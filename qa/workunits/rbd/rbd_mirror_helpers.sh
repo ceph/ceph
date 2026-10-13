@@ -892,6 +892,26 @@ wait_for_snapshot_sync_complete()
     return 1
 }
 
+test_snapshot_sync_complete()
+{
+    local local_cluster=$1
+    local remote_cluster=$2
+    local local_pool=$3
+    local remote_pool=$4
+    local image=$5
+
+    local status_log=${TEMPDIR}/$(mkfname ${remote_cluster}-${remote_pool}-${image}.status)
+    local local_status_log=${TEMPDIR}/$(mkfname ${local_cluster}-${local_pool}-${image}.status)
+
+    get_newest_mirror_snapshot "${remote_cluster}" "${remote_pool}" "${image}" "${status_log}"
+    local snapshot_id=$(xmlstarlet sel -t -v "//snapshot/id" < ${status_log})
+
+    get_newest_mirror_snapshot "${local_cluster}" "${local_pool}" "${image}" "${local_status_log}"
+    local primary_snapshot_id=$(xmlstarlet sel -t -v "//snapshot/namespace/primary_snap_id" < ${local_status_log})
+
+    test "${snapshot_id}" = "${primary_snapshot_id}"
+}
+
 wait_for_replay_complete()
 {
     local local_cluster=$1
@@ -996,6 +1016,46 @@ wait_for_replaying_status_in_pool_dir()
     else
         wait_for_status_in_pool_dir ${cluster} ${pool} ${image} 'up+replaying'
     fi
+}
+
+wait_for_replay_state_transition()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local old_replay_state=$4
+    local new_replay_state=$5
+    local -n replay_state_transition_time=$6
+    local status
+    local replay_state
+    local last_update
+    local sleep_interval
+    local old_state_last_update
+
+    # replay_state could change multiple times in small time frame for force updates,
+    # hence the small sleep intervals. It could also take up to 30 seconds, hence total
+    # timeout of ~30 seconds.
+    for sleep_interval in 0.1 0.2 0.4 0.8 1 1 1 1 1 1 1 1 1 1 2 2 4 4 4 4; do
+        status=$(CEPH_ARGS='' rbd --cluster ${cluster} mirror image status \
+                 ${pool}/${image} 2>/dev/null)
+
+        replay_state=$(sed -nE 's/^  description:.*"replay_state":"([^"]*)".*$/\1/p' <<< "$status")
+        last_update=$(sed -nE 's/^  last_update: *(.*) *$/\1/p' <<< "$status")
+        last_update=$(date -d "$last_update" +%s)
+
+        if [ "$replay_state" = "$old_replay_state" ]; then
+            old_state_last_update=$last_update
+        elif [ "$replay_state" = "$new_replay_state" ]; then
+            if [[ -z "$old_state_last_update" ]]; then
+                replay_state_transition_time=0
+            else
+                replay_state_transition_time=$((last_update - old_state_last_update))
+            fi
+            return 0
+        fi
+        sleep ${sleep_interval}
+    done
+    return 1
 }
 
 create_image()

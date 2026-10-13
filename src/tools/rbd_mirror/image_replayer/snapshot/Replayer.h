@@ -102,6 +102,11 @@ public:
     return m_image_spec;
   }
 
+  std::string get_replay_state() {
+    std::unique_lock locker{m_lock};
+    return m_replay_state;
+  }
+
 private:
   /**
    * @verbatim
@@ -258,6 +263,7 @@ private:
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
   bool m_sync_in_progress = false;
+  std::string m_replay_state;
 
   PerfCounters *m_perf_counters = nullptr;
 
@@ -336,7 +342,7 @@ private:
   void handle_replay_complete(int r, const std::string& description);
   void handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
                               int r, const std::string& description);
-  void notify_status_updated();
+  void notify_status_updated(bool force=false);
 
   bool is_replay_interrupted();
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* lock);
