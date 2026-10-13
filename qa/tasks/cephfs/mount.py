@@ -12,12 +12,11 @@ from contextlib import contextmanager
 from textwrap import dedent
 
 from teuthology.contextutil import safe_while
-from teuthology.misc import get_file
+from teuthology.misc import get_file, get_first_mon
 from teuthology.orchestra import run
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
-from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +52,7 @@ class CephFSMountBase(object):
         """
         self.ctx = ctx
         self.test_dir = test_dir
+        self._init_mon_manager()
 
         self._verify_attrs(client_id=client_id,
                            client_keyring_path=client_keyring_path,
@@ -105,6 +105,25 @@ class CephFSMountBase(object):
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
+
+
+    def _init_mon_manager(self):
+        cluster_name = 'ceph'
+        try:
+            self.mon_manager = self.ctx.managers[cluster_name]
+        except Exception as e:
+            log.warn(f'Couldn\'t get a mon_manager for cluster {cluster_name} '
+                     f'from the context; exception: {e}')
+
+            first_mon = get_first_mon(self.ctx, None)
+            admin_remote = self.ctx.cluster.only(first_mon).remotes.keys()
+
+            self.mon_manager = CephManager(admin_remote, ctx=self.ctx,
+                                           logger=log.getChild('ceph_manager'))
+
+        # allow access to these methods just like every else.
+        self.run_ceph_cmd = self.mon_manager.run_ceph_cmd
+        self.get_ceph_cmd_stdout = self.mon_manager.get_ceph_cmd_stdout
 
     def write_keyring(self):
         assert self.client_keyring
@@ -210,13 +229,11 @@ class CephFSMountBase(object):
                               sudo=True).decode())
 
     def is_blocked(self):
-        self.fs = Filesystem(self.ctx, name=self.cephfs_name)
-
         try:
-            output = self.fs.get_ceph_cmd_stdout('osd blocklist ls')
+            output = self.get_ceph_cmd_stdout('osd blocklist ls')
         except CommandFailedError:
             # Fallback for older Ceph cluster
-            output = self.fs.get_ceph_cmd_stdout('osd blacklist ls')
+            output = self.get_ceph_cmd_stdout('osd blacklist ls')
 
         return self.addr in output
 
@@ -247,15 +264,6 @@ class CephFSMountBase(object):
         else:
             log.debug(f"not mounted; /proc/self/mounts is:\n{file}")
             return False
-
-    def setupfs(self, name=None):
-        if name is None and self.fs is not None:
-            # Previous mount existed, reuse the old name
-            name = self.fs.name
-        self.fs = Filesystem(self.ctx, name=name)
-        log.info('Wait for MDS to reach steady state...')
-        self.fs.wait_for_daemons()
-        log.info('Ready to start {}...'.format(type(self).__name__))
 
     def _create_mntpt(self):
         self.client_remote.run(args=f'mkdir -p -v {self.hostfs_mntpt}',
