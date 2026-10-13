@@ -102,7 +102,7 @@ Current Members
  * João Eduardo Luis <joao@clyso.com>
  * Kyle Bader <kbader@ibm.com>
  * Laura Flores <lflores@ibm.com>
- * Mark Nelson <mark.nelson@clyso.com>
+ * Mark Nelson <mark.a.nelson@gmail.com>
  * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
