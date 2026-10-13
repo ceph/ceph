@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional, Union, cast
 import cherrypy
 
 from .. import mgr
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
@@ -206,11 +207,36 @@ class Pool(RESTController):
     @handle_send_command_error('pool')
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
                application_metadata=None, rule_name=None, configuration=None,
-               rbd_mirroring=None, **kwargs):
+               rbd_mirroring=None, num_zones=None, k=None, m=None, osd_failure_domain=None,
+               zone_failure_domain=None, replica=None, min_size=None, root=None,
+               crush_device_class=None, **kwargs):
+        if num_zones is not None and int(num_zones) not in (1, 2):
+            raise DashboardException(
+                msg='num_zones = {} is not supported; only num_zones = 1 or 2 is currently supported'
+                    .format(num_zones),
+                component='pool',
+                http_status_code=400
+            )
         ecp = erasure_code_profile if erasure_code_profile else None
-        CephService.send_command('mon', 'osd pool create', pool=pool, pg_num=int(pg_num),
-                                 pgp_num=int(pg_num), pool_type=pool_type, erasure_code_profile=ecp,
-                                 rule=rule_name)
+        cmd_kwargs = {
+            'pool': pool,
+            'pg_num': int(pg_num),
+            'pgp_num': int(pg_num),
+            'pool_type': pool_type,
+            'erasure_code_profile': ecp,
+            'rule': rule_name,
+            'num_zones': int(num_zones) if num_zones else None,
+            'replica': int(replica) if replica else None,
+            'min_size': int(min_size) if min_size else None,
+            'k': int(k) if k else None,
+            'm': int(m) if m else None,
+            'root': root if root else None,
+            'osd_failure_domain': osd_failure_domain,
+            'zone_failure_domain': zone_failure_domain,
+        }
+        if crush_device_class:
+            cmd_kwargs['class'] = crush_device_class
+        CephService.send_command('mon', 'osd pool create', **cmd_kwargs)
         self._set_pool_values(pool, application_metadata, flags, False, kwargs)
         RbdConfiguration(pool).set_configuration(configuration)
         if rbd_mirroring is not None:
@@ -375,6 +401,12 @@ class PoolUi(Pool):
                 used_profiles[profile] = [name]
 
         mgr_config = mgr.get('config')
+        nodes = mgr.get('osd_map_tree')['nodes']
+        crush_roots = [n['name'] for n in nodes if n['type'] == 'root']
+        device_classes = sorted(list(set(n['device_class'] for n in nodes if n.get('device_class'))))
+
+        crush_type_names = [t['name'] for t in sorted(osd_map_crush.get('types', []),
+                                                       key=lambda t: t['type_id'])]
         return {
             "pool_names": pool_names,
             "crush_rules_replicated": rules(1),
@@ -389,7 +421,10 @@ class PoolUi(Pool):
             "erasure_code_profiles": profiles,
             "used_rules": used_rules,
             "used_profiles": used_profiles,
-            'nodes': mgr.get('osd_map_tree')['nodes']
+            'nodes': nodes,
+            "crush_roots": crush_roots,
+            "device_classes": device_classes,
+            "crush_type_names": crush_type_names
         }
 
 

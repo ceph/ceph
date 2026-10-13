@@ -61,6 +61,119 @@ class PoolControllerTest(ControllerTestCase):
         self.assertEqual(_get.call_count, 2)
         NotificationQueue.stop()
 
+    def _create_pool(self, send_command, payload):
+        send_command.return_value = {}
+        NotificationQueue.start_queue()
+        TaskManager.init()
+        try:
+            with mock.patch('dashboard.controllers.pool.Pool._wait_for_pgs'), \
+                    mock.patch('dashboard.controllers.pool.Pool._set_pool_values'):
+                self._task_post('/api/pool', payload, 10)
+        finally:
+            NotificationQueue.stop()
+        self.assertStatus(201)
+        create_calls = [c for c in send_command.call_args_list
+                        if c[0][1] == 'osd pool create']
+        self.assertEqual(len(create_calls), 1)
+        return create_calls[0][1]
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_creation_replicated_sends_no_ec_or_zone_params(self, send_command):
+        kwargs = self._create_pool(send_command, {
+            'pool': 'rep-pool',
+            'pool_type': 'replicated',
+            'pg_num': 32,
+            'size': 3
+        })
+        self.assertEqual(kwargs['pool'], 'rep-pool')
+        self.assertEqual(kwargs['pg_num'], 32)
+        # None values are dropped by CephService.send_command, so the mon applies its defaults
+        for name in ['rule', 'num_zones', 'replica', 'min_size', 'root', 'k', 'm',
+                     'osd_failure_domain', 'zone_failure_domain', 'erasure_code_profile']:
+            self.assertIsNone(kwargs.get(name), name)
+        self.assertNotIn('class', kwargs)
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_creation_sends_rule_name_as_rule(self, send_command):
+        kwargs = self._create_pool(send_command, {
+            'pool': 'rep-pool',
+            'pool_type': 'replicated',
+            'pg_num': 32,
+            'rule_name': 'my-rule'
+        })
+        self.assertEqual(kwargs['rule'], 'my-rule')
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_creation_with_zones_and_failure_domains(self, send_command):
+        kwargs = self._create_pool(send_command, {
+            'pool': 'zone-pool',
+            'pool_type': 'replicated',
+            'pg_num': 32,
+            'num_zones': 2,
+            'replica': '2',
+            'min_size': '1',
+            'root': 'default',
+            'crush_device_class': 'ssd',
+            'osd_failure_domain': 'host',
+            'zone_failure_domain': 'datacenter'
+        })
+        self.assertEqual(kwargs['num_zones'], 2)
+        self.assertEqual(kwargs['replica'], 2)
+        self.assertEqual(kwargs['min_size'], 1)
+        self.assertEqual(kwargs['root'], 'default')
+        self.assertEqual(kwargs['class'], 'ssd')
+        self.assertEqual(kwargs['osd_failure_domain'], 'host')
+        self.assertEqual(kwargs['zone_failure_domain'], 'datacenter')
+        self.assertIsNone(kwargs['k'])
+        self.assertIsNone(kwargs['m'])
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_creation_with_num_zones_3_is_not_supported(self, send_command):
+        send_command.return_value = {}
+        NotificationQueue.start_queue()
+        TaskManager.init()
+        try:
+            with mock.patch('dashboard.controllers.pool.Pool._wait_for_pgs'), \
+                    mock.patch('dashboard.controllers.pool.Pool._set_pool_values'):
+                self._task_post('/api/pool', {
+                    'pool': 'zone-pool',
+                    'pool_type': 'replicated',
+                    'pg_num': 32,
+                    'num_zones': 3,
+                }, 10)
+        finally:
+            NotificationQueue.stop()
+        self.assertStatus(400)
+        self.assertIn('num_zones = 3', self.json_body().get('detail', ''))
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_creation_erasure_with_k_and_m(self, send_command):
+        kwargs = self._create_pool(send_command, {
+            'pool': 'ec-pool',
+            'pool_type': 'erasure',
+            'pg_num': 32,
+            'k': '4',
+            'm': '2',
+            'osd_failure_domain': 'host'
+        })
+        # String values from the request are converted to integers
+        self.assertEqual(kwargs['k'], 4)
+        self.assertEqual(kwargs['m'], 2)
+        self.assertEqual(kwargs['osd_failure_domain'], 'host')
+        self.assertIsNone(kwargs['erasure_code_profile'])
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_creation_erasure_with_profile(self, send_command):
+        kwargs = self._create_pool(send_command, {
+            'pool': 'ec-pool',
+            'pool_type': 'erasure',
+            'pg_num': 32,
+            'erasure_code_profile': 'ecp1'
+        })
+        self.assertEqual(kwargs['erasure_code_profile'], 'ecp1')
+        self.assertIsNone(kwargs['k'])
+        self.assertIsNone(kwargs['m'])
+
     @mock.patch('dashboard.controllers.pool.Pool._get')
     def test_wait_for_pgs_without_waiting(self, _get):
         _get.side_effect = [{

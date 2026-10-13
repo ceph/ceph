@@ -17,4 +17,5 @@ export class PoolFormInfo {
   used_rules: { [rule_name: string]: string[] };
   used_profiles: { [profile_name: string]: string[] };
   nodes: CrushNode[];
+  crush_type_names: string[];
 }

@@ -113,7 +113,8 @@ describe('PoolFormComponent', () => {
       used_profiles: {
         ecp1: ['some.other.pool.uses.it']
       },
-      nodes: Mocks.generateSimpleCrushMap(3, 5)
+      nodes: Mocks.generateSimpleCrushMap(3, 5),
+      crush_type_names: ['osd', 'host', 'rack', 'datacenter', 'zone', 'root']
     };
   };
 
@@ -295,12 +296,10 @@ describe('PoolFormComponent', () => {
       expect(form.valid).toBeTruthy();
     });
 
-    it('auto-selects `crushRule` with multiple crush rules', () => {
+    it('does not preselect a `crushRule` with multiple crush rules', () => {
       formHelper.expectValidChange('poolType', 'replicated');
       form.get('crushRule').updateValueAndValidity();
-      expect(form.getValue('crushRule')).toEqual(
-        component.info.crush_rules_replicated[0].rule_name
-      );
+      expect(form.getValue('crushRule')).toEqual('');
       formHelper.expectValid('crushRule');
     });
 
@@ -521,25 +520,25 @@ describe('PoolFormComponent', () => {
         expect(component.current.rules.length).toBe(1);
       });
 
-      it('disables rule field if only one rule exists which is used in the disabled field', () => {
+      it('does not preselect a rule if only one rule exists', () => {
         infoReturn.crush_rules_replicated = [
           Mocks.getCrushRule({ id: 0, name: 'rep1', type: 'replicated' })
         ];
         setUpPoolComponent();
         formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        expect(control.value).toEqual(component.info.crush_rules_replicated[0].rule_name);
-        expect(control.disabled).toBe(true);
-      });
-
-      it('selects the first rule if `replicated_rule` does not exist', () => {
-        formHelper.setValue('poolType', 'replicated');
-        const control = form.get('crushRule');
-        expect(control.value).toEqual(component.info.crush_rules_replicated[0].rule_name);
+        expect(control.value).toEqual('');
         expect(control.disabled).toBe(false);
       });
 
-      it('selects `replicated_rule` by default when available', () => {
+      it('disables the rule field if no rule exists', () => {
+        infoReturn.crush_rules_replicated = [];
+        setUpPoolComponent();
+        formHelper.setValue('poolType', 'replicated');
+        expect(form.get('crushRule').disabled).toBe(true);
+      });
+
+      it('does not preselect the first rule or `replicated_rule`', () => {
         infoReturn.crush_rules_replicated = [
           Mocks.getCrushRule({ id: 0, name: 'rep1', type: 'replicated' }),
           Mocks.getCrushRule({ id: 1, name: 'replicated_rule', type: 'replicated' }),
@@ -547,18 +546,80 @@ describe('PoolFormComponent', () => {
         ];
         setUpPoolComponent();
         const control = form.get('crushRule');
-        expect(control.value).toEqual('replicated_rule');
+        expect(control.value).toEqual('');
         expect(control.disabled).toBe(false);
+      });
+
+      it('clears the selected rule when the default option is chosen again', () => {
+        formHelper.setValue('poolType', 'replicated');
+        const control = form.get('crushRule');
+        control.setValue(component.info.crush_rules_replicated[0].rule_name);
+        expect(component.selectedCrushRule).toBeDefined();
+        control.setValue('');
+        expect(component.selectedCrushRule).toBeUndefined();
       });
 
       it('changing between both pool types will not forget the crush rule selection', () => {
         formHelper.setValue('poolType', 'replicated');
         const control = form.get('crushRule');
-        const currentRule = component.info.crush_rules_replicated[0];
+        const currentRule = component.info.crush_rules_replicated[0].rule_name;
         control.setValue(currentRule);
         formHelper.setValue('poolType', 'erasure');
         formHelper.setValue('poolType', 'replicated');
         expect(control.value).toEqual(currentRule);
+      });
+
+      it('clears zone and crush fields when switching from erasure to replicated', () => {
+        formHelper.setValue('poolType', 'erasure');
+        formHelper.setValue('k', 4);
+        formHelper.setValue('m', 2);
+        formHelper.setValue('num_zones', 2);
+        formHelper.setValue('osdFailureDomain', 'host');
+        formHelper.setValue('zoneFailureDomain', 'datacenter');
+        formHelper.setValue('crushRoot', 'default');
+        formHelper.setValue('crushDeviceClass', 'ssd');
+        expect(form.get('num_zones').value).toBe(2);
+
+        formHelper.setValue('poolType', 'replicated');
+        ['k', 'm', 'num_zones', 'osdFailureDomain', 'zoneFailureDomain', 'crushRoot'].forEach(
+          (name) => expect(form.get(name).value).toBeNull()
+        );
+        expect(form.get('crushDeviceClass').value).toBeNull();
+      });
+
+      it('clears incompatible fields when switching pool types and zone counts', () => {
+        // Start as EC with k/m set.
+        formHelper.setValue('poolType', 'erasure');
+        formHelper.setValue('k', 4);
+        formHelper.setValue('m', 2);
+        expect(form.get('k').value).toBe(4);
+
+        // Switch to replicated — k/m should be cleared.
+        formHelper.setValue('poolType', 'replicated');
+        expect(form.get('k').value).toBeNull();
+        expect(form.get('m').value).toBeNull();
+
+        // Configure multi-zone crush parameters.
+        formHelper.setValue('num_zones', 2);
+        formHelper.setValue('osdFailureDomain', 'host');
+        formHelper.setValue('zoneFailureDomain', 'datacenter');
+        formHelper.setValue('crushRoot', 'default');
+        expect(form.get('osdFailureDomain').value).toBe('host');
+
+        // Drop to single zone — failure domain fields should be cleared.
+        formHelper.setValue('num_zones', 1);
+        expect(form.get('osdFailureDomain').value).toBeNull();
+        expect(form.get('zoneFailureDomain').value).toBeNull();
+        expect(form.get('crushRoot').value).toBeNull();
+        // Failure domain fields no longer have stale values so replicatedRequiresZones cannot fire.
+        expect(form.get('osdFailureDomain').hasError('replicatedRequiresZones')).toBe(false);
+
+        // Switch to erasure — zone/CRUSH fields should be cleared.
+        formHelper.setValue('num_zones', 2);
+        formHelper.setValue('osdFailureDomain', 'host');
+        formHelper.setValue('poolType', 'erasure');
+        expect(form.get('num_zones').value).toBeNull();
+        expect(form.get('osdFailureDomain').value).toBeNull();
       });
     });
   });
@@ -1523,6 +1584,121 @@ describe('PoolFormComponent', () => {
           application_metadata: ['cephfs', 'rgw']
         });
       });
+
+      it('does not send a rule if the default option is selected', () => {
+        // pgNum is set last because changing the rule recalculates it while it is pristine.
+        setMultipleValues({ crushRule: '', pgNum: 16 });
+        component.data.applications.selected = ['cephfs', 'rgw'];
+        const pool: Record<string, any> = {
+          pool: 'repPool',
+          pool_type: 'replicated',
+          pg_autoscale_mode: 'off',
+          pg_num: 16,
+          size: 3,
+          application_metadata: ['cephfs', 'rgw']
+        };
+        expectValidSubmit(pool);
+        expect(pool.rule_name).toBeUndefined();
+      });
+
+      describe('with more than one zone', () => {
+        beforeEach(() => {
+          setMultipleValues({ crushRule: '', num_zones: 2, pgNum: 16 });
+          component.data.applications.selected = ['cephfs', 'rgw'];
+        });
+
+        it('disables the size field and does not send a size', () => {
+          expect(form.get('size').disabled).toBe(true);
+          expectValidSubmit({
+            pool: 'repPool',
+            pool_type: 'replicated',
+            pg_autoscale_mode: 'off',
+            pg_num: 16,
+            num_zones: 2,
+            application_metadata: ['cephfs', 'rgw']
+          });
+        });
+
+        it('enables the size field again with one zone', () => {
+          setMultipleValues({ num_zones: 1 });
+          expect(form.get('size').enabled).toBe(true);
+        });
+
+        it('sends the failure domains and crush parameters', () => {
+          setMultipleValues({
+            osdFailureDomain: 'host',
+            zoneFailureDomain: 'datacenter',
+            crushRoot: 'default',
+            crushDeviceClass: 'ssd',
+            min_size: 1
+          });
+          expectValidSubmit({
+            pool: 'repPool',
+            pool_type: 'replicated',
+            pg_autoscale_mode: 'off',
+            pg_num: 16,
+            num_zones: 2,
+            min_size: 1,
+            root: 'default',
+            crush_device_class: 'ssd',
+            osd_failure_domain: 'host',
+            zone_failure_domain: 'datacenter',
+            application_metadata: ['cephfs', 'rgw']
+          });
+        });
+
+        it('sends the replicas per zone when set', () => {
+          setMultipleValues({ replica: 2 });
+          expectValidSubmit({
+            pool: 'repPool',
+            pool_type: 'replicated',
+            pg_autoscale_mode: 'off',
+            pg_num: 16,
+            num_zones: 2,
+            replica: 2,
+            application_metadata: ['cephfs', 'rgw']
+          });
+        });
+
+        it('validates replicas per zone range', () => {
+          formHelper.expectErrorChange('replica', 0, 'min');
+          formHelper.expectErrorChange('replica', 11, 'max');
+          formHelper.expectValidChange('replica', 2);
+        });
+      });
+
+      describe('failure domain and crush parameters validation', () => {
+        ['osdFailureDomain', 'zoneFailureDomain', 'crushRoot', 'crushDeviceClass'].forEach(
+          (name) => {
+            it(`rejects ${name} without more than one zone`, () => {
+              // Setting a failure domain value with num_zones blank triggers replicatedRequiresZones.
+              setMultipleValues({ crushRule: '' });
+              formHelper.expectErrorChange(name, 'host', 'replicatedRequiresZones');
+              // Setting num_zones > 1 clears the error.
+              setMultipleValues({ num_zones: 2 });
+              formHelper.expectValid(name);
+              // Dropping back to single zone clears the field, so the error does not reappear.
+              setMultipleValues({ num_zones: 1 });
+              expect(form.get(name).value).toBeNull();
+              expect(form.get(name).hasError('replicatedRequiresZones')).toBe(false);
+            });
+
+            it(`rejects ${name} together with a selected rule`, () => {
+              setMultipleValues({ num_zones: 2 });
+              formHelper.expectErrorChange(name, 'host', 'ruleConflict');
+              setMultipleValues({ crushRule: '' });
+              formHelper.expectValid(name);
+            });
+          }
+        );
+      });
+    });
+
+    it('validates min_size against replica/size', () => {
+      setMultipleValues({ size: 3, num_zones: 1 });
+      formHelper.expectErrorChange('min_size', 0, 'min');
+      formHelper.expectErrorChange('min_size', 4, 'maxMinSize');
+      formHelper.expectValidChange('min_size', 2);
     });
   });
 

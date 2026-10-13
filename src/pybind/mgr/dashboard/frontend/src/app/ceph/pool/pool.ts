@@ -77,6 +77,8 @@ export class Pool {
   last_change: string;
   min_write_recency_for_promote: number;
   read_tier: number;
+  num_zones?: number;
+  replica?: number;
   stats?: PoolStats;
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];

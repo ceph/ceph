@@ -70,7 +70,6 @@ interface EcpDetailField {
   standalone: false
 })
 export class PoolFormComponent extends CdForm implements OnInit {
-  private static readonly DEFAULT_RULE_NAME = 'replicated_rule';
   private static readonly ECP_DETAIL_FIELDS = new Map<string, EcpDetailField>([
     ['plugin', { label: $localize`Plugin` }],
     ['k', { label: $localize`Data chunks (k)` }],
@@ -102,6 +101,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   editing = false;
   isReplicated = false;
   isErasure = false;
+  crushTypeNames: string[] = [];
   blobUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
   maxBytesUnits = ['KiB', 'MiB', 'GiB', 'TiB'];
   data = new PoolFormData();
@@ -220,16 +220,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
         poolType: new UntypedFormControl(PoolType.REPLICATED, {
           validators: [Validators.required]
         }),
-        crushRule: new UntypedFormControl(null, {
+        crushRule: new UntypedFormControl('', {
           validators: [
             CdValidators.custom(
               'tooFewOsds',
               (rule: any) => this.info && rule && this.info.osd_count < 1
-            ),
-            CdValidators.custom(
-              'required',
-              (rule: CrushRule) =>
-                this.isReplicated && this.info?.crush_rules_replicated?.length > 0 && !rule
             )
           ]
         }),
@@ -244,7 +239,47 @@ export class PoolFormComponent extends CdForm implements OnInit {
         max_bytes: new UntypedFormControl(0, [Validators.min(0)]),
         maxBytesUnit: new UntypedFormControl(this.maxBytesUnits[2]),
         max_objects: new UntypedFormControl(0, [Validators.min(0)]),
-        rbdMirroring: new UntypedFormControl(false)
+        rbdMirroring: new UntypedFormControl(false),
+        num_zones: new UntypedFormControl(null, [Validators.min(1)]),
+        replica: new UntypedFormControl(null, [Validators.min(1), Validators.max(10)]),
+        min_size: new UntypedFormControl(null, [
+          Validators.min(1),
+          CdValidators.custom('maxMinSize', (v: number) => {
+            if (!this.hasValue(v)) return false;
+            if (this.isReplicated) {
+              const ceiling = this.hasMultipleZones()
+                ? Number(this.form?.getValue('replica'))
+                : Number(this.form?.getValue('size'));
+              return ceiling > 0 && v > ceiling;
+            }
+            if (this.isErasure) {
+              const k = Number(this.form?.getValue('k'));
+              const m = Number(this.form?.getValue('m'));
+              return k > 0 && m > 0 && v > k + m;
+            }
+            return false;
+          })
+        ]),
+        crushRoot: new UntypedFormControl('', this.failureDomainValidators()),
+        crushDeviceClass: new UntypedFormControl('', this.failureDomainValidators()),
+        k: new UntypedFormControl(null, [
+          CdValidators.custom('min', (k: number) => this.isErasure && this.hasValue(k) && k < 2),
+          CdValidators.custom(
+            'kmRequired',
+            (k: number) =>
+              this.isErasure && !this.hasValue(k) && this.hasValue(this.form?.getValue('m'))
+          )
+        ]),
+        m: new UntypedFormControl(null, [
+          CdValidators.custom('min', (m: number) => this.isErasure && this.hasValue(m) && m < 1),
+          CdValidators.custom(
+            'kmRequired',
+            (m: number) =>
+              this.isErasure && !this.hasValue(m) && this.hasValue(this.form?.getValue('k'))
+          )
+        ]),
+        osdFailureDomain: new UntypedFormControl('', this.failureDomainValidators()),
+        zoneFailureDomain: new UntypedFormControl('', this.failureDomainValidators())
       },
       [CdValidators.custom('form', (): null => null)]
     );
@@ -280,6 +315,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.form.silentSet('pgAutoscaleMode', info.pg_autoscale_default_mode);
     this.form.silentSet('algorithm', info.bluestore_compression_algorithm);
     this.info = info;
+    this.crushTypeNames = info.crush_type_names;
     this.initEcp(info.erasure_code_profiles);
   }
 
@@ -292,10 +328,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
   /**
    * Used to update the crush rule or erasure code profile listings.
    *
-   * If only one rule or profile exists it will be selected.
+   * If only one profile exists it will be selected.
    * If nothing exists null will be selected.
-   * If more than one rule or profile exists the listing will be enabled,
-   * otherwise disabled.
+   * If more than one profile exists the listing will be enabled, otherwise disabled.
+   * A crush rule is never preselected: the empty option lets the cluster choose the rule.
+   * The rule listing is enabled as soon as at least one rule exists.
    */
   private setListControlStatus(controlName: string, arr: any[], selectedName?: string) {
     const control = this.form.get(controlName);
@@ -309,38 +346,14 @@ export class PoolFormComponent extends CdForm implements OnInit {
       } else if (arr.length === 0 && value) {
         control.setValue(null);
       }
-    } else {
-      const selectedRule = this.validateCrushRule(value, arr);
-      if (arr.length > 0 && selectedRule) {
-        control.setValue(selectedRule);
-        this.replicatedRuleChange();
-      } else if (arr.length === 0 && value) {
-        control.setValue(null);
-      }
+      arr.length <= 1 ? control.disable() : control.enable();
+      return;
     }
 
-    arr.length <= 1 ? control.disable() : control.enable();
-  }
-
-  private validateCrushRule(
-    value: string | { rule_name?: string; name?: string } | null,
-    arr: CrushRule[]
-  ): string | undefined {
-    type CrushRuleWithOptionalName = CrushRule & { name?: string };
-    const selectedName = typeof value === 'string' ? value : value?.rule_name || value?.name;
-    const isSelected =
-      selectedName &&
-      arr.some(
-        (rule: CrushRuleWithOptionalName) =>
-          rule.rule_name === selectedName || rule.name === selectedName
-      );
-    if (isSelected) {
-      return undefined;
+    if (value && !arr.some((rule: CrushRule) => rule.rule_name === value)) {
+      control.setValue('');
     }
-    const defaultRule =
-      arr.find((rule: CrushRule) => rule.rule_name === PoolFormComponent.DEFAULT_RULE_NAME) ||
-      arr[0];
-    return defaultRule?.rule_name;
+    arr.length === 0 ? control.disable() : control.enable();
   }
 
   private initEditMode() {
@@ -472,11 +485,48 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   private listenToChangesDuringAdd() {
     this.form.get('poolType').valueChanges.subscribe((poolType) => {
+      // Values entered for the previous pool type are reset in both directions, so hidden
+      // stale values cannot keep the form invalid. This only runs on a user-driven switch.
+      this.clearFields([
+        'k',
+        'm',
+        'num_zones',
+        'replica',
+        'min_size',
+        'crushRoot',
+        'crushDeviceClass',
+        'osdFailureDomain',
+        'zoneFailureDomain'
+      ]);
       this.poolTypeChange(poolType);
     });
+    this.form.get('num_zones').valueChanges.subscribe(() => {
+      if (!this.hasMultipleZones()) {
+        // Failure domain values are only sent when num_zones > 1. Clearing them
+        // prevents stale values from triggering replicatedRequiresZones errors.
+        this.clearFields([
+          'crushRoot',
+          'crushDeviceClass',
+          'osdFailureDomain',
+          'zoneFailureDomain'
+        ]);
+      }
+      this.updateSizeControlStatus();
+      this.revalidateFailureDomains();
+      this.form.get('min_size').updateValueAndValidity({ emitEvent: false });
+      ['k', 'm'].forEach((name) =>
+        this.form.get(name).updateValueAndValidity({ emitEvent: false })
+      );
+    });
     this.form.get('crushRule').valueChanges.subscribe((rule) => {
+      this.revalidateFailureDomains();
       // The crush rule can only be changed if type 'replicated' is set.
       if (!rule) {
+        // No rule selected: the cluster chooses the default rule.
+        this.selectedCrushRule = undefined;
+        this.crushRuleIsUsedBy(undefined);
+        this.replicatedRuleChange();
+        this.pgCalc();
         return;
       }
       this.data.crushInfo = false;
@@ -492,7 +542,28 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('size').valueChanges.subscribe(() => {
       // The size can only be changed if type 'replicated' is set.
+      this.form.get('min_size').updateValueAndValidity({ emitEvent: false });
       this.pgCalc();
+    });
+    this.form.get('replica').valueChanges.subscribe(() => {
+      this.form.get('min_size').updateValueAndValidity({ emitEvent: false });
+    });
+    // k and m must either both be set or both be empty. On erasure pools the failure
+    // domains additionally require k and m.
+    ['k', 'm'].forEach((name) => {
+      this.form.get(name).valueChanges.subscribe(() => {
+        [
+          'k',
+          'm',
+          'min_size',
+          'osdFailureDomain',
+          'zoneFailureDomain',
+          'crushRoot',
+          'crushDeviceClass'
+        ]
+          .filter((other) => other !== name)
+          .forEach((other) => this.form.get(other).updateValueAndValidity({ emitEvent: false }));
+      });
     });
 
     this.form
@@ -522,6 +593,76 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
   }
 
+  private hasValue(value: any): boolean {
+    return !_.isNil(value) && value !== '';
+  }
+
+  // Called by validators while the form is being built, so it must not use `this.form` directly.
+  private failureDomainValidators() {
+    return [
+      // Failure domains on erasure pools are stored in the auto-created profile (needs k and m).
+      CdValidators.custom(
+        'ecRequiresKm',
+        (v: string) => this.isErasure && this.hasValue(v) && !this.hasEcParams()
+      ),
+      // The mon rejects crush parameters on a replicated pool with a single zone.
+      CdValidators.custom(
+        'replicatedRequiresZones',
+        (v: string) => this.isReplicated && this.hasValue(v) && !this.hasMultipleZones()
+      ),
+      // The mon rejects a crush rule together with crush parameters.
+      CdValidators.custom(
+        'ruleConflict',
+        (v: string) =>
+          this.isReplicated && this.hasValue(v) && this.hasValue(this.form?.getValue('crushRule'))
+      )
+    ];
+  }
+
+  hasMultipleZones(): boolean {
+    const numZones = this.form?.getValue('num_zones');
+    return this.hasValue(numZones) && Number(numZones) > 1;
+  }
+
+  private revalidateFailureDomains() {
+    ['osdFailureDomain', 'zoneFailureDomain', 'crushRoot', 'crushDeviceClass'].forEach((name) =>
+      this.form.get(name).updateValueAndValidity({ emitEvent: false })
+    );
+  }
+
+  getCopiesPerZone(): number {
+    if (this.hasMultipleZones()) {
+      return Number(this.form?.getValue('replica'));
+    }
+    return Number(this.form?.getValue('size'));
+  }
+
+  /**
+   * The mon calculates the size of a multi-zone pool itself (zones * replicas per zone) and
+   * rejects an explicit size, so the size field is disabled while more than one zone is used.
+   */
+  private updateSizeControlStatus() {
+    if (this.editing) {
+      return;
+    }
+    const sizeControl = this.form.get('size');
+    const disable = this.isStretchMode || (this.isReplicated && this.hasMultipleZones());
+    if (disable && sizeControl.enabled) {
+      sizeControl.disable({ emitEvent: false });
+    } else if (!disable && sizeControl.disabled) {
+      sizeControl.enable({ emitEvent: false });
+    }
+  }
+
+  // The helpers below are also called by validators while the form is being built.
+  private hasEcParams(): boolean {
+    return this.hasValue(this.form?.getValue('k')) && this.hasValue(this.form?.getValue('m'));
+  }
+
+  private clearFields(names: string[]) {
+    names.forEach((name) => this.form.get(name).reset(null, { emitEvent: false }));
+  }
+
   private poolTypeChange(poolType: string) {
     if (poolType === PoolType.REPLICATED) {
       this.setTypeBooleans(true, false);
@@ -530,6 +671,16 @@ export class PoolFormComponent extends CdForm implements OnInit {
     } else {
       this.setTypeBooleans(false, false);
     }
+    // The k/m, min_size, and failure domain validators depend on the pool type.
+    [
+      'k',
+      'm',
+      'min_size',
+      'osdFailureDomain',
+      'zoneFailureDomain',
+      'crushRoot',
+      'crushDeviceClass'
+    ].forEach((name) => this.form.get(name).updateValueAndValidity({ emitEvent: false }));
     if (!poolType || !this.info) {
       this.current.rules = [];
       return;
@@ -546,15 +697,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
     if (this.isStretchMode) {
       this.applyStretchModeRestrictions();
     }
+    this.updateSizeControlStatus();
     this.pgCalc();
   }
 
   private applyStretchModeRestrictions() {
-    if (!this.editing && this.form.getValue('poolType') === 'erasure') {
-      this.form.silentSet('poolType', 'replicated');
-      this.poolTypeChange('replicated');
-      return;
-    }
     if (this.editing) {
       return;
     }
@@ -974,14 +1121,22 @@ export class PoolFormComponent extends CdForm implements OnInit {
         editable: true
       },
       this.isReplicated
-        ? { externalFieldName: 'size', formControlName: 'size' }
+        ? {
+            externalFieldName: 'size',
+            formControlName: 'size',
+            // The mon rejects an explicit size for pools with more than one zone.
+            replaceFn: (value: number) => (this.hasMultipleZones() ? undefined : value)
+          }
         : {
             externalFieldName: 'erasure_code_profile',
-            formControlName: 'erasureProfile'
+            formControlName: 'erasureProfile',
+            // The mon rejects k/m together with an erasure code profile.
+            replaceFn: (value: string) => (this.hasEcParams() ? undefined : value)
           },
       {
         externalFieldName: 'rule_name',
         formControlName: 'crushRule',
+        // The form is invalid if a rule is selected together with failure domains.
         replaceFn: (value: string) => (this.isReplicated ? value : undefined)
       },
       {
@@ -1006,7 +1161,54 @@ export class PoolFormComponent extends CdForm implements OnInit {
             externalFieldName: 'rbd_mirroring',
             formControlName: 'rbdMirroring',
             resetValue: undefined
-          }
+          },
+      { externalFieldName: 'num_zones', formControlName: 'num_zones' },
+      {
+        externalFieldName: 'replica',
+        formControlName: 'replica',
+        replaceFn: (value: number) =>
+          this.isReplicated && this.hasMultipleZones() && this.hasValue(value) ? value : undefined
+      },
+      {
+        externalFieldName: 'min_size',
+        formControlName: 'min_size',
+        replaceFn: (value: number) =>
+          this.isReplicated && this.hasValue(value) ? value : undefined
+      },
+      {
+        externalFieldName: 'root',
+        formControlName: 'crushRoot',
+        replaceFn: (value: string) =>
+          this.hasMultipleZones() && this.hasValue(value) ? value : undefined
+      },
+      {
+        externalFieldName: 'crush_device_class',
+        formControlName: 'crushDeviceClass',
+        replaceFn: (value: string) =>
+          this.hasMultipleZones() && this.hasValue(value) ? value : undefined
+      },
+      {
+        externalFieldName: 'osd_failure_domain',
+        formControlName: 'osdFailureDomain',
+        replaceFn: (value: string) =>
+          this.hasMultipleZones() && this.hasValue(value) ? value : undefined
+      },
+      {
+        externalFieldName: 'zone_failure_domain',
+        formControlName: 'zoneFailureDomain',
+        replaceFn: (value: string) =>
+          this.hasMultipleZones() && this.hasValue(value) ? value : undefined
+      },
+      {
+        externalFieldName: 'k',
+        formControlName: 'k',
+        replaceFn: (value: number) => (this.isErasure ? value : undefined)
+      },
+      {
+        externalFieldName: 'm',
+        formControlName: 'm',
+        replaceFn: (value: number) => (this.isErasure ? value : undefined)
+      }
     ]);
 
     if (this.info.is_all_bluestore) {

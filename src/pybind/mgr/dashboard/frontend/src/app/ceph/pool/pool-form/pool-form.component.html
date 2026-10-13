@@ -13,11 +13,6 @@
         class="form-header"
       >
         {{ action | titlecase }} {{ resource | upperFirst }}
-        @if (isStretchMode) {
-          <cd-help-text>
-            Stretch cluster is enabled. Only replicated pool type is supported in Stretch mode.
-          </cd-help-text>
-        }
       </div>
       <!-- Name -->
       <div
@@ -92,50 +87,22 @@
           >
             Pool type
           </legend>
-          @if (isStretchMode) {
-            <cds-tooltip
-              description="In stretch mode, only replicated pool type is supported."
-              placement="right"
-              [highContrast]="true"
-              [caret]="true"
-            >
-              <cds-radio-group
-                formControlName="poolType"
-                cdRequiredField="Pool type"
-                data-testid="pool-type-select"
+          <cds-radio-group
+            formControlName="poolType"
+            cdRequiredField="Pool type"
+            data-testid="pool-type-select"
+          >
+            @for (poolType of data.poolTypes; track poolType) {
+              <cds-radio
+                [value]="poolType"
+                [id]="poolType"
+                (change)="data.erasureInfo = false; data.crushInfo = false"
+                i18n
               >
-                @for (poolType of data.poolTypes; track poolType) {
-                  <cds-radio
-                    [value]="poolType"
-                    [id]="poolType"
-                    [disabled]="isStretchMode && !editing && poolType === 'erasure'"
-                    (change)="data.erasureInfo = false; data.crushInfo = false"
-                    i18n
-                  >
-                    {{ poolType | upperFirst }}
-                  </cds-radio>
-                }
-              </cds-radio-group>
-            </cds-tooltip>
-          } @else {
-            <cds-radio-group
-              formControlName="poolType"
-              cdRequiredField="Pool type"
-              data-testid="pool-type-select"
-            >
-              @for (poolType of data.poolTypes; track poolType) {
-                <cds-radio
-                  [value]="poolType"
-                  [id]="poolType"
-                  [disabled]="isStretchMode && !editing && poolType === 'erasure'"
-                  (change)="data.erasureInfo = false; data.crushInfo = false"
-                  i18n
-                >
-                  {{ poolType | upperFirst }}
-                </cds-radio>
-              }
-            </cds-radio-group>
-          }
+                {{ poolType | upperFirst }}
+              </cds-radio>
+            }
+          </cds-radio-group>
           @if (form.showError('poolType', formDir, 'required')) {
             <span
               class="cds--form-requirement invalid-feedback"
@@ -146,6 +113,42 @@
           }
         </div>
       </div>
+      <!-- Number of Zones -->
+      @if (!editing) {
+        <div
+          class="form-item"
+          cdsRow
+        >
+          <div cdsCol>
+            <cds-number
+              label="Number of zones"
+              i18n-label
+              [helperText]="numZonesHelperText"
+              [invalid]="form.controls.num_zones.invalid && form.controls.num_zones.dirty"
+              [invalidText]="numZonesError"
+              formControlName="num_zones"
+              min="1"
+              data-testid="num-zones"
+            >
+            </cds-number>
+            <ng-template #numZonesHelperText>
+              <span i18n
+                >Number of zones for this pool. Leave blank to use the cluster default.</span
+              >
+            </ng-template>
+            <ng-template #numZonesError>
+              @if (form.showError('num_zones', formDir, 'min')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                >
+                  Number of zones must be at least 1.
+                </span>
+              }
+            </ng-template>
+          </div>
+        </div>
+      }
       @if (isReplicated || isErasure) {
         <div>
           <!-- PG Autoscale Mode -->
@@ -171,6 +174,83 @@
               </cds-select>
             </div>
           </div>
+          <!-- Erasure coding parameters (k and m) -->
+          @if (isErasure && !editing) {
+            <div
+              class="form-item"
+              cdsRow
+            >
+              <div cdsCol>
+                <cds-number
+                  label="Data chunks (k)"
+                  i18n-label
+                  [helperText]="kmHelperText"
+                  [invalid]="form.controls.k.invalid && form.controls.k.dirty"
+                  [invalidText]="kError"
+                  formControlName="k"
+                  min="2"
+                  data-testid="ec-k"
+                >
+                </cds-number>
+                <ng-template #kError>
+                  @if (form.showError('k', formDir, 'min')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      k must be at least 2.
+                    </span>
+                  }
+                  @if (form.showError('k', formDir, 'kmRequired')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      k and m must be specified together.
+                    </span>
+                  }
+                </ng-template>
+              </div>
+              <div cdsCol>
+                <cds-number
+                  label="Coding chunks (m)"
+                  i18n-label
+                  [helperText]="kmHelperText"
+                  [invalid]="form.controls.m.invalid && form.controls.m.dirty"
+                  [invalidText]="mError"
+                  formControlName="m"
+                  min="1"
+                  data-testid="ec-m"
+                >
+                </cds-number>
+                <ng-template #mError>
+                  @if (form.showError('m', formDir, 'min')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      m must be at least 1.
+                    </span>
+                  }
+                  @if (form.showError('m', formDir, 'kmRequired')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      k and m must be specified together.
+                    </span>
+                  }
+                </ng-template>
+              </div>
+              <ng-template #kmHelperText>
+                <span i18n>
+                  When set, a profile is created for this pool and the selected erasure code profile
+                  is ignored.
+                </span>
+              </ng-template>
+            </div>
+          }
+
           <!-- Pg number -->
           @if (form.getValue('pgAutoscaleMode') !== 'on') {
             <div
@@ -244,45 +324,121 @@
               class="form-item"
               cdsRow
             >
+              @if (!hasMultipleZones()) {
+                <div cdsCol>
+                  <cds-number
+                    label="Replicated size"
+                    cdRequiredField="Replicated size"
+                    [invalid]="form.controls.size.invalid && form.controls.size.dirty"
+                    [helperText]="sizeWarning"
+                    [invalidText]="sizeError"
+                    formControlName="size"
+                    data-testid="size"
+                    [max]="getMaxSize()"
+                    [min]="getMinSize()"
+                    (handleFocus)="externalPgChange = false"
+                    (input)="alignPgs()"
+                    i18n
+                    i18n-helperText
+                  >
+                  </cds-number>
+                  <ng-template #sizeError>
+                    @if (form.showError('size', formDir)) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                      >
+                        Invalid input. Replicated size must be between {{ getMinSize() }} and
+                        {{ getMaxSize() }}.
+                      </span>
+                    }
+                  </ng-template>
+                  <ng-template #sizeWarning>
+                    @if (isStretchMode) {
+                      <span i18n> The replicated size value is predefined for stretch cluster </span>
+                    }
+                    @if (form.getValue('size') === 1) {
+                      <span
+                        class="text-warning-dark"
+                        i18n
+                      >
+                        A size of 1 will not create a replication of the object. The 'Replicated size'
+                        includes the object itself.
+                      </span>
+                    }
+                  </ng-template>
+                </div>
+              } @else if (!editing) {
+                <div cdsCol>
+                  <cds-number
+                    label="Replicas per zone"
+                    i18n-label
+                    [helperText]="replicaHelperText"
+                    [invalid]="form.controls.replica.invalid && form.controls.replica.dirty"
+                    [invalidText]="replicaError"
+                    formControlName="replica"
+                    min="1"
+                    max="10"
+                    data-testid="replica"
+                  >
+                  </cds-number>
+                  <ng-template #replicaHelperText>
+                    <span i18n
+                      >Number of replicas in each zone. Leave blank to use the cluster default.</span
+                    >
+                  </ng-template>
+                  <ng-template #replicaError>
+                    @if (form.showError('replica', formDir)) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                      >
+                        Replicas per zone must be between 1 and 10.
+                      </span>
+                    }
+                  </ng-template>
+                </div>
+              }
+            </div>
+          }
+          <!-- Minimum replica size -->
+          @if (isReplicated && !editing) {
+            <div
+              class="form-item"
+              cdsRow
+            >
               <div cdsCol>
                 <cds-number
-                  label="Replicated size"
-                  cdRequiredField="Replicated size"
-                  [invalid]="form.controls.size.invalid && form.controls.size.dirty"
-                  [helperText]="sizeWarning"
-                  [invalidText]="sizeError"
-                  formControlName="size"
-                  data-testid="size"
-                  [max]="getMaxSize()"
-                  [min]="getMinSize()"
-                  (handleFocus)="externalPgChange = false"
-                  (input)="alignPgs()"
-                  i18n
-                  i18n-helperText
+                  label="Minimum replica size (optional)"
+                  i18n-label
+                  [helperText]="minSizeHelperText"
+                  [invalid]="form.controls.min_size.invalid && form.controls.min_size.dirty"
+                  [invalidText]="minSizeError"
+                  formControlName="min_size"
+                  min="1"
+                  data-testid="min-size"
                 >
                 </cds-number>
-                <ng-template #sizeError>
-                  @if (form.showError('size', formDir)) {
+                <ng-template #minSizeHelperText>
+                  <span i18n
+                    >Minimum number of replicas required to process I/O. Leave blank to use cluster default.</span
+                  >
+                </ng-template>
+                <ng-template #minSizeError>
+                  @if (form.showError('min_size', formDir, 'min')) {
                     <span
                       class="invalid-feedback"
                       i18n
                     >
-                      Invalid input. Replicated size must be between {{ getMinSize() }} and
-                      {{ getMaxSize() }}.
+                      Minimum replica size must be at least 1.
                     </span>
                   }
-                </ng-template>
-                <ng-template #sizeWarning>
-                  @if (isStretchMode) {
-                    <span i18n> The replicated size value is predefined for stretch cluster </span>
-                  }
-                  @if (form.getValue('size') === 1) {
+                  @if (form.showError('min_size', formDir, 'maxMinSize')) {
                     <span
-                      class="text-warning-dark"
+                      class="invalid-feedback"
                       i18n
                     >
-                      A size of 1 will not create a replication of the object. The 'Replicated size'
-                      includes the object itself.
+                      Minimum replica size cannot exceed the pool replica size.
                     </span>
                   }
                 </ng-template>
@@ -627,6 +783,9 @@
                     [invalid]="crushRuleRef.isInvalid"
                     [invalidText]="crushRuleError"
                   >
+                    @if (!editing) {
+                      <option value="">-- Default (cluster chooses) --</option>
+                    }
                     @for (rule of current.rules; track rule.rule_name) {
                       <option [value]="rule.rule_name">
                         {{ rule.rule_name }}
@@ -701,12 +860,14 @@
                   [columnNumbers]="{ lg: 1 }"
                   class="item-action-btn"
                 >
-                  @if (crushUsage || current?.rules?.length === 1) {
+                  @if (!selectedCrushRule || crushUsage || current?.rules?.length === 1) {
                     <cds-tooltip
                       [description]="
-                        crushUsage
-                          ? 'This rule can\'t be deleted as it is in use.'
-                          : 'At least one crush rule must exist.'
+                        !selectedCrushRule
+                          ? 'Select a crush rule to delete it.'
+                          : crushUsage
+                            ? 'This rule can\'t be deleted as it is in use.'
+                            : 'At least one crush rule must exist.'
                       "
                       i18n-description
                       [highContrast]="true"
@@ -815,6 +976,218 @@
               }
             </div>
           </div>
+
+          @if (!editing && hasMultipleZones()) {
+            <!-- CRUSH root and Device class -->
+            <div
+              class="form-item"
+              cdsRow
+            >
+              <div cdsCol>
+                <cds-select
+                  formControlName="crushRoot"
+                  label="CRUSH root (optional)"
+                  i18n-label
+                  id="crushRoot"
+                  data-testid="crush-root"
+                  [helperText]="failureDomainHelperText"
+                  [invalid]="form.controls.crushRoot.invalid && form.controls.crushRoot.dirty"
+                  [invalidText]="crushRootError"
+                >
+                  <option value="">-- None --</option>
+                  @for (root of info?.crush_roots; track root) {
+                    <option [value]="root">
+                      {{ root }}
+                    </option>
+                  }
+                </cds-select>
+                <ng-template #crushRootError>
+                  @if (form.showError('crushRoot', formDir, 'ecRequiresKm')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on an erasure coded pool require k and m.
+                    </span>
+                  }
+                  @if (form.showError('crushRoot', formDir, 'replicatedRequiresZones')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on a replicated pool require a number of zones greater than 1.
+                    </span>
+                  }
+                  @if (form.showError('crushRoot', formDir, 'ruleConflict')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      Cannot be combined with a Crush ruleset. Select the default Crush ruleset or
+                      clear the CRUSH parameters.
+                    </span>
+                  }
+                </ng-template>
+              </div>
+              <div cdsCol>
+                <cds-select
+                  formControlName="crushDeviceClass"
+                  label="Device class (optional)"
+                  i18n-label
+                  id="crushDeviceClass"
+                  data-testid="crush-device-class"
+                  [helperText]="failureDomainHelperText"
+                  [invalid]="
+                    form.controls.crushDeviceClass.invalid && form.controls.crushDeviceClass.dirty
+                  "
+                  [invalidText]="crushDeviceClassError"
+                >
+                  <option value="">-- None --</option>
+                  @for (deviceClass of info?.device_classes; track deviceClass) {
+                    <option [value]="deviceClass">
+                      {{ deviceClass }}
+                    </option>
+                  }
+                </cds-select>
+                <ng-template #crushDeviceClassError>
+                  @if (form.showError('crushDeviceClass', formDir, 'ecRequiresKm')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on an erasure coded pool require k and m.
+                    </span>
+                  }
+                  @if (form.showError('crushDeviceClass', formDir, 'replicatedRequiresZones')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on a replicated pool require a number of zones greater than 1.
+                    </span>
+                  }
+                  @if (form.showError('crushDeviceClass', formDir, 'ruleConflict')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      Cannot be combined with a Crush ruleset. Select the default Crush ruleset or
+                      clear the CRUSH parameters.
+                    </span>
+                  }
+                </ng-template>
+              </div>
+            </div>
+
+            <!-- Failure domains -->
+            <div
+              class="form-item"
+              cdsRow
+            >
+              <div cdsCol>
+                <cds-select
+                  formControlName="osdFailureDomain"
+                  label="OSD failure domain (optional)"
+                  i18n-label
+                  id="osdFailureDomain"
+                  data-testid="osd-failure-domain"
+                  [helperText]="failureDomainHelperText"
+                  [invalid]="
+                    form.controls.osdFailureDomain.invalid && form.controls.osdFailureDomain.dirty
+                  "
+                  [invalidText]="osdFailureDomainError"
+                >
+                  <option value="">-- None --</option>
+                  @for (type of crushTypeNames; track type) {
+                    <option [value]="type">
+                      {{ type }}
+                    </option>
+                  }
+                </cds-select>
+                <ng-template #osdFailureDomainError>
+                  @if (form.showError('osdFailureDomain', formDir, 'ecRequiresKm')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on an erasure coded pool require k and m.
+                    </span>
+                  }
+                  @if (form.showError('osdFailureDomain', formDir, 'replicatedRequiresZones')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on a replicated pool require a number of zones greater than 1.
+                    </span>
+                  }
+                  @if (form.showError('osdFailureDomain', formDir, 'ruleConflict')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      Cannot be combined with a Crush ruleset. Select the default Crush ruleset or
+                      clear the CRUSH parameters.
+                    </span>
+                  }
+                </ng-template>
+              </div>
+              <div cdsCol>
+                <cds-select
+                  formControlName="zoneFailureDomain"
+                  label="Zone failure domain (optional)"
+                  i18n-label
+                  id="zoneFailureDomain"
+                  data-testid="zone-failure-domain"
+                  [helperText]="failureDomainHelperText"
+                  [invalid]="
+                    form.controls.zoneFailureDomain.invalid && form.controls.zoneFailureDomain.dirty
+                  "
+                  [invalidText]="zoneFailureDomainError"
+                >
+                  <option value="">-- None --</option>
+                  @for (type of crushTypeNames; track type) {
+                    <option [value]="type">
+                      {{ type }}
+                    </option>
+                  }
+                </cds-select>
+                <ng-template #zoneFailureDomainError>
+                  @if (form.showError('zoneFailureDomain', formDir, 'ecRequiresKm')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on an erasure coded pool require k and m.
+                    </span>
+                  }
+                  @if (form.showError('zoneFailureDomain', formDir, 'replicatedRequiresZones')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      CRUSH parameters on a replicated pool require a number of zones greater than 1.
+                    </span>
+                  }
+                  @if (form.showError('zoneFailureDomain', formDir, 'ruleConflict')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                    >
+                      Cannot be combined with a Crush ruleset. Select the default Crush ruleset or
+                      clear the CRUSH parameters.
+                    </span>
+                  }
+                </ng-template>
+              </div>
+              <ng-template #failureDomainHelperText>
+                <span i18n>
+                  When set, the crush rule is created for this pool. This cannot be combined with a
+                  selected Crush ruleset.
+                </span>
+              </ng-template>
+            </div>
+          }
         </div>
       }
       <!-- Compression -->
