@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <string_view>
 
 #include <boost/container/flat_set.hpp>
@@ -9081,6 +9082,23 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
   if (cct->_conf->rgw_debug_inject_olh_cancel_modification_err) {
     // simulate the scenario where we fail to remove the pending xattr
     return;
+  }
+
+  // for testing: hold the rollback, to reproduce a race with a concurrent
+  // overwrite of the head
+  if (cct->_conf->rgw_inject_delay_sec > 0 &&
+      std::string_view(cct->_conf->rgw_inject_delay_pattern) == "delay_olh_cancel_modification") {
+    ldpp_dout(dpp, 0) << __func__ << ": injecting delay of " << cct->_conf->rgw_inject_delay_sec
+                      << "s for " << olh_obj << dendl;
+    const auto delay = ceph::make_timespan(cct->_conf->rgw_inject_delay_sec);
+    if (y) {
+      auto yield = y.get_yield_context();
+      boost::asio::steady_timer timer{yield.get_executor(), delay};
+      boost::system::error_code ec;
+      timer.async_wait(yield[ec]);
+    } else {
+      std::this_thread::sleep_for(delay);
+    }
   }
 
   rgw_rados_ref ref;
