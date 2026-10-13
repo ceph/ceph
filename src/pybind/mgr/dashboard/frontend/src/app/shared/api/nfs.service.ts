@@ -153,13 +153,6 @@ export class NfsService extends ApiClient {
     return this.http.get(`${this.uiApiPath}/cephfs/filesystems`);
   }
 
-  nfsClusterList(): Observable<NFSCluster[]> {
-    return this.http.get<NFSCluster[]>(`${this.apiPath}/cluster`, {
-      headers: { Accept: this.getVersionHeaderValue(0, 1) },
-      params: { info: true }
-    });
-  }
-
   enableQosBandwidthForCLuster(obj: NFSBwIopConfig) {
     return this.http.patch(`${this.apiPath}/cluster/qos/bw`, obj, {
       headers: { Accept: this.getVersionHeaderValue(1, 0) },
