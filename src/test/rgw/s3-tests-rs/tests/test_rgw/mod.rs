@@ -15,3 +15,5 @@ mod features;
 mod identity;
 mod impersonation;
 mod quota;
+mod reserved_names;
+mod root_object;

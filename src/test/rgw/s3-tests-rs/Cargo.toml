@@ -42,6 +42,10 @@ fails_on_aws = []
 fails_on_dbstore = []
 fails_on_nsfs = []
 fails_on_posix = []
+# RGW over RADOS.  A rados run otherwise has only the default features,
+# so a test of a filesystem driver's own S3 behaviour had nothing to
+# gate on there.
+fails_on_rados = []
 # NooBaa, for a capture taken from their gateway rather than from RGW.
 # Permanent by nature:  it marks what their implementation does not do,
 # and it works against a black box.
