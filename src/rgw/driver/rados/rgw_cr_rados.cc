@@ -815,9 +815,13 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        source_trace_entry,
                        &zones_trace,
                        &bytes_transferred,
-                       keep_tags);
+                       keep_tags,
+                       skip_decompress_types);
 
-  if (r < 0) {
+  if (r == -ERR_SYNC_COMPRESSION_MISMATCH) {
+    // not an error, RGWObjFetchCR fetches the object again decompressed
+    ldpp_dout(dpp, 10) << "store->fetch_remote_obj() returned r=" << r << dendl;
+  } else if (r < 0) {
     ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
     if (counters) {
       counters->inc(sync_counters::l_fetch_err, 1);
