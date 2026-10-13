@@ -469,12 +469,12 @@ inline std::optional<signedspan> maybe_timespan(const double d) {
   return d ? std::make_optional(make_timespan(d)) : std::nullopt;
 }
 
-template<typename Clock,
-	 typename std::enable_if<!Clock::is_steady>::type* = nullptr>
+template<typename Clock>
+requires(!Clock::is_steady)
 std::ostream& operator<<(std::ostream& m,
 			 const std::chrono::time_point<Clock>& t);
-template<typename Clock,
-	 typename std::enable_if<Clock::is_steady>::type* = nullptr>
+template<typename Clock>
+requires(Clock::is_steady)
 std::ostream& operator<<(std::ostream& m,
 			 const std::chrono::time_point<Clock>& t);
 
