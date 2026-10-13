@@ -1,35 +1,45 @@
-# Expected differences between two corpus captures.
+# The expected-difference list:  the differences between two corpus
+# captures of one tree that are accounted for.  Read by `corpus-compare`
+# (s3-tests-rs, src/bin/corpus-compare.rs;  the rules are
+# s3_tests_rs::corpus::compare), which `standup.rs compare` runs.
 #
 # The diff gates:  a difference not matched by a row here fails the
 # comparison.  That is the point -- a comparison whose negative case
 # cannot occur proves nothing -- so every row is a claim that someone
 # has to defend, and a row with no reason is not a row.
 #
-# Six tab-separated columns:
+# Seven tab-separated columns:
 #
-#   pair      which two captures.  theirs:ours-before is adoption --
-#             what RGW answers over a tree it has not yet converted,
-#             against what NooBaa answered for the same tree.
-#             ours-before:ours-after is conversion.  "before" is before
-#             *conversion*:  the bucket has been adopted by then, so
-#             this pair measures what adoption changed.
+#   pair      which two captures.  noobaa:unconverted is the NooBaa run
+#             against the unconverted RGW run -- RGW over the tree after
+#             `import`, each bucket's record imported and its objects as
+#             NooBaa wrote them;  a difference no row accounts for is an
+#             adoption defect.  unconverted:converted is that run against
+#             the converted RGW run, after `adopt`;  a difference no row
+#             accounts for is a conversion defect.
 #   when      the modality this row applies in -- md5-off, md5-on, or
 #             blank for both.  A modality is a property of the tree,
 #             fixed when NooBaa wrote its objects, so the two are two
 #             trees and one file covers both rather than two drifting.
 #   artifact  manifest | inventory | run
-#   key       manifest:  the field, third column, `*` globs a suffix
-#             inventory: xattr:<name>, mode, owner, or size
-#             run:       the axis whose artifacts are absent entirely
-#   class     equal      must be identical, and a difference fails
-#             recognize:<r>  normalize both sides through <r>, then
-#                        compare -- so the row still asserts that both
-#                        are the same *kind* of value, where `persists`
-#                        would assert nothing
-#             persists   differs, and still will after conversion
-#             vanishes   differs now, must be identical after
-#             absent     one side produced nothing to compare
-#             filtered   not a difference;  the writer must drop it
+#   subject   which subject the row is about:  `object <key>` or
+#             `bucket <name>` for a manifest, a path for an inventory;
+#             blank for any.  A row about one object must name it, or it
+#             excuses the same difference on every object
+#   key       manifest:  the field, third column
+#             inventory: xattr:<name>, type, mode, owner, or size
+#             run:       the stem whose artifact is absent entirely
+#             `*` matches any run of characters, anywhere.  The first
+#             row that matches a difference is the one that judges it.
+#   class     each a statement about the one pair the row names:
+#             equal      values must be identical
+#             recognize:<r>  both values pass through normalizer <r>,
+#                        then must be identical -- so the row still
+#                        asserts both are the same *kind* of value
+#             differs    values may differ
+#             vanishes   present on the left, must be absent on the right
+#             absent     present on one side only, either side
+#             filtered   should never appear;  the writer drops it
 #   reason    why, in one line.  Required.
 #
 # NEVER key a row on a literal value from their side.  Their ETag and
@@ -45,6 +55,19 @@
 # of twenty carry the mark;  the rest rest on a measurement or on code
 # that was read for the purpose.
 
+# ---- named objects, first because the first matching row judges -----
+# `.noobaa-nsfs-k-under-temp` is a client's object whose name starts
+# with NooBaa's temp prefix.  NooBaa stores it and its listing hides it
+# -- the prefix it hides is wider than its temp directory,
+# `.noobaa-nsfs_<bucket id>` -- and RGW lists it, which is correct
+# (DECISIONS.md 2026-10-12).  The corpus asserts the RGW side in observe
+# mode;  these rows account for NooBaa's.
+
+noobaa:unconverted		manifest	object .noobaa-nsfs-k-under-temp	listed	absent	NooBaa's listing hides every name starting with .noobaa-nsfs (namespace_fs.js:787);  RGW lists the object, as it should
+noobaa:unconverted		manifest	object .noobaa-nsfs-k-under-temp	size	absent	same:  the size comes from the listing
+noobaa:unconverted		manifest	object .noobaa-nsfs-k-under-temp	etag	absent	same:  the ETag comes from the listing
+noobaa:unconverted		manifest	object .noobaa-nsfs-k-under-temp	body-*	absent	same:  the corpus reads back only what was listed
+
 # ---- the content proof, in either modality --------------------------
 # The strongest rows here, and the only ones that witness bytes:  the
 # suite digests each body it GETs and records `body-md5` itself, so
@@ -54,9 +77,9 @@
 # Validation is the suite's job and not the gateway's;  `DECISIONS.md`
 # 2026-10-09.
 
-theirs:ours-before		manifest	body-md5	equal	adoption writes one attribute per bucket and rewrites no object, so every byte must read back the same
-ours-before:ours-after		manifest	body-md5	equal	conversion rewrites metadata, not content;  a difference here is data loss
-theirs:ours-before		manifest	body-len	equal	same, and it localises a truncation to the length rather than the digest
+noobaa:unconverted		manifest		body-md5	equal	adoption writes one attribute per bucket and rewrites no object, so every byte must read back the same
+unconverted:converted		manifest		body-md5	equal	conversion rewrites metadata, not content;  a difference here is data loss
+noobaa:unconverted		manifest		body-len	equal	same, and it localises a truncation to the length rather than the digest
 
 # ---- adoption:  what the ETag says, by modality ---------------------
 # **nsfs never hashes an object on a read** (`ETAG_STRATEGY.md`).  An
@@ -67,50 +90,50 @@ theirs:ours-before		manifest	body-len	equal	same, and it localises a truncation 
 # So in md5-off both sides report a token;  in md5-on they stored a
 # digest and we forward it.
 
-theirs:ours-before	md5-off	manifest	etag	recognize:synthetic-identity	both report a file-instance token, and the values differ:  their mtime component loses its low 8 bits to a double in fs_napi.cpp:360, which we do not reproduce.  Recognized rather than tolerated, so a side that started reporting a digest fails
-theirs:ours-before	md5-off	manifest	listed-etag	recognize:synthetic-identity	same value by the same path, through ListObjects
-theirs:ours-before	md5-off	manifest	head-etag	recognize:synthetic-identity	same value by the same path, through HeadObject
-theirs:ours-before	md5-off	manifest	copy.reported-etag	recognize:synthetic-identity	same value by the same path, through CopyObject's result
-theirs:ours-before	md5-on	manifest	etag	equal	NooBaa stored user.content_md5 and we forward it unchanged -- xattr_strategy.cc:128 -- so the two agree by construction rather than by recomputation
-ours-before:ours-after	md5-on	manifest	etag	equal	conversion renames the attribute into our layout and must preserve its value
+noobaa:unconverted	md5-off	manifest		etag	recognize:synthetic-identity	both report a file-instance token, and the values differ:  their mtime component loses its low 8 bits to a double in fs_napi.cpp:360, which we do not reproduce.  Recognized rather than tolerated, so a side that started reporting a digest fails
+noobaa:unconverted	md5-off	manifest		listed-etag	recognize:synthetic-identity	same value by the same path, through ListObjects
+noobaa:unconverted	md5-off	manifest		head-etag	recognize:synthetic-identity	same value by the same path, through HeadObject
+noobaa:unconverted	md5-off	manifest		copy.reported-etag	recognize:synthetic-identity	same value by the same path, through CopyObject's result
+noobaa:unconverted	md5-on	manifest		etag	equal	NooBaa stored user.content_md5 and we forward it unchanged -- xattr_strategy.cc:128 -- so the two agree by construction rather than by recomputation
+unconverted:converted	md5-on	manifest		etag	equal	conversion renames the attribute into our layout and must preserve its value
 
 # ---- adoption:  everything else ------------------------------------
 # In base profile we add nothing to their tree, so the inventory should
 # be *identical* here apart from what adoption itself writes.  An
 # inventory difference in this pair that no row names is a defect.
 
-theirs:ours-before		manifest	listed-owner	persists	PROVISIONAL _get_object_owner() returns undefined always, so NooBaa objects have no owner;  answering from the inode uid is an RGW addition
-theirs:ours-before		manifest	version.*.owner	persists	PROVISIONAL same cause as listed-owner, per version
-theirs:ours-before		inventory	xattr:security.selinux	filtered	not written by either gateway;  the host's policy put it there and it differs per machine.  The inventory writer drops it rather than listing it here
-theirs:ours-before		inventory	xattr:user.nsfs.extensions	vanishes	PROVISIONAL the marker adoption writes -- EXTENSIONS_XATTR, bucket_profile.h:85 -- deliberately not routed through disk_name() because choosing the strategy is what it is for
-theirs:ours-before		manifest	put-*	absent	the outcome of a write, and only the capture that wrote has one.  An observing pass -- how capture/rgw is taken, since it must not create objects in the tree it is describing -- records no put-status, put-refused or put-message.  Keyed on the prefix because a refused key has three of them.  `capture-mode` on the bucket says which kind of capture a manifest is
-theirs:ours-before		manifest	capture-mode	persists	it says which kind of capture this is, so it differs by construction -- and the rows above are conditioned on it.  Listed rather than filtered, because a reader comparing two manifests needs to see which is which before trusting anything else
-theirs:ours-before		manifest	*-failed	absent	head-failed, tagging-failed and their kind are recorded when an operation *this pass* performed failed.  An observing pass performs none, so it has neither the failure nor the key it failed on -- the gateway refused to create it
-theirs:ours-before		manifest	head-status	absent	same:  the status of a HEAD this pass made against a key it failed to write
-theirs:ours-before		manifest	delete-marker-id-reported	absent	whether the DELETE returned a version id -- an outcome of a delete an observing pass does not make.  The marker itself is in the tree and is listed
-theirs:ours-before		manifest	versions-before-suspend	absent	the axis counts what its own puts reported either side of suspending the bucket.  An observing pass suspends nothing and puts nothing;  what the tree holds is in version.* instead
-theirs:ours-before		manifest	versions-after-suspend	absent	same
-theirs:ours-before		manifest	*.accepted	absent	bucket configuration:  whether applying it succeeded.  An observing pass applies nothing -- and must not, since clearing and re-applying would destroy the configuration it is there to describe
-theirs:ours-before		manifest	*.refused	absent	bucket configuration:  the code a refused apply returned.  Emitted with <none> when it was accepted, so it is always present in a generating capture and never in an observing one
-theirs:ours-before		manifest	copy.reported-etag	absent	what CopyObject's own response said.  An observing pass makes no copy;  what the destination holds is in head-etag, which does compare
-theirs:ours-before		manifest	copy.reported-version-id	absent	same
-theirs:ours-before		manifest	warmed-with	persists	the key count a warming listing saw, taken partway through the run -- so it reports the harness's own sequence rather than the tree, and differs between any two passes that build the tree differently.  A fact about the capture, not about what was captured
-theirs:ours-before		manifest	*.gained	absent	which stored names changed when the configuration was applied.  Differential, so it needs a before and an after that only an applying pass has
-theirs:ours-before		manifest	*.present	absent	the observing pass's counterpart to `.gained`:  which stored names are there, absolutely rather than differentially.  Present only in an observed capture, which is the same kind of row in the other direction
-theirs:ours-before		manifest	parts-listed	absent	from ListParts, which needs an upload id -- an outcome only the pass that created the upload has.  An observing capture does not ask
-theirs:ours-before		manifest	part.*.size	absent	same:  the per-part facts come from ListParts on an upload still in flight
-theirs:ours-before		run	coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
+noobaa:unconverted		manifest		listed-owner	differs	PROVISIONAL _get_object_owner() returns undefined always, so NooBaa objects have no owner;  answering from the inode uid is an RGW addition
+noobaa:unconverted		manifest		version.*.owner	differs	PROVISIONAL same cause as listed-owner, per version
+noobaa:unconverted		inventory		xattr:security.selinux	filtered	not written by either gateway;  the host's policy put it there and it differs per machine.  The inventory writer drops it rather than listing it here
+noobaa:unconverted		inventory		xattr:user.nsfs.extensions	vanishes	PROVISIONAL the marker adoption writes -- EXTENSIONS_XATTR, bucket_profile.h:85 -- deliberately not routed through disk_name() because choosing the strategy is what it is for
+noobaa:unconverted		manifest		put-*	absent	the outcome of a write, and only the capture that wrote has one.  An observing pass -- how capture/rgw is taken, since it must not create objects in the tree it is describing -- records no put-status, put-refused or put-message.  Keyed on the prefix because a refused key has three of them.  `capture-mode` on the bucket says which kind of capture a manifest is
+noobaa:unconverted		manifest		capture-mode	differs	it says which kind of capture this is, so it differs by construction -- and the rows above are conditioned on it.  Listed rather than filtered, because a reader comparing two manifests needs to see which is which before trusting anything else
+noobaa:unconverted		manifest		*-failed	absent	head-failed, tagging-failed and their kind are recorded when an operation *this pass* performed failed.  An observing pass performs none, so it has neither the failure nor the key it failed on -- the gateway refused to create it
+noobaa:unconverted		manifest		head-status	absent	same:  the status of a HEAD this pass made against a key it failed to write
+noobaa:unconverted		manifest		delete-marker-id-reported	absent	whether the DELETE returned a version id -- an outcome of a delete an observing pass does not make.  The marker itself is in the tree and is listed
+noobaa:unconverted		manifest		versions-before-suspend	absent	the axis counts what its own puts reported either side of suspending the bucket.  An observing pass suspends nothing and puts nothing;  what the tree holds is in version.* instead
+noobaa:unconverted		manifest		versions-after-suspend	absent	same
+noobaa:unconverted		manifest		*.accepted	absent	bucket configuration:  whether applying it succeeded.  An observing pass applies nothing -- and must not, since clearing and re-applying would destroy the configuration it is there to describe
+noobaa:unconverted		manifest		*.refused	absent	bucket configuration:  the code a refused apply returned.  Emitted with <none> when it was accepted, so it is always present in a generating capture and never in an observing one
+noobaa:unconverted		manifest		copy.reported-etag	absent	what CopyObject's own response said.  An observing pass makes no copy;  what the destination holds is in head-etag, which does compare
+noobaa:unconverted		manifest		copy.reported-version-id	absent	same
+noobaa:unconverted		manifest		warmed-with	differs	the key count a warming listing saw, taken partway through the run -- so it reports the harness's own sequence rather than the tree, and differs between any two passes that build the tree differently.  A fact about the capture, not about what was captured
+noobaa:unconverted		manifest		*.gained	absent	which stored names changed when the configuration was applied.  Differential, so it needs a before and an after that only an applying pass has
+noobaa:unconverted		manifest		*.present	absent	the observing pass's counterpart to `.gained`:  which stored names are there, absolutely rather than differentially.  Present only in an observed capture, which is the same kind of row in the other direction
+noobaa:unconverted		manifest		parts-listed	absent	from ListParts, which needs an upload id -- an outcome only the pass that created the upload has.  An observing capture does not ask
+noobaa:unconverted		manifest		part.*.size	absent	same:  the per-part facts come from ListParts on an upload still in flight
+noobaa:unconverted		run		coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
 
 # ---- conversion:  the layout changes wholesale ----------------------
 # These rows are the definition of conversion being complete:  nothing
 # on the left may survive on the right.
 
-ours-before:ours-after		inventory	xattr:user.nsfs.converting	vanishes	PROVISIONAL CONVERTING_XATTR, bucket_profile.h:107, records adoption underway and is gone when the walk completes
-ours-before:ours-after		inventory	xattr:user.noobaa.*	vanishes	their internal namespace becomes user.nsfs.* -- NB_KEYS, xattr_strategy.cc:127
-ours-before:ours-after		inventory	xattr:user.storage_class	vanishes	NB_KEYS maps it;  it is the one name their own reader hides from user metadata, via XATTR_METADATA_IGNORE_LIST
-ours-before:ours-after		inventory	xattr:user.content_md5	vanishes	maps to RGW_ATTR_ETAG alone, so a converted object stops carrying the key -- a decision, not a defect, recorded in docs/NOOBAA_WRITE_SURFACE.md
-ours-before:ours-after		inventory	xattr:user.*	vanishes	user metadata is plain user.<k> in their layout and user.nsfs.rgw.x-amz-meta-<k> in ours.  Ordered after the rows above, which are narrower
-ours-before:ours-after		manifest	meta.content_md5	vanishes	their reader re-exposes user.content_md5 as a user-metadata key because it is not in their ignore list;  ours does not, so the fact disappears
+unconverted:converted		inventory		xattr:user.nsfs.converting	vanishes	PROVISIONAL CONVERTING_XATTR, bucket_profile.h:107, records adoption underway and is gone when the walk completes
+unconverted:converted		inventory		xattr:user.noobaa.*	vanishes	their internal namespace becomes user.nsfs.* -- NB_KEYS, xattr_strategy.cc:127
+unconverted:converted		inventory		xattr:user.storage_class	vanishes	NB_KEYS maps it;  it is the one name their own reader hides from user metadata, via XATTR_METADATA_IGNORE_LIST
+unconverted:converted		inventory		xattr:user.content_md5	vanishes	maps to RGW_ATTR_ETAG alone, so a converted object stops carrying the key -- a decision, not a defect, recorded in docs/NOOBAA_WRITE_SURFACE.md
+unconverted:converted		inventory		xattr:user.*	vanishes	user metadata is plain user.<k> in their layout and user.nsfs.rgw.x-amz-meta-<k> in ours.  Ordered after the rows above, which are narrower
+unconverted:converted		manifest		meta.content_md5	vanishes	their reader re-exposes user.content_md5 as a user-metadata key because it is not in their ignore list;  ours does not, so the fact disappears
 
 # ---- not yet classifiable ------------------------------------------
 # One item, with no class asserted because it needs a measurement

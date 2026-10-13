@@ -9,6 +9,7 @@
 //! the environment variables a workflow driver such as
 //! `adoption/standup.rs` sets to run it.
 
+pub mod compare;
 pub mod env;
 pub mod inventory;
 pub mod manifest;
