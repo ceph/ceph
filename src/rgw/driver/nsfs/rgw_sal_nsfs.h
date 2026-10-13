@@ -1733,6 +1733,16 @@ public:
 		   nsfs::convert_cb_t* cb,
 		   nsfs::ConvertProgress* progress);
 
+  /* Convert the directory object stored at `dir`, which a client write
+   * is about to change, if it is still in NooBaa's format:  a write
+   * converts the object first and then proceeds as on a converted one
+   * (DECISIONS.md 2026-10-13).  Returns 0 when there is nothing to
+   * convert.  On a bucket that is not being converted, returns
+   * -EOPNOTSUPP:  converting one object would put a second format into
+   * a bucket that is not changing format. */
+  int convert_before_write(const DoutPrefixProvider* dpp, optional_yield y,
+			   nsfs::Directory* dir, const std::string& key);
+
 private:
   /* Re-stage the uploads still in the other format.  Part of
    * convert_tree();  separate because staging is a different shape
@@ -2129,6 +2139,11 @@ public:
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(nsfs::ObjectType type);
+  /* Before a change to this object:  if it is a directory object still
+   * in NooBaa's format, convert it, so the change lands on the object
+   * conversion would leave (NSFSBucket::convert_before_write()).  Must be
+   * called under the bucket's mutation guard. */
+  int convert_before_write(const DoutPrefixProvider* dpp, optional_yield y);
 
  class NSFSFSIOObject : public FSIOObject {
   private:

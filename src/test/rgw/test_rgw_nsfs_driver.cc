@@ -5191,6 +5191,22 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryWithoutTheMarkerIsNotItsObject)
   EXPECT_FALSE(u.listed);
 }
 
+/* On a base bucket nothing converts, so a write to a NooBaa directory
+ * object is refused rather than put in the nsfs format beside NooBaa's.
+ * What such a bucket should allow is open (DECISIONS.md 2026-10-11, the
+ * command mode). */
+TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRefused)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+
+  auto obj = bucket->get_object(rgw_obj_key("e/"));
+  EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0),
+	    -EOPNOTSUPP);
+  EXPECT_TRUE(client_view(bucket.get(), env->dpp, "e/").exists);
+  EXPECT_FALSE(sf::exists(bucket_path() / "e" / ".folder"))
+      << "a sentinel was written into a base bucket";
+}
+
 /* A base bucket whose state is where NooBaa keeps it.
  *
  * The config root is set before the driver is built, because that is
@@ -7069,6 +7085,118 @@ TEST_F(NSFSConvertingBucketTest, ReadsTheirDirectoryObjects)
   EXPECT_EQ(c.body, "dir bytes");
   EXPECT_TRUE(c.listed);
   EXPECT_EQ(c.listed_size, 9u);
+}
+
+/* Write `body` to `key` with a content type, as a client's PUT does. */
+static void put_object(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
+		       const DoutPrefixProvider* dpp, const ACLOwner& owner,
+		       const std::string& key, const std::string& body,
+		       const std::string& content_type, int expect = 0)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  auto writer = driver->get_atomic_writer(dpp, null_yield, obj.get(), owner,
+					  nullptr, 0, "put");
+  ASSERT_EQ(writer->prepare(null_yield), 0) << key;
+  bufferlist bl;
+  bl.append(body);
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, body.size()), 0);
+  Attrs attrs;
+  bufferlist ct;
+  ct.append(content_type);
+  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{dpp, null_yield, nullptr};
+  EXPECT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), expect) << key;
+}
+
+/* A write to a directory object the sweep has not reached converts that
+ * object first, so its effect is the effect after adoption
+ * (DECISIONS.md 2026-10-13).  Each case is read once the write is done
+ * and again once the sweep has run, and the two must agree. */
+TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepStaysDeleted)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+
+  for (const char* k : {"e/", "c/"}) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0), 0) << k;
+    const ClientView v = client_view(bucket.get(), env->dpp, k);
+    EXPECT_FALSE(v.exists) << k << " survived its delete";
+    EXPECT_FALSE(v.listed) << k << " listed after its delete";
+  }
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  for (const char* k : {"e/", "c/"}) {
+    const ClientView v = client_view(bucket.get(), env->dpp, k);
+    EXPECT_FALSE(v.exists) << k << " came back with the sweep";
+    EXPECT_FALSE(v.listed) << k << " listed again after the sweep";
+  }
+}
+
+TEST_F(NSFSConvertingBucketTest, APutBeforeTheSweepIsTheObject)
+{
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "c/", "new body",
+	     "text/x-new");
+
+  const ClientView v0 = client_view(bucket.get(), env->dpp, "c/");
+  ASSERT_TRUE(v0.exists);
+  EXPECT_EQ(v0.body, "new body");
+  EXPECT_EQ(v0.size, 8u);
+  EXPECT_EQ(v0.content_type, "text/x-new");
+  EXPECT_EQ(v0.probe, "") << "the replaced object's metadata survived the PUT";
+  EXPECT_TRUE(v0.listed);
+  EXPECT_EQ(v0.listed_size, 8u);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  const ClientView v1 = client_view(bucket.get(), env->dpp, "c/");
+  EXPECT_EQ(v1.exists, v0.exists);
+  EXPECT_EQ(v1.body, v0.body);
+  EXPECT_EQ(v1.size, v0.size);
+  EXPECT_EQ(v1.content_type, v0.content_type);
+  EXPECT_EQ(v1.probe, v0.probe);
+  EXPECT_EQ(v1.etag, v0.etag);
+  EXPECT_EQ(v1.mtime, v0.mtime);
+  EXPECT_EQ(v1.listed, v0.listed);
+  EXPECT_EQ(v1.listed_size, v0.listed_size);
+  EXPECT_EQ(v1.listed_etag, v0.listed_etag);
+}
+
+TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepSurvivesIt)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+
+  auto obj = bucket->get_object(rgw_obj_key("e/"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  Attrs attrs;
+  bufferlist v;
+  v.append("changed");
+  attrs[RGW_ATTR_META_PREFIX "probe"] = v;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  const ClientView v0 = client_view(bucket.get(), env->dpp, "e/");
+  ASSERT_TRUE(v0.exists);
+  EXPECT_EQ(v0.probe, "changed");
+  EXPECT_EQ(v0.content_type, "text/x-e") << "the write lost the object's other attributes";
+  EXPECT_TRUE(v0.listed);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  const ClientView v1 = client_view(bucket.get(), env->dpp, "e/");
+  EXPECT_EQ(v1.exists, v0.exists);
+  EXPECT_EQ(v1.probe, v0.probe);
+  EXPECT_EQ(v1.content_type, v0.content_type);
+  EXPECT_EQ(v1.etag, v0.etag);
+  EXPECT_EQ(v1.mtime, v0.mtime);
+  EXPECT_EQ(v1.listed, v0.listed);
 }
 
 TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)

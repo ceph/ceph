@@ -6777,6 +6777,181 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
   return 0;
 }
 
+/* Convert one directory object from NooBaa's format.
+ *
+ * `dir_fd` is the directory the object is stored at, and `key` its key,
+ * for the log and the callback.  Shared by the sweep and by a client
+ * write, which converts the object it is about to change before changing
+ * it (DECISIONS.md 2026-10-13), so the two cannot differ about what a
+ * converted directory object is.
+ *
+ * A directory object in NooBaa's format:
+ *
+ * NooBaa's marker is user.noobaa.dir_content on the directory and
+ * nsfs's is the sentinel file, and the attributes move with it:
+ * NooBaa's live on the directory, nsfs's on `.folder`.  So
+ * converting one is a move, not a rename of an attribute -- create
+ * the sentinel if the object was empty, carry the attributes
+ * across, and drop dir_content.
+ *
+ * The sentinel is created before the attributes are written, so a
+ * reader that arrives between the two sees an empty object rather
+ * than none.  A partial conversion is visible either way;  this is
+ * the ordering that makes it visible as the object it is. */
+static int convert_directory_object(const DoutPrefixProvider* dpp,
+				    optional_yield y, int dir_fd,
+				    const std::string& key,
+				    nsfs::FSStrategy* fs,
+				    const nsfs::XattrStrategy* ours,
+				    const nsfs::XattrStrategy* theirs,
+				    const ACLOwner& bucket_owner,
+				    const nsfs::PathStrategy* their_paths,
+				    nsfs::convert_cb_t* cb,
+				    nsfs::ConvertProgress& progress,
+				    bool no_chown)
+{
+  int ret;
+  const std::string sname = their_paths->folder_object_name();
+  /* NooBaa's object mode, as every object nsfs creates carries
+   * (DECISIONS.md 2026-10-11).  Restored straight after the open,
+   * while the gateway still owns the file, because the ids are
+   * taken from the directory below. */
+  int sfd = ::openat(dir_fd, sname.c_str(),
+		     O_RDONLY | O_CREAT, nsfs::file_create_mode());
+  if (sfd < 0) {
+    ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
+		      << key << ": " << cpp_strerror(-ret)
+		      << dendl;
+    return ret;
+  }
+  auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
+  ret = nsfs::apply_create_mode(dpp, sfd, nsfs::file_create_mode());
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* The sentinel re-expresses the directory, so it takes the
+   * directory's uid and gid. */
+  struct statx dstx{};
+  ret = statx_ids(dir_fd, dstx);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key
+      << " to give " << sname << " its owner: "
+      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  ret = inherit_ids(dpp, sfd, dstx, no_chown, sname);
+  if (ret < 0) {
+    /* The sentinel exists by now, and the whole point of refusing is
+     * not to leave a file whose owner is wrong.  Take it back out --
+     * the directory object is still in NooBaa's format and still readable
+     * through the fallback, which is where a stopped conversion
+     * leaves everything else. */
+    if (::unlinkat(dir_fd, sname.c_str(), 0) < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
+	<< " after refusing to create it: " << cpp_strerror(errno)
+	<< dendl;
+    }
+    return ret;
+  }
+
+  nsfs::ConvertEvent ev{};
+  ev.kind = nsfs::ConvertEvent::Kind::directory_object;
+  ev.key = key;
+  ev.index = progress.objects + progress.directory_objects;
+
+  Attrs dattrs;
+  /* Not `user.nsfs.`:  on the bucket root those are the bucket's own
+   * state, which is not the object's to carry, and nothing else in
+   * NooBaa's format has them. */
+  ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, ours, theirs, {},
+		    "user.nsfs.");
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent b = ev;
+    b.phase = nsfs::ConvertEvent::Phase::before;
+    ret = (*cb)(dpp, b);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  nsfs::xattr_map_t to_write;
+  for (const auto& [key, bl] : dattrs) {
+    const std::string mine = ours->disk_name(key);
+    if (!mine.empty()) {
+      to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
+    }
+  }
+  /* Record the owner, for the reason convert_attrs() gives:  the
+   * bucket's.  It lands on the sentinel along with everything else
+   * that moves. */
+  if (dattrs.find(RGW_ATTR_ACL) == dattrs.end()) {
+    RGWAccessControlPolicy policy;
+    policy.create_default(bucket_owner.id, bucket_owner.display_name);
+    bufferlist aclbl;
+    policy.encode(aclbl);
+    const std::string mine = ours->disk_name(RGW_ATTR_ACL);
+    if (!mine.empty()) {
+      to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
+						   aclbl));
+    }
+  }
+  if (!to_write.empty()) {
+    ret = fs->set_xattrs(dpp, sfd, to_write);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent w = ev;
+    w.phase = nsfs::ConvertEvent::Phase::written;
+    ret = (*cb)(dpp, w);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  /* dir_content last:  while it is there the directory is still an
+   * object to NooBaa's reader, and removing it before the sentinel
+   * exists would make the object vanish for the length of a
+   * syscall. */
+  std::vector<std::string> gone;
+  for (const auto& [key, bl] : dattrs) {
+    const std::string foreign = theirs->disk_name(key);
+    if (!foreign.empty()) {
+      gone.push_back(foreign);
+    }
+  }
+  if (!gone.empty()) {
+    /* upgrade command;  see convert_attrs */
+    ret = fs->remove_xattrs(dpp, dir_fd, gone);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  ret = their_paths->clear_directory_object(dpp, dir_fd);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent pr = ev;
+    pr.phase = nsfs::ConvertEvent::Phase::pruned;
+    ret = (*cb)(dpp, pr);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+  ++progress.directory_objects;
+  return 0;
+}
+
 /* One directory of the tree, and everything under it.
  *
  * Depth first, and the order within a directory is readdir's, so a
@@ -6874,155 +7049,14 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    /* A directory object in NooBaa's format.
-     *
-     * NooBaa's marker is user.noobaa.dir_content on the directory and
-     * nsfs's is the sentinel file, and the attributes move with it:
-     * NooBaa's live on the directory, nsfs's on `.folder`.  So
-     * converting one is a move, not a rename of an attribute -- create
-     * the sentinel if the object was empty, carry the attributes
-     * across, and drop dir_content.
-     *
-     * The sentinel is created before the attributes are written, so a
-     * reader that arrives between the two sees an empty object rather
-     * than none.  A partial conversion is visible either way;  this is
-     * the ordering that makes it visible as the object it is. */
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (their_paths->directory_object(dpp, sub.get_fd(), dobj)) {
-      const std::string sname = their_paths->folder_object_name();
-      /* NooBaa's object mode, as every object nsfs creates carries
-       * (DECISIONS.md 2026-10-11).  Restored straight after the open,
-       * while the gateway still owns the file, because the ids are
-       * taken from the directory below. */
-      int sfd = ::openat(sub.get_fd(), sname.c_str(),
-			 O_RDONLY | O_CREAT, nsfs::file_create_mode());
-      if (sfd < 0) {
-	ret = -errno;
-	ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
-			  << prefix << name << ": " << cpp_strerror(-ret)
-			  << dendl;
+      ret = convert_directory_object(dpp, y, sub.get_fd(), prefix + name + "/",
+				     fs, ours, theirs, bucket_owner, their_paths,
+				     cb, progress, no_chown);
+      if (ret != 0) {
 	return ret;
       }
-      auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
-      ret = nsfs::apply_create_mode(dpp, sfd, nsfs::file_create_mode());
-      if (ret < 0) {
-	return ret;
-      }
-
-      /* The sentinel re-expresses the directory, so it takes the
-       * directory's uid and gid. */
-      struct statx dstx{};
-      ret = statx_ids(sub.get_fd(), dstx);
-      if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: cannot stat " << prefix << name
-	  << " to give " << sname << " its owner: "
-	  << cpp_strerror(-ret) << dendl;
-	return ret;
-      }
-      ret = inherit_ids(dpp, sfd, dstx, no_chown, sname);
-      if (ret < 0) {
-	/* The sentinel exists by now, and the whole point of refusing is
-	 * not to leave a file whose owner is wrong.  Take it back out --
-	 * the directory object is still in NooBaa's format and still readable
-	 * through the fallback, which is where a stopped conversion
-	 * leaves everything else. */
-	if (::unlinkat(sub.get_fd(), sname.c_str(), 0) < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
-	    << " after refusing to create it: " << cpp_strerror(errno)
-	    << dendl;
-	}
-	return ret;
-      }
-
-      nsfs::ConvertEvent ev{};
-      ev.kind = nsfs::ConvertEvent::Kind::directory_object;
-      ev.key = prefix + name + "/";
-      ev.index = progress.objects + progress.directory_objects;
-
-      Attrs dattrs;
-      ret = get_x_attrs(y, dpp, sub.get_fd(), dattrs, ev.key, ours, theirs);
-      if (ret < 0) {
-	return ret;
-      }
-
-      if (cb) {
-	nsfs::ConvertEvent b = ev;
-	b.phase = nsfs::ConvertEvent::Phase::before;
-	ret = (*cb)(dpp, b);
-	if (ret != 0) {
-	  return ret;
-	}
-      }
-
-      nsfs::xattr_map_t to_write;
-      for (const auto& [key, bl] : dattrs) {
-	const std::string mine = ours->disk_name(key);
-	if (!mine.empty()) {
-	  to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
-	}
-      }
-      /* Record the owner, for the reason convert_attrs() gives:  the
-       * bucket's.  It lands on the sentinel along with everything else
-       * that moves. */
-      if (dattrs.find(RGW_ATTR_ACL) == dattrs.end()) {
-	RGWAccessControlPolicy policy;
-	policy.create_default(bucket_owner.id, bucket_owner.display_name);
-	bufferlist aclbl;
-	policy.encode(aclbl);
-	const std::string mine = ours->disk_name(RGW_ATTR_ACL);
-	if (!mine.empty()) {
-	  to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
-						       aclbl));
-	}
-      }
-      if (!to_write.empty()) {
-	ret = fs->set_xattrs(dpp, sfd, to_write);
-	if (ret < 0) {
-	  return ret;
-	}
-      }
-
-      if (cb) {
-	nsfs::ConvertEvent w = ev;
-	w.phase = nsfs::ConvertEvent::Phase::written;
-	ret = (*cb)(dpp, w);
-	if (ret != 0) {
-	  return ret;
-	}
-      }
-
-      /* dir_content last:  while it is there the directory is still an
-       * object to NooBaa's reader, and removing it before the sentinel
-       * exists would make the object vanish for the length of a
-       * syscall. */
-      std::vector<std::string> gone;
-      for (const auto& [key, bl] : dattrs) {
-	const std::string foreign = theirs->disk_name(key);
-	if (!foreign.empty()) {
-	  gone.push_back(foreign);
-	}
-      }
-      if (!gone.empty()) {
-	/* upgrade command;  see convert_attrs */
-	ret = fs->remove_xattrs(dpp, sub.get_fd(), gone);
-	if (ret < 0) {
-	  return ret;
-	}
-      }
-      ret = their_paths->clear_directory_object(dpp, sub.get_fd());
-      if (ret < 0) {
-	return ret;
-      }
-
-      if (cb) {
-	nsfs::ConvertEvent pr = ev;
-	pr.phase = nsfs::ConvertEvent::Phase::pruned;
-	ret = (*cb)(dpp, pr);
-	if (ret != 0) {
-	  return ret;
-	}
-      }
-      ++progress.directory_objects;
     }
 
     ret = convert_directory(dpp, y, &sub, cct, prefix + name + "/", fs,
@@ -7055,6 +7089,30 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
  * in the part's own file is what the nsfs assembly reads for a
  * diverted part, so both nsfs layouts complete it.
  */
+int NSFSBucket::convert_before_write(const DoutPrefixProvider* dpp,
+				     optional_yield y, nsfs::Directory* dir,
+				     const std::string& key)
+{
+  nsfs::PathStrategy::DirectoryObject dobj{};
+  if (!dir->directory_object(dpp, dobj)) {
+    return 0;
+  }
+  auto* theirs = xattr_fallback();
+  auto* their_paths = path_fallback();
+  if (!converting || !theirs || !their_paths) {
+    ldpp_dout(dpp, 1) << "nsfs: refusing to change the directory object "
+      << key << " in bucket " << get_name() << ":  it is in NooBaa's "
+      << "format, and the bucket is not being converted" << dendl;
+    return -EOPNOTSUPP;
+  }
+  nsfs::ConvertProgress progress;
+  return convert_directory_object(dpp, y, dir->get_fd(), key,
+				  driver->get_fs_strategy(), xattr_strategy(),
+				  theirs, default_object_owner(dpp, y),
+				  their_paths, nullptr, progress,
+				  driver->no_chown_injected());
+}
+
 int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				nsfs::convert_cb_t* cb,
@@ -8891,6 +8949,10 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                       << dendl;
     return -EINVAL;
   }
+  ret = dobj->convert_before_write(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
   bool has_instance = !get_key().instance.empty();
 
   ldpp_dout(dpp, 10) << "copy_object: src=" << get_key()
@@ -10280,6 +10342,10 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   if (mg.result() < 0) {
     return mg.result();
   }
+  int ret = convert_before_write(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
   std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -10336,6 +10402,16 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten, as the other
+   * attribute writes are;  see NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, get_bucket()->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
+  int ret = convert_before_write(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
   state.attrset[attr_name] = attr_val;
   return write_attrs(dpp, y);
 }
@@ -10349,9 +10425,13 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   if (mg.result() < 0) {
     return mg.result();
   }
+  int ret = convert_before_write(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
   state.attrset.erase(attr_name);
 
-  int ret = open(dpp);
+  ret = open(dpp);
   if (ret < 0) {
     return ret;
   }
@@ -10771,10 +10851,59 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
   return 0;
 }
 
+int NSFSObject::convert_before_write(const DoutPrefixProvider* dpp,
+				     optional_yield y)
+{
+  const std::string& k = state.obj.key.name;
+  if (k.empty() || (k.back() != '/') || !state.obj.key.ns.empty()) {
+    return 0;
+  }
+  NSFSBucket* b = static_cast<NSFSBucket*>(bucket);
+  /* the reader's limit too:  NooBaa versions a directory object
+   * differently, and neither side handles that yet */
+  if (b->get_info().versioned()) {
+    return 0;
+  }
+
+  std::vector<std::unique_ptr<nsfs::Directory>> chain;
+  nsfs::Directory* leaf_dir{nullptr};
+  std::string leaf;
+  int ret = nsfs::resolve_key_path(dpp, b->get_dir(), state.obj.key,
+				   get_fname(/*use_version=*/false),
+				   driver->get_reserved_names(),
+				   b->is_internal(), /*create_dirs=*/false,
+				   driver->ctx(), chain, leaf_dir, leaf);
+  if (ret == -ENOENT) {
+    /* no directory, so no object to convert */
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  ret = b->convert_before_write(dpp, y, leaf_dir, k);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* An entry built to read the NooBaa format describes an object that
+   * is no longer there;  the next stat() finds the converted one. */
+  if (dynamic_cast<nsfs::NooBaaDirectoryObject*>(ent.get())) {
+    ent.reset();
+    dir_chain.clear();
+    return stat(dpp);
+  }
+  return 0;
+}
+
 int NSFSObject::make_ent(ObjectType type)
 {
-  if (ent)
+  /* A NooBaaDirectoryObject is for reading:  a writer needs the sentinel
+   * itself, and convert_before_write() has made it the object by the
+   * time the write is published. */
+  if (ent && !dynamic_cast<nsfs::NooBaaDirectoryObject*>(ent.get())) {
     return 0;
+  }
+  ent.reset();
 
   Directory* leaf_dir;
   std::string leaf_name;
@@ -11571,6 +11700,12 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   NSFSMutationGuard mg(dpp, source->driver, source->get_bucket()->get_name());
   if (mg.result() < 0) {
     return mg.result();
+  }
+  {
+    const int cret = source->convert_before_write(dpp, y);
+    if (cret < 0) {
+      return cret;
+    }
   }
   bool has_cond = params.if_match ||
     !real_clock::is_zero(params.last_mod_time_match) ||
@@ -12601,6 +12736,13 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   NSFSMutationGuard mg(dpp, driver, bucket->get_name());
   if (mg.result() < 0) {
     return mg.result();
+  }
+  {
+    const int cret =
+      static_cast<NSFSObject*>(target_obj)->convert_before_write(dpp, y);
+    if (cret < 0) {
+      return cret;
+    }
   }
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
@@ -13763,7 +13905,10 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = 0;
+  int ret = obj->convert_before_write(rctx.dpp, rctx.y);
+  if (ret < 0) {
+    return ret;
+  }
   if (uring_write) {
     ret = uring_write->drain();
   } else {
