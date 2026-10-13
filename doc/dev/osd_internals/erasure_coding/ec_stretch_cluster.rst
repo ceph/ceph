@@ -874,6 +874,13 @@ Differences from ``enable_stretch_mode`` and ``disable_stretch_mode`` on main:
 * ``enable_stretch_mode`` can be run again. Main refuses it while stretch mode is enabled
   ("stretch mode is already engaged"). It now sets the defaults again and stretches the pools
   that are not stretched yet.
+* ``disable_stretch_mode`` can be run again too. Once stretch mode and its defaults are gone,
+  it succeeds with "stretch mode is disabled", where main fails with EINVAL ("stretch mode
+  is already disabled"). Either command changes the MonMap when it enables or disables
+  stretch mode, which makes the monitors bootstrap and run any command still waiting for its
+  reply again. The second run must therefore succeed, and its reply, which the user sees,
+  must not contradict the first: "stretch mode is enabled" or "stretch mode is disabled",
+  with the number of pools changed only when there were any.
 * ``enable_stretch_mode`` accepts replicated pools of any size. Main refuses unless every
   replicated pool has the default ``size`` and ``min_size``. Every replicated pool now ends
   with 2 replicas per zone: a local pool of size 4 or 1 becomes 2 × 2, and a two-zone pool

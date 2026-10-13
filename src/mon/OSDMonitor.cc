@@ -16201,6 +16201,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err == -EAGAIN) {
       goto wait;
     }
+    if (err == -EALREADY) {
+      err = 0;
+      goto reply_no_propose;
+    }
     if (err < 0) {
       goto reply_no_propose;
     }
@@ -17787,7 +17791,11 @@ int OSDMonitor::enable_stretch_mode(ostream& ss,
   }
   mon.configmon()->propose_global_options(defaults, "mon enable_stretch_mode");
   need_immediate_propose = true;
-  ss << "stretch mode enabled; " << plan.size() << " pool(s) changed";
+  // the reply of a retry after the MonMap change, too
+  ss << "stretch mode is enabled";
+  if (!plan.empty()) {
+    ss << "; " << plan.size() << " pool(s) changed";
+  }
   return 0;
 }
 
@@ -17801,8 +17809,10 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
     // stretch mode left with its last pool, but may have left its defaults
     const PoolCreateParams d = load_pool_defaults(g_conf());
     if (d.num_zones == 1 && d.replica == LOCAL_REPLICA) {
-      ss << "stretch mode is already disabled";
-      return -EINVAL;
+      // a success: the MonMap change of a disable bootstraps the monitors,
+      // which run the command again
+      ss << "stretch mode is disabled";
+      return -EALREADY;
     }
   }
   int r = validate_disable_stretch_mode(*osdmap.crush, osdmap.pools,
@@ -17893,7 +17903,7 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
     ss << "stretch mode was already disabled; the pool creation defaults are "
        << "now one zone with " << LOCAL_REPLICA << " replicas";
   } else {
-    ss << "stretch mode disabled; " << plan.size() << " pool(s) changed";
+    ss << "stretch mode is disabled; " << plan.size() << " pool(s) changed";
   }
   return 0;
 }

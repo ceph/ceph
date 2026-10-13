@@ -184,8 +184,9 @@ function TEST_disable_unstretches_every_pool() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
     wait_for_clean || return 1
 
-    expect_failure $dir "already disabled" \
-        ceph mon disable_stretch_mode --yes-i-really-mean-it || return 1
+    # a repeat succeeds, as the monitors' own retry does
+    ceph mon disable_stretch_mode --yes-i-really-mean-it 2> $dir/out || return 1
+    grep -q "stretch mode is disabled" $dir/out || return 1
 }
 
 # Test disable resets the defaults after the last pool has left stretch mode
@@ -211,8 +212,9 @@ function TEST_disable_resets_defaults_without_stretch_mode() {
     ceph mon disable_stretch_mode --yes-i-really-mean-it || return 1
     test "$(default_value num_zones)" = 1 || return 1
     test "$(default_value replica)" = 3 || return 1
-    expect_failure $dir "already disabled" \
-        ceph mon disable_stretch_mode --yes-i-really-mean-it || return 1
+    # a repeat succeeds, as the monitors' own retry does
+    ceph mon disable_stretch_mode --yes-i-really-mean-it 2> $dir/out || return 1
+    grep -q "stretch mode is disabled" $dir/out || return 1
 }
 
 # Test a legacy EC pool makes enabling fail without changing anything
