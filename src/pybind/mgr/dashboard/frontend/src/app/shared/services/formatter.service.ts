@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AbstractControl, ValidationErrors } from '@angular/forms';
+
 import _ from 'lodash';
 import { isEmptyInputValue } from '../forms/cd-validators';
 
@@ -90,7 +91,7 @@ export class FormatterService {
     const base = 1024;
     const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
     const bytesRegexMatch = RegExp(
-      '^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s|B/m|iB/m)?)?$',
+      '^(\\d+(.\\d+)?) ?([' + units.join('') + ']?(b|ib|B/s|B/m|iB/m|iB/s)?)?$',
       'i'
     ).exec(value);
     if (bytesRegexMatch === null) {
@@ -102,7 +103,6 @@ export class FormatterService {
     }
     return Math.round(bytes);
   }
-
   /**
    * Converts `x ms` to `x` (currently) or `0` if the conversion fails
    */

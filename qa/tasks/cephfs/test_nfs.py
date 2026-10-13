@@ -1499,3 +1499,100 @@ class TestNFS(MgrTestCase):
 
         # Deleting export 23 should delete the user_id since it's only export with that user_id
         self._delete_export(pseudo_path_3, False, nfs_output_3['fsal']['user_id'])
+
+    def test_cluster_qos_enable_disable(self):
+        """
+        Enable/disable cluster bandwidth and IOPS QoS and verify via get.
+        Covers get_cluster_qos and the cluster QoS enable/disable remotes.
+        """
+        self._test_create_cluster()
+        # Bandwidth
+        self._nfs_cmd(
+            'cluster', 'qos', 'enable', 'bandwidth_control', self.cluster_id, 'PerShare',
+            '--max_export_write_bw', '100MB', '--max_export_read_bw', '100MB')
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster not running after QoS BW enable')
+        qos = json.loads(self._nfs_cmd('cluster', 'qos', 'get', self.cluster_id))
+        self.assertTrue(qos.get('enable_bw_control'))
+        self.assertTrue(qos.get('enable_qos'))
+        self.assertEqual(qos.get('qos_type'), 'PerShare')
+
+        self._nfs_cmd('cluster', 'qos', 'disable', 'bandwidth_control', self.cluster_id)
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster not running after QoS BW disable')
+        qos = json.loads(self._nfs_cmd('cluster', 'qos', 'get', self.cluster_id))
+        self.assertFalse(qos.get('enable_bw_control'))
+        self.assertFalse(qos.get('enable_qos'))
+
+        # IOPS
+        self._nfs_cmd(
+            'cluster', 'qos', 'enable', 'ops_control', self.cluster_id, 'PerShare',
+            '--max_export_iops', '1000')
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster not running after QoS ops enable')
+        qos = json.loads(self._nfs_cmd('cluster', 'qos', 'get', self.cluster_id))
+        self.assertTrue(qos.get('enable_iops_control'))
+        self.assertTrue(qos.get('enable_qos'))
+        self.assertEqual(qos.get('max_export_iops'), 1000)
+
+        self._nfs_cmd('cluster', 'qos', 'disable', 'ops_control', self.cluster_id)
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster not running after QoS ops disable')
+        qos = json.loads(self._nfs_cmd('cluster', 'qos', 'get', self.cluster_id))
+        self.assertFalse(qos.get('enable_iops_control'))
+        self.assertFalse(qos.get('enable_qos'))
+        self._test_delete_cluster()
+
+    def test_export_qos_bw(self):
+        """
+        Enable/disable export bandwidth QoS (requires cluster BW QoS first).
+        Covers get_export_qos, enable_export_qos_bw, disable_export_qos_bw.
+        """
+        self._create_default_export()
+        self._nfs_cmd(
+            'cluster', 'qos', 'enable', 'bandwidth_control', self.cluster_id, 'PerShare',
+            '--max_export_write_bw', '100MB', '--max_export_read_bw', '100MB')
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster not running after cluster QoS BW enable')
+
+        self._nfs_cmd(
+            'export', 'qos', 'enable', 'bandwidth_control', self.cluster_id, self.pseudo_path,
+            '--max_export_write_bw', '50MB', '--max_export_read_bw', '50MB',
+            '--skip-notify-nfs-server')
+        qos = json.loads(self._nfs_cmd('export', 'qos', 'get', self.cluster_id, self.pseudo_path))
+        self.assertTrue(qos.get('enable_bw_control'))
+        self.assertTrue(qos.get('enable_qos'))
+
+        self._nfs_cmd(
+            'export', 'qos', 'disable', 'bandwidth_control', self.cluster_id, self.pseudo_path,
+            '--skip-notify-nfs-server')
+        qos = json.loads(self._nfs_cmd('export', 'qos', 'get', self.cluster_id, self.pseudo_path))
+        self.assertFalse(qos.get('enable_bw_control'))
+
+        self._nfs_cmd('cluster', 'qos', 'disable', 'bandwidth_control', self.cluster_id)
+        self._delete_export()
+        self._test_delete_cluster()
+
+    def test_export_qos_ops(self):
+        """
+        Enable/disable export IOPS QoS (requires cluster ops QoS first).
+        Covers get_export_qos, enable_export_qos_ops, disable_export_qos_ops.
+        """
+        self._create_default_export()
+        self._nfs_cmd(
+            'cluster', 'qos', 'enable', 'ops_control', self.cluster_id, 'PerShare',
+            '--max_export_iops', '1000')
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster not running after cluster QoS ops enable')
+
+        self._nfs_cmd(
+            'export', 'qos', 'enable', 'ops_control', self.cluster_id, self.pseudo_path,
+            '--max_export_iops', '500', '--skip-notify-nfs-server')
+        qos = json.loads(self._nfs_cmd('export', 'qos', 'get', self.cluster_id, self.pseudo_path))
+        self.assertTrue(qos.get('enable_iops_control'))
+        self.assertTrue(qos.get('enable_qos'))
+        self.assertEqual(qos.get('max_export_iops'), 500)
+
+        self._nfs_cmd(
+            'export', 'qos', 'disable', 'ops_control', self.cluster_id, self.pseudo_path,
+            '--skip-notify-nfs-server')
+        qos = json.loads(self._nfs_cmd('export', 'qos', 'get', self.cluster_id, self.pseudo_path))
+        self.assertFalse(qos.get('enable_iops_control'))
+
+        self._nfs_cmd('cluster', 'qos', 'disable', 'ops_control', self.cluster_id)
+        self._delete_export()
+        self._test_delete_cluster()

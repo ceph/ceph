@@ -2121,6 +2121,41 @@ EXPORT {
     def test_cluster_qos_bw_ops(self, bw_qos_type, bw_params, ops_qos_type, ops_params, positive_tc):
         self._do_mock_test(self._do_test_cluster_qos_bw_ops, bw_qos_type, bw_params, ops_qos_type, ops_params, positive_tc)
 
+    def _do_test_apply_cluster_qos(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        bw_obj = QOSBandwidthControl(True, False, export_writebw='100MB', export_readbw='200MB')
+        ops_obj = QOSOpsControl(True, max_export_iops=1000)
+        cluster.apply_cluster_qos(
+            self.cluster_id,
+            qos_type=QOSType['PerShare'],
+            bw_obj=bw_obj,
+            ops_obj=ops_obj,
+        )
+        out = cluster.get_cluster_qos(self.cluster_id)
+        assert out['enable_bw_control'] is True
+        assert out['enable_iops_control'] is True
+        assert out['enable_qos'] is True
+        assert out['qos_type'] == 'PerShare'
+        assert out['max_export_iops'] == 1000
+        # disable both atomically
+        cluster.apply_cluster_qos(
+            self.cluster_id,
+            disable_bw=True,
+            disable_ops=True,
+        )
+        out = cluster.get_cluster_qos(self.cluster_id)
+        assert out == {
+            "enable_bw_control": False,
+            "enable_qos": False,
+            "combined_rw_bw_control": False,
+            "enable_iops_control": False,
+        }
+
+    def test_apply_cluster_qos(self):
+        self._do_mock_test(self._do_test_apply_cluster_qos)
+
+
     def _do_test_export_qos_bw_ops(self, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params):
         nfs_mod = Module('nfs', '', '')
         cluster = NFSCluster(nfs_mod)

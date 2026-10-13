@@ -43,6 +43,11 @@
     display: flex;
     justify-content: flex-end;
     border-top: 1px solid theme.$border-subtle-02;
+
+    button {
+      flex: 1;
+      max-inline-size: none;
+    }
   }
 }
 
