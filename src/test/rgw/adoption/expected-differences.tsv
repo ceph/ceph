@@ -75,6 +75,13 @@
 # LMDB is built with a larger key size.
 noobaa:unconverted		manifest	object k-maxlens/*	*	known	PUNCHLIST.md "one over-long name in a foreign tree empties the whole listing":  the LMDB listing cache cannot hold a key over its maximum key size;  fix by building LMDB with a larger one
 
+# `m-collide-content-md5` carries user metadata named content_md5.  NooBaa
+# stores user metadata as user.<key>, so it lands in user.content_md5, the
+# attribute NooBaa keeps the ETag in -- a collision, and a NooBaa defect.
+# NooBaa reports that attribute twice, as the ETag and, by design, as
+# metadata;  RGW reports it as the ETag only (DECISIONS.md 2026-10-13).
+noobaa:unconverted		manifest	object m-collide-content-md5	meta.content_md5	vanishes	NooBaa reports user.content_md5 as metadata as well as the ETag, by design (their test_namespace_fs.js:242);  here a client's content_md5 metadata collided with it.  RGW reports the attribute as the ETag alone (DECISIONS.md 2026-10-13)
+
 noobaa:unconverted		manifest	object .noobaa-nsfs-k-under-temp	listed	absent	NooBaa's listing hides every name starting with .noobaa-nsfs (namespace_fs.js:787);  RGW lists the object, as it should
 noobaa:unconverted		manifest	object .noobaa-nsfs-k-under-temp	size	absent	same:  the size comes from the listing
 noobaa:unconverted		manifest	object .noobaa-nsfs-k-under-temp	etag	absent	same:  the ETag comes from the listing
