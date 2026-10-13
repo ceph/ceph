@@ -265,3 +265,55 @@ TEST(ZonePlacementInfo, CompressionMinSizeFallbacks)
   EXPECT_EQ(0u, info.get_compression_min_size("STANDARD"));
   EXPECT_EQ(0u, info.get_compression_min_size("MISSING"));
 }
+
+TEST(SyncCompressionTypes, StorageClasses)
+{
+  RGWZonePlacementInfo info;
+  const std::string zstd = "zstd", zlib = "zlib", none = "none", random = "random";
+  const std::string missing = "nosuchplugin";
+  info.storage_classes.set_storage_class("STANDARD", nullptr, &zstd);
+  info.storage_classes.set_storage_class("COLD", nullptr, &zlib);
+  info.storage_classes.set_storage_class("ARCHIVE", nullptr, &none);
+  info.storage_classes.set_storage_class("TEST", nullptr, &random);
+  info.storage_classes.set_storage_class("NOPLUGIN", nullptr, &missing);
+  info.storage_classes.set_storage_class("BAD,NAME", nullptr, &zstd);
+  info.storage_classes.set_storage_class("BAD:NAME", nullptr, &zstd);
+  info.storage_classes.set_storage_class("*", nullptr, &zstd);
+  auto cct = g_ceph_context;
+  // objects without a storage class go to the bucket's default class. classes
+  // without a fixed type or a loadable plugin, and names with separators, are
+  // left out
+  EXPECT_EQ(":zstd,COLD:zlib,STANDARD:zstd",
+            rgw_sync_compression_types(cct, info, "STANDARD", std::nullopt));
+  EXPECT_EQ(":zlib,COLD:zlib,STANDARD:zstd",
+            rgw_sync_compression_types(cct, info, "COLD", std::nullopt));
+  // sync policy puts every object in one storage class, and an empty one
+  // means the bucket's default
+  EXPECT_EQ("*:zlib", rgw_sync_compression_types(cct, info, "STANDARD", "COLD"));
+  EXPECT_EQ("*:zstd", rgw_sync_compression_types(cct, info, "STANDARD", ""));
+  EXPECT_EQ("*:zlib", rgw_sync_compression_types(cct, info, "COLD", ""));
+  EXPECT_EQ("", rgw_sync_compression_types(cct, info, "STANDARD", "ARCHIVE"));
+  EXPECT_EQ("", rgw_sync_compression_types(cct, info, "STANDARD", "NOPLUGIN"));
+  EXPECT_EQ("", rgw_sync_compression_types(cct, info, "STANDARD", "MISSING"));
+  EXPECT_EQ("", rgw_sync_compression_types(cct, RGWZonePlacementInfo{}, "STANDARD",
+                                           std::nullopt));
+}
+
+TEST(SyncCompressionTypes, Matches)
+{
+  const std::string_view types = ":zlib,COLD:zlib,STANDARD:zstd";
+  EXPECT_TRUE(rgw_sync_compression_type_matches(types, "", "zlib"));
+  EXPECT_TRUE(rgw_sync_compression_type_matches(types, "STANDARD", "zstd"));
+  EXPECT_TRUE(rgw_sync_compression_type_matches(types, "COLD", "zlib"));
+  // an object without a storage class uses the empty entry, an object with
+  // an explicit one uses that one's
+  EXPECT_FALSE(rgw_sync_compression_type_matches(types, "", "zstd"));
+  EXPECT_FALSE(rgw_sync_compression_type_matches(types, "STANDARD", "zlib"));
+  // the type of another storage class doesn't match
+  EXPECT_FALSE(rgw_sync_compression_type_matches(types, "COLD", "zstd"));
+  EXPECT_FALSE(rgw_sync_compression_type_matches(types, "MISSING", "zstd"));
+  EXPECT_TRUE(rgw_sync_compression_type_matches("*:zlib", "STANDARD", "zlib"));
+  EXPECT_FALSE(rgw_sync_compression_type_matches("*:zlib", "COLD", "zstd"));
+  EXPECT_FALSE(rgw_sync_compression_type_matches("", "STANDARD", "zstd"));
+  EXPECT_FALSE(rgw_sync_compression_type_matches("zstd,COLD", "COLD", "zstd"));
+}

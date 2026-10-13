@@ -2013,13 +2013,27 @@ def set_zone_compression(zone_conn, bucket_name, compression, placement_id,
             # reloaded, and e.g. sync can run on any of the zone's gateways
             time.sleep(config.reconfigure_delay)
 
-def test_compression_min_size_sync():
-    """ a replicated object follows the destination zone's compression min
-    size, whether or not the source zone stored it compressed """
+def get_sync_skip_decompress(zone):
+    out = zone.cluster.ceph_admin(['config', 'get', 'client', 'rgw_sync_obj_skip_decompress'])
+    # the vstart and teuthology clusters return (output, status) and output.
+    # vstart's output starts with the command line, so take the last line
+    return (out[0] if isinstance(out, tuple) else out).strip().splitlines()[-1]
+
+def set_sync_skip_decompress(zone, value):
+    """ whether sync into the zone fetches compressed objects as stored """
+    zone.cluster.ceph_admin(['config', 'set', 'client', 'rgw_sync_obj_skip_decompress', value])
+    # running gateways get the change from the mon
+    time.sleep(config.config_propagation_wait)
+
+def test_compression_sync():
+    """ a replicated object follows the destination zone's compression
+    settings. sync fetches an object that already uses the destination's type
+    as stored, which shows in a small object that keeps its compression below
+    the destination's min size """
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
     if len(zonegroup_conns.rw_zones) < 2:
-        raise SkipTest("test_compression_min_size_sync skipped. Requires 2 or more zones in master zonegroup.")
+        raise SkipTest("test_compression_sync skipped. Requires 2 or more zones in master zonegroup.")
 
     source = zonegroup_conns.master_zone
     dest = next(z for z in zonegroup_conns.rw_zones if z.zone != source.zone)
@@ -2028,12 +2042,30 @@ def test_compression_min_size_sync():
     source_original = get_zone_compression(source.zone, source_placement)
     dest_original = get_zone_compression(dest.zone, dest_placement)
     dest_original_min_size = get_zone_compression_min_size(dest.zone, dest_placement)
+    original_skip_decompress = get_sync_skip_decompress(dest.zone)
+    assert original_skip_decompress in ('true', 'false'), original_skip_decompress
 
     bucket_name = gen_bucket_name()
     source.s3_client.create_bucket(Bucket=bucket_name)
     zonegroup_meta_checkpoint(zonegroup)
 
     pattern = b'The quick brown fox jumps over the lazy dog. '
+
+    def make_data(size):
+        return (pattern * (size // len(pattern) + 1))[:size]
+
+    def upload_multipart(key, part_sizes):
+        upload_id = source.s3_client.create_multipart_upload(
+            Bucket=bucket_name, Key=key)['UploadId']
+        parts = []
+        for num, size in enumerate(part_sizes, start=1):
+            etag = source.s3_client.upload_part(Bucket=bucket_name, Key=key, PartNumber=num,
+                                                UploadId=upload_id, Body=make_data(size))['ETag']
+            parts.append({'PartNumber': num, 'ETag': etag})
+        source.s3_client.complete_multipart_upload(
+            Bucket=bucket_name, Key=key, UploadId=upload_id,
+            MultipartUpload={'Parts': parts})
+        return b''.join(make_data(size) for size in part_sizes)
 
     try:
         # start from 'none', so the canary written after the change below
@@ -2043,45 +2075,78 @@ def test_compression_min_size_sync():
         set_zone_compression(dest, bucket_name, 'zstd', dest_placement, min_size=64 * 1024,
                              all_gateways=True)
 
-        for source_compression in ['none', 'zstd']:
-            set_zone_compression(source, bucket_name, source_compression, source_placement)
-            objects = {}
-            for name, size, expected in [('small', 4 * 1024, 'none'),
-                                         ('large', 256 * 1024, 'zstd')]:
-                key = f'{source_compression}-{name}'
-                data = (pattern * (size // len(pattern) + 1))[:size]
-                source.s3_client.put_object(Bucket=bucket_name, Key=key, Body=data)
-                eq(get_obj_compression_type(source.zone, bucket_name, key), source_compression)
-                objects[key] = (data, expected)
+        for skip_decompress in [True, False]:
+            set_sync_skip_decompress(dest.zone, 'true' if skip_decompress else 'false')
 
-            # sync applies the min size to the whole object, so even a small
-            # object uploaded in parts is stored uncompressed in the
-            # destination zone
-            key = f'{source_compression}-small-multipart'
-            data = (pattern * (4 * 1024 // len(pattern) + 1))[:4 * 1024]
-            upload_id = source.s3_client.create_multipart_upload(
-                Bucket=bucket_name, Key=key)['UploadId']
-            etag = source.s3_client.upload_part(Bucket=bucket_name, Key=key, PartNumber=1,
-                                                UploadId=upload_id, Body=data)['ETag']
-            source.s3_client.complete_multipart_upload(
-                Bucket=bucket_name, Key=key, UploadId=upload_id,
-                MultipartUpload={'Parts': [{'PartNumber': 1, 'ETag': etag}]})
-            eq(get_obj_compression_type(source.zone, bucket_name, key), source_compression)
-            objects[key] = (data, 'none')
+            # objects that the source stores uncompressed, with another type,
+            # or with the destination's type
+            for source_compression in ['none', 'zlib', 'zstd']:
+                set_zone_compression(source, bucket_name, source_compression, source_placement)
+                prefix = f'{"skip" if skip_decompress else "recompress"}-{source_compression}-'
 
-            zone_bucket_checkpoint(dest.zone, source.zone, bucket_name)
+                def expected(dest_compression):
+                    if skip_decompress and source_compression == 'zstd':
+                        return 'zstd'
+                    return dest_compression
 
-            for key, (data, expected) in objects.items():
-                eq(get_obj_compression_type(dest.zone, bucket_name, key), expected)
-                response = dest.s3_client.get_object(Bucket=bucket_name, Key=key)
-                assert response['Body'].read() == data
+                objects = {}
+                for name, size, dest_compression in [('small', 4 * 1024, 'none'),
+                                                     ('large', 256 * 1024, 'zstd')]:
+                    key = prefix + name
+                    data = make_data(size)
+                    source.s3_client.put_object(Bucket=bucket_name, Key=key, Body=data)
+                    objects[key] = (data, expected(dest_compression))
+
+                # an object with an explicit storage class, rather than the
+                # bucket's default
+                key = prefix + 'small-standard'
+                data = make_data(4 * 1024)
+                source.s3_client.put_object(Bucket=bucket_name, Key=key, Body=data,
+                                            StorageClass='STANDARD')
+                objects[key] = (data, expected('none'))
+
+                # when the destination compresses an object, it applies the
+                # min size to the whole object, so even a small object
+                # uploaded in parts is stored uncompressed
+                key = prefix + 'small-multipart'
+                objects[key] = (upload_multipart(key, [4 * 1024]), expected('none'))
+
+                # a multipart object whose parts were compressed separately
+                multipart_key = prefix + 'multipart'
+                part_size = 5 * 1024 * 1024
+                multipart_data = upload_multipart(multipart_key, [part_size, 4 * 1024])
+                objects[multipart_key] = (multipart_data, expected('zstd'))
+
+                for key in objects:
+                    eq(get_obj_compression_type(source.zone, bucket_name, key), source_compression)
+
+                zone_bucket_checkpoint(dest.zone, source.zone, bucket_name)
+
+                listed = dest.s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+                sizes = {o['Key']: o['Size'] for o in listed['Contents']}
+                for key, (data, compression) in objects.items():
+                    eq(get_obj_compression_type(dest.zone, bucket_name, key), compression)
+                    eq(sizes[key], len(data))
+                    response = dest.s3_client.head_object(Bucket=bucket_name, Key=key)
+                    eq(response['ContentLength'], len(data))
+                    response = dest.s3_client.get_object(Bucket=bucket_name, Key=key)
+                    assert response['Body'].read() == data
+
+                # a range across the boundary between the compressed parts
+                start, end = part_size - 100, part_size + 99
+                response = dest.s3_client.get_object(Bucket=bucket_name, Key=multipart_key,
+                                                     Range=f'bytes={start}-{end}')
+                assert response['Body'].read() == multipart_data[start:end + 1]
     finally:
         try:
-            set_zone_compression(source, bucket_name, source_original, source_placement)
+            set_sync_skip_decompress(dest.zone, original_skip_decompress)
         finally:
-            # later tests can sync through any of the destination's gateways
-            set_zone_compression(dest, bucket_name, dest_original, dest_placement,
-                                 min_size=dest_original_min_size, all_gateways=True)
+            try:
+                set_zone_compression(source, bucket_name, source_original, source_placement)
+            finally:
+                # later tests can sync through any of the destination's gateways
+                set_zone_compression(dest, bucket_name, dest_original, dest_placement,
+                                     min_size=dest_original_min_size, all_gateways=True)
 
 def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()
