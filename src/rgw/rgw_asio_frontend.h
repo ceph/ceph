@@ -5,7 +5,7 @@
 
 #include <memory>
 
-#include "common/async/context_pool.h"
+#include <boost/asio/io_context.hpp>
 
 #include "rgw_frontend.h"
 #define REQUEST_TIMEOUT 65000
@@ -16,7 +16,7 @@ class RGWAsioFrontend : public RGWFrontend {
 public:
   RGWAsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
 		  rgw::dmclock::SchedulerCtx& sched_ctx,
-		  ceph::async::io_context_pool& context_pool);
+		  boost::asio::io_context& io_context);
   ~RGWAsioFrontend() override;
 
   int init() override;
