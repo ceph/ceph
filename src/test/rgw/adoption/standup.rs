@@ -287,6 +287,7 @@ const STEPS: &[(&str, &str)] = &[
     ("config",   "write the NooBaa account and bucket records over the data root"),
     ("serve",    "start the NooBaa NSFS endpoint"),
     ("iam-user", "create an IAM user in the account, through NooBaa's IAM API"),
+    ("store-tests", "run the nsfs unit tests that read a real NooBaa store, against this one"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("import",   "RGW over the same tree;  import the identities and each bucket's record"),
@@ -312,6 +313,7 @@ fn main() {
         "config" => config(&env),
         "serve" => serve(&env),
         "iam-user" => iam_user(&env),
+        "store-tests" => store_tests(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "import" => adopt(&env, "import"),
@@ -1467,6 +1469,54 @@ fn write_capture_conf(env: &Env, label: &str) -> Result<PathBuf, String> {
     );
     std::fs::write(&p, text).map_err(|e| format!("cannot write {}: {e}", p.display()))?;
     Ok(p)
+}
+
+/// Run the nsfs unit tests that read a real NooBaa store, against the
+/// config store this stand-up wrote.
+///
+/// They skip unless `NSFS_NOOBAA_STORE` names a store, and nothing else
+/// sets it, so without this step they never ran.  They read the store
+/// and import into the unit binary's own sandbox, so the store is left
+/// as it was.  A run in which they skip rather than run is a failure:  a
+/// step that passes by doing nothing proves nothing.
+///
+/// The nsfs unit binary purges a fixed data root at set-up, so this must
+/// not run beside another run of it.
+fn store_tests(env: &Env) -> Result<(), String> {
+    let Some(build) = env.ceph_build.as_ref() else {
+        return Err("`ceph_build` is not set;  `store-tests` runs the nsfs unit \
+                    binary from the ceph build directory".into());
+    };
+    let bin = build.join("bin/unittest_rgw_nsfs_driver");
+    if !bin.exists() {
+        return Err(format!("{} is not built", bin.display()));
+    }
+    const TESTS: usize = 4;
+    let out = Command::new(&bin)
+        .arg("--gtest_filter=*AStoreOnDisk*")
+        .env("NSFS_NOOBAA_STORE", env.config_root())
+        .current_dir(build)
+        .output()
+        .map_err(|e| format!("cannot run {}: {e}", bin.display()))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let ran: Vec<&str> = text.lines()
+        .filter(|l| l.starts_with("[       OK ]") || l.starts_with("[  FAILED  ]"))
+        .collect();
+    for l in &ran {
+        println!("store-tests {l}");
+    }
+    let passed = text.lines().filter(|l| l.starts_with("[       OK ]")).count();
+    if !out.status.success() {
+        return Err(format!("the store tests failed against {};  rerun {} with \
+                            NSFS_NOOBAA_STORE set to it for the detail",
+                           env.config_root().display(), bin.display()));
+    }
+    if passed != TESTS {
+        return Err(format!("{passed} of {TESTS} store tests ran;  the rest skipped, \
+                            so this run proves nothing about the store"));
+    }
+    println!("store-tests {passed} passed against {}", env.config_root().display());
+    Ok(())
 }
 
 /// Stop the endpoint, leaving the tree.

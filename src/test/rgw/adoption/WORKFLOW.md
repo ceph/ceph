@@ -31,6 +31,7 @@ cd src/test/rgw/adoption
 ./standup.rs up          # pin, worktree, patch, build, config
 ./standup.rs serve       # their endpoint, HTTP, on 6001;  IAM, HTTPS, on 7005
 ./standup.rs iam-user    # an IAM user in the account, through their IAM API
+./standup.rs store-tests # the nsfs unit tests that read a real NooBaa store, against this one
 ```
 
 `up` is the slow one — their dependency tree and their native addon,
@@ -43,6 +44,13 @@ rather than records composed from our reading of their schema.  Their
 CLI cannot address an IAM user, which is why `iam-user` goes through
 the API.  NooBaa shows the IAM user's secret once;  `iam-user` keeps it
 in `$ADOPTION_WORK/iam-user-credentials`.
+
+`store-tests` runs the four nsfs unit tests that read a real config
+store (`*AStoreOnDisk*`), with `NSFS_NOOBAA_STORE` pointed at this one.
+Nothing else sets that variable, so without this step they skip.  It
+needs `ceph_build`, and it fails if any of the four skip rather than
+run.  Like any run of the nsfs unit binary, it must not run beside
+another.
 
 `README.md` beside this file owns the detail — why source and not a
 container, why a `--detach`ed worktree, why the dependency tree is
