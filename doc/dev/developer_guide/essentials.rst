@@ -194,6 +194,22 @@ Speeding up local builds
 
 The following options shorten local builds and can be combined.
 
+Using a faster linker
+~~~~~~~~~~~~~~~~~~~~~
+
+With the default ``ld.bfd``, linking takes a large share of incremental build
+time. ``lld`` and ``mold`` link several times faster, and need no extra disk
+space and less memory than ``ld.bfd``:
+
+.. prompt:: bash $
+
+  cmake -DCMAKE_LINKER_TYPE=LLD ..
+
+``CMAKE_LINKER_TYPE`` accepts ``BFD``, ``LLD`` and ``MOLD``. ``lld`` needs the
+least CPU and memory when many targets are relinked at once; ``mold`` is
+slightly faster for a single binary. ``librados`` always links with ``ld.bfd``,
+the only one of the three that handles its symbol versions.
+
 Using ccache
 ~~~~~~~~~~~~
 `ccache`_ can make the process of rebuilding the ceph source tree faster. 
