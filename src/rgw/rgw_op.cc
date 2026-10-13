@@ -363,10 +363,10 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
                               rgw_bucket& bucket,
 			      optional_yield y)
 {
-  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->system_request && bucket_info.bucket_suspended()) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
-    return -ERR_USER_SUSPENDED;
+    return -ERR_BUCKET_SUSPENDED;
   }
 
   if (bucket.name.empty()) {
@@ -400,10 +400,10 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   std::unique_ptr<rgw::sal::Object> mpobj;
   rgw_obj obj;
 
-  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->system_request && bucket_info.bucket_suspended()) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
-    return -ERR_USER_SUSPENDED;
+    return -ERR_BUCKET_SUSPENDED;
   }
 
   // when getting policy info for copy-source obj, upload_id makes no sense.
@@ -548,6 +548,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     ret = read_bucket_policy(dpp, driver, s, s->bucket->get_info(),
 			     s->bucket->get_attrs(),
 			     s->bucket_acl, s->bucket->get_key(), y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "failed to read bucket policy, err: "
+          << cpp_strerror(ret) << dendl;
+      return ret;
+    }
 
     s->bucket_owner = s->bucket_acl.get_owner();
     acct_acl_user = &s->bucket_owner;

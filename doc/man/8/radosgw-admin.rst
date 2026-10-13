@@ -98,6 +98,13 @@ as follows:
 :command:`bucket stats`
   Returns bucket statistics.
 
+:command:`bucket suspend`
+  Suspend an individual bucket. S3 requests against the bucket fail with
+  ``403 BucketSuspended``.
+
+:command:`bucket unsuspend`
+  Unsuspend a previously suspended bucket.
+
 :command:`bucket rm`
   Remove a bucket.
 
