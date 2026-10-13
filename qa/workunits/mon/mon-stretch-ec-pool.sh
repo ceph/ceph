@@ -95,14 +95,11 @@ expect_false ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 non_exist_barri
 # Non-existent crush rule must fail.
 expect_false ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 datacenter non_exist_rule 6 2
 
-# Make the EC pool stretched across the two datacenters (size = num_zones*(k+m),
-# min_size = k) and verify it now shows as a stretch pool.
-expect_true ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 datacenter $TEST_STRETCH_EC_RULE 6 2
-expect_true ceph osd pool stretch show $TEST_POOL_STRETCH_EC
-
-# Unset it; afterwards show must fail because it is no longer a stretch pool.
-expect_true ceph osd pool stretch unset $TEST_POOL_STRETCH_EC $TEST_STRETCH_EC_RULE 3 2
+# An erasure coded pool is stretched with 'osd pool set <pool> num_zones 2',
+# not with stretch set/unset, which refuse it.
+expect_false ceph osd pool stretch set $TEST_POOL_STRETCH_EC 2 2 datacenter $TEST_STRETCH_EC_RULE 6 2
 expect_false ceph osd pool stretch show $TEST_POOL_STRETCH_EC
+expect_false ceph osd pool stretch unset $TEST_POOL_STRETCH_EC $TEST_STRETCH_EC_RULE 3 2
 
 # cleanup
 teardown
