@@ -49,6 +49,39 @@ place that will cause the cluster to re-replicate the data until the
 ``min_size`` configuration option has been met.
 
 
+Changing Per-Pool Zone and Replica Counts
+========================================
+
+``ceph osd pool set <pool> num_zones`` supports one or two zones. Setting the
+current zone count again leaves the pool and its CRUSH rule unchanged.
+
+To transition a replicated pool from one zone to two, ``--replica``,
+``--zone_failure_domain``, ``--osd_failure_domain``, ``--root`` and ``--class``
+can be supplied. Those that are not take their values from the pool creation
+defaults (see :ref:`pool-creation-defaults`). The pool size becomes twice the
+per-zone replica count. An erasure-coded pool must be a FastEC pool: a legacy
+erasure-coded pool cannot be stretched until it is converted with
+``ceph osd pool set <pool> allow_ec_optimizations true``.
+
+``ceph osd pool set <pool> replica <count>`` sets the number of replicas in each
+zone of a replicated pool. It has the limits of ``size``: from 1 to 10, refused
+while the pool has the ``nosizechange`` flag, and a pool of one copy needs
+``mon_allow_pool_size_one`` and ``--yes-i-really-mean-it``. Changing ``replica`` on a two-zone pool
+assigns a CRUSH rule named ``<pool>-replica-<count>`` and recalculates
+``min_size`` from the per-zone replica count. With
+``osd_pool_default_min_size=0``, the calculation is
+``replica - floor(replica / 2)``; otherwise it is the smaller of the
+configured default minimum and the replica count. This replaces any custom
+pool ``min_size`` when the replica count changes.
+
+Setting ``num_zones`` to one clears the pool's stretch peering settings and
+assigns a single-zone CRUSH rule. Replicated pools get ``--replica`` replicas,
+else :confval:`osd_pool_default_replica`, and its default minimum size. Erasure-coded pools
+revert to the size and minimum size derived from their erasure-code profile.
+An explicit ``--crush_rule`` can select the replacement rule. Replaced rules
+are removed only when no other pool references them.
+
+
 Stretch Cluster Issues
 ======================
 
@@ -91,8 +124,10 @@ Individual Stretch Pools
 
 Setting individual *stretch pool* attributes allows for
 specific pools to be distributed across two or more data centers.
-This is done by executing the ``ceph osd pool stretch set`` command on each desired pool.
-See :ref:`setting_values_for_a_stretch_pool`.
+This is done by executing the ``ceph osd pool set {pool-name} num_zones {N}`` command on each desired pool,
+or by creating a pool with stretch mode enabled using the ``zone`` parameter
+in the ``ceph osd pool create`` command.
+See :ref:`setting_values_for_a_stretch_pool` and :ref:`creating_stretch_pools`
 
 Use stretch mode when you have exactly two data centers and require a uniform
 configuration across the entire cluster. Conversely, opt for a stretch pool
@@ -132,6 +167,37 @@ never marked ``out``, so PGs stay ``peered`` and I/O stops even though
 the surviving zones have enough capacity to recover. Marking the down
 OSDs ``out`` manually restores service in that situation.
 
+.. _creating_stretch_pools:
+
+Creating Stretch Pools
+----------------------
+
+You can create a pool with stretch mode configuration at creation time by
+specifying the ``zone`` parameter:
+
+.. prompt:: bash $
+
+   ceph osd pool create mypool 32 32 replicated --num_zones=2
+
+This creates a replicated pool named ``mypool`` with 32 placement groups,
+using the ``num_zones`` parameter, the pool is configured to span 2 zones
+and will automatically create and apply a crush the following crush rule:
+
+::
+rule mypool {
+	id 1
+	type replicated
+	step take default
+	step choose firstn 2 type datacenter
+	step chooseleaf firstn 2 type host
+	step emit
+}
+
+
+Per-pool stretch mode provides the same stretch mode benefits (zone-aware
+peering, degraded/recovery modes) but applies only to the specified pool,
+allowing you to have both stretch and non-stretch pools in the same cluster.
+
 .. _stretch_mode1:
 
 Stretch Mode
@@ -140,10 +206,39 @@ Stretch Mode
 Stretch mode is designed to handle netsplit scenarios between two data centers as well
 as the loss of one data center. It handles the netsplit scenario by choosing the surviving zone
 that has the best connection to the tiebreaker Monitor. It handles the loss of one data center by
-reducing the ``min_size`` of all pools to ``1``, allowing the cluster to continue operating
+letting the stretched pools go active with the copies in the surviving data center, where
+``min_size`` applies, allowing the cluster to continue operating
 within the surviving data center. When the unavailable data center comes back, Ceph will
 converge according to the configured replication policy and return to normal operation.
 
+
+Enabling Stretch Mode for Every Pool
+------------------------------------
+
+``ceph mon enable_stretch_mode`` and ``ceph mon disable_stretch_mode`` change
+every pool and the pool creation defaults. They keep no state of their own:
+afterwards each pool can be changed on its own, and stretched and local pools,
+replicated or erasure-coded, can be mixed. Stretch mode itself, as shown by
+``ceph mon dump`` and ``ceph osd dump``, is enabled while any pool has two
+zones.
+
+``ceph mon enable_stretch_mode`` sets every pool to two zones, as
+``ceph osd pool set <pool> num_zones 2`` does. Replicated pools get two
+replicas in each zone and the CRUSH rule given to the command. Erasure-coded
+pools get CRUSH rules of their own. The command fails, and changes nothing, if
+a legacy erasure-coded pool exists. It also sets
+:confval:`osd_pool_default_num_zones` to ``2``,
+:confval:`osd_pool_default_replica` to ``2`` and
+:confval:`osd_pool_default_zone_failure_domain` to the dividing bucket type, so
+that new pools are stretched too. It can be run again.
+
+``ceph mon disable_stretch_mode`` sets every stretched pool to one zone and
+stretched replicated pools to three replicas. It sets
+:confval:`osd_pool_default_num_zones` to ``1`` and
+:confval:`osd_pool_default_replica` to ``3``.
+
+Until an upgrade is committed with ``ceph osd require-osd-release``, both
+commands behave as in earlier releases.
 
 Connectivity Monitor Election Strategy
 ---------------------------------------
@@ -269,12 +364,14 @@ with the CRUSH topology.
 
    **Option 1: Automatic tiebreaker selection** (recommended):
 
-   Let the cluster automatically select the tiebreaker:
+   Let the cluster automatically select the tiebreaker. Without the
+   tiebreaker the rule and the bucket type must be given by name, because the
+   first positional argument is the tiebreaker:
 
    .. prompt:: bash #
 
       ceph mon set_location e datacenter=zone3
-      ceph mon enable_stretch_mode stretch_replicated_rule datacenter
+      ceph mon enable_stretch_mode --new_crush_rule stretch_replicated_rule --dividing_bucket datacenter
 
    **Option 2: Explicit tiebreaker Monitor**:
 
@@ -293,11 +390,15 @@ connect to Monitors only if they are in the same data center as the Monitors.
 New Monitors will not be allowed to join the cluster if they do not specify a
 CRUSH location.
 
+``ceph mon enable_stretch_mode`` also changes the pool creation defaults so
+that future pools are stretched. See :ref:`pool-creation-defaults`.
+
 If all OSDs and Monitors in one of the ``datacenter`` become inaccessible at once,
 the cluster in the surviving ``datacenter`` enters  *degraded stretch mode*.
 A health state warning will be
-raised, pools' ``min_size`` will be reduced to ``1``, and the cluster will be
-allowed to go active with the components and data at the single remaining zone. Pool ``size``
+raised, and the cluster will be
+allowed to go active with the components and data at the single remaining zone.
+A stretched pool's ``min_size`` applies to each zone, so it does not change. Pool ``size``
 does not change, so warnings will be raised that the PGs are undersized,
 but a special stretch mode flag will prevent the OSDs from
 creating extra copies in the remaining data center. This means that the data
@@ -308,7 +409,7 @@ stretch mode*. This changes the health state warning and allows peering, but req
 only from the ``datacenter`` that was ``up`` throughout the duration of the
 downtime. When all PGs are in a known state, and are neither ``degraded`` nor
 ``undersized`` / ``incomplete``, the cluster transitions back to regular stretch mode, ends the
-warning, restores pools' ``min_size`` to its original value of ``2``, requires
+warning, requires
 PGs at both zones to peer, and no longer requires the zone that was up throughout the
 duration of the downtime when peering. This makes failover to the other zone
 possible, if needed.
@@ -326,17 +427,22 @@ To exit stretch mode, run the following command:
 
 .. describe:: {crush_rule}
 
-   The non-stretch CRUSH rule to use for all pools. If this
-   is not specified, the pools will move to the default CRUSH rule.
+   The non-stretch CRUSH rule to use for the replicated pools. If this
+   is not specified, they will move to the default CRUSH rule.
+   Erasure-coded pools get single-zone rules of their own.
 
    :Type: String
    :Required: No.
 
 This command moves the cluster back to normal mode;
 the cluster will no longer be in stretch mode.
-All pools will be set with their prior ``size`` and ``min_size``
-values. At this point the user is responsible for scaling down the cluster
+Every stretched pool is set to one zone, and replicated pools to three
+replicas, and the pool creation defaults are set for local pools.
+At this point the user is responsible for scaling down the cluster
 to the desired number of OSDs if they choose to operate with fewer OSDs.
+
+To set individual pools to one zone only, use
+``ceph osd pool set <pool> num_zones 1`` instead of this command.
 
 Note that the command will not execute when the cluster is in
 recovery stretch mode. The command executes only when the cluster
@@ -482,3 +588,78 @@ recovered), run the following command:
 
 This command can be used to to remove the ``HEALTH_WARN`` state, which recovery
 mode raises. It fails if the cluster is not in recovery mode.
+
+.. _stretch_mode_perf_counters:
+
+Cross-Zone Performance Counters
+================================
+
+Stretch clusters have OSD performance counters and per pool 
+performance counters that measure inter-zone utilization. 
+
+Write fan-out
+-------------
+
+These counters track shard data sent to replica OSDs
+that reside in remote zones.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Counter
+     - Description
+   * - ``l_osd_stretch_cross_zone_write_ops``
+     - Number of cross-zone sub-write operations issued.
+   * - ``l_osd_stretch_cross_zone_write_bytes``
+     - Total bytes of shard data sent to OSDs in the remote zone during
+       write fan-out.
+   * - ``l_osd_stretch_cross_zone_write_lat``
+     - Average round-trip latency (ns) for cross-zone sub-write operations.
+   * - ``l_osd_stretch_cross_zone_write_lat_hist``
+     - Latency histogram for cross-zone sub-write operations (p50 / p95 / p99).
+
+Recovery push
+-------------
+
+These counters track shard data sent to remote-zone OSDs during PG recovery.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Counter
+     - Description
+   * - ``l_osd_stretch_cross_zone_recovery_push_ops``
+     - Number of cross-zone recovery push operations issued.
+   * - ``l_osd_stretch_cross_zone_recovery_push_bytes``
+     - Total bytes pushed to remote-zone OSDs during recovery.
+   * - ``l_osd_stretch_cross_zone_recovery_push_lat``
+     - Average round-trip latency (ns) for cross-zone recovery push
+       operations.
+   * - ``l_osd_stretch_cross_zone_recovery_push_lat_hist``
+     - Latency histogram for cross-zone recovery push operations (p50 / p95 / p99).
+
+Remote-zone reads
+-----------------
+
+These counters track shard data fetched from remote-zone OSDs, which occurs
+during EC reconstruction reads
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Counter
+     - Description
+   * - ``l_osd_stretch_cross_zone_read_ops``
+     - Number of cross-zone sub-read operations issued.
+   * - ``l_osd_stretch_cross_zone_read_sent_bytes``
+     - Total bytes of read requests sent to remote-zone OSDs
+   * - ``l_osd_stretch_cross_zone_read_recv_bytes``
+     - Total bytes of shard data received from remote-zone OSDs in response
+       to cross-zone read requests.
+   * - ``l_osd_stretch_cross_zone_read_lat``
+     - Average round-trip latency (ns) for cross-zone sub-read operations.
+   * - ``l_osd_stretch_cross_zone_read_lat_hist``
+     - Latency histogram for cross-zone sub-read operations (p50 / p95 / p99).
