@@ -137,6 +137,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   // Display search field inside tool header?
   @Input()
   searchField? = true;
+  // Display the column visibility toggle button in the toolbar?
+  @Input()
+  showColumnToggle? = true;
   // Placeholder text shown inside the Carbon toolbar search field.
   @Input()
   searchPlaceholder = $localize`Search`;

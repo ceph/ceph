@@ -858,6 +858,22 @@ describe('TableComponent', () => {
     });
   });
 
+  describe('column toggle button', () => {
+    const getColumnToggleButton = () =>
+      fixture.debugElement.query(By.css('[data-testid="column-toggle-button"]'));
+
+    it('should show the column toggle button by default', () => {
+      expect(component.showColumnToggle).toBe(true);
+      expect(getColumnToggleButton()).not.toBeNull();
+    });
+
+    it('should hide the column toggle button when showColumnToggle is false', () => {
+      fixture.componentRef.setInput('showColumnToggle', false);
+      fixture.detectChanges();
+      expect(getColumnToggleButton()).toBeNull();
+    });
+  });
+
   describe('useCustomClass', () => {
     beforeEach(() => {
       component.customCss = {
