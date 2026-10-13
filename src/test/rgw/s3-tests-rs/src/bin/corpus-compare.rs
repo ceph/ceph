@@ -19,8 +19,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
 
-use s3_tests_rs::corpus::compare::{differences, judge, parse_rows, Capture, Difference,
-                                   Verdict};
+use s3_tests_rs::corpus::compare::{differences, judge, parse_rows, Capture, Class,
+                                   Difference, Verdict};
 
 const PAIRS: [(&str, &str, &str, &str); 2] = [
     ("noobaa:unconverted", "adoption", "noobaa", "rgw-unconverted"),
@@ -111,14 +111,43 @@ fn main() -> ExitCode {
         failed |= !violations.is_empty() || !unexpected.is_empty() || nknown > 0;
     }
 
+    /* Two kinds of row match nothing, and they mean opposite things.  A
+     * guard -- `equal` or `filtered` -- asserts a difference must never
+     * occur, so in a good run it matches nothing.  Any other class
+     * expects a difference, so one that found none may be stale.
+     * Reported under separate headings so the list is not read as one
+     * list of things to remove. */
     let unused: Vec<_> = rows
         .iter()
         .filter(|r| (r.when.is_empty() || r.when == *modality) && !used.contains_key(&r.line))
         .collect();
+    let class_name = |c: &Class| match c {
+        Class::Equal => "equal".to_string(),
+        Class::Recognize(r) => format!("recognize:{r}"),
+        Class::Differs => "differs".to_string(),
+        Class::Vanishes => "vanishes".to_string(),
+        Class::Appears => "appears".to_string(),
+        Class::Absent => "absent".to_string(),
+        Class::Known => "known".to_string(),
+        Class::Filtered => "filtered".to_string(),
+    };
+    let is_guard = |c: &Class| matches!(c, Class::Equal | Class::Filtered);
     if !unused.is_empty() {
         println!("== rows that matched no difference in {modality}");
-        for r in unused {
-            println!("  line {}:  {}  {}  {}", r.line, r.pair, r.artifact, r.key);
+        for (guards, heading) in [
+            (true, "guards -- equal and filtered rows, which match nothing in a good run:"),
+            (false, "possibly stale -- these expect a difference and found none:"),
+        ] {
+            println!("  {heading}");
+            let mut any = false;
+            for r in unused.iter().filter(|r| is_guard(&r.class) == guards) {
+                println!("    line {}:  {}  {}  {}  ({})", r.line, r.pair, r.artifact,
+                         r.key, class_name(&r.class));
+                any = true;
+            }
+            if !any {
+                println!("    (none)");
+            }
         }
     }
     if failed { ExitCode::from(1) } else { ExitCode::SUCCESS }
