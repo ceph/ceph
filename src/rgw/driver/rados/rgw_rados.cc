@@ -8536,13 +8536,40 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
   attr_name.append(op_tag);
 
   // first remove the relevant pending prefix
-  ObjectWriteOperation op;
-  bucket_index_guard_olh_op(dpp, state, op);
-  op.rmxattr(attr_name.c_str());
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+  auto remove_pending = [&] (const real_time& mtime, const bufferlist& obj_tag) {
+    ObjectWriteOperation op;
+    bucket_index_guard_olh_op(dpp, state, op);
+    // pin mtime only if the head object wasn't overwritten (RGW_ATTR_ID_TAG unchanged)
+    op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, obj_tag);
+    struct timespec mtime_ts = real_clock::to_timespec(mtime);
+    op.mtime2(&mtime_ts);
+    op.rmxattr(attr_name.c_str());
+    return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+  };
+
+  // try to preserve the head object's original mtime
+  r = remove_pending(state.mtime, state.obj_tag);
+  // if received -ECANCELED, the head may have been overwritten
+  // then try to preserve its current mtime instead
+  constexpr int max_retries = 3;
+  for (int i = 0; r == -ECANCELED && i < max_retries; i++) {
+    real_time mtime;
+    map<string, bufferlist> attrs;
+    r = raw_obj_stat(dpp, ref.obj, nullptr, &mtime, nullptr, &attrs, nullptr, nullptr, y);
+    if (r < 0) {
+      break;
+    }
+    if (!attrs[RGW_ATTR_OLH_ID_TAG].contents_equal(state.olh_tag)) {
+      // olh itself removed/re-created, no need to retry anymore
+      r = -ECANCELED;
+      break;
+    }
+    r = remove_pending(mtime, attrs[RGW_ATTR_ID_TAG]);
+  }
+
   if (r < 0) {
     if (r != -ENOENT && r != -ECANCELED) {
-      ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " rmxattr rgw_rados_operate() returned " << r << dendl;
+      ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " removing olh pending xattr returned " << r << dendl;
     }
     return;
   }
