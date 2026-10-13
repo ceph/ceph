@@ -133,15 +133,6 @@ static const DoutPrefixProvider* dpp() {
     } \
   } while (0)
 
-#define CHECK_SUCCESS(x, msg) \
-  do { \
-    int _x_val = (x); \
-    if (_x_val < 0) { \
-      cerr << msg << ": " << cpp_strerror(-_x_val) << std::endl; \
-      return _x_val; \
-    } \
-  } while (0)
-
 using namespace std;
 using rgw::run_coro;
 
@@ -3386,11 +3377,11 @@ int main(int argc, const char **argv)
   std::optional<string> opt_region;
   std::string master_zone;
   std::string realm_name, realm_id, realm_new_name;
-  std::optional<string> opt_realm_name, opt_realm_id;
+  std::optional<string> opt_realm_id;
   std::string zone_name, zone_id, zone_new_name;
-  std::optional<string> opt_zone_name, opt_zone_id;
+  std::optional<string> opt_zone_id;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
-  std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
+  std::optional<string> opt_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
   std::string provider_url, client_ids_str, thumbprints_str;
@@ -3474,8 +3465,6 @@ int main(int argc, const char **argv)
   int shard_id = -1;
   bool specified_shard_id = false;
   std::optional<std::uint64_t> count;
-  string client_id;
-  string op_id;
   string op_mask_str;
   string quota_scope;
   string ratelimit_scope;
@@ -3557,7 +3546,6 @@ int main(int argc, const char **argv)
   int detail = false;
 
   std::string val;
-  std::ostringstream errs;
   string err;
 
   string source_zone_name;
@@ -3591,8 +3579,6 @@ int main(int argc, const char **argv)
 
   string topic_name;
   string notification_id;
-  string sub_name;
-  string event_id;
 
   std::optional<uint64_t> gen;
   std::optional<std::string> str_script_ctx;
@@ -3653,12 +3639,6 @@ int main(int argc, const char **argv)
   std::optional<std::string> rgw_obj_fs; // radoslist field separator
   std::optional<std::string> restore_status_filter;
   int show_restore_stats = false;
-
-  // global CORS settings
-  std::optional<std::string> gcors_allow_origins;
-  std::optional<std::string> gcors_allow_methods;
-  std::optional<std::string> gcors_allow_headers;
-  std::optional<std::string> gcors_expose_headers;
 
   init_realm_param(cct.get(), realm_id, opt_realm_id, "rgw_realm_id");
   init_realm_param(cct.get(), zonegroup_id, opt_zonegroup_id, "rgw_zonegroup_id");
@@ -3730,10 +3710,6 @@ int main(int argc, const char **argv)
       objects_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*)NULL)) {
       object_version = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
-      client_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*)NULL)) {
-      op_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*)NULL)) {
       op_mask_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
@@ -4199,10 +4175,6 @@ int main(int argc, const char **argv)
       topic_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--notification-id", (char*)NULL)) {
       notification_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--subscription", (char*)NULL)) {
-      sub_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--event-id", (char*)NULL)) {
-      event_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--group-id", (char*)NULL)) {
       opt_group_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--status", (char*)NULL)) {
@@ -4294,14 +4266,6 @@ int main(int argc, const char **argv)
       restore_status_filter = val;
     } else if (ceph_argparse_binary_flag(args, i, &show_restore_stats, NULL, "--show-restore-stats", (char*)NULL)){
       // do nothing
-    } else if (ceph_argparse_witharg(args, i, &val, "--allow-origin", (char*)NULL)) {
-      gcors_allow_origins = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--allow-methods", (char*)NULL)) {
-      gcors_allow_methods = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--allow-headers", (char*)NULL)) {
-      gcors_allow_headers = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--expose-headers", (char*)NULL)) {
-      gcors_expose_headers = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4689,18 +4653,6 @@ int main(int argc, const char **argv)
   realm_name = g_conf()->rgw_realm;
   zone_name = g_conf()->rgw_zone;
   zonegroup_name = g_conf()->rgw_zonegroup;
-
-  if (!realm_name.empty()) {
-    opt_realm_name = realm_name;
-  }
-
-  if (!zone_name.empty()) {
-    opt_zone_name = zone_name;
-  }
-
-  if (!zonegroup_name.empty()) {
-    opt_zonegroup_name = zonegroup_name;
-  }
 
   RGWStreamFlusher stream_flusher(formatter.get(), cout);
 
