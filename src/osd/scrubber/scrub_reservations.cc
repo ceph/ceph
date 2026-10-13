@@ -7,16 +7,40 @@
 
 #include "common/ceph_time.h"
 #include "common/debug.h"
+#ifdef WITH_CRIMSON
+#include "crimson/common/log.h"
+#include "crimson/osd/scrub/pg_scrubber.h"
+#include "crimson/osd/osd.h"
+#include "crimson/osd/pg.h"
+#else
 #include "osd/OSD.h"
 #include "osd/PG.h"
+#include "pg_scrubber.h"
+#endif
 #include "osd/osd_types_fmt.h"
 
-#include "pg_scrubber.h"
 
+#ifdef WITH_CRIMSON
+using namespace crimson::osd::scrub;
+SET_SUBSYS(osd);
+#define CRIMSON_LOG_PREFIX(...) LOG_PREFIX(__VA_ARGS__)
+#define CRIMSON_DEBUG(...) DEBUG(__VA_ARGS__)
+#define CRIMSON_LOGGER (&m_pg->get_shard_services().get_perf_logger())
+#define CRIMSON_CLOG_ERROR() m_pg->get_clog_error()
+#define CRIMSON_CLOG_WARN() m_pg->get_clog_warn()
+#else
 using namespace Scrub;
+#define CRIMSON_LOG_PREFIX(...)
+#undef CRIMSON_DEBUG
+#define CRIMSON_DEBUG(...) dout(10) << fmt::format(__VA_ARGS__) << dendl
+#define CRIMSON_LOGGER m_osds->logger
+#define CRIMSON_CLOG_ERROR() m_osds->clog->error()
+#define CRIMSON_CLOG_WARN() m_osds->clog->warn()
+#endif
 using namespace std::chrono;
 using namespace std::chrono_literals;
 
+#ifndef WITH_CRIMSON
 #define dout_context (m_osds->cct)
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -26,7 +50,40 @@ static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
 {
   return t->gen_prefix(*_dout, fn);
 }
+#endif
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+ReplicaReservations::ReplicaReservations(
+  PGScrubber& scrubber,
+  reservation_nonce_t& nonce,
+  const ScrubCounterSet& pc)
+  : m_scrubber{scrubber}
+  , m_pg{&m_scrubber.get_pg()}
+  , m_pgid{m_scrubber.get_pg_id().pgid}
+  , m_last_request_sent_nonce{nonce}
+  , m_perf_indices{pc}
+{
+  CRIMSON_LOG_PREFIX("ReplicaReservations::ReplicaReservations");
+  auto acting = m_pg->get_acting_shards();
+  m_sorted_secondaries.reserve(acting.size());
+  std::copy_if(
+    acting.cbegin(), acting.cend(), std::back_inserter(m_sorted_secondaries),
+    [whoami = m_pg->get_pg_whoami()](const pg_shard_t& shard) {
+      return shard != whoami;
+    });
+    CRIMSON_LOGGER->set(
+      m_perf_indices.rsv_secondaries_num, m_sorted_secondaries.size());
 
+    m_next_to_request = m_sorted_secondaries.cbegin();
+  if (m_scrubber.is_reservation_required()) {
+    m_process_started_at = ScrubClock::now();
+    send_next_reservation_or_complete();
+  } else {
+    CRIMSON_DEBUG("high-priority scrub - no reservations needed");
+    CRIMSON_LOGGER->inc(m_perf_indices.rsv_skipped_cnt);
+  }
+}
+#else
 namespace Scrub {
 
 ReplicaReservations::ReplicaReservations(
@@ -52,7 +109,7 @@ ReplicaReservations::ReplicaReservations(
       [whoami = m_pg->pg_whoami](const pg_shard_t& shard) {
 	return shard != whoami;
       });
-  m_osds->logger->set(
+  CRIMSON_LOGGER->set(
       m_perf_indices.rsv_secondaries_num, m_sorted_secondaries.size());
 
   m_next_to_request = m_sorted_secondaries.cbegin();
@@ -63,24 +120,32 @@ ReplicaReservations::ReplicaReservations(
   } else {
     // for high-priority scrubs (i.e. - user-initiated), no reservations are
     // needed. Note: not perf-counted as either success or failure.
-    dout(10) << "high-priority scrub - no reservations needed" << dendl;
-    m_osds->logger->inc(m_perf_indices.rsv_skipped_cnt);
+    CRIMSON_DEBUG("high-priority scrub - no reservations needed");
+    CRIMSON_LOGGER->inc(m_perf_indices.rsv_skipped_cnt);
   }
 }
-
+#endif
 void ReplicaReservations::release_all()
 {
+  CRIMSON_LOG_PREFIX("ReplicaReservations::release_all");
   std::span<const pg_shard_t> replicas{
       m_sorted_secondaries.cbegin(), m_next_to_request};
-  dout(10) << fmt::format("releasing {}", replicas) << dendl;
+  CRIMSON_DEBUG("releasing {}", replicas);
   epoch_t epoch = m_pg->get_osdmap_epoch();
 
   // send 'release' messages to all replicas we have managed to reserve
   for (const auto& peer : replicas) {
+#ifdef WITH_CRIMSON
     auto m = make_message<MOSDScrubReserve>(
-	spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::RELEASE,
-	m_pg->pg_whoami, 0);
+      spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::RELEASE,
+      m_pg->get_pg_whoami(), 0);
+    std::ignore = m_pg->get_shard_services().send_to_osd(peer.osd, std::move(m), epoch);
+#else
+    auto m = make_message<MOSDScrubReserve>(
+      spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::RELEASE,
+      m_pg->pg_whoami, 0);
     m_pg->send_cluster_message(peer.osd, m, epoch, false);
+#endif
   }
 
   m_sorted_secondaries.clear();
@@ -89,7 +154,8 @@ void ReplicaReservations::release_all()
 
 void ReplicaReservations::discard_remote_reservations()
 {
-  dout(10) << "reset w/o issuing messages" << dendl;
+  CRIMSON_LOG_PREFIX("ReplicaReservations::discard_remote_reservations");
+  CRIMSON_DEBUG("reset w/o issuing messages");
   m_sorted_secondaries.clear();
   m_next_to_request = m_sorted_secondaries.cbegin();
 }
@@ -98,9 +164,9 @@ void ReplicaReservations::log_success_and_duration()
 {
   ceph_assert(m_process_started_at.has_value());
   auto logged_duration = ScrubClock::now() - m_process_started_at.value();
-  m_osds->logger->tinc(m_perf_indices.rsv_successful_elapsed, logged_duration);
-  m_osds->logger->inc(m_perf_indices.rsv_successful_cnt);
-  m_osds->logger->hinc(
+  CRIMSON_LOGGER->tinc(m_perf_indices.rsv_successful_elapsed, logged_duration);
+  CRIMSON_LOGGER->inc(m_perf_indices.rsv_successful_cnt);
+  CRIMSON_LOGGER->hinc(
       l_osd_scrub_reservation_dur_hist, std::ssize(m_sorted_secondaries),
       logged_duration.count());
   m_process_started_at.reset();
@@ -113,10 +179,10 @@ void ReplicaReservations::log_failure_and_duration(int failure_cause_counter)
     return;
   }
   auto logged_duration = ScrubClock::now() - m_process_started_at.value();
-  m_osds->logger->tinc(m_perf_indices.rsv_failed_elapsed, logged_duration);
+  CRIMSON_LOGGER->tinc(m_perf_indices.rsv_failed_elapsed, logged_duration);
   m_process_started_at.reset();
   // note: not counted into l_osd_scrub_reservation_dur_hist
-  m_osds->logger->inc(failure_cause_counter);
+  CRIMSON_LOGGER->inc(failure_cause_counter);
 }
 
 ReplicaReservations::~ReplicaReservations()
@@ -141,15 +207,15 @@ bool ReplicaReservations::handle_reserve_grant(
     const MOSDScrubReserve& msg,
     pg_shard_t from)
 {
+  CRIMSON_LOG_PREFIX("ReplicaReservations::handle_reserve_grant");
   if (!is_reservation_response_relevant(msg.reservation_nonce)) {
     // this is a stale response to a previous request (e.g. one that
     // timed-out). See m_last_request_sent_nonce for details.
-    dout(1) << fmt::format(
-		   "stale reservation response from {} with nonce {} vs. "
+    CRIMSON_DEBUG("stale reservation response from {} with nonce {} vs. "
 		   "expected {} (e:{})",
 		   from, msg.reservation_nonce, m_last_request_sent_nonce,
-		   msg.map_epoch)
-	    << dendl;
+		   msg.map_epoch);
+
     return false;
   }
 
@@ -160,33 +226,34 @@ bool ReplicaReservations::handle_reserve_grant(
   // are legacy messages, for which the nonce was not verified).
   if (!is_msg_source_correct(from)) {
     const auto error_text = fmt::format(
-	"unexpected reservation grant from {} vs. the expected {} (e:{} "
-	"message nonce:{})",
-	from, get_last_sent().value_or(pg_shard_t{}), msg.map_epoch,
-	msg.reservation_nonce);
-    dout(1) << error_text << dendl;
+      "unexpected reservation grant from {} vs. the expected {} (e:{} "
+      "message nonce:{})",
+      from, get_last_sent().value_or(pg_shard_t{}), msg.map_epoch,
+      msg.reservation_nonce);
+    CRIMSON_DEBUG("{}", error_text.c_str());
     if (msg.reservation_nonce != 0) {
-      m_osds->clog->error() << error_text;
-      ceph_abort_msg(error_text);
+      CRIMSON_CLOG_ERROR() << error_text;
+      ceph_abort_msg(error_text.c_str());
     }
     return false;
   }
 
   auto elapsed = ScrubClock::now() - m_last_request_sent_at;
-  dout(10) << fmt::format(
+  CRIMSON_DEBUG(
 		  "(e:{} nonce:{}) granted by {} ({} of {}) in {}ms",
 		  msg.map_epoch, msg.reservation_nonce, from,
 		  active_requests_cnt(), m_sorted_secondaries.size(),
-		  duration_cast<milliseconds>(elapsed).count())
-	   << dendl;
+		  duration_cast<milliseconds>(elapsed).count());
+
   return send_next_reservation_or_complete();
 }
 
 bool ReplicaReservations::send_next_reservation_or_complete()
 {
+  CRIMSON_LOG_PREFIX("ReplicaReservations::send_next_reservation_or_complete");
   if (m_next_to_request == m_sorted_secondaries.cend()) {
     // granted by all replicas
-    dout(10) << "remote reservation complete" << dendl;
+    CRIMSON_DEBUG("remote reservation complete");
     log_success_and_duration();
     return true;  // done
   }
@@ -195,17 +262,23 @@ bool ReplicaReservations::send_next_reservation_or_complete()
   const auto peer = *m_next_to_request;
   const auto epoch = m_pg->get_osdmap_epoch();
   m_last_request_sent_nonce++;
-
+#ifdef WITH_CRIMSON
+  auto m = make_message<MOSDScrubReserve>(
+      spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST, m_pg->get_pg_whoami(),
+      m_last_request_sent_nonce);
+  std::ignore = m_pg->get_shard_services().send_to_osd(peer.osd, std::move(m), epoch);
+#else
   auto m = make_message<MOSDScrubReserve>(
       spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST, m_pg->pg_whoami,
       m_last_request_sent_nonce);
   m_pg->send_cluster_message(peer.osd, m, epoch, false);
+#endif
   m_last_request_sent_at = ScrubClock::now();
-  dout(10) << fmt::format(
+  CRIMSON_DEBUG(
 		  "reserving {} (the {} of {} replicas) e:{} nonce:{}",
 		  *m_next_to_request, active_requests_cnt() + 1,
-		  m_sorted_secondaries.size(), epoch, m_last_request_sent_nonce)
-	   << dendl;
+		  m_sorted_secondaries.size(), epoch, m_last_request_sent_nonce);
+
   m_next_to_request++;
   return false;
 }
@@ -214,21 +287,21 @@ bool ReplicaReservations::handle_reserve_rejection(
     const MOSDScrubReserve& msg,
     pg_shard_t from)
 {
+  CRIMSON_LOG_PREFIX("ReplicaReservations::handle_reserve_rejection");
   // a convenient log message for the reservation process conclusion
   // (matches the one in send_next_reservation_or_complete())
-  dout(10) << fmt::format(
-		  "remote reservation failure. Rejected by {} ({})", from, msg)
-	   << dendl;
+  CRIMSON_DEBUG(
+		  "remote reservation failure. Rejected by {} ({})", from, msg);
 
   if (!is_reservation_response_relevant(msg.reservation_nonce)) {
     // this is a stale response to a previous request (e.g. one that
     // timed-out). See m_last_request_sent_nonce for details.
-    dout(10) << fmt::format(
+    CRIMSON_DEBUG(
 		    "stale reservation response from {} with reservation_nonce "
 		    "{} vs. expected {} (e:{})",
 		    from, msg.reservation_nonce, m_last_request_sent_nonce,
-		    msg.map_epoch)
-	     << dendl;
+		    msg.map_epoch);
+
     return false;
   }
 
@@ -245,7 +318,7 @@ bool ReplicaReservations::handle_reserve_rejection(
   if (is_msg_source_correct(from)) {
     m_next_to_request--;  // no need to release this one
   } else {
-    m_osds->clog->warn() << fmt::format(
+    CRIMSON_CLOG_WARN() << fmt::format(
 	"unexpected reservation denial from {} vs the expected {} (e:{} "
 	"message reservation_nonce:{})",
 	from, get_last_sent().value_or(pg_shard_t{}), msg.map_epoch,
@@ -266,7 +339,7 @@ size_t ReplicaReservations::active_requests_cnt() const
 {
   return m_next_to_request - m_sorted_secondaries.cbegin();
 }
-
+#ifndef WITH_CRIMSON
 std::ostream& ReplicaReservations::gen_prefix(
     std::ostream& out,
     std::string fn) const
@@ -274,5 +347,5 @@ std::ostream& ReplicaReservations::gen_prefix(
   return m_pg->gen_prefix(out)
 	 << fmt::format("scrubber::ReplicaReservations:{}: ", fn);
 }
-
+#endif
 } // namespace Scrub

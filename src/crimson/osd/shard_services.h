@@ -351,6 +351,7 @@ private:
   AsyncReserver<spg_t, DirectFinisher> local_reserver;
   AsyncReserver<spg_t, DirectFinisher> remote_reserver;
   AsyncReserver<spg_t, DirectFinisher> snap_reserver;
+  AsyncReserver<spg_t, DirectFinisher> scrub_reserver;
 
   epoch_t up_thru_wanted = 0;
   seastar::future<> send_alive(epoch_t want);
@@ -917,6 +918,52 @@ public:
 	  prio);
       },
       invoke_context_on_core(seastar::this_shard_id(), on_reserved));
+  }
+
+  seastar::future<> scrub_local_request_reservation(
+    spg_t item,
+    Context *on_reserved,
+    unsigned prio,
+    Context *on_preempt) {
+    LOG_PREFIX(ShardServices::scrub_local_request_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {} prio {}", item, prio);
+    return with_singleton(
+      [FNAME, item, prio](
+        OSDSingletonState &singleton,
+        Context *wrapped_on_reserved,
+        Context *wrapped_on_preempt) {
+        SUBDEBUG(osd, "on singleton pgid {} prio {}", item, prio);
+        singleton.scrub_reserver.request_reservation(
+          item,
+          wrapped_on_reserved,
+          prio,
+          wrapped_on_preempt);
+        return seastar::now();
+      },
+      invoke_context_on_core(seastar::this_shard_id(), on_reserved),
+      invoke_context_on_core(seastar::this_shard_id(), on_preempt));
+  }
+
+  seastar::future<bool> scrub_local_request_reservation_or_fail(spg_t item) {
+    LOG_PREFIX(ShardServices::scrub_local_request_reservation_or_fail);
+    SUBDEBUG(osd, "sending to singleton pgid {}", item);
+    return with_singleton(
+      [FNAME, item](OSDSingletonState &singleton) {
+        SUBDEBUG(osd, "on singleton pgid {}", item);
+        return seastar::make_ready_future<bool>(
+          singleton.scrub_reserver.request_reservation_or_fail(item));
+      });
+  }
+
+  seastar::future<> scrub_local_cancel_reservation(spg_t item) {
+    LOG_PREFIX(ShardServices::scrub_local_cancel_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {}", item);
+    return with_singleton(
+      [FNAME, item](OSDSingletonState &singleton) {
+        SUBDEBUG(osd, "on singleton pgid {}", item);
+        singleton.scrub_reserver.cancel_reservation(item);
+        return seastar::now();
+      });
   }
 
 private:

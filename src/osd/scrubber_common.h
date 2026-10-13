@@ -319,7 +319,7 @@ struct PgScrubBeListener {
   // Returns the stripe_info_t used by the PG in EC
   virtual ECUtil::stripe_info_t get_ec_sinfo() const = 0;
 };
-
+#endif
 // defining a specific subset of performance counters. Each of the members
 // is set to (the index of) the corresponding performance counter.
 // Separate sets are used for replicated and erasure-coded pools.
@@ -349,7 +349,7 @@ struct ScrubCounterSet {
   osd_counter_idx_t rsv_failed_elapsed; ///< time for reservation to fail
   osd_counter_idx_t rsv_secondaries_num; ///< number of replicas (EC or rep)
 };
-#endif
+
 }  // namespace Scrub
 
 #ifndef WITH_CRIMSON
