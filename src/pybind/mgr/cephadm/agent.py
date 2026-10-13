@@ -987,9 +987,13 @@ class HostData:
             # update timestamp of most recent agent update
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
 
-            with _stats_phase(self.mgr, 'scans'):
-                error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
-                daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
+            # Only ls updates the daemons of this host, so the cluster-wide
+            # error-daemon scans are skipped when ls was not sent.
+            ls_sent = bool(data.get('ls'))
+            if ls_sent:
+                with _stats_phase(self.mgr, 'scans'):
+                    error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                    daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
 
             up_to_date = False
 
@@ -1007,15 +1011,16 @@ class HostData:
             self._process_sections(host, data)
             self._touch_unchanged(host, unchanged)
 
-            with _stats_phase(self.mgr, 'scans'):
-                daemons_changed = (
-                    error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
-                    or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
-                )
-            if daemons_changed:
-                self.mgr.log.debug(
-                    f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
-                self.mgr._kick_serve_loop()
+            if ls_sent:
+                with _stats_phase(self.mgr, 'scans'):
+                    daemons_changed = (
+                        error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                        or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
+                    )
+                if daemons_changed:
+                    self.mgr.log.debug(
+                        f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
+                    self.mgr._kick_serve_loop()
 
             if up_to_date and (data.get('ls') or 'ls' in unchanged):
                 was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()

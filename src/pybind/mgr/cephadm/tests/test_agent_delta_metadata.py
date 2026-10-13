@@ -258,3 +258,56 @@ def test_first_contact_report_is_not_counted():
         assert delta['delta_reports'] == 0
     finally:
         ctx.__exit__(None, None, None)
+
+
+def test_daemon_scans_are_skipped_when_ls_is_not_sent():
+    """Without ls, the host's daemons cannot change: no error-daemon scans."""
+    ctx, mgr, host = _setup_mgr()
+    try:
+        endpoint = HostData(mgr)
+        mgr.agent_helpers.delta_baselines.record_received(host, ['ls', 'facts'])
+        for data in (
+            dict(_base(host), unchanged=['ls']),
+            dict(_base(host), facts='{"hostname": "delta-host"}'),
+        ):
+            with patch.object(mgr.cache, 'get_error_daemons') as scan, \
+                    patch.object(mgr, 'update_failed_daemon_health_check') as health:
+                assert endpoint.handle_metadata(data).processed is True
+            scan.assert_not_called()
+            health.assert_not_called()
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_daemon_change_from_sent_ls_kicks_serve_loop():
+    """With ls sent, a new daemon on the host still kicks the serve loop."""
+    ctx, mgr, host = _setup_mgr()
+    try:
+        endpoint = HostData(mgr)
+        data = _base(host)
+        data['ls'] = [{'name': 'mon.a', 'style': 'cephadm:v1', 'fsid': mgr._cluster_fsid}]
+        with patch.object(mgr, '_kick_serve_loop') as kick, \
+                patch.object(mgr.cache, 'get_error_daemons',
+                             wraps=mgr.cache.get_error_daemons) as scan:
+            assert endpoint.handle_metadata(data).processed is True
+        assert scan.call_count >= 2
+        kick.assert_called()
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_scan_phase_is_not_timed_for_reports_without_ls():
+    ctx, mgr, host = _setup_mgr()
+    try:
+        stats = mgr.agent_metadata_stats
+        stats.reset()
+        endpoint = HostData(mgr)
+        mgr.agent_helpers.delta_baselines.record_received(host, ['ls'])
+        data = _base(host)
+        data['unchanged'] = ['ls']
+        assert _run_report(mgr, endpoint, data).processed is True
+        processing = stats.snapshot('mgr.a')['processing']
+        assert processing['scans']['calls'] == 0
+        assert processing['other']['calls'] == 1
+    finally:
+        ctx.__exit__(None, None, None)
