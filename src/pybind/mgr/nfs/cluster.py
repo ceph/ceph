@@ -18,6 +18,7 @@ from .utils import (
     NonFatalError,
     available_clusters,
     conf_obj_name,
+    get_nfs_spec_for_cluster,
     restart_nfs_service,
     redeploy_nfs_service,
     user_conf_obj_name,
@@ -672,16 +673,13 @@ class NFSCluster:
 
         deployment_type = "standalone"
         placement = None
+        enable_rdma = False
 
-        nfs_sc = self.mgr.describe_service(
-            service_type='nfs',
-            service_name=f'nfs.{cluster_id}'
-        )
-        nfs_services = orchestrator.raise_if_exception(nfs_sc)
-        for svc in nfs_services:
-            if svc.spec.service_id == cluster_id:
-                placement = svc.spec.placement
-                break
+        # Use the same spec lookup as export creation so enable_rdma is consistent.
+        nfs_spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
+        if nfs_spec:
+            placement = nfs_spec.placement
+            enable_rdma = bool(getattr(nfs_spec, 'enable_rdma', False))
 
         if ingress_mode:
             if placement and placement.count and placement.count > 1:
@@ -696,6 +694,7 @@ class NFSCluster:
             'virtual_ip': virtual_ip,
             'backend': backends,
             'placement': placement.to_json() if placement else {},
+            'enable_rdma': enable_rdma,
         }
 
         if ingress_mode:
