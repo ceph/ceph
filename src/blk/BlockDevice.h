@@ -96,8 +96,11 @@ public:
 #endif
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
-  std::list<aio_t> pending_aios;    ///< not yet submitted
-  std::list<aio_t> running_aios;    ///< submitting or submitted
+  // Reads and writes are tracked on separate lanes so nothing ever
+  // has to inspect an aio's direction: aio_read()/aio_write() know it
+  // statically, and submission moves each lane wholesale.
+  aio_lane writes;
+  aio_lane reads;
 #endif
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
@@ -150,6 +153,8 @@ public:
 class BlockDevice {
 public:
   CephContext* cct;
+  /// upper bound on completions processed by one reap pass
+  static constexpr int REAP_BATCH_MAX = 1024;
   typedef void (*aio_callback_t)(void *handle, void *aio);
   virtual void collect_alerts(osd_alert_list_t& alerts, const std::string& device_name);
 
@@ -296,6 +301,30 @@ public:
     bool buffered,
     int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
+
+  // External completion reaping of WRITE aio (opt-in, per instance).
+  // When a caller-owned eventfd is installed with
+  // set_completion_eventfd() BEFORE open(), the device does not run a
+  // completion thread for writes for its whole open lifetime; every
+  // write completion signals that eventfd, and the owner must drain
+  // them by calling reap_completions() - the write aio callbacks then
+  // run in the caller's context.  Reads move to a dedicated ring with
+  // its own completion thread, so read completion latency never
+  // depends on the owner's schedule.  The device only borrows the fd:
+  // the caller owns its lifetime and must keep it valid while the
+  // device is open.  The owner's obligations: (a) the reaping thread
+  // must never submit write aio itself or wait on a write IOContext -
+  // it is that ring's only drain, so sleeping in the submit EAGAIN
+  // retry loop (or in aio_wait) would deadlock; (b) no write aio may
+  // be issued at all while nothing is reaping.  Reads are exempt.
+  // Default: unsupported.
+  virtual int set_completion_eventfd(int fd) { return -EOPNOTSUPP; }
+  // Nonblocking; processes up to min(max, REAP_BATCH_MAX) completed
+  // aios and returns the number processed.  Devices not in
+  // external-completion mode simply return 0, so callers need no mode
+  // check.
+  virtual int reap_completions(int max) { return 0; }
+
   virtual bool try_discard(interval_set<uint64_t> &to_release,
                            bool async=true,
                            bool force=false) { return false; }
