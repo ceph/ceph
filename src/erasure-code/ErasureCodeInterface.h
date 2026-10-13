@@ -299,18 +299,16 @@ namespace ceph {
      * **minimum_to_decode_with_cost** where each **available** chunk
      * has the same cost.
      *
-     * @see minimum_to_decode_with_cost 
+     * @see minimum_to_decode_with_cost
      *
      * @param [in] want_to_read chunk indexes to be decoded
      * @param [in] available chunk indexes containing valid data
-     * @param [out] minimum chunk indexes and corresponding 
-     *              subchunk index offsets, count.
+     * @param [out] minimum chunk indexes to retrieve
      * @return **0** on success or a negative errno on error.
      */
     virtual int minimum_to_decode(const shard_id_set &want_to_read,
                           const shard_id_set &available,
-                          shard_id_set &minimum_set,
-                          mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>> *minimum_sub_chunks) = 0;
+                          shard_id_set &minimum_set) = 0;
 
     // Interface for legacy EC.
     [[deprecated]]

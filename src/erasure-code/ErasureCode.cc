@@ -191,20 +191,9 @@ END_IGNORE_DEPRECATED
 
 int ErasureCode::minimum_to_decode(const shard_id_set &want_to_read,
                                    const shard_id_set &available_chunks,
-                                   shard_id_set &minimum_set,
-                                   shard_id_map<vector<pair<int, int>>> *minimum_sub_chunks)
+                                   shard_id_set &minimum_set)
 {
-  int r = _minimum_to_decode(want_to_read, available_chunks, &minimum_set);
-  if (minimum_sub_chunks == nullptr) return r;
-  if (r != 0) {
-    return r;
-  }
-  vector<pair<int, int>> default_subchunks;
-  default_subchunks.push_back(make_pair(0, get_sub_chunk_count()));
-  for (auto &&id : minimum_set) {
-    minimum_sub_chunks->emplace(id, default_subchunks);
-  }
-  return 0;
+  return _minimum_to_decode(want_to_read, available_chunks, &minimum_set);
 }
 
 IGNORE_DEPRECATED
