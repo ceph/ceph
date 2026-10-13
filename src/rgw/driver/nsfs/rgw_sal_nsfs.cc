@@ -1380,6 +1380,30 @@ static int copy_xattrs_fd(const DoutPrefixProvider* dpp, int src_fd, int dst_fd)
 
 namespace nsfs {
 
+int resolve_key_path(const DoutPrefixProvider* dpp,
+                     Directory* root,
+                     const rgw_obj_key& key,
+                     const std::string& key_path,
+                     const ReservedNames& rn,
+                     bool internal_bucket,
+                     bool create_dirs,
+                     CephContext* cct,
+                     std::vector<std::unique_ptr<Directory>>& dir_chain,
+                     Directory*& leaf_dir,
+                     std::string& leaf_name)
+{
+  if (!internal_bucket && key.ns.empty() &&
+      key_hits_reserved_name(key.name, rn)) {
+    if (dpp) {
+      ldpp_dout(dpp, 4) << "nsfs: refusing key " << key.name
+	<< ":  a component names driver scaffolding" << dendl;
+    }
+    return create_dirs ? -ERR_INVALID_OBJECT_NAME : -ENOENT;
+  }
+  return resolve_path(dpp, root, key_path, create_dirs, cct,
+		      dir_chain, leaf_dir, leaf_name);
+}
+
 int resolve_path(const DoutPrefixProvider* dpp,
                  Directory* root,
                  const std::string& key_path,
@@ -8393,9 +8417,10 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   std::vector<std::unique_ptr<nsfs::Directory>> dchain;
   nsfs::Directory* dst_dir{nullptr};
   std::string dst_leaf;
-  ret = nsfs::resolve_path(dpp, db->get_dir(), dest_key.name,
-			   /*create_dirs=*/true, driver->ctx(),
-			   dchain, dst_dir, dst_leaf);
+  ret = nsfs::resolve_key_path(dpp, db->get_dir(), dest_key, dest_key.name,
+			       driver->get_reserved_names(), db->is_internal(),
+			       /*create_dirs=*/true, driver->ctx(),
+			       dchain, dst_dir, dst_leaf);
   if (ret < 0 || ! dst_dir) {
     return (ret < 0) ? ret : -EIO;
   }
@@ -8756,8 +8781,9 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     std::vector<std::unique_ptr<nsfs::Directory>> dst_chain;
     nsfs::Directory* dst_leaf_dir = nullptr;
     std::string dst_leaf_name;
-    ret = nsfs::resolve_path(dpp, db->get_dir(),
+    ret = nsfs::resolve_key_path(dpp, db->get_dir(), dst_key,
         path_strategy()->object_name(dst_key, false),
+        driver->get_reserved_names(), db->is_internal(),
         /*create_dirs=*/true, driver->ctx(),
         dst_chain, dst_leaf_dir, dst_leaf_name);
     if (ret < 0) {
@@ -9032,8 +9058,10 @@ int NSFSObject::resolve_parent_dir(const DoutPrefixProvider* dpp,
   }
 
   nsfs::Directory* leaf_dir{nullptr};
-  int ret = nsfs::resolve_path(dpp, root,
+  int ret = nsfs::resolve_key_path(dpp, root, state.obj.key,
     get_fname(/*use_version=*/false),
+    driver->get_reserved_names(),
+    static_cast<NSFSBucket*>(bucket)->is_internal(),
     create_dirs,
     driver->ctx(),
     chain, leaf_dir, leaf);
@@ -10298,9 +10326,12 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
     dm_version_id.clear();
     Directory* leaf_dir;
     std::string leaf_name;
-    ret = resolve_path(dpp,
+    ret = resolve_key_path(dpp,
         static_cast<NSFSBucket *>(bucket)->get_dir(),
+        state.obj.key,
         get_fname(/*use_version=*/false),
+        driver->get_reserved_names(),
+        static_cast<NSFSBucket *>(bucket)->is_internal(),
         /*create_dirs=*/false,
         driver->ctx(),
         dir_chain, leaf_dir, leaf_name);
@@ -10518,9 +10549,12 @@ int NSFSObject::make_ent(ObjectType type)
 
   Directory* leaf_dir;
   std::string leaf_name;
-  int ret = resolve_path(nullptr,
+  int ret = resolve_key_path(nullptr,
       static_cast<NSFSBucket *>(bucket)->get_dir(),
+      state.obj.key,
       get_fname(/*use_version=*/true),
+      driver->get_reserved_names(),
+      static_cast<NSFSBucket *>(bucket)->is_internal(),
       /*create_dirs=*/true,
       driver->ctx(),
       dir_chain, leaf_dir, leaf_name);
@@ -11391,8 +11425,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       std::vector<std::unique_ptr<nsfs::Directory>> lk_chain;
       nsfs::Directory* lk_dir = nullptr;
       std::string lk_leaf;
-      int r = nsfs::resolve_path(dpp, b->get_dir(),
+      int r = nsfs::resolve_key_path(dpp, b->get_dir(), source->get_key(),
           source->get_fname(/*use_version=*/false),
+          source->driver->get_reserved_names(), b->is_internal(),
           /*create_dirs=*/false, source->driver->ctx(),
           lk_chain, lk_dir, lk_leaf);
       if (r == 0 && lk_dir) {
@@ -11456,7 +11491,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           std::string fname = source->get_fname(/*use_version=*/false);
           std::vector<std::unique_ptr<nsfs::Directory>> prom_chain;
           nsfs::Directory* prom_dir = nullptr;
-          int r = nsfs::resolve_path(dpp, b->get_dir(), fname,
+          int r = nsfs::resolve_key_path(dpp, b->get_dir(), source->get_key(),
+              fname, source->driver->get_reserved_names(), b->is_internal(),
               /*create_dirs=*/false, source->driver->ctx(),
               prom_chain, prom_dir, promote_leaf);
           if (r == 0 && prom_dir) {
@@ -11514,8 +11550,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       /* current doesn't exist, resolve path to get parent dir */
       std::vector<std::unique_ptr<nsfs::Directory>> chain;
       nsfs::Directory* leaf_dir = nullptr;
-      ret = nsfs::resolve_path(dpp, b->get_dir(),
+      ret = nsfs::resolve_key_path(dpp, b->get_dir(), source->get_key(),
           source->get_fname(/*use_version=*/false),
+          source->driver->get_reserved_names(), b->is_internal(),
           /*create_dirs=*/false, source->driver->ctx(),
           chain, leaf_dir, leaf_name);
       if (ret == 0 && leaf_dir) {
@@ -11683,8 +11720,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   if (parent_fd < 0) {
     /* current doesn't exist — resolve path just to get the parent dir */
     nsfs::Directory* leaf_dir = nullptr;
-    int r = nsfs::resolve_path(dpp, b->get_dir(),
+    int r = nsfs::resolve_key_path(dpp, b->get_dir(), source->get_key(),
         source->get_fname(/*use_version=*/false),
+        source->driver->get_reserved_names(), b->is_internal(),
         /*create_dirs=*/true, source->driver->ctx(),
         dm_chain, leaf_dir, dm_leaf);
     if (r == 0 && leaf_dir) {
@@ -11948,8 +11986,9 @@ int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   std::vector<std::unique_ptr<Directory>> dst_chain;
   Directory* dst_leaf_dir;
   std::string dst_leaf_name;
-  int ret = resolve_path(dpp, db->get_dir(),
+  int ret = resolve_key_path(dpp, db->get_dir(), dst_key,
       path_strategy()->object_name(dst_key, false),
+      driver->get_reserved_names(), db->is_internal(),
       /*create_dirs=*/true, driver->ctx(),
       dst_chain, dst_leaf_dir, dst_leaf_name);
   if (ret < 0)
@@ -12506,9 +12545,10 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   std::vector<std::unique_ptr<Directory>> dir_chain;
   Directory* leaf_dir;
   std::string leaf_name;
-  ret = resolve_path(dpp, pb->get_dir(), target_key,
-                           /*create_dirs=*/true, driver->ctx(),
-                           dir_chain, leaf_dir, leaf_name);
+  ret = resolve_key_path(dpp, pb->get_dir(), target_obj->get_key(), target_key,
+                         driver->get_reserved_names(), pb->is_internal(),
+                         /*create_dirs=*/true, driver->ctx(),
+                         dir_chain, leaf_dir, leaf_name);
   if (ret < 0) {
     return ret;
   }
@@ -13410,22 +13450,9 @@ int NSFSAtomicWriter::prepare(optional_yield y)
     }
   }
 
-  /* And refuse a key whose components collide with nsfs scaffolding,
-   * for the same reason:  the listing skips reserved names, so such an
-   * object is written, kept, and shown to nobody.
-   *
-   * NooBaa's gateway has no equivalent refusal -- NooBaa reserves three
-   * names and lists everything else -- so a tree being adopted may
-   * already contain such a file.  That is adoption's to report (it is
-   * the one pass that walks the whole tree deliberately), not this
-   * path's to fix;  refusing here stops us *adding* to the problem. */
-  if (key_hits_reserved_name(obj->get_name(),
-			     driver->get_reserved_names())) {
-    ldpp_dout(dpp, 4) << "nsfs: refusing key " << obj->get_name()
-      << ":  a component names driver scaffolding, and a listing would "
-	 "not show it" << dendl;
-    return -ERR_INVALID_OBJECT_NAME;
-  }
+  /* A key whose components collide with nsfs scaffolding is refused by
+   * resolve_key_path(), which make_ent() below goes through, as every
+   * operation's key does. */
 
   int ret;
 

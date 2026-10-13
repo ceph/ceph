@@ -459,6 +459,32 @@ int resolve_path(const DoutPrefixProvider* dpp,
                  Directory*& leaf_dir,
                  std::string& leaf_name);
 
+/* Resolve a client's S3 key to its path:  the one way a key reaches the
+ * tree.  `key_path` is the key's on-disk name (object_name()).
+ *
+ * A key with a component the driver reserves -- `.folder`, `.versions`
+ * -- is refused here, for every operation:  such a name is schema, not
+ * an object (DECISIONS.md 2026-10-12).  A lookup
+ * (`create_dirs` false) returns -ENOENT, so a read is NoSuchKey and a
+ * delete deletes nothing;  a create returns -ERR_INVALID_OBJECT_NAME.
+ * Keys in a namespace of RGW's own are not clients' names and pass, as
+ * do keys in an internal bucket (`internal_bucket`, NSFSBucket::
+ * is_internal()):  an upload's own directory holds `.meta`.
+ *
+ * resolve_path() stays for paths that are not keys:  crash recovery,
+ * conversion, the listing walk. */
+int resolve_key_path(const DoutPrefixProvider* dpp,
+                     Directory* root,
+                     const rgw_obj_key& key,
+                     const std::string& key_path,
+                     const ReservedNames& rn,
+                     bool internal_bucket,
+                     bool create_dirs,
+                     CephContext* cct,
+                     std::vector<std::unique_ptr<Directory>>& dir_chain,
+                     Directory*& leaf_dir,
+                     std::string& leaf_name);
+
 } // namespace nsfs
 
 class NSFSZoneGroup : public StoreZoneGroup {
@@ -1453,6 +1479,11 @@ private:
   std::optional<ACLOwner> default_owner;
 
 public:
+  /* Whether this is a bucket of RGW's own, such as an upload's staging
+   * directory, rather than a client's:  its keys are not clients'
+   * names, so nsfs::resolve_key_path() does not refuse reserved ones. */
+  bool is_internal() const { return ns.has_value(); }
+
   NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b),
     driver(_dr),
