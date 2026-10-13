@@ -41,6 +41,7 @@ private:
   PGLog pg_log;
   pg_info_t shard_pg_info;
   std::string dbg_prefix = "stub";
+  std::unique_ptr<PerfCounters> perf_logger;
 
 public:
   set<pg_shard_t> acting_shards;
@@ -260,6 +261,13 @@ public:
 
   const PGLog &get_log() const override {
     return pg_log;
+  }
+
+  PerfCounters *get_logger() override {
+    if (!perf_logger) {
+      perf_logger.reset(build_osd_logger(g_ceph_context));
+    }
+    return perf_logger.get();
   }
 
   DoutPrefixProvider *get_dpp() override {

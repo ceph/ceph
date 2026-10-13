@@ -18,6 +18,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "crush/CrushWrapper.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGPCT.h"
 #include "messages/MOSDRepOp.h"
@@ -30,6 +31,7 @@
 #include "include/util.h"
 #include "OSD.h"
 #include "osd_tracer.h"
+#include "osd_perf_counters.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -133,6 +135,22 @@ ReplicatedBackend::ReplicatedBackend(
   PGBackend(cct, pg, store, coll, c),
   pct_callback(this)
 {}
+
+bool ReplicatedBackend::is_cross_zone(pg_shard_t peer) const
+{
+  const pg_pool_t &pool = get_parent()->get_pool();
+  if (pool.peering_crush_bucket_count == 0)
+    return false;
+  int my_zone = get_osdmap()->crush->get_parent_of_type(
+      get_parent()->whoami_shard().osd,
+      pool.peering_crush_bucket_barrier,
+      pool.crush_rule);
+  int peer_zone = get_osdmap()->crush->get_parent_of_type(
+      peer.osd,
+      pool.peering_crush_bucket_barrier,
+      pool.crush_rule);
+  return my_zone != peer_zone;
+}
 
 void ReplicatedBackend::run_recovery_op(
   PGBackend::RecoveryHandle *_h,
@@ -742,6 +760,12 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
 	ip_op.op->mark_event("sub_op_commit_rec");
 	ip_op.op->pg_trace.event("sub_op_commit_rec");
       }
+      if (ip_op.cross_zone_write_dispatch_time.contains(from)) {
+        utime_t lat = ceph_clock_now() - ip_op.cross_zone_write_dispatch_time[from];
+        get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_write_lat, lat);
+        get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_write_lat_hist,
+                                         lat.to_nsec(), 0);
+      }
     } else {
       // legacy peer; ignore
     }
@@ -1256,7 +1280,13 @@ void ReplicatedBackend::issue_op(
 	  shard,
 	  pinfo);
       if (op->op && op->op->pg_trace)
-	wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
+wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
+      if (is_cross_zone(shard)) {
+        op->cross_zone_write_dispatch_time[shard] = ceph_clock_now();
+        uint64_t bytes = wr->get_data().length();
+        get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_write_ops);
+        get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_write_bytes, bytes);
+      }
       get_parent()->send_message_osd_cluster(
 	  shard.osd, wr, get_osdmap_epoch());
     }
@@ -2100,6 +2130,17 @@ bool ReplicatedBackend::handle_pull_response(
   pull_info.stat.num_bytes_recovered += data.length();
   get_parent()->get_logger()->inc(l_osd_rbytes, pop.omap_entries.size() + data.length());
 
+  // cross-zone read: record received bytes and round-trip latency
+  if (pull_info.cross_zone_pull_dispatch_time != utime_t() && data.length() > 0) {
+    utime_t lat = ceph_clock_now() - pull_info.cross_zone_pull_dispatch_time;
+    get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_recv_bytes,
+                                    data.length());
+    get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_read_lat, lat);
+    get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_read_lat_hist,
+                                     lat.to_nsec(), data.length());
+    pull_info.cross_zone_pull_dispatch_time = utime_t();
+  }
+
   if (complete) {
     pull_info.stat.num_objects_recovered++;
     // XXX: This could overcount if regular recovery is needed right after a repair
@@ -2173,11 +2214,13 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
   for (map<pg_shard_t, vector<PushOp> >::iterator i = pushes.begin();
        i != pushes.end();
        ++i) {
+    pg_shard_t peer = i->first;
     ConnectionRef con = get_parent()->get_con_osd_cluster(
-      i->first.osd,
+      peer.osd,
       get_osdmap_epoch());
     if (!con)
       continue;
+    bool cross_zone = is_cross_zone(peer);
     vector<PushOp>::iterator j = i->second.begin();
     while (j != i->second.end()) {
       uint64_t cost = 0;
@@ -2195,9 +2238,19 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
 	    pushes < cct->_conf->osd_max_push_objects) ;
 	   ++j) {
 	dout(20) << __func__ << ": sending push " << *j
-		 << " to osd." << i->first << dendl;
+                 << " to osd." << peer << dendl;
 	cost += j->cost(cct);
 	pushes += 1;
+        if (cross_zone) {
+          if (pushing.contains(j->soid)) {
+            if (pushing[j->soid].contains(peer)) {
+              pushing[j->soid][peer].cross_zone_recovery_push_dispatch_time = ceph_clock_now();
+            }
+          }
+          get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_recovery_push_ops);
+          get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_recovery_push_bytes,
+                                          j->data.length());
+        }
 	msg->pushes.push_back(*j);
       }
       msg->set_cost(cost);
@@ -2211,13 +2264,23 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
   for (map<pg_shard_t, vector<PullOp> >::iterator i = pulls.begin();
        i != pulls.end();
        ++i) {
+    pg_shard_t peer = i->first;
     ConnectionRef con = get_parent()->get_con_osd_cluster(
-      i->first.osd,
+      peer.osd,
       get_osdmap_epoch());
     if (!con)
       continue;
     dout(20) << __func__ << ": sending pulls " << i->second
-	     << " to osd." << i->first << dendl;
+             << " to osd." << peer << dendl;
+    if (is_cross_zone(peer)) {
+      for (const auto &pop : i->second) {
+        if (pulling.contains(pop.soid)) {
+          pulling[pop.soid].cross_zone_pull_dispatch_time = ceph_clock_now();
+        }
+      }
+      get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_ops,
+                                      i->second.size());
+    }
     MOSDPGPull *msg = new MOSDPGPull();
     msg->from = parent->whoami_shard();
     msg->set_priority(prio);
@@ -2446,6 +2509,15 @@ bool ReplicatedBackend::handle_push_reply(
   } else {
     push_info_t *push_info = &pushing[soid][peer];
     bool error = pushing[soid].begin()->second.recovery_progress.error;
+
+    // cross-zone recovery push: record round-trip latency when the ack arrives
+    if (push_info->cross_zone_recovery_push_dispatch_time != utime_t()) {
+      utime_t lat = ceph_clock_now() - push_info->cross_zone_recovery_push_dispatch_time;
+      get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_recovery_push_lat, lat);
+      get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_recovery_push_lat_hist,
+                                       lat.to_nsec(), 0);
+      push_info->cross_zone_recovery_push_dispatch_time = utime_t();
+    }
 
     if (!push_info->recovery_progress.data_complete && !error) {
       dout(10) << " pushing more from, "

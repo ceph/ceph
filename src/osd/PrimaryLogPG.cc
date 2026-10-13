@@ -16333,11 +16333,7 @@ int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
   }
 
   if (is_primary() && pool.info.is_erasure()) {
-    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
-      const shard_id_t shard(i);
-      (*out)[shard] = obc->obs.oi.get_version_for_shard(
-        pool.info.get_relative_shard(shard));
-    }
+    *out = get_shard_versions(obc->obs.oi, pool.info);
   } else {
     (*out)[pg_whoami.shard] = obc->obs.oi.version;
   }
@@ -16353,11 +16349,7 @@ int PrimaryLogPG::get_internal_versions_v2(const hobject_t& soid,
   }
 
   if (pool.info.is_erasure()) {
-    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
-      const shard_id_t shard(i);
-      (*out)[shard] = obc->obs.oi.get_version_for_shard(
-        pool.info.get_relative_shard(shard));
-    }
+    *out = get_shard_versions(obc->obs.oi, pool.info);
   } else {
     (*out)[shard_id_t::NO_SHARD] = obc->obs.oi.version;
   }
