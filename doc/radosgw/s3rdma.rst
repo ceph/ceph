@@ -18,8 +18,8 @@ by default at both build time and runtime.
    S3 RDMA with cuObject is an **experimental** feature intended for testing
    and evaluation. Configuration options and behavior may change between
    releases. It is disabled by default at both build time and runtime;
-   enabling it requires ``WITH_RADOSGW_CUOBJ=ON`` and setting
-   :confval:`rgw_cuobj_enabled` to ``true``.
+   enabling it requires ``WITH_RADOSGW_CUOBJ=ON`` (or ``--with-cuobj`` for
+   container builds) and setting :confval:`rgw_cuobj_enabled` to ``true``.
 
 See `NVIDIA cuObject documentation`_ for the library architecture and
 `cuObject client API`_ for client integration.
@@ -153,6 +153,82 @@ For an existing build directory, add the option to its configuration:
 
    cmake -S . -B build -DWITH_RADOSGW_CUOBJ=ON
    cmake --build build --target radosgw --parallel
+
+For RPM builds, cuObject is disabled by default. Enable it with
+``rpmbuild --rebuild --with cuobj ceph-<version>.src.rpm``. The spec then requires
+``libcuobjserver-devel >= 2.0.0`` and sets ``WITH_RADOSGW_CUOBJ=ON``.
+
+To configure NVIDIA's repository and install the cuObject server build
+dependencies directly on a supported RPM-based host, run:
+
+.. prompt:: bash $
+
+   env WITH_RADOSGW_CUOBJ=ON ./install-deps.sh
+
+The repository setup and cuObject dependencies are enabled only when
+``WITH_RADOSGW_CUOBJ=ON``. The container build option ``--with-cuobj`` passes
+this setting to the same dependency installer.
+
+To build RPMs in a Rocky Linux 10 container, including installation of the
+cuObject server build dependencies from NVIDIA's repository, run:
+
+.. prompt:: bash $
+
+   ./src/script/build-with-container.py -d rocky10 --with-cuobj -e source-rpm -e rpm
+
+To build the same RPMs in a RHEL 10 UBI container on a subscribed RHEL host,
+using Red Hat's Podman, run:
+
+.. prompt:: bash $
+
+   ./src/script/build-with-container.py --container-engine=podman \
+     -d rocky10 --base-image=registry.access.redhat.com/ubi10/ubi:latest \
+     --tag=+rhel10 --with-cuobj -e source-rpm -e rpm
+
+The automatic cuObject container setup supports the following distributions
+on x86_64 and aarch64:
+
+.. list-table:: Supported cuObject build containers
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Distribution
+     - Build image selection
+   * - Rocky Linux 9 and 10
+     - ``-d rocky9`` or ``-d rocky10``
+   * - CentOS Stream 9 and 10
+     - ``-d centos9`` or ``-d centos10``
+   * - AlmaLinux 9 and 10
+     - Use the matching ``-d rocky9`` or ``-d rocky10`` with
+       ``--base-image=docker.io/library/almalinux:9`` or
+       ``--base-image=docker.io/library/almalinux:10`` and ``--tag=+alma``.
+   * - RHEL 9 and 10
+     - Use the matching ``-d rocky9`` or ``-d rocky10`` with ``--base-image``
+       pointing to a RHEL build base of the same major version and
+       ``--tag=+rhel``.
+
+RHEL build bases must have access to the normal Ceph build repositories,
+including the full BaseOS, AppStream and CodeReady Builder repositories.
+The setup enables these repositories and installs EPEL; EL10 also uses
+Ceph's lab-extras repository. On a subscribed RHEL host, Red Hat's Podman
+can supply the subscription access to a UBI container. The public UBI
+repositories alone do not contain all Ceph build dependencies. NVIDIA's
+repository supplies the additional cuObject packages. There are no separate
+AlmaLinux or RHEL ``-d`` selectors.
+
+Fedora is not supported for these cuObject builds: NVIDIA's Fedora 44
+repository provides CUDA and cuObject client packages but lacks
+``libcuobjserver-devel``, the server SDK required by RGW. Enabling
+``WITH_RADOSGW_CUOBJ=ON`` or ``--with-cuobj`` fails with an error when dependency
+setup runs on Fedora, before adding any NVIDIA repository.
+
+The build image setup selects NVIDIA's matching RHEL 9 or RHEL 10 repository
+from the container's OS version, independently of the host distribution.
+The Rocky container commands can also run on AlmaLinux and RHEL hosts.
+
+The explicit ``source-rpm`` step ensures the SRPM contains the updated spec.
+See ``ContainerBuild.md`` for build image options. ``CONFIGURE_ARGS`` is used
+for source builds and does not control RPM builds.
 
 CMake must find ``libcuobjserver``, and the compiler must find the cuObject
 headers. The library and its runtime dependencies must also be available to
