@@ -3338,9 +3338,6 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
   } else {
     ss << "  cluster:\n";
     ss << "    id:     " << monmap->get_fsid() << "\n";
-    if (is_stretch_mode()){
-      ss << "    stretch_mode: ENABLED\n";
-    }
     string health;
     healthmon()->get_health_status(false, nullptr, &health,
 				   "\n            ", "\n            ");
@@ -7111,7 +7108,7 @@ void Monitor::try_engage_stretch_mode()
     return;
   }
   if (osdmon()->osdmap.stretch_mode_enabled &&
-      monmap->stretch_mode_enabled) {
+    monmap->stretch_mode_enabled) {
     dout(10) << "Engaging stretch mode!" << dendl;
     stretch_mode_engaged = true;
     int32_t stretch_divider_id = osdmon()->osdmap.stretch_mode_bucket;
@@ -7152,6 +7149,7 @@ void Monitor::do_stretch_mode_election_work()
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode() ||
       !is_leader()) return;
+  if (!monmap->stretch_mode_enabled) return;
   dout(20) << "checking for degraded stretch mode" << dendl;
   map<string, set<string>> old_dead_buckets;
   old_dead_buckets.swap(dead_mon_buckets);
@@ -7203,6 +7201,11 @@ void Monitor::go_recovery_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
+  if (!monmap->stretch_mode_enabled) return;
+  if (!monmon()->pending_map.stretch_mode_enabled) {
+    dout(10) << __func__ << " aborting: stretch mode is pending disable" << dendl;
+    return;
+  }
   dout(20) << "is_leader(): " << is_leader() << dendl;
   if (!is_leader()) return;
   dout(20) << "is_degraded_stretch_mode(): " << is_degraded_stretch_mode() << dendl;
@@ -7243,6 +7246,11 @@ void Monitor::maybe_go_degraded_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
+  if (!monmap->stretch_mode_enabled) return;
+  if (!monmon()->pending_map.stretch_mode_enabled) {
+    dout(10) << __func__ << " aborting: stretch mode is pending disable" << dendl;
+    return;
+  }
   if (is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (dead_mon_buckets.empty()) return;
@@ -7321,6 +7329,11 @@ void Monitor::trigger_healthy_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
+  if (!monmap->stretch_mode_enabled) return;
+  if (!monmon()->pending_map.stretch_mode_enabled) {
+    dout(10) << __func__ << " aborting: stretch mode is pending disable" << dendl;
+    return;
+  }
   if (!is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (!osdmon()->is_writeable()) {

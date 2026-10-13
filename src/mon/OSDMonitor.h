@@ -492,6 +492,7 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, std::ostream *ss) const;
 
+  bool is_last_stretch_pool(int64_t pool);
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 
@@ -910,6 +911,26 @@ public:
 				     int *errcode,
 				     std::set<pg_pool_t*>* pools,
 				     const std::string& new_crush_rule);
+
+  /**
+   * Static helper for validating pools for stretch mode.
+   * Extracted for testability - can be called from unit tests.
+   * @param crush: CrushWrapper to validate rule against
+   * @param pool_names: Map of pool IDs to names (for error messages)
+   * @param pools: Map of pool IDs to pool objects to validate
+   * @param ss: stringstream for error messages
+   * @param okay: Set to true if validation passes
+   * @param errcode: Set to error code if validation fails
+   * @param new_crush_rule: Name of the CRUSH rule to validate
+   */
+  static void validate_stretch_mode_pools(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      std::stringstream& ss,
+      bool *okay,
+      int *errcode,
+      const std::string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
    * engage stretch mode. Designed to be used with
@@ -932,7 +953,8 @@ public:
 			       uint32_t bucket_count,
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule,
-			       CrushWrapper& crush);
+                               CrushWrapper& crush,
+                               bool legacy);
 
   static void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
 
@@ -969,6 +991,69 @@ public:
       const mempool::osdmap::map<int64_t, pg_pool_t>& pools);
 
   static std::string num_zones_upgrade_hint();
+  static std::map<std::string, std::string> stretch_pool_defaults(
+      int num_zones, int replica, const std::string& zone_failure_domain);
+  static std::map<std::string, std::string> stretch_mode_defaults_at_commit(
+      bool stretch_mode_enabled,
+      const CrushWrapper& crush,
+      int stretch_mode_bucket,
+      uint64_t stretch_pool_size);
+
+  // What ceph mon enable_stretch_mode or disable_stretch_mode does to a pool.
+  enum class StretchModeChange {
+    STRETCH,    // num_zones 1 to 2
+    REPLICA,    // stays at num_zones 2 with a new replica count
+    UNSTRETCH,  // num_zones 2 to 1
+  };
+  static constexpr int STRETCH_MODE_REPLICA = 2;
+  static constexpr int LOCAL_REPLICA = 3;
+
+  static std::map<int64_t, StretchModeChange> plan_stretch_mode_changes(
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools, bool enable);
+
+  // The checks of ceph mon enable_stretch_mode that need no cluster state
+  // other than the CRUSH map and the pools.
+  static int validate_enable_stretch_mode(
+      CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      const std::string& new_crush_rule,
+      const std::string& dividing_bucket,
+      std::ostream *ss);
+
+  // The checks of ceph mon disable_stretch_mode that need no cluster state
+  // other than the CRUSH map, the pools and whether stretch mode recovers.
+  static int validate_disable_stretch_mode(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      const std::string& crush_rule,
+      bool recovering,
+      std::ostream *ss);
+
+  // ceph osd pool stretch set takes min_size as a total over all zones, as
+  // main does. The min_size per zone that the pool keeps, rounded up, or a
+  // negative error.
+  static int stretch_set_zone_min_size(int64_t min_size, int64_t size,
+                                       int64_t num_zones, std::ostream *ss);
+
+  // Whether ceph osd pool stretch unset may clear the stretch values of an
+  // EC pool with k data chunks and k_plus_m chunks, giving it size and
+  // min_size.
+  static int check_stretch_unset_ec(const std::string& pool_name,
+                                    int num_zones, int k, int k_plus_m,
+                                    int64_t size, int64_t min_size,
+                                    std::ostream *ss);
+
+  // ceph mon enable_stretch_mode and disable_stretch_mode once the upgrade
+  // is committed: change every pool as ceph osd pool set num_zones does and
+  // set the pool creation defaults. -EAGAIN when CRUSH rules were created
+  // and the command must be retried once they are committed.
+  int enable_stretch_mode(std::ostream& ss,
+                          const std::string& tiebreaker_mon,
+                          const std::string& dividing_bucket,
+                          const std::string& new_crush_rule);
+  int disable_stretch_mode(std::ostream& ss, const std::string& crush_rule);
+
   /**
   *
   * Set all stretch mode values of all pools back to pre-stretch mode values.
@@ -1028,6 +1113,17 @@ public:
    * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
    */
   void trigger_healthy_stretch_mode();
+  /**
+   * Update each pool that is stretched once inc is applied, including
+   * pools that inc creates or changes, for a stretch mode transition:
+   * force an op resend and, if bucket_count is non-zero, set the peering
+   * bucket count and mandatory member.
+   */
+  static void apply_stretch_transition_to_pools(
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      OSDMap::Incremental& inc,
+      uint32_t bucket_count = 0,
+      int mandatory_member = CRUSH_ITEM_NONE);
   /**
    * Obtain the crush rule being used for stretch pools.
    * Note that right now this is heuristic and simply selects the
