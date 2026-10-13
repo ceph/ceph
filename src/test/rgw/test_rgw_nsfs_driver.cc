@@ -5099,9 +5099,9 @@ static ClientView client_view(rgw::sal::Bucket* bucket,
  * Before this, `e/` was 404 and unlisted, and `c/` lost its content type
  * and metadata, because the reader took `.folder` for the whole object.
  *
- * An empty one's ETag and Last-Modified are not compared:  conversion
- * still gives it a new sentinel, so both move.  That is the conversion
- * to fix, not this reader. */
+ * Everything is compared, an empty one's ETag and Last-Modified
+ * included:  conversion gives it a new sentinel, and must not let the
+ * new inode change either (DECISIONS.md 2026-10-13). */
 TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectReadsTheSameBeforeAndAfterConversion)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
@@ -5135,8 +5135,13 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectReadsTheSameBeforeAndAfterConversio
   EXPECT_EQ(e1.size, e0.size);
   EXPECT_EQ(e1.content_type, e0.content_type);
   EXPECT_EQ(e1.probe, e0.probe);
+  EXPECT_EQ(e1.etag, e0.etag) << "conversion changed an empty object's ETag";
+  EXPECT_EQ(e1.mtime, e0.mtime)
+      << "conversion changed an empty object's Last-Modified";
   EXPECT_EQ(e1.listed, e0.listed);
   EXPECT_EQ(e1.listed_size, e0.listed_size);
+  EXPECT_EQ(e1.listed_etag, e0.listed_etag);
+  EXPECT_EQ(e1.listed_mtime, e0.listed_mtime);
 
   EXPECT_EQ(c1.exists, c0.exists);
   EXPECT_EQ(c1.size, c0.size);
@@ -5149,6 +5154,26 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectReadsTheSameBeforeAndAfterConversio
   EXPECT_EQ(c1.listed_size, c0.listed_size);
   EXPECT_EQ(c1.listed_etag, c0.listed_etag);
   EXPECT_EQ(c1.listed_mtime, c0.listed_mtime);
+}
+
+/* With MD5 on, NooBaa stores the ETag, and conversion carries it across:
+ * the ETag recorded for an empty object must not replace it. */
+TEST_F(NSFSNooBaaBucketTest, ConversionKeepsAnEmptyDirectoryObjectsStoredMD5)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  const std::string md5{"d41d8cd98f00b204e9800998ecf8427e"};
+  ASSERT_EQ(::setxattr((bucket_path() / "e").c_str(), "user.content_md5",
+		       md5.data(), md5.size(), 0), 0);
+
+  const ClientView e0 = client_view(bucket.get(), env->dpp, "e/");
+  ASSERT_EQ(e0.etag, md5) << "the stored MD5 was not read as the ETag";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  const ClientView e1 = client_view(bucket.get(), env->dpp, "e/");
+  EXPECT_EQ(e1.etag, md5);
+  EXPECT_EQ(e1.listed_etag, md5);
+  EXPECT_EQ(e1.mtime, e0.mtime);
 }
 
 /* The root object in NooBaa's format:  the marker and its attributes on

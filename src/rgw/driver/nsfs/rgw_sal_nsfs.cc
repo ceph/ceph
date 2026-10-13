@@ -6812,6 +6812,25 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
 {
   int ret;
   const std::string sname = their_paths->folder_object_name();
+
+  /* An empty object has no sentinel, and the one created below is a new
+   * inode with this moment's mtime.  The reader reports such an object
+   * with the directory's stat, so that stat is taken first -- creating
+   * the sentinel changes the directory's mtime -- and the object keeps
+   * the ETag and Last-Modified it had (DECISIONS.md 2026-10-13). */
+  struct statx probe{};
+  const bool empty =
+    (::statx(dir_fd, sname.c_str(), AT_SYMLINK_NOFOLLOW, STATX_INO,
+	     &probe) < 0) && (errno == ENOENT);
+  struct statx reported{};
+  if (empty &&
+      (::statx(dir_fd, "", AT_EMPTY_PATH, STATX_BASIC_STATS, &reported) < 0)) {
+    ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: cannot stat " << key << ": "
+		      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
   /* NooBaa's object mode, as every object nsfs creates carries
    * (DECISIONS.md 2026-10-11).  Restored straight after the open,
    * while the gateway still owns the file, because the ids are
@@ -6829,6 +6848,18 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   ret = nsfs::apply_create_mode(dpp, sfd, nsfs::file_create_mode());
   if (ret < 0) {
     return ret;
+  }
+  if (empty) {
+    const struct timespec times[2] = {
+      { 0, UTIME_OMIT },
+      { reported.stx_mtime.tv_sec, reported.stx_mtime.tv_nsec },
+    };
+    if (::futimens(sfd, times) < 0) {
+      ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: giving " << sname << " under " << key
+	<< " its directory's mtime: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   }
 
   /* The sentinel re-expresses the directory, so it takes the
@@ -6885,6 +6916,17 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     const std::string mine = ours->disk_name(key);
     if (!mine.empty()) {
       to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
+    }
+  }
+  /* The ETag the reader reported for an empty object, from the
+   * directory's stat, recorded so the new inode does not change it.  A
+   * stored MD5 has already been carried across and is kept. */
+  if (empty) {
+    bufferlist ebl;
+    ebl.append(synthesize_etag(reported));
+    const std::string mine = ours->disk_name(RGW_ATTR_ETAG);
+    if (!mine.empty()) {
+      to_write.try_emplace(mine, attr_on_disk(ours, RGW_ATTR_ETAG, ebl));
     }
   }
   /* Record the owner, for the reason convert_attrs() gives:  the
