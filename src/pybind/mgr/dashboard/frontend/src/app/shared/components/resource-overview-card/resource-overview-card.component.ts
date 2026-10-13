@@ -43,6 +43,8 @@ export class OverviewComponent implements OnChanges {
   @Input() fields: OverviewField[] = [];
   /* Number of columns used to layout the fields. */
   @Input() columns = 3;
+  /* Renders projected footer content inside the card. */
+  @Input() footer = false;
 
   loadingPlaceholders: number[] = Array.from({ length: this.columns }, (_, index) => index);
 

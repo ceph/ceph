@@ -37,7 +37,12 @@ import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant'
 import { NfsRateLimitComponent } from '../nfs-rate-limit/nfs-rate-limit.component';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { NFSBwIopConfig, RateLimitType } from '../models/nfs-cluster-config';
+import {
+  NFSBwIopConfig,
+  NFSCluster,
+  NFSClusterOption,
+  RateLimitType
+} from '../models/nfs-cluster-config';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -182,6 +187,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
           }
         }
       );
+
+      if (this.storageBackend === SUPPORTED_FSAL.RGW) {
+        this.nfsForm.get('rgw_export_type').setValue('bucket');
+        this.setBucket();
+      }
+      this.getData(promises);
     }
   }
 
@@ -481,18 +492,17 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.getSubVol(fsName);
   }
 
-  resolveClusters(clusters: string[]) {
-    this.allClusters = [];
-    for (const cluster of clusters) {
-      this.allClusters.push({ cluster_id: cluster });
-    }
-    if (!this.isEdit && this.allClusters.length > 0) {
-      const preselected =
-        this.selectedClusterId &&
-        this.allClusters.find((c) => c.cluster_id === this.selectedClusterId);
-      this.nfsForm
-        .get('cluster_id')
-        .setValue(preselected ? preselected.cluster_id : this.allClusters[0].cluster_id);
+  resolveClusters(clusters: NFSCluster[]) {
+    this.allClusters = clusters.map((cluster) => ({
+      cluster_id: cluster.name,
+      enable_rdma: cluster.enable_rdma ?? false
+    }));
+    if (!this.isEdit && this.selectedClusterId) {
+      const target = this.allClusters.find((c) => c.cluster_id === this.selectedClusterId);
+      if (target) {
+        this.nfsForm.get('cluster_id').setValue(target.cluster_id);
+        this.nfsForm.get('transportRDMA').setValue(target.enable_rdma);
+      }
     }
   }
 
@@ -863,6 +873,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   registerClusterIdChange(value: string) {
+    this.clusterChangeHandler();
     this.nfsService.getClusterBandwidthOpsConfig(value).subscribe((clusterData: NFSBwIopConfig) => {
       this.clusterAllConfig = clusterData;
     });

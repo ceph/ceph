@@ -27,6 +27,11 @@ export interface NFSCluster {
   enable_nfsv3?: boolean;
 }
 
+export interface NFSClusterOption {
+  cluster_id: string;
+  enable_rdma?: boolean;
+}
+
 export interface NFSBwIopConfig {
   cluster_id?: string;
   qos_type?: string;

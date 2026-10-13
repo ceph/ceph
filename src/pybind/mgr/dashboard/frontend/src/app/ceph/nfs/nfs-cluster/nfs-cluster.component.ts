@@ -43,7 +43,7 @@ export class NfsClusterComponent implements OnInit {
       this.orchStatus = status;
     });
     this.clusters$ = this.subject.pipe(
-      switchMap(() => this.nfsService.nfsClusterList().pipe(catchError(() => of([]))))
+      switchMap(() => this.nfsService.listClusters(true).pipe(catchError(() => of([]))))
     );
     const nfsBasePath = `/${getPathfromFsal(getFsalFromRoute(this.router.url))}/nfs/cluster`;
     this.columns = [
@@ -57,7 +57,7 @@ export class NfsClusterComponent implements OnInit {
         }
       },
       {
-        name: $localize`Hostname`,
+        name: $localize`Hostnames`,
         prop: 'backend',
         flexGrow: 2,
         cellTemplate: this.hostnameTpl
