@@ -2239,7 +2239,8 @@ class CephManager:
 
     @contextlib.contextmanager
     def pool(self, pool_name, pg_num=16, erasure_code_profile_name=None, num_zones=None):
-        self.create_pool(pool_name, pg_num, erasure_code_profile_name, num_zones)
+        self.create_pool(pool_name, pg_num, erasure_code_profile_name,
+                         num_zones=num_zones)
         yield
         self.remove_pool(pool_name)
 
