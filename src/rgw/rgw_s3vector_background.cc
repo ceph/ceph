@@ -68,7 +68,6 @@ enum {
 struct build_state_t {
   int64_t build_started_at = 0;
   std::string builder_id;
-  uint64_t global_delete_count = 0;
   // per-index rebuild timing, persisted across RGW restarts via table metadata
   int64_t last_rebuild_completed_at = 0;  // epoch seconds
   int64_t last_rebuild_duration_ms = 0;
@@ -82,20 +81,26 @@ struct build_state_t {
   // The metadata store holds null-terminated strings, so the binary encoding is
   // base64-wrapped for storage — see to_base64_str() / from_base64_str().
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    // v2 drops the obsolete global_delete_count field: ghost rows are now read
+    // as ground truth from lancedb_table_stats().num_deleted_rows instead of
+    // being accumulated into persisted metadata. compat_v is bumped to 2 because
+    // a v1 reader cannot parse a record that omits the mid-struct field.
+    ENCODE_START(2, 2, bl);
     encode(build_started_at, bl);
     encode(builder_id, bl);
-    encode(global_delete_count, bl);
     encode(last_rebuild_completed_at, bl);
     encode(last_rebuild_duration_ms, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(build_started_at, bl);
     decode(builder_id, bl);
-    decode(global_delete_count, bl);
+    if (struct_v < 2) {
+      uint64_t deprecated_global_delete_count = 0;  // removed in v2
+      decode(deprecated_global_delete_count, bl);
+    }
     decode(last_rebuild_completed_at, bl);
     decode(last_rebuild_duration_ms, bl);
     DECODE_FINISH(bl);
@@ -512,6 +517,29 @@ private:
     stats.num_unindexed_rows = lancedb_table_count_rows(table);
     stats.num_indices = 0;
     return stats;
+  }
+
+  // Ground-truth count of rows marked deleted but not yet compacted away
+  // (ghost rows), read directly from the LanceDB dataset deletion files via
+  // lancedb_table_stats(). This replaces the old persisted/accumulated
+  // global_delete_count: the stat is authoritative, shared across RGW
+  // instances, and self-resets to 0 on compaction, so no cross-instance
+  // bookkeeping (or its reset logic) is needed.
+  //
+  // Returns -1 when the backend cannot report the count (e.g. a remote table
+  // with no local dataset). Callers MUST treat a negative result as "unknown"
+  // and skip the delete-ratio decision rather than assuming zero.
+  int64_t get_deleted_row_count(const LanceDBTable* table) {
+    LanceDBTableStats stats = {};
+    char* error_message = nullptr;
+    const auto err = lancedb_table_stats(table, &stats, &error_message);
+    if (err != LANCEDB_SUCCESS) {
+      ldpp_dout(this, 1) << "ERROR: lancedb_table_stats failed: "
+          << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return -1;
+    }
+    return stats.num_deleted_rows;
   }
 
   // ============================================================================
@@ -1085,16 +1113,46 @@ private:
           << ": " << insert_ratio << " (threshold=" << insert_ratio_threshold << ")" << dendl;
     }
 
-    if (!insert_rebuild && local_deletes == 0) {
+    // Evaluate the delete ratio from ground-truth ghost rows. Unlike the old
+    // persisted global_delete_count, num_deleted_rows needs no distributed lock:
+    // it is authoritative, shared across instances, and self-resets on
+    // compaction. Returns false (do not rebuild) when the count is unavailable
+    // (-1), zero, or below threshold.
+    const auto evaluate_delete_rebuild = [&](const char* when) -> bool {
+      if (vector_index_status.num_indexed_rows == 0 || delete_ratio_threshold <= 0.0) {
+        return false;
+      }
+      const int64_t deleted_rows = get_deleted_row_count(table);
+      if (deleted_rows <= 0) {
+        if (deleted_rows < 0) {
+          ldpp_dout(this, 5) << "INFO: deleted-row count unavailable for "
+              << bucket_name << "." << index_name
+              << ", skipping delete-ratio check (" << when << ")" << dendl;
+        }
+        return false;
+      }
+      const double delete_ratio = static_cast<double>(deleted_rows)
+          / (static_cast<double>(vector_index_status.num_indexed_rows) + deleted_rows);
+      ldpp_dout(this, 5) << "INFO: delete ratio for " << bucket_name << "." << index_name
+          << ": " << delete_ratio << " (threshold=" << delete_ratio_threshold
+          << ", deleted_rows=" << deleted_rows << ", " << when << ")" << dendl;
+      return delete_ratio >= delete_ratio_threshold;
+    };
+
+    // step 5b: delete ratio pre-check (lock-free). local_deletes>0 only gates
+    // whether it is worth asking — this instance observed delete activity; the
+    // ghost count itself comes from the shared dataset.
+    bool delete_rebuild = (local_deletes > 0) && evaluate_delete_rebuild("pre-check");
+
+    if (!insert_rebuild && !delete_rebuild) {
       ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
-          << " below insert threshold and no local deletes, skipping" << dendl;
+          << " below rebuild thresholds, skipping" << dendl;
       return RESULT_SKIPPED;
     }
 
-    // step 6: acquire distributed lock.
-    // needed to read/write global_delete_count atomically (LanceDB metadata
-    // commits are not mutual-exclusive — concurrent writes cause CommitConflict)
-    // and to protect the rebuild itself.
+    // step 6: acquire distributed lock to serialize the rebuild (and its LanceDB
+    // metadata commit) against other instances — concurrent commits cause
+    // CommitConflict. The rebuild decision itself is now lock-free (above).
     optional_yield y(yield);
     auto lock_result = try_acquire_lock(tenant, bucket_name, index_name, y);
     if (lock_result.token.empty()) {
@@ -1131,30 +1189,16 @@ private:
       }
     } lock_guard{this, table_name, tenant, bucket_name, index_name, lock_token, y};
 
-    // step 7: read build state under lock — fresh global_delete_count
-    build_state_t prev_state;
-    read_build_state(table, prev_state);
-    const uint64_t global_delete_count = prev_state.global_delete_count + local_deletes;
-
-    // step 8: delete ratio check (requires global counter, must be under lock)
-    bool delete_rebuild = false;
-    if (vector_index_status.num_indexed_rows > 0 && delete_ratio_threshold > 0.0 && global_delete_count > 0) {
-      const double delete_ratio = static_cast<double>(global_delete_count)
-          / (static_cast<double>(vector_index_status.num_indexed_rows) + global_delete_count);
-      delete_rebuild = (delete_ratio >= delete_ratio_threshold);
-      ldpp_dout(this, 5) << "INFO: delete ratio for " << bucket_name << "." << index_name
-          << ": " << delete_ratio << " (threshold=" << delete_ratio_threshold
-          << ", global_delete_count=" << global_delete_count << ")" << dendl;
-    }
-
-    if (!insert_rebuild && !delete_rebuild) {
+    // step 7: re-check the delete ratio under the lock. num_deleted_rows is
+    // ground truth, so if another instance compacted this index between our
+    // lock-free pre-check and acquiring the lock, the ghost count is now lower
+    // and we can skip a now-redundant delete-only rebuild. (An insert-triggered
+    // rebuild proceeds regardless — it re-indexes live rows and clears ghosts.)
+    if (delete_rebuild && !insert_rebuild && !evaluate_delete_rebuild("under-lock")) {
       ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
-          << " below rebuild thresholds, skipping" << dendl;
-      if (local_deletes > 0) {
-        prev_state.global_delete_count = global_delete_count;
-        write_build_state(table, prev_state);
-      }
-      return 1;
+          << " delete ratio dropped under lock (another instance compacted), "
+             "skipping" << dendl;
+      return RESULT_SKIPPED;
     }
 
     // step 9: record build state
@@ -1162,7 +1206,6 @@ private:
     state.build_started_at = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     state.builder_id = lock_token;
-    state.global_delete_count = global_delete_count;
     if (int ret = write_build_state(table, state); ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to record build state for "
           << bucket_name << "." << index_name
@@ -1205,9 +1248,6 @@ private:
             << bucket_name << "." << index_name << dendl;
       }
       post_state.build_started_at = 0;
-      if (build_ret == 0 && delete_rebuild) {
-        post_state.global_delete_count = 0;
-      }
       if (build_ret == 0) {
         const int64_t now_s = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
