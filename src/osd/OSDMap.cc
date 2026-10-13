@@ -6823,8 +6823,8 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
   int num_osds = pgs_by_osd.size();
 
   float avg_prims_per_osd = (float)num_pgs / (float)num_osds;
-  uint64_t max_prims_per_osd = 0;
-  uint64_t max_acting_prims_per_osd = 0;
+  size_t max_prims_per_osd = 0;
+  size_t max_acting_prims_per_osd = 0;
   float    max_osd_score = 0.;
   bool     prim_on_zero_pa = false;
   bool     acting_on_zero_pa = false;

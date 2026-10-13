@@ -268,7 +268,7 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() (plaintext block size) */
   size_t encrypted_block_size; /**< snapshot of \ref BlockCrypt.get_encrypted_block_size() (includes auth tag for GCM) */
   optional_yield y;
-  std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
+  std::vector<uint64_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
   std::vector<std::pair<uint32_t, std::string>> part_keys; /**< per part: (S3 part number, GCM salt) */
   uint32_t current_part_num = 0; /**< current part number (1-based, 0 means single-part object) */
 
@@ -291,7 +291,7 @@ public:
                          CephContext* cct,
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt,
-                         std::vector<size_t> parts_len,
+                         std::vector<uint64_t> parts_len,
                          std::vector<std::pair<uint32_t, std::string>> part_keys,
                          off_t encrypted_total_size,
                          bool has_compression,
@@ -301,7 +301,7 @@ public:
                          CephContext* cct,
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt,
-                         std::vector<size_t> parts_len,
+                         std::vector<uint64_t> parts_len,
                          optional_yield y)
     : RGWGetObj_BlockDecrypt(dpp, cct, next, std::move(crypt),
                              std::move(parts_len), {}, 0, false, y) {}
@@ -316,7 +316,7 @@ public:
 
   static int read_manifest_parts(const DoutPrefixProvider *dpp,
                                  const bufferlist& manifest_bl,
-                                 std::vector<size_t>& parts_len);
+                                 std::vector<uint64_t>& parts_len);
 
   /**
    * Returns true if this cipher expands the data size (e.g., AEAD adds auth tags).
