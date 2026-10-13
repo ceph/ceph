@@ -69,7 +69,7 @@ class OAuth2(SSOAuth):
         try:
             return cherrypy.request.jwt_payload
         except AttributeError:
-            {}
+            return {}
 
     @classmethod
     def set_token_payload(cls, token):
