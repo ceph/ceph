@@ -398,31 +398,6 @@ class VolumesHelper(CephFSTestCase):
         self.assertEqual(sv_version, version, "version expected was '{0}' but got '{1}' from meta file at '{2}'".format(
                          version, sv_version, metapath))
 
-    def _create_v1_subvolume(self, subvol_name, subvol_group=None, has_snapshot=True, subvol_type='subvolume', state='complete'):
-        group = subvol_group if subvol_group is not None else '_nogroup'
-        basepath = os.path.join("volumes", group, subvol_name)
-        uuid_str = str(uuid.uuid4())
-        createpath = os.path.join(basepath, uuid_str)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
-
-        # create a v1 snapshot, to prevent auto upgrades
-        if has_snapshot:
-            snappath = os.path.join(createpath, ".snap", "fake")
-            self.mount_a.run_shell(['sudo', 'mkdir', '-p', snappath], omit_sudo=False)
-
-        # add required xattrs to subvolume
-        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
-
-        # create a v1 .meta file
-        meta_contents = "[GLOBAL]\nversion = 1\ntype = {0}\npath = {1}\nstate = {2}\n".format(subvol_type, "/" + createpath, state)
-        if state == 'pending':
-            # add a fake clone source
-            meta_contents = meta_contents + '[source]\nvolume = fake\nsubvolume = fake\nsnapshot = fake\n'
-        meta_filepath1 = os.path.join(self.mount_a.mountpoint, basepath, ".meta")
-        self.mount_a.client_remote.write_file(meta_filepath1, meta_contents, sudo=True)
-        return createpath
-
     def _update_fake_trash(self, subvol_name, subvol_group=None, trash_name='fake', create=True):
         group = subvol_group if subvol_group is not None else '_nogroup'
         trashpath = os.path.join("volumes", group, subvol_name, '.trash', trash_name)
@@ -1979,65 +1954,6 @@ class TestSubvolumeGroups(VolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_group_quota_legacy_subvolume_removal(self):
-        """
-        Tests legacy subvolume removal if it's group quota is set.
-        """
-        subvolume = self._gen_subvol_name()
-        group = self._gen_subvol_grp_name()
-
-        # emulate a old-fashioned subvolume -- in a custom group
-        createpath1 = os.path.join(".", "volumes", group, subvolume)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath1], omit_sudo=False)
-
-        # this would auto-upgrade on access without anyone noticing
-        subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume, "--group-name", group)
-        self.assertNotEqual(subvolpath1, None)
-        subvolpath1 = subvolpath1.rstrip() # remove "/" prefix and any trailing newline
-
-        # and... the subvolume path returned should be what we created behind the scene
-        self.assertEqual(createpath1[1:], subvolpath1)
-
-        # Set subvolumegroup quota on idempotent subvolumegroup creation
-        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
-
-        # remove subvolume
-        try:
-            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
-        except CommandFailedError:
-            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
-
-        # remove subvolumegroup
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-    def test_subvolume_group_quota_v1_subvolume_removal(self):
-        """
-        Tests v1 subvolume removal if it's group quota is set.
-        """
-        subvolume = self._gen_subvol_name()
-        group = self._gen_subvol_grp_name()
-
-        # emulate a v1 subvolume -- in a custom group
-        self._create_v1_subvolume(subvolume, subvol_group=group, has_snapshot=False)
-
-        # Set subvolumegroup quota on idempotent subvolumegroup creation
-        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
-
-        # remove subvolume
-        try:
-            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
-        except CommandFailedError:
-            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
-
-        # remove subvolumegroup
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
     def test_subvolume_group_resize_fail_invalid_size(self):
         """
         That a subvolume group cannot be resized to an invalid size and the quota did not change
@@ -3546,65 +3462,6 @@ class TestSubvolumes(VolumesHelper):
         self._wait_for_trash_empty()
 
     ### authorize operations
-
-    def test_authorize_deauthorize_legacy_subvolume(self):
-        subvolume = self._gen_subvol_name()
-        group = self._gen_subvol_grp_name()
-        authid = "alice"
-
-        guest_mount = self.mount_b
-        guest_mount.umount_wait()
-
-        # emulate a old-fashioned subvolume in a custom group
-        createpath = os.path.join(".", "volumes", group, subvolume)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
-
-        # add required xattrs to subvolume
-        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
-
-        mount_path = os.path.join("/", "volumes", group, subvolume)
-
-        # authorize guest authID read-write access to subvolume
-        key = self._fs_cmd("subvolume", "authorize", self.volname, subvolume, authid,
-                           "--group_name", group, "--tenant_id", "tenant_id")
-
-        # guest authID should exist
-        existing_ids = [a['entity'] for a in self.auth_list()]
-        self.assertIn("client.{0}".format(authid), existing_ids)
-
-        # configure credentials for guest client
-        guest_keyring_path  = self._configure_guest_auth(
-            guest_mount, authid, key)
-        # mount the subvolume, and write to it
-        guest_mount.mount_wait(cephfs_mntpt=mount_path,
-                               client_keyring_path=guest_keyring_path)
-        guest_mount.write_n_mb("data.bin", 1)
-
-        # authorize guest authID read access to subvolume
-        key = self._fs_cmd("subvolume", "authorize", self.volname, subvolume, authid,
-                           "--group_name", group, "--tenant_id", "tenant_id", "--access_level", "r")
-
-        # guest client sees the change in access level to read only after a
-        # remount of the subvolume.
-        guest_mount.umount_wait()
-        guest_mount.mount_wait(cephfs_mntpt=mount_path)
-
-        # read existing content of the subvolume
-        self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
-        # cannot write into read-only subvolume
-        with self.assertRaises(CommandFailedError):
-            guest_mount.write_n_mb("rogue.bin", 1)
-
-        # cleanup
-        guest_mount.umount_wait()
-        self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, authid,
-                     "--group_name", group)
-        # guest authID should no longer exist
-        existing_ids = [a['entity'] for a in self.auth_list()]
-        self.assertNotIn("client.{0}".format(authid), existing_ids)
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_authorize_deauthorize_subvolume(self):
         subvolume = self._gen_subvol_name()
@@ -5213,85 +5070,6 @@ class TestSubvolumes(VolumesHelper):
         # verify trash dir is clean.
         self._wait_for_trash_empty()
 
-    def test_subvolume_user_metadata_set_and_get_for_legacy_subvolume(self):
-        subvolname = self._gen_subvol_name()
-        group = self._gen_subvol_grp_name()
-
-        # emulate a old-fashioned subvolume in a custom group
-        createpath = os.path.join(".", "volumes", group, subvolname)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
-
-        # set metadata for subvolume.
-        key = "key"
-        value = "value"
-        try:
-            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
-        except CommandFailedError:
-            self.fail("expected the 'fs subvolume metadata set' command to succeed")
-
-        # get value for specified key.
-        try:
-            ret = self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
-        except CommandFailedError:
-            self.fail("expected the 'fs subvolume metadata get' command to succeed")
-
-        # remove '\n' from returned value.
-        ret = ret.strip('\n')
-
-        # match received value with expected value.
-        self.assertEqual(value, ret)
-
-        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
-
-        # verify trash dir is clean.
-        self._wait_for_trash_empty()
-
-    def test_subvolume_user_metadata_list_and_remove_for_legacy_subvolume(self):
-        subvolname = self._gen_subvol_name()
-        group = self._gen_subvol_grp_name()
-
-        # emulate a old-fashioned subvolume in a custom group
-        createpath = os.path.join(".", "volumes", group, subvolname)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
-
-        # set metadata for subvolume.
-        input_metadata_dict =  {f'key_{i}' : f'value_{i}' for i in range(3)}
-
-        for k, v in input_metadata_dict.items():
-            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, k, v, "--group_name", group)
-
-        # list metadata
-        try:
-            ret = self._fs_cmd("subvolume", "metadata", "ls", self.volname, subvolname, "--group_name", group)
-        except CommandFailedError:
-            self.fail("expected the 'fs subvolume metadata ls' command to succeed")
-
-        ret_dict = json.loads(ret)
-
-        # compare output with expected output
-        self.assertDictEqual(input_metadata_dict, ret_dict)
-
-        # remove metadata against specified key.
-        try:
-            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, "key_1", "--group_name", group)
-        except CommandFailedError:
-            self.fail("expected the 'fs subvolume metadata rm' command to succeed")
-
-        # confirm key is removed by again fetching metadata
-        try:
-            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, "key_1", "--group_name", group)
-        except CommandFailedError as e:
-            self.assertEqual(e.exitstatus, errno.ENOENT)
-        else:
-            self.fail("Expected ENOENT because key_1 does not exist")
-
-        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
-
-        # verify trash dir is clean.
-        self._wait_for_trash_empty()
-
     def test_create_when_subvol_name_is_too_long(self):
         '''
         255 chars of subvol name + 7 chars of (':', '_' and '.meta') and 0
@@ -6429,48 +6207,6 @@ class TestSubvolumeSnapshots(VolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_retain_snapshot_trash_busy_recreate(self):
-        """
-        ensure retained subvolume recreate fails if its trash is not yet purged
-        """
-        subvolume = self._gen_subvol_name()
-        snapshot = self._gen_subvol_snap_name()
-
-        # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # snapshot subvolume
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
-
-        # remove with snapshot retention
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
-
-        # fake a trash entry
-        self._update_fake_trash(subvolume)
-
-        # recreate subvolume
-        try:
-            self._fs_cmd("subvolume", "create", self.volname, subvolume)
-        except CommandFailedError as ce:
-            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of subvolume with purge pending")
-        else:
-            self.fail("expected recreate of subvolume with purge pending to fail")
-
-        # clear fake trash entry
-        self._update_fake_trash(subvolume, create=False)
-
-        # recreate subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # remove snapshot
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
     def test_subvolume_rm_with_snapshots(self):
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
@@ -7321,22 +7057,6 @@ class TestSubvolumeSnapshots(VolumesHelper):
 
 class TestSubvolumeSnapshotGetpath(VolumesHelper):
 
-    def get_subvol_uuid(self, subvol_name, group_name=None):
-        '''
-        Return the UUID directory component obtained from the path of
-        subvolume.
-        '''
-        if group_name:
-            cmd = (f'fs subvolume getpath {self.volname} {subvol_name} '
-                   f'{group_name}')
-        else:
-            cmd = f'fs subvolume getpath {self.volname} {subvol_name}'
-
-        subvol_path = self.get_ceph_cmd_stdout(cmd).strip()
-
-        subvol_uuid = os.path.basename(subvol_path)
-        return subvol_uuid
-
     def get_subvol_uuid_for_v3(self, subvol_name, group_name=None):
         '''
         Return the UUID directory component obtained from the path of
@@ -7354,16 +7074,6 @@ class TestSubvolumeSnapshotGetpath(VolumesHelper):
                                    group_name='_nogroup'):
         return os.path.join('/volumes', group_name, subvol_name, 'roots',
                             uuid, '.snap', snap_name, 'mnt')
-
-    def construct_snap_path_for_v2(self, subvol_name, snap_name, uuid,
-                                   group_name='_nogroup'):
-        return os.path.join('/volumes', group_name, subvol_name, '.snap',
-                            snap_name, uuid)
-
-    def construct_snap_path_for_v1(self, subvol_name, snap_name, uuid,
-                                   group_name='_nogroup'):
-        return os.path.join('/volumes', group_name, subvol_name, uuid,
-                            '.snap', snap_name)
 
     def construct_snap_path_for_legacy(self, subvol_name, snap_name,
                                        group_name='_nogroup'):
@@ -8313,63 +8023,6 @@ class TestSubvolumeSnapshotClones(VolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_retain_snapshot_trash_busy_recreate_clone(self):
-        """
-        ensure retained clone recreate fails if its trash is not yet purged
-        """
-        subvolume = self._gen_subvol_name()
-        snapshot = self._gen_subvol_snap_name()
-        clone = self._gen_subvol_clone_name()
-
-        # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # snapshot subvolume
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
-
-        # clone subvolume snapshot
-        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
-
-        # check clone status
-        self._wait_for_clone_to_complete(clone)
-
-        # snapshot clone
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, clone, snapshot)
-
-        # remove clone with snapshot retention
-        self._fs_cmd("subvolume", "rm", self.volname, clone, "--retain-snapshots")
-
-        # fake a trash entry
-        self._update_fake_trash(clone)
-
-        # clone subvolume snapshot (recreate)
-        try:
-            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
-        except CommandFailedError as ce:
-            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of clone with purge pending")
-        else:
-            self.fail("expected recreate of clone with purge pending to fail")
-
-        # clear fake trash entry
-        self._update_fake_trash(clone, create=False)
-
-        # recreate subvolume
-        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
-
-        # check clone status
-        self._wait_for_clone_to_complete(clone)
-
-        # remove snapshot
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, clone, snapshot)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
-        self._fs_cmd("subvolume", "rm", self.volname, clone)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
     def test_subvolume_snapshot_attr_clone(self):
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
@@ -9222,7 +8875,8 @@ class TestSubvolumeSnapshotClones(VolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_snapshot_clone_with_upgrade(self):
+    # v3,TODO: some v1/v2 stuff here?
+    def _test_subvolume_snapshot_clone_with_upgrade(self):
         """
         yet another poor man's upgrade test -- rather than going through a full
         upgrade cycle, emulate old types subvolumes by going through the wormhole
@@ -10688,395 +10342,6 @@ class TestMisc(VolumesHelper):
             else:
                 self.fail("expected the 'fs subvolumegroup snapshot {0}' command to fail".format(op))
 
-    def test_subvolume_upgrade_legacy_to_v1(self):
-        """
-        poor man's upgrade test -- rather than going through a full upgrade cycle,
-        emulate subvolumes by going through the wormhole and verify if they are
-        accessible.
-        further ensure that a legacy volume is not updated to v2.
-        """
-        subvolume1, subvolume2 = self._gen_subvol_name(2)
-        group = self._gen_subvol_grp_name()
-
-        # emulate a old-fashioned subvolume -- one in the default group and
-        # the other in a custom group
-        createpath1 = os.path.join(".", "volumes", "_nogroup", subvolume1)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath1], omit_sudo=False)
-
-        # create group
-        createpath2 = os.path.join(".", "volumes", group, subvolume2)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath2], omit_sudo=False)
-
-        # this would auto-upgrade on access without anyone noticing
-        subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume1)
-        self.assertNotEqual(subvolpath1, None)
-        subvolpath1 = subvolpath1.rstrip() # remove "/" prefix and any trailing newline
-
-        subvolpath2 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume2, group)
-        self.assertNotEqual(subvolpath2, None)
-        subvolpath2 = subvolpath2.rstrip() # remove "/" prefix and any trailing newline
-
-        # and... the subvolume path returned should be what we created behind the scene
-        self.assertEqual(createpath1[1:], subvolpath1)
-        self.assertEqual(createpath2[1:], subvolpath2)
-
-        # ensure metadata file is in legacy location, with required version v1
-        self._assert_meta_location_and_version(self.volname, subvolume1, version=1, legacy=True)
-        self._assert_meta_location_and_version(self.volname, subvolume2, subvol_group=group, version=1, legacy=True)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume1)
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume2, group)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-        # remove group
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
-
-    def test_subvolume_no_upgrade_v1_sanity(self):
-        """
-        poor man's upgrade test -- theme continues...
-
-        This test is to ensure v1 subvolumes are retained as is, due to a snapshot being present, and runs through
-        a series of operations on the v1 subvolume to ensure they work as expected.
-        """
-        subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
-                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "pool_namespace",
-                     "type", "uid", "features", "state"]
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
-
-        subvolume = self._gen_subvol_name()
-        snapshot = self._gen_subvol_snap_name()
-        clone1, clone2 = self._gen_subvol_clone_name(2)
-        mode = "777"
-        uid  = "1000"
-        gid  = "1000"
-
-        # emulate a v1 subvolume -- in the default group
-        subvolume_path = self._create_v1_subvolume(subvolume)
-
-        # getpath
-        subvolpath = self._get_subvolume_path(self.volname, subvolume)
-        self.assertEqual(subvolpath, subvolume_path)
-
-        # ls
-        subvolumes = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
-        self.assertEqual(len(subvolumes), 1, "subvolume ls count mismatch, expected '1', found {0}".format(len(subvolumes)))
-        self.assertEqual(subvolumes[0]['name'], subvolume,
-                         "subvolume name mismatch in ls output, expected '{0}', found '{1}'".format(subvolume, subvolumes[0]['name']))
-
-        # info
-        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
-        for md in subvol_md:
-            self.assertIn(md, subvol_info, "'{0}' key not present in metadata of subvolume".format(md))
-
-        self.assertEqual(subvol_info["state"], "complete",
-                         msg="expected state to be 'complete', found '{0}".format(subvol_info["state"]))
-        self.assertEqual(len(subvol_info["features"]), 2,
-                         msg="expected 1 feature, found '{0}' ({1})".format(len(subvol_info["features"]), subvol_info["features"]))
-        for feature in ['snapshot-clone', 'snapshot-autoprotect']:
-            self.assertIn(feature, subvol_info["features"], msg="expected feature '{0}' in subvolume".format(feature))
-
-        # resize
-        nsize = self.DEFAULT_FILE_SIZE*1024*1024*10
-        self._fs_cmd("subvolume", "resize", self.volname, subvolume, str(nsize))
-        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
-        for md in subvol_md:
-            self.assertIn(md, subvol_info, "'{0}' key not present in metadata of subvolume".format(md))
-        self.assertEqual(subvol_info["bytes_quota"], nsize, "bytes_quota should be set to '{0}'".format(nsize))
-
-        # create (idempotent) (change some attrs, to ensure attrs are preserved from the snapshot on clone)
-        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode", mode, "--uid", uid, "--gid", gid)
-
-        # do some IO
-        self._do_subvolume_io(subvolume, number_of_files=8)
-
-        # snap-create
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
-
-        # clone
-        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
-
-        # check clone status
-        self._wait_for_clone_to_complete(clone1)
-
-        # ensure clone is v2
-        self._assert_meta_location_and_version(self.volname, clone1, version=2)
-
-        # verify clone
-        self._verify_clone(subvolume, snapshot, clone1, source_version=1)
-
-        # clone (older snapshot)
-        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, 'fake', clone2)
-
-        # check clone status
-        self._wait_for_clone_to_complete(clone2)
-
-        # ensure clone is v2
-        self._assert_meta_location_and_version(self.volname, clone2, version=2)
-
-        # verify clone
-        # TODO: rentries will mismatch till this is fixed https://tracker.ceph.com/issues/46747
-        #self._verify_clone(subvolume, 'fake', clone2, source_version=1)
-
-        # snap-info
-        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
-        for md in snap_md:
-            self.assertIn(md, snap_info, "'{0}' key not present in metadata of snapshot".format(md))
-        self.assertEqual(snap_info["has_pending_clones"], "no")
-
-        # snap-ls
-        subvol_snapshots = json.loads(self._fs_cmd('subvolume', 'snapshot', 'ls', self.volname, subvolume))
-        self.assertEqual(len(subvol_snapshots), 2, "subvolume ls count mismatch, expected 2', found {0}".format(len(subvol_snapshots)))
-        snapshotnames = [snapshot['name'] for snapshot in subvol_snapshots]
-        for name in [snapshot, 'fake']:
-            self.assertIn(name, snapshotnames, msg="expected snapshot '{0}' in subvolume snapshot ls".format(name))
-
-        # snap-rm
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, "fake")
-
-        # ensure volume is still at version 1
-        self._assert_meta_location_and_version(self.volname, subvolume, version=1)
-
-        # rm
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
-        self._fs_cmd("subvolume", "rm", self.volname, clone1)
-        self._fs_cmd("subvolume", "rm", self.volname, clone2)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-    def test_subvolume_no_upgrade_v1_to_v2(self):
-        """
-        poor man's upgrade test -- theme continues...
-        ensure v1 to v2 upgrades are not done automatically due to various states of v1
-        """
-        subvolume1, subvolume2, subvolume3 = self._gen_subvol_name(3)
-        group = self._gen_subvol_grp_name()
-
-        # emulate a v1 subvolume -- in the default group
-        subvol1_path = self._create_v1_subvolume(subvolume1)
-
-        # emulate a v1 subvolume -- in a custom group
-        subvol2_path = self._create_v1_subvolume(subvolume2, subvol_group=group)
-
-        # emulate a v1 subvolume -- in a clone pending state
-        self._create_v1_subvolume(subvolume3, subvol_type='clone', has_snapshot=False, state='pending')
-
-        # this would attempt auto-upgrade on access, but fail to do so as snapshots exist
-        subvolpath1 = self._get_subvolume_path(self.volname, subvolume1)
-        self.assertEqual(subvolpath1, subvol1_path)
-
-        subvolpath2 = self._get_subvolume_path(self.volname, subvolume2, group_name=group)
-        self.assertEqual(subvolpath2, subvol2_path)
-
-        # this would attempt auto-upgrade on access, but fail to do so as volume is not complete
-        # use clone status, as only certain operations are allowed in pending state
-        status = json.loads(self._fs_cmd("clone", "status", self.volname, subvolume3))
-        self.assertEqual(status["status"]["state"], "pending")
-
-        # remove snapshot
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume1, "fake")
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume2, "fake", group)
-
-        # ensure metadata file is in v1 location, with version retained as v1
-        self._assert_meta_location_and_version(self.volname, subvolume1, version=1)
-        self._assert_meta_location_and_version(self.volname, subvolume2, subvol_group=group, version=1)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume1)
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume2, group)
-        try:
-            self._fs_cmd("subvolume", "rm", self.volname, subvolume3)
-        except CommandFailedError as ce:
-            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on rm of subvolume undergoing clone")
-        else:
-            self.fail("expected rm of subvolume undergoing clone to fail")
-
-        # ensure metadata file is in v1 location, with version retained as v1
-        self._assert_meta_location_and_version(self.volname, subvolume3, version=1)
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume3, "--force")
-
-        # verify list subvolumes returns an empty list
-        subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
-        self.assertEqual(len(subvolumels), 0)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-    def test_subvolume_upgrade_v1_to_v2(self):
-        """
-        poor man's upgrade test -- theme continues...
-        ensure v1 to v2 upgrades work
-        """
-        subvolume1, subvolume2 = self._gen_subvol_name(2)
-        group = self._gen_subvol_grp_name()
-
-        # emulate a v1 subvolume -- in the default group
-        subvol1_path = self._create_v1_subvolume(subvolume1, has_snapshot=False)
-
-        # emulate a v1 subvolume -- in a custom group
-        subvol2_path = self._create_v1_subvolume(subvolume2, subvol_group=group, has_snapshot=False)
-
-        # this would attempt auto-upgrade on access
-        subvolpath1 = self._get_subvolume_path(self.volname, subvolume1)
-        self.assertEqual(subvolpath1, subvol1_path)
-
-        subvolpath2 = self._get_subvolume_path(self.volname, subvolume2, group_name=group)
-        self.assertEqual(subvolpath2, subvol2_path)
-
-        # ensure metadata file is in v2 location, with version retained as v2
-        self._assert_meta_location_and_version(self.volname, subvolume1, version=2)
-        self._assert_meta_location_and_version(self.volname, subvolume2, subvol_group=group, version=2)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume1)
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume2, group)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-    def test_malicious_metafile_on_legacy_to_v1_upgrade(self):
-        """
-        Validate handcrafted .meta file on legacy subvol root doesn't break the system
-        on legacy subvol upgrade to v1
-        poor man's upgrade test -- theme continues...
-        """
-        subvol1, subvol2 = self._gen_subvol_name(2)
-
-        # emulate a old-fashioned subvolume in the default group
-        createpath1 = os.path.join(".", "volumes", "_nogroup", subvol1)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath1], omit_sudo=False)
-
-        # add required xattrs to subvolume
-        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath1, 'ceph.dir.layout.pool', default_pool, sudo=True)
-
-        # create v2 subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvol2)
-
-        # Create malicious .meta file in legacy subvolume root. Copy v2 subvolume
-        # .meta into legacy subvol1's root
-        subvol2_metapath = os.path.join(".", "volumes", "_nogroup", subvol2, ".meta")
-        self.mount_a.run_shell(['sudo', 'cp', subvol2_metapath, createpath1], omit_sudo=False)
-
-        # Upgrade legacy subvol1 to v1
-        subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvol1)
-        self.assertNotEqual(subvolpath1, None)
-        subvolpath1 = subvolpath1.rstrip()
-
-        # the subvolume path returned should not be of subvol2 from handcrafted
-        # .meta file
-        self.assertEqual(createpath1[1:], subvolpath1)
-
-        # ensure metadata file is in legacy location, with required version v1
-        self._assert_meta_location_and_version(self.volname, subvol1, version=1, legacy=True)
-
-        # Authorize alice authID read-write access to subvol1. Verify it authorizes subvol1 path and not subvol2
-        # path whose '.meta' file is copied to subvol1 root
-        authid1 = "alice"
-        self._fs_cmd("subvolume", "authorize", self.volname, subvol1, authid1)
-
-        # Validate that the mds path added is of subvol1 and not of subvol2
-        out = json.loads(self.get_ceph_cmd_stdout("auth", "get", "client.alice", "--format=json-pretty"))
-        self.assertEqual("client.alice", out[0]["entity"])
-        self.assertEqual("allow rw path={0}".format(createpath1[1:]), out[0]["caps"]["mds"])
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvol1)
-        self._fs_cmd("subvolume", "rm", self.volname, subvol2)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-    def test_binary_metafile_on_legacy_to_v1_upgrade(self):
-        """
-        Validate binary .meta file on legacy subvol root doesn't break the system
-        on legacy subvol upgrade to v1
-        poor man's upgrade test -- theme continues...
-        """
-        subvol = self._gen_subvol_name()
-        group = self._gen_subvol_grp_name()
-
-        # emulate a old-fashioned subvolume -- in a custom group
-        createpath = os.path.join(".", "volumes", group, subvol)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
-
-        # add required xattrs to subvolume
-        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
-
-        # Create unparseable binary .meta file on legacy subvol's root
-        meta_contents = os.urandom(4096)
-        meta_filepath = os.path.join(self.mount_a.mountpoint, createpath, ".meta")
-        self.mount_a.client_remote.write_file(meta_filepath, meta_contents, sudo=True)
-
-        # Upgrade legacy subvol to v1
-        subvolpath = self._fs_cmd("subvolume", "getpath", self.volname, subvol, group)
-        self.assertNotEqual(subvolpath, None)
-        subvolpath = subvolpath.rstrip()
-
-        # The legacy subvolume path should be returned for subvol.
-        # Should ignore unparseable binary .meta file in subvol's root
-        self.assertEqual(createpath[1:], subvolpath)
-
-        # ensure metadata file is in legacy location, with required version v1
-        self._assert_meta_location_and_version(self.volname, subvol, subvol_group=group, version=1, legacy=True)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvol, group)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-        # remove group
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
-
-    def test_unparseable_metafile_on_legacy_to_v1_upgrade(self):
-        """
-        Validate unparseable text .meta file on legacy subvol root doesn't break the system
-        on legacy subvol upgrade to v1
-        poor man's upgrade test -- theme continues...
-        """
-        subvol = self._gen_subvol_name()
-        group = self._gen_subvol_grp_name()
-
-        # emulate a old-fashioned subvolume -- in a custom group
-        createpath = os.path.join(".", "volumes", group, subvol)
-        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
-
-        # add required xattrs to subvolume
-        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
-
-        # Create unparseable text .meta file on legacy subvol's root
-        meta_contents = "unparseable config\nfile ...\nunparseable config\nfile ...\n"
-        meta_filepath = os.path.join(self.mount_a.mountpoint, createpath, ".meta")
-        self.mount_a.client_remote.write_file(meta_filepath, meta_contents, sudo=True)
-
-        # Upgrade legacy subvol to v1
-        subvolpath = self._fs_cmd("subvolume", "getpath", self.volname, subvol, group)
-        self.assertNotEqual(subvolpath, None)
-        subvolpath = subvolpath.rstrip()
-
-        # The legacy subvolume path should be returned for subvol.
-        # Should ignore unparseable binary .meta file in subvol's root
-        self.assertEqual(createpath[1:], subvolpath)
-
-        # ensure metadata file is in legacy location, with required version v1
-        self._assert_meta_location_and_version(self.volname, subvol, subvol_group=group, version=1, legacy=True)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvol, group)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-        # remove group
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
-
     def test_dangling_symlink(self):
         """
         test_dangling_symlink
@@ -11211,3 +10476,387 @@ class TestCorruptedSubvolumes(VolumesHelper):
         self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
                            '--force')
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+
+class _TestSubvolumeV2(VolumesHelper):
+    '''
+    Test feature specific to subvolume v2.
+    '''
+
+    def construct_snap_path_for_v2(self, subvol_name, snap_name, uuid,
+                                   group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, '.snap',
+                            snap_name, uuid)
+
+    def test_subvolume_retain_snapshot_trash_busy_recreate(self):
+        """
+        ensure retained subvolume recreate fails if its trash is not yet purged
+        """
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
+
+        # fake a trash entry
+        self._update_fake_trash(subvolume)
+
+        # recreate subvolume
+        try:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of subvolume with purge pending")
+        else:
+            self.fail("expected recreate of subvolume with purge pending to fail")
+
+        # clear fake trash entry
+        self._update_fake_trash(subvolume, create=False)
+
+        # recreate subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_retain_snapshot_trash_busy_recreate_clone(self):
+        """
+        ensure retained clone recreate fails if its trash is not yet purged
+        """
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # clone subvolume snapshot
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # snapshot clone
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, clone, snapshot)
+
+        # remove clone with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, clone, "--retain-snapshots")
+
+        # fake a trash entry
+        self._update_fake_trash(clone)
+
+        # clone subvolume snapshot (recreate)
+        try:
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EAGAIN, "invalid error code on recreate of clone with purge pending")
+        else:
+            self.fail("expected recreate of clone with purge pending to fail")
+
+        # clear fake trash entry
+        self._update_fake_trash(clone, create=False)
+
+        # recreate subvolume
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, clone, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+
+class TestSubvolumeV1(VolumesHelper):
+    '''
+    Test v1 subvolumes.
+    '''
+
+    def _create_v1_subvolume(self, subvol_name, subvol_group=None, has_snapshot=True, subvol_type='subvolume', state='complete'):
+        group = subvol_group if subvol_group is not None else '_nogroup'
+        basepath = os.path.join("volumes", group, subvol_name)
+        uuid_str = str(uuid.uuid4())
+        createpath = os.path.join(basepath, uuid_str)
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
+
+        # create a v1 snapshot, to prevent auto upgrades
+        if has_snapshot:
+            snappath = os.path.join(createpath, ".snap", "fake")
+            self.mount_a.run_shell(['sudo', 'mkdir', '-p', snappath], omit_sudo=False)
+
+        # add required xattrs to subvolume
+        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
+
+        # create a v1 .meta file
+        meta_contents = "[GLOBAL]\nversion = 1\ntype = {0}\npath = {1}\nstate = {2}\n".format(subvol_type, "/" + createpath, state)
+        if state == 'pending':
+            # add a fake clone source
+            meta_contents = meta_contents + '[source]\nvolume = fake\nsubvolume = fake\nsnapshot = fake\n'
+        meta_filepath1 = os.path.join(self.mount_a.mountpoint, basepath, ".meta")
+        self.mount_a.client_remote.write_file(meta_filepath1, meta_contents, sudo=True)
+        return createpath
+
+    def get_subvol_uuid_for_v1(self, subvol_name, group_name=None):
+        '''
+        Return the UUID directory component obtained from the path of
+        subvolume.
+        '''
+        if group_name:
+            cmd = (f'fs subvolume getpath {self.volname} {subvol_name} '
+                   f'{group_name}')
+        else:
+            cmd = f'fs subvolume getpath {self.volname} {subvol_name}'
+
+        subvol_path = self.get_ceph_cmd_stdout(cmd).strip()
+
+        subvol_uuid = os.path.basename(subvol_path)
+        return subvol_uuid
+
+    def test_subvolume_group_quota_v1_subvolume_removal(self):
+        """
+        Tests v1 subvolume removal if it's group quota is set.
+        """
+        subvolume = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+
+        # emulate a v1 subvolume -- in a custom group
+        self._create_v1_subvolume(subvolume, subvol_group=group, has_snapshot=False)
+
+        # Set subvolumegroup quota on idempotent subvolumegroup creation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def construct_snap_path_for_v1(self, subvol_name, snap_name, uuid,
+                                   group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, uuid,
+                            '.snap', snap_name)
+
+    def test_snapshot_getpath_in_group_for_v1(self):
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} '
+                          f'{group_name}')
+        self._create_v1_subvolume(subvol_name, group_name)
+        sv_uuid = self.get_subvol_uuid_for_v1(subvol_name, group_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name} {group_name}')
+
+        snap_path = self.get_ceph_cmd_stdout(
+            f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
+            f'{snap_name} {group_name}').strip()
+        exp_snap_path = self.construct_snap_path_for_v1(subvol_name, snap_name,
+                                                        sv_uuid, group_name)
+        self.assertEqual(snap_path, exp_snap_path)
+
+
+class _TestSubvolumeV0(VolumesHelper):
+    '''
+    Test for v0/legacy subvolumes.
+    '''
+
+    def test_authorize_deauthorize_legacy_subvolume(self):
+        subvolume = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        authid = "alice"
+
+        guest_mount = self.mount_b
+        guest_mount.umount_wait()
+
+        # emulate a old-fashioned subvolume in a custom group
+        createpath = os.path.join(".", "volumes", group, subvolume)
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
+
+        # add required xattrs to subvolume
+        default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
+
+        mount_path = os.path.join("/", "volumes", group, subvolume)
+
+        # authorize guest authID read-write access to subvolume
+        key = self._fs_cmd("subvolume", "authorize", self.volname, subvolume, authid,
+                           "--group_name", group, "--tenant_id", "tenant_id")
+
+        # guest authID should exist
+        existing_ids = [a['entity'] for a in self.auth_list()]
+        self.assertIn("client.{0}".format(authid), existing_ids)
+
+        # configure credentials for guest client
+        guest_keyring_path  = self._configure_guest_auth(
+            guest_mount, authid, key)
+        # mount the subvolume, and write to it
+        guest_mount.mount_wait(cephfs_mntpt=mount_path,
+                               client_keyring_path=guest_keyring_path)
+        guest_mount.write_n_mb("data.bin", 1)
+
+        # authorize guest authID read access to subvolume
+        key = self._fs_cmd("subvolume", "authorize", self.volname, subvolume, authid,
+                           "--group_name", group, "--tenant_id", "tenant_id", "--access_level", "r")
+
+        # guest client sees the change in access level to read only after a
+        # remount of the subvolume.
+        guest_mount.umount_wait()
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+
+        # read existing content of the subvolume
+        self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
+        # cannot write into read-only subvolume
+        with self.assertRaises(CommandFailedError):
+            guest_mount.write_n_mb("rogue.bin", 1)
+
+        # cleanup
+        guest_mount.umount_wait()
+        self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, authid,
+                     "--group_name", group)
+        # guest authID should no longer exist
+        existing_ids = [a['entity'] for a in self.auth_list()]
+        self.assertNotIn("client.{0}".format(authid), existing_ids)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_user_metadata_set_and_get_for_legacy_subvolume(self):
+        subvolname = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+
+        # emulate a old-fashioned subvolume in a custom group
+        createpath = os.path.join(".", "volumes", group, subvolname)
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        try:
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata set' command to succeed")
+
+        # get value for specified key.
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata get' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(value, ret)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_list_and_remove_for_legacy_subvolume(self):
+        subvolname = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+
+        # emulate a old-fashioned subvolume in a custom group
+        createpath = os.path.join(".", "volumes", group, subvolname)
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath], omit_sudo=False)
+
+        # set metadata for subvolume.
+        input_metadata_dict =  {f'key_{i}' : f'value_{i}' for i in range(3)}
+
+        for k, v in input_metadata_dict.items():
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, k, v, "--group_name", group)
+
+        # list metadata
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "ls", self.volname, subvolname, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata ls' command to succeed")
+
+        ret_dict = json.loads(ret)
+
+        # compare output with expected output
+        self.assertDictEqual(input_metadata_dict, ret_dict)
+
+        # remove metadata against specified key.
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, "key_1", "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, "key_1", "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key_1 does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_legacy_subvolume_removal(self):
+        """
+        Tests legacy subvolume removal if it's group quota is set.
+        """
+        subvolume = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+
+        # emulate a old-fashioned subvolume -- in a custom group
+        createpath1 = os.path.join(".", "volumes", group, subvolume)
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', createpath1], omit_sudo=False)
+
+        # this would auto-upgrade on access without anyone noticing
+        subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume, "--group-name", group)
+        self.assertNotEqual(subvolpath1, None)
+        subvolpath1 = subvolpath1.rstrip() # remove "/" prefix and any trailing newline
+
+        # and... the subvolume path returned should be what we created behind the scene
+        self.assertEqual(createpath1[1:], subvolpath1)
+
+        # Set subvolumegroup quota on idempotent subvolumegroup creation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
