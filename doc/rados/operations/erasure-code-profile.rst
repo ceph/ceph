@@ -68,31 +68,34 @@ A profile is created in one of two ways:
   name it with ``--erasure_code_profile``.
 
 The ``default`` profile is a template that no pool uses. It holds what a pool
-gets when it names no profile. ``ceph osd pool default set --k {k} --m {m}``
-changes its ``k`` and ``m`` and keeps its other keys. It refuses ``--k`` and
+gets when it names no profile, including its placement: ``crush-root``,
+``crush-zone-failure-domain``, ``crush-failure-domain`` and
+``crush-device-class`` (empty for no class). The profile always has these
+four: a key it lacks is filled in from :confval:`osd_pool_default_root`,
+:confval:`osd_pool_default_zone_failure_domain`,
+:confval:`osd_pool_default_osd_failure_domain` or
+:confval:`osd_pool_default_class` when the profile is created or set again.
+``ceph osd pool default set --k {k} --m {m}``
+changes its ``k`` and ``m`` and keeps its other keys. While the default pool
+type is ``erasure``, ``ceph osd pool default set`` writes ``--root``,
+``--zone_failure_domain``, ``--osd_failure_domain``, ``--class`` and
+``--no-class`` into it, instead of into the options. It refuses ``--k`` and
 ``--m`` while the default pool type is ``replicated``, unless it is also given
 ``--pool_type erasure``, which makes every later pool that names no type an
 erasure-coded pool.
 ``ceph osd erasure-code-profile set default ...`` replaces the whole profile:
 with ``osd_pool_default_erasure_code_profile`` and the keys given, or with only
 the keys given if they name another plugin. Pools created before the change
-keep their own copies. When an upgrade to this release is committed with
-``ceph osd require-osd-release``, each pool that used ``default`` gets a copy
-of its own.
+keep their own copies.
 
 When the last pool that uses a profile is deleted, the profile is deleted as
 well, however it was created. The ``default`` profile is never deleted in this
-way. The CRUSH rule of an erasure-coded pool is likewise deleted when the last
+way. Every erasure-coded pool gets a CRUSH rule of its own, named after the
+pool, unless it is given one; a CRUSH rule is likewise deleted when the last
 pool that uses it is deleted.
 
 To create another pool with a profile whose last pool has been deleted, set the
 profile again first.
-
-.. note:: In earlier releases, a profile created with ``ceph osd
-   erasure-code-profile set`` remained until it was removed with ``ceph osd
-   erasure-code-profile rm``, and could be used for any number of pools over
-   time. Scripts that create a profile once and reuse it after deleting the
-   pools that use it must now set the profile again before each reuse.
 
 osd erasure-code-profile set
 ============================
