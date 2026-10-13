@@ -3262,14 +3262,19 @@ TEST_F(NSFSBucketTest, DeletingABucketTheGatewayMadeRemovesTheDirectory)
 }
 
 /* Deleting a bucket adopted over a directory that predates it leaves
- * the directory, and its contents, alone.
+ * the directory alone.
  *
  * The directory may be a fileset junction or anything else an
  * administrator made and pointed the gateway at;  removing it is the
  * one unrecoverable thing this path can do.  What goes instead is
  * everything the gateway wrote -- the whole user.nsfs. namespace --
  * which returns the directory to the state it was in before it was
- * adopted. */
+ * adopted.
+ *
+ * The bucket is emptied first:  a non-empty one is refused whatever it
+ * owns (DECISIONS.md 2026-10-13), which
+ * ABucketThatDoesNotOwnItsDirectoryIsStillRefusedWhileNotEmpty covers.
+ * Until then this test deleted the bucket with the file still in it. */
 TEST_F(NSFSBucketTest, DeletingAnAdoptedBucketLeavesItsDirectory)
 {
   const sf::path d = bp / "root" / testname;
@@ -3282,14 +3287,13 @@ TEST_F(NSFSBucketTest, DeletingAnAdoptedBucketLeavesItsDirectory)
     ::close(fd);
   }
   ASSERT_EQ(::setxattr(d.c_str(), nsfs::OWNS_STORAGE_XATTR, "0", 1, 0), 0);
+  ASSERT_TRUE(sf::remove(d / "predates.txt"));
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->remove(env->dpp, false, null_yield), 0);
 
   EXPECT_TRUE(sf::is_directory(d))
       << "removed a directory the bucket was only lent";
-  EXPECT_TRUE(sf::is_regular_file(d / "predates.txt"))
-      << "removed contents the bucket did not put there";
 
   char buf[8192];
   const ssize_t len = ::listxattr(d.c_str(), buf, sizeof(buf));
@@ -7490,6 +7494,38 @@ TEST_F(NSFSBucketTest, DISABLED_AnOverLongNameDoesNotHideItsBucket)
   }
   EXPECT_TRUE(names.contains("a")) << "an over-long name hid its bucket";
   EXPECT_TRUE(names.contains("b")) << "an over-long name hid its bucket";
+}
+
+/* A bucket that does not own its directory is still refused deletion
+ * while it holds an object, as S3 refuses any non-empty bucket and as
+ * NooBaa refuses one over a supplied directory (`bucketspace_fs.js`
+ * delete_bucket, NOT_EMPTY).  Only the outcome of an allowed delete
+ * differs:  the directory, and anything in it, stays.
+ *
+ * Before, remove() checked emptiness only for a bucket that owns its
+ * directory, so this one was unadopted with its object in it and its
+ * record gone. */
+TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRefusedWhileNotEmpty)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_owns_storage(env->dpp, false), 0);
+  ASSERT_FALSE(b->owns_storage(env->dpp));
+  write_file(bucket_path() / "kept.txt", "kept");
+
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), -ENOTEMPTY)
+      << "a non-empty bucket was deleted";
+  EXPECT_GT(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
+		       nullptr, 0), 0)
+      << "the refused delete unadopted the bucket anyway";
+
+  /* the control:  emptied, it is removed, and its directory is left */
+  sf::remove(bucket_path() / "kept.txt");
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_TRUE(sf::is_directory(bucket_path()))
+      << "the directory the bucket did not own was deleted";
+  EXPECT_LT(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
+		       nullptr, 0), 0)
+      << "the bucket's record survived its deletion";
 }
 
 TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)

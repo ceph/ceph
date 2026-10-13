@@ -5922,18 +5922,27 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   if (mg.result() < 0) {
     return mg.result();
   }
-  /* The root object does not keep a bucket alive:  NooBaa judges a
+  /* A non-empty bucket is refused whether or not it owns its
+   * directory, as S3 refuses one and as NooBaa refuses one over a
+   * supplied directory.  Ownership decides only what an allowed delete
+   * removes:  the directory, or just the bucket's record.
+   *
+   * The root object does not keep a bucket alive:  NooBaa judges a
    * bucket empty by listing it, and the root object is never listed
    * (DECISIONS.md 2026-10-13).  delete_directory() counts any `.folder`
    * as content, because in a directory it is that directory's object,
-   * so once the bucket is known to be empty the root's is removed here,
-   * before the directory.  A bucket that does not own its storage keeps
-   * it, with the directory. */
-  if (owns_storage(dpp) && !delete_children) {
+   * so once an owned bucket is known to be empty the root's is removed
+   * here, before the directory.  A bucket that does not own its storage
+   * keeps it, with the directory. */
+  const bool owns = owns_storage(dpp);
+  if (!delete_children) {
     int r = check_empty(dpp, y);
     if (r < 0) {
       return r;
     }
+  }
+  if (owns && !delete_children) {
+    int r = 0;
     if (const auto* ps = path_strategy(); ps) {
       const std::string root_folder = ps->folder_object_name();
       if ((::unlinkat(dir->get_fd(), root_folder.c_str(), 0) < 0) &&
@@ -5946,8 +5955,7 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
       }
     }
   }
-  int ret = owns_storage(dpp) ? dir->remove(dpp, y, delete_children)
-			      : unadopt(dpp);
+  int ret = owns ? dir->remove(dpp, y, delete_children) : unadopt(dpp);
   if (ret < 0) {
     return ret;
   }
