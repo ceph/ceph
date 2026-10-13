@@ -26,6 +26,7 @@
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "common/debug.h"
+#include "crush/CrushWrapper.h"
 #include "ECMsgTypes.h"
 #include "PGLog.h"
 #include "osd_tracer.h"
@@ -54,6 +55,27 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
+
+bool ECCommon::is_cross_zone(ECListener *parent,
+                              const ECUtil::stripe_info_t &sinfo,
+                              pg_shard_t peer,
+                              const OSDMapRef &osdmap)
+{
+  const pg_pool_t &pool = parent->get_pool();
+  if (pool.peering_crush_bucket_count == 0)
+    return false;
+
+  int my_crush_zone  = osdmap->crush->get_parent_of_type(
+      parent->whoami_shard().osd,
+      pool.peering_crush_bucket_barrier,
+      pool.crush_rule);
+  int peer_crush_zone = osdmap->crush->get_parent_of_type(
+      peer.osd,
+      pool.peering_crush_bucket_barrier,
+      pool.crush_rule);
+  return my_crush_zone != peer_crush_zone;
+}
+
 
 static ostream &_prefix(std::ostream *_dout,
                         ECCommon::RMWPipeline const *rmw_pipeline) {
@@ -702,6 +724,18 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       msg->trace.keyval("shard", pg_shard.shard.id);
     }
     msg->compute_cost(cct, subchunk_info);
+    if (is_cross_zone(get_parent(), sinfo, pg_shard, get_osdmap())) {
+      uint64_t requested = 0;
+      for (const auto &[hoid, extents] : read.to_read) {
+        for (const auto &extent : extents) {
+          requested += extent.get<1>();
+        }
+      }
+      get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_ops);
+      get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_sent_bytes,
+                                      requested);
+      rop.cross_zone_read_dispatch_time[pg_shard] = ceph_clock_now();
+    }
     m.push_back(std::make_pair(pg_shard.osd, msg));
     dout(10) << __func__ << ": will send msg " << *msg
              << " to osd." << pg_shard.osd << dendl;
@@ -1137,6 +1171,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       // is never used again after this point.
       sop.t.swap(*transaction_copy);
     }
+    // MOSDECSubOpWrite claims sop below
+    const uint64_t sub_write_bytes = sop.t.get_num_bytes();
 
     ZTracer::Trace trace;
     if (op.trace) {
@@ -1162,6 +1198,12 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
       r->trace = trace;
+      if (should_send && is_cross_zone(get_parent(), sinfo, pg_shard, get_osdmap())) {
+        get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_write_ops);
+        get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_write_bytes,
+                                        sub_write_bytes);
+        op.cross_zone_write_dispatch_time[pg_shard] = ceph_clock_now();
+      }
       messages.push_back(std::make_pair(pg_shard.osd, r));
     }
   }
@@ -1468,6 +1510,15 @@ void ECCommon::RecoveryBackend::handle_recovery_push_reply(
   RecoveryOp &rop = recovery_ops[op.soid];
   ceph_assert(rop.waiting_on_pushes.contains(from));
   rop.waiting_on_pushes.erase(from);
+
+  if (rop.cross_zone_recovery_push_dispatch_time.contains(from)) {
+    utime_t lat = ceph_clock_now() - rop.cross_zone_recovery_push_dispatch_time.at(from);
+    get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_recovery_push_lat,
+                                     lat);
+    get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_recovery_push_lat_hist,
+                                     lat.to_nsec(), 0);
+  }
+
   continue_recovery_op(rop, m);
 }
 
@@ -1821,7 +1872,12 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
 
         op.returned_data->get_sparse_buffer(rel_shard, pop.data, pop.data_included);
         ceph_assert(pop.data.length() == pop.data_included.size());
-
+        if (is_cross_zone(get_parent(), sinfo, pg_shard, get_osdmap())) {
+          get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_recovery_push_ops);
+          get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_recovery_push_bytes,
+                                          pop.data.length());
+          op.cross_zone_recovery_push_dispatch_time[pg_shard] = ceph_clock_now();
+        }
         dout(10) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
                  << ", before_progress=" << op.recovery_progress
