@@ -438,7 +438,9 @@ class RgwUserControllerTestCase(ControllerTestCase):
             {
                 "user_ratelimit": {
                     "max_read_ops": 100,
-                    "max_write_ops": 50
+                    "max_write_ops": 50,
+                    "max_list_ops": 30,
+                    "max_delete_ops": 20
                 }
             },
             ""   # empty error msg
@@ -447,6 +449,45 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self._get('/test/api/rgw/user/testuser/ratelimit')
         self.assertStatus(200)
         self.assertInJsonBody('user_ratelimit')
+        self.assertEqual(self.json_body()['user_ratelimit']['max_list_ops'], 30)
+        self.assertEqual(self.json_body()['user_ratelimit']['max_delete_ops'], 20)
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_get_rate_limit_default_fallback(self, send_rgwadmin_command):
+        send_rgwadmin_command.return_value = (1, "", "No such file or directory")
+
+        self._get('/test/api/rgw/user/testuser/ratelimit')
+        self.assertStatus(200)
+        self.assertEqual(self.json_body()['user_ratelimit']['max_list_ops'], 0)
+        self.assertEqual(self.json_body()['user_ratelimit']['max_delete_ops'], 0)
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_set_rate_limit_list_delete_ops(self, send_rgwadmin_command):
+        send_rgwadmin_command.return_value = (0, "", "")
+
+        self._put('/test/api/rgw/user/testuser/ratelimit', data={
+            'enabled': True,
+            'max_read_ops': 1,
+            'max_write_ops': 2,
+            'max_read_bytes': 3,
+            'max_write_bytes': 4,
+            'max_list_ops': 5,
+            'max_delete_ops': 6
+        })
+        self.assertStatus(200)
+        set_cmd = send_rgwadmin_command.call_args_list[0][0][0]
+        self.assertEqual(set_cmd[set_cmd.index('--max-list-ops') + 1], '5')
+        self.assertEqual(set_cmd[set_cmd.index('--max-delete-ops') + 1], '6')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_set_rate_limit_list_delete_ops_default(self, send_rgwadmin_command):
+        send_rgwadmin_command.return_value = (0, "", "")
+
+        self._put('/test/api/rgw/user/testuser/ratelimit', data={'enabled': True})
+        self.assertStatus(200)
+        set_cmd = send_rgwadmin_command.call_args_list[0][0][0]
+        self.assertEqual(set_cmd[set_cmd.index('--max-list-ops') + 1], '0')
+        self.assertEqual(set_cmd[set_cmd.index('--max-delete-ops') + 1], '0')
 
     @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
     @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
@@ -748,6 +789,37 @@ class RgwBucketControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
         cls.setup_controllers([RgwBucket], '/test')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_get_rate_limit_list_delete_ops(self, send_rgwadmin_command):
+        send_rgwadmin_command.return_value = (
+            0,
+            {"bucket_ratelimit": {"max_list_ops": 7, "max_delete_ops": 8}},
+            ""
+        )
+
+        self._get('/test/api/rgw/bucket/testbucket/ratelimit')
+        self.assertStatus(200)
+        self.assertEqual(self.json_body()['bucket_ratelimit']['max_list_ops'], 7)
+        self.assertEqual(self.json_body()['bucket_ratelimit']['max_delete_ops'], 8)
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    def test_set_rate_limit_list_delete_ops(self, send_rgwadmin_command):
+        send_rgwadmin_command.return_value = (0, "", "")
+
+        self._put('/test/api/rgw/bucket/testbucket/ratelimit', data={
+            'enabled': True,
+            'max_read_ops': 1,
+            'max_write_ops': 2,
+            'max_read_bytes': 3,
+            'max_write_bytes': 4,
+            'max_list_ops': 5,
+            'max_delete_ops': 6
+        })
+        self.assertStatus(200)
+        set_cmd = send_rgwadmin_command.call_args_list[0][0][0]
+        self.assertEqual(set_cmd[set_cmd.index('--max-list-ops') + 1], '5')
+        self.assertEqual(set_cmd[set_cmd.index('--max-delete-ops') + 1], '6')
 
     @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
     def test_get_bucket_not_found(self, mock_admin_instance):
