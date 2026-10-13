@@ -119,7 +119,6 @@ def main():
     get_resp = bucket.Object(key).get()
     assert put_resp.e_tag == get_resp['ETag'], 'get did not return null version with correct etag'
     # the rollback of the failed olh upgrade must not change the null version's mtime
-    # (without the fix, the rollback rewrote the shared head object with a new mtime)
     head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
     list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
     null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
