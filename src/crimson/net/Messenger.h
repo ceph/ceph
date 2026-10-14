@@ -60,6 +60,10 @@ public:
 
   virtual seastar::future<> mark_down(const entity_addr_t &addr) = 0;
 
+  /// mark down every connection from the peer process at addr: same
+  /// type, IP and nonce, any port
+  virtual seastar::future<> mark_down_all_ports(const entity_addr_t &addr) = 0;
+
   using bind_ertr = crimson::errorator<
     crimson::ct_error::address_in_use, // The address (range) is already bound
     crimson::ct_error::address_not_available
