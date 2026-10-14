@@ -279,6 +279,11 @@ def test_daemon_scans_are_skipped_when_ls_is_not_sent():
         ctx.__exit__(None, None, None)
 
 
+def _ls(mgr, *daemons):
+    return [dict({'style': 'cephadm:v1', 'fsid': mgr._cluster_fsid}, name=name, state=state)
+            for name, state in daemons]
+
+
 def test_daemon_change_from_sent_ls_kicks_serve_loop():
     """With ls sent, a new daemon on the host still kicks the serve loop."""
     ctx, mgr, host = _setup_mgr()
@@ -287,11 +292,74 @@ def test_daemon_change_from_sent_ls_kicks_serve_loop():
         data = _base(host)
         data['ls'] = [{'name': 'mon.a', 'style': 'cephadm:v1', 'fsid': mgr._cluster_fsid}]
         with patch.object(mgr, '_kick_serve_loop') as kick, \
-                patch.object(mgr.cache, 'get_error_daemons',
-                             wraps=mgr.cache.get_error_daemons) as scan:
+                patch.object(mgr.cache, 'get_error_daemons') as scan:
             assert endpoint.handle_metadata(data).processed is True
-        assert scan.call_count >= 2
+        scan.assert_not_called()
         kick.assert_called()
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_new_error_daemon_updates_health_check_and_kicks_serve_loop():
+    """An error daemon reported by the host refreshes the health check and kicks the serve loop."""
+    ctx, mgr, host = _setup_mgr()
+    try:
+        endpoint = HostData(mgr)
+        data = _base(host)
+        data['ls'] = _ls(mgr, ('mon.a', 'running'))
+        assert endpoint.handle_metadata(data).processed is True
+
+        data['ls'] = _ls(mgr, ('mon.a', 'error'))
+        with patch.object(mgr, '_kick_serve_loop') as kick:
+            assert endpoint.handle_metadata(data).processed is True
+        kick.assert_called()
+        assert 'CEPHADM_FAILED_DAEMON' in mgr.health_checks
+
+        data['ls'] = _ls(mgr, ('mon.a', 'running'))
+        with patch.object(mgr, '_kick_serve_loop') as kick:
+            assert endpoint.handle_metadata(data).processed is True
+        kick.assert_called()
+        assert 'CEPHADM_FAILED_DAEMON' not in mgr.health_checks
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_ls_without_daemon_changes_skips_health_check_and_kick():
+    """A resent ls with the same daemons and states changes nothing in the cluster state."""
+    ctx, mgr, host = _setup_mgr()
+    try:
+        endpoint = HostData(mgr)
+        data = _base(host)
+        data['ls'] = _ls(mgr, ('mon.a', 'error'), ('mgr.b', 'running'))
+        assert endpoint.handle_metadata(data).processed is True
+
+        with patch.object(mgr, '_kick_serve_loop') as kick, \
+                patch.object(mgr, 'update_failed_daemon_health_check') as health:
+            assert endpoint.handle_metadata(data).processed is True
+        health.assert_not_called()
+        kick.assert_not_called()
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_error_daemons_of_other_hosts_do_not_affect_report():
+    """Error daemons on other hosts are not looked at when this host reports."""
+    ctx, mgr, host = _setup_mgr()
+    try:
+        other = 'other-host'
+        mgr.inventory.add_host(HostSpec(hostname=other, addr='1::5'))
+        mgr._process_ls_output(other, _ls(mgr, ('osd.1', 'error')))
+
+        endpoint = HostData(mgr)
+        data = _base(host)
+        data['ls'] = _ls(mgr, ('mon.a', 'running'))
+        assert endpoint.handle_metadata(data).processed is True
+
+        with patch.object(mgr, 'update_failed_daemon_health_check') as health, \
+                patch.object(mgr.cache, 'get_error_daemons') as scan:
+            assert endpoint.handle_metadata(data).processed is True
+        scan.assert_not_called()
+        health.assert_not_called()
     finally:
         ctx.__exit__(None, None, None)
 

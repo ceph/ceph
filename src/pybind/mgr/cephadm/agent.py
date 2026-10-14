@@ -1039,12 +1039,13 @@ class HostData:
             # update timestamp of most recent agent update
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
 
-            # Only ls updates the daemons of this host, so the cluster-wide
-            # error-daemon scans are skipped when ls was not sent.
+            # Only ls updates daemons, and only those of this host, so the
+            # change detection looks at this host's daemons and is skipped
+            # when ls was not sent.
             ls_sent = bool(data.get('ls'))
             if ls_sent:
                 with _stats_phase(self.mgr, 'scans'):
-                    error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                    host_errors_old = self._host_error_daemons(host)
                     daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
 
             up_to_date = False
@@ -1065,10 +1066,16 @@ class HostData:
 
             if ls_sent:
                 with _stats_phase(self.mgr, 'scans'):
+                    host_errors_changed = host_errors_old != self._host_error_daemons(host)
                     daemons_changed = (
-                        error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                        host_errors_changed
                         or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
                     )
+                    # The failed-daemon health check only depends on this
+                    # report through the error daemons of this host; the
+                    # serve loop refreshes it on every pass anyway.
+                    if host_errors_changed:
+                        self.mgr.update_failed_daemon_health_check()
                 if daemons_changed:
                     self.mgr.log.debug(
                         f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
@@ -1103,6 +1110,13 @@ class HostData:
             self.mgr.log.warning(err_str)
             return MetadataResult(False, err_str, [])
 
+    def _host_error_daemons(self, host: str) -> Set[str]:
+        """Names of the daemons in error state on the given host."""
+        return {
+            dd.name() for dd in self.mgr.cache.get_daemons_by_host(host)
+            if dd.status == DaemonDescriptionStatus.error
+        }
+
     def _reconcile_delta(self, host: str, data: Dict[str, Any],
                          up_to_date: bool) -> Tuple[Set[str], List[str]]:
         """Split the sections the agent reports as unchanged.
@@ -1124,8 +1138,6 @@ class HostData:
             with _stats_phase(self.mgr, 'ls'):
                 self.mgr._process_ls_output(host, data['ls'])
             host_cache_saved = True  # _process_ls_output() calls save_host().
-            with _stats_phase(self.mgr, 'scans'):
-                self.mgr.update_failed_daemon_health_check()
         if data.get('networks'):
             self.mgr.cache.update_host_networks(host, data['networks'])
             host_cache_changed = True
