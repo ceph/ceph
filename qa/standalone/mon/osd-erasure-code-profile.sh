@@ -294,6 +294,31 @@ function TEST_invalid_crush_failure_domain() {
     ! ceph osd erasure-code-profile set $profile k=4 m=2 crush-failure-domain=$crush_failure_domain 2>&1 || return 1
 }
 
+# A pool created while the deletion of the last pool of the rule it would
+# reuse by name is pending must not get that rule: the monitor would crash
+# computing the new pool's PGs with a rule that is gone
+function TEST_create_while_rule_of_its_name_removed() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set prof k=2 m=1 crush-failure-domain=osd || return 1
+    # keeps the profile while the rule named a goes
+    ceph osd pool create keep 8 8 erasure prof || return 1
+    ceph osd pool create a 8 8 erasure prof || return 1
+    ceph osd pool rename a z || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm z z --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool create a 8 8 erasure prof || return 1
+    wait $pid || return 1
+    timeout 60 ceph osd pool get a crush_rule > $dir/rule || return 1
+    ceph osd crush rule ls | grep -qx "$(awk '{print $2}' $dir/rule)" || return 1
+}
+
 main osd-erasure-code-profile "$@"
 
 # Local Variables:
