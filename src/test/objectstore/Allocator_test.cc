@@ -300,6 +300,22 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   tmp.clear();
   EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, -1, &tmp));
 
+  // Verify fragmentation remains bounded when range_tree is empty and released
+  // extents reside solely in OpportunisticExtentCache (e.g. hybrid_btree2).
+  {
+    interval_set<uint64_t> cached_release;
+    cached_release.insert(allocated[0].offset, allocated[0].length);
+    cached_release.insert(allocated[2].offset, allocated[2].length);
+    alloc->release(cached_release);
+    EXPECT_GE(alloc->get_fragmentation(), 0.0);
+    EXPECT_LE(alloc->get_fragmentation(), 1.0);
+    for (int k = 0; k < 2; ++k) {
+      tmp.clear();
+      EXPECT_EQ(static_cast<int64_t>(want_size),
+        alloc->allocate(want_size, alloc_unit, 0, -1, &tmp));
+    }
+  }
+
   if (!(GetParam() == string("stupid") || GetParam() == string("bitmap"))) {
     GTEST_SKIP() << "skipping for specific allocators";
   }
@@ -345,6 +361,12 @@ TEST_P(AllocTest, test_fragmentation_score_0)
   uint64_t alloc_unit = 4096;
 
   init_alloc(capacity, alloc_unit);
+  EXPECT_EQ(0.0, alloc->get_fragmentation_score());
+
+  alloc->init_add_free(0, alloc_unit);
+  EXPECT_EQ(0.0, alloc->get_fragmentation_score());
+  alloc->init_rm_free(0, alloc_unit);
+
   alloc->init_add_free(0, capacity);
   EXPECT_EQ(0, alloc->get_fragmentation_score());
 

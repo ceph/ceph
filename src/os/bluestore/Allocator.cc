@@ -102,25 +102,28 @@ double Allocator::get_fragmentation_score()
   static const size_t small_chunk_p2 = 20; // 1MB
   static const size_t huge_chunk_p2 = 27; // 128MB
   // for chunks 1MB - 128MB penalty coeffs are linearly weighted 1.2 (at small) ... 1 (at huge)
-  static std::vector<double> scales{1};
+  static const std::vector<double> scales = []() {
+    std::vector<double> s{1};
+    while (s.size() <= sizeof(size_t) * 8) {
+      auto ss = s.size();
+      double scale = double_size_worth_small;
+      if (ss >= huge_chunk_p2) {
+        scale = double_size_worth_huge;
+      } else if (ss > small_chunk_p2) {
+        // linear decrease 1.2 ... 1
+        scale = (double_size_worth_huge * (ss - small_chunk_p2) +
+                 double_size_worth_small * (huge_chunk_p2 - ss)) /
+          (huge_chunk_p2 - small_chunk_p2);
+      }
+      s.push_back(s.back() * scale);
+    }
+    return s;
+  }();
   double score_sum = 0;
   size_t sum = 0;
 
   auto get_score = [&](size_t v) -> double {
     size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
-    while (scales.size() <= sc + 1) {
-      //unlikely expand scales vector
-      auto ss = scales.size();
-      double scale = double_size_worth_small;
-      if (ss >= huge_chunk_p2) {
-	scale = double_size_worth_huge;
-      } else if (ss > small_chunk_p2) {
-	// linear decrease 1.2 ... 1
-	scale = (double_size_worth_huge * (ss - small_chunk_p2) + double_size_worth_small * (huge_chunk_p2 - ss)) /
-	  (huge_chunk_p2 - small_chunk_p2);
-      }
-      scales.push_back(scales[scales.size() - 1] * scale);
-    }
     size_t sc_shifted = size_t(1) << sc;
     double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
     // linear extrapolation in its scale grade
@@ -137,12 +140,15 @@ double Allocator::get_fragmentation_score()
     sum += len;
   };
   foreach_interruptible(iterated_allocation);
-  if (sum == 0) {
+  if (sum <= block_size) {
     return 0.0;
   }
 
   double ideal = get_score(sum);
   double terrible = (sum / block_size) * get_score(block_size);
+  if (ideal <= terrible) {
+    return 0.0;
+  }
   return (ideal - score_sum) / (ideal - terrible);
 }
 
