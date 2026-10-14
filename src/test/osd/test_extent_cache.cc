@@ -773,18 +773,16 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 //      so write_done never fires for the clone target.
 //
 // cache_maybe_ready pops the clone target (read_done=true, invalidation
-// fires).  invalidate() clears do_not_read and pre-sets projected_size =
-// op->projected_size BEFORE replaying — so the growth hole from 0 →
-// projected_size is never re-added.  The clone target Object now has
-// current_size=0 and empty do_not_read.
+// fires).  invalidate() clears do_not_read and replays from projected_size =
+// op->projected_size: the clone's data is not a hole.  The clone target
+// Object has current_size=0 until the clone's write is issued.
 //
 // A new op on the clone oid (via submit_transaction → execute) computes
-// reads with orig_size = projected_size (large), which survive the empty
-// do_not_read.  send_reads fires with current_size=0.  In production,
+// reads with orig_size = projected_size (large).  If send_reads fired before
+// the clone's write, it would use current_size=0.  In production,
 // get_min_avail_to_read_shards returns 0 without populating shard_reads,
 // and do_read_op hits ceph_assert(reads_sent).
-// Disabled until https://tracker.ceph.com/issues/78465 has a new fix.
-TEST(ECExtentCache, DISABLED_CloneInvalidateStaleSize)
+TEST(ECExtentCache, CloneInvalidateStaleSize)
 {
   MultiClient cl(4096, 2, 1, 1024*1024);
   const auto *si = cl.get_stripe_info();
@@ -847,15 +845,14 @@ TEST(ECExtentCache, DISABLED_CloneInvalidateStaleSize)
   //  - X completes → write_done, popped
   //  - Clone target: invalidates_cache=true, reading=false → invalidate()!
   //    invalidate clears do_not_read, sets projected_size=head_size,
-  //    replays clone target (no reads/writes, growth hole NOT re-added
-  //    because projected_size already == op->projected_size)
+  //    replays clone target (no reads/writes, no growth)
   //  - Clone target: complete_if_reads_cached → callback fires
   //  - X2: reads outstanding (from execute) → cache_maybe_ready stops
   //
   // Clone target Object now has:
   //   current_size = 0  (write_done never called — pending_cache_ops > 0)
   //   projected_size = head_size
-  //   do_not_read = EMPTY (invalidation cleared it, growth hole not re-added)
+  //   do_not_read = EMPTY (invalidation cleared it)
 
   // Step 3: A new op on the clone oid arrives (e.g. snap trim or CLS op).
   // submit_transaction → execute → request → send_reads.
@@ -869,23 +866,23 @@ TEST(ECExtentCache, DISABLED_CloneInvalidateStaleSize)
     });
   cl.cache_execute(*op_y);
 
-  // With the fix, invalidate() sets projected_size = current_size (0
-  // for a clone target).  During replay, the growth hole from 0 ->
-  // projected_size is re-added to do_not_read, so the reads are subtracted
-  // and no backend_read is issued.
-  //
-  // Without the fix, the growth hole is NOT re-added, reads survive
-  // do_not_read, and send_reads fires with current_size=0 — which in
-  // production causes ceph_assert(reads_sent).
+  // The clone has not been written, so the shards do not hold Y yet and
+  // the read must wait for the clone's write.  Sent now, it went out with
+  // current_size=0, which in production causes ceph_assert(reads_sent).
   ASSERT_FALSE(cl.active_reads[cl.oid_y].has_value());
 
-  // Clean up: op_x2's reads may have been covered by op_x's do_not_read,
-  // so only complete the read if it was actually issued.
+  // op_x2's reads may have been covered by op_x's do_not_read, so only
+  // complete the read if it was actually issued.
   if (cl.active_reads[cl.oid_x].has_value()) {
     cl.complete_read(cl.oid_x);
   }
   cl.complete_write(*op_x);
   cl.complete_write(*op_clone);
+
+  // Once the clone is written, Y's data is read, for the clone's size.
+  ASSERT_TRUE(cl.active_reads[cl.oid_y].has_value());
+  ASSERT_EQ(head_size, cl.last_read_object_size[cl.oid_y]);
+  cl.complete_read(cl.oid_y);
   cl.complete_write(*op_x2);
   cl.complete_write(*op_y);
 }
