@@ -5548,7 +5548,7 @@ void BlueFS::trim_free_space(const string& type, std::ostream& outss)
     ceph_assert(len > 0);
     interval_set<uint64_t> to_discard;
     to_discard.union_insert(off, len);
-    bdev[bdev_id]->try_discard(to_discard, false);
+    bdev[bdev_id]->try_discard(to_discard, false, true);
   };
   if (!bdev[bdev_id]) {
     outss << "device " << type << " is not configured";
