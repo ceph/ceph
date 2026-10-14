@@ -4,6 +4,7 @@
 edition = "2021"
 
 [dependencies]
+serde_json = "1"
 ---
 //! Stand up NooBaa's NSFS gateway over a data root, so that the
 //! conversion corpus can be run against *their* implementation and the
@@ -290,6 +291,7 @@ const STEPS: &[(&str, &str)] = &[
     ("store-tests", "run the nsfs unit tests that read a real NooBaa store, against this one"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
+    ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
     ("import",   "RGW over the same tree;  import the identities and each bucket's record"),
     ("adopt",    "adopt every bucket:  import its record and convert its tree"),
     ("compare",  "judge the three captures against the expected-difference list"),
@@ -318,6 +320,7 @@ fn main() {
         "store-tests" => store_tests(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
+        "damage" => damage(&env),
         "import" => adopt(&env, "import"),
         "adopt" => adopt(&env, "adopt"),
         "compare" => compare(&env),
@@ -777,6 +780,20 @@ fn config(env: &Env) -> Result<(), String> {
         }
         nsfs_cli(env, &add)?;
         println!("         bucket {:?} created at {}", env.bucket, bucket_path.display());
+    }
+
+    /* The bucket `damage` damages, made as any other is.  It is not a
+     * corpus bucket, so no capture and no comparison sees it. */
+    let damaged_path = env.tree().join(DAMAGED_BUCKET);
+    if nsfs_cli(env, &["bucket", "status", "--name", DAMAGED_BUCKET]).is_ok() {
+        println!("         bucket {DAMAGED_BUCKET:?} already present");
+    } else {
+        std::fs::create_dir_all(&damaged_path)
+            .map_err(|e| format!("cannot create {}: {e}", damaged_path.display()))?;
+        let dp = damaged_path.display().to_string();
+        nsfs_cli(env, &["bucket", "add", "--name", DAMAGED_BUCKET,
+                        "--owner", &env.account, "--path", &dp])?;
+        println!("         bucket {DAMAGED_BUCKET:?} created at {dp}, for `damage`");
     }
 
     /* The NC config file, which is where a config override goes.
@@ -1609,7 +1626,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         return Err("`ceph_build` is not set;  the profile hands the tree to RGW \
                     and runs the nsfs unit binary".into());
     }
-    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 15] = [
+    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 16] = [
         ("pin", &pin),
         ("worktree", &worktree),
         ("patch", &patch),
@@ -1620,6 +1637,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("store-tests", &store_tests),
         ("capture noobaa", &|e| capture(e, "noobaa")),
         ("stop", &stop),
+        ("damage", &damage),
         ("import", &|e| adopt(e, "import")),
         ("capture rgw-unconverted", &|e| capture(e, "rgw-unconverted")),
         ("adopt", &|e| adopt(e, "adopt")),
@@ -1871,7 +1889,12 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         .filter_map(|e| e.file_name().to_str()?.strip_suffix(".json").map(str::to_string))
         .collect();
     names.sort();
+    let damaged = damaged_id(env);
     for name in &names {
+        if damaged.is_some() && name == DAMAGED_BUCKET {
+            println!("{tag} bucket {name}:  damaged by `damage`;  left for the escape hatch");
+            continue;
+        }
         if step == "import" {
             let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&import={name}"))?;
             if status != 200 || json_bool(&body, "configured") != Some(true) {
@@ -1900,6 +1923,9 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
      * 2026-10-13).  Required here, because a pass that does not write it
      * has found something the per-bucket adoption above missed. */
     if step == "adopt" {
+        if let Some(id) = &damaged {
+            escape_hatch(env, &admin, &hint, id)?;
+        }
         let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&run=true"))?;
         if status != 200 || json_bool(&body, "complete") != Some(true) {
             return Err(format!(
@@ -1908,7 +1934,150 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         }
         println!("{tag} adoption complete at {}",
                  json_str(&body, "completed_at").unwrap_or_default());
+        if damaged.is_some() {
+            after_the_escape_hatch(env, &admin)?;
+        }
     }
+    Ok(())
+}
+
+/// The bucket `damage` damages.  Made by `config` like any other.
+const DAMAGED_BUCKET: &str = "corpus-damaged";
+
+/// An account `_id` no identity in the store has.
+const NO_SUCH_OWNER: &str = "000000000000000000000000";
+
+/// Where `damage` records what it did, for the steps after it.
+fn damaged_marker(env: &Env) -> PathBuf {
+    env.work.join("damaged.json")
+}
+
+/// The `_id` of the record `damage` damaged, if it ran.
+fn damaged_id(env: &Env) -> Option<String> {
+    let text = std::fs::read_to_string(damaged_marker(env)).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    v["id"].as_str().map(str::to_string)
+}
+
+/// Damage one bucket record, discretely:  its `owner_account` becomes an
+/// `_id` no identity has.  The record still parses, so it can be found
+/// and abandoned by `_id`;  RGW's import refuses it, because its owner
+/// is not an account the import wrote.  So adoption meets a record it
+/// cannot carry, and the escape hatch has something real to do.
+///
+/// The harness writes NooBaa's store here, with NooBaa stopped, as a
+/// fixture.  RGW never does.
+fn damage(env: &Env) -> Result<(), String> {
+    if let Some(pid) = running(env) {
+        return Err(format!("NooBaa is still running (pid {pid});  run `stop` first"));
+    }
+    let path = env.config_root().join("buckets").join(format!("{DAMAGED_BUCKET}.json"));
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let mut record: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("{} is not JSON: {e}", path.display()))?;
+    let id = record["_id"].as_str()
+        .ok_or_else(|| format!("{} has no _id", path.display()))?
+        .to_string();
+    let was = record["owner_account"].as_str().unwrap_or_default().to_string();
+    if was == NO_SUCH_OWNER {
+        println!("damage   {DAMAGED_BUCKET}:  already damaged");
+    } else {
+        record["owner_account"] = serde_json::Value::from(NO_SUCH_OWNER);
+        std::fs::write(&path, record.to_string())
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        println!("damage   {DAMAGED_BUCKET} (_id {id}):  owner_account {was} -> {NO_SUCH_OWNER}");
+    }
+    let marker = serde_json::json!({
+        "bucket": DAMAGED_BUCKET, "id": id, "field": "owner_account",
+        "was": was, "now": NO_SUCH_OWNER,
+    });
+    std::fs::write(damaged_marker(env), marker.to_string())
+        .map_err(|e| format!("cannot write {}: {e}", damaged_marker(env).display()))?;
+    Ok(())
+}
+
+/// Parse a reply, naming the request on failure.
+fn reply_json(what: &str, body: &str) -> Result<serde_json::Value, String> {
+    serde_json::from_str(body).map_err(|e| format!("{what}:  not JSON ({e}):\n{body}"))
+}
+
+/// The escape hatch, end to end against the live gateway (DECISIONS.md
+/// 2026-10-14):  the damaged record blocks completion, it is abandoned
+/// with a reason, and the listing shows it.  `adopt` then requires the
+/// full pass to complete.
+fn escape_hatch(env: &Env, admin: &str, hint: &str, id: &str) -> Result<(), String> {
+    let base = format!("http://127.0.0.1:{}", env.rgw_port);
+
+    /* the control:  the damage is real, so the pass cannot complete */
+    let (status, _) = rgw_call(admin, "DELETE", &format!("{hint}&run=true"))?;
+    if status == 200 {
+        return Err("the full pass succeeded with the damaged record in place;  \
+                    the damage did not take".into());
+    }
+    let (_, body) = rgw_call(admin, "DELETE", hint)?;
+    let state = reply_json("the adoption hint", &body)?;
+    if state["results"]["complete"].as_bool() != Some(false) {
+        return Err(format!("adoption reports complete with the damaged record unadopted:\n{body}"));
+    }
+    println!("adopt    {DAMAGED_BUCKET}:  blocks completion, as damaged");
+
+    /* the cap, which the gateway's bootstrap does not grant */
+    let ak = admin.split(':').next().unwrap_or_default();
+    let (status, body) = rgw_call(admin, "GET",
+        &format!("{base}/admin/user?access-key={ak}&format=json"))?;
+    let me = reply_json("the admin user", &body)?;
+    let uid = me["user_id"].as_str().filter(|u| !u.is_empty())
+        .ok_or_else(|| format!("cannot find the admin user ({status}):\n{body}"))?
+        .to_string();
+    let (status, body) = rgw_call(admin, "PUT",
+        &format!("{base}/admin/user?caps&uid={uid}&user-caps=nsfs-adoption%3D%2A&format=json"))?;
+    if status != 200 {
+        return Err(format!("granting nsfs-adoption failed ({status}):\n{body}"));
+    }
+
+    /* abandon it, with a reason */
+    let (status, body) = rgw_call(admin, "PUT", &format!(
+        "{base}/admin/nsfs/abandoned?id={id}&reason=damaged%20by%20the%20stand-up%27s%20damage%20step"))?;
+    if status != 200 {
+        return Err(format!("abandoning {DAMAGED_BUCKET} failed ({status}):\n{body}"));
+    }
+    let entry = reply_json("the abandonment", &body)?;
+    if entry["stage"].as_str() != Some("not imported") || entry["kind"].as_str() != Some("bucket") {
+        return Err(format!("the abandonment recorded the wrong kind or stage:\n{body}"));
+    }
+
+    let (status, body) = rgw_call(admin, "GET", &format!("{base}/admin/nsfs/abandoned"))?;
+    let listed = reply_json("the abandoned listing", &body)?;
+    let found = listed.as_array().map_or(false, |a| a.iter().any(|e| e["id"].as_str() == Some(id)));
+    if status != 200 || !found {
+        return Err(format!("the abandoned listing does not show {DAMAGED_BUCKET} ({status}):\n{body}"));
+    }
+    println!("adopt    {DAMAGED_BUCKET}:  abandoned (not imported), and listed");
+    Ok(())
+}
+
+/// After completion:  the abandoned bucket is not served, its tree is
+/// untouched, and the abandonment is fixed.
+fn after_the_escape_hatch(env: &Env, admin: &str) -> Result<(), String> {
+    let base = format!("http://127.0.0.1:{}", env.rgw_port);
+    /* a listing, not HEAD:  curl -X HEAD waits for a body that is not
+     * coming */
+    let (status, _) = rgw_call(admin, "GET", &format!("{base}/{DAMAGED_BUCKET}"))?;
+    if status != 404 {
+        return Err(format!("{DAMAGED_BUCKET} is served after completion ({status});  \
+                            an abandoned bucket never imported must not be"));
+    }
+    if !env.tree().join(DAMAGED_BUCKET).is_dir() {
+        return Err(format!("{DAMAGED_BUCKET}'s directory is gone;  abandoning must not touch data"));
+    }
+    let id = damaged_id(env).unwrap_or_default();
+    let (status, body) = rgw_call(admin, "DELETE",
+        &format!("{base}/admin/nsfs/abandoned?id={id}"))?;
+    if status != 409 {
+        return Err(format!("taking the abandonment back after completion was not refused ({status}):\n{body}"));
+    }
+    println!("adopt    {DAMAGED_BUCKET}:  not served, its tree untouched, the abandonment fixed");
     Ok(())
 }
 
