@@ -1205,10 +1205,14 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   std::set<pg_shard_t> object_errors;  // be returned
   std::vector<shard_id_map<bufferlist>> zone_digests;
   std::map<shard_id_t, shard_id_t> corrupt_copies;
-  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
-      m_depth == scrub_level_t::deep) {
+  // the copies of a shard in different zones are compared whatever the
+  // plugin; checking a zone's stripe needs it to encode and decode CRCs
+  const bool crc_decode = m_pg.get_ec_supports_crc_encode_decode();
+  if (!m_is_replicated && m_depth == scrub_level_t::deep &&
+      (crc_decode || m_pg.get_ec_sinfo().get_num_zones() > 1)) {
     zone_digests = collect_ec_zone_digests(ho, auth_sel);
-    corrupt_copies = find_corrupt_zone_copies(ho, auth_sel, zone_digests);
+    corrupt_copies =
+      find_corrupt_zone_copies(ho, auth_sel, zone_digests, crc_decode);
   }
 
   for (const auto& [srd, smap] : this_chunk->received_maps) {
@@ -1327,7 +1331,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
              << dendl;
   }
 
-  for (int zone = 0; std::cmp_less(zone, zone_digests.size()); ++zone) {
+  for (int zone = 0; crc_decode && std::cmp_less(zone, zone_digests.size());
+       ++zone) {
     check_ec_stripe_digests(ho, auth_sel, zone, zone_digests[zone],
                             obj_result, errstream);
   }
@@ -1384,7 +1389,8 @@ std::vector<shard_id_map<bufferlist>> ScrubBackend::collect_ec_zone_digests(
 std::map<shard_id_t, shard_id_t> ScrubBackend::find_corrupt_zone_copies(
     const hobject_t& ho,
     const auth_selection_t& auth_sel,
-    std::vector<shard_id_map<bufferlist>>& zone_digests)
+    std::vector<shard_id_map<bufferlist>>& zone_digests,
+    bool crc_decode)
 {
   std::map<shard_id_t, shard_id_t> corrupt;
   if (zone_digests.size() < 2) {
@@ -1403,6 +1409,10 @@ std::map<shard_id_t, shard_id_t> ScrubBackend::find_corrupt_zone_copies(
 
   std::vector<bool> consistent;
   for (const auto& digests : zone_digests) {
+    if (!crc_decode) {
+      consistent.push_back(false);
+      continue;
+    }
     shard_id_map<bufferlist> copy{digests.max_size()};
     for (const auto& [shard, bl] : digests) {
       copy[shard] = copy_of(bl);

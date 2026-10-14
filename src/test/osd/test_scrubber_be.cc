@@ -185,8 +185,11 @@ class TestPg : public PgScrubBeListener {
   };
 
   bool get_ec_supports_crc_encode_decode() const final {
-    return get_is_ec_optimized();
+    return get_is_ec_optimized() && ec_crc_encode_decode;
   }
+  // whether the plugin can encode and decode CRCs, as jerasure's FastEC
+  // technique cannot
+  bool ec_crc_encode_decode = true;
 
   ECUtil::stripe_info_t get_ec_sinfo() const final { return *m_sinfo; }
 
@@ -1055,6 +1058,40 @@ TEST_F(TestTScrubberBeECStretchM2, corrupt_last_parity_copy_in_first_zone) {
   const auto& obj = std::get<inconsistent_obj_wrapper>(incons.front());
   for (const auto& [osd_shard, shard] : obj.shards) {
     EXPECT_EQ(osd_shard.osd == corrupt.osd || osd_shard.osd == good.osd,
+              shard.has_ec_hash_error())
+        << "osd " << osd_shard.osd << ", corrupted " << corrupt;
+  }
+}
+
+// A plugin that cannot encode and decode CRCs, as jerasure's FastEC
+// technique cannot, gives no coding check of a zone's stripe, but the copies
+// of a shard in the two zones must still match.
+class TestTScrubberBeECStretchNoCrc : public TestTScrubberBeECStretch {
+ public:
+  void ec_set_stripe_info() override {
+    test_pg->ec_crc_encode_decode = false;
+    TestTScrubberBeECStretch::ec_set_stripe_info();
+  }
+};
+
+TEST_F(TestTScrubberBeECStretchNoCrc, no_corruption) {
+  logger.set_expected_err_count(0);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  EXPECT_EQ(0u, incons.size());
+}
+
+// Nothing shows which copy is good, so both copies are reported and repair
+// rebuilds both.
+TEST_F(TestTScrubberBeECStretchNoCrc, corrupt_zone_copy) {
+  const pg_shard_t corrupt = pg_shard_of(shard_id_t(0));
+  const pg_shard_t other = pg_shard_of(shard_id_t(k + m));
+  corrupt_digest(corrupt);
+  logger.set_expected_err_count(1);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  ASSERT_EQ(1u, incons.size());
+  const auto& obj = std::get<inconsistent_obj_wrapper>(incons.front());
+  for (const auto& [osd_shard, shard] : obj.shards) {
+    EXPECT_EQ(osd_shard.osd == corrupt.osd || osd_shard.osd == other.osd,
               shard.has_ec_hash_error())
         << "osd " << osd_shard.osd << ", corrupted " << corrupt;
   }

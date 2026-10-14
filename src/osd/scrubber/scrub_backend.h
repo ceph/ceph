@@ -471,11 +471,13 @@ class ScrubBackend {
 
   /// Copies of a relative shard whose CRC differs from the copy in the first
   /// zone whose stripe decodes consistently, mapped to that copy's absolute
-  /// shard. zone_digests gets that copy's CRC in their place.
+  /// shard. zone_digests gets that copy's CRC in their place. Without
+  /// crc_decode no stripe is checked, so the CRC that most zones hold wins.
   std::map<shard_id_t, shard_id_t> find_corrupt_zone_copies(
       const hobject_t& ho,
       const auth_selection_t& auth_sel,
-      std::vector<shard_id_map<bufferlist>>& zone_digests);
+      std::vector<shard_id_map<bufferlist>>& zone_digests,
+      bool crc_decode);
 
   /// Data shards whose CRC does not decode from the rest of one zone's
   /// stripe, or nullopt if it cannot be decoded. Unseeds the digests.
