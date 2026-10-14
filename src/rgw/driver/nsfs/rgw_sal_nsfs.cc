@@ -4036,18 +4036,16 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	const DoutPrefix dp{ctx(), dout_subsys,
 			    "nsfs multipart stabilize: "};
 
-	/* get_root_fd(), not the root_fd member:  that member is
-	 * declared and never assigned, and this was its only reader.
-	 * An openat from an uninitialised descriptor is whatever
-	 * integer happened to be there, so the callback could not have
-	 * worked -- which is why the two defects above it had never
-	 * been seen. */
-	int bfd = ::openat(get_root_fd(), key.bucket_name.c_str(),
-			   O_RDONLY | O_DIRECTORY);
-	if (bfd < 0) {
+	/* Resolved as every lookup is, from the row or NooBaa's record:
+	 * a bucket at a stored path is not under the base path, and the
+	 * key carries the tenant the row is keyed by. */
+	const auto [tenant, name] =
+	  nsfs::mp_cache_bucket_split(key.bucket_name);
+	auto bdir = placed_bucket_dir(&dp, name, tenant);
+	if (!bdir || (bdir->open(&dp) < 0)) {
 	  return;
 	}
-	auto close_bfd = make_scope_guard([bfd] { ::close(bfd); });
+	const int bfd = bdir->get_fd();
 
 	/* Which layout staged this upload, found rather than assumed.
 	 *
@@ -4672,24 +4670,34 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* The directory of a bucket nothing places:  no row, and no NooBaa
+ * record.  It has no path, so opening it is -ENOENT and nothing on disk
+ * is consulted -- a directory under the base path is not a bucket
+ * because of where it sits (DECISIONS.md 2026-10-13).  The handle is
+ * still a bucket, because RGW's CreateBucket creates through the one
+ * load_bucket() returned, and create() places it. */
+std::unique_ptr<nsfs::Directory>
+NSFSDriver::bucket_dir(const DoutPrefixProvider* dpp, const std::string& name,
+		       const std::string& tenant)
+{
+  if (auto placed = placed_bucket_dir(dpp, name, tenant)) {
+    return placed;
+  }
+  return make_placed_dir(std::string{});
+}
+
 int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  if (auto placed = placed_bucket_dir(dpp, b.name, b.tenant)) {
-    *bucket = std::make_unique<NSFSBucket>(this, std::move(placed), b);
-  } else {
-    *bucket = std::make_unique<NSFSBucket>(this, root_dir.get(), b);
-  }
+  *bucket = std::make_unique<NSFSBucket>(this, bucket_dir(dpp, b.name,
+							  b.tenant), b);
   return (*bucket)->load_bucket(dpp, y);
 }
 
 std::unique_ptr<Bucket> NSFSDriver::get_bucket(const RGWBucketInfo& i)
 {
   /* Don't need to fetch the bucket info, use the provided one */
-  if (auto placed = placed_bucket_dir(nullptr, i.bucket.name,
-				      i.bucket.tenant)) {
-    return std::make_unique<NSFSBucket>(this, std::move(placed), i);
-  }
-  return std::make_unique<NSFSBucket>(this, root_dir.get(), i);
+  return std::make_unique<NSFSBucket>(
+    this, bucket_dir(nullptr, i.bucket.name, i.bucket.tenant), i);
 }
 
 std::string NSFSDriver::zone_unique_trans_id(const uint64_t unique_num)
@@ -7507,7 +7515,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       nsfs::MPUStrategy::PartRecord rec{};
       file::listing::MultipartPartInfo cached;
       auto* mc = driver->get_multipart_cache();
-      if (mc && mc->peek_part({get_name(), meta}, *num, cached)) {
+      if (mc && mc->peek_part({nsfs::mp_cache_bucket(get_tenant(), get_name()), meta},
+				  *num, cached)) {
 	rec.size = cached.size;
 	/* a part in a file of its own leaves `stored` at 0 in the cache;
 	 * its bytes are then the part's accounted size */
@@ -7690,7 +7699,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
      * part was already in its own file (DECISIONS.md 2026-10-13). */
     if (placement_changed) {
       if (auto* mc = driver->get_multipart_cache()) {
-	mc->remove({get_name(), meta});
+	mc->remove({nsfs::mp_cache_bucket(get_tenant(), get_name()), meta});
       }
     }
 
@@ -12922,7 +12931,8 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
   }
 
   file::listing::MultipartCacheKey cache_key{
-    bucket->get_name(), mp_obj.meta};
+    nsfs::mp_cache_bucket(bucket->get_tenant(), bucket->get_name()),
+    mp_obj.meta};
 
   auto result = mc->list_parts(
     cache_key, marker, num_parts,
@@ -13019,7 +13029,8 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
   }
 
   if (auto* mc = driver->get_multipart_cache()) {
-    mc->remove({bucket->get_name(), mp_obj.meta});
+    mc->remove({nsfs::mp_cache_bucket(bucket->get_tenant(),
+					bucket->get_name()), mp_obj.meta});
   }
   shadow->remove(dpp, true, y);
 
@@ -13419,7 +13430,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   // remove multipart cache entry and staging directory
   if (auto* mc = driver->get_multipart_cache()) {
-    mc->remove({bucket->get_name(), mp_obj.meta});
+    mc->remove({nsfs::mp_cache_bucket(bucket->get_tenant(),
+					bucket->get_name()), mp_obj.meta});
   }
   shadow->get_dir()->close();
   /* under the staging root, which is the bucket directory only where
@@ -13621,7 +13633,9 @@ NSFSMultipartUpload::established_stride(const DoutPrefixProvider* dpp,
   uint64_t stored = 0;
   if (auto* mc = driver->get_multipart_cache(); mc) {
     file::listing::MultipartPartInfo pi;
-    if (mc->peek_part({bucket->get_name(), mp_obj.meta}, 1, pi)) {
+    if (mc->peek_part({nsfs::mp_cache_bucket(bucket->get_tenant(),
+						 bucket->get_name()),
+			     mp_obj.meta}, 1, pi)) {
       stored = pi.stored;
     }
   }
@@ -13668,7 +13682,8 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
   load(dpp);
 
   file::listing::MultipartCacheKey cache_key{
-    bucket->get_name(), mp_obj.meta};
+    nsfs::mp_cache_bucket(bucket->get_tenant(), bucket->get_name()),
+    mp_obj.meta};
 
   /* Ask the layout where the bytes go.  The stride is the upload's
    * established uniform part size, which part 1 sets at its completion
@@ -13909,7 +13924,8 @@ int NSFSMultipartWriter::complete(
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(rctx.dpp, driver, mp_cache_key.bucket_name);
+  NSFSMutationGuard mg(rctx.dpp, driver,
+		       nsfs::mp_cache_bucket_split(mp_cache_key.bucket_name).second);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14576,14 +14592,12 @@ int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
 				   uint32_t* had, std::string* had_profile,
 				   nsfs::ConvertProgress* progress)
 {
-  rgw_bucket b;
-  b.name = name;
-  NSFSBucket bucket(this, root_dir.get(), b);
-
-  int ret = bucket.load_bucket(dpp, y);
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  int ret = load_bucket(dpp, rgw_bucket{"", name}, &loaded, y);
   if (ret < 0) {
     return ret;
   }
+  auto& bucket = *static_cast<NSFSBucket*>(loaded.get());
 
   const nsfs::BucketProfile* was = bucket.get_profile();
   if (had) {
@@ -14604,19 +14618,18 @@ int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
 				   uint32_t* extensions, std::string* pname,
 				   bool* converting)
 {
-  rgw_bucket b;
-  b.name = name;
-  NSFSBucket bucket(this, root_dir.get(), b);
-
   /* -EBADMSG is unreadable bucket state, and a profile does not come
    * from bucket state -- resolve_profile() has already read the marker
    * by the time the state is loaded.  An operator diagnosing a bucket
    * that fails closed needs this endpoint precisely then, so it is the
-   * one caller that does not treat unreadable state as fatal. */
-  int ret = bucket.load_bucket(dpp, y);
+   * one caller that does not treat unreadable state as fatal.
+   * load_bucket() hands back the bucket whatever it returns. */
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  int ret = load_bucket(dpp, rgw_bucket{"", name}, &loaded, y);
   if ((ret < 0) && (ret != -EBADMSG)) {
     return ret;
   }
+  auto& bucket = *static_cast<NSFSBucket*>(loaded.get());
 
   const nsfs::BucketProfile* p = bucket.get_profile();
   if (extensions) {
@@ -15266,13 +15279,13 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       return -EINVAL;
     }
 
-    rgw_bucket b;
-    b.name = it->second;
-    NSFSBucket bucket(this, root_dir.get(), b);
-    int ret = bucket.load_bucket(dpp, null_yield);
+    std::unique_ptr<rgw::sal::Bucket> loaded;
+    int ret = load_bucket(dpp, rgw_bucket{"", it->second}, &loaded,
+			  null_yield);
     if (ret < 0) {
       return ret;
     }
+    auto& bucket = *static_cast<NSFSBucket*>(loaded.get());
     if (out) {
       (*out)["had_profile"] = bucket.profile_name();
     }

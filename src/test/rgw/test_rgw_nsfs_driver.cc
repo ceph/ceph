@@ -4999,10 +4999,6 @@ public:
     ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE), 0);
     ASSERT_STREQ(b->profile_name(), "base");
     ASSERT_STREQ(b->get_format()->name(), "noobaa");
-    /* NooBaa made this bucket, so nsfs holds no row for it:  what places
-     * a NooBaa bucket is its record, until the import writes a row. */
-    ASSERT_EQ(driver->get_identity_db()->remove_bucket_placement(
-		  env->dpp, testname, ""), 0);
   }
 
   sf::path bucket_path() const { return bp / "root" / testname; }
@@ -5493,6 +5489,10 @@ public:
     sf::create_directories(conf_root() / "buckets");
     g_conf().set_val("rgw_nsfs_noobaa_config_root", conf_root().string());
     NSFSNooBaaBucketTest::SetUp();
+    /* NooBaa made this bucket, so nsfs holds no row for it:  what places
+     * a NooBaa bucket is its record, until the import writes a row. */
+    ASSERT_EQ(driver->get_identity_db()->remove_bucket_placement(
+		  env->dpp, testname, ""), 0);
   }
 
   void TearDown() override {
@@ -13335,6 +13335,76 @@ TEST_F(NSFSPlacedBucketTest, AFailedMkdirLeavesNoRow)
       << "the row outlived the directory it named";
 }
 
+/* A directory nothing places is not a bucket:  no row and no NooBaa
+ * record means -ENOENT, wherever the directory sits.  The control is
+ * the same directory with a row. */
+TEST_F(NSFSPlacedBucketTest, ADirectoryWithoutARowOrRecordIsNoBucket)
+{
+  const sf::path stray = bp / "root" / "stray";
+  sf::create_directories(stray);
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "stray"},
+				&loaded, null_yield), -ENOENT)
+      << "a directory under the base path was served as a bucket";
+
+  place("stray", stray);
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "stray"},
+				&loaded, null_yield), 0)
+      << "the row did not make the directory resolve";
+}
+
+/* The profile endpoint resolves the bucket as every lookup does.  It
+ * built `<base>/<name>` itself, so a placed bucket was -ENOENT. */
+TEST_F(NSFSPlacedBucketTest, TheProfileEndpointFindsAPlacedBucket)
+{
+  const sf::path acct = elsewhere() / "acct";
+  sf::create_directories(acct);
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  id.new_buckets_path = acct.string();
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+  auto bucket = make_bucket("profiled");
+  ASSERT_TRUE(sf::is_directory(acct / "profiled"));
+
+  uint32_t ext = 0;
+  std::string pname;
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, "profiled",
+				       &ext, &pname), 0);
+  EXPECT_EQ(pname, "shared");
+
+  uint32_t had = 0;
+  std::string had_profile;
+  ASSERT_EQ(driver->set_bucket_profile(
+		env->dpp, null_yield, "profiled",
+		*nsfs::extensions_for_profile("strong"), &had, &had_profile),
+	    0);
+  EXPECT_EQ(had_profile, "shared");
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, "profiled",
+				       &ext, &pname), 0);
+  EXPECT_EQ(pname, "strong") << "the change did not reach the placed bucket";
+  EXPECT_FALSE(sf::exists(bp / "root" / "profiled"));
+}
+
+/* The profile hint resolves the bucket too. */
+TEST_F(NSFSPlacedBucketTest, TheProfileHintFindsAPlacedBucket)
+{
+  const sf::path acct = elsewhere() / "acct";
+  sf::create_directories(acct);
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  id.new_buckets_path = acct.string();
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+  auto bucket = make_bucket("hinted");
+
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "bucket-profile",
+				{{"bucket", "hinted"}, {"profile", "strong"}},
+				&out), 0);
+  EXPECT_EQ(out["had_profile"], "shared");
+  EXPECT_EQ(out["profile"], "strong");
+}
+
 /* Deleting a bucket deletes its row. */
 TEST_F(NSFSPlacedBucketTest, RemovalDeletesTheRow)
 {
@@ -13394,6 +13464,83 @@ TEST_F(NSFSPlacedBucketTest, TheTenantSelectsTheRow)
   ASSERT_EQ(loaded->merge_and_store_attrs(env->dpp, attrs, null_yield), 0);
   EXPECT_GT(::getxattr(a.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
       << "the tenanted bucket did not resolve to its row";
+}
+
+/* A placed bucket under writeback, with a cache small enough that a
+ * second upload evicts the first.  Eviction is the only thing that
+ * writes the part records under this policy, and its callback opened
+ * `<base>/<name>`:  a placed bucket's records were lost, and its upload
+ * could not complete. */
+class NSFSPlacedEvictingTest : public NSFSPlacedBucketTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::writeback;
+  }
+  std::array<uint64_t, 4> mp_cache_sizes() const override {
+    return {1, 1, 1, 8};
+  }
+
+  void evict_and_complete(const std::string& tenant) {
+    const sf::path acct = elsewhere() / "acct";
+    sf::create_directories(acct);
+    nsfs::Identity id;
+    id.key = to_string(owner);
+    id.new_buckets_path = acct.string();
+    ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+
+    RGWBucketInfo info;
+    info.bucket.tenant = tenant;
+    info.bucket.name = "evicting";
+    info.owner = owner;
+    auto bucket = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    ASSERT_EQ(bucket->create(env->dpp, cp, null_yield), 0);
+    const std::string dname = tenant.empty() ? "evicting"
+					     : (tenant + "$evicting");
+    ASSERT_TRUE(sf::is_directory(acct / dname));
+
+    const std::string objname = "big.bin";
+    auto upload = bucket->get_multipart_upload(
+	objname, "11111111-2222-4333-8444-555555555555");
+    rgw_placement_rule placement;
+    Attrs attrs;
+    ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement,
+			   attrs), 0);
+    const size_t stride = 64;
+    std::string expected;
+    std::map<int, std::string> part_etags;
+    for (int i = 1; i <= 3; ++i) {
+      std::string payload(stride, static_cast<char>('a' + i));
+      part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				    payload);
+      expected += payload;
+    }
+
+    /* the second upload evicts the first one's entry */
+    auto other = bucket->get_multipart_upload(
+	"other.bin", "22222222-3333-4444-8555-666666666666");
+    ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+    write_mp_part(other.get(), acl_owner, &placement, 1,
+		  std::string(stride, 'z'));
+
+    ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			  part_etags), 0)
+	<< "the evicted parts' records did not reach the placed bucket";
+    EXPECT_EQ(read_all(acct / dname / objname), expected);
+  }
+};
+
+TEST_F(NSFSPlacedEvictingTest, APlacedBucketsEvictedPartsSurvive)
+{
+  evict_and_complete("");
+}
+
+/* The tenant travels in the cache key, since the row is keyed by it. */
+TEST_F(NSFSPlacedEvictingTest, ATenantsPlacedBucketsEvictedPartsSurvive)
+{
+  evict_and_complete("t1");
 }
 
 /* ------------------------------------------------------------------ *
@@ -13566,13 +13713,14 @@ TEST_F(NSFSRecordedPathTest, APathWeWouldNotStoreIsNotServedFrom)
       "\",\"versioning\":\"DISABLED\",\"path\":\"" + bad + "\"}";
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
 
-    /* falls back to the default location rather than following it */
+    /* Not followed, and not replaced by the base path either:  the
+     * record is what places a NooBaa bucket, and a path we would not
+     * store places nothing (DECISIONS.md 2026-10-13). */
     std::unique_ptr<rgw::sal::Bucket> loaded;
     const int ret = driver->load_bucket(env->dpp,
 					rgw_bucket{"", testname}, &loaded,
 					null_yield);
-    EXPECT_EQ(ret, 0) << "refusing the path should fall back, not fail: "
-		      << bad;
+    EXPECT_EQ(ret, -ENOENT) << "a bucket was served for the path " << bad;
   }
 }
 

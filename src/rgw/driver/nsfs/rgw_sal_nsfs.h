@@ -49,6 +49,26 @@ class NSFSObject;
 
 namespace nsfs {
 
+/* The multipart cache's bucket field, which has to find the bucket again
+ * from an eviction with nothing else in hand.  `<tenant>/<name>`, or the
+ * name alone without a tenant;  a bucket name cannot contain '/'. */
+inline std::string mp_cache_bucket(const std::string& tenant,
+				   const std::string& name)
+{
+  return tenant.empty() ? name : (tenant + "/" + name);
+}
+
+/* {tenant, name} back from mp_cache_bucket(). */
+inline std::pair<std::string, std::string>
+mp_cache_bucket_split(const std::string& field)
+{
+  const auto slash = field.find('/');
+  if (slash == std::string::npos) {
+    return {std::string{}, field};
+  }
+  return {field.substr(0, slash), field.substr(slash + 1)};
+}
+
 /* What the upgrade is doing, at the moment it calls back.
  *
  * A bucket moving from base to a named profile rewrites every object
@@ -1034,6 +1054,12 @@ public:
   std::unique_ptr<nsfs::Directory>
   placed_bucket_dir(const DoutPrefixProvider* dpp, const std::string& name,
 		    const std::string& tenant);
+
+  /* Every bucket's Directory:  placed by its row or NooBaa's record,
+   * or else one with no path, which is -ENOENT. */
+  std::unique_ptr<nsfs::Directory>
+  bucket_dir(const DoutPrefixProvider* dpp, const std::string& name,
+	     const std::string& tenant);
 
   /* The Directory for a bucket at an absolute path:  no parent, and
    * seeded with the strategies the base path's Directory is given. */
