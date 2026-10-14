@@ -160,6 +160,7 @@ degrade_namespace_on_kmip_error = True
 fail_io_for_degraded_namespace = True
 resize_degraded_namespace = True
 verify_image_encryption_settings = True
+verify_pool_applications = True
 
 [gateway-logs]
 log_level = INFO
@@ -505,6 +506,7 @@ degrade_namespace_on_kmip_error = True
 fail_io_for_degraded_namespace = True
 resize_degraded_namespace = True
 verify_image_encryption_settings = True
+verify_pool_applications = True
 
 [gateway-logs]
 log_level = INFO
@@ -707,6 +709,7 @@ degrade_namespace_on_kmip_error = True
 fail_io_for_degraded_namespace = True
 resize_degraded_namespace = True
 verify_image_encryption_settings = True
+verify_pool_applications = True
 
 [gateway-logs]
 log_level = INFO
