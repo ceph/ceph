@@ -468,6 +468,27 @@ function TEST_crush_rule_create_simple_racing_its_removal() {
     ceph osd crush rule ls | grep -qx race_rule || return 1
 }
 
+# A default rule named in the update that removes the rule must not be taken:
+# replicated pools would have no default rule left
+function TEST_pool_default_rule_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    ! timeout 60 ceph osd pool default set --rule race_rule > $dir/out 2>&1 || return 1
+    wait $pid || return 1
+    grep "does not exist" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx race_rule || return 1
+    timeout 60 ceph osd pool create p 8 || return 1
+}
+
 # osd pool set num_zones checks the rule and the replicas as pool create does
 function TEST_pool_set_num_zones_checks() {
     local dir=$1
