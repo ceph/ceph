@@ -1161,6 +1161,12 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
       ss << "rule '" << p.rule << "' does not exist";
       return -ENOENT;
     }
+    // replicated pools fall back on the default rule
+    if (!osdmap.crush->rule_valid_for_pool_type(rule_id,
+                                                pg_pool_t::TYPE_REPLICATED)) {
+      ss << "rule '" << p.rule << "' is not a replicated rule";
+      return -EINVAL;
+    }
   }
 
   // 4. the checks that the next ceph osd pool create would make
