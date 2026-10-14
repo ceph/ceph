@@ -331,6 +331,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   void publish_stats_to_osd() override {
     stats_published = true;
+    ++publish_stats_call_count;
+    if (!ps->is_dispatching_peering_event()) {
+      saw_publish_stats_outside_dispatch = true;
+    }
   }
 
   void clear_publish_stats() override {
@@ -525,6 +529,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool pg_temp_cleared = false;
   bool pg_migrated_pool_sent = false;
   bool stats_published = false;
+  int publish_stats_call_count = 0;
+  bool saw_publish_stats_outside_dispatch = false;
   bool stats_cleared = false;
   bool recovery_sources_checked = false;
   bool blocklisted_watchers_checked = false;

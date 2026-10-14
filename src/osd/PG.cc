@@ -807,10 +807,43 @@ void PG::publish_stats_to_osd()
     });
 
   std::lock_guard l{pg_stats_publish_lock};
+  const bool was_dirty = recovery_state.debug_has_dirty_state();
   auto stats =
     recovery_state.prepare_stats_for_publish(pg_stats_publish, unstable_stats);
   if (stats) {
     pg_stats_publish = std::move(stats);
+  }
+
+  if (was_dirty || !recovery_state.debug_has_dirty_state()) {
+    return;
+  }
+
+  if (recovery_state.is_dispatching_peering_event()) {
+    // The peering-event dispatch currently in progress
+    // (do_peering_event()/advance_map()/activate_map()) already calls
+    // write_if_dirty(rctx.transaction) right after it finishes, so this
+    // transition will be flushed through that transaction. A brand-new
+    // PG's own collection-creation transaction can still be pending in
+    // rctx at this point (OSD::handle_pg_create_info() dispatches
+    // activate_map() before submitting it), so issuing a second,
+    // standalone transaction here could reach the store before that
+    // one and hit a collection that doesn't exist yet.
+    dout(15) << __func__ << " deferring a new vulnerability/rebuild "
+             << "latch transition to the current peering event "
+             << "dispatch's own write_if_dirty()" << dendl;
+    return;
+  }
+
+  // Not every caller of publish_stats_to_osd() has a transaction in
+  // flight to carry this write. An op/repop-completion callback, for
+  // instance, runs after its own transaction has already committed.
+  // So don't rely on one coming along later; write it now.
+  dout(15) << __func__ << " forcing an immediate write for a new "
+           << "vulnerability/rebuild latch transition" << dendl;
+  ObjectStore::Transaction t;
+  recovery_state.write_if_dirty(t);
+  if (!t.empty()) {
+    osd->store->queue_transaction(ch, std::move(t), nullptr);
   }
 }
 
@@ -2122,7 +2155,10 @@ void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
   if (old_peering_evt(evt)) {
     dout(10) << "discard old " << evt->get_desc() << dendl;
   } else {
+    bool saved_dispatching = recovery_state.is_dispatching_peering_event();
+    recovery_state.set_dispatching_peering_event(true);
     recovery_state.handle_event(evt, &rctx);
+    recovery_state.set_dispatching_peering_event(saved_dispatching);
   }
   // write_if_dirty regardless of path above to ensure we capture any work
   // done by OSD::advance_pg().
