@@ -518,6 +518,9 @@ public:
   d_bitmap_le_t *get_d_bitmap_ptr() {
     return L::Partial(1, 1, 1, 1, 1).template Pointer<3>(buf);
   }
+  const d_bitmap_le_t *get_d_bitmap_ptr() const {
+    return L::Partial(1, 1, 1, 1, 1).template Pointer<3>(buf);
+  }
   laddr_le_t *get_dup_tail_addr_ptr() {
     return L::Partial(1, 1, 1, 1, 1).template Pointer<4>(buf);
   }
@@ -605,8 +608,8 @@ public:
     return uint32_t(pos);
   }
 
-  d_bitmap_t get_d_bitmap() {
-    d_bitmap_le_t &bitmap = *get_d_bitmap_ptr();
+  d_bitmap_t get_d_bitmap() const {
+    const d_bitmap_le_t &bitmap = *get_d_bitmap_ptr();
     return d_bitmap_t(bitmap);
   }
 
@@ -818,7 +821,7 @@ struct LogNode
   }
 
   mutable delta_buffer_t delta_buffer;
-  delta_buffer_t *maybe_get_delta_buffer() {
+  delta_buffer_t *maybe_get_delta_buffer() const {
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
@@ -914,7 +917,7 @@ struct LogNode
 
   // The deletion bitmap in effect for this transaction, i.e. including any
   // pending delta.
-  d_bitmap_t get_live_bitmap();
+  d_bitmap_t get_live_bitmap() const;
 
   /*
    * Invoke fn(entry, index) for every entry of this node that is not marked
@@ -923,7 +926,7 @@ struct LogNode
    * materialising its keys.
    */
   template <typename F>
-  void for_each_live_entry(F&& fn) {
+  void for_each_live_entry(F&& fn) const {
     d_bitmap_t bitmap = get_live_bitmap();
     uint32_t index = 0;
     auto iter = iter_begin();

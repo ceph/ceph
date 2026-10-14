@@ -435,16 +435,17 @@ public:
   TransactionManager &tm;
 };
 
+// length of eversion_t::get_key_name(), "%010u.%020llu"
+constexpr size_t PG_LOG_KEY_LEN = 10 + 1 + 20;
+
 inline bool is_log_key(std::string_view s) {
-  pg_log_entry_t e;
-  return (s.size() == e.get_key_name().size() &&
+  return (s.size() == PG_LOG_KEY_LEN &&
       (s[0] >= (0 + '0') && s[0] <= (9 + '0'))) ||
       s.starts_with("dup_");
 }
 
 inline bool is_pg_log_key(const std::string &s) {
-  pg_log_entry_t e;
-  return (s.size() == e.get_key_name().size() &&
+  return (s.size() == PG_LOG_KEY_LEN &&
       (s[0] >= (0 + '0') && s[0] <= (9 + '0')));
 }
 
