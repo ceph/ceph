@@ -74,4 +74,20 @@ function TEST_pool_create_existing_rule_must_span_zones() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
 }
 
+# A rule left with the pool's name by an earlier pool over two zones must
+# place this pool's own share of shards in each zone
+function TEST_pool_create_existing_rule_zone_size() {
+    local dir=$1
+
+    two_zone_cluster $dir 4 || return 1
+
+    ceph osd pool create e erasure --k 2 --m 2 --num_zones 2 || return 1
+    ceph osd pool rename e e_old || return 1
+    ! ceph osd pool create e erasure --k 2 --m 1 --num_zones 2 \
+        > $dir/out 2>&1 || return 1
+    grep "crush rule e does not place 3 items in each datacenter" $dir/out || return 1
+    ! ceph osd pool ls | grep -qx e || return 1
+    ceph osd pool create f erasure --k 2 --m 1 --num_zones 2 || return 1
+}
+
 main mon-stretch-pool-create-rule "$@"
