@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    conf:
+      client.0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(OBJECT_
+      - \(PG_
+      - \(SLOW_OPS\)
+      - overall HEALTH
+      - slow request
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rados/fio_ec_workload.sh
