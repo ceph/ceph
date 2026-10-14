@@ -37,6 +37,27 @@ function TEST_pool_create_rule_must_span_zones() {
     test "$(pool_field good num_zones)" = 2 || return 1
 }
 
+# osd pool set crush_rule checks the rule of a pool over two zones as create does
+function TEST_pool_set_rule_must_span_zones() {
+    local dir=$1
+
+    two_zone_cluster $dir 2 || return 1
+    ceph osd pool create p --num_zones 2 --replica 2 || return 1
+    local rule=$(pool_field p crush_rule)
+
+    ! ceph osd pool set p crush_rule replicated_rule > $dir/out 2>&1 || return 1
+    grep "does not place the pool in 2 buckets of type datacenter" $dir/out || return 1
+    ceph osd crush rule create-stretch-replicated --rule-name one_per_dc \
+        --num-replica-per-zone 1 || return 1
+    ! ceph osd pool set p crush_rule one_per_dc > $dir/out 2>&1 || return 1
+    grep "does not place 2 items in each datacenter" $dir/out || return 1
+    test "$(pool_field p crush_rule)" = "$rule" || return 1
+
+    ceph osd crush rule create-stretch-replicated --rule-name two_per_dc \
+        --num-replica-per-zone 2 || return 1
+    ceph osd pool set p crush_rule two_per_dc || return 1
+}
+
 # min_size of a pool over two zones counts the copies in each zone
 function TEST_pool_create_min_size_per_zone() {
     local dir=$1
