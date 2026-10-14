@@ -250,41 +250,35 @@ void LogNode::remove_last_entry()
   set_cur_bitmap(size - 1, size - 1);
 }
 
-bool LogNode::log_less_than(std::string_view str) const
+// After a full rewrite of the pg log, a node can hold removed log keys that
+// are newer than its live ones, so only the live entries are checked.
+bool LogNode::log_less_than(std::string_view str)
 {
-  std::string last_key = get_last_key();
-  if (is_log_key(last_key)) {
-    return last_key < str;
-  }
-  auto iter = iter_begin();
   bool all_less = false;
-  // perform full traversal to figure out last entry < str
-  while(iter != iter_end()) {
-    std::string key = iter->get_key();
-    if (is_log_key(key)) {
-      if (key >= str) {
-        return false;
-      }
-      all_less = key < str;
+  for_each_live_entry([&](const auto &ent, uint32_t index) -> bool {
+    std::string key = ent.get_key();
+    if (!is_log_key(key)) {
+      return false;
     }
-    iter++;
-  };
+    all_less = key < str;
+    return !all_less;
+  });
   return all_less;
 }
 
-bool LogNode::log_has_larger_than(std::string_view str) const
+bool LogNode::log_has_larger_than(std::string_view str)
 {
-  auto iter = iter_begin();
-  // return true if the first log entry > str
-  while(iter != iter_end()) {
-    std::string key = iter->get_key();
+  // return true if the first live log entry > str
+  bool larger = false;
+  for_each_live_entry([&](const auto &ent, uint32_t index) -> bool {
+    std::string key = ent.get_key();
     if (!is_log_key(key)) {
-      iter++;
-      continue;
+      return false;
     }
-    return key > str;
-  };
-  return false;
+    larger = key > str;
+    return true;
+  });
+  return larger;
 }
 
 bool LogNode::can_ow()

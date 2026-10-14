@@ -900,9 +900,9 @@ struct LogNode
 
   bool is_removable();
 
-  bool log_has_larger_than(std::string_view str) const;
+  bool log_has_larger_than(std::string_view str);
 
-  bool log_less_than(std::string_view str) const;
+  bool log_less_than(std::string_view str);
 
   enum class range_t : uint8_t {
     HAS_BETWEEN,
