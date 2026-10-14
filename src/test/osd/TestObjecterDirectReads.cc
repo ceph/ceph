@@ -38,6 +38,7 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "osdc/Objecter.h"
+#include "osdc/SplitOp.h"
 #include "test/osd/MockConnection.h"
 #include "test/osd/OSDMapTestHelpers.h"
 
@@ -321,4 +322,29 @@ TEST_F(TestSplitOpMapChange, ECSplitReadShardsMoveDuringSubmit)
   EXPECT_EQ(std::make_pair(parent, shard_id_t(0)), sent_to(moved[0]).back());
   reply(moved[0], cons[moved[0]]->sent.back());
   EXPECT_EQ(0, done.wait_for(0));
+}
+
+// A balanced read of a pool over two zones whose acting set holds only one
+// zone, as when CRUSH finds one zone, reads from that zone
+TEST_F(TestSplitOpMapChange, ECBalancedShardWithOneZoneInActingSet)
+{
+  constexpr int64_t two_zone_pool_id = 2;
+  auto pool = objecter->with_osdmap([](const OSDMap& o) {
+    return *o.get_pg_pool(ec_pool_id);
+  });
+  pool.num_zones = 2;
+  pool.size = 6;
+  advance_map([&](OSDMap::Incremental& inc) {
+    inc.new_pool_max = two_zone_pool_id;
+    inc.new_pools[two_zone_pool_id] = pool;
+  });
+
+  Objecter::op_target_t target(object_t("obj"),
+                               object_locator_t(two_zone_pool_id), 0);
+  target.acting = acting;
+  std::optional<int> local_zone;
+  for (int i = 0; i < 20; i++) {
+    EXPECT_EQ(shard_id_t(1), ECSplitOp::choose_read_shard(
+      *objecter, g_ceph_context, target, false, shard_id_t(1), local_zone));
+  }
 }

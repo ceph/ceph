@@ -309,9 +309,11 @@ shard_id_t ECSplitOp::choose_read_shard(
 {
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
+  // CRUSH may have found fewer zones than the pool has
   auto readable = [&](int zone) {
-    return objecter.osdmap->exists(
-        target.acting[(int)pi->get_abs_shard(shard, zone)]);
+    const unsigned pos = (int)pi->get_abs_shard(shard, zone);
+    return pos < target.acting.size() &&
+      objecter.osdmap->exists(target.acting[pos]);
   };
 
   if (localize) {
