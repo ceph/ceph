@@ -4392,6 +4392,14 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
     else
       pg_pool = *osdmap.get_pg_pool(pool);
 
+    // asked for before num_zones changed the size of an erasure coded pool
+    if (pg_pool.is_erasure() && !p->second.empty() &&
+        p->second.size() != pg_pool.size) {
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+               << ": pool size is now " << pg_pool.size << dendl;
+      continue;
+    }
+
     std::vector<int> pg_temp = osdmap.pgtemp_primaryfirst(pg_pool, p->second);
     pending_inc.new_pg_temp[p->first] =
       mempool::osdmap::vector<int>(pg_temp.begin(), pg_temp.end());
@@ -9239,6 +9247,42 @@ int OSDMonitor::prepare_num_zones_crush_rule(
       cmd_getval_or<string>(cmdmap, "class", ""), crush_rule, ss);
 }
 
+// The pg_temp, primary_temp and pg_upmap of the pool's PGs name an OSD for
+// each position of the acting set, and those of an erasure coded pool must
+// match its size: drop them when the size changes.
+void OSDMonitor::clear_pool_mappings_of_size(int64_t pool)
+{
+  for (auto p = osdmap.pg_temp->begin(); p != osdmap.pg_temp->end(); ++p) {
+    if (p->first.pool() == pool) {
+      pending_inc.new_pg_temp[p->first].clear();
+    }
+  }
+  for (auto& [pgid, osds] : pending_inc.new_pg_temp) {
+    if (pgid.pool() == pool) {
+      osds.clear();
+    }
+  }
+  for (auto p = osdmap.primary_temp->begin(); p != osdmap.primary_temp->end();
+       ++p) {
+    if (p->first.pool() == pool) {
+      pending_inc.new_primary_temp[p->first] = -1;
+    }
+  }
+  for (auto& [pgid, osd] : pending_inc.new_primary_temp) {
+    if (pgid.pool() == pool) {
+      osd = -1;
+    }
+  }
+  for (const auto& [pgid, osds] : osdmap.pg_upmap) {
+    if (pgid.pool() == pool) {
+      pending_inc.old_pg_upmap.insert(pgid);
+    }
+  }
+  std::erase_if(pending_inc.new_pg_upmap, [pool](const auto& i) {
+    return i.first.pool() == pool;
+  });
+}
+
 int OSDMonitor::prepare_command_pool_set_num_zones(
     const cmdmap_t& cmdmap, int64_t pool, const string& poolstr, int64_t n,
     const string& val, const string& interr, pg_pool_t& p, stringstream& ss)
@@ -9257,6 +9301,7 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
   }
   const int64_t old_num_zones = p.get_num_zones();
   const int old_crush_rule = p.crush_rule;
+  const unsigned old_size = p.size;
   if (n == old_num_zones) {
     return 0;
   }
@@ -9517,6 +9562,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
   }
   if (p.crush_rule != old_crush_rule) {
     maybe_remove_unused_crush_rule(pool, old_crush_rule);
+  }
+  if (p.size != old_size) {
+    clear_pool_mappings_of_size(pool);
   }
   return 0;
 }

@@ -991,6 +991,7 @@ public:
   // validate_stretch_mode_new_pool() for a pool joining stretch mode, which
   // may be entered in the pending update, against the pools it leaves; the
   // joining pool, if it exists, is not compared with itself
+  void clear_pool_mappings_of_size(int64_t pool);
   int validate_joining_pool(CrushWrapper& crush, int crush_rule,
                             const std::string& zone_failure_domain,
                             int64_t pool, std::ostream *ss) const;
