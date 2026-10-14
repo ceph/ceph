@@ -115,6 +115,21 @@ function TEST_failed_pool_create_removes_its_rule() {
     ! ceph osd erasure-code-profile ls | grep -q '^bigec-' || return 1
 }
 
+# A default profile with a stripe unit that is not a multiple of 4096, which
+# only --force accepts, does not serve the pools that name no profile, and the
+# refused create leaves nothing behind
+function TEST_default_profile_odd_stripe_unit() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set default plugin=isa k=2 m=1 \
+        stripe_unit=2048 --force --yes-i-really-mean-it || return 1
+    expect_failure $dir "stripe_unit should be a multiple of 4096 bytes" \
+        ceph osd pool create e 8 8 erasure || return 1
+    ! ceph osd pool ls | grep -qx e || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx e-k2-m1 || return 1
+    ! ceph osd crush rule ls | grep -qx e || return 1
+}
+
 function TEST_erasure_crush_rule() {
     local dir=$1
     run_mon $dir a || return 1
