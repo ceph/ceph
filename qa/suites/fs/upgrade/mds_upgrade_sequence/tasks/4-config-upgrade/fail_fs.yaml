@@ -2,7 +2,7 @@ teuthology:
   premerge: |
             local set = yaml.teuthology.variables.fail_fs
             local cmd = "ceph config set mgr mgr/orchestrator/fail_fs "..tostring(set)
-            local cmds = yaml_fragment['upgrade-tasks'].sequential[0]['cephadm.shell']['host.a']
+            local cmds = yaml_fragment['upgrade-tasks'].sequential[0]['cephadm.shell']['mon.a']
             if set then
               py_attrgetter(cmds).append "ceph config set mgr mgr/orchestrator/fail_fs true"
             else
@@ -12,4 +12,4 @@ upgrade-tasks:
   sequential:
     - cephadm.shell:
         env: [sha1]
-        host.a: []
+        mon.a: []
