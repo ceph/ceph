@@ -13017,7 +13017,7 @@ TEST_F(NooBaaCompletionTest, AfterCompletionTheStoreIsNotRead)
 				  {{cmd, std::string(cmd) == "identities" ||
 					 std::string(cmd) == "run"
 					   ? "true" : "late"}}, &out),
-	      -EALREADY) << cmd;
+	      -EEXIST) << cmd;
     EXPECT_EQ(out["why"], "adoption is complete") << cmd;
   }
 }
@@ -13028,6 +13028,207 @@ TEST_F(NooBaaCompletionTest, TheRecordSurvivesARestart)
   ASSERT_EQ(ask({{"run", "true"}})["complete"], "true");
   restart();
   EXPECT_TRUE(driver->adoption_complete());
+}
+
+/* Abandoning a NooBaa record (DECISIONS.md 2026-10-13).  The fixture's
+ * store has one account and one bucket;  `unowned` is a second bucket
+ * whose owner is not in the store, so it can never be adopted. */
+class NooBaaAbandonTest : public NooBaaCompletionTest {
+public:
+  static constexpr const char* UNOWNED_ID = "6560e1f1c0ffee00000000dd";
+  /* the `_id` write_their_record() writes */
+  static constexpr const char* THEIR_BUCKET_ID = "6560e1f1c0ffee0000000001";
+
+  void add_unowned() {
+    const sf::path at = bp / "root" / "unowned";
+    sf::create_directories(at);
+    write_file(conf_root() / "buckets" / "unowned.json",
+	       std::string(R"({"_id":")") + UNOWNED_ID +
+	       R"(","name":"unowned","owner_account":"6560e1f1c0ffee00000000ee",)"
+	       R"("versioning":"DISABLED","path":")" + at.string() +
+	       R"(","should_create_underlying_storage":true,)"
+	       R"("creation_date":"2026-01-02T03:04:05.000Z"})");
+  }
+
+  int abandon(const std::string& id, const std::string& reason,
+	      nsfs::AbandonedRecord* out = nullptr) {
+    nsfs::AbandonedRecord r;
+    const int ret = driver->abandon_noobaa_record(env->dpp, null_yield, id,
+						  reason, r);
+    if (out) {
+      *out = r;
+    }
+    return ret;
+  }
+
+  int run() {
+    std::map<std::string, std::string> out;
+    return driver->driver_hint(env->dpp, "adoption", {{"run", "true"}},
+			       &out);
+  }
+};
+
+/* What abandoning refuses:  no reason, an `_id` the store does not
+ * hold, and a record already consumed. */
+TEST_F(NooBaaAbandonTest, AbandoningRefusesWhatItShould)
+{
+  EXPECT_EQ(abandon(THEIR_BUCKET_ID, ""), -EINVAL);
+  EXPECT_EQ(abandon("6560e1f1c0ffee0000000bad", "gone"), -ENOENT);
+
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  EXPECT_EQ(abandon(THEIR_OWNER_ID, "imported already"), -EEXIST)
+      << "an imported identity was abandoned";
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_EQ(abandon(THEIR_BUCKET_ID, "adopted already"), -EEXIST)
+      << "an adopted bucket, or anything after completion, was abandoned";
+}
+
+/* A record that can never be adopted keeps adoption incomplete until it
+ * is abandoned;  then the pass completes, and the bucket, never
+ * imported, is not served. */
+TEST_F(NooBaaAbandonTest, AbandoningAnUnimportedBucketLetsAdoptionComplete)
+{
+  add_unowned();
+  EXPECT_LT(run(), 0) << "the control:  the unowned bucket blocks it";
+  EXPECT_FALSE(driver->adoption_complete());
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(UNOWNED_ID, "its owner was deleted in NooBaa", &r), 0);
+  EXPECT_EQ(r.kind, "bucket");
+  EXPECT_EQ(r.name, "unowned");
+  EXPECT_EQ(r.stage, "not imported");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "unowned"}, &loaded,
+				null_yield), -ENOENT)
+      << "a bucket abandoned before its import is served after completion";
+
+  /* and it is fixed now */
+  EXPECT_EQ(driver->unabandon_noobaa_record(env->dpp, UNOWNED_ID), -EEXIST);
+  std::vector<nsfs::AbandonedRecord> all;
+  ASSERT_EQ(driver->list_abandoned(env->dpp, all), 0);
+  ASSERT_EQ(all.size(), 1u);
+  EXPECT_EQ(all[0].reason, "its owner was deleted in NooBaa");
+}
+
+/* A bucket abandoned after its import, before its conversion, stays
+ * served, in NooBaa's format. */
+TEST_F(NooBaaAbandonTest, AnUnconvertedBucketAbandonedStaysServed)
+{
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  ASSERT_EQ(ask({{"import", testname}})["configured"], "true");
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(THEIR_BUCKET_ID, "left in NooBaa's format", &r), 0);
+  EXPECT_EQ(r.stage, "not converted");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &loaded,
+				null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base")
+      << "the pass converted a bucket whose conversion was abandoned";
+}
+
+/* Adopting or importing an abandoned record by name is refused, as the
+ * full pass skips it;  so is the profile change that would import it.
+ * Taking the abandonment back is the way to adopt it after all, and is
+ * the control. */
+TEST_F(NooBaaAbandonTest, AnAbandonedRecordIsNotAdoptedByName)
+{
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  ASSERT_EQ(abandon(THEIR_BUCKET_ID, "not this one"), 0);
+
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption", {{"bucket", testname}},
+				&out), -EEXIST);
+  EXPECT_EQ(out["why"], "abandoned:  not this one");
+  out.clear();
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption", {{"import", testname}},
+				&out), -EEXIST);
+  uint32_t had = 0;
+  std::string had_profile;
+  EXPECT_LT(driver->set_bucket_profile(env->dpp, null_yield, testname,
+				       *nsfs::extensions_for_profile("shared"),
+				       &had, &had_profile), 0)
+      << "the profile endpoint adopted an abandoned bucket";
+
+  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, THEIR_BUCKET_ID), 0);
+  EXPECT_EQ(ask({{"bucket", testname}})["adopted"], "true");
+}
+
+/* A conversion that stopped partway can be abandoned:  the escape hatch
+ * for a tree that will not convert.  It is recorded as partly converted,
+ * adoption completes, and the bucket stays served, still converting. */
+TEST_F(NooBaaAbandonTest, APartlyConvertedBucketCanBeAbandoned)
+{
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  ASSERT_EQ(ask({{"import", testname}})["configured"], "true");
+  {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				  null_yield), 0);
+    put_object(driver.get(), b.get(), env->dpp, acl_owner, "one", "1",
+	       "text/plain");
+    put_object(driver.get(), b.get(), env->dpp, acl_owner, "two", "2",
+	       "text/plain");
+    nsfs::convert_cb_t stop =
+      [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+	return (ev.phase == nsfs::ConvertEvent::Phase::pruned) ? -EINTR : 0;
+      };
+    ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(b.get())->set_profile(
+		  env->dpp, null_yield, nsfs::EXTENSIONS_SHARED, &stop, nullptr),
+	      -EINTR);
+  }
+
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(THEIR_BUCKET_ID, "the rest will not convert", &r), 0);
+  EXPECT_EQ(r.stage, "partly converted");
+
+  ASSERT_EQ(run(), 0);
+  EXPECT_TRUE(driver->adoption_complete());
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &loaded,
+				null_yield), 0);
+  EXPECT_TRUE(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		->is_converting())
+      << "the control:  the bucket was really left partway";
+}
+
+/* Taking an abandonment back lets the next pass try the record again. */
+TEST_F(NooBaaAbandonTest, UnabandoningLetsThePassTryAgain)
+{
+  add_unowned();
+  ASSERT_EQ(abandon(UNOWNED_ID, "for now"), 0);
+  EXPECT_EQ(abandon(UNOWNED_ID, "again"), -EEXIST);
+  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, UNOWNED_ID), 0);
+  EXPECT_EQ(driver->unabandon_noobaa_record(env->dpp, UNOWNED_ID), -ENOENT);
+
+  EXPECT_LT(run(), 0) << "the record was not tried again";
+  EXPECT_FALSE(driver->adoption_complete());
+}
+
+/* An abandoned identity is left out of the import, and the others are
+ * not held up by it. */
+TEST_F(NooBaaAbandonTest, AnAbandonedIdentityIsNotImported)
+{
+  nsfs::AbandonedRecord r;
+  ASSERT_EQ(abandon(THEIR_OWNER_ID, "a collision nobody will resolve", &r),
+	    0);
+  /* what depends on it is said, since each now fails its import */
+  EXPECT_EQ(r.dependent_buckets, std::vector<std::string>{testname});
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["identities_abandoned"], "1");
+  std::string owner;
+  EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, THEIR_OWNER_ID, owner), -ENOENT);
 }
 
 /* `import=` imports a bucket's record and nothing else.

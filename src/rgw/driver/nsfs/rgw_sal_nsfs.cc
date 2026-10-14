@@ -23,6 +23,7 @@
 #include "common/iso_8601.h"
 #include "common/version.h"
 #include "rgw_rest_nsfs_profile.h"
+#include "rgw_rest_nsfs_abandoned.h"
 #include "rgw_rest_nsfs_identity.h"
 #include "common/code_environment.h"
 
@@ -14659,6 +14660,7 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   nsfs_mgr->register_resource("identity", new RGWRESTMgr_NSFS_Identity);
   nsfs_mgr->register_resource("credentials",
 			      new RGWRESTMgr_NSFS_Credentials);
+  nsfs_mgr->register_resource("abandoned", new RGWRESTMgr_NSFS_Abandoned);
   mgr->register_resource("nsfs", nsfs_mgr);
 }
 
@@ -14710,6 +14712,19 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     put_report("ran", "false");
     put_report("unreadable", std::to_string(contents.unreadable.size()));
     return -EBADMSG;
+  }
+  /* an identity an operator abandoned is not imported, and does not
+   * stop the others -- a collision is the usual reason to abandon one */
+  {
+    const size_t before = contents.identities.size();
+    std::erase_if(contents.identities, [this, dpp](const auto& id) {
+      nsfs::AbandonedRecord r;
+      return userDB->get_abandoned(dpp, id.id, r) == 0;
+    });
+    if (contents.identities.size() != before) {
+      put_report("identities_abandoned",
+	  std::to_string(before - contents.identities.size()));
+    }
   }
 
   nsfs::NooBaaMasterKeys keys;
@@ -14812,8 +14827,13 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
-  size_t adopted = 0, failed = 0;
+  size_t adopted = 0, failed = 0, abandoned = 0;
   for (const auto& b : contents.buckets) {
+    nsfs::AbandonedRecord ab;
+    if (userDB->get_abandoned(dpp, b.id, ab) == 0) {
+      ++abandoned;
+      continue;
+    }
     std::map<std::string, std::string> one;
     if (adopt_one_bucket(dpp, y, b.name, &one) < 0) {
       ++failed;
@@ -14825,6 +14845,7 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   }
   if (report) {
     (*report)["buckets_adopted"] = std::to_string(adopted);
+    (*report)["buckets_abandoned"] = std::to_string(abandoned);
     (*report)["buckets_failed"] = std::to_string(failed);
   }
   ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": " << adopted
@@ -14833,6 +14854,144 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
     return -EIO;
   }
   return observe_adoption_completion(dpp, y, root, contents, report);
+}
+
+/* Abandon one NooBaa record (DECISIONS.md 2026-10-13):  find it by
+ * `_id`, work out how far it got, and record that with the operator's
+ * reason.  A record fully consumed has nothing to abandon, and nothing
+ * is abandoned once adoption is complete. */
+int NSFSDriver::abandon_noobaa_record(const DoutPrefixProvider* dpp,
+				      optional_yield y,
+				      const std::string& noobaa_id,
+				      const std::string& reason,
+				      nsfs::AbandonedRecord& out)
+{
+  if (noobaa_id.empty() || reason.empty()) {
+    return -EINVAL;
+  }
+  int ret = load_adoption_completion(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (adoption_complete()) {
+    ldpp_dout(dpp, 1) << "nsfs: not abandoning " << noobaa_id
+      << ":  adoption is complete" << dendl;
+    return -EEXIST;
+  }
+  if (!adoption_configured()) {
+    return -ENOENT;
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  ret = store.read(dpp, contents);
+  if (ret < 0) {
+    return ret;
+  }
+
+  nsfs::AbandonedRecord r;
+  r.noobaa_id = noobaa_id;
+  r.reason = reason;
+  for (const auto& id : contents.identities) {
+    if (id.id != noobaa_id) {
+      continue;
+    }
+    std::string owner;
+    if (userDB->get_owner_by_noobaa_id(dpp, id.id, owner) == 0) {
+      ldpp_dout(dpp, 1) << "nsfs: not abandoning identity " << id.name
+	<< ":  it is imported" << dendl;
+      return -EEXIST;
+    }
+    r.kind = "identity";
+    r.name = id.name;
+    r.stage = "not imported";
+    for (const auto& b : contents.buckets) {
+      if (b.owner_account == id.id) {
+	r.dependent_buckets.push_back(b.name);
+      }
+    }
+  }
+  for (const auto& b : contents.buckets) {
+    if (b.id != noobaa_id) {
+      continue;
+    }
+    r.kind = "bucket";
+    r.name = b.name;
+    nsfs::BucketPlacement row;
+    if (userDB->get_bucket_placement(dpp, b.name, "", row) < 0) {
+      r.stage = "not imported";
+      break;
+    }
+    r.stage = "not converted";
+    std::unique_ptr<Bucket> loaded;
+    if (load_bucket(dpp, rgw_bucket{"", b.name}, &loaded, y) == 0) {
+      auto* nb = static_cast<NSFSBucket*>(loaded.get());
+      if (nb->is_converting()) {
+	/* an escape hatch for a conversion that will not finish:
+	 * allowed, and said, since the bucket stays half-converted */
+	r.stage = "partly converted";
+      } else if (std::strcmp(nb->profile_name(), "base")) {
+	ldpp_dout(dpp, 1) << "nsfs: not abandoning bucket " << b.name
+	  << ":  it is adopted" << dendl;
+	return -EEXIST;
+      }
+    }
+  }
+  if (r.kind.empty()) {
+    return -ENOENT;
+  }
+
+  r.at = to_iso_8601(ceph::real_clock::now());
+  ret = userDB->put_abandoned(dpp, r);
+  if (ret < 0) {
+    return ret;
+  }
+  ldpp_dout(dpp, 0) << "nsfs: abandoned " << r.kind << " " << r.name << " ("
+    << r.noobaa_id << "), " << r.stage << ":  " << r.reason << dendl;
+  if (!r.dependent_buckets.empty()) {
+    ldpp_dout(dpp, 0) << "nsfs: " << r.name << " owns "
+      << r.dependent_buckets.size() << " bucket records, which will now fail "
+      << "their imports and block completion until each is decided" << dendl;
+  }
+  out = std::move(r);
+  return 0;
+}
+
+int NSFSDriver::abandoned_bucket(const DoutPrefixProvider* dpp,
+				 const std::string& bucket_name,
+				 nsfs::AbandonedRecord& out)
+{
+  if (!nb_bucket_state_strategy) {
+    return -ENOENT;
+  }
+  std::string id;
+  int ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    nb_bucket_state_strategy.get())->recorded_id(dpp, bucket_name, id);
+  if (ret < 0) {
+    return ret;
+  }
+  return userDB->get_abandoned(dpp, id, out);
+}
+
+int NSFSDriver::unabandon_noobaa_record(const DoutPrefixProvider* dpp,
+					const std::string& noobaa_id)
+{
+  int ret = load_adoption_completion(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (adoption_complete()) {
+    return -EEXIST;
+  }
+  return userDB->remove_abandoned(dpp, noobaa_id);
+}
+
+int NSFSDriver::list_abandoned(const DoutPrefixProvider* dpp,
+			       std::vector<nsfs::AbandonedRecord>& out)
+{
+  return userDB->list_abandoned(dpp, out);
 }
 
 int NSFSDriver::load_adoption_completion(const DoutPrefixProvider* dpp)
@@ -14872,14 +15031,24 @@ int NSFSDriver::observe_adoption_completion(
   if (!contents.unreadable.empty()) {
     return not_yet(contents.unreadable.front().path + " does not read");
   }
+  auto abandoned = [&](const std::string& id) {
+    nsfs::AbandonedRecord r;
+    return userDB->get_abandoned(dpp, id, r) == 0;
+  };
   for (const auto& id : contents.identities) {
     std::string owner;
+    if (abandoned(id.id)) {
+      continue;
+    }
     if (userDB->get_owner_by_noobaa_id(dpp, id.id, owner) < 0) {
       return not_yet("identity " + id.name + " (" + id.id +
 		     ") is not imported");
     }
   }
   for (const auto& b : contents.buckets) {
+    if (abandoned(b.id)) {
+      continue;
+    }
     nsfs::BucketPlacement row;
     if (userDB->get_bucket_placement(dpp, b.name, "", row) < 0) {
       return not_yet("bucket " + b.name + " has no placement row");
@@ -14956,6 +15125,13 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     put_report("why", "adoption is complete");
     return -ENOENT;
   }
+  /* an operator decided this record goes no further;  a profile change
+   * that would import it is refused with it, not quietly converted
+   * without its state */
+  if (nsfs::AbandonedRecord ab; abandoned_bucket(dpp, bucket_name, ab) == 0) {
+    put_report("why", "abandoned:  " + ab.reason);
+    return -EEXIST;
+  }
 
   const auto& root =
     g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
@@ -15026,6 +15202,15 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
       << ":  rgw_nsfs_extensions is off, so its tree cannot be converted"
       << dendl;
     return -EPERM;
+  }
+
+  /* An operator decided this record goes no further, so adopting it by
+   * name is refused as the full pass skips it.  Take the abandonment
+   * back first to adopt it. */
+  if (nsfs::AbandonedRecord ab; abandoned_bucket(dpp, bucket_name, ab) == 0) {
+    put_report("adopted", "false");
+    put_report("why", "abandoned:  " + ab.reason);
+    return -EEXIST;
   }
 
   std::unique_ptr<rgw::sal::Bucket> b;
@@ -15145,7 +15330,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	  if (out) {
 	    (*out)["why"] = "adoption is complete";
 	  }
-	  return -EALREADY;
+	  /* 409:  EALREADY has no HTTP mapping and would be a 500 */
+	  return -EEXIST;
 	}
       }
     }

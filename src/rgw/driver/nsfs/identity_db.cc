@@ -274,6 +274,22 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  Buckets INTEGER NOT NULL,"
     "  GatewayVersion TEXT NOT NULL,"
     "  Extensions INTEGER NOT NULL"
+    ");"
+
+    /* NooBaa records abandoned by an operator, by `_id`.  A reason is
+     * required:  the point of the table is that an operator can see
+     * later what was left behind and why. */
+    "CREATE TABLE IF NOT EXISTS '" + abandoned_table + "' ("
+    "  NoobaaId TEXT NOT NULL PRIMARY KEY,"
+    "  Kind TEXT NOT NULL,"
+    "  Name TEXT NOT NULL,"
+    "  Stage TEXT NOT NULL,"
+    "  Reason TEXT NOT NULL,"
+    "  At TEXT NOT NULL,"
+    "  CHECK (NoobaaId != '' AND Reason != ''),"
+    "  CHECK (Kind IN ('identity', 'bucket')),"
+    "  CHECK (Stage IN ('not imported', 'not converted',"
+    "                   'partly converted'))"
     ");";
 
   ret = exec(&dp, schema.c_str(), nullptr);
@@ -485,6 +501,132 @@ int IdentityDB::get_adoption_completion(const DoutPrefixProvider* dpp,
   c.buckets = static_cast<uint64_t>(sqlite3_column_int64(st, 3));
   c.gateway_version = column_text(st, 4);
   c.extensions = static_cast<uint32_t>(sqlite3_column_int64(st, 5));
+  return 0;
+}
+
+namespace {
+
+constexpr const char* ABANDONED_COLUMNS =
+  "NoobaaId, Kind, Name, Stage, Reason, At";
+
+AbandonedRecord row_to_abandoned(sqlite3_stmt* st)
+{
+  AbandonedRecord r;
+  r.noobaa_id = column_text(st, 0);
+  r.kind = column_text(st, 1);
+  r.name = column_text(st, 2);
+  r.stage = column_text(st, 3);
+  r.reason = column_text(st, 4);
+  r.at = column_text(st, 5);
+  return r;
+}
+
+} // namespace
+
+int IdentityDB::put_abandoned(const DoutPrefixProvider* dpp,
+			      const AbandonedRecord& r)
+{
+  if (r.noobaa_id.empty() || r.reason.empty()) {
+    return -EINVAL;
+  }
+  const std::string sql =
+    "INSERT INTO '" + abandoned_table + "' (" + ABANDONED_COLUMNS + ") "
+    "VALUES (?, ?, ?, ?, ?, ?);";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, r.noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, r.kind.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 3, r.name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 4, r.stage.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 5, r.reason.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 6, r.at.c_str(), -1, SQLITE_TRANSIENT);
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
+      return -EEXIST;
+    }
+    ldpp_dout(dpp, 4) << "abandoning " << r.noobaa_id << " refused: "
+      << sqlite3_errmsg(handle()) << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int IdentityDB::remove_abandoned(const DoutPrefixProvider* dpp,
+				 const std::string& noobaa_id)
+{
+  const std::string sql =
+    "DELETE FROM '" + abandoned_table + "' WHERE NoobaaId = ?;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  return (sqlite3_changes(handle()) == 0) ? -ENOENT : 0;
+}
+
+int IdentityDB::get_abandoned(const DoutPrefixProvider* dpp,
+			      const std::string& noobaa_id,
+			      AbandonedRecord& r) const
+{
+  const std::string sql =
+    std::string("SELECT ") + ABANDONED_COLUMNS + " FROM '" + abandoned_table
+    + "' WHERE NoobaaId = ?;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  const int step = sqlite3_step(st);
+  if (step == SQLITE_DONE) {
+    return -ENOENT;
+  }
+  if (step != SQLITE_ROW) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  r = row_to_abandoned(st);
+  return 0;
+}
+
+int IdentityDB::list_abandoned(const DoutPrefixProvider* dpp,
+			       std::vector<AbandonedRecord>& out) const
+{
+  out.clear();
+  const std::string sql =
+    std::string("SELECT ") + ABANDONED_COLUMNS + " FROM '" + abandoned_table
+    + "' ORDER BY NoobaaId;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    out.push_back(row_to_abandoned(st));
+  }
+  if (rc != SQLITE_DONE) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
   return 0;
 }
 

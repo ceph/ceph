@@ -819,6 +819,33 @@ int NooBaaBucketStateStrategy::list_records(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int NooBaaBucketStateStrategy::recorded_id(const DoutPrefixProvider* dpp,
+					   const std::string& bucket_name,
+					   std::string& out) const
+{
+  out.clear();
+  if (config_root.empty()) {
+    return -ENOENT;
+  }
+  const std::string path =
+    config_root + "/buckets/" + bucket_name + ".json";
+  std::string doc;
+  int ret = read_record_file(dpp, path, doc);
+  if (ret < 0) {
+    return ret;
+  }
+  JSONParser p;
+  if (!p.parse(doc.data(), doc.size())) {
+    return -EBADMSG;
+  }
+  try {
+    JSONDecoder::decode_json("_id", out, &p);
+  } catch (const JSONDecoder::err&) {
+    return -EBADMSG;
+  }
+  return out.empty() ? -EBADMSG : 0;
+}
+
 int NooBaaBucketStateStrategy::recorded_path(const DoutPrefixProvider* dpp,
 					     const std::string& bucket_name,
 					     std::string& out) const

@@ -192,6 +192,11 @@ public:
 		    const std::string& bucket_name,
 		    std::string& out) const;
 
+  /* The `_id` NooBaa's record of `bucket_name` carries.  -ENOENT when
+   * there is no record. */
+  int recorded_id(const DoutPrefixProvider* dpp,
+		  const std::string& bucket_name, std::string& out) const;
+
   /* The names NooBaa's store has a bucket record for, sorted:  every
    * `buckets/<name>.json`, without reading any of them.  Empty with no
    * store. */

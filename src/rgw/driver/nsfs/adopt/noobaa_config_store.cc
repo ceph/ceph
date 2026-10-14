@@ -394,6 +394,21 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	}
 	NooBaaBucketRecord rec;
 	rec.name = name.substr(0, name.size() - suffix.size());
+	try {
+	  JSONDecoder::decode_json("_id", rec.id, &p);
+	} catch (const JSONDecoder::err& e) {
+	  unreadable(path, std::string("_id: ") + e.what());
+	  continue;
+	}
+	if (rec.id.empty()) {
+	  unreadable(path, "no _id");
+	  continue;
+	}
+	try {
+	  JSONDecoder::decode_json("owner_account", rec.owner_account, &p);
+	} catch (const JSONDecoder::err&) {
+	  rec.owner_account.clear();
+	}
 	/* Presence, then value.  Absent is a third state NooBaa's cascade
 	 * depends on, so it cannot be read as false. */
 	if (p.find_obj("force_md5_etag")) {

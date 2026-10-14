@@ -1331,6 +1331,26 @@ public:
    * test driver, and by each adoption command before it acts, which is
    * how a record another gateway wrote is seen. */
   int load_adoption_completion(const DoutPrefixProvider* dpp);
+  /* An operator's decision that one NooBaa record goes no further,
+   * with the reason.  -EINVAL with no reason;  -ENOENT for an `_id` the
+   * store does not hold, or no store;  -EEXIST for a record fully
+   * consumed, one already abandoned, or once adoption is complete. */
+  int abandon_noobaa_record(const DoutPrefixProvider* dpp, optional_yield y,
+			    const std::string& noobaa_id,
+			    const std::string& reason,
+			    nsfs::AbandonedRecord& out);
+  /* -ENOENT when it is not abandoned;  -EEXIST once adoption is
+   * complete. */
+  int unabandon_noobaa_record(const DoutPrefixProvider* dpp,
+			      const std::string& noobaa_id);
+  int list_abandoned(const DoutPrefixProvider* dpp,
+		     std::vector<nsfs::AbandonedRecord>& out);
+  /* The abandoned entry for NooBaa's record of `bucket_name`.  -ENOENT
+   * when there is no record, or it is not abandoned. */
+  int abandoned_bucket(const DoutPrefixProvider* dpp,
+		       const std::string& bucket_name,
+		       nsfs::AbandonedRecord& out);
+
   int observe_adoption_completion(const DoutPrefixProvider* dpp,
 				  optional_yield y, const std::string& root,
 				  const nsfs::NooBaaStoreContents& contents,

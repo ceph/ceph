@@ -192,6 +192,12 @@ struct NooBaaSettings {
  * itself the finding. */
 struct NooBaaBucketRecord {
   std::string name;
+  /* `_id`, which NooBaa's schema requires.  What an abandoned record is
+   * known by, since a name can be recorded again. */
+  std::string id;
+  /* `owner_account`, an account's `_id`:  what depends on an account an
+   * operator abandons */
+  std::string owner_account;
 
   /* X1.  Carried, not enforced.  Three states, because NooBaa's
    * precedence is a cascade and `false` counts as defined.

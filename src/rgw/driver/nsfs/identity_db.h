@@ -139,6 +139,29 @@ struct AdoptionCompletion {
   uint32_t extensions{0};
 };
 
+/* A NooBaa record an operator decided will not be carried further, and
+ * why (DECISIONS.md 2026-10-13).  It counts as consumed for adoption's
+ * completion, and is fixed once adoption is complete. */
+struct AbandonedRecord {
+  std::string noobaa_id;
+  /* "identity" or "bucket" */
+  std::string kind;
+  std::string name;
+  /* "not imported", "not converted" or "partly converted" -- what was
+   * left undone, which decides what becomes of a bucket:  one not
+   * imported leaves S3 at completion;  one not converted stays, in
+   * NooBaa's format;  one partly converted stays, served through the
+   * conversion's fallback indefinitely, since nothing finishes it */
+  std::string stage;
+  std::string reason;
+  /* ISO 8601, UTC */
+  std::string at;
+  /* Not stored:  for an identity, the bucket records it owns at the
+   * moment it is abandoned.  Each of them then fails its import, and
+   * needs a decision of its own. */
+  std::vector<std::string> dependent_buckets;
+};
+
 /* Whether a path may be stored.
  *
  * A stored path is input:  it arrives over Admin Ops or is translated
@@ -189,6 +212,8 @@ class IdentityDB : public rgw::store::POSIXUserDB {
   const std::string placement_table;
   /* adoption's completion record:  at most one row */
   const std::string completion_table;
+  /* NooBaa records abandoned by an operator */
+  const std::string abandoned_table;
 
   /* The one handle, qualified.
    *
@@ -216,7 +241,9 @@ public:
       placement_table(std::filesystem::path(db_name).filename().string()
 		      + "_nsfs_bucket_placement"),
       completion_table(std::filesystem::path(db_name).filename().string()
-		       + "_nsfs_adoption_complete") {}
+		       + "_nsfs_adoption_complete"),
+      abandoned_table(std::filesystem::path(db_name).filename().string()
+		      + "_nsfs_noobaa_abandoned") {}
 
   int Initialize(std::string logfile, int loglevel);
 
@@ -290,6 +317,17 @@ public:
 			      const AdoptionCompletion& c);
   int get_adoption_completion(const DoutPrefixProvider* dpp,
 			      AdoptionCompletion& c) const;
+
+  /* Abandoned records.  `put` is a plain INSERT, -EEXIST when the id is
+   * abandoned already;  `remove` is -ENOENT when it is not;  `get` is
+   * -ENOENT when it is not. */
+  int put_abandoned(const DoutPrefixProvider* dpp, const AbandonedRecord& r);
+  int remove_abandoned(const DoutPrefixProvider* dpp,
+		       const std::string& noobaa_id);
+  int get_abandoned(const DoutPrefixProvider* dpp,
+		    const std::string& noobaa_id, AbandonedRecord& r) const;
+  int list_abandoned(const DoutPrefixProvider* dpp,
+		     std::vector<AbandonedRecord>& out) const;
 
   /* Whether `owner_key` was imported from NooBaa. */
   int owner_was_imported(const DoutPrefixProvider* dpp,
