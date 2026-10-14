@@ -871,7 +871,8 @@ public:
     const std::string& obj_name,
     const std::string& attr_name,
     const std::string& attr_value,
-    bool force_all_shards);
+    bool force_all_shards,
+    bool run = true);
 
   /**
    * List all attributes on an object.
