@@ -18029,7 +18029,16 @@ int OSDMonitor::enable_stretch_mode(ostream& ss,
     } else {
       const int old_rule = p.crush_rule;
       const unsigned size = p.get_num_zones() * STRETCH_MODE_REPLICA;
-      r = check_pg_num(id, p.get_pg_num(), size, new_rule, &pss);
+      if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
+        pss << "pool size change is disabled; you must unset nosizechange flag for the pool first";
+        r = -EPERM;
+      } else {
+        r = check_rule_places_pool(new_rule, p.get_type(), p.get_num_zones(),
+                                   dividing_bucket, size, &pss);
+      }
+      if (r == 0) {
+        r = check_pg_num(id, p.get_pg_num(), size, new_rule, &pss);
+      }
       if (r == 0) {
         p.replica = STRETCH_MODE_REPLICA;
         p.size = size;
