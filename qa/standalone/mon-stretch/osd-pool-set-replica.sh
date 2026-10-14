@@ -235,4 +235,54 @@ function TEST_pool_replica_limits() {
     test "$(ceph osd pool get single min_size | awk '{print $2}')" = 1 || return 1
 }
 
+# A pool over two zones on a rule that takes each zone in turn, as the rules
+# of global stretch mode do, can change its replicas too
+function TEST_pool_replica_two_take_rule() {
+    local dir=$1
+
+    CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A"
+    run_mon $dir a --public-addr "$CEPH_MON_A" || return 1
+    wait_for_quorum 300 1 || return 1
+    for zone in zone-a zone-b; do
+        ceph osd crush add-bucket $zone zone || return 1
+        ceph osd crush move $zone root=default || return 1
+        for i in 1 2; do
+            ceph osd crush add-bucket $zone-host-$i host || return 1
+            ceph osd crush move $zone-host-$i zone=$zone || return 1
+        done
+    done
+    local osd=0
+    for zone in zone-a zone-b; do
+        for i in 1 2; do
+            run_osd $dir $osd || return 1
+            ceph osd crush move osd.$osd host=$zone-host-$i || return 1
+            osd=$((osd + 1))
+        done
+    done
+    ceph osd getcrushmap > $dir/crushmap || return 1
+    crushtool --decompile $dir/crushmap > $dir/crushmap.txt || return 1
+    sed 's/^# end crush map$//' $dir/crushmap.txt > $dir/crushmap_modified.txt || return 1
+    cat >> $dir/crushmap_modified.txt << EOF
+rule two_take {
+        id 1
+        type replicated
+        step take zone-a
+        step chooseleaf firstn 2 type host
+        step emit
+        step take zone-b
+        step chooseleaf firstn 2 type host
+        step emit
+}
+
+# end crush map
+EOF
+    crushtool --compile $dir/crushmap_modified.txt -o $dir/crushmap.bin || return 1
+    ceph osd setcrushmap -i $dir/crushmap.bin || return 1
+    ceph osd pool create p 8 8 replicated two_take || return 1
+    ceph osd pool stretch set p 2 2 zone two_take 4 2 || return 1
+
+    ceph osd pool set p replica 1 || return 1
+    assert_pool_rule p p-replica-1 1 1 || return 1
+}
+
 main osd-pool-set-replica "$@"
