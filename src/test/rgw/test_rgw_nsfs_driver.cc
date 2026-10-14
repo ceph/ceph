@@ -13195,6 +13195,40 @@ TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRefused)
   EXPECT_TRUE(sf::is_directory(bp / "root" / "fresh"));
 }
 
+/* A creation that fails after its directory is made takes back both:
+ * the directory, then the row.  A directory left behind would hold the
+ * name, since creation refuses one that already exists, so the retry
+ * is the proof.  The failure is injected, since nothing in an ordinary
+ * setup fails after mkdir;  the control is the same retry with the
+ * hint off. */
+TEST_F(NSFSPlacedBucketTest, AFailureAfterMkdirTakesBackTheDirectory)
+{
+  auto create = [this](const char* name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = owner;
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    return b->create(env->dpp, cp, null_yield);
+  };
+
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-create-failure",
+				{{"enable", "true"}}, nullptr), 0);
+  EXPECT_EQ(create("rolled-back"), -EIO);
+  EXPECT_FALSE(sf::exists(bp / "root" / "rolled-back"))
+      << "the directory this creation made was left";
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "rolled-back", "", row), -ENOENT);
+
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-create-failure",
+				{{"enable", "false"}}, nullptr), 0);
+  EXPECT_EQ(create("rolled-back"), 0)
+      << "the failed creation still held the name";
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "rolled-back"));
+}
+
 /* A directory that cannot be made takes its row back, as NooBaa deletes
  * its record when _create_uls fails. */
 TEST_F(NSFSPlacedBucketTest, AFailedMkdirLeavesNoRow)

@@ -8706,21 +8706,37 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
     return -EEXIST;
   }
 
+  const bool made = !existed || !*existed;
+
   /* Stamp a bucket we made, so that everything this deployment creates
    * is marked and only trees that came from somewhere else are not.  An
    * existing directory is left alone:  re-creating a base-profile bucket
    * must not mark it by a side effect, since marking is what ends its
    * ability to go back. */
-  if ((!existed || !*existed) && driver->extensions_enabled()) {
+  if (!is_internal() && driver->create_failure_injected()) {
+    ret = -EIO;
+  } else if (made && driver->extensions_enabled()) {
     ret = mark_extensions(dpp, driver->new_bucket_extensions());
-    if (ret < 0) {
-      return ret;
-    }
   } else if (!profile) {
     profile = driver->get_base_profile();
   }
+  if (ret == 0) {
+    ret = write_attrs(dpp, y);
+  }
 
-  return write_attrs(dpp, y);
+  /* A client's bucket that failed here is taken back whole:  the
+   * directory this call made goes, and the caller then removes the row.
+   * Left in place it would hold the name, since creation refuses a
+   * directory that already exists. */
+  if ((ret < 0) && made && !is_internal()) {
+    int r = dir->remove(dpp, y, true);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " failed, and "
+	<< "the directory it made, " << dir->get_name() << ", could not be "
+	<< "removed: " << cpp_strerror(-r) << dendl;
+    }
+  }
+  return ret;
 }
 
 std::string NSFSBucket::get_fname()
@@ -15196,6 +15212,20 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_no_chown = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_no_chown ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-create-failure") {
+    /* fail a client's bucket creation after its directory is made, so
+     * the rollback is reachable from a test */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_create_failure = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_create_failure ? "true" : "false";
     }
     return 0;
   }

@@ -818,6 +818,10 @@ protected:
    * wrong.  The capability is not droppable in a test process -- a
    * thread cannot regain it -- so the condition has to be injected */
   bool inject_no_chown{false};
+  /* fail a client's bucket creation after its directory is made, so a
+   * test can assert the rollback:  nothing in an ordinary setup makes
+   * the steps after mkdir fail */
+  bool inject_create_failure{false};
 
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -1312,6 +1316,7 @@ public:
   }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
   bool no_chown_injected() const { return inject_no_chown; }
+  bool create_failure_injected() const { return inject_create_failure; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
