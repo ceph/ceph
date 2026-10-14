@@ -948,6 +948,18 @@ namespace rgw::s3vector {
           nullptr, &table, &error_message); result != LANCEDB_SUCCESS) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector creating index: " << configuration.index_name << ", lancedb error code: " << result << ", error: " << error_message << dendl;
       if (result == LANCEDB_SCHEMA || result == LANCEDB_INVALID_INPUT || result == LANCEDB_ARROW || result == LANCEDB_LANCE) {
+        /* a missing backing bucket surfaces as a generic lance error:
+         * distinguish it from request-validation failures, so that the
+         * operation reports the unavailability of the backend (404) instead
+         * of blaming the request parameters */
+        std::unique_ptr<rgw::sal::Bucket> s3_bucket;
+        if (driver->load_bucket(dpp, rgw_bucket(ns.tenant, configuration.vector_bucket_name),
+                                &s3_bucket, null_yield) == -ENOENT) {
+          lancedb_free_string(error_message);
+          lancedb_connection_free(conn);
+          ctx->result = -ENOENT;
+          return;
+        }
         errors.push_back({"metadataConfiguration.filterableMetadataKeys", error_message});
         lancedb_free_string(error_message);
         lancedb_connection_free(conn);
