@@ -319,6 +319,26 @@ function TEST_create_while_rule_of_its_name_removed() {
     ceph osd crush rule ls | grep -qx "$(awk '{print $2}' $dir/rule)" || return 1
 }
 
+# A profile set again while its removal with its last pool is pending exists
+# afterwards
+function TEST_profile_set_while_removed() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set prof k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create a 8 8 erasure prof || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd erasure-code-profile set prof k=2 m=1 \
+        crush-failure-domain=osd || return 1
+    wait $pid || return 1
+    ceph osd erasure-code-profile ls | grep -qx prof || return 1
+}
+
 main osd-erasure-code-profile "$@"
 
 # Local Variables:
