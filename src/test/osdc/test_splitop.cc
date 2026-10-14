@@ -33,6 +33,10 @@
 #include <boost/asio/io_context.hpp>
 
 #include "common/ref.h"
+#include "common/async/context_pool.h"
+#include "messages/MOSDMap.h"
+#include "mon/MonClient.h"
+#include "msg/Messenger.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "osdc/SplitOp.h"
@@ -1168,5 +1172,176 @@ TEST_F(TestSplitOpInit, ReplicaStatBeforeReadTargetsReference)
     ASSERT_GE((int)ref.abs_shard, 0);
     EXPECT_EQ(split.reference_sub_read.osd, acting[(int)ref.abs_shard]);
   }
+  op->put();
+}
+
+// ===========================================================================
+// Section 6: SplitOp::create() — the OSD a single direct op is sent to
+//
+// An op whose reads all fall in one chunk is sent whole to the OSD holding
+// that chunk. An op that also holds ops only the primary may run, such as
+// CALL, must go to the primary.
+// ===========================================================================
+
+class TestSingleDirectOpTarget : public ::testing::Test {
+protected:
+  static constexpr int k = 2;
+  static constexpr int m = 1;
+  static constexpr uint32_t chunk_size = 4096;
+  CephContext *cct = g_ceph_context;
+  std::unique_ptr<ceph::async::io_context_pool> icp;
+  std::unique_ptr<MonClient> monc;
+  std::unique_ptr<Messenger> messenger;
+  std::unique_ptr<Objecter> objecter;
+  OSDMap osdmap;
+  int64_t pool_id = -1;
+
+  void SetUp() override {
+    icp = std::make_unique<ceph::async::io_context_pool>(1);
+    monc = std::make_unique<MonClient>(cct, *icp);
+    messenger.reset(
+      Messenger::create_client_messenger(cct, "unittest_splitop"));
+    messenger->start();
+    objecter = std::make_unique<Objecter>(cct, messenger.get(), monc.get(),
+                                          *icp);
+    objecter->set_client_incarnation(0);
+    objecter->init();
+    ASSERT_NO_FATAL_FAILURE(build_osdmap());
+  }
+
+  void TearDown() override {
+    objecter->shutdown();
+    monc->shutdown();
+    messenger->shutdown();
+    messenger->wait();
+    objecter.reset();
+    monc.reset();
+    messenger.reset();
+    icp.reset();
+  }
+
+  // OSDs 0..k-1 have primary affinity 0, so a PG with all its data shards on
+  // them has its parity shard as primary while shard 0 is up.
+  void build_osdmap() {
+    uuid_d fsid; // matches the unconnected MonClient
+    osdmap.build_simple(cct, 0, fsid, k + m);
+    OSDMap::Incremental osd_inc(osdmap.get_epoch() + 1);
+    osd_inc.fsid = fsid;
+    entity_addrvec_t addrs;
+    addrs.v.push_back(entity_addr_t());
+    for (int i = 0; i < k + m; ++i) {
+      addrs.v[0].nonce = i;
+      osd_inc.new_state[i] = CEPH_OSD_EXISTS | CEPH_OSD_NEW;
+      osd_inc.new_up_client[i] = addrs;
+      osd_inc.new_up_cluster[i] = addrs;
+      osd_inc.new_hb_back_up[i] = addrs;
+      osd_inc.new_hb_front_up[i] = addrs;
+      osd_inc.new_weight[i] = CEPH_OSD_IN;
+    }
+    osdmap.apply_incremental(osd_inc);
+    for (int i = 0; i < k; ++i) {
+      osdmap.set_primary_affinity(i, 0);
+    }
+
+    int rule = osdmap.crush->add_simple_rule(
+      "ec", "default", "osd", "", "indep", pg_pool_t::TYPE_ERASURE, &std::cerr);
+    ASSERT_GE(rule, 0);
+    OSDMap::Incremental pool_inc(osdmap.get_epoch() + 1);
+    pool_inc.fsid = fsid;
+    pool_inc.new_pool_max = osdmap.get_pool_max();
+    pool_id = ++pool_inc.new_pool_max;
+    pg_pool_t pool = make_ec_pool(k, m, chunk_size);
+    pool.set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    pool.object_hash = CEPH_STR_HASH_RJENKINS;
+    pool.set_pg_num(64);
+    pool.set_pgp_num(64);
+    pool.crush_rule = rule;
+    for (int i = 1; i < k; ++i) {
+      pool.nonprimary_shards.insert(shard_id_t(i));
+    }
+    pool_inc.new_pools[pool_id] = pool;
+    pool_inc.new_pool_names[pool_id] = "ec";
+    osdmap.apply_incremental(pool_inc);
+
+    bufferlist bl;
+    osdmap.encode(bl, CEPH_FEATURES_ALL | CEPH_FEATURE_RESERVED);
+    auto msg = ceph::make_message<MOSDMap>(fsid, CEPH_FEATURES_ALL);
+    msg->maps[osdmap.get_epoch()] = bl;
+    objecter->handle_osd_map(msg.get());
+  }
+
+  // Sets *oid to an object whose PG has acting[primary_shard] as primary,
+  // with shard 0 up. Searching object names, rather than changing the map,
+  // keeps the primary that CRUSH and primary affinity choose.
+  void find_object_with_primary(int primary_shard, object_t *oid) {
+    static constexpr int max_objects = 1000;
+    for (int i = 0; i < max_objects; ++i) {
+      object_t candidate("obj" + std::to_string(i));
+      pg_t pgid = osdmap.object_locator_to_pg(candidate,
+                                              object_locator_t(pool_id));
+      std::vector<int> acting;
+      int primary;
+      osdmap.pg_to_acting_osds(pgid, &acting, &primary);
+      if (acting.size() == k + m && osdmap.is_up(acting[0]) &&
+          primary == acting[primary_shard]) {
+        *oid = candidate;
+        return;
+      }
+    }
+    FAIL() << "no PG has shard " << primary_shard << " as primary";
+  }
+
+  // Returns the op after SplitOp::create() chose not to split it.
+  Objecter::Op *make_split_op(const object_t &oid, ObjectOperation &rd) {
+    Objecter::Op *op = objecter->prepare_read_op(
+      oid, object_locator_t(pool_id), rd, CEPH_NOSNAP, nullptr,
+      CEPH_OSD_FLAG_BALANCE_READS, -1, nullptr);
+    ceph::shared_mutex lock = ceph::make_shared_mutex("TestSingleDirectOpTarget");
+    ceph::shunique_lock<ceph::shared_mutex> sul(lock, ceph::acquire_shared);
+    EXPECT_FALSE(SplitOp::create(op, *objecter, sul, cct));
+    return op;
+  }
+};
+
+TEST_F(TestSingleDirectOpTarget, ReadGoesToItsShard)
+{
+  object_t oid;
+  ASSERT_NO_FATAL_FAILURE(find_object_with_primary(k, &oid));
+  ObjectOperation rd;
+  bufferlist out;
+  rd.read(0, chunk_size / 2, &out, nullptr, nullptr);
+  Objecter::Op *op = make_split_op(oid, rd);
+  EXPECT_EQ(op->target.acting[0], op->target.osd);
+  EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+  op->put();
+}
+
+TEST_F(TestSingleDirectOpTarget, CallGoesToPrimary)
+{
+  object_t oid;
+  ASSERT_NO_FATAL_FAILURE(find_object_with_primary(k, &oid));
+  ObjectOperation rd;
+  bufferlist out, in;
+  rd.read(0, chunk_size / 2, &out, nullptr, nullptr);
+  rd.call("lock", "get_info", in);
+  Objecter::Op *op = make_split_op(oid, rd);
+  EXPECT_NE(op->target.acting[0], op->target.acting_primary);
+  EXPECT_EQ(op->target.acting_primary, op->target.osd)
+    << "acting " << op->target.acting;
+  EXPECT_FALSE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+  op->put();
+}
+
+TEST_F(TestSingleDirectOpTarget, CallGoesDirectToPrimaryShardZero)
+{
+  object_t oid;
+  ASSERT_NO_FATAL_FAILURE(find_object_with_primary(0, &oid));
+  ObjectOperation rd;
+  bufferlist out, in;
+  rd.read(0, chunk_size / 2, &out, nullptr, nullptr);
+  rd.call("lock", "get_info", in);
+  Objecter::Op *op = make_split_op(oid, rd);
+  EXPECT_EQ(op->target.acting_primary, op->target.osd);
+  EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
   op->put();
 }
