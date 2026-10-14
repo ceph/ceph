@@ -3,7 +3,6 @@
 # vim: ts=4 sw=4 expandtab
 
 import argparse
-import errno
 import grp
 import logging
 import os
@@ -16,6 +15,9 @@ import time
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('ceph-crash')
+
+# exit code of timeout(1) when the command timed out
+TIMEOUT_EXIT_CODE = 124
 
 auth_names = ['client.crash.%s' % socket.gethostname(),
               'client.crash',
@@ -42,32 +44,35 @@ def parse_args():
     return parser.parse_args()
 
 
-def post_crash(path):
-    rc = 0
+def run_ceph(what, args, input=None):
+    # Try each auth name until one works. A missing keyring and a wrong key
+    # fail with different exit codes, so move on after any error except a
+    # timeout, where the other names won't reach the cluster either.
+    errors = []
     for n in auth_names:
         pr = subprocess.Popen(
-            args=['timeout', '30', 'ceph',
-                  '-n', n,
-                  'crash', 'post', '-i', '-'],
+            args=['timeout', '30', 'ceph', '-n', n] + args,
             stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-        f = open(os.path.join(path, 'meta'), 'rb')
-        (_, stderr) = pr.communicate(input=f.read())
-        stderr = stderr.decode()
-        rc = pr.wait()
-        f.close()
-        if rc == 0 and stderr == "":
+        (_, stderr) = pr.communicate(input=input)
+        stderr = stderr.decode(errors='replace').strip()
+        rc = pr.returncode
+        if rc == 0 and stderr == '':
+            return 0
+        log.debug('%s as %s failed: %s' % (what, n, stderr))
+        errors.append('%s: %s' % (n, stderr or 'exit code %d' % rc))
+        if rc == 0 or rc == TIMEOUT_EXIT_CODE:
             break
-        if rc == errno.EACCES:
-            log.debug('post %s as %s failed: %s' % (path, n, stderr))
-        else:
-            log.warning('post %s as %s failed: %s' % (path, n, stderr))
-            break
-    else:
-        log.warning('post %s failed: unable to authenticate as %s: %s'
-                    % (path, ', '.join(auth_names), stderr))
+    log.warning('%s failed as %s' % (what, '; '.join(errors)))
     return rc
+
+
+def post_crash(path):
+    with open(os.path.join(path, 'meta'), 'rb') as f:
+        meta = f.read()
+    return run_ceph('post %s' % path, ['crash', 'post', '-i', '-'], meta)
 
 
 def scrape_path(path):
