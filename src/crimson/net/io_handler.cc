@@ -1100,7 +1100,7 @@ IOHandler::read_message(
     // notify ack
     if (!conn.policy.lossy) {
       ++ack_left;
-      notify_out_dispatch();
+      maybe_notify_out_dispatch();
     }
 
     ack_out_sent(current_header.ack_seq);
