@@ -226,6 +226,8 @@ class OSDThrasher(Thrasher):
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 4)
+        self.min_in_hosts = self.config.get("min_in_hosts", 2)
+        self.thrash_hosts = self.config.get("thrash_hosts", False)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
         self.sighup_delay = self.config.get('sighup_delay')
         self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
@@ -569,47 +571,72 @@ class OSDThrasher(Thrasher):
             self.ceph_manager.set_config(self.rerrosd,
                                          bluestore_debug_random_read_err = self.random_eio)
 
+    def _host_osds(self):
+        """
+        Map each OSD host to the ids of the OSDs on it.
+        """
+        osds = self.ceph_manager.ctx.cluster.only(teuthology.is_type('osd', self.ceph_manager.cluster))
+        return {host: [int(role.split('.')[1]) for role in roles
+                       if role.startswith("osd.")]
+                for host, roles in osds.remotes.items()}
+
     def out_host(self, host=None):
         """
-        Make all OSDs on a host out if the host has more than min_in OSDs.
+        Make all OSDs on a host out, if at least min_in OSDs on at least
+        min_in_hosts hosts stay in.
         :param host: Host to be marked.
         """
-        # Check that all OSD remotes have a valid console
-        osds = self.ceph_manager.ctx.cluster.only(teuthology.is_type('osd', self.ceph_manager.cluster))
-        all_hosts = list(osds.remotes.keys())
-        min_in = self.minin
-        
+        host_osds = self._host_osds()
+        all_hosts = list(host_osds.keys())
+
         if host is not None:
             all_hosts = [host] if host in all_hosts else []
 
         random.shuffle(all_hosts)  # Shuffle the list to pick hosts randomly
-        
+
         for host in all_hosts:
             self.log("Checking the number of in OSDs in host %s" % (host,))
+            in_host_osds = [osd for osd in host_osds[host]
+                            if osd in self.in_osds]
+            if not in_host_osds:
+                continue
 
-            # Count the number of in OSDs in the host
-            in_host_osd_count = 0
-            for role in osds.remotes[host]:
-                if role.startswith("osd."):
-                    osdid = int(role.split('.')[1])
-                    if osdid in self.in_osds:
-                        in_host_osd_count += 1
-
-            # Check taking out that host will cause the number 
-            # of in OSDs to be less than min_in
-            if len(self.in_osds) - in_host_osd_count >= min_in:
+            osds_left = len(self.in_osds) - len(in_host_osds)
+            hosts_left = len([h for h, h_osds in host_osds.items()
+                              if h != host and
+                              any(osd in self.in_osds for osd in h_osds)])
+            if osds_left >= self.minin and hosts_left >= self.min_in_hosts:
                 self.log("Removing all OSDs in host %s" % (host,))
-                # Proceed to take out OSDs
-                for role in osds.remotes[host]:
-                    if role.startswith("osd."):
-                        osdid = int(role.split('.')[1])
-                        if osdid in self.in_osds:
-                            self.out_osd(osdid)
+                for osd in in_host_osds:
+                    self.out_osd(osd)
                 return
             else:
-                self.log("Host %s can't be trashed as it will left %d OSDs in" % (host, len(self.in_osds) - in_host_osd_count))
+                self.log("Host %s can't be trashed as it will leave %d OSDs "
+                         "in on %d hosts" % (host, osds_left, hosts_left))
 
         self.log("No suitable host found to thrash")
+
+    def in_host(self, host=None):
+        """
+        Mark in all OSDs on a host, so that a host is either all in or
+        all out.
+        :param host: Host to be marked.
+        """
+        host_osds = self._host_osds()
+        if host is None:
+            out_hosts = [h for h, h_osds in host_osds.items()
+                         if any(osd in self.out_osds for osd in h_osds)]
+            if not out_hosts:
+                self.log("No host with out OSDs found")
+                return
+            host = random.choice(out_hosts)
+
+        self.log("Adding all OSDs in host %s" % (host,))
+        for osd in host_osds[host]:
+            if osd in self.dead_osds:
+                self.revive_osd(osd)
+            if osd in self.out_osds:
+                self.in_osd(osd)
 
     def out_osd(self, osd=None):
         """
@@ -1261,7 +1288,10 @@ class OSDThrasher(Thrasher):
         """
         self.log("test_map_discontinuity")
         while len(self.in_osds) < (self.minin + 1):
-            self.in_osd()
+            if self.thrash_hosts:
+                self.in_host()
+            else:
+                self.in_osd()
         self.log("Waiting for recovery")
         self.ceph_manager.wait_for_all_osds_up(
             timeout=self.config.get('timeout')
@@ -1299,14 +1329,13 @@ class OSDThrasher(Thrasher):
         minout = int(self.config.get("min_out", 0))
         minlive = int(self.config.get("min_live", 2))
         mindead = int(self.config.get("min_dead", 0))
-        thrash_hosts = self.config.get("thrash_hosts", False)
 
         self.log('choose_action: min_in %d min_out '
                  '%d min_live %d min_dead %d '
                  'chance_down %.2f' %
                  (minin, minout, minlive, mindead, chance_down))
         actions = []
-        if thrash_hosts:
+        if self.thrash_hosts:
             if len(self.in_osds) > minin:
                 self.log("check thrash_hosts: in_osds > minin")
                 actions.append((self.out_host, 1.0,))
@@ -1315,7 +1344,10 @@ class OSDThrasher(Thrasher):
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
         if len(self.out_osds) > minout:
-            actions.append((self.in_osd, 1.7,))
+            if self.thrash_hosts:
+                actions.append((self.in_host, 1.7,))
+            else:
+                actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
             actions.append((self.revive_osd, 1.0,))
         if self.config.get('thrash_primary_affinity', True):
