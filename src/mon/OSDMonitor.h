@@ -988,6 +988,12 @@ public:
    */
   static int validate_stretch_mode_new_pool(CrushWrapper& crush, int crush_rule, int stretch_bucket_count, int stretch_mode_bucket, 
     const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const std::string& zone_failure_domain, std::ostream *ss);
+  // validate_stretch_mode_new_pool() for a pool joining stretch mode, which
+  // may be entered in the pending update, against the pools it leaves; the
+  // joining pool, if it exists, is not compared with itself
+  int validate_joining_pool(CrushWrapper& crush, int crush_rule,
+                            const std::string& zone_failure_domain,
+                            int64_t pool, std::ostream *ss) const;
 
   // The release that ships per-pool num_zones. Until require_osd_release
   // reaches it the monitors keep the behaviour of earlier releases.

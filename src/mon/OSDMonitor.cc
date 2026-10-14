@@ -8551,8 +8551,6 @@ int OSDMonitor::check_pg_num(int64_t pool,
  *
  * @return 0 on success, negative errno on failure.
  */
-static int degraded_stretch_mandatory_member(const OSDMap& osdmap);
-
 int OSDMonitor::prepare_new_pool(string& name,
                                  int crush_rule,
                                  const string &crush_rule_name,
@@ -8626,10 +8624,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     effective_zone_failure_domain = g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
 
   // a new stretch pool must divide the cluster as stretch mode does
-  if (osdmap.stretch_mode_enabled && num_zones > 1) {
+  if (stretch_mode_enabled_or_pending() && num_zones > 1) {
     CrushWrapper newcrush = _get_pending_crush();
-    r = validate_stretch_mode_new_pool(newcrush, crush_rule, osdmap.stretch_bucket_count, osdmap.stretch_mode_bucket, 
-      osdmap.pools, effective_zone_failure_domain, ss);
+    r = validate_joining_pool(newcrush, crush_rule,
+                              effective_zone_failure_domain, -1, ss);
     if (r) {
       dout(10) << "validate_stretch_mode_pool returns " << r << dendl;
       *ss << rule_defaults;
@@ -9422,11 +9420,10 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       return -EINVAL;
     }
     // a pool joining stretch mode must divide the cluster as stretch mode does
-    if (osdmap.stretch_mode_enabled) {
+    if (stretch_mode_enabled_or_pending()) {
       CrushWrapper newcrush = _get_pending_crush();
-      int r = validate_stretch_mode_new_pool(
-        newcrush, crush_rule, osdmap.stretch_bucket_count,
-        osdmap.stretch_mode_bucket, osdmap.pools, zone_failure_domain, &ss);
+      int r = validate_joining_pool(newcrush, crush_rule, zone_failure_domain,
+                                    pool, &ss);
       if (r) return r;
     }
     unsigned size, min_size;
@@ -17048,6 +17045,26 @@ bool OSDMonitor::stretch_mode_enabled_or_pending() const
                                          : osdmap.stretch_mode_enabled;
 }
 
+int OSDMonitor::validate_joining_pool(CrushWrapper& crush, int crush_rule,
+                                      const string& zone_failure_domain,
+                                      int64_t pool, ostream *ss) const
+{
+  const bool pending = pending_inc.change_stretch_mode;
+  auto pools = osdmap.pools;
+  for (const auto& [id, p] : pending_inc.new_pools) {
+    pools[id] = p;
+  }
+  for (const auto id : pending_inc.old_pools) {
+    pools.erase(id);
+  }
+  pools.erase(pool);
+  return validate_stretch_mode_new_pool(
+    crush, crush_rule,
+    pending ? pending_inc.new_stretch_bucket_count : osdmap.stretch_bucket_count,
+    pending ? pending_inc.new_stretch_mode_bucket : osdmap.stretch_mode_bucket,
+    pools, zone_failure_domain, ss);
+}
+
 int OSDMonitor::check_no_legacy_individual_stretch_pools(int64_t skip_pool,
                                                          ostream *ss) const
 {
@@ -17579,12 +17596,22 @@ int OSDMonitor::validate_stretch_mode_new_pool(CrushWrapper& crush, int new_crus
 }
 
 // the surviving bucket that degraded stretch mode made mandatory for the
-// existing stretch pools
-static int degraded_stretch_mandatory_member(const OSDMap& osdmap)
+// existing stretch pools, as the pending update leaves them
+static int degraded_stretch_mandatory_member(const OSDMap& osdmap,
+                                             const OSDMap::Incremental& inc,
+                                             uint32_t degraded)
 {
+  auto mandatory = [degraded](const pg_pool_t& p) {
+    return p.peering_crush_bucket_count == degraded &&
+           p.peering_crush_mandatory_member != CRUSH_ITEM_NONE;
+  };
+  for (const auto& [id, p] : inc.new_pools) {
+    if (mandatory(p)) {
+      return p.peering_crush_mandatory_member;
+    }
+  }
   for (const auto& [id, p] : osdmap.get_pools()) {
-    if (p.peering_crush_bucket_count == osdmap.degraded_stretch_mode &&
-        p.peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
+    if (!inc.new_pools.contains(id) && mandatory(p)) {
       return p.peering_crush_mandatory_member;
     }
   }
@@ -17602,10 +17629,10 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 {
   dout(20) << __func__ << dendl;
   *okay = false;
-  // a pool joining an enabled stretch mode must not reset its state, which
-  // may be degraded or recovering, nor be refused for zone weights that
-  // drifted apart after stretch mode was entered
-  const bool already_enabled = !legacy && osdmap.stretch_mode_enabled;
+  // a pool joining an enabled stretch mode, or one that the pending update
+  // enters, must not reset its state, which may be degraded or recovering,
+  // nor be refused for zone weights that drifted apart since it was entered
+  const bool already_enabled = !legacy && stretch_mode_enabled_or_pending();
   int dividing_id = -1;
   if (auto type_id = crush.get_validated_type_id(dividing_bucket);
       !type_id.has_value()) {
@@ -17672,10 +17699,13 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
       pool->peering_crush_bucket_barrier = dividing_id;
       pool->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
       pool->num_zones = bucket_count;
-      if (already_enabled && osdmap.degraded_stretch_mode) {
-        pool->peering_crush_bucket_count = osdmap.degraded_stretch_mode;
+      const uint32_t degraded = pending_inc.change_stretch_mode
+        ? pending_inc.new_degraded_stretch_mode
+        : osdmap.degraded_stretch_mode;
+      if (already_enabled && degraded) {
+        pool->peering_crush_bucket_count = degraded;
         pool->peering_crush_mandatory_member =
-          degraded_stretch_mandatory_member(osdmap);
+          degraded_stretch_mandatory_member(osdmap, pending_inc, degraded);
       }
       // as earlier releases did, with min_size counted per zone
       if (legacy) {
