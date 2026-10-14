@@ -4,6 +4,10 @@ on:
     workflows: [Reviewer Submitted Review]
     types: [completed]
 
+concurrency:
+  group: githubmap-reminder-${{ github.event.workflow_run.display_title }}-${{ github.event.workflow_run.actor.login }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write
@@ -96,7 +100,19 @@ jobs:
             }
 
             // 5. Leave a comment prompting the contributor to add themselves
-            const commentBody = `@${reviewer} Thank you for reviewing this pull request! As a member of the Ceph organization, please add yourself to \`.githubmap\` in the \`main\` branch if you haven't already.`;
+            const marker = `<!-- githubmap-reminder: ${reviewer} -->`;
+            const commentBody = `${marker}\n@${reviewer} Thank you for reviewing this pull request! As a member of the Ceph organization, please add yourself to \`.githubmap\` in the \`main\` branch if you haven't already.`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            if (comments.some(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker))) {
+              console.log(`Already reminded @${reviewer} on #${issueNumber}.`);
+              return;
+            }
 
             await github.rest.issues.createComment({
               owner,
