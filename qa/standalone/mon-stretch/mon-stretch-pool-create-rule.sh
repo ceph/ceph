@@ -208,4 +208,22 @@ function TEST_pool_create_two_zone_ec_fields() {
     done
 }
 
+# A pool over two zones joins stretch mode as it is: the zone weights are
+# checked only when stretch mode is entered
+function TEST_join_stretch_mode_with_uneven_zone_weights() {
+    local dir=$1
+
+    two_zone_cluster $dir 3 || return 1
+    ceph osd pool create first --num_zones 2 --replica 2 || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
+
+    ceph osd crush reweight osd.0 0.1 || return 1
+    ceph osd crush reweight osd.1 0.1 || return 1
+    ceph osd pool create second --num_zones 2 --replica 2 || return 1
+    test "$(pool_field second num_zones)" = 2 || return 1
+    ceph osd pool create third 8 || return 1
+    ceph osd pool set third num_zones 2 --replica 2 || return 1
+    test "$(pool_field third num_zones)" = 2 || return 1
+}
+
 main mon-stretch-pool-create-rule "$@"
