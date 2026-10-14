@@ -1148,13 +1148,15 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
     if (monmap.stretch_mode_enabled) {
       ss << "stretch mode is already engaged";
-      err = -EINVAL;
+      err = 0;
       goto reply_no_propose;
     }
     if (pending_map.stretch_mode_enabled) {
-      ss << "stretch mode currently committing";
-      err = 0;
-      goto reply_no_propose;
+      dout(10) << "stretch mode currently committing; "
+               << "waiting for commit before retrying command"
+               << dendl;
+      wait_for_commit(op, new Monitor::C_RetryMessage(&mon, op));
+      return false;
     }
     string new_crush_rule;
     if (!cmd_getval(cmdmap, "new_crush_rule", new_crush_rule)) {
