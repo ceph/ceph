@@ -388,7 +388,7 @@ Enabling OSD Memory Autotuning
 
 See :ref:`osd_autotune`.
 
-To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/cephadm.html#scenario-deploy-hyperconverged-ceph>`_
+To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/deployed_ceph.html#scenario-deploy-hyperconverged-ceph>`_
 
 In other cases where the cluster hardware is not exclusively used by Ceph (converged infrastructure),
 reduce the memory consumption of Ceph like so:
