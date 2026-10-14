@@ -7883,6 +7883,7 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
     *rule = ruleno;
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    note_created_crush_rule(name);
     return 0;
   }
 }
@@ -7939,6 +7940,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
     *rule = err;
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    note_created_crush_rule(name);
     return 0;
   }
 }
@@ -9057,6 +9059,47 @@ void OSDMonitor::maybe_remove_unused_crush_rule(int64_t skip_pool,
   }
   pending_inc.crush.clear();
   newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+}
+
+void OSDMonitor::note_created_crush_rule(const string& name)
+{
+  if (preparing_op) {
+    preparing_op->created_crush_rules.insert(name);
+  }
+}
+
+// A request that fails removes the rules it created in an earlier update,
+// unless a pool uses them. Returns whether a removal is pending.
+bool OSDMonitor::remove_what_failed_op_created(MonOpRequestRef op)
+{
+  bool removed = false;
+  if (!op->created_crush_rules.empty()) {
+    CrushWrapper newcrush = _get_pending_crush();
+    const int default_rule =
+      osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
+    bool rule_removed = false;
+    for (const auto& name : op->created_crush_rules) {
+      const int id = newcrush.get_rule_id(name);
+      if (id < 0 || id == default_rule ||
+          other_pool(-1, [id](const pg_pool_t& p) {
+            return p.crush_rule == id;
+          })) {
+        continue;
+      }
+      dout(10) << __func__ << " removing crush rule " << name
+               << " of a failed command" << dendl;
+      if (newcrush.remove_rule(id) == 0) {
+        rule_removed = true;
+      }
+    }
+    op->created_crush_rules.clear();
+    if (rule_removed) {
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+      removed = true;
+    }
+  }
+  return removed;
 }
 
 // A pool over zones needs a rule that places it in num_zones buckets of the
@@ -11778,6 +11821,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				      const cmdmap_t& cmdmap)
 {
   op->mark_osdmon_event(__func__);
+  preparing_op = op;
+  auto clear_preparing_op = make_scope_guard([this] { preparing_op.reset(); });
   auto m = op->get_req<MMonCommand>();
   stringstream ss;
   string rs;
@@ -16351,6 +16396,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   getline(ss, rs);
   if (err < 0 && rs.length() == 0)
     rs = cpp_strerror(err);
+  if (err < 0 && remove_what_failed_op_created(op)) {
+    wait_for_commit(op, new Monitor::C_Command(mon, op, err, rs, rdata,
+                                               get_last_committed() + 1));
+    return true;
+  }
   mon.reply_command(op, err, rs, rdata, get_last_committed());
   return false; /* nothing to propose */
 
