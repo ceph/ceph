@@ -879,6 +879,7 @@ protected:
     pg_pool_t rep = make_replicated_pool(4);
     rep.num_zones = 2;
     rep.peering_crush_bucket_count = 2;
+    rep.peering_crush_bucket_barrier = crush.get_type_id("datacenter");
     rep.set_pg_num(1);
     rep.set_pgp_num(1);
     OSDMapTestHelpers::add_pool(map, rep_pool_id, rep);

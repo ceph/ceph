@@ -356,24 +356,40 @@ void ReplicaSplitOp::init_reference_sub_read() {
 
   // When LOCALIZE_READS is set on a stretch replica pool, restrict sub-reads
   // to replicas in the client's local zone only.  If fewer than two are
-  // available the split is aborted and the op falls back to the primary.
+  // available the split is aborted and the op goes to the nearest replica.
   //
   // For BALANCE_READS (localize=false) we use all available replicas.
-  int first = 0;
-  int end = target.acting.size();
   if (localize && pi->is_stretch_pool() && pi->get_num_zone() > 1) {
-    int zone_size = pi->get_zone_size();
-    int local_zone = local_zone_for_acting_set(
-        target.acting, pi->get_num_zone(), zone_size,
-        objecter.osdmap->crush.get(), cct, objecter.crush_location);
-    first = (int)pi->get_abs_shard(shard_id_t(0), local_zone);
-    end = std::min(end, first + zone_size);
-  }
-
-  for (int i = first; i < end; i++) {
-    int direct_osd = target.acting[i];
-    if (objecter.osdmap->exists(direct_osd)) {
-      valid_indices.push_back(i);
+    // A replicated acting set is not ordered by zone: the local zone is that
+    // of the replica nearest the client.
+    CrushWrapper *crush = objecter.osdmap->crush.get();
+    std::map<int, std::vector<int>> zone_indices;
+    int local_zone = CRUSH_ITEM_NONE;
+    int best_distance = INT_MAX;
+    for (int i = 0; i < (int)target.acting.size(); i++) {
+      const int osd = target.acting[i];
+      if (!objecter.osdmap->exists(osd)) {
+        continue;
+      }
+      // the real bucket, which a client's crush_location names
+      const int zone = crush->get_parent_of_type(
+        osd, pi->peering_crush_bucket_barrier, -1);
+      zone_indices[zone].push_back(i);
+      const int distance = crush->get_common_ancestor_distance(
+        cct, osd, objecter.crush_location);
+      if (distance >= 0 && distance < best_distance) {
+        best_distance = distance;
+        local_zone = zone;
+      }
+    }
+    if (local_zone != CRUSH_ITEM_NONE) {
+      valid_indices = std::move(zone_indices[local_zone]);
+    }
+  } else {
+    for (int i = 0; i < (int)target.acting.size(); i++) {
+      if (objecter.osdmap->exists(target.acting[i])) {
+        valid_indices.push_back(i);
+      }
     }
   }
 
