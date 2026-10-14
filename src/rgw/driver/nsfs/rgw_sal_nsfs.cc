@@ -4735,6 +4735,58 @@ NSFSDriver::bucket_dir(const DoutPrefixProvider* dpp, const std::string& name,
   return make_placed_dir(std::string{});
 }
 
+int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
+				   const rgw_owner& owner, const RGWEnv* env,
+				   std::optional<std::string>& path)
+{
+  path.reset();
+  if (!env) {
+    return 0;
+  }
+  /* the header as RGWEnv keeps it:  HTTP_, upper case, '-' as '_' */
+  std::string var = "HTTP_";
+  for (char c : g_conf().get_val<std::string>(
+	 "rgw_nsfs_custom_bucket_path_header")) {
+    var += (c == '-') ? '_' : static_cast<char>(std::toupper(
+						   static_cast<unsigned char>(c)));
+  }
+  const char* asked = env->get(var.c_str());
+  if (!asked || !*asked) {
+    return 0;
+  }
+
+  std::string list;
+  nsfs::Identity id;
+  if ((userDB->get_identity(dpp, to_string(owner), id) == 0) &&
+      !id.custom_bucket_path_allowed_list.empty()) {
+    list = id.custom_bucket_path_allowed_list;
+  } else {
+    /* the global fallback, which nothing validated when it was set */
+    std::string bad;
+    if (nsfs::normalize_allowed_list(
+	  g_conf().get_val<std::string>("rgw_nsfs_custom_bucket_path_allowed_list"),
+	  list, bad) < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_custom_bucket_path_allowed_list "
+	<< "entry \"" << bad << "\" is not an absolute canonical path;  "
+	<< "refusing custom bucket paths" << dendl;
+      return -EACCES;
+    }
+  }
+  if (list.empty() || !nsfs::allowed_list_admits(list, asked)) {
+    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " refused:  "
+      << (list.empty() ? "no allowlist" : "not in the allowlist " + list)
+      << dendl;
+    return -EACCES;
+  }
+  if (!nsfs::placement_path_is_acceptable(asked)) {
+    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " refused:  "
+      << "not an absolute canonical path" << dendl;
+    return -EINVAL;
+  }
+  path = asked;
+  return 0;
+}
+
 int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   *bucket = std::make_unique<NSFSBucket>(this, bucket_dir(dpp, b.name,
@@ -5008,6 +5060,14 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     ret = driver->new_bucket_path(dpp, params.owner, get_key(), bp.path);
     if (ret < 0) {
       return ret;
+    }
+    std::optional<std::string> custom;
+    ret = driver->custom_bucket_path(dpp, params.owner, params.env, custom);
+    if (ret < 0) {
+      return ret;
+    }
+    if (custom) {
+      bp.path = *custom;
     }
     ret = driver->get_identity_db()->insert_bucket_placement(dpp, bp);
     if (ret == -EADDRINUSE) {

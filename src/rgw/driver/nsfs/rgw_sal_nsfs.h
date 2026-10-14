@@ -1112,6 +1112,16 @@ public:
   int new_bucket_path(const DoutPrefixProvider* dpp, const rgw_owner& owner,
 		      const rgw_bucket& b, std::string& path);
 
+  /* NooBaa's custom bucket path:  the header rgw_nsfs_custom_bucket_path_header
+   * names, when the request carries it.  The path is admitted by the
+   * owner's allowlist, or rgw_nsfs_custom_bucket_path_allowed_list when the
+   * owner has none, as a string prefix (DECISIONS.md 2026-10-14).  0 with
+   * `path` unset when there is no header;  -EACCES when no allowlist
+   * admits it, as NooBaa refuses with UNAUTHORIZED;  -EINVAL for a path
+   * nsfs would not store. */
+  int custom_bucket_path(const DoutPrefixProvider* dpp, const rgw_owner& owner,
+			 const RGWEnv* env, std::optional<std::string>& path);
+
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;

@@ -19,6 +19,7 @@
 #include <sqlite3.h>
 
 #include "common/errno.h"
+#include "common/split.h"
 #include "include/scope_guard.h"
 
 #include "rgw_common.h"
@@ -131,6 +132,42 @@ int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
 }
 
 } // namespace
+
+int normalize_allowed_list(std::string_view in, std::string& out,
+			   std::string& bad)
+{
+  out.clear();
+  for (std::string_view entry : ceph::split(in, ":")) {
+    while (!entry.empty() && ((entry.front() == ' ') || (entry.front() == '\t'))) {
+      entry.remove_prefix(1);
+    }
+    while (!entry.empty() && ((entry.back() == ' ') || (entry.back() == '\t'))) {
+      entry.remove_suffix(1);
+    }
+    if (entry.empty()) {
+      continue;
+    }
+    if (!placement_path_is_acceptable(entry)) {
+      bad = std::string(entry);
+      return -EINVAL;
+    }
+    if (!out.empty()) {
+      out += ':';
+    }
+    out += entry;
+  }
+  return 0;
+}
+
+bool allowed_list_admits(std::string_view list, std::string_view path)
+{
+  for (std::string_view prefix : ceph::split(list, ":")) {
+    if (path.starts_with(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 bool placement_path_is_acceptable(std::string_view path)
 {
@@ -307,6 +344,21 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
   if (id.key.empty()) {
     return -EINVAL;
   }
+  /* The custom-bucket-path allowlist is checked here, where it is stored,
+   * so a bad entry is refused with a message rather than found by a
+   * CreateBucket later.  Both writers come through here:  the import and
+   * the identity Admin Ops. */
+  std::string allowed;
+  if (!id.custom_bucket_path_allowed_list.empty()) {
+    std::string bad;
+    if (normalize_allowed_list(id.custom_bucket_path_allowed_list, allowed,
+			       bad) < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " refused:  its "
+	<< "custom_bucket_path_allowed_list entry \"" << bad << "\" is not "
+	<< "an absolute canonical path" << dendl;
+      return -EINVAL;
+    }
+  }
 
   const std::string sql =
     "INSERT OR REPLACE INTO '" + identity_table + "' (" + IDENTITY_COLUMNS
@@ -334,7 +386,7 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
   }
   bind_text_or_null(st, 5, id.distinguished_name);
   bind_text_or_null(st, 6, id.new_buckets_path);
-  bind_text_or_null(st, 7, id.custom_bucket_path_allowed_list);
+  bind_text_or_null(st, 7, allowed);
   bind_text_or_null(st, 8, id.fs_backend);
   id.force_md5_etag ? sqlite3_bind_int64(st, 9, *id.force_md5_etag ? 1 : 0)
 		    : sqlite3_bind_null(st, 9);

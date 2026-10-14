@@ -4733,6 +4733,28 @@ options:
     well-known path with it.
   services:
   - rgw
+- name: rgw_nsfs_custom_bucket_path_header
+  type: str
+  level: advanced
+  desc: The request header naming a custom path for a new bucket
+  long_desc: A CreateBucket carrying this header, with a path the owner's
+    allowlist admits, creates the bucket at that path rather than at the
+    owner's new_buckets_path.  The default is NooBaa's header, so that clients
+    of a migrated deployment keep working;  naming another lets NooBaa's be
+    retired.
+  default: x-noobaa-custom-bucket-path
+  services:
+  - rgw
+- name: rgw_nsfs_custom_bucket_path_allowed_list
+  type: str
+  level: advanced
+  desc: Path prefixes a custom bucket path may start with, colon-separated
+  long_desc: The allowlist for an owner whose identity carries none of its own,
+    as NooBaa's NSFS_CUSTOM_BUCKET_PATH_ALLOWED_LIST is.  A custom path is
+    admitted when it starts with one of these, as a string prefix, as NooBaa
+    matches.  Empty refuses every custom path.
+  services:
+  - rgw
 - name: rgw_nsfs_bucket_profile
   type: str
   level: advanced

@@ -181,6 +181,19 @@ struct AbandonedRecord {
  * clean path is not an authorized one. */
 bool placement_path_is_acceptable(std::string_view path);
 
+/* A custom-bucket-path allowlist, NooBaa's colon-separated string of path
+ * prefixes, checked and normalised where it is stored (DECISIONS.md
+ * 2026-10-14).  Entries are trimmed of blanks and empty ones dropped, as
+ * NooBaa's parse does;  each that remains must be a path
+ * placement_path_is_acceptable() accepts.  `out` is the entries joined
+ * by ':' again.  -EINVAL names the first bad entry in `bad`. */
+int normalize_allowed_list(std::string_view in, std::string& out,
+			   std::string& bad);
+
+/* Whether `path` starts with an entry of a normalised allowlist:  a
+ * string prefix, as NooBaa matches (DECISIONS.md 2026-10-14). */
+bool allowed_list_admits(std::string_view list, std::string_view path);
+
 /* The driver's database, plus the identity table.
  *
  * A subclass rather than a second database:  one file, one

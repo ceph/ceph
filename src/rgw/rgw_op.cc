@@ -4268,6 +4268,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
   s->bucket_owner = policy.get_owner();
   createparams.owner = s->bucket_owner.id;
+  createparams.env = s->info.env;
 
   buffer::list aclbl;
   policy.encode(aclbl);

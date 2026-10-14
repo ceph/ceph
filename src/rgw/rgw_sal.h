@@ -983,6 +983,9 @@ class Bucket {
       std::optional<ceph::real_time> creation_time;
       std::optional<rgw::BucketIndexType> index_type;
       std::optional<uint32_t> index_shards;
+      // the request's headers, for a driver that reads one of its own --
+      // nsfs's custom bucket path.  Null when no request carries them.
+      const RGWEnv* env = nullptr;
     };
 
     /// Create this bucket in the backing store.

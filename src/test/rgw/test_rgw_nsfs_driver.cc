@@ -11464,6 +11464,45 @@ TEST_F(NooBaaImportTest, AnAccountBecomesAnAccountAUserAndARow)
  * rewrites `name` and `email` and leaves `_id` alone.  A name-keyed
  * re-run would collide on the name it wrote itself, or worse, mint a
  * second id for an identity already imported. */
+/* NooBaa's `allow_bucket_creation` reaches RGW as the user's bucket
+ * limit:  false is a negative limit, which RGW reads as "may not create
+ * buckets", and true leaves the limit alone.  Both polarities on two
+ * account roots, so the mapping is shown to read the field and not to
+ * apply one value to everyone. */
+TEST_F(NooBaaImportTest, AllowBucketCreationBecomesTheBucketLimit)
+{
+  auto edit = [](std::string rec,
+		 std::initializer_list<std::pair<std::string, std::string>> subs) {
+    for (const auto& [from, to] : subs) {
+      const auto at = rec.find(from);
+      EXPECT_NE(at, std::string::npos) << from;
+      rec.replace(at, from.size(), to);
+    }
+    return rec;
+  };
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  const std::string refused = edit(NB_ACCOUNT_PLAIN, {
+      {"\"6ac7cb27fd4af356919110a3\"", "\"6ac7cb27fd4af356919110b4\""},
+      {"\"name\": \"interchange\"", "\"name\": \"no-buckets\""},
+      {"\"email\": \"interchange\"", "\"email\": \"no-buckets\""},
+      {"INTERCHANGEACCESSKEY", "NOBUCKETSACCESSKEY01"},
+      {"\"allow_bucket_creation\": true", "\"allow_bucket_creation\": false"}});
+  add_identity("6ac7cb27fd4af356919110b4", refused.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+
+  std::unique_ptr<rgw::sal::User> allowed, denied;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &allowed), 0);
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "NOBUCKETSACCESSKEY01",
+					   null_yield, &denied), 0);
+  EXPECT_GE(allowed->get_info().max_buckets, 0)
+      << "allow_bucket_creation true still refused buckets";
+  EXPECT_LT(denied->get_info().max_buckets, 0)
+      << "allow_bucket_creation false still allowed buckets";
+}
+
 TEST_F(NooBaaImportTest, ASecondRunRecognisesWhatTheFirstWrote)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
@@ -13907,6 +13946,139 @@ TEST_F(NSFSPlacedBucketTest, TheRowsOwnerFollowsTheBuckets)
 				null_yield), 0);
   EXPECT_EQ(to_string(loaded->get_owner()), row_owner())
       << "the row and bucket_info disagree";
+}
+
+/* NooBaa's custom bucket path (DECISIONS.md 2026-10-14):  a CreateBucket
+ * whose request carries the header, with a path an allowlist admits,
+ * creates the bucket at that path. */
+class NSFSCustomPathTest : public NSFSPlacedBucketTest {
+public:
+  RGWEnv env_;
+
+  void TearDown() override {
+    g_conf().set_val("rgw_nsfs_custom_bucket_path_allowed_list", "");
+    g_conf().set_val("rgw_nsfs_custom_bucket_path_header",
+		     "x-noobaa-custom-bucket-path");
+    NSFSPlacedBucketTest::TearDown();
+  }
+
+  void owner_allows(const std::string& list) {
+    nsfs::Identity id;
+    id.key = to_string(owner);
+    id.custom_bucket_path_allowed_list = list;
+    ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+  }
+
+  int create(const std::string& name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = owner;
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    cp.env = &env_;
+    return b->create(env->dpp, cp, null_yield);
+  }
+
+  std::string row_path(const std::string& name) {
+    nsfs::BucketPlacement row;
+    if (driver->get_identity_db()->get_bucket_placement(env->dpp, name, "",
+							 row) < 0) {
+      return {};
+    }
+    return row.path;
+  }
+};
+
+TEST_F(NSFSCustomPathTest, TheOwnersAllowlistAdmitsACustomPath)
+{
+  sf::create_directories(elsewhere());
+  owner_allows(elsewhere().string());
+  const sf::path at = elsewhere() / "chosen";
+  env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
+
+  ASSERT_EQ(create("custom"), 0);
+  EXPECT_TRUE(sf::is_directory(at));
+  EXPECT_FALSE(sf::exists(bp / "root" / "custom"));
+  EXPECT_EQ(row_path("custom"), at.string());
+}
+
+/* The global list stands in for an owner with none. */
+TEST_F(NSFSCustomPathTest, TheGlobalAllowlistAdmitsForAnOwnerWithNone)
+{
+  sf::create_directories(elsewhere());
+  g_conf().set_val("rgw_nsfs_custom_bucket_path_allowed_list",
+		   "/nowhere:" + elsewhere().string());
+  const sf::path at = elsewhere() / "global";
+  env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
+
+  ASSERT_EQ(create("global"), 0);
+  EXPECT_EQ(row_path("global"), at.string());
+}
+
+/* A path no list admits is refused, as NooBaa refuses it, and so is
+ * every path when there is no list at all.  Nothing is made. */
+TEST_F(NSFSCustomPathTest, APathNoAllowlistAdmitsIsRefused)
+{
+  sf::create_directories(elsewhere());
+  const sf::path at = elsewhere() / "refused";
+  env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
+
+  EXPECT_EQ(create("refused"), -EACCES) << "no allowlist at all";
+  owner_allows("/somewhere/else");
+  EXPECT_EQ(create("refused"), -EACCES) << "an allowlist not admitting it";
+  EXPECT_FALSE(sf::exists(at));
+  EXPECT_TRUE(row_path("refused").empty());
+}
+
+/* The match is NooBaa's:  a string prefix, so a sibling sharing the
+ * prefix is admitted (DECISIONS.md 2026-10-14). */
+TEST_F(NSFSCustomPathTest, TheMatchIsAStringPrefixAsNooBaas)
+{
+  sf::create_directories(elsewhere());
+  owner_allows((elsewhere() / "buckets").string());
+  const sf::path sibling = elsewhere() / "buckets-sibling";
+  env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", sibling.string());
+
+  ASSERT_EQ(create("sibling"), 0);
+  EXPECT_EQ(row_path("sibling"), sibling.string());
+}
+
+/* The header's name is configuration:  renamed, NooBaa's is not read and
+ * the new one is. */
+TEST_F(NSFSCustomPathTest, TheHeaderNameIsConfiguration)
+{
+  sf::create_directories(elsewhere());
+  owner_allows(elsewhere().string());
+  g_conf().set_val("rgw_nsfs_custom_bucket_path_header", "x-bucket-path");
+
+  env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH",
+	   (elsewhere() / "old-name").string());
+  ASSERT_EQ(create("old-name"), 0);
+  EXPECT_EQ(row_path("old-name"), (bp / "root" / "old-name").string())
+      << "NooBaa's header was read after the option renamed it";
+
+  env_.set("HTTP_X_BUCKET_PATH", (elsewhere() / "new-name").string());
+  ASSERT_EQ(create("new-name"), 0);
+  EXPECT_EQ(row_path("new-name"), (elsewhere() / "new-name").string());
+}
+
+/* The allowlist is checked where it is stored:  a bad entry is refused,
+ * and a good list is kept normalised. */
+TEST_F(NSFSCustomPathTest, TheAllowlistIsCheckedWhereItIsStored)
+{
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  id.custom_bucket_path_allowed_list = "/fine:relative/entry";
+  EXPECT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), -EINVAL);
+  id.custom_bucket_path_allowed_list = "/trailing/:/fine";
+  EXPECT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), -EINVAL);
+
+  id.custom_bucket_path_allowed_list = " /a : /b/c ::";
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+  nsfs::Identity got;
+  ASSERT_EQ(driver->get_identity_db()->get_identity(env->dpp, id.key, got), 0);
+  EXPECT_EQ(got.custom_bucket_path_allowed_list, "/a:/b/c");
 }
 
 /* Deleting a bucket deletes its row. */
