@@ -51,4 +51,27 @@ function TEST_pool_create_min_size_per_zone() {
     ! ceph osd pool ls | grep -qx s2 || return 1
 }
 
+# A rule that already has the pool's name, left by a pool that was renamed,
+# must also place a pool over two zones in both zones
+function TEST_pool_create_existing_rule_must_span_zones() {
+    local dir=$1
+
+    two_zone_cluster $dir 3 || return 1
+
+    ceph osd pool create e erasure --k 2 --m 1 || return 1
+    ceph osd pool rename e e_old || return 1
+    ! ceph osd pool create e erasure --k 2 --m 1 --num_zones 2 \
+        > $dir/out 2>&1 || return 1
+    grep "crush rule e does not place the pool in 2 buckets of type datacenter" \
+        $dir/out || return 1
+    ! ceph osd pool ls | grep -qx e || return 1
+
+    ceph osd crush rule create-replicated r default host || return 1
+    ! ceph osd pool create r --num_zones 2 --replica 2 > $dir/out 2>&1 || return 1
+    grep "crush rule r does not place the pool in 2 buckets of type datacenter" \
+        $dir/out || return 1
+    ! ceph osd pool ls | grep -qx r || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
+}
+
 main mon-stretch-pool-create-rule "$@"
