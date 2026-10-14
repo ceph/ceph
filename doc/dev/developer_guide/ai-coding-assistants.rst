@@ -19,9 +19,10 @@ when contributing to Ceph.
 AI tools helping with Ceph development should follow the standard Ceph
 development process:
 
-- `Contributing to Ceph: A Guide for Developers <index>`_
-- `Submitting Patches to Ceph <../../../SubmittingPatches>`_
-- `Basic Workflow <basic-workflow>`_
+- :doc:`Contributing to Ceph: A Guide for Developers <index>`
+- `Submitting Patches to Ceph
+  <https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst>`_
+- :doc:`Basic Workflow <basic-workflow>`
 
 Coding Style
 ------------
@@ -57,8 +58,9 @@ By adding a ``Signed-off-by`` tag, the submitter also certifies that they
 have disclosed all AI assistance used in producing the contribution, as
 required by this document.
 
-See `Sign your work <../../../SubmittingPatches>`_ in ``SubmittingPatches.rst``
-for the full DCO text and instructions.
+See `Sign your work
+<https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst#sign-your-work>`_
+in ``SubmittingPatches.rst`` for the full DCO text and instructions.
 
 Attribution
 -----------
