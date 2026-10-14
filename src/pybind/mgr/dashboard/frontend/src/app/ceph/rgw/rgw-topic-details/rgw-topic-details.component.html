@@ -1,22 +1,22 @@
-<ng-container *ngIf="!!selection">
+@if (!!selection) {
   <cds-tabs
     type="contained"
     theme="light"
-  >
+    >
     <cds-tab
       heading="Details"
       i18n-heading
-    >
+      >
       <table
         class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
         data-testid="rgw-topic-details"
-      >
+        >
         <tbody>
           <tr>
             <td
               i18n
               class="bold"
-            >
+              >
               Push endpoint arguments
             </td>
             <td>{{ selection?.dest?.push_endpoint_args }}</td>
@@ -25,7 +25,7 @@
             <td
               i18n
               class="bold w-25"
-            >
+              >
               Stored secret
             </td>
             <td class="w-75">{{ selection?.dest?.stored_secret }}</td>
@@ -34,7 +34,7 @@
             <td
               i18n
               class="bold"
-            >
+              >
               Persistent
             </td>
             <td>{{ selection?.dest?.persistent }}</td>
@@ -43,7 +43,7 @@
             <td
               i18n
               class="bold"
-            >
+              >
               Persistent queue
             </td>
             <td>{{ selection?.dest?.persistent_queue }}</td>
@@ -52,7 +52,7 @@
             <td
               i18n
               class="bold"
-            >
+              >
               Time to live
             </td>
             <td>{{ selection?.dest?.time_to_live }}</td>
@@ -61,7 +61,7 @@
             <td
               i18n
               class="bold"
-            >
+              >
               Max retries
             </td>
             <td>{{ selection?.dest?.max_retries }}</td>
@@ -70,7 +70,7 @@
             <td
               i18n
               class="bold"
-            >
+              >
               Retry sleep duration
             </td>
             <td>{{ selection?.dest?.retry_sleep_duration }}</td>
@@ -79,7 +79,7 @@
             <td
               i18n
               class="bold"
-            >
+              >
               Opaque data
             </td>
             <td>{{ selection?.opaqueData }}</td>
@@ -90,17 +90,17 @@
     <cds-tab
       heading="Policies"
       i18n-heading
-    >
+      >
       <div>
         <table
           class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
-        >
+          >
           <tbody>
             <tr>
               <td
                 i18n
                 class="bold w-25"
-              >
+                >
                 Policy
               </td>
               <td>
@@ -114,16 +114,16 @@
     <cds-tab
       heading="Subscribed buckets"
       i18n-heading
-    >
+      >
       <table
         class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
-      >
+        >
         <tbody>
           <tr>
             <td
               i18n
               class="bold w-25"
-            >
+              >
               Subscribed buckets
             </td>
             <td>
@@ -134,4 +134,4 @@
       </table>
     </cds-tab>
   </cds-tabs>
-</ng-container>
+}

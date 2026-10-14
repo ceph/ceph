@@ -1,16 +1,16 @@
-<ng-container *ngIf="codes.length > 1; else singleCodeBlock">
+@if (codes.length > 1) {
   <pre id="bigCodeBlock">
-    <span *ngFor="let code of codes"
-          class="d-flex px-2 py-3 align-items-center justify-content-between text-dark">
-      <span [ngClass]="{'text-wrap': textWrap}">{{code}}</span>
-      <cd-copy-2-clipboard-button
+    @for (code of codes; track code) {
+      <span
+        class="d-flex px-2 py-3 align-items-center justify-content-between text-dark">
+        <span [ngClass]="{'text-wrap': textWrap}">{{code}}</span>
+        <cd-copy-2-clipboard-button
           [source]="code"
-          [byId]="false"></cd-copy-2-clipboard-button>
-    </span>
+        [byId]="false"></cd-copy-2-clipboard-button>
+      </span>
+    }
   </pre>
-</ng-container>
-
-<ng-template #singleCodeBlock>
+} @else {
   <pre
     class="d-flex px-2 py-3 align-items-center justify-content-between text-dark"
     id="singleCodeBlock"
@@ -18,6 +18,6 @@
     <span [ngClass]="{'text-wrap': textWrap}">{{codes}}</span>
     <cd-copy-2-clipboard-button
       [source]="codes"
-      [byId]="false"></cd-copy-2-clipboard-button>
+    [byId]="false"></cd-copy-2-clipboard-button>
   </pre>
-</ng-template>
+}

@@ -49,24 +49,27 @@
             />
           </cds-text-label>
           <ng-template #subvolumeNameError>
-            <span
-              class="invalid-feedback"
-              *ngIf="subvolumeForm.showError('subvolumeName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="subvolumeForm.showError('subvolumeName', formDir, 'notUnique')"
-              i18n
-              >The subvolume already exists.</span
-            >
-            <span
-              *ngIf="subvolumeForm.showError('subvolumeName', formDir, 'pattern')"
-              class="invalid-feedback"
-              i18n
-              >Subvolume name can only contain letters, numbers, '.', '-' or '_'</span
-            >
+            @if (subvolumeForm.showError('subvolumeName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (subvolumeForm.showError('subvolumeName', formDir, 'notUnique')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The subvolume already exists.</span
+              >
+            }
+            @if (subvolumeForm.showError('subvolumeName', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Subvolume name can only contain letters, numbers, '.', '-' or '_'</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -89,27 +92,27 @@
 
         <!--Subvolume Group name -->
         <div class="form-item">
-          <cds-select
-            label="Subvolume group"
-            for="subvolumeGroupName"
-            formControlName="subvolumeGroupName"
-            name="subvolumeGroupName"
-            id="subvolumeGroupName"
-            *ngIf="subVolumeGroups$ | async as subvolumeGroups"
-          >
-            <option
-              value=""
-              i18n
+          @if (subVolumeGroups$ | async; as subvolumeGroups) {
+            <cds-select
+              label="Subvolume group"
+              for="subvolumeGroupName"
+              formControlName="subvolumeGroupName"
+              name="subvolumeGroupName"
+              id="subvolumeGroupName"
             >
-              Default
-            </option>
-            <option
-              *ngFor="let subvolumegroup of subvolumeGroups"
-              [value]="subvolumegroup.name"
-            >
-              {{ subvolumegroup.name }}
-            </option>
-          </cds-select>
+              <option
+                value=""
+                i18n
+              >
+                Default
+              </option>
+              @for (subvolumegroup of subvolumeGroups; track subvolumegroup) {
+                <option [value]="subvolumegroup.name">
+                  {{ subvolumegroup.name }}
+                </option>
+              }
+            </cds-select>
+          }
         </div>
 
         <!-- Size -->
@@ -138,23 +141,26 @@
             />
           </cds-text-label>
           <ng-template #sizeError>
-            <span
-              *ngIf="subvolumeForm.showError('size', formDir, 'pattern')"
-              class="invalid-feedback"
-              i18n
-              >Size must be a number or in a valid format. eg: 5 GiB</span
-            >
+            @if (subvolumeForm.showError('size', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Size must be a number or in a valid format. eg: 5 GiB</span
+              >
+            }
           </ng-template>
         </div>
 
-        <cd-alert-panel
-          *ngIf="!showSnapshotVisibility"
-          type="warning"
-          class="cds-mb-6"
-          i18n
-        >
-          To manage snapshot visibility, first enable client_respect_subvolume_snapshot_visibility.
-        </cd-alert-panel>
+        @if (!showSnapshotVisibility) {
+          <cd-alert-panel
+            type="warning"
+            class="cds-mb-6"
+            i18n
+          >
+            To manage snapshot visibility, first enable
+            client_respect_subvolume_snapshot_visibility.
+          </cd-alert-panel>
+        }
 
         <!-- Snapshot visibility -->
         <div class="form-item">
@@ -184,12 +190,11 @@
             helperText="By default, the data_pool_layout of the parent directory is selected."
             i18n-helperText
           >
-            <option
-              *ngFor="let pool of dataPools"
-              [value]="pool.pool"
-            >
-              {{ pool.pool }}
-            </option>
+            @for (pool of dataPools; track pool) {
+              <option [value]="pool.pool">
+                {{ pool.pool }}
+              </option>
+            }
           </cds-select>
         </div>
 

@@ -93,6 +93,7 @@ export default tseslint.config(
       '@angular-eslint/template/click-events-have-key-events': 'error',
       '@angular-eslint/template/label-has-associated-control': 'error',
       '@angular-eslint/template/elements-content': 'error',
+      '@angular-eslint/template/prefer-control-flow': 'error'
     }
   }
 );
