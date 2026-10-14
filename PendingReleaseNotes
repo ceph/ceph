@@ -1,4 +1,52 @@
 * DASHBOARD: Added support for RGW zonegroup hostnames and wildcard certificates for virtual-host-style bucket access
+>=22.0.0
+
+* Cephadm: ``ceph orch upgrade start`` and ``ceph orch upgrade check`` now
+  verify that every host's CPU supports the x86-64 microarchitecture level
+  required by the target release (official builds of 21.x and later require
+  ``x86-64-v3``). An upgrade that would deploy binaries a host's CPU cannot
+  execute is refused, or paused with a new ``UPGRADE_INCOMPATIBLE_HOST_CPU``
+  health alert. cephadm now reports the host's detected level as a new
+  ``cpu_isa_level`` host fact (e.g. ``x86-64-v2``). The check can be disabled
+  with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
+  when running custom-built images targeting an older CPU generation.
+* RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
+  from ``false`` to ``true``.
+* RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
+  from ``2`` to ``30`` seconds.
+
+* ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
+  re-execs under GNU bash >= 4 when the system bash is too old, and honors a
+  ``$GETOPT`` environment override so GNU getopt can be selected
+  (``brew install bash gnu-getopt``).
+* CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
+  prioritize standby promotion during failover events. The `mds_join_fs` configuration
+  variable is now checked in combination with infrastructure topology rules to enforce
+  node anti-affinity constraints. An isolated, generic standby daemon (Score 5) will
+  now be chosen over a preferred standby daemon targeting that file system if the
+  preferred standby resides on the same physical host as the failed active rank (Score 3).
+  This safely mitigates localized hardware failure boundaries during rapid automatic
+  recovery cycles. This behavior can be disabled per file system using the command
+  `ceph fs set <fs_name> standby_enable_host_anti_affinity false` (default: true)
+  to restore legacy strict 'mds_join_fs' prioritization.
+
+* CephFS: New MDS configuration options for non-blocking dirfrag prefetch have
+  been added. ``mds_dir_prefetch_backend``, when enabled with
+  ``mds_dir_prefetch=false``, serves dentry requests via a fast targeted keyed
+  OSD fetch while lazily launching a full dirfrag prefetch in the background.
+  The background prefetch is triggered only after
+  ``mds_dir_prefetch_backend_hit_threshold`` (default 16) accesses to the same
+  dirfrag, avoiding wasted full-omap reads for directories that are only hit
+  a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
+  limits the number of concurrent background fetches.  This reduces latency in
+  large directories while retaining cache warmth for hot directories.
+
+* CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
+  as not supporting runtime updates. Previously, the configuration schema indicated
+  this option could be changed at runtime, but changes had no effect on opened file
+  handlers in ceph-fuse or libcephfs clients because there is no logic to propagate
+  changes to open file handles.
+
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
