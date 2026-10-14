@@ -146,6 +146,12 @@ class AgentEndpoint:
         self.server_addr = self.mgr.get_mgr_ip()
         self.key_file: IO[bytes]
         self.cert_file: IO[bytes]
+        # Client TLS context used by the mgr to connect to the agents. It is
+        # shared by all the agent message threads and rebuilt only when the
+        # root CA or the mgr agent credentials change.
+        self._client_ssl_lock = threading.Lock()
+        self._client_ssl_ctx: Optional[ssl.SSLContext] = None
+        self._client_ssl_ctx_key: Optional[Tuple[str, str, str]] = None
 
     def get_cherrypy_config(self) -> Dict:
         config = {
@@ -198,6 +204,40 @@ class AgentEndpoint:
             tls_creds = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
             self.mgr.cert_mgr.save_self_signed_cert_key_pair(CephadmAgent.TYPE, tls_creds, host=host)
         return tls_creds
+
+    def get_client_ssl_context(self) -> ssl.SSLContext:
+        """Return the TLS context the mgr uses to connect to the agents.
+
+        The agent listener only checks that the client certificate is signed
+        by the cephadm root CA, so the mgr presents its agent endpoint
+        credentials, which are generated once and stored by the cert manager.
+        The context is cached and rebuilt only when the root CA or those
+        credentials change.
+        """
+        with self._client_ssl_lock:
+            # Registering is idempotent; configure_tls() normally did it already.
+            self.mgr.cert_mgr.register_self_signed_cert_key_pair(CephadmAgent.TYPE)
+            root_ca = self.mgr.cert_mgr.get_root_ca()
+            tls_creds = self._get_agent_certificates()
+            ctx_key = (root_ca, tls_creds.cert, tls_creds.key)
+            if self._client_ssl_ctx is not None and self._client_ssl_ctx_key == ctx_key:
+                return self._client_ssl_ctx
+
+            ssl_ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cadata=root_ca)
+            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+            ssl_ctx.check_hostname = True
+            # load_cert_chain() only accepts file paths; the files are only
+            # needed while the chain is loaded into the context.
+            with tempfile.NamedTemporaryFile() as cert_tmp, tempfile.NamedTemporaryFile() as key_tmp:
+                cert_tmp.write(tls_creds.cert.encode('utf-8'))
+                cert_tmp.flush()
+                key_tmp.write(tls_creds.key.encode('utf-8'))
+                key_tmp.flush()
+                ssl_ctx.load_cert_chain(cert_tmp.name, key_tmp.name)
+
+            self._client_ssl_ctx = ssl_ctx
+            self._client_ssl_ctx_key = ctx_key
+            return ssl_ctx
 
     def find_free_port(self) -> None:
         max_port = self.server_port + 150
@@ -1138,28 +1178,7 @@ class AgentMessageThread(threading.Thread):
         self.mgr.agent_cache.sending_agent_message[self.host] = True
         try:
             assert self.agent
-            root_cert = self.mgr.cert_mgr.get_root_ca()
-            root_cert_tmp = tempfile.NamedTemporaryFile()
-            root_cert_tmp.write(root_cert.encode('utf-8'))
-            root_cert_tmp.flush()
-            root_cert_fname = root_cert_tmp.name
-
-            tls_pair = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
-
-            cert_tmp = tempfile.NamedTemporaryFile()
-            cert_tmp.write(tls_pair.cert.encode('utf-8'))
-            cert_tmp.flush()
-            cert_fname = cert_tmp.name
-
-            key_tmp = tempfile.NamedTemporaryFile()
-            key_tmp.write(tls_pair.key.encode('utf-8'))
-            key_tmp.flush()
-            key_fname = key_tmp.name
-
-            ssl_ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=root_cert_fname)
-            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-            ssl_ctx.check_hostname = True
-            ssl_ctx.load_cert_chain(cert_fname, key_fname)
+            ssl_ctx = self.agent.get_client_ssl_context()
         except Exception as e:
             self.mgr.log.error(f'Failed to get certs for connecting to agent: {e}')
             self.mgr.agent_cache.sending_agent_message[self.host] = False
