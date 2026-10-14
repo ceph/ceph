@@ -10804,6 +10804,8 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
       << "a bucket with no row was not the ordinary case";
 
   nsfs::BucketPlacement bp;
+
+  bp.owner = "RGW00000000000000001";
   bp.bucket_name = "elsewhere";
   bp.path = "/ibm/gpfs/fs1/elsewhere";
   ASSERT_EQ(db->put_bucket_placement(env->dpp, bp), 0);
@@ -10816,6 +10818,7 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   /* every row carries a path:  an empty one is refused, and there is
    * no row meaning "the default" */
   nsfs::BucketPlacement deflt;
+  deflt.owner = "RGW00000000000000001";
   deflt.bucket_name = "ordinary";
   EXPECT_EQ(db->put_bucket_placement(env->dpp, deflt), -EINVAL);
   EXPECT_EQ(db->get_bucket_placement(env->dpp, "ordinary", "", got),
@@ -10844,12 +10847,15 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
 TEST_F(NSFSIdentityDBTest, TheTenantIsPartOfTheKey)
 {
   nsfs::BucketPlacement one;
+  one.owner = "RGW00000000000000001";
   one.bucket_name = "shared-name";
   one.tenant = "tenant-a";
   one.path = "/ibm/gpfs/fs1/a";
   ASSERT_EQ(db->put_bucket_placement(env->dpp, one), 0);
 
   nsfs::BucketPlacement two;
+
+  two.owner = "RGW00000000000000001";
   two.bucket_name = "shared-name";
   two.tenant = "tenant-b";
   two.path = "/ibm/gpfs/fs1/b";
@@ -10877,6 +10883,7 @@ TEST_F(NSFSIdentityDBTest, TheTenantIsPartOfTheKey)
 TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
 {
   nsfs::BucketPlacement x;
+  x.owner = "RGW00000000000000001";
   x.bucket_name = "x";
   x.path = "/ibm/gpfs/fs1/a/b";
   ASSERT_EQ(db->insert_bucket_placement(env->dpp, x), 0);
@@ -10885,6 +10892,8 @@ TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
   EXPECT_EQ(db->insert_bucket_placement(env->dpp, x), -EEXIST);
 
   nsfs::BucketPlacement y;
+
+  y.owner = "RGW00000000000000001";
   y.bucket_name = "y";
   for (const char* clash : {"/ibm/gpfs/fs1/a/b", "/ibm/gpfs/fs1/a/b/c",
 			    "/ibm/gpfs/fs1/a"}) {
@@ -10919,6 +10928,7 @@ TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
 TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
 {
   nsfs::BucketPlacement place;
+  place.owner = "RGW00000000000000001";
   place.bucket_name = "b";
 
   for (const char* bad : {"relative/path", "/a/../b", "/trailing/",
@@ -10953,8 +10963,8 @@ TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
   for (const char* bad : {"relative/path", "/a/../b", "/double//slash",
 			  "/a/.."}) {
     const std::string sql =
-      "INSERT INTO '" + table + "' (BucketName, Tenant, Path)"
-      " VALUES ('direct', '', '" + bad + "');";
+      "INSERT INTO '" + table + "' (BucketName, Tenant, Path, Owner)"
+      " VALUES ('direct', '', '" + bad + "', 'o');";
     char* err = nullptr;
     EXPECT_NE(sqlite3_exec(raw, sql.c_str(), nullptr, nullptr, &err),
 	      SQLITE_OK)
@@ -10964,8 +10974,8 @@ TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
 
   /* the comparison can succeed:  an acceptable path goes in this way */
   const std::string good =
-    "INSERT INTO '" + table + "' (BucketName, Tenant, Path)"
-    " VALUES ('direct', '', '/ibm/gpfs/fs1/direct');";
+    "INSERT INTO '" + table + "' (BucketName, Tenant, Path, Owner)"
+    " VALUES ('direct', '', '/ibm/gpfs/fs1/direct', 'o');";
   char* err = nullptr;
   EXPECT_EQ(sqlite3_exec(raw, good.c_str(), nullptr, nullptr, &err),
 	    SQLITE_OK) << (err ? err : "");
@@ -12371,6 +12381,7 @@ TEST_F(NooBaaBucketImportTest, ARecordForANameNsfsHoldsElsewhereIsRefused)
 {
   write_their_record("DISABLED");
   nsfs::BucketPlacement row;
+  row.owner = "RGW00000000000000001";
   row.bucket_name = testname;
   row.path = (bp / "another-filesystem" / testname).string();
   ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp, row),
@@ -12392,6 +12403,38 @@ TEST_F(NooBaaBucketImportTest, ARecordForANameNsfsHoldsElsewhereIsRefused)
 	    0);
   EXPECT_EQ(run(), 0) << why();
   EXPECT_EQ(result.buckets_written, 1u);
+}
+
+/* The operator's bucket listing is every bucket a record places:  the
+ * rows, and NooBaa's records not yet imported.  A name both hold is one
+ * bucket.  A directory nothing places is not listed. */
+TEST_F(NooBaaBucketImportTest, TheMetadataListingIsRowsAndUnimportedRecords)
+{
+  write_their_record("DISABLED");
+  write_file(conf_root() / "buckets" / "only-theirs.json",
+	     R"({"_id":"6560e1f1c0ffee00000000cc","name":"only-theirs",)"
+	     R"("path":"/ibm/gpfs/fs1/only-theirs"})");
+  write_file(conf_root() / "buckets" / "only-theirs.json.lock", "");
+  sf::create_directories(bp / "root" / "a-stray");
+
+  auto keys = [this] {
+    void* h = nullptr;
+    EXPECT_EQ(driver->meta_list_keys_init(env->dpp, "bucket", "", &h), 0);
+    std::list<std::string> out;
+    bool truncated = false;
+    EXPECT_EQ(driver->meta_list_keys_next(env->dpp, h, 1000, out,
+					  &truncated), 0);
+    driver->meta_list_keys_complete(h);
+    return std::vector<std::string>(out.begin(), out.end());
+  };
+
+  using V = std::vector<std::string>;
+  EXPECT_EQ(keys(), (V{testname, "only-theirs"}))
+      << "before import:  both from their records";
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(keys(), (V{testname, "only-theirs"}))
+      << "after import:  the row and the record are one bucket";
 }
 
 TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
@@ -12526,6 +12569,8 @@ TEST_F(NooBaaBucketImportTest, TheImportRecordsTheBucketsPath)
   ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
 		env->dpp, testname, "", row), 0);
   EXPECT_EQ(row.path, bucket_path().string());
+  EXPECT_EQ(row.owner, "RGW11111111111111111")
+      << "the row does not carry the imported owner";
 
   ASSERT_EQ(run(), 0) << why() << "\n  a second import failed";
   EXPECT_EQ(result.buckets_written, 1u);
@@ -12563,6 +12608,7 @@ TEST_F(NooBaaBucketImportTest, ARecordNestedWithAnotherBucketIsRefused)
 {
   write_their_record("DISABLED");
   nsfs::BucketPlacement other;
+  other.owner = "RGW00000000000000001";
   other.bucket_name = "inner";
   other.path = (bucket_path() / "inner").string();
   ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
@@ -13011,9 +13057,11 @@ public:
   void place(const std::string& name, const sf::path& at,
 	     const std::string& tenant = "") {
     nsfs::BucketPlacement bp2;
+    bp2.owner = "RGW00000000000000001";
     bp2.bucket_name = name;
     bp2.tenant = tenant;
     bp2.path = at.string();
+    bp2.owner = to_string(owner);
     ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
 							      bp2), 0);
   }
@@ -13405,6 +13453,144 @@ TEST_F(NSFSPlacedBucketTest, TheProfileHintFindsAPlacedBucket)
   EXPECT_EQ(out["profile"], "strong");
 }
 
+/* ListBuckets is the caller's rows, in name order:  a bucket at a stored
+ * path is listed, a directory nothing places is not, and paging by
+ * marker and end_marker works. */
+TEST_F(NSFSPlacedBucketTest, ListBucketsIsTheOwnersRows)
+{
+  auto b1 = make_bucket("lb-a");
+  auto b2 = make_bucket("lb-c");
+  const sf::path at = elsewhere() / "lb-b";
+  sf::create_directories(at);
+  place("lb-b", at);
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, "lb-b",
+				       nullptr, nullptr), 0);
+  {
+    /* a bare directory with a row loads as base, and base reconstructs
+     * an owner from the directory;  give it ours, as an import would */
+    std::unique_ptr<rgw::sal::Bucket> placed;
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "lb-b"}, &placed,
+				  null_yield), 0);
+    placed->get_info().owner = owner;
+    ASSERT_EQ(placed->put_info(env->dpp, false, ceph::real_clock::now(),
+			       null_yield), 0);
+  }
+  sf::create_directories(bp / "root" / "lb-stray");
+
+  auto names = [this](const std::string& marker, const std::string& end,
+		      uint64_t max, std::string* next) {
+    rgw::sal::BucketList bl;
+    EXPECT_EQ(driver->list_buckets(env->dpp, owner, "", marker, end, max,
+				   false, bl, null_yield), 0);
+    std::vector<std::string> v;
+    for (const auto& e : bl.buckets) {
+      v.push_back(e.bucket.name);
+    }
+    if (next) {
+      *next = bl.next_marker;
+    }
+    return v;
+  };
+
+  using V = std::vector<std::string>;
+  EXPECT_EQ(names("", "", 1000, nullptr), (V{"lb-a", "lb-b", "lb-c"}))
+      << "the stray directory, or the placed bucket, was mislisted";
+
+  std::string next;
+  EXPECT_EQ(names("", "", 2, &next), (V{"lb-a", "lb-b"}));
+  EXPECT_EQ(next, "lb-b");
+  EXPECT_EQ(names(next, "", 2, &next), (V{"lb-c"}));
+  EXPECT_TRUE(next.empty());
+  EXPECT_EQ(names("", "lb-c", 1000, nullptr), (V{"lb-a", "lb-b"}));
+}
+
+/* A tenant's buckets are listed in that tenant only. */
+TEST_F(NSFSPlacedBucketTest, ListBucketsIsPerTenant)
+{
+  auto plain = make_bucket("tb");
+  RGWBucketInfo info;
+  info.bucket.tenant = "t1";
+  info.bucket.name = "tb";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  ASSERT_EQ(b->create(env->dpp, cp, null_yield), 0);
+
+  rgw::sal::BucketList bl;
+  ASSERT_EQ(driver->list_buckets(env->dpp, owner, "t1", "", "", 1000, false,
+				 bl, null_yield), 0);
+  ASSERT_EQ(bl.buckets.size(), 1u);
+  EXPECT_EQ(bl.buckets[0].bucket.tenant, "t1");
+  ASSERT_EQ(driver->list_buckets(env->dpp, owner, "", "", "", 1000, false,
+				 bl, null_yield), 0);
+  ASSERT_EQ(bl.buckets.size(), 1u);
+  EXPECT_EQ(bl.buckets[0].bucket.tenant, "");
+}
+
+/* ListBuckets opens only the caller's buckets.  Another owner's bucket
+ * that cannot be opened fails that owner's listing -- the control that
+ * the damage is visible to a listing that opens it -- and not ours. */
+TEST_F(NSFSPlacedBucketTest, ListBucketsOpensOnlyTheCallersBuckets)
+{
+  auto mine = make_bucket("mine");
+
+  const rgw_user other{"tenant", "somebody-else"};
+  RGWBucketInfo info;
+  info.bucket.name = "theirs";
+  info.owner = other;
+  auto theirs = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = other;
+  ASSERT_EQ(theirs->create(env->dpp, cp, null_yield), 0);
+  const sf::path t = bp / "root" / "theirs";
+  ASSERT_EQ(::chmod(t.c_str(), 0), 0);
+  auto restore = make_scope_guard([&t] { ::chmod(t.c_str(), 0755); });
+  if (::access(t.c_str(), R_OK) == 0) {
+    GTEST_SKIP() << "running with privilege;  mode 0 does not stop us";
+  }
+
+  rgw::sal::BucketList bl;
+  EXPECT_LT(driver->list_buckets(env->dpp, rgw_owner{other}, "", "", "",
+				 1000, false, bl, null_yield), 0)
+      << "the control:  their listing opens their unreadable bucket";
+  ASSERT_EQ(driver->list_buckets(env->dpp, owner, "", "", "", 1000, false,
+				 bl, null_yield), 0)
+      << "our listing opened somebody else's bucket";
+  ASSERT_EQ(bl.buckets.size(), 1u);
+  EXPECT_EQ(bl.buckets[0].bucket.name, "mine");
+}
+
+/* The row's owner follows the bucket's, wherever the owner changes:
+ * creation, chown, and an ACL naming another owner. */
+TEST_F(NSFSPlacedBucketTest, TheRowsOwnerFollowsTheBuckets)
+{
+  auto bucket = make_bucket("owned");
+  auto row_owner = [this] {
+    nsfs::BucketPlacement row;
+    EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		  env->dpp, "owned", "", row), 0);
+    return row.owner;
+  };
+  EXPECT_EQ(row_owner(), to_string(owner));
+
+  const rgw_user second{"tenant", "second"};
+  ASSERT_EQ(bucket->chown(env->dpp, second, "Second", null_yield), 0);
+  EXPECT_EQ(row_owner(), to_string(rgw_owner{second}));
+
+  const rgw_user third{"tenant", "third"};
+  RGWAccessControlPolicy policy;
+  policy.create_default(third, "Third");
+  ASSERT_EQ(bucket->set_acl(env->dpp, policy, null_yield), 0);
+  EXPECT_EQ(row_owner(), to_string(rgw_owner{third}));
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "owned"}, &loaded,
+				null_yield), 0);
+  EXPECT_EQ(to_string(loaded->get_owner()), row_owner())
+      << "the row and bucket_info disagree";
+}
+
 /* Deleting a bucket deletes its row. */
 TEST_F(NSFSPlacedBucketTest, RemovalDeletesTheRow)
 {
@@ -13664,6 +13850,8 @@ TEST_F(NSFSRecordedPathTest, OurRowWinsOverTheirRecord)
   record_at(theirs);
 
   nsfs::BucketPlacement row;
+
+  row.owner = "RGW00000000000000001";
   row.bucket_name = testname;
   row.path = ours.string();
   ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
@@ -13688,6 +13876,8 @@ TEST_F(NSFSRecordedPathTest, ARowForTheBasePathDoesNotFallThrough)
   record_at(theirs);
 
   nsfs::BucketPlacement row;
+
+  row.owner = "RGW00000000000000001";
   row.bucket_name = testname;
   row.path = bucket_path().string();
   ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,

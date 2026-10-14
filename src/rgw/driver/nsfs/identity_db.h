@@ -115,6 +115,12 @@ struct BucketPlacement {
 
   /* absolute, canonical, no `..`.  Never empty. */
   std::string path;
+
+  /* to_string(rgw_owner), the key identity rows use.  An index of the
+   * owner bucket_info records on the directory, so that ListBuckets
+   * opens only the caller's buckets:  written where the owner is set
+   * (creation, the import, chown, set_acl) and nowhere else. */
+  std::string owner;
 };
 
 /* Whether a path may be stored.
@@ -213,6 +219,28 @@ public:
   int remove_bucket_placement(const DoutPrefixProvider* dpp,
 			      const std::string& bucket_name,
 			      const std::string& tenant);
+
+  /* The owner changed.  A bucket with no row -- one NooBaa's record
+   * still places -- has nothing to update, which is not an error. */
+  int set_bucket_placement_owner(const DoutPrefixProvider* dpp,
+				 const std::string& bucket_name,
+				 const std::string& tenant,
+				 const std::string& owner);
+
+  /* Rows in name order, after `marker` and up to `end_marker` when it
+   * is not empty, at most `max`.  The first is one owner's in one
+   * tenant, which is ListBuckets;  the second is every row, which is
+   * the metadata listing. */
+  int list_bucket_placements_by_owner(const DoutPrefixProvider* dpp,
+				      const std::string& owner,
+				      const std::string& tenant,
+				      const std::string& marker,
+				      const std::string& end_marker,
+				      uint64_t max,
+				      std::vector<BucketPlacement>& out) const;
+  int list_bucket_placements(const DoutPrefixProvider* dpp,
+			     const std::string& marker, uint64_t max,
+			     std::vector<BucketPlacement>& out) const;
 
   /* Insert or replace.  `id.key` must be set;  everything else is
    * optional subject to the exclusivity rule. */

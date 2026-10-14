@@ -250,13 +250,19 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  BucketName TEXT NOT NULL,"
     "  Tenant TEXT NOT NULL DEFAULT '',"
     "  Path TEXT NOT NULL,"
+    "  Owner TEXT NOT NULL,"
     "  PRIMARY KEY (BucketName, Tenant),"
     "  UNIQUE (Path),"
+    "  CHECK (Owner != ''),"
     "  CHECK (Path GLOB '/*'"
     "         AND Path NOT GLOB '*/../*'"
     "         AND Path NOT GLOB '*/..'"
     "         AND Path NOT GLOB '*//*')"
-    ");";
+    ");"
+
+    /* ListBuckets is one owner's rows in one tenant, in name order. */
+    "CREATE INDEX IF NOT EXISTS '" + placement_table + "_owner' ON '"
+    + placement_table + "' (Owner, Tenant, BucketName);";
 
   ret = exec(&dp, schema.c_str(), nullptr);
   if (ret < 0) {
@@ -554,7 +560,17 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 namespace {
 
 constexpr const char* PLACEMENT_COLUMNS =
-  "BucketName, Tenant, Path";
+  "BucketName, Tenant, Path, Owner";
+
+BucketPlacement row_to_placement(sqlite3_stmt* st)
+{
+  BucketPlacement bp;
+  bp.bucket_name = column_text(st, 0);
+  bp.tenant = column_text(st, 1);
+  bp.path = column_text(st, 2);
+  bp.owner = column_text(st, 3);
+  return bp;
+}
 
 } // namespace
 
@@ -568,7 +584,7 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
 				       const BucketPlacement& bp,
 				       bool repoint)
 {
-  if (bp.bucket_name.empty()) {
+  if (bp.bucket_name.empty() || bp.owner.empty()) {
     return -EINVAL;
   }
   /* Refused here with a message rather than left to the CHECK, so an
@@ -587,13 +603,14 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
    * UNIQUE (Path)'s. */
   std::string sql =
     "INSERT INTO '" + placement_table + "' (" + PLACEMENT_COLUMNS + ") "
-    "SELECT ?1, ?2, ?3 WHERE NOT EXISTS ("
+    "SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS ("
     "  SELECT 1 FROM '" + placement_table + "'"
     "  WHERE NOT (BucketName = ?1 AND Tenant = ?2)"
     "  AND (substr(?3, 1, length(Path) + 1) = Path || '/'"
     "       OR substr(Path, 1, length(?3) + 1) = ?3 || '/'))";
   if (repoint) {
-    sql += " ON CONFLICT (BucketName, Tenant) DO UPDATE SET Path = excluded.Path";
+    sql += " ON CONFLICT (BucketName, Tenant) DO UPDATE SET Path = excluded.Path,"
+	   " Owner = excluded.Owner";
   }
   sql += ";";
 
@@ -608,6 +625,7 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   sqlite3_bind_text(st, 1, bp.bucket_name.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 2, bp.tenant.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 3, bp.path.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 4, bp.owner.c_str(), -1, SQLITE_TRANSIENT);
 
   if (sqlite3_step(st) != SQLITE_DONE) {
     const int ext = sqlite3_extended_errcode(handle());
@@ -678,10 +696,7 @@ int IdentityDB::get_bucket_placement(const DoutPrefixProvider* dpp,
     return -EIO;
   }
 
-  out = BucketPlacement{};
-  out.bucket_name = column_text(st, 0);
-  out.tenant = column_text(st, 1);
-  out.path = column_text(st, 2);
+  out = row_to_placement(st);
   return 0;
 }
 
@@ -711,6 +726,102 @@ int IdentityDB::remove_bucket_placement(const DoutPrefixProvider* dpp,
   /* Removing a row that is not there is not a failure:  a bucket at
    * the default location has none. */
   return 0;
+}
+
+int IdentityDB::set_bucket_placement_owner(const DoutPrefixProvider* dpp,
+					   const std::string& bucket_name,
+					   const std::string& tenant,
+					   const std::string& owner)
+{
+  if (owner.empty()) {
+    return -EINVAL;
+  }
+  const std::string sql =
+    "UPDATE '" + placement_table + "' SET Owner = ? "
+    "WHERE BucketName = ? AND Tenant = ?;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, owner.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, bucket_name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 3, tenant.c_str(), -1, SQLITE_TRANSIENT);
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+namespace {
+
+/* Run a placement query with its parameters bound, collecting rows. */
+template <typename Bind>
+int collect_placements(const DoutPrefixProvider* dpp, sqlite3* h,
+		       const std::string& sql, Bind&& bind,
+		       std::vector<BucketPlacement>& out)
+{
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(h, sql.c_str(), -1, &st, nullptr) != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(h) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  bind(st);
+
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    out.push_back(row_to_placement(st));
+  }
+  if (rc != SQLITE_DONE) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(h) << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+} // namespace
+
+int IdentityDB::list_bucket_placements_by_owner(
+  const DoutPrefixProvider* dpp, const std::string& owner,
+  const std::string& tenant, const std::string& marker,
+  const std::string& end_marker, uint64_t max,
+  std::vector<BucketPlacement>& out) const
+{
+  out.clear();
+  const std::string sql =
+    std::string("SELECT ") + PLACEMENT_COLUMNS + " FROM '"
+    + placement_table + "' WHERE Owner = ?1 AND Tenant = ?2"
+    " AND BucketName > ?3 AND (?4 = '' OR BucketName < ?4)"
+    " ORDER BY BucketName LIMIT ?5;";
+  return collect_placements(dpp, handle(), sql, [&](sqlite3_stmt* st) {
+      sqlite3_bind_text(st, 1, owner.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(st, 2, tenant.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(st, 3, marker.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(st, 4, end_marker.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int64(st, 5, static_cast<sqlite3_int64>(max));
+    }, out);
+}
+
+int IdentityDB::list_bucket_placements(const DoutPrefixProvider* dpp,
+				       const std::string& marker,
+				       uint64_t max,
+				       std::vector<BucketPlacement>& out) const
+{
+  out.clear();
+  const std::string sql =
+    std::string("SELECT ") + PLACEMENT_COLUMNS + " FROM '"
+    + placement_table + "' WHERE BucketName > ?1"
+    " ORDER BY BucketName, Tenant LIMIT ?2;";
+  return collect_placements(dpp, handle(), sql, [&](sqlite3_stmt* st) {
+      sqlite3_bind_text(st, 1, marker.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int64(st, 2, static_cast<sqlite3_int64>(max));
+    }, out);
 }
 
 }}} // namespace rgw::sal::nsfs

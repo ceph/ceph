@@ -192,6 +192,12 @@ public:
 		    const std::string& bucket_name,
 		    std::string& out) const;
 
+  /* The names NooBaa's store has a bucket record for, sorted:  every
+   * `buckets/<name>.json`, without reading any of them.  Empty with no
+   * store. */
+  int list_records(const DoutPrefixProvider* dpp,
+		   std::vector<std::string>& names) const;
+
   const char* name() const override { return "noobaa"; }
 };
 

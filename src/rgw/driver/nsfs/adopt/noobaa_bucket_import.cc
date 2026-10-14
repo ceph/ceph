@@ -508,6 +508,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       nsfs::BucketPlacement row;
       row.bucket_name = rec.name;
       row.path = their_path;
+      row.owner = to_string(bucket->get_owner());
       ret = driver->get_identity_db()->insert_bucket_placement(dpp, row);
       if (ret == -EADDRINUSE) {
 	result.failures.push_back(

@@ -13,6 +13,8 @@
  *
  */
 
+#include <algorithm>
+#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -775,6 +777,47 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
 }
 
 } // namespace
+
+int NooBaaBucketStateStrategy::list_records(const DoutPrefixProvider* dpp,
+					    std::vector<std::string>& names) const
+{
+  names.clear();
+  if (config_root.empty()) {
+    return 0;
+  }
+  const std::string dir = config_root + "/buckets";
+  DIR* d = ::opendir(dir.c_str());
+  if (!d) {
+    if (errno == ENOENT) {
+      return 0;
+    }
+    const int ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: listing " << dir << ": "
+      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  auto close_dir = make_scope_guard([d] { ::closedir(d); });
+
+  static const std::string suffix = ".json";
+  for (;;) {
+    errno = 0;
+    struct dirent* e = ::readdir(d);
+    if (!e) {
+      if (errno != 0) {
+	return -errno;
+      }
+      break;
+    }
+    const std::string_view n(e->d_name);
+    /* `<name>.json.lock` sits beside each record, and is NooBaa's write
+     * path's, not a record */
+    if ((n.size() > suffix.size()) && n.ends_with(suffix)) {
+      names.emplace_back(n.substr(0, n.size() - suffix.size()));
+    }
+  }
+  std::sort(names.begin(), names.end());
+  return 0;
+}
 
 int NooBaaBucketStateStrategy::recorded_path(const DoutPrefixProvider* dpp,
 					     const std::string& bucket_name,

@@ -4826,128 +4826,75 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &result, optional_yield y)
 {
-  DIR* dir;
-  struct dirent* entry;
-  int dfd;
-  int ret;
-
   result.buckets.clear();
-
-  /* it's not sufficient to dup(root_fd), as as the new fd would share
-   * the file position of root_fd */
-  dfd = copy_dir_fd(get_root_fd());
-  if (dfd == -1) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-      << cpp_strerror(ret) << dendl;
-    return -errno;
+  result.next_marker.clear();
+  if (max == 0) {
+    return 0;
   }
 
-  dir = fdopendir(dfd);
-  if (dir == NULL) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-      << cpp_strerror(ret) << dendl;
-    ::close(dfd);
-    return -ret;
-  }
-
-  auto cleanup_guard = make_scope_guard(
-    [&dir]
-      {
-	closedir(dir);
-	// dfd is also closed
-      }
-    );
-
-  /* errno is cleared immediately before readdir and read immediately
-   * after it returns NULL, because anything in the body may set it.
-   * Clearing it at the bottom of the body instead -- which this did --
-   * makes every `continue` responsible for remembering, and the one
-   * that did not, an entry owned by somebody else, is the common exit
-   * when the base path holds other accounts' buckets.  resolve_profile()
-   * reading an attribute a bucket does not carry leaves ENODATA behind,
-   * and ListBuckets reported that as a failed listing:  500, for every
-   * caller, as soon as a second attribute was read there. */
-  while (true) {
-    errno = 0;
-    entry = readdir(dir);
-    if (entry == NULL) {
-      break;
-    }
-    struct statx stx;
-
-    ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
+  /* The caller's rows, in name order:  a bucket exists because a record
+   * says so, and the row says whose it is, so no other owner's bucket is
+   * opened (DECISIONS.md 2026-10-13).  A NooBaa bucket not yet imported
+   * has no row and an owner no RGW owner matches, so it is not listed
+   * until the import, as before. */
+  const std::string key = to_string(owner);
+  std::string after = marker;
+  for (;;) {
+    std::vector<nsfs::BucketPlacement> rows;
+    int ret = userDB->list_bucket_placements_by_owner(
+      dpp, key, tenant, after, end_marker, max - result.buckets.size(), rows);
     if (ret < 0) {
-      ret = errno;
-      if (ret == ENOENT) {
-	continue;
-      }
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
-	<< cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-
-    if (!S_ISDIR(stx.stx_mode)) {
-      /* Not a bucket, skip it */
-      continue;
-    }
-    if (entry->d_name[0] == '.') {
-      /* Skip dotfiles */
-      continue;
-    }
-    std::unique_ptr<Bucket> bucket;
-    ret = load_bucket(dpp, rgw_bucket("", entry->d_name), &bucket, null_yield);
-    if (ret < 0) {
-      if (ret == -ENOENT) {
-	continue;
-      }
-      /* A bucket we cannot read is one bucket, not a failed listing.
-       * ERR_NOT_IMPLEMENTED means it carries an extension set this build
-       * does not implement -- written by a newer gateway, or restored
-       * from one -- and refusing the whole account's ListBuckets over it
-       * denies every other bucket for no reason.  Skip it and say so. */
-      if (ret == -ERR_NOT_IMPLEMENTED) {
-	ldpp_dout(dpp, 4) << "list_buckets: skipping " << entry->d_name
-	  << ", this gateway cannot serve it" << dendl;
-	continue;
-      }
-      /* -EBADMSG is stored state we cannot read, which fails that
-       * bucket closed.  The same reasoning applies:  it is one bucket
-       * and the account's other buckets are fine. */
-      if (ret == -EBADMSG) {
-	ldpp_dout(dpp, 1) << "list_buckets: skipping " << entry->d_name
-	  << ", its stored state does not decode" << dendl;
-	continue;
-      }
+      ldpp_dout(dpp, 0) << "ERROR: could not list buckets for " << owner
+	<< ": " << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    if (bucket->get_owner() != owner) {
-      continue;
+    if (rows.empty()) {
+      return 0;
     }
-    RGWBucketEnt ent;
-    ent.bucket.name = entry->d_name;
-    /* from the bucket we just loaded, not from stx_btime again:  the
-     * birth time is optional and a filesystem which does not report it
-     * -- GPFS -- leaves it zeroed, and load_bucket() has already decided
-     * what this bucket's creation time is. */
-    ent.creation_time = bucket->get_creation_time();
-    // TODO: ent.size and ent.count
-
-    result.buckets.push_back(std::move(ent));
-    if (result.buckets.size() == max){
-      result.next_marker = ent.bucket.marker;
-      break;
+    for (const auto& row : rows) {
+      after = row.bucket_name;
+      std::unique_ptr<Bucket> bucket;
+      ret = load_bucket(dpp, rgw_bucket(row.tenant, row.bucket_name), &bucket,
+			y);
+      if (ret < 0) {
+	/* A bucket we cannot read is one bucket, not a failed listing.
+	 * -ENOENT is a row whose directory is gone.
+	 * ERR_NOT_IMPLEMENTED is an extension set this build does not
+	 * implement -- written by a newer gateway, or restored from one.
+	 * -EBADMSG is stored state that does not decode, which fails
+	 * that bucket closed.  The account's other buckets are fine. */
+	if ((ret == -ENOENT) || (ret == -ERR_NOT_IMPLEMENTED) ||
+	    (ret == -EBADMSG)) {
+	  ldpp_dout(dpp, 1) << "list_buckets: skipping " << row.bucket_name
+	    << ": " << cpp_strerror(-ret) << dendl;
+	  continue;
+	}
+	return ret;
+      }
+      /* The row's owner indexes the one bucket_info records;  they
+       * disagree only if an owner was changed somewhere that did not
+       * update the row, which is a defect to see, not to paper over. */
+      if (bucket->get_owner() != owner) {
+	ldpp_dout(dpp, 0) << "ERROR: bucket " << row.bucket_name
+	  << " is listed for " << owner << " but owned by "
+	  << bucket->get_owner() << ";  its placement row is stale" << dendl;
+	continue;
+      }
+      RGWBucketEnt ent;
+      ent.bucket = bucket->get_key();
+      /* from the bucket just loaded, not from stx_btime:  the birth time
+       * is optional and a filesystem which does not report it -- GPFS --
+       * leaves it zeroed, and load_bucket() has already decided what
+       * this bucket's creation time is. */
+      ent.creation_time = bucket->get_creation_time();
+      // TODO: ent.size and ent.count
+      result.buckets.push_back(std::move(ent));
+      if (result.buckets.size() == max) {
+	result.next_marker = row.bucket_name;
+	return 0;
+      }
     }
   }
-  ret = errno;
-  if (ret != 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not list buckets for " << owner << ": "
-      << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-
-  return 0;
 }
 
 /* Defined below, beside the operations that use it most. */
@@ -5008,6 +4955,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     nsfs::BucketPlacement bp;
     bp.bucket_name = get_name();
     bp.tenant = get_tenant();
+    bp.owner = to_string(params.owner);
     ret = driver->new_bucket_path(dpp, params.owner, get_key(), bp.path);
     if (ret < 0) {
       return ret;
@@ -5676,18 +5624,22 @@ int NSFSDriver::list_account_topics(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* In an anonymous namespace because the posix driver, which nsfs was
+ * forked from, defines an rgw::sal::meta_list_handle of its own with
+ * more members.  Two definitions of one name are one type to the
+ * linker, which keeps one inline constructor for both:  posix's then
+ * wrote its extra members past the end of this smaller handle. */
+namespace {
 struct meta_list_handle {
   std::string marker;
   std::string section;
-
-  DIR *dir = nullptr;
-  long dpos = -1;
 
   meta_list_handle(const std::string& _section, const std::string& _marker) {
     marker = _marker;
     section = _section;
   }
 };
+} // namespace
 
 int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
                                      const std::string& section,
@@ -5695,25 +5647,6 @@ int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
 {
   meta_list_handle* stuff = new meta_list_handle(section, marker);
   *phandle = (void *)stuff;
-  if (section == "bucket") {
-    int ret;
-    int dfd = copy_dir_fd(get_root_fd());
-    if (dfd == -1) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-                        << cpp_strerror(errno) << dendl;
-      return -ret;
-    }
-
-    stuff->dir = fdopendir(dfd);
-    if (stuff->dir == NULL) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
-                        << cpp_strerror(ret) << dendl;
-      ::close(dfd);
-      return -ret;
-    }
-  }
   return 0;
   }
 
@@ -5737,37 +5670,44 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
       }
     }
   } else if (h->section == "bucket") {
-    if (h->dpos != -1) {
-      seekdir(h->dir, h->dpos);
+    /* Every bucket a record places:  each row, and each NooBaa record
+     * not yet imported, which has no row (DECISIONS.md 2026-10-13).
+     * A row and a record of one name are one bucket, the row's.  No
+     * owner filter, since this is the operator's listing.  Keys are
+     * RGW's, `<tenant>/<name>` for a tenant's bucket. */
+    std::vector<nsfs::BucketPlacement> rows;
+    ret = userDB->list_bucket_placements(dpp, "", UINT64_MAX, rows);
+    if (ret < 0) {
+      return ret;
     }
-    struct dirent* entry;
-    while ((entry = readdir(h->dir)) != NULL) {
-      if (entry->d_type == DT_UNKNOWN) {
-        struct statx stx;
-
-        ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
-        if (ret < 0) {
-          ret = errno;
-          ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
-	                    << cpp_strerror(ret) << dendl;
-          return -ret;
-        }
-        if (!S_ISDIR(stx.stx_mode)) {
-        /* Not a bucket, skip it */
-          continue;
-        }
-      } else if (entry->d_type != DT_DIR) {
-        continue;
+    std::set<std::string> all;
+    std::set<std::string> untenanted;
+    for (const auto& r : rows) {
+      all.insert(r.tenant.empty() ? r.bucket_name
+				  : (r.tenant + "/" + r.bucket_name));
+      if (r.tenant.empty()) {
+	untenanted.insert(r.bucket_name);
       }
-      if (entry->d_name[0] == '.') {
-        /* Skip dotfiles */
-        continue;
-     }
-      keys.push_back(entry->d_name);
-      if (std::cmp_equal(keys.size(),max)) {
-        h->dpos = telldir(h->dir);
-        *truncated = true;
-        break;
+    }
+    if (nb_bucket_state_strategy) {
+      std::vector<std::string> theirs;
+      ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+	nb_bucket_state_strategy.get())->list_records(dpp, theirs);
+      if (ret < 0) {
+	return ret;
+      }
+      for (const auto& n : theirs) {
+	if (!untenanted.contains(n)) {
+	  all.insert(n);
+	}
+      }
+    }
+    for (auto it = all.upper_bound(h->marker); it != all.end(); ++it) {
+      keys.push_back(*it);
+      h->marker = *it;
+      if (std::cmp_equal(keys.size(), max)) {
+	*truncated = (std::next(it) != all.end());
+	break;
       }
     }
   }
@@ -5778,9 +5718,6 @@ void NSFSDriver::meta_list_keys_complete(void* handle)
 {
   if (handle) {
     meta_list_handle *h = static_cast<meta_list_handle *>(handle);
-    if (h->section == "bucket") {
-      closedir(h->dir);
-    }
     delete h;
   }
   return;
@@ -8097,9 +8034,15 @@ int NSFSBucket::set_acl(const DoutPrefixProvider* dpp,
   acl.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
+  const bool owner_changed = (info.owner != acl.get_owner().id);
   info.owner = acl.get_owner().id;
 
-  return write_attrs(dpp, y);
+  int ret = write_attrs(dpp, y);
+  if ((ret == 0) && owner_changed && !is_internal()) {
+    ret = driver->get_identity_db()->set_bucket_placement_owner(
+      dpp, get_name(), get_tenant(), to_string(info.owner));
+  }
+  return ret;
 }
 
 int NSFSBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
@@ -8293,6 +8236,11 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
   }
   info.owner = new_owner;
   int ret = put_info(dpp, false, ceph::real_clock::now(), y);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = driver->get_identity_db()->set_bucket_placement_owner(
+    dpp, get_name(), get_tenant(), to_string(new_owner));
   if (ret < 0) {
     return ret;
   }
