@@ -241,6 +241,42 @@ def test_agent_wakeup():
         assert agent.event.is_set() == True
 
 
+@pytest.mark.parametrize(
+    'woken, new_ack, jitter_seconds, target_changed, stop, delayed',
+    [
+        # mgr asked for new metadata (ack fan-out, config push): spread it
+        (True, 8, 30, False, False, True),
+        # periodic report: the jittered wait already ran to completion
+        (False, 8, 30, False, False, False),
+        # wakeup for a local daemon change: report at once
+        (True, 7, 30, False, False, False),
+        # jitter disabled
+        (True, 8, 0, False, False, False),
+        # target mgr changed: delayed once, at the top of the loop
+        (True, 8, 30, True, False, False),
+        # agent shutting down
+        (True, 8, 30, False, True, False),
+    ],
+)
+@mock.patch('cephadm.random.uniform', return_value=12.5)
+@mock.patch('cephadm.time.sleep')
+def test_agent_delays_report_requested_by_mgr(
+    _sleep, _uniform, woken, new_ack, jitter_seconds, target_changed, stop, delayed
+):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        agent.ack = new_ack
+        agent.jitter_seconds = jitter_seconds
+        agent.target_changed = target_changed
+        agent.stop = stop
+        agent._delay_report_after_mgr_request(woken, sent_ack=7)
+        if delayed:
+            _uniform.assert_called_once_with(0, jitter_seconds)
+            _sleep.assert_called_once_with(12.5)
+        else:
+            _sleep.assert_not_called()
+
+
 @mock.patch("cephadm.CephadmAgent.shutdown")
 @mock.patch("cephadm.AgentGatherer.update_func")
 def test_pull_conf_settings(_update_func, _shutdown, cephadm_fs):
