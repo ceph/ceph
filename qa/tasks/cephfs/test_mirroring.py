@@ -2710,6 +2710,106 @@ class TestMirroring(CephFSTestCase):
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def _fail_sync_over_base(self, dir_name, peer_spec):
+        """
+        Mirror dir_name with snap0 and snap1 synced, snap1 adding entries that
+        snap2 removes again, and let the first attempt at snap2 fail before it
+        reaches them. Every attempt keeps failing until the remote file quota
+        on dir_name is lifted. Returns the directory holding the entries that
+        only exist in snap1, and the expected contents of that directory.
+        """
+        # readdir order is the dentry name hash order: 'z' comes before 'n'
+        old_dir = 'n'
+        new_dir = 'z'
+        keep = [f'keep{i}' for i in range(10)]
+        base = [f'base{i}' for i in range(10)]
+        self.mount_a.run_shell(['mkdir', '-p', f'{dir_name}/{old_dir}'])
+        for name in keep:
+            self.mount_a.write_file(f'{dir_name}/{old_dir}/{name}', data='keep')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap0'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap0', 1)
+
+        for name in base:
+            self.mount_a.write_file(f'{dir_name}/{old_dir}/{name}', data='base')
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap1'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap1', 2)
+
+        for name in base:
+            self.mount_a.run_shell(['rm', f'{dir_name}/{old_dir}/{name}'])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/{new_dir}'])
+        # Every sync attempt fails at the remote mkdir of new_dir. The crawl
+        # has to reach it before old_dir, or the attempt removes the base*
+        # entries before failing and the test proves nothing.
+        order = self.mount_a.run_shell(['ls', '-U', dir_name]).stdout.getvalue().split()
+        self.assertLess(order.index(new_dir), order.index(old_dir), f'readdir order {order}')
+        self.mount_b.setfattr(dir_name, 'ceph.quota.max_files', '1', sudo=True)
+
+        failures = self.get_peer_perf_counters()['sync_failures']
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap2'])
+        self.wait_peer_sync_failures(failures)
+        return old_dir, keep
+
+    def test_cephfs_mirror_resume_after_base_snapshot_delete(self):
+        """Entries that only existed in a deleted base snapshot do not stay on
+        the remote when a failed sync is resumed from an older snapshot."""
+        self.setup_mount_b(mds_perm='rwp')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        dir_name = 'base_snap_delete'
+        old_dir, keep = self._fail_sync_over_base(dir_name, peer_spec)
+
+        # delete the base of the failed attempt; wait until the deletion is
+        # mirrored and an attempt after it failed too
+        self.mount_a.run_shell(['rmdir', f'{dir_name}/.snap/snap1'])
+        self.check_peer_status_deleted_snap(self.primary_fs_name, self.primary_fs_id,
+                                            peer_spec, f'/{dir_name}', 1)
+        self.wait_peer_sync_failures(self.get_peer_perf_counters()['sync_failures'])
+        self.assertEqual(['snap0'], self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        self.mount_b.setfattr(dir_name, 'ceph.quota.max_files', '0', sudo=True)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap2', 3)
+        self.verify_snapshot(dir_name, 'snap2')
+        self.assertEqual(keep, sorted(self.mount_b.ls(path=f'{dir_name}/.snap/snap2/{old_dir}')))
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_resume_after_base_snapshot_delete_on_both_sides(self):
+        """Same as above, but the base snapshot is already gone on both sides
+        when the daemon next looks at the directory, so the first attempt
+        sees an older previous snapshot than the one the failed attempt
+        diffed from (e.g. the daemon stopped right after deleting it)."""
+        self.setup_mount_b(mds_perm='rwps')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        dir_name = 'base_snap_delete_both'
+        old_dir, keep = self._fail_sync_over_base(dir_name, peer_spec)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.mount_a.run_shell(['rmdir', f'{dir_name}/.snap/snap1'])
+        self.mount_b.run_shell(['sudo', 'rmdir', f'{dir_name}/.snap/snap1'])
+        self.mount_b.setfattr(dir_name, 'ceph.quota.max_files', '0', sudo=True)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        @retry_assert(timeout=600, interval=10)
+        def wait_remote_snap2():
+            self.assertIn('snap2', self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        wait_remote_snap2()
+        self.verify_snapshot(dir_name, 'snap2')
+        self.assertEqual(keep, sorted(self.mount_b.ls(path=f'{dir_name}/.snap/snap2/{old_dir}')))
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_cephfs_mirror_incremental_sync_with_type_mixup(self):
         """ Test incremental snapshot synchronization with file type changes.
 
