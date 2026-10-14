@@ -366,6 +366,9 @@ private:
   interruptible_errorated_future<osd_op_errorator>
   do_execute_op(OSDOp& osd_op);
 
+  interruptible_errorated_future<osd_op_errorator>
+  do_execute_op_body(OSDOp& osd_op);
+
   OpsExecuter(Ref<PG> pg,
               ObjectContextRef obc,
               const OpInfo& op_info,

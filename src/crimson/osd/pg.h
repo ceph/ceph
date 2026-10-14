@@ -241,7 +241,7 @@ public:
     return false;
   }
 
-  bool is_local_store_full() const {
+  seastar::future<bool> is_local_store_full() const {
     return shard_services.is_local_storage_full(get_store_index());
   }
 

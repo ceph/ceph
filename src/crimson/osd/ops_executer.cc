@@ -625,14 +625,27 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_WRITESAME:
   case CEPH_OSD_OP_APPEND:
   case CEPH_OSD_OP_COPY_FROM2:
-    if (pg->is_local_store_full() && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
-      return crimson::ct_error::eagain::make();
-    }
-    break;
+    return interruptor::make_interruptible(
+      pg->is_local_store_full()
+    ).then_interruptible(
+      [this, &osd_op](bool is_full)
+      -> interruptible_errorated_future<osd_op_errorator> {
+        if (is_full && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+          return crimson::ct_error::eagain::make();
+        }
+        return do_execute_op_body(osd_op);
+      });
   default:
     break;
   }
+  return do_execute_op_body(osd_op);
+}
+
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
+OpsExecuter::do_execute_op_body(OSDOp& osd_op)
+{
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
+
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
   case CEPH_OSD_OP_READ:
