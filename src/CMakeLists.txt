@@ -524,6 +524,9 @@ if(WITH_CRIMSON)
   endif()
   add_subdirectory(crimson)
   add_dependencies(crimson-osd erasure_code)
+else()
+  # Empty definition because non-Crimson libraries depend on it.
+  add_library(crimson::cflags INTERFACE IMPORTED)
 endif()
 
 include(CheckTypeSize)
