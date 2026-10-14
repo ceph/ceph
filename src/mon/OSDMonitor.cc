@@ -9199,7 +9199,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         return r;
       }
       ss << "pool unstretched (num_zones=1); ";
-      if (!other_pool(pool, [](const pg_pool_t& p) {
+      // an individual stretch pool leaves stretch mode, if off, as it is
+      if (stretch_mode_enabled_or_pending() &&
+          !other_pool(pool, [](const pg_pool_t& p) {
             return p.is_stretch_pool();
           })) {
         mon.monmon()->clear_stretch_mode_state();
