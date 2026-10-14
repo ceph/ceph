@@ -378,6 +378,37 @@ TEST_P(TestECFailoverWithPeering, CrossZoneWriteBytesCounted) {
 // Async recovery keeps each zone of a stretched pool at its min_size: OSDs
 // of one zone that missed different writes are recovered asynchronously
 // only as far as the zone has shards above min_size.
+// A read that the primary's zone cannot serve reads the other zone's
+// shards, and the cross-zone sub-read counters count it.
+TEST_P(TestECFailoverWithPeering, CrossZoneReadCounted) {
+  if (num_zones != 2) {
+    GTEST_SKIP() << "requires num_zones == 2";
+  }
+  const std::string obj_name = "test_cross_zone_read";
+  const std::string test_data(k * stripe_unit, 'r');
+  create_and_write_verify(obj_name, test_data);
+
+  // more errors than zone 0 can decode around, none on the primary's shard
+  for (int shard = 1; shard <= m + 1; ++shard) {
+    inject_read_error_for_shard(obj_name, shard, -EIO);
+  }
+  PerfCounters *logger = get_primary_listener()->get_logger();
+  const uint64_t ops_before = logger->get(l_osd_stretch_cross_zone_read_ops);
+  const uint64_t sent_before =
+    logger->get(l_osd_stretch_cross_zone_read_sent_bytes);
+  const uint64_t recv_before =
+    logger->get(l_osd_stretch_cross_zone_read_recv_bytes);
+
+  bufferlist out;
+  ASSERT_EQ(static_cast<int>(test_data.size()),
+            read_object(obj_name, 0, test_data.size(), out, test_data.size()));
+  EXPECT_EQ(test_data, out.to_str());
+
+  EXPECT_GT(logger->get(l_osd_stretch_cross_zone_read_ops), ops_before);
+  EXPECT_GT(logger->get(l_osd_stretch_cross_zone_read_sent_bytes), sent_before);
+  EXPECT_GT(logger->get(l_osd_stretch_cross_zone_read_recv_bytes), recv_before);
+}
+
 TEST_P(TestECFailoverWithPeering, AsyncRecoveryKeepsEachZoneAtMinSize) {
   if (num_zones != 2) {
     GTEST_SKIP() << "requires num_zones == 2";

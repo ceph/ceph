@@ -723,6 +723,18 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       msg->trace.keyval("shard", pg_shard.shard.id);
     }
     msg->compute_cost(cct, subchunk_info);
+    if (is_cross_zone(get_parent(), sinfo, pg_shard, get_osdmap())) {
+      uint64_t requested = 0;
+      for (const auto &[hoid, extents] : read.to_read) {
+        for (const auto &extent : extents) {
+          requested += extent.get<1>();
+        }
+      }
+      get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_ops);
+      get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_sent_bytes,
+                                      requested);
+      rop.cross_zone_read_dispatch_time[pg_shard] = ceph_clock_now();
+    }
     m.push_back(std::make_pair(pg_shard.osd, msg));
     dout(10) << __func__ << ": will send msg " << *msg
              << " to osd." << pg_shard.osd << dendl;

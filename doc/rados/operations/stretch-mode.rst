@@ -603,8 +603,10 @@ mode raises. It fails if the cluster is not in recovery mode.
 Cross-Zone Performance Counters
 ================================
 
-Stretch clusters have OSD performance counters and per pool 
-performance counters that measure inter-zone utilization. 
+OSDs of stretch clusters have performance counters that measure the traffic
+between zones. A primary OSD counts the sub-operations that it sends to OSDs
+in another zone, for erasure coded and replicated pools alike. Show them with
+``ceph tell osd.<id> perf dump``.
 
 Write fan-out
 -------------
@@ -618,15 +620,15 @@ that reside in remote zones.
 
    * - Counter
      - Description
-   * - ``l_osd_stretch_cross_zone_write_ops``
+   * - ``cross_zone_write_ops``
      - Number of cross-zone sub-write operations issued.
-   * - ``l_osd_stretch_cross_zone_write_bytes``
+   * - ``cross_zone_write_bytes``
      - Total bytes of shard data sent to OSDs in the remote zone during
        write fan-out.
-   * - ``l_osd_stretch_cross_zone_write_lat``
-     - Average round-trip latency (ns) for cross-zone sub-write operations.
-   * - ``l_osd_stretch_cross_zone_write_lat_hist``
-     - Latency histogram for cross-zone sub-write operations (p50 / p95 / p99).
+   * - ``cross_zone_write_latency``
+     - Average round-trip latency for cross-zone sub-write operations.
+   * - ``cross_zone_write_latency_bytes_histogram``
+     - Histogram of the latency and size of cross-zone sub-write operations.
 
 Recovery push
 -------------
@@ -639,21 +641,22 @@ These counters track shard data sent to remote-zone OSDs during PG recovery.
 
    * - Counter
      - Description
-   * - ``l_osd_stretch_cross_zone_recovery_push_ops``
+   * - ``cross_zone_recovery_push_ops``
      - Number of cross-zone recovery push operations issued.
-   * - ``l_osd_stretch_cross_zone_recovery_push_bytes``
+   * - ``cross_zone_recovery_push_bytes``
      - Total bytes pushed to remote-zone OSDs during recovery.
-   * - ``l_osd_stretch_cross_zone_recovery_push_lat``
-     - Average round-trip latency (ns) for cross-zone recovery push
+   * - ``cross_zone_recovery_push_latency``
+     - Average round-trip latency for cross-zone recovery push
        operations.
-   * - ``l_osd_stretch_cross_zone_recovery_push_lat_hist``
-     - Latency histogram for cross-zone recovery push operations (p50 / p95 / p99).
+   * - ``cross_zone_recovery_push_latency_bytes_histogram``
+     - Histogram of the latency and size of cross-zone recovery pushes.
 
 Remote-zone reads
 -----------------
 
-These counters track shard data fetched from remote-zone OSDs, which occurs
-during EC reconstruction reads
+These counters track data fetched from remote-zone OSDs: erasure coded shards
+read when the primary's zone cannot serve a read, and objects that a
+replicated pool's primary pulls during recovery.
 
 .. list-table::
    :header-rows: 1
@@ -661,14 +664,15 @@ during EC reconstruction reads
 
    * - Counter
      - Description
-   * - ``l_osd_stretch_cross_zone_read_ops``
-     - Number of cross-zone sub-read operations issued.
-   * - ``l_osd_stretch_cross_zone_read_sent_bytes``
-     - Total bytes of read requests sent to remote-zone OSDs
-   * - ``l_osd_stretch_cross_zone_read_recv_bytes``
-     - Total bytes of shard data received from remote-zone OSDs in response
+   * - ``cross_zone_subread_ops``
+     - Number of cross-zone sub-read and pull operations issued.
+   * - ``cross_zone_subread_sent_bytes``
+     - Total bytes that erasure coded sub-reads requested from remote-zone
+       OSDs.
+   * - ``cross_zone_subread_recv_bytes``
+     - Total bytes of data received from remote-zone OSDs in response
        to cross-zone read requests.
-   * - ``l_osd_stretch_cross_zone_read_lat``
-     - Average round-trip latency (ns) for cross-zone sub-read operations.
-   * - ``l_osd_stretch_cross_zone_read_lat_hist``
-     - Latency histogram for cross-zone sub-read operations (p50 / p95 / p99).
+   * - ``cross_zone_subread_latency``
+     - Average round-trip latency for cross-zone sub-read operations.
+   * - ``cross_zone_subread_latency_bytes_histogram``
+     - Histogram of the latency and size of cross-zone sub-read operations.
