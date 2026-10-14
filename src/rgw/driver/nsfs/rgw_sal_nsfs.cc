@@ -14675,15 +14675,15 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::map<std::string, std::string>* report)
 {
-  auto say = [report](const char* k, const std::string& v) {
+  auto put_report = [report](const char* k, const std::string& v) {
     if (report) {
       (*report)[k] = v;
     }
   };
 
   if (!adoption_configured()) {
-    say("ran", "false");
-    say("why", "no NooBaa configuration store is configured");
+    put_report("ran", "false");
+    put_report("why", "no NooBaa configuration store is configured");
     return -ENOENT;
   }
 
@@ -14698,8 +14698,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: adoption: cannot read " << root << ": "
       << cpp_strerror(-ret) << dendl;
-    say("ran", "false");
-    say("error", cpp_strerror(-ret));
+    put_report("ran", "false");
+    put_report("error", cpp_strerror(-ret));
     return ret;
   }
   if (!contents.unreadable.empty()) {
@@ -14707,8 +14707,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "ERROR: adoption: " << u.path << ": " << u.why
 	<< dendl;
     }
-    say("ran", "false");
-    say("unreadable", std::to_string(contents.unreadable.size()));
+    put_report("ran", "false");
+    put_report("unreadable", std::to_string(contents.unreadable.size()));
     return -EBADMSG;
   }
 
@@ -14717,8 +14717,8 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: adoption: no usable master key: "
       << cpp_strerror(-ret) << dendl;
-    say("ran", "false");
-    say("error", "master keys");
+    put_report("ran", "false");
+    put_report("error", "master keys");
     return ret;
   }
   std::vector<std::string> rejected;
@@ -14727,27 +14727,27 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     for (const auto& r : rejected) {
       ldpp_dout(dpp, 0) << "ERROR: adoption: " << r << dendl;
     }
-    say("ran", "false");
-    say("error", "secrets");
+    put_report("ran", "false");
+    put_report("error", "secrets");
     return ret;
   }
 
   nsfs::ImportPlan plan;
   ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
 				  get_identity_db());
-  say("drift", std::to_string(plan.drift.size()));
-  say("limits_to_raise", std::to_string(plan.raised.size()));
-  say("roots_widened", std::to_string(plan.widened.size()));
+  put_report("drift", std::to_string(plan.drift.size()));
+  put_report("limits_to_raise", std::to_string(plan.raised.size()));
+  put_report("roots_widened", std::to_string(plan.widened.size()));
   if (ret < 0) {
-    say("ran", "false");
-    say("collisions", std::to_string(plan.collisions.size()));
+    put_report("ran", "false");
+    put_report("collisions", std::to_string(plan.collisions.size()));
     return ret;
   }
   std::vector<std::string> collisions;
   ret = nsfs::check_rgw_state(dpp, y, this, plan, collisions);
   if (ret < 0) {
-    say("ran", "false");
-    say("collisions", std::to_string(collisions.size()));
+    put_report("ran", "false");
+    put_report("collisions", std::to_string(collisions.size()));
     return ret;
   }
 
@@ -14755,20 +14755,20 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
 
   nsfs::ImportResult ir;
   ret = nsfs::import_identities(dpp, y, this, contents, plan, ir);
-  say("accounts", std::to_string(ir.accounts_created));
-  say("accounts_present", std::to_string(ir.accounts_skipped));
-  say("users", std::to_string(ir.users_created));
-  say("users_present", std::to_string(ir.users_skipped));
-  say("identity_rows", std::to_string(ir.identity_rows));
-  say("limits_raised", std::to_string(ir.limits_raised));
-  say("anonymous", ir.anonymous_imported ? "true" : "false");
-  say("anonymous_present", ir.anonymous_present ? "true" : "false");
+  put_report("accounts", std::to_string(ir.accounts_created));
+  put_report("accounts_present", std::to_string(ir.accounts_skipped));
+  put_report("users", std::to_string(ir.users_created));
+  put_report("users_present", std::to_string(ir.users_skipped));
+  put_report("identity_rows", std::to_string(ir.identity_rows));
+  put_report("limits_raised", std::to_string(ir.limits_raised));
+  put_report("anonymous", ir.anonymous_imported ? "true" : "false");
+  put_report("anonymous_present", ir.anonymous_present ? "true" : "false");
   if (ret < 0) {
-    say("ran", "partial");
+    put_report("ran", "partial");
     return ret;
   }
 
-  say("ran", "true");
+  put_report("ran", "true");
   return 0;
 }
 
@@ -14939,21 +14939,21 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
 				     const std::string& bucket_name,
 				     std::map<std::string, std::string>* report)
 {
-  auto say = [report](const char* k, const std::string& v) {
+  auto put_report = [report](const char* k, const std::string& v) {
     if (report) {
       (*report)[k] = v;
     }
   };
 
   if (!adoption_configured()) {
-    say("configured", "false");
-    say("why", "no NooBaa configuration store is configured");
+    put_report("configured", "false");
+    put_report("why", "no NooBaa configuration store is configured");
     return -ENOENT;
   }
   /* once adoption is complete NooBaa's store is not an input, so there
    * is no record to import */
   if (adoption_complete()) {
-    say("why", "adoption is complete");
+    put_report("why", "adoption is complete");
     return -ENOENT;
   }
 
@@ -14964,8 +14964,8 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   nsfs::NooBaaStoreContents contents;
   int ret = store.read(dpp, contents);
   if (ret < 0) {
-    say("configured", "false");
-    say("error", cpp_strerror(-ret));
+    put_report("configured", "false");
+    put_report("error", cpp_strerror(-ret));
     return ret;
   }
 
@@ -14973,8 +14973,8 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
 				  get_identity_db());
   if (ret < 0) {
-    say("configured", "false");
-    say("collisions", std::to_string(plan.collisions.size()));
+    put_report("configured", "false");
+    put_report("collisions", std::to_string(plan.collisions.size()));
     return ret;
   }
   std::erase_if(plan.entries, [this, dpp](const nsfs::ImportEntry& e) {
@@ -14987,13 +14987,13 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   nsfs::BucketImportResult br;
   ret = nsfs::import_one_bucket(dpp, y, this, root, bucket_name, contents,
 				mapping, br);
-  say("configured", (ret == 0) ? "true" : "false");
-  say("buckets", std::to_string(br.buckets_written));
-  say("policies", std::to_string(br.policies_rewritten));
-  say("policies_refused", std::to_string(br.policies_refused.size()));
-  say("logging", std::to_string(br.logging_carried));
+  put_report("configured", (ret == 0) ? "true" : "false");
+  put_report("buckets", std::to_string(br.buckets_written));
+  put_report("policies", std::to_string(br.policies_rewritten));
+  put_report("policies_refused", std::to_string(br.policies_refused.size()));
+  put_report("logging", std::to_string(br.logging_carried));
   if (ret < 0) {
-    say("error", cpp_strerror(-ret));
+    put_report("error", cpp_strerror(-ret));
   }
   return ret;
 }
@@ -15012,15 +15012,15 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
 				 const std::string& bucket_name,
 				 std::map<std::string, std::string>* report)
 {
-  auto say = [report](const char* k, const std::string& v) {
+  auto put_report = [report](const char* k, const std::string& v) {
     if (report) {
       (*report)[k] = v;
     }
   };
 
   if (!extensions_enabled()) {
-    say("adopted", "false");
-    say("why", "rgw_nsfs_extensions is off, so the bucket's tree cannot be "
+    put_report("adopted", "false");
+    put_report("why", "rgw_nsfs_extensions is off, so the bucket's tree cannot be "
 	       "converted");
     ldpp_dout(dpp, 0) << "ERROR: not adopting bucket " << bucket_name
       << ":  rgw_nsfs_extensions is off, so its tree cannot be converted"
@@ -15033,8 +15033,8 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   rb.name = bucket_name;
   int ret = load_bucket(dpp, rb, &b, y);
   if (ret < 0) {
-    say("adopted", "false");
-    say("error", cpp_strerror(-ret));
+    put_report("adopted", "false");
+    put_report("error", cpp_strerror(-ret));
     return ret;
   }
 
@@ -15045,25 +15045,25 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
    * number:  a resumed run has only these and its marker to report
    * from, and a half-finished walk otherwise reads the same as a bucket
    * with history. */
-  say("objects", std::to_string(prog.objects));
-  say("directory_objects", std::to_string(prog.directory_objects));
-  say("versions", std::to_string(prog.versions));
-  say("uploads", std::to_string(prog.uploads));
-  say("parts", std::to_string(prog.parts));
-  say("profile_set", prog.profile_set ? "true" : "false");
-  say("profile", static_cast<NSFSBucket*>(b.get())->profile_name());
+  put_report("objects", std::to_string(prog.objects));
+  put_report("directory_objects", std::to_string(prog.directory_objects));
+  put_report("versions", std::to_string(prog.versions));
+  put_report("uploads", std::to_string(prog.uploads));
+  put_report("parts", std::to_string(prog.parts));
+  put_report("profile_set", prog.profile_set ? "true" : "false");
+  put_report("profile", static_cast<NSFSBucket*>(b.get())->profile_name());
   if (ret < 0) {
-    say("adopted", "false");
-    say("error", cpp_strerror(-ret));
+    put_report("adopted", "false");
+    put_report("error", cpp_strerror(-ret));
     return ret;
   }
   /* `complete` and `profile_set` fail apart, and the struct says why:
    * a run that stops halfway has changed the profile and not finished
    * the tree, and the bucket is servable in exactly that state.  So
    * adoption is complete only when nothing foreign is left. */
-  say("adopted", prog.complete ? "true" : "false");
+  put_report("adopted", prog.complete ? "true" : "false");
   if (!prog.complete) {
-    say("why", "the walk did not finish;  the converting marker stands "
+    put_report("why", "the walk did not finish;  the converting marker stands "
 	       "and a later run resumes it");
   }
   return 0;
