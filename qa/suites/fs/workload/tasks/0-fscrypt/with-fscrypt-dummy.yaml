@@ -1,8 +1,6 @@
+# fscrypt is not supported on EC pools (allocation is not preserved)
 overrides:
   ceph:
-    cephfs:
-      ec_profile:
-        - disabled
     conf:
       client:
         client_fscrypt_dummy_encryption: true
