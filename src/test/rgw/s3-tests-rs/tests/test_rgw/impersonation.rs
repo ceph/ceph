@@ -252,3 +252,63 @@ async fn test_impersonation_refuses_an_unprovisioned_identity() {
 
     unbind_identities().await;
 }
+
+/// NooBaa's guard on where an account's buckets go, enacted
+/// (DECISIONS.md 2026-10-14):  NooBaa makes a bucket's directory as the
+/// account, so an account that cannot write its `new_buckets_path`
+/// cannot create there.  nsfs makes the directory as the gateway, so it
+/// checks the account's access as the account before it does.
+///
+/// alice is mapped with `/usr` as her `new_buckets_path`, which is
+/// root-owned and not writable by uid 70101:  refused.  (Not `/`, which
+/// nsfs refuses to store as a path at all.)  The control is
+/// `/tmp`, which anyone may write:  created.  Neither depends on a
+/// fixture directory.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_new_buckets_path_requires_the_accounts_access() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let cfg = get_config();
+    let alice = get_client();
+    let bind = |nbp: &'static str| {
+        let me = cfg.main_user_id.clone();
+        async move {
+            let r = nsfs_put_identity(&[
+                ("identity", me.as_str()),
+                ("uid", UID_ALICE),
+                ("gid", UID_ALICE),
+                ("new_buckets_path", nbp),
+            ]).await;
+            assert_eq!(r.status, 200, "binding alice failed: {}", r.body);
+        }
+    };
+    let status = |r: Result<_, aws_sdk_s3::error::SdkError<
+        aws_sdk_s3::operation::create_bucket::CreateBucketError>>| match r {
+        Ok(_) => 200,
+        Err(e) => e.raw_response().map_or(0, |r| r.status().as_u16()),
+    };
+
+    bind("/usr").await;
+    let refused = s3_tests_rs::fixtures::get_new_bucket_name();
+    let r = status(alice.create_bucket().bucket(&refused).send().await);
+
+    bind("/tmp").await;
+    let allowed = s3_tests_rs::fixtures::get_new_bucket_name();
+    let ok = status(alice.create_bucket().bucket(&allowed).send().await);
+    if ok == 200 {
+        let _ = alice.delete_bucket().bucket(&allowed).send().await;
+    }
+    unbind_identities().await;
+
+    assert_eq!(r, 403, "alice created a bucket where she cannot write");
+    assert_eq!(ok, 200, "alice was refused where she can write");
+}
