@@ -3,13 +3,17 @@ from textwrap import dedent
 from unittest.mock import patch
 from typing import List
 
+import pytest
+
 from orchestrator._interface import DaemonDescription
 
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
+    CertificateSource,
     MgmtGatewaySpec,
-    OAuth2ProxySpec
+    OAuth2ProxySpec,
 )
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.services.service_registry import service_registry
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 from cephadm.tlsobject_types import TLSCredentials
@@ -815,6 +819,71 @@ class TestMgmtGateway:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    @pytest.mark.parametrize(
+        "service_type",
+        [
+            "mgmt-gateway",
+            "oauth2-proxy",
+        ],
+    )
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.oauth2_proxy.OAuth2ProxyService.get_certificates",
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
+           lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints",
+           lambda _: (["ceph-node-2:8443"], "https"))
+    def test_tls_dependencies_match_reconciliation(
+        self,
+        _run_cephadm,
+        service_type,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        """
+        generate_config() deps (persisted as last_deps) must match
+        sorted_dependencies() (used by reconcile), including TLS deps
+        such as certificate_source.
+        """
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        cert_source = CertificateSource.CEPHADM_SIGNED.value
+
+        if service_type == 'mgmt-gateway':
+            spec = MgmtGatewaySpec(certificate_source=cert_source)
+        else:
+            spec = OAuth2ProxySpec(
+                provider_display_name='my_idp_provider',
+                client_id='my_client_id',
+                client_secret='my_client_secret',
+                oidc_issuer_url='http://192.168.10.10:8888/dex',
+                cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
+                redirect_url='https://ceph-node:5555/oauth2/callback',
+                certificate_source=cert_source,
+            )
+
+        with with_host(cephadm_module, 'ceph-node'):
+            with with_service(cephadm_module, spec):
+                service = service_registry.get_service(service_type)
+                svc_spec = cephadm_module.spec_store[spec.service_name()].spec
+                daemon_spec = CephadmDaemonDeploySpec(
+                    host='ceph-node',
+                    daemon_id='ceph-node',
+                    service_name=spec.service_name(),
+                    daemon_type=service_type,
+                )
+
+                _, generated_deps = service.generate_config(daemon_spec)
+                expected_deps = service.sorted_dependencies(
+                    cephadm_module,
+                    svc_spec,
+                    daemon_spec.daemon_type,
+                )
+
+                assert generated_deps == expected_deps
+                assert f'certificate_source: {cert_source}' in generated_deps
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_mgmt_gateway_default_port_is_443_when_unspecified(
