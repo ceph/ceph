@@ -314,11 +314,13 @@ class TestOSDRemovalQueue:
         assert queued.zap is False
         start.assert_called_once()
 
-    def _removal_queue_with_osd(self, force=False):
+    def _removal_queue_with_osd(self, force=False, replace=False, replace_block=False, zap=False):
         mgr = mock.Mock()
         mgr.max_osd_draining_count = 1
         mgr.cache.has_daemon.return_value = False
-        osd = OSD(osd_id=1, remove_util=mock.MagicMock(), force=force, hostname='host1')
+        osd = OSD(osd_id=1, remove_util=mock.MagicMock(), force=force,
+                  replace=replace, replace_block=replace_block, zap=zap,
+                  hostname='host1')
         q = OSDRemovalQueue(mgr)
         q.osds.add(osd)
         return q, osd
@@ -346,6 +348,36 @@ class TestOSDRemovalQueue:
         q.process_removal_queue()
         _purge.assert_called_once()
         _std.assert_not_called()
+        assert osd not in q.osds
+
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
+    @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.down", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.destroy", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.do_zap")
+    def test_process_removal_queue_replace_without_zap_does_not_zap(
+            self, _do_zap, _destroy, _down, _std, _pgs, _err):
+        q, osd = self._removal_queue_with_osd(force=True, replace=True)
+        q.process_removal_queue()
+        _destroy.assert_called_once()
+        _do_zap.assert_not_called()
+        assert osd not in q.osds
+
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
+    @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.down", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.destroy", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.do_zap")
+    def test_process_removal_queue_replace_block_still_zaps(
+            self, _do_zap, _destroy, _down, _std, _pgs, _err):
+        q, osd = self._removal_queue_with_osd(force=True, replace_block=True)
+        q.process_removal_queue()
+        _destroy.assert_called_once()
+        _do_zap.assert_called_once()
         assert osd not in q.osds
 
     @mock.patch("cephadm.services.osd.OSD.exists", True)
