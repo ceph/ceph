@@ -473,6 +473,7 @@ public:
    */
   version_t cached_first_committed = 0;
   version_t cached_last_committed = 0;
+  version_t last_committed_post_refresh = 0;
   /**
    * @}
    */
@@ -539,12 +540,16 @@ public:
   }
 
   /**
-   * Wait for a proposal to commit.
+   * Wait for a proposal to commit and for committed state to be applied.
    *
-   * Note: the proposal may not be signaled yet. This simply adds a context to
-   * be completed when the next proposal commits.
+   * The proposal may not be signaled yet. This queues @p c to run from
+   * post_refresh() after every PaxosService has run _update_from_paxos()
+   * for that round — not merely after the store write. Completing waiters
+   * earlier would let a client observe the ack (e.g. osd new) and use the
+   * new value (cephx as osd.N) while KeyServer is still at the previous version.
    *
-   * @param c The callback to be awaken once the proposal is committed.
+   * @param c The callback to be awaken once the proposal is committed
+   *          and applied.
    */
   void wait_for_commit(MonOpRequestRef op, Context *c) {
     if (op)
