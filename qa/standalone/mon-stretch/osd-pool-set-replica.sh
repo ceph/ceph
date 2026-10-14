@@ -233,6 +233,9 @@ function TEST_pool_replica_limits() {
     test "$(ceph osd pool get single size | awk '{print $2}')" = 1 || return 1
     # as with size, a min_size above the new size is reset
     test "$(ceph osd pool get single min_size | awk '{print $2}')" = 1 || return 1
+    # the reply's parts are separated
+    ceph osd pool set single replica 2 > "$dir/out.txt" 2>&1 || return 1
+    grep -F "size set to 2; set pool" "$dir/out.txt" || return 1
 }
 
 # The options of num_zones are refused with other variables, which would
