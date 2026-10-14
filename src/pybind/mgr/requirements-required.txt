@@ -8,7 +8,7 @@ pecan
 prettytable<3.4.0
 pyfakefs
 pyOpenSSL
-pytest-cov==2.7.1
+pytest-cov
 pyyaml
 requests-mock
 scipy
