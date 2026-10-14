@@ -578,7 +578,6 @@ private:
   bool remove_what_failed_op_created(MonOpRequestRef op);
   // the command or pool operation being prepared
   MonOpRequestRef preparing_op;
-  bool crush_rule_removal_pending(const std::string& rule_name, int rule_id);
   bool erasure_code_profile_removal_pending(const std::string& name) const;
   int prepare_pool_size(const unsigned pool_type,
 			const std::string &erasure_code_profile,
@@ -997,6 +996,7 @@ public:
   // What check_pool_params() needs from this cluster, with crush as its
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(CrushWrapper& crush);
+  bool crush_rule_removal_pending(const std::string& rule_name, int rule_id);
 
   // -EINVAL unless rule places a pool over zones in num_zones buckets of the
   // zone type, with its share of size in each.

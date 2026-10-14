@@ -620,6 +620,16 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return false;
     }
+    // a rule that the pending OSDMap update removes is found gone once the
+    // update has committed
+    if (string rule; cmd_getval(cmdmap, "rule", rule) && rule != "none") {
+      const int id = mon.osdmon()->osdmap.crush->get_rule_id(rule);
+      if (id >= 0 && mon.osdmon()->crush_rule_removal_pending(rule, id)) {
+        mon.osdmon()->wait_for_finished_proposal(
+          op, new C_RetryMessage(this, op));
+        return false;
+      }
+    }
     std::optional<map<string,string>> default_profile;
     err = prepare_pool_default_set(cmdmap, ss, &default_profile);
     if (err) {
