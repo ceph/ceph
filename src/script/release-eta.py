@@ -17,6 +17,10 @@ upstream release pipeline and apply historical lags for that stage:
   tagged     -> vX.Y.Z tag pushed -> tag date + typical tag-to-announcement lag
   released   -> announced (ceph.io notes merged or doc/releases/releases.yml)
 
+For a major release that hasn't branched yet, the release manager's planned
+branch and release dates on the Ceph community calendar take precedence over
+the historical estimate, which is still reported for comparison.
+
 Usage:
   src/script/release-eta.py                 # text summary of all active releases
   src/script/release-eta.py squid           # just one release
@@ -42,6 +46,12 @@ import yaml
 GH = "https://api.github.com"
 TRACKER = "https://tracker.ceph.com"
 RELEASES_YML = "repos/ceph/ceph/contents/doc/releases/releases.yml?ref=main"
+# The public Ceph community calendar (ceph.io/en/community/meetups/)
+CALENDAR_ID = "9ts9c7lt7u1vic2ijvvqqlfpo0@group.calendar.google.com"
+CALENDAR_ICS = ("https://calendar.google.com/calendar/ical/"
+                f"{urllib.parse.quote(CALENDAR_ID)}/public/basic.ics")
+CALENDAR_URL = ("https://calendar.google.com/calendar/embed?src="
+                f"{urllib.parse.quote(CALENDAR_ID)}")
 TODAY = dt.date.today()
 HISTORY = 8  # how many recent samples to use for each lag distribution
 CADENCE = 56  # upstream aims for a point release every 8 weeks
@@ -175,8 +185,41 @@ def collect():
                 for it in gh("search/issues?per_page=50&q=" + urllib.parse.quote(
                     "repo:ceph/ceph is:pr in:title kickoff"))["items"]]
 
+    try:
+        plans, merge_windows = calendar_plans()
+    except Exception:
+        plans, merge_windows = {}, {}
+
     return {"yml": yml, "tags": tags, "branches": branches, "notes": notes,
-            "milestones": milestones, "redmine": redmine, "kickoffs": kickoffs}
+            "milestones": milestones, "redmine": redmine, "kickoffs": kickoffs,
+            "plans": plans, "merge_windows": merge_windows}
+
+
+def calendar_plans():
+    """Release dates the release manager put on the community calendar:
+    {name: {"branch": (date, url), "ga": (date, url)}} and
+    {version: (merge window start, url)}. Events look like
+    "Vampire: Branch Date", "Vampire: Projected Release Date",
+    "Umbrella Development Freeze / Branch", "Squid v19.2.8 Merge Window"."""
+    with urllib.request.urlopen(CALENDAR_ICS, timeout=60) as r:
+        ics = r.read().decode()
+    ics = re.sub(r"\r?\n[ \t]", "", ics)  # unfold continuation lines
+    majors, windows = {}, {}
+    for ev in ics.split("BEGIN:VEVENT")[1:]:
+        summary = re.search(r"^SUMMARY:(.*)$", ev, re.M)
+        start = re.search(r"^DTSTART[^:\n]*:(\d{8})", ev, re.M)
+        if not (summary and start):
+            continue
+        summary, day = summary.group(1).strip(), dt.datetime.strptime(start.group(1), "%Y%m%d").date()
+        url = re.search(r"https://tracker\.ceph\.com/issues/\d+", ev)
+        url = url and url.group(0)
+        if m := re.fullmatch(r"(\w+):? (?:Branch Date|Development Freeze / Branch)", summary, re.I):
+            majors.setdefault(m.group(1).lower(), {})["branch"] = (day, url)
+        elif m := re.fullmatch(r"(\w+):? (?:Projected )?Release Date", summary, re.I):
+            majors.setdefault(m.group(1).lower(), {})["ga"] = (day, url)
+        elif m := re.fullmatch(r"\w+ v(\d+\.\d+\.\d+) Merge Window", summary, re.I):
+            windows[m.group(1)] = (day, url)
+    return majors, windows
 
 
 def branch_head_date(sha):
@@ -312,6 +355,10 @@ def estimate_series(name, series, data, announced, models):
         ev.append(f"GitHub milestone v{nxt}: {ms['closed_issues']}/{tot} PRs merged"
                   + (f" ({ms['open_issues']} still open)" if ms["open_issues"] else ""))
         links.append((f"milestone v{nxt}", ms["html_url"]))
+    if mw := data["merge_windows"].get(nxt):
+        ev.append(f"The v{nxt} merge window opened {mw[0]} (community calendar)")
+        if mw[1]:
+            links.append((f"v{nxt} merge window", mw[1]))
     n_back = ahead_by(f"v{last}", name)
     if n_back is not None:
         ev.append(f"{n_back} commits on the {name} branch since v{last}")
@@ -481,6 +528,36 @@ def estimate_planned(data, announced, models, dev):
     if len(windows) == 2:
         ev.append(f"The two methods give {windows[0]['likely']} (from kickoff) and "
                   f"{windows[1]['likely']} (from major cadence)")
+
+    plan = data["plans"].get(name, {})
+    if "ga" in plan:
+        # The release manager's plan wins over history; history only says how
+        # late it could run (first RC -> GA, counted from the planned branch).
+        planned, url = plan["ga"]
+        branch = plan.get("branch")
+        hist = likely
+        latest = planned
+        if branch and models["rc_to_ga"]:
+            latest = max(planned, branch[0] + dt.timedelta(models["rc_to_ga"]["p75"]))
+        res["eta"] = {"basis": "release manager's plan", "likely": planned,
+                      "earliest": planned, "latest": latest, "planned": True}
+        if branch:
+            ev.insert(0, f"The release manager plans to branch {name.title()} on {branch[0]} "
+                         f"(community calendar)")
+            if branch[1]:
+                links.insert(0, ("branch date", branch[1]))
+        ev.insert(1 if branch else 0, f"The release manager plans {name.title()} GA for {planned} "
+                                      f"(community calendar)")
+        links.insert(1 if branch and branch[1] else 0, ("planned release", url or CALENDAR_URL))
+        ev.append(f"Without the plan, history alone would put GA around {hist:%B %Y}")
+        res["note"] = "Planned dates from the release manager."
+        res["summary"] = (f"{name.title()} {ga} is the major after "
+                          f"{dev['name'].title() if dev else 'the current one'}. The release manager "
+                          + (f"plans to branch it on {branch[0]} and " if branch else "plans ")
+                          + f"to release it around {planned:%B %Y}"
+                          + (f" (could run to {latest:%b %Y})." if latest > planned else "."))
+        return res
+
     res["summary"] = (f"{name.title()} {ga} is the major after {dev['name'].title() if dev else 'the current one'}. "
                       f"It is still being kicked off, so this is a rough estimate: GA around "
                       f"{likely:%B %Y} (range {res['eta']['earliest']:%b %Y} – {res['eta']['latest']:%b %Y}).")
@@ -693,7 +770,7 @@ h1{{font-size:18px;margin:0 0 2px}}.top{{max-width:1100px;margin:0 auto 14px}}.t
 details ul{{padding-left:18px;margin:6px 0}}a{{color:var(--accent)}}
 </style>
 <div class=top><h1>When is the next Ceph release?</h1>
-<p>Estimated from upstream git tags, release branches, ceph.io release-notes PRs and historical lags, not from tracker due dates. Updated {e(out['generated'][:16].replace('T', ' '))} UTC.</p></div>
+<p>Estimated by src/script/release-eta.py (written with an LLM's help) from upstream git tags, release branches, GitHub milestones, ceph.io release-notes PRs, doc/releases/releases.yml, tracker.ceph.com versions and the release manager's dates on the Ceph community calendar, using historical lags between release stages. Estimates, not commitments. Updated {e(out['generated'][:16].replace('T', ' '))} UTC.</p></div>
 <div class=grid>{''.join(cards)}</div>"""
     if fragment:
         return page
