@@ -984,7 +984,28 @@ class LocalFilesystem(LocalMDSCluster, tasks.cephfs.filesystem.FilesystemBase):
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
-        self.ec_profile = fs_config.get('ec_profile')
+
+        pool_types = fs_config.get('pool_types', {})
+
+        def _parse_pool_type(tokens):
+            """Return (is_erasure, profile_tokens) from a pool_types token list."""
+            if not tokens:
+                return False, []
+            is_erasure = 'type=erasure' in tokens
+            profile_tokens = [t for t in tokens if not t.startswith('type=')]
+            return is_erasure, profile_tokens
+
+        data_tokens = pool_types.get('data_pool', [])
+        meta_tokens = pool_types.get('metadata_pool', [])
+        self.data_pool_is_erasure, self.data_pool_ec_profile = _parse_pool_type(data_tokens)
+        self.metadata_pool_is_erasure, self.metadata_pool_ec_profile = _parse_pool_type(meta_tokens)
+
+        # Legacy key — still accepted for backward compatibility
+        if not self.data_pool_is_erasure:
+            legacy_ec = fs_config.get('ec_profile')
+            if legacy_ec and 'disabled' not in legacy_ec:
+                self.data_pool_is_erasure = True
+                self.data_pool_ec_profile = legacy_ec
 
         self.mon_manager = LocalCephManager(ctx=self._ctx, cluster_name=cluster_name)
 
