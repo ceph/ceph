@@ -377,8 +377,10 @@ class SplitOp {
   * @param op Operation to prepare
   * @param objecter Objecter instance
   * @param cct CephContext for logging
+  * @param has_primary_ops Operation holds ops only the primary may run
   */
- static void prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct);
+ static void prepare_single_op(Objecter::Op *op, Objecter &objecter,
+                               CephContext *cct, bool has_primary_ops);
  
  /**
   * @brief Add version tracking to sub-operations for consistency.

@@ -10,6 +10,7 @@
  */
 
 #include <algorithm>
+#include <tuple>
 
 #include "osdc/SplitOp.h"
 #include "osdc/Objecter.h"
@@ -820,17 +821,18 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
  * @param objecter Objecter instance for configuration access
  * @param pi Pool information
  * @param cct CephContext for logging
- * @return A pair of bools: {suitable_read_found, single_direct_op}
+ * @return A tuple of bools: {suitable_read_found, single_direct_op, has_primary_ops}
  *         - suitable_read_found: true if operation contains valid read(s)
  *         - single_direct_op: true if operation can be sent to single OSD
+ *         - has_primary_ops: true if operation holds ops only the primary may run
  */
-std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
-                               const pg_pool_t *pi, CephContext *cct) {
+std::tuple<bool, bool, bool> validate(Objecter::Op *op, Objecter &objecter,
+                                      const pg_pool_t *pi, CephContext *cct) {
   bool is_erasure = pi->is_erasure();
 
   // Validate flags
   if (!validate_flags(pi, op, cct)) {
-    return {false, false};
+    return {false, false, false};
   }
 
   // Initialize state for operation validation
@@ -841,7 +843,7 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
   
   if (!is_erasure && replica_min_shard_read_size == 0) {
     ldout(cct, DBG_LVL) << __func__ << " REJECT: splitting disabled (min_split_replica_read_size=0)" << dendl;
-    return {false, false};
+    return {false, false, false};
   }
   
   uint64_t replica_min_read_size = replica_min_shard_read_size * kReplicaMinShardReads;
@@ -851,7 +853,7 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
                                                  replica_min_read_size, cct,
                                                  has_primary_ops, single_direct_op);
 
-  return {suitable_read_found, single_direct_op};
+  return {suitable_read_found, single_direct_op, has_primary_ops};
 }
 
 void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct) {
@@ -894,11 +896,16 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
  * This optimization avoids split operation overhead when data can be
  * retrieved from a single shard.
  *
+ * An operation that holds ops only the primary may run is left to go to the
+ * primary unless the read's shard is the primary's.
+ *
  * @param op Operation to prepare
  * @param objecter Objecter instance
  * @param cct CephContext for logging
+ * @param has_primary_ops Operation holds ops only the primary may run
  */
-void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct) {
+void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter,
+                                CephContext *cct, bool has_primary_ops) {
   auto &target = op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
@@ -913,7 +920,8 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
         o.op.op == CEPH_OSD_OP_READ) {
       raw_shard_id_t raw_shard((o.op.extent.offset) / chunk_size % data_chunk_count);
       shard_id_t shard = pi->get_shard(raw_shard);
-      if (shard != shard_id_t::NO_SHARD) {
+      if (shard != shard_id_t::NO_SHARD &&
+          (!has_primary_ops || shard == target.actual_pgid.shard)) {
         int acting_index = (int)shard;
         if (objecter.osdmap->exists(op->target.acting[acting_index])) {
           op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
@@ -996,7 +1004,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  auto [validated, single_op] = validate(op, objecter, pi, cct);
+  auto [validated, single_op, has_primary_ops] = validate(op, objecter, pi, cct);
 
   if (!validated) {
     return false;
@@ -1004,7 +1012,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   if (single_op) {
     ldout(cct, DBG_LVL) << __func__ <<" reusing original op " << dendl;
-    prepare_single_op(op, objecter, cct);
+    prepare_single_op(op, objecter, cct, has_primary_ops);
     return false;
   }
 
@@ -1062,7 +1070,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   if (split_read->sub_reads.size() <= 1) {
     ldout(cct, DBG_LVL) << __func__ <<" reusing original op - inefficient" << dendl;
     target = saved_target;
-    prepare_single_op(op, objecter, cct);
+    prepare_single_op(op, objecter, cct, has_primary_ops);
     split_read->abort = true; // Required for destructor.
     return false;
   }
