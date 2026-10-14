@@ -1566,6 +1566,28 @@ def _osd_unit_poststop_commands(
 ##################################
 
 
+def bind_listen_socket(port: int) -> socket.socket:
+    try:
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    except OSError as e:
+        logger.debug(f'Unable to create IPv6 socket, falling back to IPv4: {e}')
+    else:
+        try:
+            # Allow rebinding after restart while the prior socket is in TIME_WAIT.
+            # Does not allow stealing a port from a live LISTEN socket.
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            s.bind(('::', port))
+            return s
+        except OSError as e:
+            s.close()
+            logger.debug(f'Unable to bind dual-stack socket on port {port}, falling back to IPv4: {e}')
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('0.0.0.0', port))
+    return s
+
+
 class MgrListener(Thread):
     def __init__(self, agent: 'CephadmAgent') -> None:
         self.agent = agent
@@ -1574,11 +1596,7 @@ class MgrListener(Thread):
         super(MgrListener, self).__init__(target=self.run)
 
     def run(self) -> None:
-        listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # Allow rebinding after restart while the prior socket is in TIME_WAIT.
-        # Does not allow stealing a port from a live LISTEN socket.
-        listenSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
+        listenSocket = bind_listen_socket(int(self.agent.listener_port))
         listenSocket.settimeout(60)
         listenSocket.listen(1)
         ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
