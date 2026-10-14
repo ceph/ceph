@@ -195,6 +195,7 @@ private:
     crimson::os::FuturizedStore &store
   );
   seastar::future<> start_boot();
+  seastar::future<> start_cluster_lanes(uint64_t osd_required);
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
   seastar::future<> _add_me_to_crush();
