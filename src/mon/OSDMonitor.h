@@ -1001,6 +1001,11 @@ public:
   bool num_zones_supported() const {
     return osdmap.require_osd_release >= NUM_ZONES_RELEASE;
   }
+  // the pending update commits the upgrade
+  bool num_zones_commit_pending() const {
+    return !num_zones_supported() &&
+           pending_inc.new_require_osd_release >= NUM_ZONES_RELEASE;
+  }
   // What check_pool_params() needs from this cluster, with crush as its
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(CrushWrapper& crush);

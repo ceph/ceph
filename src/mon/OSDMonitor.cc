@@ -15251,6 +15251,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply_no_propose;
     }
+    // the commit converts only the pools before it in its update
+    if (num_zones_commit_pending()) {
+      goto wait;
+    }
 
     int pool_type;
     if (pool_type_str == "replicated") {
@@ -15561,6 +15565,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	 << "followed by --yes-i-really-really-mean-it.";
       err = -EPERM;
       goto reply_no_propose;
+    }
+    // the commit may have given the pool a copy of the default profile
+    if (num_zones_commit_pending()) {
+      goto wait;
     }
     err = _prepare_remove_pool(pool, &ss, force_no_fake);
     if (err == -EAGAIN) {
@@ -17939,10 +17947,6 @@ string OSDMonitor::profile_copy_name(
 
 void OSDMonitor::copy_default_profile_to_pools()
 {
-  if (!osdmap.has_erasure_code_profile("default")) {
-    return;
-  }
-  const auto& profile = osdmap.get_erasure_code_profile("default");
   auto lookup = [this](const string& name) -> const map<string, string>* {
     if (auto p = pending_inc.new_erasure_code_profiles.find(name);
         p != pending_inc.new_erasure_code_profiles.end()) {
@@ -17951,7 +17955,25 @@ void OSDMonitor::copy_default_profile_to_pools()
     return osdmap.has_erasure_code_profile(name)
       ? &osdmap.get_erasure_code_profile(name) : nullptr;
   };
-  for (const auto& [id, pool] : osdmap.get_pools()) {
+  const auto *default_profile = lookup("default");
+  if (!default_profile) {
+    return;
+  }
+  const map<string, string> profile = *default_profile;
+  // the pools as the update of the commit leaves them
+  auto pools = osdmap.get_pools();
+  for (const auto& [id, p] : pending_inc.new_pools) {
+    pools[id] = p;
+  }
+  for (const auto id : pending_inc.old_pools) {
+    pools.erase(id);
+  }
+  auto pool_name = [this](int64_t id) {
+    auto i = pending_inc.new_pool_names.find(id);
+    return i != pending_inc.new_pool_names.end() ? i->second
+                                                 : osdmap.get_pool_name(id);
+  };
+  for (const auto& [id, pool] : pools) {
     if (!pool.is_erasure() || pool.erasure_code_profile != "default") {
       continue;
     }
@@ -17959,18 +17981,17 @@ void OSDMonitor::copy_default_profile_to_pools()
     std::ostringstream err;
     string base;
     if (profile_chunk_counts(profile, &k, &m, &err) == 0) {
-      base = osdmap.get_pool_name(id) + "-k" + stringify(k) + "-m" +
-             stringify(m);
+      base = pool_name(id) + "-k" + stringify(k) + "-m" + stringify(m);
     } else {
       dout(0) << __func__ << " " << err.str() << dendl;
-      base = osdmap.get_pool_name(id) + "-default";
+      base = pool_name(id) + "-default";
     }
     const string name = profile_copy_name(base, profile, lookup);
     pending_inc.set_erasure_code_profile(name, profile);
     pg_pool_t *p = pending_inc.get_new_pool(id, &pool);
     p->erasure_code_profile = name;
     p->last_change = pending_inc.epoch;
-    mon.clog->info() << "pool '" << osdmap.get_pool_name(id)
+    mon.clog->info() << "pool '" << pool_name(id)
                      << "' now uses erasure code profile '" << name
                      << "', a copy of profile 'default'";
   }
