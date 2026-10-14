@@ -835,7 +835,11 @@ To set values for a stretch pool, run a command of the following form:
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
 
 This command configures an individual stretch pool, which is an alternative to
-stretch mode. It fails while stretch mode is enabled. See :ref:`stretch_mode`.
+stretch mode. It fails while stretch mode is enabled, and stretch mode cannot be
+enabled while such a pool exists. See :ref:`stretch_mode`. Individual stretch
+pools are a legacy feature: for a pool over two zones, use ``num_zones``. In
+this release ``num_zones`` is 1 or 2, so a pool over three or more zones still
+needs this command.
 
 .. note::
 

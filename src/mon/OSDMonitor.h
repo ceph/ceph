@@ -498,6 +498,12 @@ private:
   std::optional<int64_t> other_pool(
     int64_t skip_pool,
     const std::function<bool(const pg_pool_t&)>& pred) const;
+  // whether stretch mode is enabled, or enabled by the pending changes
+  bool stretch_mode_enabled_or_pending() const;
+  // legacy individual stretch pools ('osd pool stretch set' while stretch
+  // mode is off) and stretch mode cannot be combined
+  int check_no_legacy_individual_stretch_pools(int64_t skip_pool,
+                                               std::ostream *ss) const;
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 

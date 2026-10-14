@@ -8557,6 +8557,12 @@ int OSDMonitor::prepare_new_pool(string& name,
     return -EINVAL;
   }
   int r;
+  if (num_zones > 1) {
+    r = check_no_legacy_individual_stretch_pools(-1, ss);
+    if (r) {
+      return r;
+    }
+  }
   r = prepare_pool_crush_rule(pool_type, name, erasure_code_profile,
                                  crush_rule_name, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, &crush_rule, ss);
   if (r) {
@@ -9198,6 +9204,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
     if (p.is_stretch_pool()) {
       ss << "Error: num_zones == 1 but pool is already stretched";
       return -EINVAL;
+    }
+    if (int r = check_no_legacy_individual_stretch_pools(pool, &ss); r) {
+      return r;
     }
     const PoolCreateParams d = load_pool_defaults(g_conf());
     const string zone_failure_domain = cmd_getval_or<string>(
@@ -10386,11 +10395,11 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
   return _command_pool_application(prefix, cmdmap, ss, nullptr, true);
 }
 
-static bool refuse_in_stretch_mode(const OSDMap& osdmap,
+static bool refuse_in_stretch_mode(bool stretch_mode_enabled,
                                    const string& command,
                                    stringstream& ss)
 {
-  if (osdmap.stretch_mode_enabled) {
+  if (stretch_mode_enabled) {
     ss << command << " is for individual stretch pools and cannot be used "
        << "while stretch mode is enabled";
     return true;
@@ -10401,7 +10410,7 @@ static bool refuse_in_stretch_mode(const OSDMap& osdmap,
 int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
                                                     stringstream& ss)
 {
-  if (refuse_in_stretch_mode(osdmap, "osd pool stretch set", ss)) {
+  if (refuse_in_stretch_mode(stretch_mode_enabled_or_pending(), "osd pool stretch set", ss)) {
     return -EINVAL;
   }
 
@@ -10605,7 +10614,7 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   * Command syntax:
   *   ceph osd pool stretch unset <pool>
   */
-  if (refuse_in_stretch_mode(osdmap, "osd pool stretch unset", ss)) {
+  if (refuse_in_stretch_mode(stretch_mode_enabled_or_pending(), "osd pool stretch unset", ss)) {
     return -EINVAL;
   }
 
@@ -16852,6 +16861,38 @@ std::optional<int64_t> OSDMonitor::other_pool(
   return std::nullopt;
 }
 
+bool OSDMonitor::stretch_mode_enabled_or_pending() const
+{
+  return pending_inc.change_stretch_mode ? pending_inc.stretch_mode_enabled
+                                         : osdmap.stretch_mode_enabled;
+}
+
+int OSDMonitor::check_no_legacy_individual_stretch_pools(int64_t skip_pool,
+                                                         ostream *ss) const
+{
+  if (stretch_mode_enabled_or_pending()) {
+    return 0;
+  }
+  const auto pool = other_pool(skip_pool, [](const pg_pool_t& p) {
+    return p.is_stretch_pool();
+  });
+  if (!pool) {
+    return 0;
+  }
+  string name = "pool " + stringify(*pool);
+  if (const auto it = pending_inc.new_pool_names.find(*pool);
+      it != pending_inc.new_pool_names.end()) {
+    name = it->second;
+  } else if (osdmap.have_pg_pool(*pool)) {
+    name = osdmap.get_pool_name(*pool);
+  }
+  *ss << "pool '" << name << "' is a legacy individual stretch pool; legacy "
+      << "individual stretch pools and stretch mode cannot be combined, so "
+      << "unstretch it first with 'ceph osd pool stretch unset' or "
+      << "'ceph osd pool set " << name << " num_zones 1'";
+  return -EINVAL;
+}
+
 int OSDMonitor::_prepare_remove_pool(
   int64_t pool, ostream *ss, bool no_fake)
 {
@@ -17782,6 +17823,10 @@ int OSDMonitor::enable_stretch_mode(ostream& ss,
   CrushWrapper crush = _get_pending_crush();
   int r = validate_enable_stretch_mode(crush, osdmap.pool_name, osdmap.pools,
                                        new_crush_rule, dividing_bucket, &ss);
+  if (r < 0) {
+    return r;
+  }
+  r = check_no_legacy_individual_stretch_pools(-1, &ss);
   if (r < 0) {
     return r;
   }

@@ -124,10 +124,15 @@ Individual Stretch Pools
 
 Setting individual *stretch pool* attributes allows for
 specific pools to be distributed across two or more data centers.
-This is done by executing the ``ceph osd pool set {pool-name} num_zones {N}`` command on each desired pool,
-or by creating a pool with stretch mode enabled using the ``zone`` parameter
-in the ``ceph osd pool create`` command.
-See :ref:`setting_values_for_a_stretch_pool` and :ref:`creating_stretch_pools`
+This is done by executing the ``ceph osd pool stretch set`` command on each desired pool.
+See :ref:`setting_values_for_a_stretch_pool`. A pool created with
+``--num_zones 2``, or set to ``num_zones`` 2, is not an individual stretch pool:
+it enables stretch mode (see :ref:`creating_stretch_pools`).
+
+Individual stretch pools are a legacy feature: for a pool over two data
+centers, use ``num_zones`` instead. In this release ``num_zones`` is 1 or 2, so
+a pool over three or more data centers still needs ``ceph osd pool stretch
+set``. A later release will support three zones with ``num_zones``.
 
 Use stretch mode when you have exactly two data centers and require a uniform
 configuration across the entire cluster. Conversely, opt for a stretch pool
@@ -136,7 +141,11 @@ providing a more granular level of control.
 
 Individual stretch pools and stretch mode cannot be combined. While stretch
 mode is enabled, it manages the stretch values of every pool itself, and
-``ceph osd pool stretch set`` and ``ceph osd pool stretch unset`` fail.
+``ceph osd pool stretch set`` and ``ceph osd pool stretch unset`` fail. While
+an individual stretch pool exists, stretch mode cannot be enabled: creating a
+pool with ``--num_zones 2``, ``ceph osd pool set {pool-name} num_zones 2`` and
+``ceph mon enable_stretch_mode`` fail until the pool is unstretched with
+``ceph osd pool stretch unset``.
 
 
 Limitations
@@ -226,7 +235,7 @@ zones.
 ``ceph osd pool set <pool> num_zones 2`` does. Replicated pools get two
 replicas in each zone and the CRUSH rule given to the command. Erasure-coded
 pools get CRUSH rules of their own. The command fails, and changes nothing, if
-a legacy erasure-coded pool exists. It also sets
+a legacy erasure-coded pool or an individual stretch pool exists. It also sets
 :confval:`osd_pool_default_num_zones` to ``2``,
 :confval:`osd_pool_default_replica` to ``2`` and
 :confval:`osd_pool_default_zone_failure_domain` to the dividing bucket type, so
