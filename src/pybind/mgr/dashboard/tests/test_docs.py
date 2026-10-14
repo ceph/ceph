@@ -95,9 +95,22 @@ class DocsTest(ControllerTestCase):
                                    'my_prop': {
                                        'type': 'string',
                                        'description': '200 property desc.'}}},
+                               'required': ['my_prop']}},
+                'application/json': {
+                    'schema': {'type': 'array',
+                               'items': {'type': 'object', 'properties': {
+                                   'my_prop': {
+                                       'type': 'string',
+                                       'description': '200 property desc.'}}},
                                'required': ['my_prop']}}},
             '202': {
                 APIVersion(0, 1).to_mime_type(): {
+                    'schema': {'type': 'object',
+                               'properties': {'my_prop': {
+                                   'type': 'string',
+                                   'description': '202 property desc.'}},
+                               'required': ['my_prop']}},
+                'application/json': {
                     'schema': {'type': 'object',
                                'properties': {'my_prop': {
                                    'type': 'string',
@@ -113,7 +126,8 @@ class DocsTest(ControllerTestCase):
     def test_gen_method_paths(self):
         outcome = Docs().gen_paths(False)['/api/doctest/']['get']
 
-        self.assertEqual({APIVersion(0, 1).to_mime_type(): {'type': 'object'}},
+        self.assertEqual({APIVersion(0, 1).to_mime_type(): {'schema': {'type': 'object'}},
+                          'application/json': {'schema': {'type': 'object'}}},
                          outcome['responses']['200']['content'])
 
     def test_gen_paths_all(self):
