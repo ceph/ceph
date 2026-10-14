@@ -6036,7 +6036,7 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
 
 void BlueStore::_set_compression()
 {
-  _clear_global_compression_alert();
+  compression_alert_t alert;
   auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
   if (m) {
     comp_mode = *m;
@@ -6046,9 +6046,8 @@ void BlueStore::_set_compression()
          << "', reverting to 'none'"
          << dendl;
     comp_mode = Compressor::COMP_NONE;
-    string s("unknown mode: ");
-    s += cct->_conf->bluestore_compression_mode;
-    _set_global_compression_alert(s);
+    alert.add_invalid_param(
+      "bluestore_compression_mode = " + cct->_conf->bluestore_compression_mode);
   }
   auto validate_and_assign = [&](std::atomic<uint64_t>& var,
                                 int64_t val,
@@ -6059,11 +6058,7 @@ void BlueStore::_set_compression()
            << " = " << val << ", not aligned with " << unit
            << ", not applied"
            << dendl;
-      string s("invalid value: ");
-      s += name;
-      s += " = ";
-      s += stringify(val);
-      _set_global_compression_alert(s);
+      alert.add_invalid_param(string(name) + " = " + stringify(val));
     } else {
       var = val;
     }
@@ -6114,11 +6109,9 @@ void BlueStore::_set_compression()
       derr << "_set_compression: Invalid values, compression min_blob_size = "
            << min_bs << " exceeds max_blob_size = " << max_bs
            << dendl;
-      string s("invalid value: compression min_blob_size = ");
-      s += stringify(min_bs);
-      s += " > max_blob_size = ";
-      s += stringify(max_bs);
-      _set_global_compression_alert(s);
+      alert.add_invalid_param(
+        "compression min_blob_size = " + stringify(min_bs) +
+        " > max_blob_size = " + stringify(max_bs));
     }
   }
   if (compressors.size() == 0) {
@@ -6141,11 +6134,12 @@ void BlueStore::_set_compression()
     if (!alg_name.empty()) {
       derr << __func__ << " unable to initialize " << alg_name.c_str() << " compressor"
            << dendl;
-      _set_global_compression_alert("unable to load: " + alg_name);
+      alert.add_failed_plugin(alg_name);
     }
     def_compressor_alg = Compressor::COMP_ALG_NONE;
     alg_name = "(none)";
   }
+  _set_global_compression_alert(alert);
   dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
 	   << " alg " << alg_name
 	   << " min_blob " << comp_min_blob_size
@@ -13014,7 +13008,7 @@ int BlueStore::set_collection_opts(
   c->pool_opts = opts;
 
   int64_t pool_id = c->cid.is_pg() ? c->cid.pool() : META_POOL_ID;
-  string pool_alert;
+  compression_alert_t pool_alert;
   string val;
   c->compression_algorithm.reset();
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
@@ -13023,10 +13017,8 @@ int BlueStore::set_collection_opts(
     if (alg.has_value() && *alg != Compressor::COMP_ALG_NONE) {
       cp = *alg < compressors.size() ? compressors[*alg] : cp;
       if (!cp) {
-        pool_alert += "unable to load: pool ";
-        pool_alert += stringify(pool_id);
-        pool_alert += " compression_algorithm = ";
-        pool_alert += val;
+        pool_alert.add_failed_plugin(
+          "pool " + stringify(pool_id) + " compression_algorithm = " + val);
         derr << __func__ << " unable to load compressor plugin for " << val.c_str()
              << dendl;
       } else {
@@ -13067,15 +13059,8 @@ int BlueStore::set_collection_opts(
            << ", not aligned with " << min_alloc_size
            << ", not applied"
            << dendl;
-      if (!pool_alert.empty()) {
-        pool_alert += ", ";
-      }
-      pool_alert += "invalid value: pool ";
-      pool_alert += stringify(pool_id);
-      pool_alert += " ";
-      pool_alert += name;
-      pool_alert += " = ";
-      pool_alert += stringify(val);
+      pool_alert.add_invalid_param(
+        "pool " + stringify(pool_id) + " " + name + " = " + stringify(val));
     } else {
       var = val;
     }
@@ -13096,15 +13081,10 @@ int BlueStore::set_collection_opts(
          << " compression_min_blob_size = " << *c->comp_min_blob_size
          << " exceeds compression_max_blob_size = " << *c->comp_max_blob_size
          << dendl;
-    if (!pool_alert.empty()) {
-      pool_alert += ", ";
-    }
-    pool_alert += "invalid value: pool ";
-    pool_alert += stringify(pool_id);
-    pool_alert += " compression_min_blob_size = ";
-    pool_alert += stringify(*c->comp_min_blob_size);
-    pool_alert += " > compression_max_blob_size = ";
-    pool_alert += stringify(*c->comp_max_blob_size);
+    pool_alert.add_invalid_param(
+      "pool " + stringify(pool_id) +
+      " compression_min_blob_size = " + stringify(*c->comp_min_blob_size) +
+      " > compression_max_blob_size = " + stringify(*c->comp_max_blob_size));
   }
   _set_pool_compression_alert(pool_id, pool_alert);
   double dval;
@@ -20215,26 +20195,31 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
       "BLUESTORE_LEGACY_MIN_ALLOC_SIZE",
       legacy_min_alloc_size_alert);
   }
-  string comp_alert;
-  auto add_comp_alert = [&](const string& s) {
-    if (!comp_alert.empty()) {
-      comp_alert += ", ";
+  compression_alert_t comp_alert;
+  auto add_comp_alert = [&](const compression_alert_t& a) {
+    if (!a.invalid_params.empty()) {
+      comp_alert.add_invalid_param(a.invalid_params);
     }
-    comp_alert += s;
+    if (!a.failed_plugins.empty()) {
+      comp_alert.add_failed_plugin(a.failed_plugins);
+    }
   };
-  for (auto& s : global_compression_alerts) {
-    add_comp_alert(s);
-  }
-  for (auto& [pool, s] : pool_compression_alerts) {
-    add_comp_alert(s);
+  add_comp_alert(global_compression_alert);
+  for (auto& [pool, a] : pool_compression_alerts) {
+    add_comp_alert(a);
   }
   for (auto& s : failed_decompressors) {
-    add_comp_alert("unable to load for decompression: " + s);
+    comp_alert.add_failed_plugin("decompression " + s);
   }
-  if (!comp_alert.empty()) {
+  if (!comp_alert.invalid_params.empty()) {
+    alerts.emplace(
+      "BLUESTORE_INVALID_COMPRESSION_PARAMS",
+      comp_alert.invalid_params);
+  }
+  if (!comp_alert.failed_plugins.empty()) {
     alerts.emplace(
       "BLUESTORE_NO_COMPRESSION",
-      comp_alert);
+      "unable to load: " + comp_alert.failed_plugins);
   }
   if (logger->get(l_bluestore_fragmentation) >
     cct->_conf.get_val<double>("bluestore_warn_on_free_fragmentation") * 1e6) {
