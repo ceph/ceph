@@ -18241,6 +18241,18 @@ void Client::ms_handle_remote_reset(Connection *con)
     return 0;
   });
 
+  // The session reset discarded any unacked messages: resend the
+  // remaining commands on the new session.
+  {
+    std::scoped_lock cmd_lock(command_lock);
+    for (const auto& [tid, op] : command_table.get_commands()) {
+      if (!op.one_shot && op.con.get() == con) {
+        ldout(cct, 1) << __func__ << ": resending command op " << tid << dendl;
+        con->send_message2(op.get_message(monclient->get_fsid()));
+      }
+    }
+  }
+
   std::scoped_lock lock(client_lock);
   switch (con->get_peer_type()) {
   case CEPH_ENTITY_TYPE_MDS:
