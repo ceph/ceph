@@ -59,6 +59,10 @@ degrade_namespace_on_kmip_error = {{ spec.degrade_namespace_on_kmip_error }}
 fail_io_for_degraded_namespace = {{ spec.fail_io_for_degraded_namespace }}
 resize_degraded_namespace = {{ spec.resize_degraded_namespace }}
 verify_image_encryption_settings = {{ spec.verify_image_encryption_settings }}
+verify_pool_applications = {{ spec.verify_pool_applications }}
+{% if spec.allowed_pool_applications %}
+allowed_pool_applications = {{ spec.allowed_pool_applications | join(',') }}
+{% endif %}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}

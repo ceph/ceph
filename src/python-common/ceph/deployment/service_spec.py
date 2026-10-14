@@ -1980,6 +1980,8 @@ class NvmeofServiceSpec(ServiceSpec):
                  fail_io_for_degraded_namespace: Optional[bool] = True,
                  resize_degraded_namespace: Optional[bool] = True,
                  verify_image_encryption_settings: Optional[bool] = True,
+                 verify_pool_applications: Optional[bool] = True,
+                 allowed_pool_applications: Optional[List[str]] = [],
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -2158,6 +2160,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.resize_degraded_namespace = resize_degraded_namespace
         #: ``verify_image_encryption_settings`` verify encryption setting of ns before calling SPDK
         self.verify_image_encryption_settings = verify_image_encryption_settings
+        #: ``verify_pool_applications`` verify pool only has allowed applications enabled
+        self.verify_pool_applications = verify_pool_applications
+        #: ``allowed_pool_applications`` allowed applications on pool
+        self.allowed_pool_applications = allowed_pool_applications
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -2446,6 +2452,7 @@ class NvmeofServiceSpec(ServiceSpec):
                        "Resize degraded namespaces to accommodate for encryption tables")
         verify_boolean(self.verify_image_encryption_settings,
                        "Verify namespace encryption settings in the gateway")
+        verify_boolean(self.verify_pool_applications, "Verify pool applications")
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
