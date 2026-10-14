@@ -8599,12 +8599,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
   }
 
-  // Validate replica parameter
-  if (replica > 0 && pool_type != pg_pool_t::TYPE_REPLICATED) {
-      *ss << "replica is only applicable to replicated pools";
-      return -EINVAL;
-  }
-
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, repl_size, replica,
                         num_zones, &size, &min_size, ss);

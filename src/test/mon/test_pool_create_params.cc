@@ -427,6 +427,14 @@ TEST_F(PoolParamsTest, KMForReplicated) {
   EXPECT_EQ(0, check_line(p, PoolCommand::DEFAULT_SET)) << ss.str();
 }
 
+// Test replica fails for an erasure coded pool before anything is created
+TEST_F(PoolParamsTest, ReplicaForErasure) {
+  const PoolCreateParams p = with({{"pool_type", string("erasure")},
+                                   {"replica", int64_t(2)}});
+  EXPECT_EQ(-EINVAL, check_line(p, PoolCommand::CREATE));
+  EXPECT_EQ("replica is only applicable to replicated pools", ss.str());
+}
+
 // Test CRUSH parameters fail for a single-zone replicated pool, but not as
 // defaults
 TEST_F(PoolParamsTest, CrushParamsForSingleZoneReplicated) {

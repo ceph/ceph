@@ -215,6 +215,10 @@ int check_command_line(const PoolCreateParams& p, PoolCommand command,
     *ss << "cannot specify k/m parameters for replicated pools";
     return -EINVAL;
   }
+  if (create && erasure && p.is_given("replica")) {
+    *ss << "replica is only applicable to replicated pools";
+    return -EINVAL;
+  }
   if (create && replicated && p.num_zones == 1 && p.crush_params_given()) {
     *ss << CRUSH_PARAMS << " require num_zones > 1 for a replicated pool";
     return -EINVAL;
