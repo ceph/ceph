@@ -165,6 +165,15 @@ function TEST_pool_replica_crush_rule_name() {
     ! ceph osd pool set "$poolname" num_zones 1 --replica 200 \
         > "$dir/error.txt" 2>&1 || return 1
     grep 'replica must be between 1 and 10' "$dir/error.txt" || return 1
+    # one copy needs the same confirmation as osd pool set size 1
+    ! ceph osd pool set "$poolname" num_zones 1 --replica 1 \
+        > "$dir/error.txt" 2>&1 || return 1
+    grep 'yes-i-really-mean-it' "$dir/error.txt" || return 1
+    # num_zones changes the size, which nosizechange forbids
+    ceph osd pool set "$poolname" nosizechange true || return 1
+    ! ceph osd pool set "$poolname" num_zones 1 > "$dir/error.txt" 2>&1 || return 1
+    grep 'unset nosizechange flag' "$dir/error.txt" || return 1
+    ceph osd pool set "$poolname" nosizechange false || return 1
     ceph osd pool set "$poolname" num_zones 1 || return 1
     ceph osd pool get "$poolname" all --format json > "$dir/pool.json" || return 1
     jq -e '.num_zones == 1 and .replica == 3 and .size == 3 and
