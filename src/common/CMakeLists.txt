@@ -8,6 +8,7 @@ add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
 target_link_libraries(common_prioritycache_obj
   PRIVATE
+    crimson::cflags
     legacy-option-headers)
 
 if(WIN32)
