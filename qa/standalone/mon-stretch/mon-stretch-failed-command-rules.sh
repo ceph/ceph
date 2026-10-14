@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# A command that generates a CRUSH rule for a pool and then fails removes
-# the rule if no pool uses it. A rule of the same name made by hand stays.
+# A command that generates a CRUSH rule or an erasure code profile for a
+# pool and then fails removes them if no pool uses them. A rule of the same
+# name made by hand stays.
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 source $CEPH_ROOT/qa/standalone/mon-stretch/mon-stretch-helpers.sh
@@ -37,6 +38,8 @@ function TEST_failed_pool_create_removes_its_rule() {
         ceph osd pool create bigec erasure --k 2 --m 1 --num_zones 2 \
         --pg_num 64 --autoscale_mode off || return 1
     ! rule_exists bigec || return 1
+    # and so is the profile generated for it
+    ! ceph osd erasure-code-profile ls | grep -qx bigec-k2-m1 || return 1
 
     ceph osd crush rule create-stretch-replicated --rule-name big \
         --num-replica-per-zone 2 || return 1

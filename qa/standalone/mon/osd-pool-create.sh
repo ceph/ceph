@@ -95,8 +95,8 @@ function TEST_failed_pool_create_leaves_no_pool() {
     ! ceph osd pool ls | grep -q badpool || return 1
 }
 
-# A pool create that fails removes the rule it generated; a rule of that
-# name made by hand stays
+# A pool create that fails removes the rule and the profile it generated; a
+# rule of that name made by hand stays
 function TEST_failed_pool_create_removes_its_rule() {
     local dir=$1
     run_mon $dir a --enable_experimental_unrecoverable_data_corrupting_features=crimson || return 1
@@ -112,6 +112,7 @@ function TEST_failed_pool_create_removes_its_rule() {
     ! ceph osd pool create bigec 1024 1024 erasure > $dir/out 2>&1 || return 1
     grep "exceeds the" $dir/out || return 1
     ! ceph osd crush rule ls | grep -qx erasure-code || return 1
+    ! ceph osd erasure-code-profile ls | grep -q '^bigec-' || return 1
 }
 
 function TEST_erasure_crush_rule() {
