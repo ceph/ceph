@@ -75,6 +75,8 @@ function TEST_stretch_set_counts_above_zones() {
         done
     done
     test "$(pool_field rep peering_crush_bucket_count)" = 0 || return 1
+    expect_failure $dir "is not evenly divisible by the number of zone zones (2)" \
+        ceph osd pool stretch set rep 2 2 zone replicated_rule 5 2 || return 1
 }
 
 function TEST_stretch_set_ec_pool() {

@@ -155,6 +155,11 @@ function TEST_individual_stretch_pool_blocks_stretch_mode() {
     grep "individual stretch pools and stretch mode cannot be combined" $dir/out || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
     test "$(pool_field ind peering_crush_bucket_count)" = 2 || return 1
+    ceph mon set election_strategy connectivity || return 1
+    ! ceph mon enable_stretch_mode c two_dc datacenter > $dir/out 2>&1 || return 1
+    grep "individual stretch pools and stretch mode cannot be combined" $dir/out || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
 
     ceph osd pool stretch unset ind two_dc 3 2 || return 1
     ceph osd pool create p --num_zones 2 --replica 2 || return 1
