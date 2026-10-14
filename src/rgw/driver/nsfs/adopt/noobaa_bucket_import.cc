@@ -407,18 +407,24 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       attrs[RGW_ATTR_OWNERSHIP_CONTROLS] = std::move(bl);
     }
 
-    /* `path` not under the base path.
-     *
-     * Serving it from there is done -- P2 resolves an index row and
-     * P5 falls back to this very record -- so what is left is
-     * *recording* it in the index, which is P6.  Reported so an
-     * operator knows the bucket is being served from NooBaa's record
-     * rather than from a fact nsfs holds. */
+    /* `path`, which places the bucket (P6).  NooBaa's schema requires
+     * it, and a bucket with none has nowhere to be, so it is refused
+     * before anything is written. */
     std::string their_path;
     try {
       JSONDecoder::decode_json("path", their_path, &p);
     } catch (const JSONDecoder::err&) {
       their_path.clear();
+    }
+    if (their_path.empty()) {
+      result.failures.push_back(rec.name + ": their record names no path");
+      continue;
+    }
+    if (!nsfs::placement_path_is_acceptable(their_path)) {
+      result.failures.push_back(
+	  rec.name + ": their record's path " + their_path +
+	  " is not an absolute canonical path");
+      continue;
     }
     /* A bucket nsfs already holds under this name, somewhere else, is a
      * different bucket:  creation refuses a name NooBaa's store holds,
@@ -428,24 +434,13 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       nsfs::BucketPlacement row;
       if ((driver->get_identity_db()->get_bucket_placement(
 	     dpp, rec.name, "", row) == 0) &&
-	  !their_path.empty() && (row.path != their_path)) {
+	  (row.path != their_path)) {
 	result.failures.push_back(
 	    rec.name + ": nsfs already has a bucket of this name, at " +
 	    row.path + ";  their record says " + their_path);
 	continue;
       }
     }
-    if (!their_path.empty()) {
-      const std::string expected =
-	driver->get_base_path() + "/" + rec.name;
-      if (their_path != expected) {
-	result.deferred.push_back(
-	    rec.name + ": its storage is at " + their_path +
-	    ", which is not under the base path;  it is served from their "
-	    "record until the index records it (P6)");
-      }
-    }
-
     /* And write it.
      *
      * `merge_and_store_attrs()` is the path every bucket mutation
@@ -502,6 +497,29 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	  rec.name + ": recording its storage ownership: " +
 	  cpp_strerror(-ret));
       continue;
+    }
+
+    /* The row, last:  it is what makes nsfs the authority for where the
+     * bucket is, so an import that failed above leaves the bucket served
+     * from their record exactly as before.  Importing again finds the
+     * row it wrote, at the same path;  a different path was refused
+     * above. */
+    {
+      nsfs::BucketPlacement row;
+      row.bucket_name = rec.name;
+      row.path = their_path;
+      ret = driver->get_identity_db()->insert_bucket_placement(dpp, row);
+      if (ret == -EADDRINUSE) {
+	result.failures.push_back(
+	    rec.name + ": its path " + their_path + " is another bucket's "
+	    "directory, or nested with one");
+	continue;
+      }
+      if ((ret < 0) && (ret != -EEXIST)) {
+	result.failures.push_back(
+	    rec.name + ": recording its placement: " + cpp_strerror(-ret));
+	continue;
+      }
     }
     ++result.buckets_written;
   }

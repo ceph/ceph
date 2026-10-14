@@ -613,13 +613,18 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
     const int ext = sqlite3_extended_errcode(handle());
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "
       << bp.path << " refused: " << sqlite3_errmsg(handle()) << dendl;
-    if (ext == SQLITE_CONSTRAINT_PRIMARYKEY) {
+    if ((ext != SQLITE_CONSTRAINT_PRIMARYKEY) &&
+	(ext != SQLITE_CONSTRAINT_UNIQUE)) {
+      return -EINVAL;
+    }
+    /* A row this name already has is -EEXIST, whichever constraint
+     * SQLite names:  the same name at the same path breaks both the key
+     * and UNIQUE (Path), and it reports the latter. */
+    BucketPlacement held;
+    if (get_bucket_placement(dpp, bp.bucket_name, bp.tenant, held) == 0) {
       return -EEXIST;
     }
-    if (ext == SQLITE_CONSTRAINT_UNIQUE) {
-      return -EADDRINUSE;
-    }
-    return -EINVAL;
+    return -EADDRINUSE;
   }
   if (sqlite3_changes(handle()) == 0) {
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "

@@ -126,8 +126,7 @@ struct BucketImportResult {
   /* A policy we would not write, and why.  The bucket's other state
    * was written. */
   std::vector<std::string> policies_refused;
-  /* Read and not translated:  a path outside the data root (P6), and
-   * notifications (which need topics). */
+  /* Read and not translated:  notifications, which need topics. */
   std::vector<std::string> deferred;
   std::vector<std::string> failures;
 };

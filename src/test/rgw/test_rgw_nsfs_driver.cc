@@ -10880,6 +10880,9 @@ TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
   x.bucket_name = "x";
   x.path = "/ibm/gpfs/fs1/a/b";
   ASSERT_EQ(db->insert_bucket_placement(env->dpp, x), 0);
+  /* the same row again is the name taken, not a path clash:  it breaks
+   * both constraints, and SQLite names the path's */
+  EXPECT_EQ(db->insert_bucket_placement(env->dpp, x), -EEXIST);
 
   nsfs::BucketPlacement y;
   y.bucket_name = "y";
@@ -12405,6 +12408,12 @@ TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
     }
   }
   EXPECT_TRUE(said) << why();
+
+  /* the row is written last, so a refused bucket has none, and is still
+   * placed by their record */
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", row), -ENOENT);
 }
 
 /* A policy whose principals do not resolve is dropped, the rest of
@@ -12462,17 +12471,16 @@ TEST_F(NooBaaBucketImportTest, AResolvablePolicyIsRewrittenAndWritten)
       << "their name survived in the stored policy: " << stored;
 }
 
-/* What is read and not translated is reported rather than silent.
+/* What is read and not translated is reported rather than silent, and
+ * what is translated is not reported as waiting.
  *
- * Notifications need an RGW topic per destination;  a path outside the
- * data root needs P2 to serve it and P6 to record it.  Both are
- * deliberate boundaries, and an operator should learn them from the
- * report. */
+ * Notifications need an RGW topic per destination, a deliberate
+ * boundary an operator should learn from the report.  A path outside
+ * the base path used to be reported too, until the index recorded it;
+ * the import now writes the row (P6), so the path is recorded rather
+ * than deferred. */
 TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
 {
-  /* A path genuinely outside the data root, said explicitly:  the
-   * deferral is about that, and inheriting it from the fixture's
-   * default made the test depend on a detail that then changed. */
   const sf::path elsewhere = bp / "another-filesystem" / testname;
   sf::create_directories(elsewhere);
   write_their_record("DISABLED",
@@ -12488,14 +12496,89 @@ TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
     if (d.find("notifications") != std::string::npos) {
       notif = true;
     }
-    if (d.find("not under the base path") != std::string::npos) {
+    if (d.find(elsewhere.string()) != std::string::npos) {
       path = true;
     }
   }
   EXPECT_TRUE(notif) << "notifications were dropped silently";
-  /* write_their_record() always writes a path under /ibm/gpfs, so the
-   * path deferral is reached too */
-  EXPECT_TRUE(path) << "a path outside the data root was not reported";
+  EXPECT_FALSE(path) << "a recorded path was still reported as waiting";
+
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", row), 0)
+      << "the import did not record the bucket's path";
+  EXPECT_EQ(row.path, elsewhere.string());
+}
+
+/* The import records the path NooBaa's record names, as the row that
+ * places the bucket from then on (P6).  Importing again finds the row
+ * it wrote and changes nothing, since adoption imports a bucket that
+ * an earlier import= already did. */
+TEST_F(NooBaaBucketImportTest, TheImportRecordsTheBucketsPath)
+{
+  write_their_record("DISABLED");
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", row), -ENOENT)
+      << "the fixture's NooBaa bucket already had a row";
+
+  ASSERT_EQ(run(), 0) << why();
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", row), 0);
+  EXPECT_EQ(row.path, bucket_path().string());
+
+  ASSERT_EQ(run(), 0) << why() << "\n  a second import failed";
+  EXPECT_EQ(result.buckets_written, 1u);
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", row), 0);
+  EXPECT_EQ(row.path, bucket_path().string());
+}
+
+/* A record that names no path places nothing, and is refused before
+ * anything is written;  NooBaa's schema requires the field. */
+TEST_F(NooBaaBucketImportTest, ARecordWithoutAPathIsRefused)
+{
+  write_file(conf_root() / "buckets" / (testname + ".json"),
+	     std::string(R"({"_id":"6560e1f1c0ffee0000000001","name":")") +
+	     testname + R"(","owner_account":"6560e1f1c0ffee0000000002",)"
+	     R"("versioning":"DISABLED","creation_date":"2026-01-02T03:04:05.000Z"})");
+
+  EXPECT_EQ(run(), -EIO);
+  EXPECT_EQ(result.buckets_written, 0u);
+  bool said = false;
+  for (const auto& f : result.failures) {
+    if (f.find("names no path") != std::string::npos) {
+      said = true;
+    }
+  }
+  EXPECT_TRUE(said) << why();
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", row), -ENOENT);
+}
+
+/* A record whose path is another bucket's directory, or nested with
+ * one, is refused, naming the path. */
+TEST_F(NooBaaBucketImportTest, ARecordNestedWithAnotherBucketIsRefused)
+{
+  write_their_record("DISABLED");
+  nsfs::BucketPlacement other;
+  other.bucket_name = "inner";
+  other.path = (bucket_path() / "inner").string();
+  ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
+							    other), 0);
+
+  EXPECT_EQ(run(), -EIO);
+  bool said = false;
+  for (const auto& f : result.failures) {
+    if (f.find("nested with one") != std::string::npos) {
+      said = true;
+    }
+  }
+  EXPECT_TRUE(said) << why();
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", row), -ENOENT);
 }
 
 /* ------------------------------------------------------------------ *
