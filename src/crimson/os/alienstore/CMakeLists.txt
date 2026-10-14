@@ -74,7 +74,7 @@ endif()
 
 target_link_libraries(crimson-alienstore
   PRIVATE
-    seastar
+    crimson::cflags
     ${FMT_LIB}
     kv
     heap_profiler
