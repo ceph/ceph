@@ -8615,6 +8615,21 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (requested_min_size > 0) {
     min_size = requested_min_size;
   }
+  // the plugin knows the chunk counts, LRC's local parity chunks included
+  if (requested_min_size > 0 && pool_type == pg_pool_t::TYPE_ERASURE) {
+    ErasureCodeInterfaceRef erasure_code;
+    r = get_erasure_code(erasure_code_profile, &erasure_code, ss);
+    if (r) {
+      return r;
+    }
+    const unsigned data_chunks = erasure_code->get_data_chunk_count();
+    const unsigned zone_size = size / num_zones;
+    if (min_size < data_chunks || min_size > zone_size) {
+      *ss << "pool min_size must be between " << data_chunks << " and "
+          << zone_size;
+      return -EINVAL;
+    }
+  }
   if (g_conf()->mon_osd_crush_smoke_test) {
     CrushWrapper newcrush = _get_pending_crush();
     ostringstream err;
