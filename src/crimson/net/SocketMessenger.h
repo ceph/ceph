@@ -165,6 +165,8 @@ public:
     }
     return seastar::now();
   }
+
+  seastar::future<> mark_down_all_ports(const entity_addr_t& a) final;
 private:
   seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
 
