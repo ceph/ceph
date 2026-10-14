@@ -185,6 +185,19 @@ function TEST_legacy_stretch_mode_then_commit() {
     wait_for_clean || return 1
 }
 
+# Test the commit gives a pool that uses the default profile a copy of it
+function TEST_commit_copies_default_profile() {
+    local dir=$1
+    run_mons $dir --mon-debug-allow-pool-create-before-commit=true || return 1
+
+    ceph osd pool create ecdefault 8 8 erasure || return 1
+    test "$(pool_field ecdefault erasure_code_profile)" = '"default"' || return 1
+    ceph osd require-osd-release umbrella --yes-i-really-mean-it || return 1
+    test "$(pool_field ecdefault erasure_code_profile)" = '"ecdefault-k2-m2"' || return 1
+    test "$(ceph osd erasure-code-profile get ecdefault-k2-m2 -f json)" = \
+        "$(ceph osd erasure-code-profile get default -f json)" || return 1
+}
+
 # Test a legacy stretch mode min_size that the zones do not divide rounds up
 # per zone, so the pool never takes writes with fewer copies than asked for
 function TEST_legacy_stretch_mode_min_size_rounds_up() {
