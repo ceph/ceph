@@ -17112,9 +17112,12 @@ int OSDMonitor::_prepare_remove_pool(
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
   }
 
-  // remove any crush rules for this pool
+  // remove the pool's rule, as the pending changes left it, if unused
   const pg_pool_t *pi = osdmap.get_pg_pool(pool);
-  maybe_remove_unused_crush_rule(pool, pi->get_crush_rule());
+  const auto pending_pool = pending_inc.new_pools.find(pool);
+  maybe_remove_unused_crush_rule(
+    pool, pending_pool != pending_inc.new_pools.end()
+            ? pending_pool->second.get_crush_rule() : pi->get_crush_rule());
   if (clear_stretch_mode) {
     dout(10) << __func__ << " no pools with stretch mode remain, "
              << "cleaning up per-pool stretch mode state" << dendl;
