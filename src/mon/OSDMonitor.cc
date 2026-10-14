@@ -8213,6 +8213,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 
 int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 					  const string &erasure_code_profile,
+                                          bool ec_optimized,
 					  uint32_t *stripe_width,
 					  ostream *ss)
 {
@@ -8235,7 +8236,8 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       if (stripe_unit == 0) {
         if (((erasure_code->get_supported_optimizations() & 
               ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0) &&
-            (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
+            (ec_optimized ||
+             cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
             stripe_unit = 16 * 1024;
         } else {
           stripe_unit = 4 * 1024;
@@ -8697,7 +8699,9 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   uint32_t stripe_width = 0;
-  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
+  // a pool over zones is always FastEC
+  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, num_zones > 1,
+                                &stripe_width, ss);
   if (r) {
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
     return r;
