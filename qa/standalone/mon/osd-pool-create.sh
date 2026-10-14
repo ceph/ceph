@@ -95,6 +95,25 @@ function TEST_failed_pool_create_leaves_no_pool() {
     ! ceph osd pool ls | grep -q badpool || return 1
 }
 
+# A pool create that fails removes the rule it generated; a rule of that
+# name made by hand stays
+function TEST_failed_pool_create_removes_its_rule() {
+    local dir=$1
+    run_mon $dir a --enable_experimental_unrecoverable_data_corrupting_features=crimson || return 1
+    ceph osd set-allow-crimson --yes-i-really-mean-it || return 1
+    # crimson needs EC optimizations, which lrc does not support
+    ceph osd erasure-code-profile set lrcprofile plugin=lrc k=2 m=1 l=3 || return 1
+    ! ceph osd pool create badpool 12 12 erasure lrcprofile --crimson || return 1
+    ! ceph osd crush rule ls | grep -qx badpool || return 1
+    ceph osd crush rule create-erasure badpool lrcprofile || return 1
+    ! ceph osd pool create badpool 12 12 erasure lrcprofile --crimson || return 1
+    ceph osd crush rule ls | grep -qx badpool || return 1
+    # the PG limit is checked with the rule
+    ! ceph osd pool create bigec 1024 1024 erasure > $dir/out 2>&1 || return 1
+    grep "exceeds the" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx erasure-code || return 1
+}
+
 function TEST_erasure_crush_rule() {
     local dir=$1
     run_mon $dir a || return 1
