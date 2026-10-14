@@ -4804,10 +4804,10 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
    * Clearing it at the bottom of the body instead -- which this did --
    * makes every `continue` responsible for remembering, and the one
    * that did not, an entry owned by somebody else, is the common exit
-   * on a shared root.  resolve_profile() reading an attribute a bucket
-   * does not carry leaves ENODATA behind, and ListBuckets reported
-   * that as a failed listing:  500, for every caller, as soon as a
-   * second attribute was read there. */
+   * when the base path holds other accounts' buckets.  resolve_profile()
+   * reading an attribute a bucket does not carry leaves ENODATA behind,
+   * and ListBuckets reported that as a failed listing:  500, for every
+   * caller, as soon as a second attribute was read there. */
   while (true) {
     errno = 0;
     entry = readdir(dir);
