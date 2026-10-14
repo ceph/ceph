@@ -14,10 +14,11 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
 
     export BASE_CEPH_ARGS=$CEPH_ARGS
-    CEPH_ARGS+="--mon-host=$CEPH_MON_A"
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
+        # each test adds monitors to the --mon-host it is given
+        CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A"
         setup $dir || return 1
         $func $dir || return 1
         teardown $dir || return 1
