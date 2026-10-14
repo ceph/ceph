@@ -14081,6 +14081,27 @@ TEST_F(NSFSCustomPathTest, TheAllowlistIsCheckedWhereItIsStored)
   EXPECT_EQ(got.custom_bucket_path_allowed_list, "/a:/b/c");
 }
 
+/* new_buckets_path is checked where it is stored:  a path nsfs would not
+ * store is refused, and a trailing slash an operator might write is
+ * dropped.  Whether it exists is not asked, since storage can be
+ * attached later (DECISIONS.md 2026-10-14). */
+TEST_F(NSFSPlacedBucketTest, NewBucketsPathIsCheckedWhereItIsStored)
+{
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  for (const char* bad : {"relative/path", "/a/../b", "/double//slash"}) {
+    id.new_buckets_path = bad;
+    EXPECT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), -EINVAL)
+	<< "stored " << bad;
+  }
+  id.new_buckets_path = "/not/there/yet/";
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0)
+      << "a path that does not exist yet was refused";
+  nsfs::Identity got;
+  ASSERT_EQ(driver->get_identity_db()->get_identity(env->dpp, id.key, got), 0);
+  EXPECT_EQ(got.new_buckets_path, "/not/there/yet");
+}
+
 /* Deleting a bucket deletes its row. */
 TEST_F(NSFSPlacedBucketTest, RemovalDeletesTheRow)
 {

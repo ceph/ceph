@@ -4671,8 +4671,11 @@ NSFSDriver::make_placed_dir(const std::string& path)
 
 int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
 				const rgw_owner& owner, const rgw_bucket& b,
-				std::string& path)
+				std::string& path, bool* owners_path)
 {
+  if (owners_path) {
+    *owners_path = false;
+  }
   /* NooBaa has no tenants, so only an untenanted name can be one of
    * its buckets. */
   if (b.tenant.empty() && nb_bucket_state_strategy && !adoption_complete()) {
@@ -4701,6 +4704,9 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
       at.pop_back();
     }
     path = at + "/" + dname;
+    if (owners_path) {
+      *owners_path = true;
+    }
     return 0;
   }
 
@@ -4784,6 +4790,39 @@ int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
     return -EINVAL;
   }
   path = asked;
+  return 0;
+}
+
+int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
+					  const rgw_owner& owner,
+					  const std::string& path)
+{
+  /* Only when the gateway writes as identities:  without impersonation
+   * an account's uid never touches the filesystem, and a gateway that
+   * cannot assume one has nothing to check with. */
+  if (!nsfs::impersonation_enabled()) {
+    return 0;
+  }
+  nsfs::Credentials cred;
+  int ret = nsfs::resolve_credentials(dpp, *userDB, owner, cred);
+  if (ret == -ENOENT) {
+    /* no Scale identity:  nothing is written as anybody but the gateway */
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  const std::string parent = std::filesystem::path(path).parent_path().string();
+  ret = nsfs::run_as(dpp, cred, [&parent]() -> int {
+      return (::faccessat(AT_FDCWD, parent.c_str(), W_OK | X_OK,
+			  AT_EACCESS) < 0) ? -errno : 0;
+    });
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "nsfs: " << to_string(owner) << " (uid " << cred.uid
+      << ") may not create buckets in " << parent << ":  "
+      << cpp_strerror(-ret) << dendl;
+    return -EACCES;
+  }
   return 0;
 }
 
@@ -5057,7 +5096,9 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     bp.bucket_name = get_name();
     bp.tenant = get_tenant();
     bp.owner = to_string(params.owner);
-    ret = driver->new_bucket_path(dpp, params.owner, get_key(), bp.path);
+    bool owners_path = false;
+    ret = driver->new_bucket_path(dpp, params.owner, get_key(), bp.path,
+				  &owners_path);
     if (ret < 0) {
       return ret;
     }
@@ -5068,6 +5109,15 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     }
     if (custom) {
       bp.path = *custom;
+    }
+    /* NooBaa's guard applies where NooBaa has it:  a path the account
+     * chose.  The base path is the gateway's default, not the
+     * account's. */
+    if (owners_path || custom) {
+      ret = driver->check_owner_can_create_at(dpp, params.owner, bp.path);
+      if (ret < 0) {
+	return ret;
+      }
     }
     ret = driver->get_identity_db()->insert_bucket_placement(dpp, bp);
     if (ret == -EADDRINUSE) {

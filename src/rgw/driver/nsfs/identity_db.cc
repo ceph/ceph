@@ -348,6 +348,21 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
    * so a bad entry is refused with a message rather than found by a
    * CreateBucket later.  Both writers come through here:  the import and
    * the identity Admin Ops. */
+  /* new_buckets_path, the same way:  its form is checked here, where it
+   * is stored (DECISIONS.md 2026-10-14).  A trailing slash, which an
+   * operator may well write, is dropped rather than refused.  Whether the
+   * directory exists is not asked:  storage on Scale is attachable later,
+   * and a missing parent fails CreateBucket plainly. */
+  std::string nbp = id.new_buckets_path;
+  while ((nbp.size() > 1) && (nbp.back() == '/')) {
+    nbp.pop_back();
+  }
+  if (!nbp.empty() && !placement_path_is_acceptable(nbp)) {
+    ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " refused:  its "
+      << "new_buckets_path \"" << id.new_buckets_path << "\" is not an "
+      << "absolute canonical path" << dendl;
+    return -EINVAL;
+  }
   std::string allowed;
   if (!id.custom_bucket_path_allowed_list.empty()) {
     std::string bad;
@@ -385,7 +400,7 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     sqlite3_bind_null(st, 4);
   }
   bind_text_or_null(st, 5, id.distinguished_name);
-  bind_text_or_null(st, 6, id.new_buckets_path);
+  bind_text_or_null(st, 6, nbp);
   bind_text_or_null(st, 7, allowed);
   bind_text_or_null(st, 8, id.fs_backend);
   id.force_md5_etag ? sqlite3_bind_int64(st, 9, *id.force_md5_etag ? 1 : 0)

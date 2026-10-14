@@ -1110,7 +1110,8 @@ public:
    * NooBaa does not let create buckets.  -EEXIST for a name a NooBaa
    * bucket record holds, since that bucket is visible already. */
   int new_bucket_path(const DoutPrefixProvider* dpp, const rgw_owner& owner,
-		      const rgw_bucket& b, std::string& path);
+		      const rgw_bucket& b, std::string& path,
+		      bool* owners_path = nullptr);
 
   /* NooBaa's custom bucket path:  the header rgw_nsfs_custom_bucket_path_header
    * names, when the request carries it.  The path is admitted by the
@@ -1121,6 +1122,19 @@ public:
    * nsfs would not store. */
   int custom_bucket_path(const DoutPrefixProvider* dpp, const rgw_owner& owner,
 			 const RGWEnv* env, std::optional<std::string>& path);
+
+  /* NooBaa's guard on where an account's buckets go, enacted:  NooBaa
+   * makes a bucket's directory as the account, so an account that
+   * cannot write the parent cannot create there.  nsfs makes it as the
+   * gateway (NSFS_IMPERSONATION.md §8a), so the account's access is
+   * checked as the account, the kernel deciding, ACLs included.  Under
+   * impersonation only, for an owner with credentials, and for a path the
+   * account chose -- its new_buckets_path or a custom path -- never the
+   * base path, which is the gateway's own default and was never the
+   * account's to write.  -EACCES when the account may not write
+   * `path`'s parent (DECISIONS.md 2026-10-14). */
+  int check_owner_can_create_at(const DoutPrefixProvider* dpp,
+				const rgw_owner& owner, const std::string& path);
 
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
