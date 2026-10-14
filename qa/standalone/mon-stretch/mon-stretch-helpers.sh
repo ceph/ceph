@@ -39,6 +39,16 @@ function pool_field() {
     ceph osd pool ls detail -f json | jq --arg p $1 ".[]|select(.pool_name==\$p)|.$2"
 }
 
+# create a pool as librados clients such as RGW do
+function librados_create_pool() {
+    local dir=$1
+    python3 -c "
+import rados
+with rados.Rados(conffile='$dir/ceph.conf') as r:
+    r.create_pool('$2')
+"
+}
+
 # monitors a in dc1, b in dc2 and c as arbiter, a manager, and the given
 # number of OSDs (default 3) in each of dc1 and dc2, on a host each
 function two_zone_cluster() {

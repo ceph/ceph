@@ -5,6 +5,7 @@
 # set the pool creation defaults.
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/mon-stretch/mon-stretch-helpers.sh
 
 function run() {
     local dir=$1
@@ -156,6 +157,36 @@ function TEST_enable_stretches_every_pool() {
     ceph osd pool create newrep2 8 8 || return 1
     test "$(pool_num_zones newrep2)" = 2 || return 1
     test "$(pool_field newrep2 crush_rule)" = 1 || return 1
+    wait_for_clean || return 1
+}
+
+# Test a pool created through librados takes the pool creation defaults, as
+# ceph osd pool create <pool> does: in stretch mode it is stretched
+function TEST_librados_pool_takes_defaults() {
+    local dir=$1
+    setup_zones $dir || return 1
+    setup_osds $dir || return 1
+    librados_create_pool $dir before || return 1
+    test "$(pool_num_zones before)" = 1 || return 1
+    test "$(pool_field before size)" = 3 || return 1
+
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    librados_create_pool $dir during || return 1
+    test "$(pool_num_zones during)" = 2 || return 1
+    test "$(pool_field during size)" = 4 || return 1
+    test "$(pool_field during crush_rule)" != 1 || return 1
+    # the default rule, when it suits the pool
+    ceph osd pool default set --rule stretch_rule || return 1
+    librados_create_pool $dir withrule || return 1
+    test "$(pool_field withrule crush_rule)" = 1 || return 1
+    ceph osd pool default set --rule none || return 1
+
+    # a create that fails removes the rule it generated
+    ceph config set global mon_max_pg_per_osd 1 || return 1
+    ! librados_create_pool $dir toomany || return 1
+    ! ceph osd pool ls | grep -qx toomany || return 1
+    ! ceph osd crush rule ls | grep -qx toomany || return 1
+    ceph config rm global mon_max_pg_per_osd || return 1
     wait_for_clean || return 1
 }
 
