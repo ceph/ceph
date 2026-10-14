@@ -272,10 +272,13 @@ available options.
   cluster configuration, because Ceph does not support dual-stack operation.
   The ``public_network`` is inferred from the host's IPv6 routes unless
   ``--skip-mon-network`` is given or a ``public_network`` is set in the file
-  passed with ``--config``. When adding further hosts, pass their IPv6
-  address explicitly (``ceph orch host add <hostname> <ipv6-address>``);
-  on a host that has both an IPv4 and an IPv6 address, name resolution
-  otherwise prefers the IPv4 address.
+  passed with ``--config``. When a host is added by name only
+  (``ceph orch host add <hostname>``), cephadm resolves the name and prefers
+  the address family of the active Manager, so on an IPv6 cluster a host
+  that has both an IPv4 and an IPv6 address is registered with its IPv6
+  address. If the name has no IPv6 address, adding the host fails. Pass the
+  address explicitly (``ceph orch host add <hostname> <ipv6-address>``) to
+  override this, or when the name does not resolve on the Manager host.
 
 * ``cephadm bootstrap`` writes to ``/etc/ceph`` files needed to access
   the new cluster. This central location makes it possible for Ceph
