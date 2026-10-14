@@ -29,6 +29,9 @@ class Templates(str, enum.Enum):
     cephadm_logrotate_config = 'cephadm.logrotate.config.j2'
     sidecar_run = 'sidecar.run.j2'
     init_ctr_run = 'init_containers.run.j2'
+    ceph_timer = 'ceph.timer.j2'
+    ceph_oneshot = 'ceph.oneshot.j2'
+    metrics_push_run = 'metrics-push.run.j2'
 
     def __str__(self) -> str:
         return self.value

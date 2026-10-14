@@ -7,7 +7,7 @@ import pathlib
 from typing import IO, List, Optional, Union
 
 from . import templating
-from .call_wrappers import call_throws
+from .call_wrappers import call, call_throws, CallVerbosity
 from .container_engines import Docker, Podman
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity, DaemonSubIdentity
@@ -250,6 +250,89 @@ def update_files(
     _install_success_exit_status_drop_in(
         pathinfo, ident, success_exit_status or []
     )
+
+
+def install_timer_unit(
+    ctx: CephadmContext,
+    fsid: str,
+    unit_id: str,
+    job_description: str,
+    script_path: str,
+    interval_sec: int,
+    timeout_sec: int,
+    randomized_delay_sec: int = 0,
+) -> None:
+    """Install a systemd timer + oneshot service pair for a periodic job."""
+    _install_base_units(ctx, fsid)
+
+    # write the oneshot service
+    service_name = f'ceph-{fsid}-{unit_id}.service'
+    service_file = os.path.join(ctx.unit_dir, service_name)
+    service_content = templating.render(
+        ctx,
+        templating.Templates.ceph_oneshot,
+        fsid=fsid,
+        job_description=job_description,
+        script_path=script_path,
+        timeout_sec=timeout_sec,
+    )
+    with write_new(service_file, perms=None) as f:
+        f.write(service_content)
+
+    # write the timer that triggers the oneshot service
+    timer_name = f'ceph-{fsid}-{unit_id}.timer'
+    timer_path = os.path.join(ctx.unit_dir, timer_name)
+    timer_content = templating.render(
+        ctx,
+        templating.Templates.ceph_timer,
+        fsid=fsid,
+        job_description=job_description,
+        interval_sec=interval_sec,
+        randomized_delay_sec=randomized_delay_sec,
+    )
+    with write_new(timer_path, perms=None) as f:
+        f.write(timer_content)
+
+    call_throws(ctx, ['systemctl', 'daemon-reload'])
+    call_throws(ctx, ['systemctl', 'enable', timer_name])
+    call_throws(ctx, ['systemctl', 'start', timer_name])
+
+
+def remove_timer_unit(
+    ctx: CephadmContext,
+    fsid: str,
+    unit_id: str,
+) -> None:
+    """Remove a systemd timer + oneshot service pair."""
+    timer_name = f'ceph-{fsid}-{unit_id}.timer'
+    service_name = f'ceph-{fsid}-{unit_id}.service'
+
+    timer_path = os.path.join(ctx.unit_dir, timer_name)
+    service_path = os.path.join(ctx.unit_dir, service_name)
+
+    # Nothing to do when the timer was never installed.
+    if not os.path.exists(timer_path) and not os.path.exists(service_path):
+        return
+
+    call(
+        ctx, ['systemctl', 'stop', timer_name], verbosity=CallVerbosity.DEBUG
+    )
+    call(
+        ctx,
+        ['systemctl', 'stop', service_name],
+        verbosity=CallVerbosity.DEBUG,
+    )
+    call(
+        ctx,
+        ['systemctl', 'disable', timer_name],
+        verbosity=CallVerbosity.DEBUG,
+    )
+
+    for path in [timer_path, service_path]:
+        if os.path.exists(path):
+            os.unlink(path)
+
+    call_throws(ctx, ['systemctl', 'daemon-reload'])
 
 
 def sidecars_from_dropin(
