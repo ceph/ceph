@@ -788,6 +788,10 @@ are ready.
         all: true
       encrypted: true
 
+With ``method: raw``, encrypted OSD deployment through cephadm requires
+``tpm2: true`` and a compatible TPM2 device. Use ``method: lvm`` for
+encryption without TPM2.
+
 Ceph Squid onwards support TPM2 token enrollment for LUKS2 devices.
 Add the ``tpm2`` attribute to the OSD spec:
 
