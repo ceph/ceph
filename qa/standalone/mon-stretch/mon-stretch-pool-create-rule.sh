@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# A pool over two zones created with a given CRUSH rule: the rule must place
-# the pool's copies in both zones.
+# Checks of osd pool create for a pool over two zones: its CRUSH rule must
+# place the pool's copies in both zones, its profile must support FastEC,
+# and no individual stretch pool may exist.
 #
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
@@ -112,6 +113,31 @@ function TEST_pool_create_zones_need_fast_ec() {
 
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
     test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
+}
+
+# An individual stretch pool ('osd pool stretch set' while stretch mode is
+# off) and stretch mode cannot be combined
+function TEST_individual_stretch_pool_blocks_stretch_mode() {
+    local dir=$1
+
+    two_zone_cluster $dir 2 || return 1
+    ceph osd crush rule create-stretch-replicated --rule-name two_dc \
+        --num-replica-per-zone 2 || return 1
+    ceph osd pool create ind 8 8 replicated two_dc || return 1
+    ceph osd pool stretch set ind 2 2 datacenter two_dc 4 2 || return 1
+
+    ! ceph osd pool create p --num_zones 2 --replica 2 > $dir/out 2>&1 || return 1
+    grep "individual stretch pools and stretch mode cannot be combined" $dir/out || return 1
+    ! ceph osd pool ls | grep -qx p || return 1
+    ceph osd pool create q --replica 2 || return 1
+    ! ceph osd pool set q num_zones 2 > $dir/out 2>&1 || return 1
+    grep "individual stretch pools and stretch mode cannot be combined" $dir/out || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
+    test "$(pool_field ind peering_crush_bucket_count)" = 2 || return 1
+
+    ceph osd pool stretch unset ind two_dc 3 2 || return 1
+    ceph osd pool create p --num_zones 2 --replica 2 || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
 }
 
 main mon-stretch-pool-create-rule "$@"
