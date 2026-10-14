@@ -415,6 +415,25 @@ function TEST_pool_set_rule_racing_its_removal() {
     fi
 }
 
+# osd pool set num_zones checks the rule and the replicas as pool create does
+function TEST_pool_set_num_zones_checks() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated one_zone default host || return 1
+    ceph osd pool create r 8 8 replicated || return 1
+    ! ceph osd pool set r num_zones 2 --crush_rule one_zone > $dir/out 2>&1 || return 1
+    grep "does not place the pool in 2 buckets of type datacenter" $dir/out || return 1
+    ! ceph osd pool set r num_zones 2 --replica 11 > $dir/out 2>&1 || return 1
+    grep "replica must be between 1 and 10" $dir/out || return 1
+
+    ceph osd pool create e 8 8 erasure --k 2 --m 1 || return 1
+    ceph osd pool set e allow_ec_optimizations true || return 1
+    ! ceph osd pool set e num_zones 2 --crush_rule nosuch > $dir/out 2>&1 || return 1
+    grep "specified rule nosuch doesn't exist" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx nosuch || return 1
+}
+
 main osd-pool-create "$@"
 
 # Local Variables:
