@@ -1055,7 +1055,7 @@ TEST_F(TestSplitOpInit, ECSingleChunkLocalizeReadsLocalZone)
 {
   set_client_zone(1);
   auto op = make_read_op(ec_pool_id, {}, 0, 4096, CEPH_OSD_FLAG_LOCALIZE_READS);
-  SplitOp::prepare_single_op(op, *objecter, g_ceph_context);
+  SplitOp::prepare_single_op(op, *objecter, g_ceph_context, false);
   EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
   EXPECT_EQ(4, op->target.osd);
   EXPECT_EQ(shard_id_t(3), op->target.actual_pgid.shard);
@@ -1069,7 +1069,7 @@ TEST_F(TestSplitOpInit, ECSingleChunkBalanceReadsUsesEveryZone)
   for (unsigned seed = 0; seed < 16; seed++) {
     srand(seed);
     auto op = make_read_op(ec_pool_id, {}, 0, 4096, CEPH_OSD_FLAG_BALANCE_READS);
-    SplitOp::prepare_single_op(op, *objecter, g_ceph_context);
+    SplitOp::prepare_single_op(op, *objecter, g_ceph_context, false);
     EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
     zones.insert(zone_of(op->target.osd));
     op->put();
@@ -1084,7 +1084,7 @@ TEST_F(TestSplitOpInit, ECSingleChunkBalanceReadsSkipZoneMissingShard)
     srand(seed);
     auto op = make_read_op(degraded_ec_pool_id, {}, 0, 4096, CEPH_OSD_FLAG_BALANCE_READS);
     op->ops[0].op.extent.offset = 4096;
-    SplitOp::prepare_single_op(op, *objecter, g_ceph_context);
+    SplitOp::prepare_single_op(op, *objecter, g_ceph_context, false);
     EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) << "seed " << seed;
     EXPECT_EQ(1, op->target.osd) << "seed " << seed;
     op->put();
