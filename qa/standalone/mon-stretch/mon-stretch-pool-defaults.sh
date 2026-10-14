@@ -39,10 +39,12 @@ function TEST_get_shows_every_default() {
     local param
     for param in pool_type num_zones rule zone_failure_domain \
                  osd_failure_domain root class replica min_size \
-                 erasure_code_profile k m pg_num pgp_num autoscale_mode \
+                 k m pg_num pgp_num autoscale_mode \
                  bulk crimson ; do
         test "$(ceph osd pool default get -f json | jq "has(\"$param\")")" = true || return 1
     done
+    # k and m, but no profile name
+    test "$(ceph osd pool default get -f json | jq 'has("erasure_code_profile")')" = false || return 1
     test "$(default_field pool_type value)" = replicated || return 1
     test "$(default_field num_zones value)" = 1 || return 1
     test "$(default_field num_zones source)" = default || return 1
@@ -154,28 +156,37 @@ function TEST_set_rule() {
     test "$(ceph config get mon osd_pool_default_crush_rule)" = -1 || return 1
 }
 
-# Test k, m and a profile all write the default erasure code profile
-function TEST_set_erasure_code_profile() {
+function profile_of() {
+    ceph osd pool get $1 erasure_code_profile -f json | jq -r .erasure_code_profile
+}
+
+# Test k and m are kept in the default profile, which new pools copy
+function TEST_set_k_m_in_default_profile() {
     local dir=$1
     run_mon $dir a || return 1
 
+    ceph osd pool create before 8 8 erasure || return 1
+    local option="$(ceph config get mon osd_pool_default_erasure_code_profile)"
     ceph osd pool default set --k 4 --m 3 || return 1
     test "$(default_field k value)" = 4 || return 1
     test "$(default_field m value)" = 3 || return 1
-    ceph config get mon osd_pool_default_erasure_code_profile | grep -q 'k=4' || return 1
+    test "$(default_field k source)" = osdmap || return 1
+    test "$(ceph osd erasure-code-profile get default -f json | jq -r .k)" = 4 || return 1
+    # the option is left alone
+    test "$(ceph config get mon osd_pool_default_erasure_code_profile)" = "$option" || return 1
+    # together with an option
+    ceph osd pool default set --k 5 --pg_num 16 || return 1
+    test "$(default_field k value)" = 5 || return 1
+    test "$(default_field pg_num value)" = 16 || return 1
 
-    ceph osd erasure-code-profile set myprofile plugin=isa k=3 m=2 || return 1
-    ceph osd pool default set --erasure_code_profile myprofile || return 1
-    test "$(default_field k value)" = 3 || return 1
-    test "$(default_field m value)" = 2 || return 1
-    # a copy, so the default stays when the profile goes
-    ceph osd erasure-code-profile rm myprofile || return 1
-    test "$(default_field k value)" = 3 || return 1
+    # new pools copy the default profile, existing pools keep theirs
+    ceph osd pool create after 8 8 erasure || return 1
+    test "$(profile_of after)" = after-k5-m3 || return 1
+    test "$(profile_of before)" = before-k2-m2 || return 1
+    test "$(ceph osd erasure-code-profile get before-k2-m2 -f json | jq -r .k)" = 2 || return 1
 
-    expect_failure $dir "cannot specify both erasure_code_profile and k/m parameters" \
-        ceph osd pool default set --erasure_code_profile default --k 2 || return 1
-    expect_failure $dir "does not exist" \
-        ceph osd pool default set --erasure_code_profile nosuchprofile || return 1
+    expect_failure $dir "erasure_code_profile" \
+        ceph osd pool default set --erasure_code_profile default || return 1
 }
 
 # Test values that another source overrides are refused

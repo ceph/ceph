@@ -169,12 +169,16 @@ function TEST_erasure_crush_stripe_unit_padded() {
 function TEST_erasure_code_pool() {
     local dir=$1
     run_mon $dir a || return 1
-    ceph --format json osd dump > $dir/osd.json
-    local expected='"erasure_code_profile":"default"'
-    ! grep "$expected" $dir/osd.json || return 1
     ceph osd pool create erasurecodes 12 12 erasure
+    # a copy of the default profile of the pool's own
+    ceph osd pool get erasurecodes erasure_code_profile | \
+        grep 'erasure_code_profile: erasurecodes-k2-m2$' || return 1
+    test "$(ceph osd erasure-code-profile get erasurecodes-k2-m2 -f json | jq -r .plugin)" = \
+        "$(ceph osd erasure-code-profile get default -f json | jq -r .plugin)" || return 1
     ceph --format json osd dump | tee $dir/osd.json
-    grep "$expected" $dir/osd.json > /dev/null || return 1
+    ! grep '"erasure_code_profile":"default"' $dir/osd.json || return 1
+    test "$(ceph osd pool get erasurecodes crush_rule -f json | jq -r .crush_rule)" = \
+        erasure-code || return 1
 
     ceph osd pool create erasurecodes 12 12 erasure 2>&1 | \
         grep 'already exists' || return 1
@@ -203,20 +207,30 @@ function TEST_erasure_code_pool_km_crush_params() {
         --zone_failure_domain rack --osd_failure_domain osd || return 1
 }
 
-function TEST_erasure_code_pool_crush_params_need_km() {
+function TEST_erasure_code_pool_crush_params_without_km() {
     local dir=$1
     run_mon $dir a || return 1
-    # without k/m or a profile the pool shares the default profile and the
-    # "erasure-code" rule, so crush parameters cannot be honoured; they
-    # must be rejected even when they equal the default profile's values
-    for fd in osd host ; do
-        ! ceph osd pool create crush_no_km --pool_type erasure \
-            --pg_num 8 --pgp_num 8 --osd_failure_domain $fd \
-            2> $dir/err.txt || return 1
-        cat $dir/err.txt
-        grep 'crush parameters .* require k and m' $dir/err.txt || return 1
-    done
-    ! ceph osd pool ls | grep crush_no_km || return 1
+    # k and m come from the default profile, and the pool's own profile and
+    # rule record the crush parameters
+    ceph osd pool create crush_no_km --pool_type erasure \
+        --pg_num 8 --pgp_num 8 --osd_failure_domain osd || return 1
+    ceph osd erasure-code-profile get crush_no_km-k2-m2 | tee $dir/profile.txt
+    grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
+    test "$(ceph osd pool get crush_no_km crush_rule -f json | jq -r .crush_rule)" = \
+        crush_no_km || return 1
+}
+
+function TEST_erasure_code_pool_profile_name_taken() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set taken-k2-m2 plugin=isa k=2 m=2 \
+        crush-failure-domain=osd || return 1
+    ! ceph osd pool create taken --pool_type erasure --pg_num 8 \
+        2> $dir/err.txt || return 1
+    grep "EC profile 'taken-k2-m2' already exists with different contents; remove it with ceph osd erasure-code-profile rm taken-k2-m2, or use it with --erasure_code_profile taken-k2-m2" \
+        $dir/err.txt || return 1
+    ceph osd pool create taken --pool_type erasure --pg_num 8 \
+        --erasure_code_profile taken-k2-m2 || return 1
 }
 
 function TEST_replicated_pool_with_rule() {

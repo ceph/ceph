@@ -30,6 +30,13 @@ function TEST_multi_zone_pool_default_profile() {
     ceph osd pool create p3 erasure --num-zones 2 || return 1
     ceph osd pool create p4 erasure || return 1
 
+    # every pool has a profile of its own
+    local pool
+    for pool in p1 p2 p3 p4; do
+        test "$(ceph osd pool get $pool erasure_code_profile -f json | \
+                jq -r .erasure_code_profile)" = $pool-k2-m2 || return 1
+    done
+
     test "$(rule_of p1)" = erasure-code || return 1
     test "$(rule_of p2)" = p2 || return 1
     test "$(rule_of p3)" = p3 || return 1
