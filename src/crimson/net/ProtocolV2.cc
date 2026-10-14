@@ -5,6 +5,7 @@
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <seastar/core/coroutine.hh>
 #include "include/msgr.h"
 #include "include/random.h"
 #include "msg/msg_fmt.h"
@@ -534,78 +535,75 @@ ProtocolV2::banner_exchange(bool is_connect)
 
 seastar::future<> ProtocolV2::handle_auth_reply()
 {
-  return frame_assembler->read_main_preamble(
-  ).then([this](auto ret) {
-    switch (ret.tag) {
-      case Tag::AUTH_BAD_METHOD:
-        return frame_assembler->read_frame_payload(
-        ).then([this](auto payload) {
-          // handle_auth_bad_method() logic
-          auto bad_method = AuthBadMethodFrame::Decode(payload->back());
-          logger().warn("{} GOT AuthBadMethodFrame: method={} result={}, "
-                        "allowed_methods={}, allowed_modes={}",
-                        conn, bad_method.method(), cpp_strerror(bad_method.result()),
-                        bad_method.allowed_methods(), bad_method.allowed_modes());
-          ceph_assert(messenger.get_auth_client());
-          int r = messenger.get_auth_client()->handle_auth_bad_method(
-              conn, *auth_meta,
-              bad_method.method(), bad_method.result(),
-              bad_method.allowed_methods(), bad_method.allowed_modes());
-          if (r < 0) {
-            logger().warn("{} auth_client handle_auth_bad_method returned {}",
-                          conn, r);
-            abort_in_fault();
-          }
-          return client_auth(bad_method.allowed_methods());
-        });
-      case Tag::AUTH_REPLY_MORE:
-        return frame_assembler->read_frame_payload(
-        ).then([this](auto payload) {
-          // handle_auth_reply_more() logic
-          auto auth_more = AuthReplyMoreFrame::Decode(payload->back());
-          logger().debug("{} GOT AuthReplyMoreFrame: payload_len={}",
-                         conn, auth_more.auth_payload().length());
-          ceph_assert(messenger.get_auth_client());
-          // let execute_connecting() take care of the thrown exception
-          auto reply = messenger.get_auth_client()->handle_auth_reply_more(
-            conn, *auth_meta, auth_more.auth_payload());
-          auto more_reply = AuthRequestMoreFrame::Encode(reply);
-          logger().debug("{} WRITE AuthRequestMoreFrame: payload_len={}",
-                         conn, reply.length());
-          return frame_assembler->write_flush_frame(more_reply);
-        }).then([this] {
-          return handle_auth_reply();
-        });
-      case Tag::AUTH_DONE:
-        return frame_assembler->read_frame_payload(
-        ).then([this](auto payload) {
-          // handle_auth_done() logic
-          auto auth_done = AuthDoneFrame::Decode(payload->back());
-          logger().debug("{} GOT AuthDoneFrame: gid={}, con_mode={}, payload_len={}",
-                         conn, auth_done.global_id(),
-                         ceph_con_mode_name(auth_done.con_mode()),
-                         auth_done.auth_payload().length());
-          ceph_assert(messenger.get_auth_client());
-          int r = messenger.get_auth_client()->handle_auth_done(
-              conn,
-              *auth_meta,
-              auth_done.global_id(),
-              auth_done.con_mode(),
-              auth_done.auth_payload());
-          if (r < 0) {
-            logger().warn("{} auth_client handle_auth_done returned {}", conn, r);
-            abort_in_fault();
-          }
-          auth_meta->con_mode = auth_done.con_mode();
-          frame_assembler->create_session_stream_handlers(*auth_meta, false);
-          return finish_auth();
-        });
-      default: {
-        unexpected_tag(ret.tag, conn, "handle_auth_reply");
-        return seastar::now();
+  auto ret = co_await frame_assembler->read_main_preamble();
+  switch (ret.tag) {
+    case Tag::AUTH_BAD_METHOD: {
+      auto payload = co_await frame_assembler->read_frame_payload();
+      // handle_auth_bad_method() logic
+      auto bad_method = AuthBadMethodFrame::Decode(payload->back());
+      logger().warn("{} GOT AuthBadMethodFrame: method={} result={}, "
+                    "allowed_methods={}, allowed_modes={}",
+                    conn, bad_method.method(), cpp_strerror(bad_method.result()),
+                    bad_method.allowed_methods(), bad_method.allowed_modes());
+      ceph_assert(messenger.get_auth_client());
+      int r = messenger.get_auth_client()->handle_auth_bad_method(
+          conn, *auth_meta,
+          bad_method.method(), bad_method.result(),
+          bad_method.allowed_methods(), bad_method.allowed_modes());
+      if (r < 0) {
+        logger().warn("{} auth_client handle_auth_bad_method returned {}",
+                      conn, r);
+        abort_in_fault();
       }
+      co_await client_auth(bad_method.allowed_methods());
+      co_return;
     }
-  });
+    case Tag::AUTH_REPLY_MORE: {
+      auto payload = co_await frame_assembler->read_frame_payload();
+      // handle_auth_reply_more() logic
+      auto auth_more = AuthReplyMoreFrame::Decode(payload->back());
+      logger().debug("{} GOT AuthReplyMoreFrame: payload_len={}",
+                     conn, auth_more.auth_payload().length());
+      ceph_assert(messenger.get_auth_client());
+      // let execute_connecting() take care of the thrown exception
+      auto reply = messenger.get_auth_client()->handle_auth_reply_more(
+        conn, *auth_meta, auth_more.auth_payload());
+      auto more_reply = AuthRequestMoreFrame::Encode(reply);
+      logger().debug("{} WRITE AuthRequestMoreFrame: payload_len={}",
+                     conn, reply.length());
+      co_await frame_assembler->write_flush_frame(more_reply);
+      co_await handle_auth_reply();
+      co_return;
+    }
+    case Tag::AUTH_DONE: {
+      auto payload = co_await frame_assembler->read_frame_payload();
+      // handle_auth_done() logic
+      auto auth_done = AuthDoneFrame::Decode(payload->back());
+      logger().debug("{} GOT AuthDoneFrame: gid={}, con_mode={}, payload_len={}",
+                     conn, auth_done.global_id(),
+                     ceph_con_mode_name(auth_done.con_mode()),
+                     auth_done.auth_payload().length());
+      ceph_assert(messenger.get_auth_client());
+      int r = messenger.get_auth_client()->handle_auth_done(
+          conn,
+          *auth_meta,
+          auth_done.global_id(),
+          auth_done.con_mode(),
+          auth_done.auth_payload());
+      if (r < 0) {
+        logger().warn("{} auth_client handle_auth_done returned {}", conn, r);
+        abort_in_fault();
+      }
+      auth_meta->con_mode = auth_done.con_mode();
+      frame_assembler->create_session_stream_handlers(*auth_meta, false);
+      co_await finish_auth();
+      co_return;
+    }
+    default: {
+      unexpected_tag(ret.tag, conn, "handle_auth_reply");
+      co_return;
+    }
+  }
 }
 
 seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods)
@@ -613,23 +611,21 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
   // send_auth_request() logic
   ceph_assert(messenger.get_auth_client());
 
+  crimson::auth::AuthClient::auth_request_t request;
   try {
-    auto [auth_method, preferred_modes, bl] =
-      messenger.get_auth_client()->get_auth_request(conn, *auth_meta);
-    auth_meta->auth_method = auth_method;
-    auto frame = AuthRequestFrame::Encode(auth_method, preferred_modes, bl);
-    logger().debug("{} WRITE AuthRequestFrame: method={},"
-                   " preferred_modes={}, payload_len={}",
-                   conn, auth_method, preferred_modes, bl.length());
-    return frame_assembler->write_flush_frame(frame
-    ).then([this] {
-      return handle_auth_reply();
-    });
+    request = messenger.get_auth_client()->get_auth_request(conn, *auth_meta);
   } catch (const crimson::auth::error& e) {
     logger().error("{} get_initial_auth_request returned {}", conn, e.what());
     ABORT_IN_CLOSE(true);
-    return seastar::now();
   }
+  auto& [auth_method, preferred_modes, bl] = request;
+  auth_meta->auth_method = auth_method;
+  auto frame = AuthRequestFrame::Encode(auth_method, preferred_modes, bl);
+  logger().debug("{} WRITE AuthRequestFrame: method={},"
+                 " preferred_modes={}, payload_len={}",
+                 conn, auth_method, preferred_modes, bl.length());
+  co_await frame_assembler->write_flush_frame(frame);
+  co_await handle_auth_reply();
 }
 
 seastar::future<ProtocolV2::next_step_t>
@@ -1067,10 +1063,8 @@ seastar::future<> ProtocolV2::_auth_bad_method(int r)
                 "allowed_methods={}, allowed_modes={})",
                 conn, auth_meta->auth_method, cpp_strerror(r),
                 allowed_methods, allowed_modes);
-  return frame_assembler->write_flush_frame(bad_method
-  ).then([this] {
-    return server_auth();
-  });
+  co_await frame_assembler->write_flush_frame(bad_method);
+  co_await server_auth();
 }
 
 seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
@@ -1094,66 +1088,60 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
     logger().debug("{} WRITE AuthDoneFrame: gid={}, con_mode={}, payload_len={}",
                    conn, conn.peer_global_id,
                    ceph_con_mode_name(auth_meta->con_mode), reply.length());
-    return frame_assembler->write_flush_frame(auth_done
-    ).then([this] {
-      ceph_assert(auth_meta);
-      frame_assembler->create_session_stream_handlers(*auth_meta, true);
-      return finish_auth();
-    });
+    co_await frame_assembler->write_flush_frame(auth_done);
+    ceph_assert(auth_meta);
+    frame_assembler->create_session_stream_handlers(*auth_meta, true);
+    co_await finish_auth();
+    co_return;
    }
    // auth more
    case 0: {
     auto more = AuthReplyMoreFrame::Encode(reply);
     logger().debug("{} WRITE AuthReplyMoreFrame: payload_len={}",
                    conn, reply.length());
-    return frame_assembler->write_flush_frame(more
-    ).then([this] {
-      return frame_assembler->read_main_preamble();
-    }).then([this](auto ret) {
-      expect_tag(Tag::AUTH_REQUEST_MORE, ret.tag, conn, "read_auth_request_more");
-      return frame_assembler->read_frame_payload();
-    }).then([this](auto payload) {
-      auto auth_more = AuthRequestMoreFrame::Decode(payload->back());
-      logger().debug("{} GOT AuthRequestMoreFrame: payload_len={}",
-                     conn, auth_more.auth_payload().length());
-      return _handle_auth_request(auth_more.auth_payload(), true);
-    });
+    co_await frame_assembler->write_flush_frame(more);
+    auto ret = co_await frame_assembler->read_main_preamble();
+    expect_tag(Tag::AUTH_REQUEST_MORE, ret.tag, conn, "read_auth_request_more");
+    auto payload = co_await frame_assembler->read_frame_payload();
+    auto auth_more = AuthRequestMoreFrame::Decode(payload->back());
+    logger().debug("{} GOT AuthRequestMoreFrame: payload_len={}",
+                   conn, auth_more.auth_payload().length());
+    co_await _handle_auth_request(auth_more.auth_payload(), true);
+    co_return;
    }
    case -EBUSY: {
     logger().warn("{} auth_server handle_auth_request returned -EBUSY", conn);
     abort_in_fault();
-    return seastar::now();
    }
    default: {
     logger().warn("{} auth_server handle_auth_request returned {}", conn, r);
-    return _auth_bad_method(r);
+    co_await _auth_bad_method(r);
+    co_return;
    }
   }
 }
 
 seastar::future<> ProtocolV2::server_auth()
 {
-  return frame_assembler->read_main_preamble(
-  ).then([this](auto ret) {
-    expect_tag(Tag::AUTH_REQUEST, ret.tag, conn, "read_auth_request");
-    return frame_assembler->read_frame_payload();
-  }).then([this](auto payload) {
-    // handle_auth_request() logic
-    auto request = AuthRequestFrame::Decode(payload->back());
-    logger().debug("{} GOT AuthRequestFrame: method={}, preferred_modes={},"
-                   " payload_len={}",
-                   conn, request.method(), request.preferred_modes(),
-                   request.auth_payload().length());
-    auth_meta->auth_method = request.method();
-    auth_meta->con_mode = messenger.get_auth_server()->pick_con_mode(
-        conn.get_peer_type(), auth_meta->auth_method,
-        request.preferred_modes());
-    if (auth_meta->con_mode == CEPH_CON_MODE_UNKNOWN) {
-      logger().warn("{} auth_server pick_con_mode returned mode CEPH_CON_MODE_UNKNOWN", conn);
-      return _auth_bad_method(-EOPNOTSUPP);
-    }
-    return _handle_auth_request(request.auth_payload(), false);
-  });
+  auto ret = co_await frame_assembler->read_main_preamble();
+  expect_tag(Tag::AUTH_REQUEST, ret.tag, conn, "read_auth_request");
+  auto payload = co_await frame_assembler->read_frame_payload();
+  // handle_auth_request() logic
+  auto request = AuthRequestFrame::Decode(payload->back());
+  logger().debug("{} GOT AuthRequestFrame: method={}, preferred_modes={},"
+                 " payload_len={}",
+                 conn, request.method(), request.preferred_modes(),
+                 request.auth_payload().length());
+  auth_meta->auth_method = request.method();
+  auth_meta->con_mode = messenger.get_auth_server()->pick_con_mode(
+      conn.get_peer_type(), auth_meta->auth_method,
+      request.preferred_modes());
+  if (auth_meta->con_mode == CEPH_CON_MODE_UNKNOWN) {
+    logger().warn("{} auth_server pick_con_mode returned mode CEPH_CON_MODE_UNKNOWN", conn);
+    co_await _auth_bad_method(-EOPNOTSUPP);
+    co_return;
+  }
+  co_await _handle_auth_request(request.auth_payload(), false);
 }
 
 bool ProtocolV2::validate_peer_name(const entity_name_t& peer_name) const
