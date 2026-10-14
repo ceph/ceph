@@ -660,6 +660,11 @@ public:
     /* as initialize() does, from rgw_posix_sync_policy */
     init_sync_policy(dpp);
 
+    /* as initialize() does:  adoption's completion record, read once */
+    if (int r = load_adoption_completion(dpp); r < 0) {
+      return r;
+    }
+
     /* Small, like the bucket cache above:  the configured defaults are
      * large enough that nothing is ever evicted, and eviction is what
      * runs the stabilize callback.  writeback is the policy that has
@@ -12902,6 +12907,127 @@ TEST_F(NooBaaModeTest, AdoptionIsRefusedWithExtensionsOff)
   auto on = ask({{"bucket", testname}});
   EXPECT_EQ(on["adopted"], "true") << on["error"];
   EXPECT_EQ(on["profile"], "shared");
+}
+
+/* Adoption's completion record (DECISIONS.md 2026-10-13):  written by the
+ * pass that observes NooBaa's store consumed, and from then on the store
+ * is not read. */
+class NooBaaCompletionTest : public NooBaaModeTest {
+public:
+  void SetUp() override {
+    NooBaaModeTest::SetUp();
+    add_the_owning_account();
+    write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+    write_their_record("ENABLED");
+  }
+
+  void restart() {
+    bucket.reset();
+    driver.reset();
+    driver = std::make_unique<TestDriver>(bp);
+    ASSERT_EQ(driver->init(env->dpp), 0);
+  }
+};
+
+/* A pass over a store it consumes writes the record, and the hint
+ * reports it. */
+TEST_F(NooBaaCompletionTest, ACompletePassWritesTheRecord)
+{
+  EXPECT_FALSE(driver->adoption_complete());
+  auto run = ask({{"run", "true"}});
+  EXPECT_EQ(run["complete"], "true") << run["why_not_complete"];
+  ASSERT_TRUE(driver->adoption_complete());
+
+  nsfs::AdoptionCompletion c;
+  ASSERT_EQ(driver->get_identity_db()->get_adoption_completion(env->dpp, c),
+	    0);
+  EXPECT_EQ(c.config_root, conf_root().string());
+  EXPECT_EQ(c.buckets, 1u);
+  EXPECT_GE(c.identities, 1u);
+  EXPECT_FALSE(c.completed_at.empty());
+
+  auto st = ask();
+  EXPECT_EQ(st["complete"], "true");
+  EXPECT_EQ(st["completed_at"], c.completed_at);
+}
+
+/* A record that does not adopt keeps adoption incomplete:  the control
+ * that the record is observed, not merely written at the end of a
+ * pass. */
+TEST_F(NooBaaCompletionTest, AnUnadoptedRecordKeepsItIncomplete)
+{
+  const sf::path stray = bp / "root" / "unowned";
+  sf::create_directories(stray);
+  write_file(conf_root() / "buckets" / "unowned.json",
+	     R"({"_id":"6560e1f1c0ffee00000000dd","name":"unowned",)"
+	     R"("owner_account":"6560e1f1c0ffee00000000ee",)"
+	     R"("versioning":"DISABLED","path":")" + stray.string() +
+	     R"(","should_create_underlying_storage":true,)"
+	     R"("creation_date":"2026-01-02T03:04:05.000Z"})");
+
+  std::map<std::string, std::string> out;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption", {{"run", "true"}},
+				&out), 0);
+  EXPECT_FALSE(driver->adoption_complete());
+  nsfs::AdoptionCompletion c;
+  EXPECT_EQ(driver->get_identity_db()->get_adoption_completion(env->dpp, c),
+	    -ENOENT);
+}
+
+/* After completion NooBaa's store is not read:  a record that appears
+ * places no bucket, lists none, holds no name, and the commands
+ * refuse. */
+TEST_F(NooBaaCompletionTest, AfterCompletionTheStoreIsNotRead)
+{
+  ASSERT_EQ(ask({{"run", "true"}})["complete"], "true");
+
+  const sf::path late = bp / "late-dir";
+  sf::create_directories(late);
+  write_file(conf_root() / "buckets" / "late.json",
+	     R"({"_id":"6560e1f1c0ffee00000000ff","name":"late","path":")" +
+	     late.string() + R"("})");
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "late"}, &loaded,
+				null_yield), -ENOENT)
+      << "a NooBaa record served a bucket after completion";
+
+  void* h = nullptr;
+  ASSERT_EQ(driver->meta_list_keys_init(env->dpp, "bucket", "", &h), 0);
+  std::list<std::string> keys;
+  bool truncated = false;
+  ASSERT_EQ(driver->meta_list_keys_next(env->dpp, h, 1000, keys,
+					&truncated), 0);
+  driver->meta_list_keys_complete(h);
+  EXPECT_EQ(std::find(keys.begin(), keys.end(), "late"), keys.end());
+
+  RGWBucketInfo info;
+  info.bucket.name = "late";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield), 0)
+      << "NooBaa's record still held the name";
+
+  std::map<std::string, std::string> out;
+  for (const char* cmd : {"identities", "import", "bucket", "run"}) {
+    out.clear();
+    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				  {{cmd, std::string(cmd) == "identities" ||
+					 std::string(cmd) == "run"
+					   ? "true" : "late"}}, &out),
+	      -EALREADY) << cmd;
+    EXPECT_EQ(out["why"], "adoption is complete") << cmd;
+  }
+}
+
+/* The record is read at startup:  a restarted gateway is complete. */
+TEST_F(NooBaaCompletionTest, TheRecordSurvivesARestart)
+{
+  ASSERT_EQ(ask({{"run", "true"}})["complete"], "true");
+  restart();
+  EXPECT_TRUE(driver->adoption_complete());
 }
 
 /* `import=` imports a bucket's record and nothing else.

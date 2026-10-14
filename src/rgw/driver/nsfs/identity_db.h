@@ -123,6 +123,22 @@ struct BucketPlacement {
   std::string owner;
 };
 
+/* Adoption's completion record:  NooBaa's store has been consumed and
+ * is never read again (DECISIONS.md 2026-10-13).  One row, written by
+ * the adoption pass that observes it, beside the placement rows it
+ * describes and restored with them. */
+struct AdoptionCompletion {
+  /* ISO 8601, UTC */
+  std::string completed_at;
+  /* the store that was consumed */
+  std::string config_root;
+  uint64_t identities{0};
+  uint64_t buckets{0};
+  /* what did the conversion */
+  std::string gateway_version;
+  uint32_t extensions{0};
+};
+
 /* Whether a path may be stored.
  *
  * A stored path is input:  it arrives over Admin Ops or is translated
@@ -171,6 +187,8 @@ class IdentityDB : public rgw::store::POSIXUserDB {
    *
    * The class name is narrower than what it now holds. */
   const std::string placement_table;
+  /* adoption's completion record:  at most one row */
+  const std::string completion_table;
 
   /* The one handle, qualified.
    *
@@ -196,7 +214,9 @@ public:
       noobaa_id_table(std::filesystem::path(db_name).filename().string()
 		      + "_nsfs_noobaa_id"),
       placement_table(std::filesystem::path(db_name).filename().string()
-		      + "_nsfs_bucket_placement") {}
+		      + "_nsfs_bucket_placement"),
+      completion_table(std::filesystem::path(db_name).filename().string()
+		       + "_nsfs_adoption_complete") {}
 
   int Initialize(std::string logfile, int loglevel);
 
@@ -262,6 +282,14 @@ public:
   int put_noobaa_id(const DoutPrefixProvider* dpp,
 		    const std::string& noobaa_id,
 		    const std::string& owner_key);
+
+  /* The completion record.  `put` is a plain INSERT:  -EEXIST once it
+   * is written, since completion happens once.  `get` is -ENOENT before
+   * it. */
+  int put_adoption_completion(const DoutPrefixProvider* dpp,
+			      const AdoptionCompletion& c);
+  int get_adoption_completion(const DoutPrefixProvider* dpp,
+			      AdoptionCompletion& c) const;
 
   /* Whether `owner_key` was imported from NooBaa. */
   int owner_was_imported(const DoutPrefixProvider* dpp,

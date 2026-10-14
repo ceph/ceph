@@ -50,6 +50,8 @@ class NSFSObject;
 
 namespace nsfs {
 
+struct NooBaaStoreContents;
+
 /* The multipart cache's bucket field, which has to find the bucket again
  * from an eviction with nothing else in hand.  `<tenant>/<name>`, or the
  * name alone without a tenant;  a bucket name cannot contain '/'. */
@@ -741,6 +743,7 @@ protected:
   /* the two waits;  see the constants they are seeded from */
   std::chrono::milliseconds mutation_gate_wait{5000};
   std::chrono::milliseconds gate_drain_wait{60000};
+  std::optional<nsfs::AdoptionCompletion> completion;
   /* under the relaxed sync policy only;  see init_sync_policy() */
   std::unique_ptr<nsfs::SyncFsSet> sync_set;
   UserCache user_cache;
@@ -1317,6 +1320,22 @@ public:
   /* Whether the mode governs anything.  It does not without a store
    * to adopt from, which is what keeps this option from changing an
    * ordinary deployment by existing. */
+  /* Adoption's completion record, read once at startup and updated by
+   * the pass that writes it.  Once set, NooBaa's store is not read:  no
+   * record serves a bucket, lists one, holds a name, or is adopted. */
+  bool adoption_complete() const { return completion.has_value(); }
+  const std::optional<nsfs::AdoptionCompletion>& adoption_completion() const {
+    return completion;
+  }
+  /* Read the record from the identity DB.  Called by initialize() and a
+   * test driver, and by each adoption command before it acts, which is
+   * how a record another gateway wrote is seen. */
+  int load_adoption_completion(const DoutPrefixProvider* dpp);
+  int observe_adoption_completion(const DoutPrefixProvider* dpp,
+				  optional_yield y, const std::string& root,
+				  const nsfs::NooBaaStoreContents& contents,
+				  std::map<std::string, std::string>* report);
+
   bool adoption_configured() const {
     return nb_bucket_state_strategy != nullptr;
   }

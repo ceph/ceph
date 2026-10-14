@@ -262,7 +262,19 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
 
     /* ListBuckets is one owner's rows in one tenant, in name order. */
     "CREATE INDEX IF NOT EXISTS '" + placement_table + "_owner' ON '"
-    + placement_table + "' (Owner, Tenant, BucketName);";
+    + placement_table + "' (Owner, Tenant, BucketName);"
+
+    /* Adoption's completion record.  Id is fixed at 1, so the key is
+     * the whole of "at most one row". */
+    "CREATE TABLE IF NOT EXISTS '" + completion_table + "' ("
+    "  Id INTEGER NOT NULL PRIMARY KEY CHECK (Id = 1),"
+    "  CompletedAt TEXT NOT NULL,"
+    "  ConfigRoot TEXT NOT NULL,"
+    "  Identities INTEGER NOT NULL,"
+    "  Buckets INTEGER NOT NULL,"
+    "  GatewayVersion TEXT NOT NULL,"
+    "  Extensions INTEGER NOT NULL"
+    ");";
 
   ret = exec(&dp, schema.c_str(), nullptr);
   if (ret < 0) {
@@ -408,6 +420,71 @@ int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
     return -EIO;
   }
   owner_key = column_text(st, 0);
+  return 0;
+}
+
+int IdentityDB::put_adoption_completion(const DoutPrefixProvider* dpp,
+					const AdoptionCompletion& c)
+{
+  const std::string sql =
+    "INSERT INTO '" + completion_table + "' (Id, CompletedAt, ConfigRoot, "
+    "Identities, Buckets, GatewayVersion, Extensions) "
+    "VALUES (1, ?, ?, ?, ?, ?, ?);";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, c.completed_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, c.config_root.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(st, 3, static_cast<sqlite3_int64>(c.identities));
+  sqlite3_bind_int64(st, 4, static_cast<sqlite3_int64>(c.buckets));
+  sqlite3_bind_text(st, 5, c.gateway_version.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(st, 6, c.extensions);
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
+      return -EEXIST;
+    }
+    ldpp_dout(dpp, 0) << "ERROR: writing the completion record: "
+      << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+int IdentityDB::get_adoption_completion(const DoutPrefixProvider* dpp,
+					AdoptionCompletion& c) const
+{
+  const std::string sql =
+    "SELECT CompletedAt, ConfigRoot, Identities, Buckets, GatewayVersion, "
+    "Extensions FROM '" + completion_table + "' WHERE Id = 1;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+
+  const int step = sqlite3_step(st);
+  if (step == SQLITE_DONE) {
+    return -ENOENT;
+  }
+  if (step != SQLITE_ROW) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  c.completed_at = column_text(st, 0);
+  c.config_root = column_text(st, 1);
+  c.identities = static_cast<uint64_t>(sqlite3_column_int64(st, 2));
+  c.buckets = static_cast<uint64_t>(sqlite3_column_int64(st, 3));
+  c.gateway_version = column_text(st, 4);
+  c.extensions = static_cast<uint32_t>(sqlite3_column_int64(st, 5));
   return 0;
 }
 

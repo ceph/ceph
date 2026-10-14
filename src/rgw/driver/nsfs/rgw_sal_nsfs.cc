@@ -20,6 +20,8 @@
 #include "rgw_rest_user.h"
 #include "driver/posix/sync_policy.h"
 #include "rgw_rest_driver_hint.h"
+#include "common/iso_8601.h"
+#include "common/version.h"
 #include "rgw_rest_nsfs_profile.h"
 #include "rgw_rest_nsfs_identity.h"
 #include "common/code_environment.h"
@@ -4277,7 +4279,15 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
    * refusing to start would take away the one thing an operator can
    * use to see what went wrong.  Re-running is the recovery, and the
    * mode still says to, so a restart retries it. */
-  if (adoption_configured() && (adoption_mode == AdoptionMode::Automatic)) {
+  if (int r = load_adoption_completion(dpp); r < 0) {
+    return r;
+  }
+  if (adoption_complete()) {
+    ldpp_dout(dpp, 1) << "nsfs: adoption completed at "
+      << completion->completed_at << " from " << completion->config_root
+      << ";  NooBaa's store is not read" << dendl;
+  } else if (adoption_configured() &&
+	     (adoption_mode == AdoptionMode::Automatic)) {
     if (int r = run_adoption(dpp, null_yield); r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: adoption did not finish: "
 	<< cpp_strerror(-r) << ";  the deployment is readable and a "
@@ -4603,7 +4613,7 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
      * **It never adopts.**  Resolving where a bucket lives is
      * read-only;  adoption happens because the mode says so, or by
      * explicit command. */
-    if (!nb_bucket_state_strategy) {
+    if (!nb_bucket_state_strategy || adoption_complete()) {
       return nullptr;
     }
     auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
@@ -4664,7 +4674,7 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
 {
   /* NooBaa has no tenants, so only an untenanted name can be one of
    * its buckets. */
-  if (b.tenant.empty() && nb_bucket_state_strategy) {
+  if (b.tenant.empty() && nb_bucket_state_strategy && !adoption_complete()) {
     auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
       nb_bucket_state_strategy.get());
     std::string recorded;
@@ -5730,7 +5740,7 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
 	untenanted.insert(r.bucket_name);
       }
     }
-    if (nb_bucket_state_strategy) {
+    if (nb_bucket_state_strategy && !adoption_complete()) {
       std::vector<std::string> theirs;
       ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
 	nb_bucket_state_strategy.get())->list_records(dpp, theirs);
@@ -14819,7 +14829,94 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   }
   ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": " << adopted
     << " buckets, " << failed << " failed" << dendl;
-  return failed ? -EIO : 0;
+  if (failed) {
+    return -EIO;
+  }
+  return observe_adoption_completion(dpp, y, root, contents, report);
+}
+
+int NSFSDriver::load_adoption_completion(const DoutPrefixProvider* dpp)
+{
+  nsfs::AdoptionCompletion c;
+  const int ret = userDB->get_adoption_completion(dpp, c);
+  if (ret == -ENOENT) {
+    completion.reset();
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  completion = std::move(c);
+  return 0;
+}
+
+/* Whether this pass has consumed NooBaa's store, and if it has, the
+ * record that says so.  Observed, not declared:  every identity
+ * imported, every bucket record with a row, and every bucket that came
+ * from NooBaa adopted -- out of base, and not converting.  A store with
+ * a record that would not read is not consumed. */
+int NSFSDriver::observe_adoption_completion(
+  const DoutPrefixProvider* dpp, optional_yield y, const std::string& root,
+  const nsfs::NooBaaStoreContents& contents,
+  std::map<std::string, std::string>* report)
+{
+  auto not_yet = [&](const std::string& why) {
+    ldpp_dout(dpp, 1) << "nsfs: adoption not complete:  " << why << dendl;
+    if (report) {
+      (*report)["complete"] = "false";
+      (*report)["why_not_complete"] = why;
+    }
+    return 0;
+  };
+
+  if (!contents.unreadable.empty()) {
+    return not_yet(contents.unreadable.front().path + " does not read");
+  }
+  for (const auto& id : contents.identities) {
+    std::string owner;
+    if (userDB->get_owner_by_noobaa_id(dpp, id.id, owner) < 0) {
+      return not_yet("identity " + id.name + " (" + id.id +
+		     ") is not imported");
+    }
+  }
+  for (const auto& b : contents.buckets) {
+    nsfs::BucketPlacement row;
+    if (userDB->get_bucket_placement(dpp, b.name, "", row) < 0) {
+      return not_yet("bucket " + b.name + " has no placement row");
+    }
+    std::unique_ptr<Bucket> loaded;
+    if (load_bucket(dpp, rgw_bucket{"", b.name}, &loaded, y) < 0) {
+      return not_yet("bucket " + b.name + " does not load");
+    }
+    auto* nb = static_cast<NSFSBucket*>(loaded.get());
+    if (nb->is_converting() || !std::strcmp(nb->profile_name(), "base")) {
+      return not_yet("bucket " + b.name + " is not converted");
+    }
+  }
+
+  nsfs::AdoptionCompletion c;
+  c.completed_at = to_iso_8601(ceph::real_clock::now());
+  c.config_root = root;
+  c.identities = contents.identities.size();
+  c.buckets = contents.buckets.size();
+  c.gateway_version = pretty_version_to_str();
+  c.extensions = new_bucket_extensions();
+  int ret = userDB->put_adoption_completion(dpp, c);
+  if (ret == -EEXIST) {
+    /* another gateway got there first;  theirs is the record */
+    return load_adoption_completion(dpp);
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  completion = std::move(c);
+  ldpp_dout(dpp, 0) << "nsfs: adoption is complete:  " << root << " is "
+    << "consumed and is not read again" << dendl;
+  if (report) {
+    (*report)["complete"] = "true";
+    (*report)["completed_at"] = completion->completed_at;
+  }
+  return 0;
 }
 
 /* Import one bucket's NooBaa record:  its owner, versioning, policy,
@@ -14851,6 +14948,12 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
   if (!adoption_configured()) {
     say("configured", "false");
     say("why", "no NooBaa configuration store is configured");
+    return -ENOENT;
+  }
+  /* once adoption is complete NooBaa's store is not an input, so there
+   * is no record to import */
+  if (adoption_complete()) {
+    say("why", "adoption is complete");
     return -ENOENT;
   }
 
@@ -15018,6 +15121,32 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
       if (out) {
 	(*out)["mode"] = it->second;
+      }
+    }
+    /* Re-read, so that a record another gateway wrote is seen before a
+     * command acts;  once it is there every command refuses, since
+     * NooBaa's store is no longer an input. */
+    if (int r = load_adoption_completion(dpp); r < 0) {
+      return r;
+    }
+    if (out && completion) {
+      (*out)["complete"] = "true";
+      (*out)["completed_at"] = completion->completed_at;
+      (*out)["completed_from"] = completion->config_root;
+      (*out)["completed_identities"] = std::to_string(completion->identities);
+      (*out)["completed_buckets"] = std::to_string(completion->buckets);
+      (*out)["completed_by"] = completion->gateway_version;
+    } else if (out) {
+      (*out)["complete"] = "false";
+    }
+    if (completion) {
+      for (const char* cmd : {"identities", "import", "bucket", "run"}) {
+	if (params.count(cmd)) {
+	  if (out) {
+	    (*out)["why"] = "adoption is complete";
+	  }
+	  return -EALREADY;
+	}
       }
     }
     /* The commands (DECISIONS.md 2026-10-11).  `identities=true`
