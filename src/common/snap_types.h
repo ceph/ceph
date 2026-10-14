@@ -1,14 +1,15 @@
 #ifndef __CEPH_SNAP_TYPES_H
 #define __CEPH_SNAP_TYPES_H
 
+#include <iosfwd>
+#include <list>
+#include <vector>
+
+#include "include/ceph_fs.h" // for struct ceph_mds_snap_realm
+#include "include/encoding.h" // for WRITE_CLASS_ENCODER
 #include "include/object.h" // for struct snapid_t
 #include "include/utime.h"
 #include "include/fs_types.h" // for struct inodeno_t
-
-#include <fmt/core.h> // for FMT_VERSION
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
 
 namespace ceph {
 class Formatter;
@@ -103,9 +104,5 @@ struct SnapContext {
 WRITE_CLASS_ENCODER(SnapContext)
 
 std::ostream& operator<<(std::ostream& out, const SnapContext& snapc);
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<SnapContext> : fmt::ostream_formatter {};
-#endif
 
 #endif

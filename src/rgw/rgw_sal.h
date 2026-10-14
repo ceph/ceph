@@ -734,9 +734,11 @@ class Driver {
      * bucket must still be allocated to support bucket->create(). */
     virtual int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                             std::unique_ptr<VectorBucket>* bucket, optional_yield y) = 0;
-    /** List the vector buckets of a given owner */
+    /** List the vector buckets of a given owner. "ns" is the namespace of the vector
+     * buckets: the ID of the account when the owner is an account, and the tenant
+     * of the owner otherwise */
     virtual int list_vector_buckets(const DoutPrefixProvider* dpp,
-			     const rgw_owner& owner, const std::string& tenant,
+			     const rgw_owner& owner, const std::string& ns,
 			     const std::string& marker, const std::string& end_marker,
 			     uint64_t max, BucketList& buckets,
 			     optional_yield y) = 0;
@@ -1303,6 +1305,8 @@ class Object {
 
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
+    /** Apply pending olh log entries left by deletes with FLAG_SKIP_UPDATE_OLH */
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;

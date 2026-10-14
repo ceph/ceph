@@ -8,6 +8,7 @@
 #include <set>
 #include <vector>
 
+#include "include/container_ios.h"
 #include "include/types.h"
 #include "common/snap_types.h"
 #include "include/xlist.h"

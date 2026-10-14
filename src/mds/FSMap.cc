@@ -18,6 +18,7 @@
 #include <ranges>
 
 #include "FSMap.h"
+#include "common/ceph_time_fmt.h"
 #include "common/debug.h"
 #include "common/StackStringStream.h"
 #include "common/strtol.h" // for strict_strtoll()

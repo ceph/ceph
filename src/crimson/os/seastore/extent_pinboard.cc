@@ -275,7 +275,7 @@ public:
     : promotion_size(promotion_size),
       epm(epm),
       test_workload(crimson::common::get_conf<bool>(
-        "seastore_logical_bucket_cache_test_stress"))
+        "seastore_lbc_test_stress"))
   {}
 
   ~ExtentPromoter() {
@@ -743,9 +743,9 @@ public:
 	hot(hot_capacity),
 	promoter(promotion_size, epm),
         test_workload(crimson::common::get_conf<bool>(
-          "seastore_logical_bucket_cache_test_stress")),
+          "seastore_lbc_test_stress")),
         TwoQ_promote_probability(crimson::common::get_conf<double>(
-          "seastore_test_workload_2Q_promote_probability"))
+          "seastore_lbc_test_2q_promote_probability"))
   {
     LOG_PREFIX(ExtentPinboardTwoQ::ExtentPinboardTwoQ);
     INFO("created, warm_in_capacity=0x{:x}B, warm_out_capacity=0x{:x}B, "
@@ -1180,7 +1180,7 @@ void ExtentPinboardTwoQ::register_metrics(store_index_t store_index) {
 
 ExtentPinboardRef create_extent_pinboard(std::size_t capacity, ExtentPlacementManager *epm) {
   using crimson::common::get_conf;
-  size_t promotion_size = get_conf<Option::size_t>("seastore_cache_promotion_size");
+  size_t promotion_size = get_conf<Option::size_t>("seastore_lbc_promote_size");
   auto algorithm = get_conf<std::string>("seastore_cachepin_type");
   if (algorithm == "LRU") {
     return std::make_unique<ExtentPinboardLRU>(capacity, promotion_size, *epm);

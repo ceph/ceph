@@ -43,6 +43,7 @@ public:
   pg_info_t info;
   OSDMapRef osdmap;
   int64_t pool_id;
+  PGPool pool;  // Pool wrapper - updated when OSDMap changes
   PGLog log;
   DoutPrefixProvider *dpp;
   pg_shard_t pg_whoami;
@@ -91,7 +92,9 @@ public:
   RecoveryCallbackTracker recovery_tracker;
 
   MockPGBackendListener(OSDMapRef osdmap, int64_t pool_id, DoutPrefixProvider *dpp, pg_shard_t pg_whoami, PeeringState *ps = nullptr) :
-    osdmap(osdmap), pool_id(pool_id), log(g_ceph_context), dpp(dpp), pg_whoami(pg_whoami), peering_state(ps) {
+    osdmap(osdmap), pool_id(pool_id),
+    pool(osdmap, pool_id, *osdmap->get_pg_pool(pool_id), osdmap->get_pool_name(pool_id)),
+    log(g_ceph_context), dpp(dpp), pg_whoami(pg_whoami), peering_state(ps) {
     // Create a full OSD PerfCounters using the standard build_osd_logger function.
     // This prevents null pointer dereferences when ReplicatedBackend calls get_logger()->inc().
     perf_logger = build_osd_logger(g_ceph_context);
@@ -439,9 +442,7 @@ public:
   }
 
   const pg_pool_t &get_pool() const override {
-    const pg_pool_t *p = osdmap->get_pg_pool(pool_id);
-    ceph_assert(p != nullptr);
-    return *p;
+    return pool.info;
   }
 
   eversion_t get_pg_committed_to() const override {
@@ -619,7 +620,7 @@ public:
   }
 
   spg_t primary_spg_t() const override {
-    return spg_t();
+    return spg_t(info.pgid.pgid, primary_shard().shard);
   }
 
   pg_shard_t primary_shard() const override {

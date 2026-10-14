@@ -295,11 +295,8 @@ list(APPEND librgw_dbstore_srcs
   driver/dbstore/sqlite/sqliteDB.h
   driver/dbstore/sqlite/sqliteDB.cc
 )
-list(APPEND librgw_motr_srcs
-  driver/motr/rgw_sal_motr.cc
-)
 list(APPEND librgw_daos_srcs
-  driver/motr/rgw_sal_daos.cc
+  driver/daos/rgw_sal_daos.cc
 )
 list(APPEND librgw_posix_srcs
   driver/posix/rgw_sal_posix.cc
@@ -324,9 +321,6 @@ if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
   list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
   list(APPEND rgw_common_libs sqlite3)
 set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
-endif()
-if(WITH_RADOSGW_MOTR)
-  list(APPEND librgw_driver_srcs ${librgw_motr_srcs})
 endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_driver_srcs ${librgw_daos_srcs})
@@ -375,7 +369,7 @@ target_link_libraries(rgw_common
     global
     cls_rgw_client
     keyring
-    rt
+    ${RT_LIBRARY}
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -431,10 +425,6 @@ if(WITH_OPENLDAP)
     PRIVATE
       OpenLDAP::OpenLDAP)
 endif()
-if(WITH_RADOSGW_LUA_PACKAGES)
-  target_link_libraries(rgw_common
-    PRIVATE Boost::filesystem StdFilesystem::filesystem)
-endif()
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -462,11 +452,6 @@ if(WITH_RADOSGW_RADOS)
 	  librados
 	  libneorados
   )
-endif()
-
-if(WITH_RADOSGW_MOTR)
-  find_package(motr REQUIRED)
-  list(APPEND rgw_libs motr::motr)
 endif()
 
 if(WITH_RADOSGW_DAOS)
@@ -497,7 +482,7 @@ if(WITH_RADOSGW_STANDALONE)
     global
     cls_rgw_client
     keyring
-    rt
+    ${RT_LIBRARY}
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -529,7 +514,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS"
     PUBLIC "-UWITH_RADOSGW_AMQP_ENDPOINT")
 
@@ -543,10 +527,6 @@ if(WITH_RADOSGW_STANDALONE)
     target_link_libraries(rgw_common_standalone
       PRIVATE
       OpenLDAP::OpenLDAP)
-  endif()
-  if(WITH_RADOSGW_LUA_PACKAGES)
-    target_link_libraries(rgw_common_standalone
-      PRIVATE Boost::filesystem StdFilesystem::filesystem)
   endif()
 
   if(WITH_JAEGER)
@@ -794,6 +774,7 @@ target_link_libraries(rgw_a
   PRIVATE
     rgw_schedulers
     kmip
+    heap_profiler
     legacy-option-headers
     common_utf8 global
     heap_profiler
@@ -821,7 +802,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   target_include_directories(rgw_a_standalone
@@ -897,7 +877,6 @@ target_include_directories(radosgw
 target_link_libraries(radosgw PRIVATE
   legacy-option-headers
   ${rgw_libs}
-  heap_profiler
   ${ALLOC_LIBS})
 
 if(WITH_RADOSGW_FDB)
@@ -950,7 +929,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   target_include_directories(rgw-standalone
@@ -1030,7 +1008,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   install(TARGETS rgw-standalone-admin DESTINATION bin)
@@ -1110,7 +1087,6 @@ target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
   rgw_common
-  heap_profiler
   librados
   cls_rgw_client
   cls_otp_client

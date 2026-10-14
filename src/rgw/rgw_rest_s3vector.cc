@@ -20,11 +20,18 @@ class RGWS3VectorBase : public RGWDefaultResponseOp {
 protected:
   bufferlist in_data;
   std::vector<rgw::s3vector::validation_error_t> validation_errors;
+  rgw::s3vector::bucket_namespace_t bucket_ns;
 public:
   explicit RGWS3VectorBase(bufferlist&& data) : in_data(std::move(data)) {}
 protected:
   template<typename T>
   int do_init_processing(T& configuration, optional_yield y) {
+    // the namespace of the request is the one of the user making it
+    bucket_ns.tenant = s->bucket_tenant;
+    if (const auto* account_id = std::get_if<rgw_account_id>(&s->owner.id); account_id) {
+      bucket_ns.account = *account_id;
+    }
+
     if (in_data.length() == 0) {
       ldpp_dout(this, 1) << "ERROR: JSON s3vector payload missing" << dendl;
       return -EINVAL;
@@ -158,17 +165,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if(op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::create_index(configuration, driver, &s->bucket_tenant, this, y, validation_errors);
+    op_ret = rgw::s3vector::create_index(configuration, driver, bucket_ns, this, y, validation_errors);
   }
 
   void send_response() override {
@@ -189,7 +196,7 @@ private:
     dump_start(s);
 
     rgw::s3vector::create_index_reply_t reply{
-      rgw::s3vector::index_arn(s->zonegroup_name, s->account_name, configuration.vector_bucket_name, configuration.index_name).to_string()
+      rgw::s3vector::index_arn(s->zonegroup_name, bucket_ns.name(), configuration.vector_bucket_name, configuration.index_name).to_string()
     };
     const auto f = s->formatter;
     reply.dump(f);
@@ -209,8 +216,8 @@ private:
       return -EACCES;
     }
 
-    rgw::ARN arn(rgw::Partition::aws, rgw::Service::s3vectors,
-                         "", s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw::ARN arn = rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name, bucket_ns.name(), configuration.vector_bucket_name);
     if (!verify_user_permission(this, s, arn, rgw::IAM::s3vectorsCreateVectorBucket, false)) {
       return -EACCES;
     }
@@ -240,53 +247,50 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     const int ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
-    if (ret < 0 && ret != -ENOENT) {
+    if (ret == 0) {
+      ldpp_dout(this, 5) << "WARNING: s3vector bucket " << bucket_id << " already exists" << dendl;
+      op_ret = -EEXIST;
+      return;
+    }
+    if (ret != -ENOENT) {
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << ret << dendl;
       op_ret = ret;
       return;
     }
 
     // the backend is verified before the metadata of the bucket is created, so that a
-    // failed request does not leave a bucket behind. it is verified also when the bucket
-    // already exists, so that the request fails if the backend became unusable
-    op_ret = rgw::s3vector::create_vector_bucket(configuration, driver, &s->bucket_tenant, this, y);
+    // failed request does not leave a bucket behind
+    op_ret = rgw::s3vector::create_vector_bucket(configuration, driver, bucket_ns, this, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to initialize the backend of s3vector bucket " << bucket_id <<
         ". error: " << op_ret << dendl;
       return;
     }
 
-    // TODO: verify creation parameters are the same as the existing ones. reject if not
-    if (ret == -ENOENT) {
-      const auto& zonegroup = s->penv.site->get_zonegroup();
+    const auto& zonegroup = s->penv.site->get_zonegroup();
 
-      rgw::sal::VectorBucket::CreateParams createparams;
-      // as with ordinary buckets, a vector bucket belongs to the account of the user
-      // creating it, when it has one, and to the user itself otherwise
-      createparams.owner = s->owner.id;
-      createparams.zonegroup_id = zonegroup.id;
-      // vector buckets are indexless
-      createparams.index_type = rgw::BucketIndexType::Indexless;
-      createparams.placement_rule.storage_class = s->info.storage_class;
+    rgw::sal::VectorBucket::CreateParams createparams;
+    // as with ordinary buckets, a vector bucket belongs to the account of the user
+    // creating it, when it has one, and to the user itself otherwise
+    createparams.owner = s->owner.id;
+    createparams.zonegroup_id = zonegroup.id;
+    // vector buckets are indexless
+    createparams.index_type = rgw::BucketIndexType::Indexless;
+    createparams.placement_rule.storage_class = s->info.storage_class;
 
-      op_ret = bucket->create(this, createparams, y);
-      if (op_ret < 0) {
-        ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
-        return;
-      }
+    // a request that raced with another creation of the same bucket fails here
+    op_ret = bucket->create(this, createparams, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
+      return;
     }
   }
 
   void send_response() override {
-    if (op_ret == -ERR_BUCKET_EXISTS) {
-      const auto eexist_override = s->cct->_conf.get_val<bool>("rgw_bucket_eexist_override");
-      if (! eexist_override) [[likely]] {
-        op_ret = 0;
-      } else {
-        s->err.message = "The requested bucket name is not available. The bucket namespace is shared by all users of the system. Specify a different name and try again.";
-      }
+    if (op_ret == -EEXIST || op_ret == -ERR_BUCKET_EXISTS) {
+      s->err.message = "A vector bucket with this name already exists. Choose a different name and try again.";
     }
 
     if (op_ret) {
@@ -318,7 +322,7 @@ private:
     rgw::s3vector::create_vector_bucket_reply_t reply{
       rgw::s3vector::vector_bucket_arn(
         s->zonegroup_name,
-        s->account_name,
+        bucket_ns.name(),
         configuration.vector_bucket_name).to_string()
     };
     reply.dump(&f);
@@ -351,17 +355,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_index(configuration, driver, &s->bucket_tenant, this, y);
+    op_ret = rgw::s3vector::delete_index(configuration, driver, bucket_ns, this, y);
   }
 };
 
@@ -393,7 +397,7 @@ private:
     if (!configuration.vector_bucket_arn) {
       configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
         s->zonegroup_name,
-        s->account_name,
+        bucket_ns.name(),
         configuration.vector_bucket_name
       );
     }
@@ -411,12 +415,12 @@ private:
       f.flush(ss);
       ldpp_dout(this, 20) << "INFO: executing s3vector DeleteVectorBucket with: " << ss.str() << dendl;
     }
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -452,12 +456,12 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -491,17 +495,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::put_vectors(configuration, driver, &s->bucket_tenant, this, y, validation_errors);
+    op_ret = rgw::s3vector::put_vectors(configuration, driver, bucket_ns, this, y, validation_errors);
   }
 
   void send_response() override {
@@ -543,17 +547,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_vectors(configuration, driver, &s->bucket_tenant, this, y, reply);
+    op_ret = rgw::s3vector::get_vectors(configuration, driver, bucket_ns, this, y, reply);
   }
 
   void send_response() override {
@@ -601,17 +605,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::list_vectors(configuration, driver, &s->bucket_tenant, this, y, reply);
+    op_ret = rgw::s3vector::list_vectors(configuration, driver, bucket_ns, this, y, reply);
   }
 
   void send_response() override {
@@ -676,7 +680,7 @@ private:
     rgw::ARN arn = rgw::ARN(rgw::Partition::aws,
         rgw::Service::s3vectors,
         zonegroup_name,
-        s->auth.identity->get_tenant(),
+        bucket_ns.name(),
         "*");
     if (!verify_user_permission(this, s, arn, rgw::IAM::s3vectorsListVectorBuckets, false)) {
       return -EACCES;
@@ -709,7 +713,7 @@ private:
       end_marker = prefix_end_marker(configuration.prefix);
     }
 
-    op_ret = driver->list_vector_buckets(this, s->owner.id, s->auth.identity->get_tenant(),
+    op_ret = driver->list_vector_buckets(this, s->owner.id, bucket_ns.name(),
         start_marker, end_marker, configuration.max_results, listing, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: failed to execute ListVectorBuckets. error: " << op_ret << dendl;
@@ -749,12 +753,9 @@ private:
     f.open_array_section("vectorBuckets");
     for (const auto& bucket : listing.buckets) {
       f.open_object_section("");
-      ::encode_json("creationTime",  ceph::to_iso_8601(bucket.creation_time), &f);
-      rgw::ARN arn(rgw::Partition::aws,
-          rgw::Service::s3vectors,
-          zonegroup_name,
-          s->auth.identity->get_tenant(),
-          bucket.bucket.name);
+      // the AWS API encodes timestamps as seconds since the epoch
+      ::encode_json("creationTime", static_cast<uint64_t>(ceph::real_clock::to_time_t(bucket.creation_time)), &f);
+      const auto arn = rgw::s3vector::vector_bucket_arn(zonegroup_name, bucket_ns.name(), bucket.bucket.name);
       ::encode_json("vectorBucketArn", arn.to_string(), &f);
       ::encode_json("vectorBucketName", bucket.bucket.name, &f);
       f.close_section();
@@ -797,7 +798,7 @@ private:
     if (!configuration.vector_bucket_arn) {
       configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
         s->zonegroup_name,
-        s->account_name,
+        bucket_ns.name(),
         configuration.vector_bucket_name
       );
     }
@@ -815,11 +816,11 @@ private:
       f.flush(ss);
       ldpp_dout(this, 20) << "INFO: executing s3vector GetVectorBucket with: " << ss.str() << dendl;
     }
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
     }
@@ -840,7 +841,8 @@ private:
     JSONFormatter f;
     f.open_object_section("");
     f.open_object_section("vectorBucket");
-    ::encode_json("creationTime",  ceph::to_iso_8601(bucket->get_creation_time()), &f);
+    // the AWS API encodes timestamps as seconds since the epoch
+    ::encode_json("creationTime", static_cast<uint64_t>(ceph::real_clock::to_time_t(bucket->get_creation_time())), &f);
     ::encode_json("vectorBucketArn", configuration.vector_bucket_arn->to_string(), &f);
     ::encode_json("vectorBucketName", bucket->get_name(), &f);
     f.close_section(); // vectorBucket
@@ -877,17 +879,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, s->account_name, driver, &s->bucket_tenant, this, y, reply);
+    op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, driver, bucket_ns, this, y, reply);
   }
 
   void send_response() override {
@@ -935,12 +937,12 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -948,11 +950,11 @@ private:
     if (!configuration.vector_bucket_arn) {
       configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
         s->zonegroup_name,
-        s->account_name,
+        bucket_ns.name(),
         configuration.vector_bucket_name
       );
     }
-    op_ret = rgw::s3vector::list_indexes(configuration, driver, &s->bucket_tenant, this, y, reply);
+    op_ret = rgw::s3vector::list_indexes(configuration, driver, bucket_ns, this, y, reply);
     if (op_ret == -ENOENT) {
       // the backend of the bucket does not exist. this happens when the bucket was
       // created, but its backend was never initialized. such a bucket has no indexes,
@@ -1006,12 +1008,12 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1044,12 +1046,12 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1083,17 +1085,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_vectors(configuration, driver, &s->bucket_tenant, this, y);
+    op_ret = rgw::s3vector::delete_vectors(configuration, driver, bucket_ns, this, y);
   }
 };
 
@@ -1135,17 +1137,17 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, driver, &s->bucket_tenant, this, y, reply, validation_errors);
+    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, driver, bucket_ns, this, y, reply, validation_errors);
   }
 
   void send_response() override {
@@ -1178,7 +1180,34 @@ int RGWHandler_REST_s3Vector::init(rgw::sal::Driver* driver, req_state *s, rgw::
   if (const auto ret = RGWHandler_REST::init(driver, s, cio); ret < 0) {
     return ret;
   }
-  return RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false);
+  if (const auto ret = RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false); ret < 0) {
+    return ret;
+  }
+  // an s3vector request is signed as a non-s3 one, without the
+  // "x-amz-content-sha256" header. so, the payload must be read, and its hash
+  // calculated, before the request is authenticated.
+  // the payload of PutVectors holds the vectors themselves, so its size is
+  // limited separately from the parameters of the other REST requests
+  const auto max_size = s->cct->_conf.get_val<Option::size_t>("rgw_s3vector_max_request_size");
+  int ret;
+  std::tie(ret, bl_post_body) = rgw_rest_read_all_input(s, max_size, false);
+  if (ret == -ERANGE) {
+    ldpp_dout(s, 1) << "ERROR: s3vector payload of " << s->init_state.url_bucket <<
+      " is larger than the maximum of " << max_size << " bytes" << dendl;
+    return -ERR_TOO_LARGE;
+  }
+  if (ret < 0) {
+    ldpp_dout(s, 1) << "ERROR: failed to read s3vector payload of " <<
+      s->init_state.url_bucket << ". error: " << ret << dendl;
+    return ret;
+  }
+  // PayloadHash is present if the request was forwarded from another zone
+  if (!s->info.args.exists("PayloadHash")) {
+    auto sha256_hash = calc_hash_sha256_open_stream();
+    calc_hash_sha256_update_stream(sha256_hash, bl_post_body.c_str(), bl_post_body.length());
+    s->info.args.append("PayloadHash", calc_hash_sha256_close_stream(&sha256_hash));
+  }
+  return 0;
 }
 
 int RGWHandler_REST_s3Vector::postauth_init(optional_yield y) {

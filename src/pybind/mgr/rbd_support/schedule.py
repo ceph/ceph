@@ -241,7 +241,10 @@ class Interval:
         return hash(self.minutes)
 
     def to_string(self) -> str:
-        if self.minutes % (60 * 24) == 0:
+        if self.minutes % (60 * 24 * 7) == 0:
+            interval = int(self.minutes / (60 * 24 * 7))
+            units = 'w'
+        elif self.minutes % (60 * 24) == 0:
             interval = int(self.minutes / (60 * 24))
             units = 'd'
         elif self.minutes % 60 == 0:
@@ -255,12 +258,16 @@ class Interval:
 
     @classmethod
     def from_string(cls, interval: str) -> 'Interval':
-        match = re.match(r'^(\d+)(d|h|m)?$', interval)
+        match = re.match(r'^(\d+)(w|d|h|m)?$', interval)
         if not match:
-            raise ValueError("Invalid interval ({})".format(interval))
+            raise ValueError(
+                "Invalid interval ({}), valid units are w, d, h, m".format(
+                    interval))
 
         minutes = int(match.group(1))
-        if match.group(2) == 'd':
+        if match.group(2) == 'w':
+            minutes *= 60 * 24 * 7
+        elif match.group(2) == 'd':
             minutes *= 60 * 24
         elif match.group(2) == 'h':
             minutes *= 60
@@ -463,7 +470,7 @@ class Schedules:
         try:
             while True:
                 with rados.ReadOpCtx() as read_op:
-                    self.handler.log.info(
+                    self.handler.log.debug(
                         "load_schedules: {}, start_after={}".format(
                             pool_name, start_after))
                     it, ret = ioctx.get_omap_vals(read_op, start_after, "", 128)
@@ -473,7 +480,7 @@ class Schedules:
                     for k, v in it:
                         start_after = k
                         v = v.decode()
-                        self.handler.log.info(
+                        self.handler.log.debug(
                             "load_schedule: {} {}".format(k, v))
                         try:
                             try:

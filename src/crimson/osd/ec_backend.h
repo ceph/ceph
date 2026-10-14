@@ -96,8 +96,6 @@ private:
     ECSubRead &op,
     const ZTracer::Trace &trace) override;
 
-  bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
-
   ll_read_errorator::future<ceph::bufferlist> maybe_chunked_read(
     const hobject_t& obj,
     const ECSubRead& op,

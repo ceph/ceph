@@ -1,36 +1,38 @@
-<div *ngIf="upgradeStatus$ | async as status; else isUpgradable">
-  <ng-container *ngIf="status.is_paused || status.in_progress; else isUpgradable">
-    <h5
-      *ngIf="status.is_paused; else inProgress"
-      i18n
-    >
-      Upgrade is paused
-    </h5>
-    <ng-template #inProgress>
-      <a
-        href="#/upgrade/progress"
-        i18n
-      >
-        <cds-inline-loading></cds-inline-loading>
-        Upgrading {{ executingTask?.progress }}%
-      </a>
-    </ng-template>
-  </ng-container>
-</div>
+@if (upgradeStatus$ | async; as status) {
+  <div>
+    @if (status.is_paused || status.in_progress) {
+      @if (status.is_paused) {
+        <h5 i18n>Upgrade is paused</h5>
+      } @else {
+        <a
+          href="#/upgrade/progress"
+          i18n
+        >
+          <cds-inline-loading></cds-inline-loading>
+          Upgrading {{ executingTask?.progress }}%
+        </a>
+      }
+    } @else {
+      <ng-container *ngTemplateOutlet="isUpgradable"></ng-container>
+    }
+  </div>
+} @else {
+  <ng-container *ngTemplateOutlet="isUpgradable"></ng-container>
+}
 
 <ng-template #isUpgradable>
-  <div
-    *ngIf="upgradeInfo$ | async as info"
-    i18n
-  >
-    <h5
-      *ngIf="info.versions.length > 0"
-      (click)="upgradeModal()"
-      tabindex="0"
-      (keydown.enter)="upgradeModal()"
-    >
-      <i [ngClass]="icons.up"></i>
-      Upgrade available
-    </h5>
-  </div>
+  @if (upgradeInfo$ | async; as info) {
+    <div i18n>
+      @if (info.versions.length > 0) {
+        <h5
+          (click)="upgradeModal()"
+          tabindex="0"
+          (keydown.enter)="upgradeModal()"
+        >
+          <i [ngClass]="icons.up"></i>
+          Upgrade available
+        </h5>
+      }
+    </div>
+  }
 </ng-template>

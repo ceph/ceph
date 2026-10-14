@@ -105,6 +105,29 @@ The following is recommended for any bucket that backs a vector bucket:
   object deletions would leave behind stale files that are not cleaned up.
 
 
+Accounts and Tenants
+--------------------
+
+The name of a vector bucket is unique within the account that owns it. A vector
+bucket that is created by a user that does not belong to an account is owned by
+that user, and its name is unique within the tenant of the user. Two accounts,
+or two tenants, may therefore each have a vector bucket of the same name,
+holding different indexes and vectors.
+
+The account, or the tenant, is not part of the name of the vector bucket. It is
+implied by the credentials of the request, and it is the ``<account>`` part of
+the ARN of the vector bucket and of its indexes. See: `S3 Vectors REST API`_.
+
+.. note:: The name of a regular S3 bucket is always unique within its tenant,
+   whether or not the bucket is owned by an account. So, while two accounts of
+   the same tenant may each have a vector bucket of the same name, they cannot
+   each have a regular S3 bucket of that name. With the ``rgw`` backend, such
+   accounts share the backing bucket of these vector buckets, which only one of
+   them owns. The other accounts must be allowed to access it by its policy.
+   See: `Ownership`_.
+   The LanceDB files of a vector bucket that is owned by an account are stored
+   in the backing bucket under a prefix, which is the ID of the account.
+
 Multisite
 ---------
 
@@ -407,6 +430,13 @@ may not be given in the same request. The ARN formats are::
    arn:aws:s3vectors:<zone-group>:<account>:bucket/<vector-bucket>
    arn:aws:s3vectors:<zone-group>:<account>:bucket/<vector-bucket>/index/<index>
 
+Where ``<account>`` is the ID of the account that owns the vector bucket, or the
+tenant of its owner when the owner does not belong to an account (empty for a
+user with no tenant). See: `Accounts and Tenants`_.
+
+A vector bucket that is identified by name is looked up in the account, or the
+tenant, of the user sending the request.
+
 In case that ``CreateIndex``, ``PutVectors`` and ``QueryVectors``,
 encounter errors that are the result of an invalid request, they return  a ``400``
 status, the ``ValidationException`` code, and a ``fieldList`` array that points
@@ -473,7 +503,7 @@ The response has the following format:
 ::
 
     {
-        "vectorBucketArn": "arn:aws:s3vectors:::bucket/<vector-bucket>"
+        "vectorBucketArn": "arn:aws:s3vectors::<account>:bucket/<vector-bucket>"
     }
 
 Get Vector Bucket
@@ -495,7 +525,7 @@ The response has the following format:
 
     {
         "vectorBucket": {
-            "creationTime": "<iso-8601-timestamp>",
+            "creationTime": <number>,
             "vectorBucketArn": "<vector-bucket-arn>",
             "vectorBucketName": "<vector-bucket>"
         }
@@ -532,7 +562,7 @@ The response has the following format:
         "nextToken": "<token>",
         "vectorBuckets": [
             {
-                "creationTime": "<iso-8601-timestamp>",
+                "creationTime": <number>,
                 "vectorBucketArn": "<vector-bucket-arn>",
                 "vectorBucketName": "<vector-bucket>"
             }
@@ -792,7 +822,8 @@ same keys.
 
 Request parameters:
 
-- ``vectors``: Between 1 and 500 vectors. Each has:
+- ``vectors``: Between 1 and 500 vectors. The maximum could be changed, see
+  below. Each has:
 
   - ``key``: The identifier of the vector inside the index. Must be between 1
     and 1024 characters long.
@@ -812,7 +843,16 @@ Request parameters:
     of the declared type, and must be present if the key was declared with
     ``mustExist``.
 
+The maximum number of vectors in a request is set by:
+
+.. confval:: rgw_s3vector_max_put_vectors
+
 An empty response body is returned on success.
+
+The number of vectors that fit into a single request depends on their dimension
+and metadata. The size of the payload of any S3 Vectors request is limited by:
+
+.. confval:: rgw_s3vector_max_request_size
 
 Get Vectors
 ```````````
@@ -1022,7 +1062,7 @@ index. For example:
         "Effect": "Allow",
         "Principal": {"AWS": ["arn:aws:iam::usfolks:user/fred"]},
         "Action": ["s3vectors:QueryVectors", "s3vectors:GetVectors"],
-        "Resource": ["arn:aws:s3vectors:::bucket/my-vectors/index/my-index"]
+        "Resource": ["arn:aws:s3vectors::usfolks:bucket/my-vectors/index/my-index"]
       }]
     }
 

@@ -210,8 +210,10 @@ public:
 			  Callable&& f, Args&&... args) {
     std::lock_guard l(lock);
     auto e = std::make_unique<event>(when, ++next_id,
-				     std::bind(std::forward<Callable>(f),
-					       std::forward<Args>(args)...));
+                                     [f = std::forward<Callable>(f),
+                                      ...args = std::forward<Args>(args)]() mutable {
+                                       std::invoke(std::move(f), std::move(args)...);
+                                     });
     auto id = e->id;
     auto i = schedule.insert(*e);
     events.insert(*(e.release()));

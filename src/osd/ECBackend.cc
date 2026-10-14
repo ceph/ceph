@@ -526,39 +526,10 @@ void ECBackend::handle_sub_read(
     int r = 0;
     for (auto &&[offset, len, flags]: to_read) {
       bufferlist bl;
-      auto &subchunks = op.subchunks.at(hoid);
-      if ((subchunks.size() == 1) &&
-        (subchunks.front().second == ec_impl->get_sub_chunk_count())) {
-        dout(20) << __func__ << " case1: reading the complete chunk/shard." << dendl;
-        r = switcher->store->read(
-          switcher->ch,
-          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
-          offset, len, bl, flags); // Allow EIO return
-      } else {
-        int subchunk_size =
-          sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-        dout(20) << __func__ << " case2: going to do fragmented read;"
-		 << " subchunk_size=" << subchunk_size
-		 << " chunk_size=" << sinfo.get_chunk_size() << dendl;
-        bool error = false;
-        for (int m = 0; m < (int)len && !error;
-             m += sinfo.get_chunk_size()) {
-          for (auto &&k: subchunks) {
-            bufferlist bl0;
-            r = switcher->store->read(
-              switcher->ch,
-              ghobject_t(hoid, ghobject_t::NO_GEN, shard),
-              offset + m + (k.first) * subchunk_size,
-              (k.second) * subchunk_size,
-              bl0, flags);
-            if (r < 0) {
-              error = true;
-              break;
-            }
-            bl.claim_append(bl0);
-          }
-        }
-      }
+      r = switcher->store->read(
+        switcher->ch,
+        ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+        offset, len, bl, flags); // Allow EIO return
 
       if (r < 0) {
         // if we are doing fast reads, it's possible for one of the shard
@@ -716,7 +687,7 @@ void ECBackend::handle_sub_read(
           bufferlist val_bl;
           val_bl.append(value);
           current_batch.insert(make_pair(key, val_bl));
-          available -= std::min(available, num_new_bytes);
+          available -= std::min<uint64_t>(available, num_new_bytes);
           return ObjectStore::omap_iter_ret_t::NEXT;
         }, switcher->store);
 
@@ -968,8 +939,7 @@ void ECBackend::handle_sub_read_reply(
       }
 
       if (attrs_satisfied && omap_satisfied) {
-        err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
-                                                    nullptr);
+        err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum);
       }
 
       if (err) {
@@ -1237,29 +1207,34 @@ int ECBackend::objects_read_sync(
   std::pair<ceph::buffer::list*, Context*>>> &to_read,
   CoroHandles coro)
 {
-  int result = 0;
-  bool done = false;
-  bool waiting = false;
+  struct ReadState {
+    int result = 0;
+    bool done = false;
+    bool waiting = false;
+  };
+  auto state = std::make_shared<ReadState>();
 
-  // Callback for the async read
-  Context *on_finish = new LambdaContext([&, coro](int r) {
-    result = r;
-    done = true;
+  std::weak_ptr<resume_token_t> weak_resume = coro.resume;
+  Context *on_finish = new LambdaContext([state, weak_resume](int r) {
+    state->result = r;
+    state->done = true;
 
-    if (waiting) {
-      coro.resume();
+    if (state->waiting) {
+      if (auto locked = weak_resume.lock(); locked) {
+        (*locked)();
+      }
     }
   });
 
   objects_read_async(hoid, object_size, to_read, on_finish, true);
 
   // If the async read is not yet complete, yield and wait for it to complete
-  if (!done) {
-    waiting = true;
+  if (!state->done) {
+    state->waiting = true;
     coro.yield();
   }
 
-  return result;
+  return state->result;
 }
 
 int ECBackend::objects_read_local(
@@ -1476,19 +1451,11 @@ void ECBackend::objects_read_async(
 }
 
 bool ECBackend::ec_can_decode(const shard_id_set &available_shards) const {
-  if (sinfo.supports_sub_chunks()) {
-    ceph_abort_msg("Interface does not support subchunks");
-    return false;
-  }
-
-  mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>>
-      minimum_sub_chunks{ec_impl->get_chunk_count()};
   shard_id_set want_to_read = sinfo.get_all_shards();
   shard_id_set available(available_shards);
   shard_id_set minimum_set;
 
-  int r = ec_impl->minimum_to_decode(want_to_read, available, minimum_set,
-                                     &minimum_sub_chunks);
+  int r = ec_impl->minimum_to_decode(want_to_read, available, minimum_set);
   return (r == 0);
 }
 

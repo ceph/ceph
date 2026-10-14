@@ -192,6 +192,7 @@ class ServiceType(enum.Enum):
     loki = 'loki'
     promtail = 'promtail'
     alloy = 'alloy'
+    pushgateway = 'pushgateway'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'
@@ -504,7 +505,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                   addr: Optional[str] = None,
                   labels: Optional[List[str]] = None,
                   maintenance: Optional[bool] = False) -> HandleCommandResult:
-        """Add a host"""
+        """
+        Add a host. For more than one label, use --labels label1,label2,... or
+        list them after <addr> separated by spaces (without <addr>, the first
+        label is taken as the address).
+        """
         _status = 'maintenance' if maintenance else ''
 
         # split multiple labels passed in with --labels=label1,label2
@@ -1013,15 +1018,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         # Sort the list for display
         services.sort(key=lambda s: (ukn(s.spec.service_name())))
 
-        if len(services) == 0:
-            return HandleCommandResult(stdout="No services reported")
-        elif format != Format.plain:
+        if format != Format.plain:
+            # emit a valid (possibly empty) document, like 'orch ps' does
             with service_spec_allow_invalid_from_json():
                 if export:
                     data = [s.spec for s in services if s.deleted is None]
                     return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
                 else:
                     return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
+        elif len(services) == 0:
+            return HandleCommandResult(stdout="No services reported")
         else:
             now = datetime_now()
             table = PrettyTable(
@@ -1543,6 +1549,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             dg_specs = []
             for dg in drivegroups:
                 spec = DriveGroupSpec.from_json(dg)
+                # incentivize users to provide a service id for their OSD specs
+                # we can't make this part of the spec validation itself because
+                # it would cause us to drop previously working specs during upgrade,
+                # but we can do it for new specs
+                if not spec.service_id:
+                    raise SpecValidationError(
+                        'OSD spec with no service_id field found. Please provide a service_id for all OSD specs'
+                    )
                 if dry_run:
                     spec.preview_only = True
                 dg_specs.append(spec)
@@ -1916,7 +1930,15 @@ Usage:
             force_delete_data=force_delete_data,
         )
         raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        result = completion.result_str()
+        if service_name.startswith('nfs.'):
+            cluster_id = service_name[len('nfs.'):]
+            result += (
+                f"\n\nWARNING: 'ceph orch rm {service_name}' only removes the NFS service daemon.\n"
+                f"Associated resources (RADOS config objects, exports, ingress service) will NOT be cleaned up.\n"
+                f"Use 'ceph nfs cluster rm {cluster_id}' for full resource cleanup."
+            )
+        return HandleCommandResult(stdout=result)
 
     @OrchestratorCLICommand.Write('orch apply')
     def apply_misc(self,
@@ -2193,6 +2215,10 @@ Usage:
     @OrchestratorCLICommand.Write('orch apply oauth2-proxy')
     def _apply_oauth2_proxy(self,
                             https_address: Optional[str] = None,
+                            provider_display_name: Optional[str] = None,
+                            oidc_issuer_url: Optional[str] = None,
+                            client_id: Optional[str] = None,
+                            client_secret: Optional[str] = None,
                             placement: Optional[str] = None,
                             unmanaged: bool = False,
                             dry_run: bool = False,
@@ -2207,6 +2233,10 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             https_address=https_address,
+            provider_display_name=provider_display_name,
+            oidc_issuer_url=oidc_issuer_url,
+            client_id=client_id,
+            client_secret=client_secret,
         )
         spec.preview_only = dry_run
 

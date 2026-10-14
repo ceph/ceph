@@ -11,11 +11,14 @@ import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { OsdService } from '~/app/shared/api/osd.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   DeploymentOptions,
   OsdDeploymentOptions
 } from '~/app/shared/models/osd-deployment-options';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FixtureHelper, FormHelper } from '~/testing/unit-test-helper';
@@ -377,6 +380,34 @@ describe('OsdFormComponent', () => {
           });
         });
       });
+    });
+  });
+
+  describe('getDeploymentOptions permission guard', () => {
+    let osdService: OsdService;
+    let authStorageService: AuthStorageService;
+
+    beforeEach(() => {
+      osdService = TestBed.inject(OsdService);
+      authStorageService = TestBed.inject(AuthStorageService);
+      spyOn(osdService, 'getDeploymentOptions').and.returnValue(of(deploymentOptions));
+      spyOn(TestBed.inject(OrchestratorService), 'status').and.returnValue(
+        of({ available: false })
+      );
+    });
+
+    it('should not call getDeploymentOptions when osd.read is false', () => {
+      spyOn(authStorageService, 'getPermissions').and.returnValue(new Permissions({ osd: [] }));
+      fixture.detectChanges();
+      expect(osdService.getDeploymentOptions).not.toHaveBeenCalled();
+    });
+
+    it('should call getDeploymentOptions when osd.read is true', () => {
+      spyOn(authStorageService, 'getPermissions').and.returnValue(
+        new Permissions({ osd: ['read'] })
+      );
+      fixture.detectChanges();
+      expect(osdService.getDeploymentOptions).toHaveBeenCalled();
     });
   });
 });

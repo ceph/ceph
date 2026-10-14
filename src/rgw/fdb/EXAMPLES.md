@@ -249,7 +249,7 @@ for (const auto& object : objects_to_index) {
   lfdb::set(txn, object.index_key, object.index_record);
 
   if (soft_limit < lfdb::approximate_commit_bytes(txn)) {
-    finish_batch(std::move(txn));
+    finish_batch(txn);
     txn = lfdb::make_transaction(dbh);
   }
 }
@@ -307,6 +307,88 @@ txr([](auto& txn) {
   lfdb::set(txn, "person/eleanor-of-aquitaine/title", "Duchess of Aquitaine");
 });
 ```
+
+### Staged Proxies
+
+A transactor may run its body more than once. Mutating a captured output
+variable directly can therefore append or count the same result several times.
+Staged Proxies give each attempt a private value and publish only the attempt
+whose commit is confirmed.
+
+Choose the parameter form according to its role:
+
+| Parameter | Use it for | Replay behavior |
+| --- | --- | --- |
+| `input` | An input that the transaction reads but does not modify. | The transactor copies it once and presents the same value to every attempt. |
+| `lfdb::staged(output)` | An output that modifies or extends its existing value. | Each attempt lazily copies the existing value before its first mutation. |
+| `lfdb::staged(output, std::in_place)` | An output rebuilt entirely from transaction results. | Each attempt starts with a fresh value; the previous contents are never copied. |
+
+Treat ordinary bound parameters as read-only. Mutating one changes only the
+transactor's private argument and that mutation carries into later attempts;
+it does not update the caller's object.
+
+In-place construction happens before each attempt, so a successful query that
+finds no values still replaces stale output with an empty value.
+
+Prefer an ordinary return value when the callback produces one new value.
+Staging is useful for output parameters or several existing local values.
+
+```cpp
+// Recompute a D4N bucket's cached-byte count without counting a replay twice.
+std::uint64_t cached_bytes = 0;
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& bytes, std::string_view bucket_id) {
+  bytes = 0;
+
+  for (const auto& block :
+       lfdb::scan<CacheBlock>(txn, object_range(bucket_id)) |
+         std::views::values) {
+    bytes += block.size;
+  }
+}, lfdb::staged(cached_bytes), bucket_id);
+```
+
+If you declare a proxy ahead of time, move it into the transactor because it
+represents exactly one invocation's staging state:
+
+```cpp
+// Rebuild a D4N block listing without copying its previous contents.
+std::vector<CacheBlock> blocks;
+auto blocks_prx = lfdb::staged(blocks, std::in_place);
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& blocks, std::string_view bucket_id) {
+  for (auto block : read_blocks(txn, bucket_id)) {
+    blocks.push_back(std::move(block));
+  }
+}, std::move(blocks_prx), bucket_id);
+```
+
+The proxy covers assignment, `+=`, common sequence updates, and
+`insert_or_assign()`; use `get_target()` for an uncommon operation. Mutating
+operations deliberately return no iterator or reference into attempt-local
+storage.
+
+Gotchas:
+
+- An ordinarily staged target must be copy-constructible; an in-place target
+  must be default-initializable. Both must be nothrow move-assignable, alive for
+  the call, and not accessed concurrently. Binding the same target more than
+  once is rejected with an exception; overlapping targets are also invalid.
+
+- Accept the proxy by lvalue reference (`auto& output`, as above). Do not
+  capture and mutate the original target or retain the proxy after the callback.
+  Any pointer, reference, or iterator obtained through `get_target()` is
+  attempt-local and must not escape the callback.
+
+- Staging protects only the bound C++ value. Logging, I/O, other captured state,
+  and non-idempotent database writes after `commit_unknown_result` still need
+  their own replay-safe design.
+
+Any outcome without a confirmed commit leaves the target unchanged. An ordinary
+transactor throws on retry exhaustion; `with_result` reports it with
+`committed == false`.
 
 Use `with_result` when application code needs to report or resume after retry
 exhaustion. The transaction body must return `void` because the result describes
@@ -393,10 +475,11 @@ singleton keys, and explicit open/closed boundaries.
 | Read directly into a chosen container type | `lfdb::collect<T, AssocT>(dbh, query)` | `AssocT` | Keeps materialization explicit when the caller wants a map or custom container. |
 | Process very large result sets | `lfdb::blocks<T>(dbh, query)` | generator of containers | Reads block-at-a-time to avoid one oversized, aging transaction. |
 | Select everything under one key prefix | `q::prefix(prefix)` | `lfdb::select` | Handles FDB prefix successor rules without hand-built byte bounds. |
-| Select an explicit half-open key interval | `q::between(begin, end)` | `lfdb::select` | Matches the usual FoundationDB `[begin, end)` range shape. |
+| Select an explicit half-open key interval | `q::between(lower, upper)` | `lfdb::select` | Matches the usual FoundationDB `[lower, upper)` range shape. |
 | Combine or subtract selections | `q::intersection()`, `q::set_union()`, `q::difference()` | query expression or selector | Lets the query compiler normalize intervals before execution. |
 | Add an explicit conflict check | `lfdb::mark_conflict_read(txn, query)` | `void` | Records transaction correctness dependencies that ordinary operations did not express. |
 | Run several dependent operations atomically | `lfdb::make_transactor(dbh)` | callable transaction runner | Replays retryable transactions while keeping user code explicit. |
+| Publish local output after a replayable transaction | `lfdb::staged(output)` | callback proxy | Prevents retries from applying the same local mutation more than once. |
 
 ### Key Selectors
 
@@ -548,6 +631,36 @@ q::for_each_interval(public_keys, [](const lfdb::select& interval) {
   inspect(interval);
 });
 ```
+
+Most callers only need to ask about the selection, not materialize its
+canonical intervals. The relationship predicates work directly with composed
+expressions:
+
+```cpp
+const auto objects = q::prefix("bucket/objects/");
+const auto hidden = q::prefix("bucket/objects/.hidden/");
+const auto visible = q::difference(objects, hidden);
+const auto page = q::between("bucket/objects/a", "bucket/objects/z");
+
+if (q::contains(visible, object_key)) {
+  load_object(object_key);
+}
+
+if (q::intersects(visible, page)) {
+  read_page(q::intersection(visible, page));
+}
+
+assert(q::encloses(objects, visible));
+assert(q::is_disjoint(hidden, visible));
+```
+
+`q::is_empty_expression()` answers whether an expression selects no ordinary
+FoundationDB keys. `q::interval_count()` instead counts the canonical,
+nonoverlapping intervals an expression emits; use it only when the count itself
+is needed. These predicates are `constexpr` and can participate in constant
+evaluation when the expression's value types permit it. Complements and
+unbounded expressions are still interpreted relative to FoundationDB's
+ordinary keyspace.
 
 ### Prefix Cursors
 

@@ -7,6 +7,7 @@
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/container_ios.h"
 #include "mon/MonClient.h"
 
 #include "ClusterWatcher.h"

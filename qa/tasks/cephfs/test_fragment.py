@@ -400,6 +400,11 @@ class TestFragmentation(CephFSTestCase):
 
         self.assertEqual(self.get_merges(), 0)
 
+        # flush buffered writes before snapshotting. otherwise the (kernel)
+        # client flushes a capsnap per snapshot, each cow'ing a separate
+        # snapped dentry, which doubles the snap items and splits the dir.
+        self.mount_a.run_shell(["sync"])
+
         self.mount_a.run_shell(["mkdir", "splitdir/.snap/snap_a"])
         self.mount_a.run_shell(["mkdir", "splitdir/.snap/snap_b"])
         self.mount_a.run_shell(["rm", "-f", run.Raw("splitdir/file*")])

@@ -769,6 +769,10 @@ def test_flush_empty_creates_empty_object(s3_client, logging_type):
     try:
         assert create_bucket_with_logging(s3_client, source_bucket, log_bucket, logging_type)
 
+        # The first log object will contain the record for REST.PUT.LOGGING
+        output, ret = admin(['bucket', 'logging', 'flush', '--bucket', source_bucket])
+        assert ret == 0, f"Flush failed with return code {ret}"
+
         output, ret = admin(['bucket', 'logging', 'flush', '--bucket', source_bucket])
         assert ret == 0, f"Flush failed with return code {ret}"
         assert output.strip()

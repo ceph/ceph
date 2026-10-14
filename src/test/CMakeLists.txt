@@ -160,10 +160,8 @@ set(bench_log_srcs
 add_executable(ceph_bench_log
   ${bench_log_srcs}
   )
-target_link_libraries(ceph_bench_log global pthread ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-if(NOT WIN32)
-  target_link_libraries(ceph_bench_log rt)
-endif()
+target_link_libraries(ceph_bench_log global pthread ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}
+  ${RT_LIBRARY})
 
 if(WITH_SYSTEMD)
   add_executable(ceph_bench_journald_logger
@@ -617,17 +615,15 @@ endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 
-if(StdFilesystem_FOUND)
-  add_executable(ceph_test_admin_socket_output
-    test_admin_socket_output.cc
-    admin_socket_output.cc
-    admin_socket_output_tests.cc)
-  target_link_libraries(ceph_test_admin_socket_output
-    ceph-common StdFilesystem::filesystem)
-  install(TARGETS
-    ceph_test_admin_socket_output
-    DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
+add_executable(ceph_test_admin_socket_output
+  test_admin_socket_output.cc
+  admin_socket_output.cc
+  admin_socket_output_tests.cc)
+target_link_libraries(ceph_test_admin_socket_output
+  ceph-common)
+install(TARGETS
+  ceph_test_admin_socket_output
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 #make check starts here
 

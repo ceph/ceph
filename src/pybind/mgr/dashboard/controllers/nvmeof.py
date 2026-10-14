@@ -2667,6 +2667,50 @@ else:
             )
 
         @NvmeofCLICommand(
+            "nvmeof connection get_extended_io_statistics",
+            model.ConnectionExtendedIOStatistics,
+            success_message_template="Please use JSON format to see the statistics"
+        )
+        @EndpointDoc(
+            "Get extended IO statistics",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN", True, None),
+                "host_nqn": Param(str, "NVMeoF host NQN", True, None),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+                "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
+                "verbose_statistics_mode": Param(bool,
+                                                 "Enable verbose per-bucket statistics",
+                                                 True, False),
+            },
+        )
+        @convert_to_model(model.ConnectionExtendedIOStatistics)
+        @handle_nvmeof_error
+        def get_extended_io_stats(
+            self,
+            nqn: Optional[str] = None,
+            host_nqn: Optional[str] = None,
+            gw_group: Optional[str] = None,
+            server_address: Optional[str] = None,
+            traddr: Optional[str] = None,
+            verbose_statistics_mode: Optional[bool] = False
+        ):
+            server_address = resolve_nvmeof_server_address(
+                server_address=server_address,
+                traddr=traddr
+            )
+            return NVMeoFClient(
+                gw_group=gw_group,
+                server_address=server_address
+            ).stub.get_connection_extended_io_statistics(
+                NVMeoFClient.pb2.get_connection_extended_io_statistics_req(
+                    subsystem_nqn=nqn,
+                    host_nqn=host_nqn,
+                    reset=False,
+                    verbose=verbose_statistics_mode)
+            )
+
+        @NvmeofCLICommand(
             "nvmeof connection reset_io_statistics",
             model.ConnectionIOStatistics,
             success_message_template=(
@@ -2704,6 +2748,46 @@ else:
                 NVMeoFClient.pb2.get_connection_io_statistics_req(subsystem_nqn=nqn,
                                                                   host_nqn=host_nqn,
                                                                   reset=True)
+            )
+
+        @NvmeofCLICommand(
+            "nvmeof connection reset_extended_io_statistics",
+            model.ConnectionExtendedIOStatistics,
+            success_message_template=(
+                "Resetting IO statistics: Successful"
+            )
+        )
+        @EndpointDoc(
+            "Reset the IO statistics",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN", True, None),
+                "host_nqn": Param(str, "NVMeoF host NQN", True, None),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+                "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
+            },
+        )
+        @convert_to_model(model.ConnectionExtendedIOStatistics)
+        @handle_nvmeof_error
+        def reset_extended_io_stats(
+            self,
+            nqn: Optional[str] = None,
+            host_nqn: Optional[str] = None,
+            gw_group: Optional[str] = None,
+            server_address: Optional[str] = None,
+            traddr: Optional[str] = None
+        ):
+            server_address = resolve_nvmeof_server_address(
+                server_address=server_address,
+                traddr=traddr
+            )
+            return NVMeoFClient(
+                gw_group=gw_group,
+                server_address=server_address
+            ).stub.get_connection_extended_io_statistics(
+                NVMeoFClient.pb2.get_connection_extended_io_statistics_req(subsystem_nqn=nqn,
+                                                                           host_nqn=host_nqn,
+                                                                           reset=True)
             )
 
     @UIRouter('/nvmeof', Scope.NVME_OF)

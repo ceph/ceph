@@ -70,19 +70,19 @@ LogMissingRequest::with_pg_interruptible(
   LOG_PREFIX(LogMissingRequest::with_pg_interruptible);
   DEBUGI("{}: pg present", *this);
 
-  // acquire throttle BEFORE entering exclusive process stage
-  // shared with RepRequest -- don't block it while waiting for slot
-  // uses immediate class so wait is instantaneous (high_priority queue)
-  auto throttle = co_await interruptor::make_interruptible(
+  // enter process first -- ordering is preserved by the pipeline;
+  // taking the throttle before process causes out-of-order log entries
+  // (https://tracker.ceph.com/issues/80205)
+  co_await this->template enter_stage<interruptor>(
+    repop_pipeline(*pg).process);
+
+   auto throttle = co_await interruptor::make_interruptible(
     shard_services.get_throttle(
       scheduler::params_t{
         1,
         static_cast<unsigned>(req->get_priority()),
         0,
         SchedulerClass::immediate}));
-
-  co_await this->template enter_stage<interruptor>(
-    repop_pipeline(*pg).process);
 
   co_await interruptor::make_interruptible(
   this->template with_blocking_event<

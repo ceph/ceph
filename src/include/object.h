@@ -138,17 +138,7 @@ struct formatter<snapid_t> {
 
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
-  template <typename FormatContext>
-  auto format(const snapid_t& snp, FormatContext& ctx) const
-  {
-    if (snp == CEPH_NOSNAP) {
-      return fmt::format_to(ctx.out(), "head");
-    }
-    if (snp == CEPH_SNAPDIR) {
-      return fmt::format_to(ctx.out(), "snapdir");
-    }
-    return fmt::format_to(ctx.out(), FMT_COMPILE("{:x}"), snp.val);
-  }
+  auto format(const snapid_t& snp, format_context& ctx) const -> format_context::iterator;
 };
 } // namespace fmt
 

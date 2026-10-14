@@ -3452,10 +3452,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->manifest = manifest;
   target->state = state;
   RGWObjState* current_state = target->state;
-  if (!target->obj.key.instance.empty()) {
+  RGWObjState no_current_version;
+  if (!target->obj.key.instance.empty() || is_olh) {
     r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
     if (r == -ENOENT) {
-      current_state = target->state;
+      current_state = &no_current_version;
     } else if (r < 0) {
       return r;
     }
@@ -3906,7 +3907,7 @@ public:
         // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
         if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
             !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
-          std::vector<size_t> parts_len;
+          std::vector<uint64_t> parts_len;
           int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
                                                               parts_len);
           if (r < 0) {
@@ -5713,7 +5714,7 @@ int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &
   // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
   if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
       !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
 							parts_len);
     if (r < 0) {

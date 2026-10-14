@@ -97,17 +97,33 @@ Examples
 --------
 
 
-Hardware Health Status Summary 
+Hardware Health Status Summary
 ______________________________
 
 .. prompt:: bash # auto
 
   # ceph orch hardware status
-  +------------+---------+-----+-----+--------+-------+------+
-  |    HOST    | STORAGE | CPU | NET | MEMORY | POWER | FANS |
-  +------------+---------+-----+-----+--------+-------+------+
-  |   node-10  |    ok   |  ok |  ok |   ok   |   ok  |  ok  |
-  +------------+---------+-----+-----+--------+-------+------+
+  +---------+---------+---------+-----+-----+--------+-------+------+
+  |   HOST  |    SN   | STORAGE | CPU | NET | MEMORY | POWER | FANS |
+  +---------+---------+---------+-----+-----+--------+-------+------+
+  | node-10 | FR8Y5X3 |    ok   |  ok |  ok |   ok   |   ok  |  ok  |
+  +---------+---------+---------+-----+-----+--------+-------+------+
+
+
+Memory Report
+_____________
+
+.. prompt:: bash # auto
+
+  # ceph orch hardware status node-10 --category memory
+  +---------+--------+---------+--------+---------+
+  |   HOST  | SYS_ID |   NAME  | STATUS |  STATE  |
+  +---------+--------+---------+--------+---------+
+  | node-10 |   1    | DIMM A1 |   OK   | Enabled |
+  | node-10 |   1    | DIMM A2 |   OK   | Enabled |
+  | node-10 |   1    | DIMM B1 |   OK   | Enabled |
+  | node-10 |   1    | DIMM B2 |   OK   | Enabled |
+  +---------+--------+---------+--------+---------+
 
 
 Storage Devices Report
@@ -115,28 +131,87 @@ ______________________
 
 .. prompt:: bash # auto
 
-  # ceph orch hardware status IBM-Ceph-1 --category storage
-  +------------+--------------------------------------------------------+------------------+----------------+----------+----------------+--------+---------+
-  |    HOST    |                          NAME                          |      MODEL       |      SIZE      | PROTOCOL |       SN       | STATUS |  STATE  |
-  +------------+--------------------------------------------------------+------------------+----------------+----------+----------------+--------+---------+
-  |   node-10  | Disk 8 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT99QLL    |   OK   | Enabled |
-  |   node-10  | Disk 10 in Backplane 1 of Storage Controller in Slot 2 | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT98ZYX    |   OK   | Enabled |
-  |   node-10  | Disk 11 in Backplane 1 of Storage Controller in Slot 2 | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT98ZWB    |   OK   | Enabled |
-  |   node-10  | Disk 9 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT98ZC9    |   OK   | Enabled |
-  |   node-10  | Disk 3 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT9903Y    |   OK   | Enabled |
-  |   node-10  | Disk 1 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT9901E    |   OK   | Enabled |
-  |   node-10  | Disk 7 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT98ZQJ    |   OK   | Enabled |
-  |   node-10  | Disk 2 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT99PA2    |   OK   | Enabled |
-  |   node-10  | Disk 4 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT99PFG    |   OK   | Enabled |
-  |   node-10  | Disk 0 in Backplane 0 of Storage Controller in Slot 2  | MZ7L33T8HBNAAD3  | 3840755981824  |   SATA   | S6M5NE0T800539 |   OK   | Enabled |
-  |   node-10  | Disk 1 in Backplane 0 of Storage Controller in Slot 2  | MZ7L33T8HBNAAD3  | 3840755981824  |   SATA   | S6M5NE0T800554 |   OK   | Enabled |
-  |   node-10  | Disk 6 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT98ZER    |   OK   | Enabled |
-  |   node-10  | Disk 0 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT98ZEJ    |   OK   | Enabled |
-  |   node-10  | Disk 5 in Backplane 1 of Storage Controller in Slot 2  | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT99QMH    |   OK   | Enabled |
-  |   node-10  |           Disk 0 on AHCI Controller in SL 6            |  MTFDDAV240TDU   |  240057409536  |   SATA   |  22373BB1E0F8  |   OK   | Enabled |
-  |   node-10  |           Disk 1 on AHCI Controller in SL 6            |  MTFDDAV240TDU   |  240057409536  |   SATA   |  22373BB1E0D5  |   OK   | Enabled |
-  +------------+--------------------------------------------------------+------------------+----------------+----------+----------------+--------+---------+
+  # ceph orch hardware status node-10 --category storage
+  +---------+--------+-------------------------------------------------------+------------------+----------------+----------+----------------+------+----+--------+---------+
+  |   HOST  | SYS_ID |                          NAME                         |      MODEL       |      SIZE      | PROTOCOL |       SN       | SLOT | FW | STATUS |  STATE  |
+  +---------+--------+-------------------------------------------------------+------------------+----------------+----------+----------------+------+----+--------+---------+
+  | node-10 |   1    | Disk 8 in Backplane 1 of Storage Controller in Slot 2 | ST20000NM008D-3D | 20000588955136 |   SATA   |    ZVT99QLL    |  8   |    |   OK   | Enabled |
+  | node-10 |   1    | Disk 0 in Backplane 0 of Storage Controller in Slot 2 | MZ7L33T8HBNAAD3  | 3840755981824  |   SATA   | S6M5NE0T800539 |  0   |    |   OK   | Enabled |
+  +---------+--------+-------------------------------------------------------+------------------+----------------+----------+----------------+------+----+--------+---------+
 
+
+Processors Report
+_________________
+
+.. prompt:: bash # auto
+
+  # ceph orch hardware status node-10 --category processors
+  +---------+--------+--------------+--------------------------------------------+-------+---------+--------+---------+
+  |   HOST  | SYS_ID |     NAME     |                   MODEL                    | CORES | THREADS | STATUS |  STATE  |
+  +---------+--------+--------------+--------------------------------------------+-------+---------+--------+---------+
+  | node-10 |   1    | cpu.socket.1 | Intel(R) Xeon(R) Silver 4314 CPU @ 2.40GHz |   16  |    32   |   OK   | Enabled |
+  | node-10 |   1    | cpu.socket.2 | Intel(R) Xeon(R) Silver 4314 CPU @ 2.40GHz |   16  |    32   |   OK   | Enabled |
+  +---------+--------+--------------+--------------------------------------------+-------+---------+--------+---------+
+
+
+Network Devices Report
+______________________
+
+.. prompt:: bash # auto
+
+  # ceph orch hardware status node-10 --category network
+  +---------+--------+----------------------------------+-------+--------+---------+
+  |   HOST  | SYS_ID |               NAME               | SPEED | STATUS |  STATE  |
+  +---------+--------+----------------------------------+-------+--------+---------+
+  | node-10 |   1    | NIC in Slot 1 Port 1 Partition 1 | 10000 |   OK   | Enabled |
+  | node-10 |   1    |             eno8303              |  1000 |   OK   | Enabled |
+  +---------+--------+----------------------------------+-------+--------+---------+
+
+
+Power Supplies Report
+_____________________
+
+.. prompt:: bash # auto
+
+  # ceph orch hardware status node-10 --category power
+  +---------+------------+----+------------+-------------------------+--------------+--------+---------+
+  |   HOST  | CHASSIS_ID | ID |    NAME    |          MODEL          | MANUFACTURER | STATUS |  STATE  |
+  +---------+------------+----+------------+-------------------------+--------------+--------+---------+
+  | node-10 |     1      | 0  | PS1 Status | PWR SPLY,800W,RDNT,LTON |     DELL     |   OK   | Enabled |
+  | node-10 |     1      | 1  | PS2 Status | PWR SPLY,800W,RDNT,LTON |     DELL     |   OK   | Enabled |
+  +---------+------------+----+------------+-------------------------+--------------+--------+---------+
+
+
+Fans Report
+___________
+
+.. prompt:: bash # auto
+
+  # ceph orch hardware status node-10 --category fans
+  +---------+------------+----+--------------------+---------+-------+--------+---------+
+  |   HOST  | CHASSIS_ID | ID |        NAME        | READING | UNITS | STATUS |  STATE  |
+  +---------+------------+----+--------------------+---------+-------+--------+---------+
+  | node-10 |     1      | 0  | System Board Fan1A |   4800  |  RPM  |   OK   | Enabled |
+  | node-10 |     1      | 1  | System Board Fan1B |   4680  |  RPM  |   OK   | Enabled |
+  | node-10 |     1      | 2  | System Board Fan2A |   4920  |  RPM  |   OK   | Enabled |
+  | node-10 |     1      | 3  | System Board Fan2B |   4560  |  RPM  |   OK   | Enabled |
+  +---------+------------+----+--------------------+---------+-------+--------+---------+
+
+
+Temperature Sensors Report
+__________________________
+
+.. prompt:: bash # auto
+
+  # ceph orch hardware status node-10 --category temperatures
+  +---------+------------+----+---------------------------+---------+-------+--------+---------+
+  |   HOST  | CHASSIS_ID | ID |            NAME           | READING | UNITS | STATUS |  STATE  |
+  +---------+------------+----+---------------------------+---------+-------+--------+---------+
+  | node-10 |     1      | 0  |  System Board Inlet Temp  |    24   |  Cel  |   OK   | Enabled |
+  | node-10 |     1      | 1  |         CPU1 Temp         |    47   |  Cel  |   OK   | Enabled |
+  | node-10 |     1      | 2  |         CPU2 Temp         |    45   |  Cel  |   OK   | Enabled |
+  | node-10 |     1      | 3  | System Board Exhaust Temp |    38   |  Cel  |   OK   | Enabled |
+  +---------+------------+----+---------------------------+---------+-------+--------+---------+
 
 
 Firmware Details
@@ -149,11 +224,11 @@ ________________
   |    HOST    |                                 COMPONENT                                  |                             NAME                             |         DATE         |   VERSION   | STATUS |
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
   |   node-10  |               current-107649-7.03__raid.backplane.firmware.0               |                         Backplane 0                          | 2022-12-05T00:00:00Z |     7.03    |   OK   |
-  
-  
+
+
   ... omitted output ...
-  
-  
+
+
   |   node-10  |               previous-25227-6.10.30.20__idrac.embedded.1-1                |             Integrated Remote Access Controller              |      00:00:00Z       |  6.10.30.20 |   OK   |
   +------------+----------------------------------------------------------------------------+--------------------------------------------------------------+----------------------+-------------+--------+
 
@@ -164,11 +239,11 @@ _________________________________
 .. prompt:: bash # auto
 
   # ceph orch hardware status --category criticals
-  +------------+-----------+------------+----------+-----------------+
-  |    HOST    | COMPONENT |    NAME    |  STATUS  |      STATE      |
-  +------------+-----------+------------+----------+-----------------+
-  |   node-10  |   power   | PS2 Status | critical |    unplugged    |
-  +------------+-----------+------------+----------+-----------------+
+  +---------+--------+-----------+------------+----------+-----------+
+  |   HOST  | SYS_ID | COMPONENT |    NAME    |  STATUS  |   STATE   |
+  +---------+--------+-----------+------------+----------+-----------+
+  | node-10 |   1    |   power   | PS2 Status | critical | unplugged |
+  +---------+--------+-----------+------------+----------+-----------+
 
 
 For Developers

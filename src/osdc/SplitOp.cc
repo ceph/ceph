@@ -9,6 +9,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <algorithm>
+
 #include "osdc/SplitOp.h"
 #include "osdc/Objecter.h"
 #include "osd/osd_types.h"
@@ -172,8 +174,9 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
  * @param op Operation descriptor containing offset and length
  * @param sparse Whether this is a sparse read operation
  * @param ops_index Index of the operation in the operation list
+ * @param single_op True if the whole op will be sent as a single op
  */
-void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
+void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
   auto &target = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
@@ -206,7 +209,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
       break;
     }
   }
-  bool primary_required = count > 1 || orig_op->objver || has_non_read_ops;
+  bool primary_required = !single_op || orig_op->objver || has_non_read_ops;
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -249,29 +252,27 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 /**
  * @brief Initialize reference_sub_read to a random valid OSD.
  *
- * Counts valid OSDs in the acting set and picks a random acting index.
- * Must be called after _calc_target() populates the acting set.
+ * Collects the valid acting indices and picks one at random. Must be
+ * called after _calc_target() populates the acting set.
  */
 void ReplicaSplitOp::init_reference_sub_read() {
   auto &target = orig_op->target;
-  
-  // Count valid OSDs in the acting set
-  int valid_osd_count = 0;
+
   for (size_t i = 0; i < target.acting.size(); i++) {
     int direct_osd = target.acting[i];
     if (objecter.osdmap->exists(direct_osd)) {
-      valid_osd_count++;
+      valid_indices.push_back(i);
     }
   }
-  
-  if (valid_osd_count < 2) {
+
+  if (valid_indices.size() < 2) {
     abort = true;
     ldout(cct, DBG_LVL) << __func__ << " ABORT: Not enough valid OSDs" << dendl;
     return;
   }
-  
-  // Pick a random valid acting index
-  reference_sub_read = rand() % valid_osd_count;
+
+  reference_valid_index = rand() % valid_indices.size();
+  reference_sub_read = valid_indices[reference_valid_index];
 }
 
 /**
@@ -288,6 +289,10 @@ std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_spars
   bufferlist bl_out;
 
   for (auto && [acting_index, sr] : sub_reads) {
+    // Ops with fewer chunks than sub-reads do not use every sub-read.
+    if (!sr.details.contains(ops_index)) {
+      continue;
+    }
     for (auto [off, len] : *sr.details.at(ops_index).e) {
       extents_out.insert(off, len);
     }
@@ -307,6 +312,9 @@ std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_spars
  */
 void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
   for (auto && [acting_index, sr] : sub_reads) {
+    if (!sr.details.contains(ops_index)) {
+      continue;
+    }
     bl_out.append(sr.details.at(ops_index).bl);
   }
 }
@@ -325,25 +333,16 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) con
  * @param op Operation descriptor containing offset and length
  * @param sparse Whether this is a sparse read operation
  * @param ops_index Index of the operation in the operation list
+ * @param single_op True if the whole op will be sent as a single op
  */
-void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
+void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
 
   auto &target = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
 
-  std::set<int> osds;
-  for (int direct_osd : target.acting) {
-    if (objecter.osdmap->exists(direct_osd)) {
-      osds.insert(direct_osd);
-    }
-  }
-
-  if (osds.size() < 2) {
-    ldout(cct, DBG_LVL) << __func__ <<" ABORT: No OSDs" << dendl;
-    abort = true;
-    return;
-  }
+  // init_reference_sub_read() aborts on < 2 valid OSDs; checked by create().
+  ceph_assert(valid_indices.size() >= 2);
 
   uint64_t replica_min_shard_read_size
     = objecter.get_min_split_replica_read_size();
@@ -352,13 +351,26 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t length = op.op.extent.length;
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
-                                   osds.size());
-  uint64_t chunk_size = p2roundup(length / slice_count, REPLICA_MIN_SPLIT_SIZE);
-  
-  // Use reference_sub_read (set in constructor) as the starting shard
-  // This provides load balancing while ensuring reference_sub_read is always set
-  for (unsigned i = reference_sub_read; length > 0; i = (i + 1 == osds.size()) ? 0 : i + 1) {
-    int acting_index = i;
+                                   static_cast<uint64_t>(valid_indices.size()));
+  // A multi-op request may carry a read shorter than the minimum split
+  // size; serve it whole from the reference OSD.
+  slice_count = std::max<uint64_t>(slice_count, 1);
+  // Round up, otherwise chunk_count can exceed slice_count and reuse a
+  // sub-read.
+  uint64_t chunk_size = p2roundup(div_round_up(length, slice_count),
+                                  REPLICA_MIN_SPLIT_SIZE);
+  uint64_t chunk_count = div_round_up(length, chunk_size);
+
+  // Window starts at reference_sub_read for load balancing; chunks are
+  // assigned in ascending acting-index order to match assemble_buffer_read().
+  std::vector<int> chosen_indices;
+  for (uint64_t i = 0; i < chunk_count; i++) {
+    chosen_indices.push_back(
+      valid_indices[(reference_valid_index + i) % valid_indices.size()]);
+  }
+  std::sort(chosen_indices.begin(), chosen_indices.end());
+
+  for (int acting_index : chosen_indices) {
     if (!sub_reads.contains(acting_index)) {
       sub_reads.emplace(acting_index, orig_op->ops.size() + 1);
     }
@@ -375,6 +387,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     offset += len;
     length -= len;
   }
+  ceph_assert(length == 0);
 }
 
 #undef dout_prefix
@@ -628,14 +641,14 @@ void SplitOp::protect_torn_reads() {
   }
 }
 
-void SplitOp::init(OSDOp &op, int ops_index) {
+void SplitOp::init(OSDOp &op, int ops_index, bool single_op) {
   switch (op.op.op) {
   case CEPH_OSD_OP_SPARSE_READ: {
-    init_read(op, true, ops_index);
+    init_read(op, true, ops_index, single_op);
     break;
   }
   case CEPH_OSD_OP_READ: {
-    init_read(op, false, ops_index);
+    init_read(op, false, ops_index, single_op);
     break;
   }
   default: {
@@ -1010,7 +1023,9 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  // Populate the target, to extract the acting set from it.
+  // Populate the target, to extract the acting set from it. _calc_target()
+  // short-circuits once pgid is set.
+  const auto saved_target = target;
   target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
   objecter._calc_target(&op->target, op);
 
@@ -1020,15 +1035,16 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   if (split_read->reference_sub_read == -1) {
     split_read->abort = true;
   }
-  
+
   if (split_read->abort) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORTED after init_reference_sub_read" << dendl;
+    target = saved_target;
     return false;
   }
 
   // STAGE 4: Initialize sub-operations (may set abort if problems detected)
   for (unsigned i = 0; i < op->ops.size(); ++i) {
-    split_read->init( op->ops[i], i);
+    split_read->init( op->ops[i], i, single_op);
     if (split_read->abort) {
       break;
     }
@@ -1037,6 +1053,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // STAGE 5: Final abort check - discard split op if problems were detected
   if (split_read->abort) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORTED 2" << dendl;
+    target = saved_target;
     return false;
   }
 
@@ -1044,6 +1061,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // fails, then this will catch the cases (albeit less efficiently).
   if (split_read->sub_reads.size() <= 1) {
     ldout(cct, DBG_LVL) << __func__ <<" reusing original op - inefficient" << dendl;
+    target = saved_target;
     prepare_single_op(op, objecter, cct);
     split_read->abort = true; // Required for destructor.
     return false;
@@ -1085,7 +1103,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     }
     st.osd = st.acting[index];
 
-    target.used_replica = (st.acting_primary != st.osd);
+    st.used_replica = (st.acting_primary != st.osd);
 
     objecter._op_submit(sub_op, sul, &tids[i++]);
 

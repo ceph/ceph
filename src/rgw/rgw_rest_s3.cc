@@ -199,6 +199,14 @@ int get_encryption_defaults(req_state *s)
     }
   }
   if (meta_sse_group & SSE_C_GROUP) {
+    /*
+     * checked here so part uploads are covered; they never reach the
+     * encrypt path that gates a new object write
+     */
+    int r = rgw_s3_check_sse_c_blocked(s);
+    if (r < 0) {
+      return r;
+    }
     ldpp_dout(s, 20) << "get_encryption_defaults: no defaults cause sse-c forced"
 	<< dendl;
     return 0;			// sse-c: no defaults here
@@ -4833,6 +4841,16 @@ int RGWCompleteMultipart_ObjStore_S3::verify_encryption(map<string, bufferlist>&
 {
   // s3 only needs the sse-c key here for checksummed uploads; verify it whenever it's sent
   const std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
+  if (stored_mode.starts_with("SSE-C")) {
+    /*
+     * an sse-c multipart upload may have started before the bucket
+     * blocked sse-c; refuse to complete it
+     */
+    int res = rgw_s3_check_sse_c_blocked(s);
+    if (res < 0) {
+      return res;
+    }
+  }
   if (stored_mode.starts_with("SSE-C") &&
       cksum_type == rgw::cksum::Type::none &&
       !s->info.env->exists_prefix("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_")) {
@@ -6197,18 +6215,8 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
 #ifdef WITH_RADOSGW_LANCEDB
   if (enable_s3vector && is_s3vector_op(s)) {
     ldpp_dout(s, 20) << "INFO: s3vector op: " << s->init_state.url_bucket << dendl;
-    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-    int ret;
-    bufferlist data;
-    std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
-    if (ret < 0) {
-      return nullptr;
-    }
-    if (!s->info.args.exists("PayloadHash")) {
-      const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(data.to_str());
-      s->info.args.append("PayloadHash", payload_hash);
-    }
-    return new RGWHandler_REST_s3Vector(auth_registry, data);
+    // the payload is read when the handler is initialized
+    return new RGWHandler_REST_s3Vector(auth_registry);
   }
 #endif // WITH_RADOSGW_LANCEDB
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);

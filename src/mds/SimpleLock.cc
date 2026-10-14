@@ -16,6 +16,7 @@
 
 #include "SimpleLock.h"
 #include "Mutation.h"
+#include "include/container_ios.h"
 
 SimpleLock::unstable_bits_t *SimpleLock::more() const {
   if (!_unstable)

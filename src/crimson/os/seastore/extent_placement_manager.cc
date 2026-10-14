@@ -225,13 +225,20 @@ void ExtentPlacementManager::init(
         cold_tier_generations);
   ceph_assert(dynamic_max_rewrite_generation > MIN_REWRITE_GENERATION);
 
-  auto main_bw_limit = crimson::common::get_conf<
-    Option::size_t>("seastore_hot_backend_bw_throttle");
-  auto secondary_bw_limit = crimson::common::get_conf<
-    Option::size_t>("seastore_cold_backend_bw_throttle");
+  auto cache_bw_limit = crimson::common::get_conf<
+    Option::size_t>("seastore_cache_device_bw_throttle");
+  auto data_bw_limit = crimson::common::get_conf<
+    Option::size_t>("seastore_data_device_bw_throttle");
 
-  token_buckets.emplace_back(std::make_unique<TokenBucket>(main_bw_limit));
-  token_buckets.back()->start();
+  if (cold_cleaner) {
+    token_buckets.emplace_back(std::make_unique<TokenBucket>(cache_bw_limit));
+    token_buckets.back()->start();
+    token_buckets.emplace_back(std::make_unique<TokenBucket>(data_bw_limit));
+    token_buckets.back()->start();
+  } else {
+    token_buckets.emplace_back(std::make_unique<TokenBucket>(data_bw_limit));
+    token_buckets.back()->start();
+  }
 
   if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
     DEBUG("initiating SegmentCleaner");
@@ -288,8 +295,6 @@ void ExtentPlacementManager::init(
   }
 
   if (cold_cleaner) {
-    token_buckets.emplace_back(std::make_unique<TokenBucket>(secondary_bw_limit));
-    token_buckets.back()->start();
     if (cold_cleaner->get_backend_type() == backend_type_t::SEGMENTED) {
       auto cold_segment_cleaner = static_cast<SegmentCleaner*>(cold_cleaner.get());
       for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {

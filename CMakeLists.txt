@@ -294,7 +294,7 @@ if(WITH_RBD AND LINUX)
 endif()
 
 # libnbd
-if(WITH_RBD AND NOT WIN32)
+if(WITH_RBD AND NOT WIN32 AND NOT APPLE AND NOT FREEBSD)
   find_package(libnbd 1.0 REQUIRED)
   set(HAVE_LIBNBD ${LIBNBD_FOUND})
 endif()
@@ -324,14 +324,8 @@ CMAKE_DEPENDENT_OPTION(WITH_RBD_MIGRATION_FORMAT_QCOW_V1
   "Enable librbd QCOW v1 migration format support" ON
   "WITH_RBD" OFF)
 
-CMAKE_DEPENDENT_OPTION(WITH_RBD_RWL "Enable librbd persistent write back cache" OFF
-  "WITH_RBD" OFF)
-
 CMAKE_DEPENDENT_OPTION(WITH_RBD_SSD_CACHE "Enable librbd persistent write back cache for SSDs" OFF
     "WITH_RBD" OFF)
-
-CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
-  "WITH_RBD_RWL" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_RBD_UBBD "Enable ubbd support for rbd device utility" OFF
     "WITH_RBD" OFF)
@@ -593,8 +587,10 @@ option(WITH_SYSTEM_RDKAFKA "build against system librdkafka instead of the bundl
 option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
-option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
+if(WITH_RADOSGW_DAOS)
+    message(WARNING "The DAOS SAL has been unmaintained and does not compile against DAOS libraries.")
+endif(WITH_RADOSGW_DAOS)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
 option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
 cmake_dependent_option(WITH_RADOSGW_STANDALONE "Standalone RADOS Gateway" ON WITH_RADOSGW_POSIX OFF)
@@ -602,7 +598,12 @@ option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
-option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ON)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|aarch64|arm64|ARM64|loongarch64)$")
+  set(WITH_RADOSGW_LANCEDB_DEFAULT ON)
+else()
+  set(WITH_RADOSGW_LANCEDB_DEFAULT OFF)
+endif()
+option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ${WITH_RADOSGW_LANCEDB_DEFAULT})
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
@@ -842,17 +843,9 @@ if(WITH_CRIMSON)
   list(APPEND BOOST_COMPONENTS timer)
 endif()
 
-if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
-  list(APPEND BOOST_COMPONENTS filesystem)
-endif()
-
 if(WITH_LIBCEPHFS OR WITH_FUSE)
   find_package(ICU REQUIRED COMPONENTS uc i18n)
   list(APPEND BOOST_COMPONENTS locale)
-endif()
-
-if(WITH_CEPHFS)
-  list(APPEND BOOST_COMPONENTS filesystem)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
@@ -892,6 +885,9 @@ else()
     add_compile_definitions(BOOST_USE_ASAN BOOST_USE_UCONTEXT)
   endif()
 endif()
+# Set tree-wide: the macro changes the type of bp::filesystem::path in inline
+# code, so a binary mixing both settings would be an ODR violation.
+add_compile_definitions(BOOST_PROCESS_USE_STD_FS)
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 if(WIN32 AND WITH_CATCH2)
   foreach(catch2_target Catch2 Catch2WithMain)
@@ -928,7 +924,6 @@ CMAKE_DEPENDENT_OPTION(WITH_MGR_ROOK_CLIENT "Enable the mgr's Rook support" ON
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
-find_package(StdFilesystem REQUIRED)
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)

@@ -1,3 +1,14 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # https://tracker.ceph.com/issues/76988
+      # ignore expected placement/apply failures when thrashing hosts/daemons
+      - CEPHADM_DAEMON_PLACE_FAIL
+      - CEPHADM_APPLY_SPEC_FAIL
+      # https://tracker.ceph.com/issues/75452
+      # ignore refresh warnings when thrashing hosts/daemons
+      - CEPHADM_REFRESH_FAILED
+
 tasks:
 - workunit:
     no_coverage_and_limits: true

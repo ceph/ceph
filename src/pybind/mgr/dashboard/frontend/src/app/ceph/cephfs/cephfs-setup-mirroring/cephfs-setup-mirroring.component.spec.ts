@@ -8,6 +8,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CEPHFS_TOKEN } from '~/app/shared/constants/mock';
 
 describe('CephfsSetupMirroringComponent', () => {
   let component: CephfsSetupMirroringComponent;
@@ -129,12 +130,12 @@ describe('CephfsSetupMirroringComponent', () => {
     });
 
     it('should be valid when filesystem and token are filled', () => {
-      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
       expect(component.setupForm.valid).toBe(true);
     });
 
     it('should be invalid when filesystem is missing', () => {
-      component.setupForm.setValue({ filesystem: '', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+      component.setupForm.setValue({ filesystem: '', token: CEPHFS_TOKEN });
       expect(component.setupForm.invalid).toBe(true);
     });
 
@@ -173,16 +174,13 @@ describe('CephfsSetupMirroringComponent', () => {
 
     it('should deploy service, enable mirror, create peer, and emit on success', () => {
       const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
-      component.setupForm.setValue({ filesystem: 'myfs', token: '  eyJrZXkiOiJ2YWx1ZSJ9  ' });
+      component.setupForm.setValue({ filesystem: 'myfs', token: ` ${CEPHFS_TOKEN} ` });
 
       component.onSetupMirroring();
 
       expect(cephServiceServiceMock.create).toHaveBeenCalledWith({ service_type: 'cephfs-mirror' });
       expect(cephfsServiceMock.enableMirror).toHaveBeenCalledWith('myfs');
-      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith(
-        'myfs',
-        'eyJrZXkiOiJ2YWx1ZSJ9'
-      );
+      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith('myfs', CEPHFS_TOKEN);
       expect(taskWrapperMock.wrapTaskAroundCall).toHaveBeenCalledWith(
         expect.objectContaining({
           task: expect.objectContaining({ name: 'cephfs/mirroring/setup' })
@@ -195,22 +193,19 @@ describe('CephfsSetupMirroringComponent', () => {
     it('should strip all whitespace from the token before creating the peer', () => {
       component.setupForm.setValue({
         filesystem: 'myfs',
-        token: '  eyJr\nZXkiOiJ2YWx1ZSJ9  '
+        token: `  ${CEPHFS_TOKEN}  `
       });
 
       component.onSetupMirroring();
 
-      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith(
-        'myfs',
-        'eyJrZXkiOiJ2YWx1ZSJ9'
-      );
+      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith('myfs', CEPHFS_TOKEN);
     });
 
     it('should reset isSubmitting on error without emitting', () => {
       const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
       const setErrorsSpy = jest.spyOn(component.setupForm, 'setErrors');
       taskWrapperMock.wrapTaskAroundCall.mockReturnValue(throwError(() => new Error('fail')));
-      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
 
       component.onSetupMirroring();
 
@@ -225,15 +220,12 @@ describe('CephfsSetupMirroringComponent', () => {
       cephfsServiceMock.createBootstrapPeer.mockReturnValue(
         throwError(() => new Error('import failed'))
       );
-      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
 
       component.onSetupMirroring();
 
       expect(cephfsServiceMock.enableMirror).toHaveBeenCalledWith('myfs');
-      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith(
-        'myfs',
-        'eyJrZXkiOiJ2YWx1ZSJ9'
-      );
+      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith('myfs', CEPHFS_TOKEN);
       expect(cephfsServiceMock.disableMirror).toHaveBeenCalledWith('myfs');
       expect(component.isSubmitting).toBe(false);
       expect(setErrorsSpy).toHaveBeenCalledWith({ cdSubmitButton: true });
@@ -249,7 +241,7 @@ describe('CephfsSetupMirroringComponent', () => {
       cephfsServiceMock.disableMirror.mockReturnValue(
         throwError(() => new Error('disable failed'))
       );
-      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
 
       component.onSetupMirroring();
 
@@ -259,7 +251,7 @@ describe('CephfsSetupMirroringComponent', () => {
     });
 
     it('should set isSubmitting to true before API call completes', () => {
-      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
 
       const submittingDuringCall: boolean[] = [];
       taskWrapperMock.wrapTaskAroundCall.mockImplementation(({ call }) => {
@@ -277,7 +269,7 @@ describe('CephfsSetupMirroringComponent', () => {
 
     it('should emit close and reset form', () => {
       const closeSpy = jest.spyOn(component.close, 'emit');
-      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
       component.isSubmitting = true;
 
       component.closeModal();

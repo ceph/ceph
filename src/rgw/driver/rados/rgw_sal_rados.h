@@ -433,7 +433,7 @@ class RadosStore : public StoreDriver {
     int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                             std::unique_ptr<VectorBucket>* bucket, optional_yield y) override;
     int list_vector_buckets(const DoutPrefixProvider* dpp,
-			     const rgw_owner& owner, const std::string& tenant,
+			     const rgw_owner& owner, const std::string& ns,
 			     const std::string& marker, const std::string& end_marker,
 			     uint64_t max, BucketList& listing,
 			     optional_yield y) override;
@@ -615,6 +615,7 @@ class RadosObject : public StoreObject {
     /* For rgw_admin.cc */
     RGWObjState& get_state() { return state; }
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
 
     /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
     virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,

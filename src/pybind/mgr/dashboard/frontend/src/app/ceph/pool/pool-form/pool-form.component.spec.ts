@@ -195,9 +195,9 @@ describe('PoolFormComponent', () => {
     const expectError = (redirected: boolean) => {
       navigationSpy.calls.reset();
       if (redirected) {
-        expect(() => component.authenticate()).toThrowError(DashboardNotFoundError);
+        expect(() => component.authenticate()).toThrow(DashboardNotFoundError);
       } else {
-        expect(() => component.authenticate()).not.toThrowError();
+        expect(() => component.authenticate()).not.toThrow();
       }
     };
 
@@ -206,7 +206,7 @@ describe('PoolFormComponent', () => {
     });
 
     it('navigates to Dashboard if not allowed', () => {
-      expect(() => component.authenticate()).toThrowError(DashboardNotFoundError);
+      expect(() => component.authenticate()).toThrow(DashboardNotFoundError);
     });
 
     it('throws error if user is not allowed', () => {

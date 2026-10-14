@@ -39,7 +39,7 @@ class DefaultImages(Enum):
     GRAFANA = _create_image('quay.io/ceph/grafana:12.3.1', 'grafana')
     HAPROXY = _create_image('quay.io/ceph/haproxy:2.3', 'haproxy')
     KEEPALIVED = _create_image('quay.io/ceph/keepalived:2.2.4', 'keepalived')
-    NVMEOF = _create_image('quay.io/ceph/nvmeof:1.9', 'nvmeof')
+    NVMEOF = _create_image('quay.io/ceph/nvmeof:2.0', 'nvmeof')
     SNMP_GATEWAY = _create_image(
         'docker.io/maxwo/snmp-notifier:v1.2.1', 'snmp_gateway'
     )
@@ -63,6 +63,9 @@ class DefaultImages(Enum):
         'samba_metrics',
     )
     NGINX = _create_image('quay.io/ceph/nginx:sclorg-nginx-126', 'nginx')
+    PUSHGATEWAY = _create_image(
+        'quay.io/prometheus/pushgateway:v1.11.3', 'pushgateway'
+    )
     OAUTH2_PROXY = _create_image(
         'quay.io/oauth2-proxy/oauth2-proxy:v7.6.0', 'oauth2_proxy'
     )
@@ -94,5 +97,6 @@ class NonCephImageServiceTypes(Enum):
     jaeger_collector = 'jaeger-collector'
     jaeger_query = 'jaeger-query'
     jaeger_agent = 'jaeger-agent'
+    pushgateway = 'pushgateway'
     samba = 'smb'
     oauth2_proxy = 'oauth2-proxy'

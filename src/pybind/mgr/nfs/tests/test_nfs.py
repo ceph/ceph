@@ -378,8 +378,7 @@ QOS_BLOCK {
                 "dir_chunk": 0
             }),
             RawBlock('NFSV4', values={
-                "recoverybackend": "rados_cluster",
-                "minor_versions": [1, 2]
+                "recoverybackend": "rados_cluster"
             }),
             RawBlock('RADOS_KV', values={
                 "pool": NFS_POOL_NAME,
@@ -409,7 +408,6 @@ NFS_CORE_PARAM {
 
         NFSv4 {
            RecoveryBackend = rados_cluster;
-           Minor_Versions = 1, 2;
         }
 
         RADOS_KV {
@@ -1270,6 +1268,181 @@ NFS_CORE_PARAM {
         assert export.clients[0].addresses == ["192.168.1.0/8"]
         assert export.cluster_id == self.cluster_id
 
+    def test_rotate_keys(self):
+        self._do_mock_test(self._do_test_rotate_keys)
+
+    def test_rotate_keys_all_entities(self):
+        self._do_mock_test(self._do_test_rotate_keys_all_entities)
+
+    def test_rotate_keys_rejects_foreign_entity(self):
+        self._do_mock_test(self._do_test_rotate_keys_rejects_foreign_entity)
+
+    def test_rotate_keys_requires_explicit_selection(self):
+        self._do_mock_test(self._do_test_rotate_keys_requires_explicit_selection)
+
+    def test_rotate_keys_rejects_both_selections(self):
+        self._do_mock_test(self._do_test_rotate_keys_rejects_both_selections)
+
+    def _do_test_rotate_keys(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs_rotate',
+            read_only=False,
+            squash='none',
+        )
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs_rotate2',
+            read_only=False,
+            squash='none',
+        )
+
+        entity = 'client.nfs.foo.myfs.86ca58ef'
+        rotated_key = 'rotated-export-key'
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return rotated_key
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[entity, 'nfs.foo.myfs.86ca58ef'],
+                key_type='aes256k',
+            )
+
+        check_mon.assert_called_once_with({
+            'prefix': 'auth rotate',
+            'entity': entity,
+            'key_type': 'aes256k',
+        })
+        redeploy.assert_not_called()
+        assert result['cluster_id'] == self.cluster_id
+        assert result['rotated'] == [entity]
+        assert result['export_keys'] == [entity]
+        assert result['daemon_keys'] == []
+        assert result['key_type'] == 'aes256k'
+        assert result['service_redeployed'] is False
+        assert sorted(result['updated_exports']) == ['/cephfs_rotate', '/cephfs_rotate2']
+
+        for pseudo in ('/cephfs_rotate', '/cephfs_rotate2'):
+            export = conf._fetch_export(self.cluster_id, pseudo)
+            assert export is not None
+            assert export.fsal.cephx_key == rotated_key
+
+    def _do_test_rotate_keys_all_entities(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs_rotate_all',
+            read_only=False,
+            squash='none',
+        )
+
+        export_entity = 'client.nfs.foo.myfs.86ca58ef'
+        daemon_entity = 'client.nfs.foo.0.0.host.hash-rgw'
+        cluster_entity = 'client.nfs.foo'
+        rotated_key = 'rotated-export-key'
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return rotated_key
+
+        auth_ls = {
+            'auth_dump': [
+                {'entity': cluster_entity},
+                {'entity': daemon_entity},
+                {'entity': export_entity},
+                {'entity': 'client.nfs.other.fs.deadbeef'},
+            ]
+        }
+
+        def mock_check_mon(cmd):
+            if cmd.get('prefix') == 'auth ls':
+                return mock.Mock(stdout=json.dumps(auth_ls), retval=0, stderr='')
+            return mock.Mock(stdout='', retval=0, stderr='')
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon) as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                all_daemon_and_export_keys=True,
+                key_type='aes256k',
+            )
+
+        rotate_calls = [
+            c.args[0] for c in check_mon.call_args_list
+            if c.args[0].get('prefix') == 'auth rotate'
+        ]
+        rotated = [c['entity'] for c in rotate_calls]
+        assert sorted(rotated) == sorted([cluster_entity, daemon_entity, export_entity])
+        assert all(c.get('key_type') == 'aes256k' for c in rotate_calls)
+        redeploy.assert_called_once_with(nfs_mod, self.cluster_id)
+        assert result['service_redeployed'] is True
+        assert sorted(result['daemon_keys']) == sorted([cluster_entity, daemon_entity])
+        assert result['export_keys'] == [export_entity]
+        assert result['updated_exports'] == ['/cephfs_rotate_all']
+
+    def _do_test_rotate_keys_rejects_foreign_entity(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = nfs_mod.nfs
+
+        with pytest.raises(Exception) as e:
+            cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=['client.nfs.other.fs.deadbeef'],
+            )
+        assert 'does not belong to NFS cluster' in str(e.value)
+
+    def _do_test_rotate_keys_requires_explicit_selection(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = nfs_mod.nfs
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            with pytest.raises(Exception) as e:
+                cluster.rotate_keys(cluster_id=self.cluster_id)
+
+        assert '--all-daemon-and-export-keys' in str(e.value)
+        assert '--auth-entities' in str(e.value)
+        assert 'ceph auth ls' in str(e.value)
+        check_mon.assert_not_called()
+        redeploy.assert_not_called()
+
+    def _do_test_rotate_keys_rejects_both_selections(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = nfs_mod.nfs
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            with pytest.raises(Exception) as e:
+                cluster.rotate_keys(
+                    cluster_id=self.cluster_id,
+                    all_daemon_and_export_keys=True,
+                    auth_entities=['client.nfs.foo.myfs.86ca58ef'],
+                )
+
+        assert 'mutually exclusive' in str(e.value)
+        check_mon.assert_not_called()
+        redeploy.assert_not_called()
+
     def test_create_export_default_transports_rdma_cluster(self):
         """When cluster has enable_rdma=True, new exports get default Transports = tcp, RDMA."""
         self._do_mock_test(self._do_test_create_export_default_transports_rdma_cluster)
@@ -1436,11 +1609,40 @@ EXPORT {
             "deployment_type": "standalone",
             "virtual_ip": None,
             "backend": [],
-            "placement": {}
+            "placement": {},
+            "enable_rdma": False,
         }}
 
     def test_cluster_info(self):
         self._do_mock_test(self._do_test_cluster_info)
+
+    def _do_test_cluster_info_enable_rdma(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        rdma_services = [
+            ServiceDescription(
+                spec=NFSServiceSpec(service_id=self.cluster_id, enable_rdma=True)
+            )
+        ]
+
+        def mock_describe_service(cls, *args, **kwargs):
+            if kwargs['service_type'] == 'nfs':
+                return OrchResult(rdma_services)
+            return OrchResult([])
+
+        with mock.patch('nfs.module.Module.describe_service', mock_describe_service):
+            out = cluster.show_nfs_cluster_info(self.cluster_id)
+
+        assert out == {"foo": {
+            "deployment_type": "standalone",
+            "virtual_ip": None,
+            "backend": [],
+            "placement": {},
+            "enable_rdma": True,
+        }}
+
+    def test_cluster_info_enable_rdma(self):
+        self._do_mock_test(self._do_test_cluster_info_enable_rdma)
 
     def _do_test_cluster_config(self):
         nfs_mod = Module('nfs', '', '')

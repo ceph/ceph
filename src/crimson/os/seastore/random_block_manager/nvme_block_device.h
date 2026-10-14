@@ -212,9 +212,12 @@ public:
    * atomic_write_unit does not require fsync().
    */
 
-  NVMeBlockDevice(std::string device_path, store_index_t store_index = 0)
-    : RBMDevice(store_index),
-      device_path(device_path) {}
+  NVMeBlockDevice(
+    std::string device_path,
+    device_type_t dtype,
+    device_id_t id,
+    store_index_t store_index = 0)
+    : RBMDevice(device_path, dtype, id, store_index) {}
   ~NVMeBlockDevice() = default;
 
   open_ertr::future<> open(
@@ -372,7 +375,6 @@ private:
   uint32_t atomic_write_unit = 4096;
 
   int namespace_id; // TODO: multi namespaces
-  std::string device_path;
 
   seastar::sharded<MultiShardDevices<NVMeBlockDevice>> shard_devices;
 };

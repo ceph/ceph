@@ -24,7 +24,7 @@ export class LogsPageHelper extends PageHelper {
     cy.contains('.modal-dialog', 'Delete Pool').should('not.exist');
 
     // go to audit logs tab
-    cy.contains('.nav-link', 'Audit Logs').click();
+    cy.contains('.nav-link', 'Audit Logs').click().should('have.class', 'active');
 
     // The filter toolbar is re-created on every tab switch. Wait until the
     // new pane's keyword filter is interactable before driving the filter
@@ -36,15 +36,23 @@ export class LogsPageHelper extends PageHelper {
     this.setTimepickerValue(0, hour);
     this.setTimepickerValue(1, minute);
 
+    // Wait a second for the timepicker to finish updating the filter
+    // and the log viewer to finish re-rendering the log entries.
+    cy.wait(1000);
+
     // Enter the pool name into the filter box
-    cy.get('.tab-pane.active #logs-keyword').clear();
-    cy.get('.tab-pane.active #logs-keyword').type(poolname);
-    cy.get('.tab-pane.active #logs-keyword').should('have.value', poolname);
+    cy.get('.tab-pane.active #logs-keyword')
+      .should('be.visible')
+      .and('be.enabled')
+      .clear()
+      .type(poolname)
+      .should('have.value', poolname);
 
     cy.get('.tab-pane.active')
-      .get('.log-viewer')
-      .get('.log-entry__message')
-      .should('contain.text', poolname)
+      .find('.log-viewer')
+      .find('.log-entry__message')
+      .should('be.visible')
+      .and('contain.text', poolname)
       .and('contain.text', `pool ${poolfunction}`);
   }
 

@@ -235,6 +235,13 @@ else
     [ $stop_cephadm -eq 1 ] && do_killcephadm
 fi
 
+# Remove the Prometheus/Grafana containers of monitoring/crimson/vstart-monitoring.sh
+# (the data volumes stay)
+if [ $stop_all -eq 1 ] && [ -f "$PWD/crimson-monitoring/env" ]; then
+    STATE_DIR="$PWD/crimson-monitoring" \
+        "$(dirname "$0")/../monitoring/crimson/vstart-monitoring.sh" stop || true
+fi
+
 # Check whether the --crimson-balance-cpu option was used, if so remove any auxiliary files left:
 if [ "$ceph_osd" == "crimson-osd" ] && [ -f /tmp/numa_args_*.out ]; then
     rm -f /tmp/numa_args_*.out

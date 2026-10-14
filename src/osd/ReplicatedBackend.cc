@@ -609,7 +609,7 @@ void ReplicatedBackend::submit_transaction(
     delta_stats);
 
   vector<pg_log_entry_t> log_entries(_log_entries);
-  ObjectStore::Transaction op_t;
+  ObjectStore::Transaction op_t{get_parent()->min_peer_features()};
   PGTransactionUPtr t(std::move(_t));
   set<hobject_t> added, removed;
   generate_transaction(
@@ -2323,7 +2323,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 	  }
         }
         omap_entries.insert(make_pair(key, to_bufferlist(value)));
-	available -= std::min(available, num_new_bytes);
+	available -= std::min<uint64_t>(available, num_new_bytes);
         return ObjectStore::omap_iter_ret_t::NEXT;
       });
     if (result < 0) {

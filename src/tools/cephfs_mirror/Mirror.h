@@ -76,6 +76,7 @@ private:
     }
 
     uint64_t pool_id; // for restarting blocklisted mirror instance
+    bool mirroring_enabled = true;
     bool action_in_progress = false;
     bool restarting = false;
     std::list<Context *> action_ctxs;

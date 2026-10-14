@@ -166,7 +166,7 @@
     mdlog trim                       trim metadata log (use marker)
     mdlog status                     read metadata log status
     bilog list                       list bucket index log
-    bilog trim                       trim bucket index log (use start-marker, end-marker)
+    bilog trim                       trim bucket index log (use end-marker); without end-marker, requires --yes-i-really-mean-it
     bilog status                     read bucket index log status
     bilog autotrim                   auto trim bucket index log
     datalog list                     list data log
@@ -440,8 +440,7 @@
      --hide-progress               when specified, per-shard progress details are not printed to stderr
   
   radoslist options:
-     --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name;
-                                   additionally rados objects for incomplete multipart uploads will not be output
+     --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name
   
   Bucket list objects options:
      --max-entries                 max number of entries listed (default 1000)

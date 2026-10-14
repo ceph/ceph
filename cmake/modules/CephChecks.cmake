@@ -1,9 +1,3 @@
-if(CMAKE_COMPILER_IS_GNUCXX)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.1)
-    message(FATAL_ERROR "GCC 8.1+ required due to C++17 requirements")
-  endif()
-endif()
-
 #Check Includes
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
@@ -86,7 +80,14 @@ check_symbol_exists(res_nquery "resolv.h" HAVE_RES_NQUERY)
 check_symbol_exists(F_SETPIPE_SZ "linux/fcntl.h" CEPH_HAVE_SETPIPE_SZ)
 check_symbol_exists(__func__ "" HAVE_FUNC)
 check_symbol_exists(__PRETTY_FUNCTION__ "" HAVE_PRETTY_FUNC)
-check_symbol_exists(getentropy "unistd.h" HAVE_GETENTROPY)
+CHECK_INCLUDE_FILES("sys/random.h" HAVE_SYS_RANDOM_H)
+check_symbol_exists(getentropy "unistd.h" HAVE_GETENTROPY_UNISTD)
+if(HAVE_SYS_RANDOM_H)
+  check_symbol_exists(getentropy "sys/random.h" HAVE_GETENTROPY_SYS_RANDOM)
+endif()
+if(HAVE_GETENTROPY_UNISTD OR HAVE_GETENTROPY_SYS_RANDOM)
+  set(HAVE_GETENTROPY ON)
+endif()
 
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles("

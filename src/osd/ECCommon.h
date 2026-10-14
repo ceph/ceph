@@ -99,14 +99,12 @@ struct ECCommon {
 
   struct shard_read_t {
     extent_set extents;
-    std::optional<std::vector<std::pair<int, int>>> subchunk;
     pg_shard_t pg_shard;
     bool omap_source = false;
     bool operator==(const shard_read_t &other) const;
 
     void print(std::ostream &os) const {
       os << "shard_read_t(extents=[" << extents << "]"
-          << ", subchunk=" << subchunk
           << ", pg_shard=" << pg_shard
           << ", omap_source=" << omap_source
           << ")";
@@ -500,7 +498,7 @@ struct ECCommon {
         bool do_redundant_reads,
         ///< [in] true if we want to issue redundant reads to reduce latency
         read_request_t &read_request,
-        ///< [out] shard_reads, corresponding subchunks / other sub reads to read
+        ///< [out] shard_reads to read
         const std::optional<std::set<pg_shard_t>> &error_shards = std::nullopt
         //< [in] Shards where reads have failed (optional)
       ); ///< @return error code, 0 on success
@@ -665,7 +663,6 @@ struct ECCommon {
     using OpRef = std::shared_ptr<Op>;
 
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
-    std::map<hobject_t, eversion_t> oid_to_version;
 
     std::list<OpRef> waiting_commit;
     eversion_t completed_to;

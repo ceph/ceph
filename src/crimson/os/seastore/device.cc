@@ -3,6 +3,8 @@
 
 #include "device.h"
 
+#include <sys/stat.h>
+
 #include <seastar/core/smp.hh>
 
 #include "segment_manager.h"
@@ -12,6 +14,37 @@
 SET_SUBSYS(seastore);
 
 namespace crimson::os::seastore {
+
+std::string normalize_device_path(const std::string& device)
+{
+  std::string device_path = device;
+  if (device_path.rfind("/dev/", 0) == 0) {
+    return device_path;
+  }
+
+  const auto last_slash = device_path.find_last_of('/');
+  const std::string basename =
+    (last_slash == std::string::npos) ?
+      device_path :
+      device_path.substr(last_slash + 1);
+
+  // Concrete OSD device entry (file or symlink), e.g. .../block or .../block.db
+  if (basename == "block") {
+    return device_path;
+  }
+  if (basename.rfind("block.", 0) == 0) {
+    // SeaStore secondary devices use a directory named block.<id> that
+    // contains the actual block file (see SeaStore::_mkfs / _mount).
+    struct ::stat st;
+    if (::stat(device_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+      device_path += "/block";
+    }
+    return device_path;
+  }
+
+  device_path += "/block";
+  return device_path;
+}
 
 std::ostream& operator<<(std::ostream& out, const device_spec_t& ds)
 {
@@ -28,8 +61,13 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
       << "major_dev=" << conf.major_dev
       << ", spec=" << conf.spec
       << ", meta=" << conf.meta
-      << ", secondary(";
-  for (const auto& [k, v] : conf.secondary_devices) {
+      << ", cache(";
+  for (const auto& [k, v] : conf.cache_devices) {
+    out << device_id_printer_t{k}
+        << ": " << v << ", ";
+  }
+  out << "), data(";
+  for (const auto& [k, v] : conf.data_devices) {
     out << device_id_printer_t{k}
         << ": " << v << ", ";
   }
@@ -62,9 +100,9 @@ void device_superblock_t::validate() const
   ceph_assert(config.spec.btype != backend_type_t::NONE);
   ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
   if (!config.major_dev) {
-    ceph_assert(config.secondary_devices.empty());
+    ceph_assert(config.cache_devices.empty());
   }
-  for (const auto& [k, v] : config.secondary_devices) {
+  for (const auto& [k, v] : config.cache_devices) {
     ceph_assert(k != config.spec.id);
     ceph_assert(k <= DEVICE_ID_MAX_VALID);
     ceph_assert(k == v.id);
@@ -77,7 +115,7 @@ void device_superblock_t::validate() const
     ceph_assert(segment_capacity > 0);
     ceph_assert_always(segment_capacity <= SEGMENT_OFF_MAX);
   }
-  auto backend = get_default_backend_of_device(config.spec.dtype);
+  auto backend = config.spec.btype;
   if (backend == backend_type_t::SEGMENTED) {
     ceph_assert(segment_size > 0 && segment_size % block_size == 0);
     ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
@@ -101,15 +139,14 @@ void device_superblock_t::validate() const
   } else {
     // RBM
     ceph_assert(total_size > 0);
-    ceph_assert(get_default_backend_of_device(config.spec.dtype) ==
-                backend_type_t::RANDOM_BLOCK);
+    ceph_assert(config.spec.btype == backend_type_t::RANDOM_BLOCK);
     ceph_assert(shard_infos.size() >= shard_num);
     for (unsigned int i = 0; i < shard_num; i++) {
       ceph_assert(shard_infos[i].size > block_size &&
                   shard_infos[i].size % block_size == 0);
       ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
       ceph_assert((journal_size > 0 && journal_size % block_size == 0) ||
-                   config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
+                   config.spec.dtype == device_type_t::HDD);
       ceph_assert(shard_infos[i].start_offset < total_size &&
                   shard_infos[i].start_offset % block_size == 0);
     }
@@ -120,16 +157,17 @@ seastar::future<DeviceRef>
 Device::make_device(
   const std::string& device,
   device_type_t dtype,
-  backend_type_t btype)
+  backend_type_t btype,
+  device_id_t id)
 {
   if (btype == backend_type_t::SEGMENTED) {
-    return SegmentManager::get_segment_manager(device, dtype
+    return SegmentManager::get_segment_manager(device, dtype, id
     ).then([](DeviceRef ret) {
       return ret;
     });
   } else {
     ceph_assert(btype != backend_type_t::NONE);
-    return get_rb_device(device, dtype
+    return get_rb_device(device, dtype, id
     ).then([](DeviceRef ret) {
       return ret;
     });

@@ -7,6 +7,7 @@
 #include <fmt/chrono.h>
 #include <fmt/os.h>
 
+#include "common/ceph_time_fmt.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "msg/msg_types.h"

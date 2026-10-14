@@ -858,6 +858,7 @@ def get_time_series_rates(data: List[Tuple[float, float]]) -> List[Tuple[float, 
     [(1, 2.0)]
     >>> get_time_series_rates([[1, 1], [2, 3], [4, 11], [5, 16], [6, 22]])
     [(2, 2.0), (4, 4.0), (5, 5.0), (6, 6.0)]
+    >>> del logger.debug
     """
     data = _filter_time_series(data)
     if not data:
@@ -911,6 +912,7 @@ def _filter_time_series(data: List[Tuple[float, float]]) -> List[Tuple[float, fl
     [[0, 1], [1, 3]]
     >>> _filter_time_series([[1, 1], [2, 3], [4, 11], [5, 16], [6, 22]])
     [[1, 1], [2, 3], [4, 11], [5, 16], [6, 22]]
+    >>> del logger.debug
     """
     filtered = []
     for i in range(len(data) - 1):

@@ -148,7 +148,9 @@ private:
   MessageRef pending_tell_command;
 
   AuthRegistry *auth_registry;
-  ceph::mutex& monc_lock;
+  // not necessarily MonClient's monc_lock: the pinger owns a MonConnection
+  // and guards it with its own lock
+  ceph::mutex& auth_lock;
 };
 
 
@@ -219,6 +221,7 @@ struct MonClientPinger : public Dispatcher,
     uint32_t *auth_method,
     std::vector<uint32_t> *preferred_modes,
     ceph::buffer::list *bl) override {
+    std::lock_guard l(lock);
     return mc->get_auth_request(auth_method, preferred_modes, bl,
 				cct->_conf->name, 0, keyring);
   }
@@ -227,6 +230,7 @@ struct MonClientPinger : public Dispatcher,
     AuthConnectionMeta *auth_meta,
     const ceph::buffer::list& bl,
     ceph::buffer::list *reply) override {
+    std::lock_guard l(lock);
     return mc->handle_auth_reply_more(auth_meta, bl, reply);
   }
   int handle_auth_done(
@@ -237,6 +241,7 @@ struct MonClientPinger : public Dispatcher,
     const ceph::buffer::list& bl,
     CryptoKey *session_key,
     std::string *connection_secret) override {
+    std::lock_guard l(lock);
     return mc->handle_auth_done(auth_meta, global_id, bl,
 				session_key, connection_secret);
   }
@@ -247,6 +252,7 @@ struct MonClientPinger : public Dispatcher,
     int result,
     const std::vector<uint32_t>& allowed_methods,
     const std::vector<uint32_t>& allowed_modes) override {
+    std::lock_guard l(lock);
     return mc->handle_auth_bad_method(old_auth_method, result,
 				      allowed_methods, allowed_modes);
   }

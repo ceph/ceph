@@ -34,6 +34,8 @@ enum class context {
 // return "none" if not matched
 context to_context(const std::string& s);
 
+std::string to_string(context ctx);
+
 // verify a lua script
 bool verify(const std::string& script, std::string& err_msg);
 

@@ -13,7 +13,7 @@ add_executable(cephfs-journal-tool ${cephfs_journal_tool_srcs})
 target_link_libraries(cephfs-journal-tool
   legacy-option-headers
   ceph-common librados mds osdc global Boost::boost
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 set(cephfs-meta-injection_srcs
   cephfs-meta-injection.cc
@@ -34,7 +34,7 @@ set(cephfs_table_tool_srcs
   MDSUtility.cc)
 add_executable(cephfs-table-tool ${cephfs_table_tool_srcs})
 target_link_libraries(cephfs-table-tool ceph-common librados mds osdc global Boost::boost
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 set(cephfs_data_scan_srcs
   cephfs-data-scan.cc
@@ -46,7 +46,7 @@ set(cephfs_data_scan_srcs
 add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
 target_link_libraries(cephfs-data-scan ceph-common librados cephfs mds osdc global Boost::boost
   cls_cephfs_client
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 set(cephfs_tool_srcs
   cephfs-tool.cc)

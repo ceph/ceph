@@ -578,14 +578,14 @@ public:
 
   /** Inquires about the Transaction as a whole. */
 
-  /// How big is the encoded Transaction buffer?
+  /// How big is the encoded Transaction buffer? Exact for the layout
+  /// encode() emits for this transaction's own data_features (see
+  /// _get_encoded_framing_bytes()). BlueStore charges the result as the
+  /// transaction's throttle cost, so both payload bufferlists count.
   uint64_t get_encoded_bytes() {
-    //layout: data_misaligned_bl + op_bl + coll_index + object_index +
-    //        data + data_features
-
-    // coll_index size, object_index size and sizeof(transaction_data)
-    // all here, so they may be computed at compile-time
-    size_t final_size = sizeof(__u32) * 2 + sizeof(data);
+    // framing plus the two index counts; the loops below are the only
+    // per-entry work
+    size_t final_size = _get_encoded_framing_bytes() + sizeof(__u32) * 2;
 
     // coll_index second and object_index second
     final_size += (coll_index.size() + object_index.size()) * sizeof(__u32);
@@ -600,9 +600,8 @@ public:
 	final_size += p->first.encoded_size();
     }
 
-    final_size += sizeof(data_features);
-
-    return data_misaligned_bl.length() +
+    return data_aligned_bl.length() +
+	data_misaligned_bl.length() +
 	op_bl.length() +
 	final_size;
   }
@@ -610,17 +609,17 @@ public:
   /// Retain old version for regression testing purposes
   uint64_t get_encoded_bytes_test() {
     using ceph::encode;
-    //layout: data_misaligned_bl + op_bl + coll_index + object_index +
-    //        data + data_features
+    // same layouts as get_encoded_bytes(), with coll_index and
+    // object_index sized by encoding them
     ceph::buffer::list bl;
     encode(coll_index, bl);
     encode(object_index, bl);
 
-    return data_misaligned_bl.length() +
+    return data_aligned_bl.length() +
+	data_misaligned_bl.length() +
 	op_bl.length() +
 	bl.length() +
-	sizeof(data) +
-	sizeof(data_features);
+	_get_encoded_framing_bytes();
   }
 
   uint64_t get_num_bytes() {
@@ -825,6 +824,32 @@ private:
     uint32_t index_id = object_id++;
     object_index[oid] = index_id;
     return index_id;
+  }
+
+  /// Bytes encode() spends on framing around the streams, for the layout
+  /// this transaction's own data_features selects: the ENCODE_START
+  /// header, the length word ahead of op_bl, the packed transaction data,
+  /// and the payload framing (version 9: data_misaligned_bl's length word;
+  /// version 10: data_features plus the length of each payload bufferlist).
+  /// The index maps are not included; each size function sizes those its
+  /// own way.
+  size_t _get_encoded_framing_bytes() const {
+    size_t r = 0;
+    r += sizeof(__u8);              // ENCODE_START: struct_v
+    r += sizeof(__u8);              // ENCODE_START: struct_compat
+    r += sizeof(ceph_le32);         // ENCODE_START: struct_len
+    r += sizeof(__u32);             // length word ahead of op_bl
+    r += sizeof(data);              // TransactionData, appended verbatim
+    if (is_format_aligned()) {
+      // version 10: the payload bufferlists go out raw, described here
+      r += sizeof(data_features);   // data_features
+      r += sizeof(__u32);           // data_aligned_bl.length()
+      r += sizeof(__u32);           // data_misaligned_bl.length()
+    } else {
+      // version 9: data_misaligned_bl is encoded inline
+      r += sizeof(__u32);           // length word ahead of data_misaligned_bl
+    }
+    return r;
   }
 
 public:
@@ -1348,7 +1373,7 @@ public:
 	      ceph::buffer::list &d_bl,
 	      uint64_t features=0) const
   {
-    //see also get_encoded_bytes which assumes layout version 9
+    //see also get_encoded_bytes which mirrors both layouts
 
     //layout version 9:
     // buffer = data_misaligned_bl + op_bl + coll_index + object_index + data

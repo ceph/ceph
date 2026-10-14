@@ -71,6 +71,7 @@
 #include "rgw_zone.h"
 #include "rgw_restore.h"
 #include "rgw_multipart_meta_filter.h"
+#include "yield_completion.h"
 
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
@@ -670,10 +671,28 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
 
 #ifdef WITH_RADOSGW_LANCEDB
   {
+    // the namespace of the vector bucket takes the place of the tenant in its key
+    rgw::s3vector::bucket_namespace_t ns;
+    if (const auto* account_id = std::get_if<rgw_account_id>(&info.owner); account_id) {
+      // the tenant of the vector bucket is the one of the account that owns it
+      RGWAccountInfo account;
+      Attrs account_attrs;
+      RGWObjVersionTracker account_objv;
+      if (const int r = store->load_account_by_id(dpp, y, *account_id, account,
+                                                  account_attrs, account_objv); r < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to load account " << *account_id <<
+          " of s3vector bucket " << info.bucket << ". error: " << r << dendl;
+        return r;
+      }
+      ns.account = *account_id;
+      ns.tenant = account.tenant;
+    } else {
+      ns.tenant = info.bucket.tenant;
+    }
     // the indexes hold the data of a vector bucket, like the objects of an ordinary
     // one: they are removed only when the caller asks for it, and prevent the removal
     // of the vector bucket otherwise
-    const int r = rgw::s3vector::remove_indexes(dpp, store, &info.bucket.tenant,
+    const int r = rgw::s3vector::remove_indexes(dpp, store, ns,
                                                 info.bucket.name, delete_children, y);
     if (r == -ENOENT) {
       // the backend of the vector bucket does not exist. this happens when the bucket
@@ -685,7 +704,7 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
       return r;
     }
     // the data of the vector bucket is gone, and so should be its cached session
-    rgw::s3vector::notify_session_delete(dpp, info.bucket.tenant, info.bucket.name);
+    rgw::s3vector::notify_session_delete(dpp, ns, info.bucket.name);
   }
 #endif
 
@@ -2958,14 +2977,15 @@ int RadosStore::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_buck
 }
 
 int RadosStore::list_vector_buckets(const DoutPrefixProvider* dpp,
-			     const rgw_owner& owner, const std::string& tenant,
+			     const rgw_owner& owner, const std::string& ns,
 			     const std::string& marker, const std::string& end_marker,
 			     uint64_t max, BucketList& listing,
 			     optional_yield y) {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const rgw_raw_obj& obj = get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner);
 
-  return rgwrados::buckets::list(dpp, y, rados, obj, tenant,
+  // the namespace takes the place of the tenant in the keys of the vector buckets
+  return rgwrados::buckets::list(dpp, y, rados, obj, ns,
                                     marker, end_marker, max, listing);
 }
 
@@ -3136,6 +3156,34 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   return ret;
 }
 
+int RadosObject::update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
+{
+  RGWObjState* s = nullptr;
+  int r = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(),
+                                           &s, nullptr, false, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read olh state for obj=" << get_key()
+                      << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  if (!s->is_olh) {
+    return 0;
+  }
+  auto iter = s->attrset.lower_bound(RGW_ATTR_OLH_PENDING_PREFIX);
+  if (iter == s->attrset.end() ||
+      !boost::algorithm::starts_with(iter->first, RGW_ATTR_OLH_PENDING_PREFIX)) {
+    return 0;
+  }
+  r = store->getRados()->update_olh(dpp, *rados_ctx, s, bucket->get_info(), get_obj(), y,
+                                    nullptr, false, flags & FLAG_LOG_OP);
+  if (r < 0 && r != -ECANCELED) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to apply pending olh log for obj=" << get_key()
+                      << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  return 0;
+}
+
 int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj)
 {
   read_op.params.attrs = &state.attrset;
@@ -3153,7 +3201,7 @@ int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, A
   const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
   // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
   // won't return ERR_NOT_MODIFIED when syncing the modified object
-  const auto mtime = log_op ? state.mtime + std::chrono::nanoseconds(1) : state.mtime;
+  const auto mtime = log_op ? state.mtime + ceph::timespan{std::chrono::nanoseconds{1}} : state.mtime;
   return store->getRados()->set_attrs(dpp, rados_ctx,
 			bucket->get_info(),
 			get_obj(),
@@ -4962,12 +5010,7 @@ void MPRadosSerializer::stop_renewal()
 
   // wait for notification of completion
   boost::system::error_code ec_ignored;
-  if (y) {
-    cond.async_wait(lock, y.get_yield_context()[ec_ignored]);
-  } else {
-    maybe_warn_about_blocking(dpp);
-    cond.async_wait(lock, ceph::async::use_blocked[ec_ignored]);
-  }
+  cond.async_wait(lock, rgw::maybe_yield(dpp, y, ec_ignored));
 }
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
@@ -5236,11 +5279,10 @@ int RadosRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
   num_objs = n_objs;
   obj_names = o_names;
 
-  maybe_warn_about_blocking(dpp);
   for (auto i=0; i < num_objs; i++) {
     std::unique_ptr<fifo::FIFO> fifo_tmp;
     try {
-      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, ceph::async::use_blocked);
+      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, rgw::maybe_yield(dpp, y));
     } catch (const sys::system_error& e) {
       ldpp_dout(dpp, -1) << "creating fifo object for index=" << i
 	   << ", objname=" << obj_names[i] << " failed : " << e.what() << dendl;
@@ -5295,9 +5337,8 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, std::deque<ceph::buffer::list>&& items) {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, items, ceph::async::use_blocked);
+    fifos[index]->push(dpp, items, rgw::maybe_yield(dpp, y));
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5312,9 +5353,8 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
+    fifos[index]->push(dpp, std::move(bl), rgw::maybe_yield(dpp, y));
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5363,10 +5403,9 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
     auto [lentries, lmark] = fifos[index]->list(dpp, marker,
-			  	 restore_entries, ceph::async::use_blocked);
+			  	 restore_entries, rgw::maybe_yield(dpp, y));
     entries.clear();
 
     for (const auto& entry : lentries) {
@@ -5424,9 +5463,8 @@ int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+    fifos[index]->trim(dpp, std::string(marker), false, rgw::maybe_yield(dpp, y));
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to trim FIFO: " << obj_names[index]

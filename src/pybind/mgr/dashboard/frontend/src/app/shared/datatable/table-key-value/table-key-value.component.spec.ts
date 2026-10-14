@@ -109,9 +109,9 @@ describe('TableKeyValueComponent', () => {
 
   it('throws errors if data cannot be converted', () => {
     component.data = 38;
-    expect(() => component.ngOnInit()).toThrowError('Wrong data format');
+    expect(() => component.ngOnInit()).toThrow('Wrong data format');
     component.data = [['someKey', 0, 3]];
-    expect(() => component.ngOnInit()).toThrowError(
+    expect(() => component.ngOnInit()).toThrow(
       'Array contains too many elements (3). Needs to be of type [string, any][]'
     );
   });

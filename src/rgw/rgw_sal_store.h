@@ -425,6 +425,10 @@ class StoreObject : public Object {
 			   optional_yield y) override {
       return -1;
     }
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y,
+                           uint32_t flags) override {
+      return 0;
+    }
     jspan_context& get_trace() override { return trace_ctx; }
     void set_trace (jspan_context&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }
 

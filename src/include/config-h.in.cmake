@@ -347,6 +347,7 @@
 
 /* Defined if getentropy() is available */
 #cmakedefine HAVE_GETENTROPY
+#cmakedefine HAVE_SYS_RANDOM_H
 
 /* Defined if libradosstriper is enabled: */
 #cmakedefine WITH_LIBRADOSSTRIPER
@@ -365,9 +366,6 @@
 
 /* Backend dbstore for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DBSTORE
-
-/* Backend CORTX-Motr for Rados Gateway */
-#cmakedefine WITH_RADOSGW_MOTR
 
 /* Backend CORTX-DAOS for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DAOS
@@ -395,9 +393,6 @@
 
 /* Define if libcephsqlite is enabled */
 #cmakedefine WITH_LIBCEPHSQLITE
-
-/* Define if RWL is enabled */
-#cmakedefine WITH_RBD_RWL
 
 /* Define if PWL-SSD is enabled */
 #cmakedefine WITH_RBD_SSD_CACHE

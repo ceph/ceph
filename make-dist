@@ -74,19 +74,19 @@ download_boost() {
     boost_sha256=$1
     shift
     boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
-    boost_fname=boost_${boost_version_underscore}.tar.bz2
+    boost_dir=boost_${boost_version_underscore}
+    boost_fname=${boost_dir}.tar.bz2
     download_from $boost_fname $boost_sha256 $*
     tar xjf $boost_fname -C src \
-        --exclude="$boost_version_underscore/libs/*/doc" \
-        --exclude="$boost_version_underscore/libs/*/example" \
-        --exclude="$boost_version_underscore/libs/*/examples" \
-        --exclude="$boost_version_underscore/libs/*/meta" \
-        --exclude="$boost_version_underscore/libs/*/test" \
-        --exclude="$boost_version_underscore/tools/boostbook" \
-        --exclude="$boost_version_underscore/tools/quickbook" \
-        --exclude="$boost_version_underscore/tools/auto_index" \
+        --exclude="$boost_dir/libs/*/doc" \
+        --exclude="$boost_dir/libs/*/example" \
+        --exclude="$boost_dir/libs/*/examples" \
+        --exclude="$boost_dir/libs/*/test" \
+        --exclude="$boost_dir/tools/boostbook" \
+        --exclude="$boost_dir/tools/quickbook" \
+        --exclude="$boost_dir/tools/auto_index" \
         --exclude='doc' --exclude='more' --exclude='status'
-    mv src/boost_${boost_version_underscore} src/boost
+    mv src/$boost_dir src/boost
     tar cf ${outfile}.boost.tar ${outfile}/src/boost
     rm -rf src/boost
 }
@@ -108,23 +108,6 @@ download_liburing() {
     mv src/liburing-* src/liburing
     tar cf ${outfile}.liburing.tar ${outfile}/src/liburing
     rm -rf src/liburing
-}
-
-download_pmdk() {
-    pmdk_version=$1
-    shift
-    pmdk_sha256=$1
-    shift
-    pmdk_fname=pmdk-${pmdk_version}.tar.gz
-    download_from $pmdk_fname $pmdk_sha256 $*
-    tar xzf $pmdk_fname -C src \
-        --exclude="pmdk-${pmdk_version}/doc" \
-        --exclude="pmdk-${pmdk_version}/src/test" \
-        --exclude="pmdk-${pmdk_version}/src/examples" \
-        --exclude="pmdk-${pmdk_version}/src/benchmarks"
-    mv src/pmdk-${pmdk_version} src/pmdk
-    tar cf ${outfile}.pmdk.tar ${outfile}/src/pmdk
-    rm -rf src/pmdk
 }
 
 build_dashboard_frontend() {
@@ -199,15 +182,11 @@ download_boost $boost_version af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11
 download_liburing 2.5 456f5f882165630f0dc7b75e8fd53bd01a955d5d4720729b4323097e6e9f2a98 \
                   https://github.com/axboe/liburing/archive \
                   https://git.kernel.dk/cgit/liburing/snapshot
-pmdk_version=1.10
-download_pmdk $pmdk_version 08dafcf94db5ac13fac9139c92225d9aa5f3724ea74beee4e6ca19a01a2eb20c \
-               https://github.com/pmem/pmdk/releases/download/$pmdk_version
 build_dashboard_frontend
 generate_rook_ceph_client
 for tarball in $outfile.version   \
                $outfile.boost     \
                $outfile.liburing  \
-               $outfile.pmdk  \
                dashboard_frontend \
                rook_ceph_client   \
                $outfile; do

@@ -1,3 +1,5 @@
+import errno
+
 class VolumeException(Exception):
     def __init__(self, error_code, error_message):
         self.errno = error_code
@@ -35,6 +37,27 @@ class OpSmException(Exception):
 
 class NotImplementedException(Exception):
     pass
+
+class JobDeferred(Exception):
+    """
+    Raised by an async job (from execute_job()) that cannot make progress
+    right now (e.g., the subvolume it operates on is quarantined). The job
+    is skipped with an exponential backoff instead of being retried on every
+    pass. Intentionally not a VolumeException so that the generic handlers in
+    the job implementations let it through.
+    """
+    pass
+
+def is_quarantined_error(e):
+    """
+    Check if an exception (VolumeException, MetadataMgrException, ...) was
+    caused by a quarantined subvolume. The MDS rejects access to inodes under
+    a quarantined subvolume with EACCES for clients that lack quarantine
+    access (q/Q) -- which includes the mgr, whose 'allow *' does not imply it.
+    Since the mgr's caps otherwise permit everything, EACCES is only expected
+    due to quarantine.
+    """
+    return getattr(e, 'errno', None) == -errno.EACCES
 
 class ClusterTimeout(Exception):
     """

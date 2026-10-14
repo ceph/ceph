@@ -527,6 +527,36 @@ options:
   daemon_default: 10000
   # default changed by common_preinit()
   with_legacy: true
+- name: high_debug_level_threshold
+  type: int
+  level: advanced
+  desc: Debug log level at or above which a subsystem is considered excessively high
+  long_desc: When any debug_* subsystem has its log level set at or above this
+    threshold, the daemon will issue a health warning and start a timer to
+    set it back to the level it had before it was raised, after
+    high_debug_level_reset_timeout seconds. Set to 0 to disable the guard.
+  default: 0
+  min: 0
+  max: 30
+  flags:
+  - runtime
+  see_also:
+  - high_debug_level_reset_timeout
+- name: high_debug_level_reset_timeout
+  type: secs
+  level: advanced
+  desc: Seconds before an excessively high debug level is auto-reverted
+  long_desc: When a debug subsystem is at or above high_debug_level_threshold,
+    the daemon sets it back to the level it had before it was raised, after
+    this many seconds. Set to 0 to disable the auto-revert while keeping the
+    health warning. This protects against accidental high debug levels causing
+    disk I/O floods and CPU overhead in production.
+  default: 300
+  min: 0
+  flags:
+  - runtime
+  see_also:
+  - high_debug_level_threshold
 - name: log_to_file
   type: bool
   level: basic
@@ -5962,6 +5992,25 @@ options:
     database into multiple column families, which impacts caching and compaction
     efficiency. Such OSDs can be migrated to a sharded layout offline using
     'ceph-bluestore-tool reshard'.
+  default: true
+  with_legacy: true
+- name: bluestore_warn_on_legacy_min_alloc_size
+  type: bool
+  level: advanced
+  desc: Raise a health warning if a BlueStore OSD uses an allocation unit that
+    differs from the one a newly deployed OSD would use
+  long_desc: HDD-backed BlueStore OSDs deployed prior to the Pacific release were
+    created with a 64 KiB allocation unit (min_alloc_size), while the current
+    default is 4 KiB. A large allocation unit causes increased space usage for
+    small objects, erasure-coded chunks and compressed data. The allocation unit
+    is set at OSD creation time; changing it requires redeploying the OSD. The
+    on-disk value is compared against the allocation unit that mkfs would select
+    today on the same device, so deliberate settings such as an explicitly
+    configured bluestore_min_alloc_size or a value derived from the device
+    optimal IO size (bluestore_use_optimal_io_size_for_min_alloc_size, e.g. for
+    coarse-IU QLC devices) do not raise the warning. The warning can also be
+    disabled for specific OSDs or device classes only, using a configuration
+    mask such as 'osd/class:hdd'.
   default: true
   with_legacy: true
 - name: bluestore_log_op_age

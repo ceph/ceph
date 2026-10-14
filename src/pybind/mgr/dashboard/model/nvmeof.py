@@ -185,6 +185,20 @@ class ConnectionIOStatistics(NamedTuple):
     buckets: Annotated[List[BucketInfo], CliFlags.EXCLUSIVE_LIST]
 
 
+class StatisticsEntry(NamedTuple):
+    subsystem_nqn: str
+    host_nqn: str
+    total_num_ios: int
+    buckets: Annotated[List[BucketInfo], CliFlags.EXCLUSIVE_LIST]
+
+
+class ConnectionExtendedIOStatistics(NamedTuple):
+    status: int
+    error_message: str
+    category: str
+    statistics_entries: Annotated[List[StatisticsEntry], CliFlags.EXCLUSIVE_LIST]
+
+
 class NamespaceCreation(NamedTuple):
     status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
     error_message: str

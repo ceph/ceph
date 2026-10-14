@@ -59,10 +59,8 @@
 #define FSCRYPT_MAXIO_SIZE (INT_MAX & ~4095)
 #endif
 
-#if __GNUC__ >= 4
 // we test deprecated functions
-  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 using namespace std;
 

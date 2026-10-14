@@ -16,6 +16,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 
+class Context;
 class dir_result_t;
 
 struct MetaRequest {

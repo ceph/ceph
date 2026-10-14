@@ -507,6 +507,7 @@ class RedmineUpkeep:
         self.revision_range = args.revision_range
         self.pull_request_id = args.pull_request
         self.merge_commit = args.merge_commit
+        self.filter_name = args.filter
 
         self.remote_url = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}"
         self.upkeep_failures = 0
@@ -757,6 +758,16 @@ class RedmineUpkeep:
         issue_update.logger.debug(f"Last PR ID change: {last_pr_id_change}, Last Merge Commit set: {last_merge_commit_set}")
 
         if last_pr_id_change > last_merge_commit_set:
+            recorded_commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
+            if recorded_commit:
+                current_merge = self._get_merge_commit(issue_update)
+                if current_merge and str(current_merge).lower() == str(recorded_commit).lower():
+                    issue_update.logger.info(
+                        f"Recorded merge commit ({recorded_commit}) matches current PR merge commit. "
+                        "Skipping stale clear."
+                    )
+                    return False
+
             issue_update.logger.info("The 'Pull Request ID' was changed after the 'Merge Commit SHA' was set. Clearing the stale merge commit.")
             # Clear the merge commit field and also the 'Fixed In' field which depends on it.
             changed = False
@@ -1720,6 +1731,13 @@ h2. Update Payload
             if limit <= 0:
                 log.info("Issue processing limit reached. Stopping filter execution.")
                 break
+            if self.filter_name:
+                f_name_norm = f.NAME.lower().replace(" ", "").replace("_", "")
+                f_class_norm = f.__name__.lower().replace(" ", "").replace("_", "")
+                arg_norm = self.filter_name.lower().replace(" ", "").replace("_", "")
+                if arg_norm not in (f_name_norm, f_class_norm):
+                    log.debug(f"Skipping filter {f.NAME} (does not match --filter '{self.filter_name}')")
+                    continue
             for filter_set in f.get_filters():
                 if limit <= 0:
                     break
@@ -1751,6 +1769,7 @@ def main():
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--github-action', default=GITHUB_ACTIONS, dest='gha', action='store_true', help='github action output')
     parser.add_argument('--limit', dest='limit', action='store', type=int, default=200, help='limit processed issues')
+    parser.add_argument('--filter', dest='filter', action='store', help='filter by specific filter name (e.g. "Pending Backport")')
     parser.add_argument('--git-dir', dest='git', action='store', default=".", help='git directory')
 
     # Mutually exclusive group for different modes of operation

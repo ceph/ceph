@@ -429,10 +429,11 @@ as follows:
   List bucket index log which is needed for multi-site deployments.
 
 :command:`bilog trim`
-  Trim bucket index log (use start-marker, end-marker) manually instead
+  Trim bucket index log (use end-marker) manually instead
   of relying on the gateway's integrated log sync.
   Before trimming, compare the listings and make sure the last sync was
-  complete, otherwise it can reinitiate a sync.
+  complete, otherwise it can reinitiate a sync. Without an end-marker the
+  trim has no upper bound, so it requires --yes-i-really-mean-it.
 
 :command:`datalog list`
   List data log which is needed for multi-site deployments.
@@ -469,7 +470,7 @@ as follows:
 :command:`role list`
   List the roles with specified path prefix.
 
-:command:`role modify`
+:command:`role-trust-policy modify`
   Modify the assume role policy of an existing role.
 
 :command:`role-policy put`
@@ -1032,14 +1033,6 @@ Bucket Notifications/PubSub Options
 .. option:: --topic                   
 
    The bucket notifications/pubsub topic name.
-
-.. option:: --subscription
-
-   The pubsub subscription name.
-
-.. option:: --event-id
-
-   The event id in a pubsub subscription.
 
 
 Examples

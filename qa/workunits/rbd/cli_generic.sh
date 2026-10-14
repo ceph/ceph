@@ -35,7 +35,7 @@ are_schedules_staggered() {
     local interval_min=$2
 
     local unique_times=()
-    mapfile -t unique_times < <(jq -r '.[].schedule_time' <<< "$status_json" | sort -u)
+    mapfile -t unique_times < <(jq -r '.[].next_scheduled_time' <<< "$status_json" | sort -u)
 
     # Expect one unique time slot per interval minute (1-minute scheduler granularity).
     # Allow one extra time slot in case status is observed during cycle rollover
@@ -1203,7 +1203,7 @@ test_trash_purge_schedule() {
         sleep 10
     done
     test "$(rbd trash purge schedule status -p rbd --format xml |
-        xmlstarlet sel -t -v '//scheduled/item/schedule_time')" = '2100-01-01 19:00:00'
+        xmlstarlet sel -t -v '//scheduled/item/next_scheduled_time')" = '2100-01-01 19:00:00'
     rbd trash purge schedule rm -p rbd
 
     rbd trash purge schedule add -p rbd 1d 2020-01-14T07:00+05:30
@@ -1470,7 +1470,7 @@ test_trash_purge_schedule_staggering() {
     [ "$(jq 'length' <<< "$first_half_json")" -eq 40 ] || return 1
     local anchored_times=()
     mapfile -t anchored_times < <(
-        jq -r '.[].schedule_time' <<< "$first_half_json" | sort -u
+        jq -r '.[].next_scheduled_time' <<< "$first_half_json" | sort -u
     )
     (( ${#anchored_times[@]} == 1 )) || return 1
 
@@ -1545,7 +1545,7 @@ test_mirror_snapshot_schedule() {
         sleep 10
     done
     test "$(rbd mirror snapshot schedule status -p rbd2/ns1 --format xml |
-        xmlstarlet sel -t -v '//scheduled_images/image/schedule_time')" = '2100-01-01 19:00:00'
+        xmlstarlet sel -t -v '//scheduled_images/image/next_scheduled_time')" = '2100-01-01 19:00:00'
     rbd mirror snapshot schedule rm -p rbd2/ns1
 
     rbd mirror snapshot schedule add -p rbd2/ns1 --image test1 1m
@@ -1803,7 +1803,7 @@ test_mirror_snapshot_schedule_staggering() {
     [ "$(jq 'length' <<< "$first_half_json")" -eq 40 ] || return 1
     local anchored_times=()
     mapfile -t anchored_times < <(
-        jq -r '.[].schedule_time' <<< "$first_half_json" | sort -u
+        jq -r '.[].next_scheduled_time' <<< "$first_half_json" | sort -u
     )
     (( ${#anchored_times[@]} == 1 )) || return 1
 

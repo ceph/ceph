@@ -2162,6 +2162,16 @@ def test_same_account_role_policy_allow(iam_root, iam_alt_root):
                     RoleName=role_name, Path=path, AssumeRolePolicyDocument=trust_policy)['Role']
     role_arn = role['Arn']
 
+    # add user policy to assume the role arn
+    iam_alt_root.put_user_policy(UserName=user_name, PolicyName='AllowAssumeRole', PolicyDocument=json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Resource': role_arn
+            }]
+        }))
+
     sts = get_sts_client(aws_access_key_id=key['AccessKeyId'],
                          aws_secret_access_key=key['SecretAccessKey'])
 
@@ -2226,6 +2236,16 @@ def test_cross_account_role_policy_allow(iam_root, iam_alt_root):
     role = retry_on('MalformedPolicyDocument', 10, iam_root.create_role,
                     RoleName=role_name, Path=path, AssumeRolePolicyDocument=trust_policy)['Role']
     role_arn = role['Arn']
+
+    # add user policy to assume the role arn
+    iam_alt_root.put_user_policy(UserName=user_name, PolicyName='AllowAssumeRole', PolicyDocument=json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Resource': role_arn
+            }]
+        }))
 
     sts = get_sts_client(aws_access_key_id=key['AccessKeyId'],
                          aws_secret_access_key=key['SecretAccessKey'])
@@ -2307,6 +2327,16 @@ def test_account_role_policy_allow_create_bucket(iam_root, iam_alt_root):
                     RoleName=role_name, Path=path, AssumeRolePolicyDocument=trust_policy)['Role']
     role_arn = role['Arn']
 
+    # add user policy to assume the role arn
+    iam_alt_root.put_user_policy(UserName=user_name, PolicyName='AllowAssumeRole', PolicyDocument=json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Resource': role_arn
+            }]
+        }))
+
     sts = get_sts_client(aws_access_key_id=key['AccessKeyId'],
                          aws_secret_access_key=key['SecretAccessKey'])
 
@@ -2376,6 +2406,16 @@ def test_account_role_policy_allow_get_role(iam_root, iam_alt_root):
     role = retry_on('MalformedPolicyDocument', 10, iam_root.create_role,
                     RoleName=role_name, Path=path, AssumeRolePolicyDocument=trust_policy)['Role']
     role_arn = role['Arn']
+
+    # add user policy to assume the role arn
+    iam_alt_root.put_user_policy(UserName=user_name, PolicyName='AllowAssumeRole', PolicyDocument=json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Resource': role_arn
+            }]
+        }))
 
     sts = get_sts_client(aws_access_key_id=key['AccessKeyId'],
                          aws_secret_access_key=key['SecretAccessKey'])
@@ -2604,6 +2644,106 @@ def test_verify_update_thumbprintlist_of_oidc(iam_root):
                         OpenIDConnectProviderArn=response['OpenIDConnectProviderArn']
                     )
     assert del_response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+def test_same_account_bucket_policy_allow_user_arn(iam_root):
+    roots3 = get_iam_root_client(service_name='s3')
+    path = get_iam_path_prefix()
+    user_name = make_iam_name('User')
+    response = iam_root.create_user(UserName=user_name, Path=path)
+    user_arn = response['User']['Arn']
+    key = iam_root.create_access_key(UserName=user_name)['AccessKey']
+    s3 = get_iam_s3client(aws_access_key_id=key['AccessKeyId'],
+                          aws_secret_access_key=key['SecretAccessKey'])
+
+    # create a bucket with the root user
+    bucket = get_new_bucket(roots3)
+    try:
+        # the access key may take a bit to start working. retry until it returns
+        # something other than InvalidAccessKeyId
+        e = assert_raises(ClientError, retry_on, 'InvalidAccessKeyId', 10, s3.list_objects, Bucket=bucket)
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'AccessDenied'
+
+        # add a bucket policy that allows s3:ListBucket for the iam user's arn
+        roots3.put_bucket_policy(Bucket=bucket, Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': user_arn},
+                'Action': 's3:ListBucket',
+                'Resource': f'arn:aws:s3:::{bucket}'
+                }]
+            }))
+
+        # because the bucket policy names the user's arn, access should not require identity policy
+        retry_on('AccessDenied', 10, s3.list_objects, Bucket=bucket)
+    finally:
+        roots3.delete_bucket(Bucket=bucket)
+
+def _test_same_account_bucket_policy_allow_account(root, user_name, principal):
+    key = root.create_access_key(UserName=user_name)['AccessKey']
+    s3 = get_iam_s3client(aws_access_key_id=key['AccessKeyId'],
+                          aws_secret_access_key=key['SecretAccessKey'])
+
+    # create a bucket with the root user
+    roots3 = get_iam_root_client(service_name='s3')
+    bucket = get_new_bucket(roots3)
+    try:
+        # the access key may take a bit to start working. retry until it returns
+        # something other than InvalidAccessKeyId
+        e = assert_raises(ClientError, retry_on, 'InvalidAccessKeyId', 10, s3.list_objects, Bucket=bucket)
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'AccessDenied'
+
+        # add a bucket policy that allows s3:ListBucket for the given principal
+        roots3.put_bucket_policy(Bucket=bucket, Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': principal},
+                'Action': 's3:ListBucket',
+                'Resource': f'arn:aws:s3:::{bucket}'
+                }]
+            }))
+
+        # ListBucket should still fail without identity policy
+        e = assert_raises(ClientError, s3.list_objects, Bucket=bucket)
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'AccessDenied'
+
+        # add a user policy that allows s3 actions
+        root.put_user_policy(UserName=user_name, PolicyName='AllowStar', PolicyDocument=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Action': 's3:*',
+                'Resource': '*'
+                }]
+            }))
+
+        # verify that the iam user can eventually access it
+        retry_on('AccessDenied', 10, s3.list_objects, Bucket=bucket)
+    finally:
+        roots3.delete_bucket(Bucket=bucket)
+
+def test_same_account_bucket_policy_allow_account_arn(iam_root):
+    path = get_iam_path_prefix()
+    user_name = make_iam_name('User')
+    response = iam_root.create_user(UserName=user_name, Path=path)
+    user_arn = response['User']['Arn']
+    account_arn = user_arn.replace(f':user{path}{user_name}', ':root')
+    _test_same_account_bucket_policy_allow_account(iam_root, user_name, account_arn)
+
+def test_same_account_bucket_policy_allow_account_id(iam_root):
+    path = get_iam_path_prefix()
+    user_name = make_iam_name('User')
+    response = iam_root.create_user(UserName=user_name, Path=path)
+    user_arn = response['User']['Arn']
+    account_id = get_iam_root_account_id()
+    _test_same_account_bucket_policy_allow_account(iam_root, user_name, account_id)
 
 # test cross-account access, adding user policy before the bucket policy
 def _test_cross_account_user_bucket_policy(roots3, alt_root, alt_name, alt_arn):

@@ -15,6 +15,7 @@ from cephadm.inventory import (
 )
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.services.nvmeof import NvmeofService
+from cephadm.services.service_registry import service_registry
 from cephadm.utils import SpecialHostLabels, cephadmNoImage
 
 try:
@@ -626,6 +627,107 @@ class TestCephadm(object):
 
                 _save_host.assert_called_with('test')
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_check_daemons_skip_when_not_ok_to_stop(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator
+    ):
+        """_check_daemons must NOT act on an OSD that needs an autonomous
+        reconfig/redeploy when the cluster reports it is not ok-to-stop.
+        The action must be deferred to the next serve-loop iteration."""
+        from mgr_module import HandleCommandResult
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1) as dd:
+                # No scheduled action — the action will be derived autonomously
+                # (extra ceph config changed → reconfig).
+                assert cephadm_module.cache.get_scheduled_daemon_action(
+                    'test', dd.name()) is None
+
+                cephadm_module._set_extra_ceph_conf('[osd]\ndebug_osd=5')
+
+                # Simulate ok-to-stop returning failure.
+                with mock.patch.object(
+                    cephadm_module.osd_service,
+                    'ok_to_stop',
+                    return_value=HandleCommandResult(
+                        retval=-1, stdout='', stderr='not safe to stop osd.1'
+                    ),
+                ) as mock_ok_to_stop:
+                    with mock.patch.object(
+                        cephadm_module, '_daemon_action'
+                    ) as mock_daemon_action:
+                        CephadmServe(cephadm_module)._check_daemons()
+
+                # ok-to-stop must have been checked
+                mock_ok_to_stop.assert_called_once_with(['1'])
+                # the daemon action must NOT have been called
+                mock_daemon_action.assert_not_called()
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_check_daemons_proceeds_when_ok_to_stop(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator
+    ):
+        """_check_daemons MUST act on an OSD that needs an autonomous
+        reconfig/redeploy when the cluster confirms it is ok-to-stop."""
+        from mgr_module import HandleCommandResult
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1) as dd:
+                assert cephadm_module.cache.get_scheduled_daemon_action(
+                    'test', dd.name()) is None
+
+                cephadm_module._set_extra_ceph_conf('[osd]\ndebug_osd=5')
+
+                # Simulate ok-to-stop returning success.
+                with mock.patch.object(
+                    cephadm_module.osd_service,
+                    'ok_to_stop',
+                    return_value=HandleCommandResult(
+                        retval=0, stdout='osd.1 is safe to restart', stderr=''
+                    ),
+                ) as mock_ok_to_stop:
+                    with mock.patch.object(
+                        cephadm_module, '_daemon_action'
+                    ) as mock_daemon_action:
+                        CephadmServe(cephadm_module)._check_daemons()
+
+                # ok-to-stop must have been checked
+                mock_ok_to_stop.assert_called_once_with(['1'])
+                # the daemon action MUST have been called
+                mock_daemon_action.assert_called_once()
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_check_daemons_scheduled_action_skips_ok_to_stop(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator
+    ):
+        """When a user explicitly schedules a redeploy/reconfig for an OSD via
+        'ceph orch daemon redeploy osd.X', the ok-to-stop guard must NOT block
+        it — the user made an explicit decision."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1) as dd:
+                # Explicitly schedule a redeploy (user-initiated).
+                cephadm_module._schedule_daemon_action(dd.name(), 'redeploy')
+                assert cephadm_module.cache.get_scheduled_daemon_action(
+                    'test', dd.name()) == 'redeploy'
+
+                with mock.patch.object(
+                    cephadm_module.osd_service,
+                    'ok_to_stop',
+                ) as mock_ok_to_stop:
+                    with mock.patch.object(
+                        cephadm_module, '_daemon_action'
+                    ) as mock_daemon_action:
+                        CephadmServe(cephadm_module)._check_daemons()
+
+                # ok-to-stop must NOT have been consulted for a user-scheduled action
+                mock_ok_to_stop.assert_not_called()
+                # the daemon action must still have run
+                mock_daemon_action.assert_called_once()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_daemon_check_extra_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -2111,12 +2213,26 @@ class TestCephadm(object):
             spec = NFSServiceSpec(
                 service_id='name',
                 placement=ps)
-            unmanaged_spec = ServiceSpec.from_json(spec.to_json())
-            unmanaged_spec.unmanaged = True
+            unmanaged_spec = NFSServiceSpec(
+                service_id='name',
+                placement=ps,
+                enable_client_object_cache=True,
+                unmanaged=True,
+            )
             with with_service(cephadm_module, unmanaged_spec):
-                c = cephadm_module.add_daemon(spec)
-                [out] = wait(cephadm_module, c)
-                match_glob(out, "Deployed nfs.name.* on host 'test'")
+                nfs_service = service_registry.get_service('nfs')
+                with mock.patch.object(
+                    nfs_service,
+                    'generate_config',
+                    wraps=nfs_service.generate_config,
+                ) as generate_config:
+                    c = cephadm_module.add_daemon(spec)
+                    [out] = wait(cephadm_module, c)
+                    match_glob(out, "Deployed nfs.name.* on host 'test'")
+                    deploy_ctx = generate_config.call_args.args[0]
+                    stored_spec = cephadm_module.spec_store['nfs.name'].spec
+                    assert deploy_ctx.service_spec is stored_spec
+                    assert deploy_ctx.service_spec.enable_client_object_cache is True
 
                 assert_rm_daemon(cephadm_module, 'nfs.name.test', 'test')
 

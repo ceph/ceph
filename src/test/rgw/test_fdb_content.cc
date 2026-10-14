@@ -19,12 +19,13 @@
 
 #include "test/rgw/test_fdb_common.h"
 
-#include <algorithm>
-#include <compare>
+#include <array>
 #include <ranges>
 #include <string>
-#include <string_view>
 #include <vector>
+#include <compare>
+#include <algorithm>
+#include <string_view>
 
 namespace content = ceph::libfdb::layer::content;
 
@@ -49,8 +50,35 @@ void check_comparison_laws(const auto& lesser, const auto& equal_lesser, const a
 
 void append_manual_string_segment(std::string& out, const std::string_view segment)
 {
+ out.push_back('\x01');
  out.append(segment);
  out.push_back('\0');
+}
+
+std::vector<std::string> representative_byte_strings()
+{
+ constexpr std::array alphabet {
+  '\0', '\x01', '\x7F', static_cast<char>(0xFF)
+ };
+ std::vector strings {std::string {}};
+ std::vector frontier {std::string {}};
+
+ for (auto length = 0; length < 3; ++length) {
+  std::vector<std::string> next;
+
+  for (const auto& prefix : frontier) {
+   for (const auto byte : alphabet) {
+    auto value = prefix;
+    value.push_back(byte);
+    strings.push_back(value);
+    next.push_back(std::move(value));
+   }
+  }
+
+  frontier = std::move(next);
+ }
+
+ return strings;
 }
 
 std::string manually_encoded_key(const std::vector<std::string_view>& segments,
@@ -74,13 +102,16 @@ std::string materialized_key(const content::compiled_key& key)
 
 } // anonymous namespace
 
-TEST_CASE("content keys compile string segments", "[fdb][content]")
+TEST_CASE("content keys use the FoundationDB byte-string tuple representation",
+          "[fdb][content]")
 {
- STATIC_REQUIRE(7 == content::keyspace("tenant").size());
- STATIC_REQUIRE(21 == content::key("tenant", "bucket", "object").size());
+ STATIC_REQUIRE(8 == content::keyspace("tenant").size());
+ STATIC_REQUIRE(24 == content::key("tenant", "bucket", "object").size());
 
  const auto key = content::keyspace("tenant") / "bucket" / "object";
- const auto expected = std::string("tenant\0bucket\0object\0", 21);
+ auto expected = std::string("\x01tenant\0", 8);
+ expected.append("\x01" "bucket\0", 8);
+ expected.append("\x01object\0", 8);
 
  CHECK(expected == materialized_key(key));
  CHECK(expected.size() == key.size());
@@ -108,37 +139,53 @@ TEST_CASE("content key assembly rejects invalid inputs", "[fdb][content]")
 
  REQUIRE_THROWS_AS(content::keyspace(std::string_view()),
                    ceph::libfdb::libfdb_exception);
-
- REQUIRE_THROWS_AS(content::keyspace(std::string_view("\xFF"sv)),
-                   ceph::libfdb::libfdb_exception);
 }
 
-TEST_CASE("content key assembly constrains only the root segment",
+TEST_CASE("content key assembly accepts arbitrary bytes and empty child segments",
           "[fdb][content]")
 {
- constexpr char high_segment[] = { static_cast<char>(0xFF), 'x' };
+ constexpr char leading_high_segment[] = { static_cast<char>(0xFF), 'x' };
+ constexpr char trailing_high_segment[] = { 'x', static_cast<char>(0xFF) };
+ const auto high_root_key =
+  content::keyspace(
+    std::string_view(leading_high_segment, sizeof(leading_high_segment)));
  const auto empty_segment_key = content::keyspace("tenant") / "" / "object";
- const auto high_segment_key =
+ const auto leading_high_key =
   content::keyspace("tenant") /
-  std::string_view(high_segment, sizeof(high_segment));
- const auto expected_empty = std::string("tenant\0\0object\0", 15);
- auto expected_high = std::string("tenant\0", 7);
- expected_high.append(high_segment, sizeof(high_segment));
- expected_high.push_back('\0');
+  std::string_view(leading_high_segment, sizeof(leading_high_segment));
+ const auto trailing_high_key =
+  content::keyspace("tenant") /
+  std::string_view(trailing_high_segment, sizeof(trailing_high_segment));
+ auto expected_root = std::string("\x01", 1);
+ expected_root.append(leading_high_segment, sizeof(leading_high_segment));
+ expected_root.push_back('\0');
+ auto expected_empty = std::string("\x01tenant\0\x01", 9);
+ expected_empty.push_back('\0');
+ expected_empty.append("\x01object\0", 8);
+ auto expected_leading = std::string("\x01tenant\0\x01", 9);
+ expected_leading.append(leading_high_segment, sizeof(leading_high_segment));
+ expected_leading.push_back('\0');
+ auto expected_trailing = std::string("\x01tenant\0\x01", 9);
+ expected_trailing.append(trailing_high_segment, sizeof(trailing_high_segment));
+ expected_trailing.push_back('\0');
 
+ CHECK_THAT(materialized_key(high_root_key),
+            Catch::Matchers::RangeEquals(expected_root));
  CHECK_THAT(materialized_key(empty_segment_key),
             Catch::Matchers::RangeEquals(expected_empty));
- CHECK_THAT(materialized_key(high_segment_key),
-            Catch::Matchers::RangeEquals(expected_high));
+ CHECK_THAT(materialized_key(leading_high_key),
+            Catch::Matchers::RangeEquals(expected_leading));
+ CHECK_THAT(materialized_key(trailing_high_key),
+            Catch::Matchers::RangeEquals(expected_trailing));
 }
 
 TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
 {
- STATIC_REQUIRE(5 == content::detail::encoded_string_segment_size("a\0b"sv));
+ STATIC_REQUIRE(6 == content::detail::encoded_string_segment_size("a\0b"sv));
 
  constexpr char segment_bytes[] = { 'a', '\0', 'b' };
  const auto key = content::keyspace(std::string_view(segment_bytes, sizeof(segment_bytes)));
- const auto expected = std::string("a\0\xFF""b\0", 5);
+ const auto expected = std::string("\x01" "a\0\xFF" "b\0", 6);
 
  CHECK_THAT(materialized_key(key), Catch::Matchers::RangeEquals(expected));
 }
@@ -148,9 +195,9 @@ TEST_CASE("content key string segments escape multiple embedded nulls", "[fdb][c
  constexpr char segment_bytes[] = { 'a', '\0', 'b', '\0', 'c' };
  const auto segment = std::string_view(segment_bytes, sizeof(segment_bytes));
  const auto key = content::keyspace("tenant") / segment;
- auto expected = std::string("tenant\0", 7);
+ auto expected = std::string("\x01tenant\0", 8);
 
- expected.append("a\0\xFF""b\0\xFF""c\0", 8);
+ expected.append("\x01" "a\0\xFF" "b\0\xFF" "c\0", 9);
 
  CHECK_THAT(materialized_key(key), Catch::Matchers::RangeEquals(expected));
 }
@@ -158,7 +205,7 @@ TEST_CASE("content key string segments escape multiple embedded nulls", "[fdb][c
 TEST_CASE("content key string literals preserve embedded nulls", "[fdb][content]")
 {
  const auto key = content::keyspace("a\0b");
- const auto expected = std::string("a\0\xFF""b\0", 5);
+ const auto expected = std::string("\x01" "a\0\xFF" "b\0", 6);
 
  CHECK_THAT(materialized_key(key), Catch::Matchers::RangeEquals(expected));
 }
@@ -173,6 +220,39 @@ TEST_CASE("content key segment boundaries are unambiguous", "[fdb][content]")
 
  CHECK_FALSE(one_segment == two_segments);
  CHECK(two_segments < one_segment);
+}
+
+TEST_CASE("content key segment encoding is injective over representative bytes",
+          "[fdb][content]")
+{
+ const auto segments = representative_byte_strings();
+ std::vector<content::compiled_key> keys;
+ keys.reserve(std::size(segments) + std::size(segments) * std::size(segments));
+
+ for (const auto& first : segments) {
+  keys.push_back(content::keyspace("root") / first);
+
+  for (const auto& second : segments) {
+   keys.push_back(content::keyspace("root") / first / second);
+  }
+ }
+
+ std::ranges::sort(keys);
+
+ CHECK(std::ranges::adjacent_find(keys) == std::end(keys));
+}
+
+TEST_CASE("content key encoding distinguishes escapes from segment boundaries",
+          "[fdb][content]")
+{
+ constexpr char embedded_null[] = { 'a', '\0' };
+ constexpr char high_byte[] = { static_cast<char>(0xFF) };
+ const auto one_segment =
+  content::key("root", std::string_view(embedded_null, sizeof(embedded_null)));
+ const auto two_segments =
+  content::key("root", "a", std::string_view(high_byte, sizeof(high_byte)));
+
+ CHECK_FALSE(one_segment == two_segments);
 }
 
 TEST_CASE("content key comparison algebra follows compiled byte order", "[fdb][content]")

@@ -141,7 +141,10 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
 }
 
 static tl::expected<early_config_t, int>
-_get_early_config(int argc, const char *argv[])
+_get_early_config(
+  int argc,
+  const char *argv[],
+  std::vector<const char *> &extra_args)
 {
   early_config_t ret;
 
@@ -150,6 +153,7 @@ _get_early_config(int argc, const char *argv[])
   early_args.insert(
     std::end(early_args),
     argv, argv + argc);
+  early_args.insert(std::end(early_args), extra_args.begin(), extra_args.end());
 
   ret.init_params = ceph_argparse_early_args(
     early_args,
@@ -291,7 +295,10 @@ _get_early_config(int argc, const char *argv[])
  * and send it back to the parent process.
  */
 tl::expected<early_config_t, int>
-get_early_config(int argc, const char *argv[])
+get_early_config(
+  int argc,
+  const char *argv[],
+  std::vector<const char*> extra_args)
 {
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -319,7 +326,7 @@ get_early_config(int argc, const char *argv[])
     return tl::unexpected(-errno);
   } else if (worker == 0) { // child
     close(pipes[0]);
-    auto ret = _get_early_config(argc, argv);
+    auto ret = _get_early_config(argc, argv, extra_args);
     if (ret.has_value()) {
       bufferlist bl;
       ::encode(ret.value(), bl);
