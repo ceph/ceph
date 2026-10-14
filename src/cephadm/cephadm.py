@@ -1799,6 +1799,32 @@ class CephadmAgent(DaemonForm):
     def wakeup(self) -> None:
         self.event.set()
 
+    def _delay_report_after_mgr_request(self, woken: bool, sent_ack: int) -> None:
+        """Spread the report the mgr asked for with a new ack.
+
+        The mgr requests fresh metadata from many agents at once (ack fan-out
+        after deploying daemons, config pushes), and the gatherers wake the
+        main loop as soon as they have collected data for the new ack. Delay
+        that report by up to jitter_seconds so the agents do not all report at
+        the same moment. Wakeups for local daemon changes (same ack) are not
+        delayed, and a target mgr change is already delayed at the top of the
+        loop.
+        """
+        if (
+            not woken
+            or self.stop
+            or self.ack == sent_ack
+            or not self.jitter_seconds
+            or self.target_changed
+        ):
+            return
+        delay = random.uniform(0, self.jitter_seconds)
+        logger.info(
+            f'Mgr requested new metadata (ack {self.ack}), delaying next '
+            f'metadata report for {delay:.2f} seconds'
+        )
+        time.sleep(delay)
+
     def pull_conf_settings(self) -> None:
         previous_target = (self.target_ip, self.target_port)
         try:
@@ -1965,8 +1991,9 @@ class CephadmAgent(DaemonForm):
             # Add ± jitter_seconds to introduce randomness
             jitter = random.uniform(-self.jitter_seconds, self.jitter_seconds)
             delay = max(self.loop_interval - int(run_time_average) + jitter, 0)
-            self.event.wait(delay)
+            woken = self.event.wait(delay)
             self.event.clear()
+            self._delay_report_after_mgr_request(woken, ack)
 
     def _apply_mgr_response(self, response_json: Dict[str, Any],
                             pending: Dict[str, PendingSection]) -> None:
