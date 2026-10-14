@@ -1,12 +1,12 @@
 import { Component, inject, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { Observable, BehaviorSubject, of } from 'rxjs';
+import { Observable, BehaviorSubject, forkJoin, of } from 'rxjs';
 import { switchMap, catchError, map } from 'rxjs/operators';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Permission } from '~/app/shared/models/permissions';
-import { SMBShare } from '../smb.model';
+import { SMBCluster, SMBShare } from '../smb.model';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { Bucket } from '~/app/ceph/rgw/models/rgw-bucket';
@@ -24,6 +24,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 interface SMBShareRow extends SMBShare {
   bucketRouterLink?: string[];
+  hasPersistentHandles?: boolean;
 }
 
 @Component({
@@ -58,6 +59,7 @@ export class SmbShareListComponent implements OnInit {
   modalRef: NgbModalRef;
   isRgw = false;
   shareListDescription = '';
+  private persistentHandlesDefault = false;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -147,6 +149,12 @@ export class SmbShareListComponent implements OnInit {
             flexGrow: 2
           },
           {
+            name: $localize`Persistent handles`,
+            prop: 'hasPersistentHandles',
+            flexGrow: 2,
+            cellTransformation: CellTemplate.checkIcon
+          },
+          {
             name: $localize`IOPS Limit`,
             prop: 'cephfs.qos',
             cellTemplate: this.iopsLimitTpl,
@@ -194,8 +202,14 @@ export class SmbShareListComponent implements OnInit {
 
     this.smbShares$ = this.subject$.pipe(
       switchMap(() =>
-        this.smbService.listShares(this.clusterId).pipe(
-          map((shares: SMBShare[]) => this.filterByBackend(shares)),
+        forkJoin({
+          shares: this.smbService.listShares(this.clusterId),
+          persistentHandlesDefault: this.loadPersistentHandlesDefault()
+        }).pipe(
+          map(({ shares, persistentHandlesDefault }) => {
+            this.persistentHandlesDefault = persistentHandlesDefault;
+            return this.filterByBackend(shares);
+          }),
           switchMap((shares) => this.withBucketLinks(shares)),
           catchError(() => {
             this.context.error();
@@ -203,6 +217,16 @@ export class SmbShareListComponent implements OnInit {
           })
         )
       )
+    );
+  }
+
+  private loadPersistentHandlesDefault(): Observable<boolean> {
+    if (this.isRgw) {
+      return of(false);
+    }
+    return this.smbService.getCluster(this.clusterId).pipe(
+      map((cluster: SMBCluster) => !!cluster.share_defaults?.availability?.persistent_handles),
+      catchError(() => of(false))
     );
   }
 
@@ -214,8 +238,11 @@ export class SmbShareListComponent implements OnInit {
   }
 
   private withBucketLinks(shares: SMBShare[]): Observable<SMBShareRow[]> {
-    if (!this.isRgw || !shares?.length) {
-      return of(shares || []);
+    if (!shares?.length) {
+      return of([]);
+    }
+    if (!this.isRgw) {
+      return of(this.mapShareRows(shares));
     }
 
     const needsOwnerLookup = shares.some((share) => share.rgw?.bucket && !share.rgw?.user_id);
@@ -237,8 +264,12 @@ export class SmbShareListComponent implements OnInit {
     return shares.map((share) => {
       const bucketName = share.rgw?.bucket;
       const owner = share.rgw?.user_id || (bucketName && ownerByBid?.get(bucketName));
+      // Shares without an explicit override inherit the cluster default.
+      const hasPersistentHandles =
+        !!share.cephfs && (share.availability?.persistent_handles ?? this.persistentHandlesDefault);
       return {
         ...share,
+        hasPersistentHandles,
         bucketRouterLink: bucketName && owner ? ['/rgw/bucket', bucketName, owner] : undefined
       };
     });
