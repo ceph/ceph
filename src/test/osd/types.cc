@@ -24,6 +24,7 @@
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
+#include "messages/MOSDOpReply.h"
 
 #include <iostream> // for std::cout
 #include <sstream>
@@ -2689,6 +2690,57 @@ TEST(chunk_info_test, calc_refs_inc_match) {
     mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "foo"}}}),
     mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "ccc"}}}),
     mk_delta({}));
+}
+
+static ceph::ref_t<MOSDOpReply> reply_roundtrip(
+  const ceph::ref_t<MOSDOpReply>& in,
+  uint64_t features)
+{
+  in->encode_payload(features);
+  auto out = ceph::make_message<MOSDOpReply>();
+  out->set_header(in->get_header());
+  ceph::buffer::list payload = in->get_payload();
+  out->set_payload(payload);
+  out->set_data(in->get_data());
+  out->decode_payload();
+  return out;
+}
+
+TEST(MOSDOpReply, core_hint_roundtrip)
+{
+  entity_addr_t a;
+  ASSERT_TRUE(a.parse("v2:127.0.0.1:6810/1234"));
+  const osd_core_hint_t hint{3, entity_addrvec_t(a)};
+
+  auto reply = ceph::make_message<MOSDOpReply>();
+  reply->set_core_hint(hint);
+  auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
+  EXPECT_EQ(decoded->get_header().version, 9);
+  ASSERT_TRUE(decoded->get_core_hint().has_value());
+  EXPECT_EQ(*decoded->get_core_hint(), hint);
+  EXPECT_EQ(fmt::format("{}", *decoded->get_core_hint()),
+            "core 3 at v2:127.0.0.1:6810/1234");
+}
+
+TEST(MOSDOpReply, no_core_hint)
+{
+  auto reply = ceph::make_message<MOSDOpReply>();
+  auto decoded = reply_roundtrip(reply, CEPH_FEATURES_ALL);
+  EXPECT_EQ(decoded->get_header().version, 9);
+  EXPECT_FALSE(decoded->get_core_hint().has_value());
+}
+
+TEST(MOSDOpReply, core_hint_dropped_for_old_peer)
+{
+  entity_addr_t a;
+  ASSERT_TRUE(a.parse("v2:127.0.0.1:6810/1234"));
+
+  auto reply = ceph::make_message<MOSDOpReply>();
+  reply->set_core_hint(osd_core_hint_t{3, entity_addrvec_t(a)});
+  auto decoded = reply_roundtrip(
+    reply, CEPH_FEATURES_ALL & ~CEPH_FEATURE_OSD_CORE_HINT);
+  EXPECT_EQ(decoded->get_header().version, 8);
+  EXPECT_FALSE(decoded->get_core_hint().has_value());
 }
 
 /*

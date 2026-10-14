@@ -1,0 +1,10 @@
+# Route client ops directly to the OSD reactor core owning their PG:
+# the OSDs listen on a port per reactor core, and hint the PG's core in
+# their op replies; the clients follow the hints.
+overrides:
+  ceph:
+    conf:
+      osd:
+        crimson osd core listeners: true
+      client:
+        objecter use osd core hints: true

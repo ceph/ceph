@@ -151,6 +151,23 @@ options:
   default: 0
   desc: Report OSD status periodically in seconds, 0 to disable
 
+- name: crimson_osd_core_listeners
+  type: bool
+  level: advanced
+  default: false
+  desc: Listen for client connections on an additional port per reactor core
+  long_desc: The public messenger binds one more port (from the
+             ms_bind_port_min..ms_bind_port_max range) per reactor core.
+             A connection accepted on a core's port is served on that core.
+             Replies to client ops carry the address of the core owning the
+             PG, so that clients supporting OSD_CORE_HINT can send ops
+             directly to that core.
+  see_also:
+  - ms_bind_port_min
+  - ms_bind_port_max
+  flags:
+  - startup
+
 - name: crimson_poll_mode
   type: bool
   level: advanced

@@ -95,6 +95,15 @@ class PerShardState {
   seastar::future<> dump_ops_in_flight(Formatter *f) const;
 
   epoch_t up_epoch = 0;
+
+  /// sent to clients in op replies: this core, and the address of its
+  /// client listener. Unset unless crimson_osd_core_listeners.
+  std::optional<osd_core_hint_t> core_hint;
+  void set_core_hint(std::optional<osd_core_hint_t> hint) {
+    assert_core();
+    core_hint = std::move(hint);
+  }
+
   OSDMapService::cached_map_t osdmap;
   const auto &get_osdmap() const {
     assert_core();
@@ -679,6 +688,9 @@ public:
   // OSDMapService
   cached_map_t get_map() const final { return local_state.get_osdmap(); }
   epoch_t get_up_epoch() const final { return local_state.up_epoch; }
+  const std::optional<osd_core_hint_t>& get_core_hint() const {
+    return local_state.core_hint;
+  }
   seastar::future<cached_map_t> get_map(epoch_t e) final {
     return with_singleton(
       [](auto &sstate, epoch_t e) {

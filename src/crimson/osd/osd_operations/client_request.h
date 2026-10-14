@@ -22,6 +22,8 @@
 #include "crimson/common/utility.h"
 #include "messages/MOSDOp.h"
 
+class MOSDOpReply;
+
 namespace crimson::osd {
 class PG;
 class OSD;
@@ -241,6 +243,11 @@ private:
   template <typename FuncT>
   interruptible_future<> with_sequencer(FuncT&& func);
   interruptible_future<> reply_op_error(const Ref<PG>& pg, int err);
+
+  /// send an op reply to the client, carrying this core's routing hint
+  /// (see osd_core_hint_t). Runs on the core owning the PG, which is
+  /// thus the core to hint.
+  seastar::future<> send_reply(MURef<MOSDOpReply> reply);
 
   interruptible_future<> do_process(
     instance_handle_t &ihref,

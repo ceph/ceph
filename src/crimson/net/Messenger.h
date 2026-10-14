@@ -67,6 +67,15 @@ public:
   /// bind to the given address
   virtual bind_ertr::future<> bind(const entity_addrvec_t& addr) = 0;
 
+  /// bind one additional listener per reactor core, on the IP of the
+  /// main address: a connection accepted by core c's listener is served
+  /// on core c. Must follow a successful bind(), and precede start().
+  virtual bind_ertr::future<> bind_core_listeners() = 0;
+
+  /// the address of each core's listener, indexed by core; empty unless
+  /// bind_core_listeners() succeeded
+  virtual std::vector<entity_addrvec_t> get_core_addrs() const = 0;
+
   /// start the messenger
   virtual seastar::future<> start(const dispatchers_t&) = 0;
 

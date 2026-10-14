@@ -2055,6 +2055,12 @@ public:
     /// true if we should resend this message on failure
     bool should_resend = true;
 
+    /// set while the op is accounted for as in flight in its session's
+    /// pg_routes: the PG it was sent for, and the core connection it was
+    /// sent on (nullopt: the session's main connection)
+    std::optional<spg_t> routed_pgid;
+    std::optional<uint32_t> routed_core;
+
     /// true if the throttle budget is get/put on a series of OPs,
     /// instead of per OP basis, when this flag is set, the budget is
     /// acquired before sending the very first OP of the series and
@@ -2515,6 +2521,25 @@ public:
 
     int incarnation;
     ConnectionRef con;
+
+    /// connections to the per-core listeners of a Crimson OSD (see
+    /// osd_core_hint_t), by core; in addition to 'con'. Protected by lock.
+    std::map<uint32_t, ConnectionRef> core_cons;
+
+    /// how a PG's ops are routed to the OSD core owning it
+    struct pg_route_t {
+      /// the core the OSD last hinted for the PG
+      std::optional<uint32_t> hinted_core;
+      /// the core connection the PG's ops are sent on (nullopt: 'con').
+      /// Changed only while no op of the PG is in flight, so that the
+      /// PG's ops arrive in order. Always one of core_cons.
+      std::optional<uint32_t> core;
+      /// the PG's ops in flight (sent, and still assigned to the session)
+      unsigned in_flight = 0;
+    };
+    /// by PG; protected by lock
+    std::map<spg_t, pg_route_t> pg_routes;
+
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
@@ -2526,6 +2551,13 @@ public:
     ~OSDSession() override;
 
     bool is_homeless() { return (osd == -1); }
+
+    /// whether c is one of our connections ('con' or a core connection);
+    /// lock is locked
+    bool owns_con(const ConnectionRef& c) const;
+
+    /// the core of c, if c is one of core_cons; lock is locked
+    std::optional<uint32_t> core_of(const ConnectionRef& c) const;
 
     std::unique_lock<std::mutex> get_lock(object_t& oid);
   };
@@ -2675,6 +2707,25 @@ private:
   void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
+  /// mark down and forget all of s's core connections; s->lock is locked
+  void _close_core_cons(OSDSession *s);
+  /// handle the reset of one of s's core connections: mark it down and
+  /// forget it, and resend the ops sent on it via the main connection.
+  /// The lingers to re-register are added to lresend.
+  /// rwlock is locked unique, s->lock is locked
+  void _reset_core_con(OSDSession *s,
+		       uint32_t core,
+		       std::map<uint64_t, LingerOp *>& lresend);
+  /// choose the connection to send op on, and account for op as in flight
+  /// on it; op->session->lock is locked
+  ConnectionRef _op_route(Op *op);
+  /// stop accounting for op as in flight; op->session->lock is locked
+  void _op_unroute(Op *op);
+  /// note the core hinted for pgid in an op reply from s, and connect to
+  /// that core if not yet connected. s->lock is locked
+  void _session_apply_core_hint(OSDSession *s,
+				const spg_t& pgid,
+				const osd_core_hint_t& hint);
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
@@ -4114,6 +4165,9 @@ private:
   epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
+  /// see objecter_use_osd_core_hints
+  const bool use_osd_core_hints =
+    cct->_conf.get_val<bool>("objecter_use_osd_core_hints");
 
 public:
   void set_epoch_barrier(epoch_t epoch);

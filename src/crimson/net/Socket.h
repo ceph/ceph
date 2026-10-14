@@ -161,6 +161,7 @@ public:
   ShardedServerSocket(
       seastar::shard_id sid,
       bool dispatch_only_on_primary_sid,
+      std::optional<seastar::shard_id> fixed_sid,
       construct_tag);
 
   ~ShardedServerSocket();
@@ -185,10 +186,25 @@ public:
   static seastar::future<ShardedServerSocket*> create(
       bool dispatch_only_on_this_shard);
 
+  /// create a listener that places every accepted socket on core
+  /// target_sid. Accepted sockets are still passed to fn_accept on
+  /// target_sid, and dispatching to the primary shard is up to the user.
+  static seastar::future<ShardedServerSocket*> create_fixed(
+      seastar::shard_id target_sid);
+
 private:
+  static seastar::future<ShardedServerSocket*> do_create(
+      bool dispatch_only_on_this_shard,
+      std::optional<seastar::shard_id> fixed_sid);
+
+  /// whether this shard needs a seastar listener
+  bool listens_on_this_shard() const;
+
   const seastar::shard_id primary_sid;
   /// XXX: Remove once all infrastructure uses multi-core messenger
   const bool dispatch_only_on_primary_sid;
+  /// the shard all accepted sockets are placed on, if fixed
+  const std::optional<seastar::shard_id> fixed_sid;
   entity_addr_t listen_addr;
   std::optional<seastar::server_socket> listener;
   seastar::gate shutdown_gate;

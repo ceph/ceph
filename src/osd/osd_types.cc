@@ -357,6 +357,39 @@ list<request_redirect_t> request_redirect_t::generate_test_instances()
   return o;
 }
 
+// -- osd_core_hint_t --
+void osd_core_hint_t::encode(ceph::buffer::list& bl, uint64_t features) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(core, bl);
+  encode(addrs, bl, features);
+  ENCODE_FINISH(bl);
+}
+
+void osd_core_hint_t::decode(ceph::buffer::list::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(core, bl);
+  decode(addrs, bl);
+  DECODE_FINISH(bl);
+}
+
+void osd_core_hint_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("core", core);
+  f->dump_object("addrs", addrs);
+}
+
+list<osd_core_hint_t> osd_core_hint_t::generate_test_instances()
+{
+  list<osd_core_hint_t> o;
+  o.push_back(osd_core_hint_t());
+  entity_addr_t a;
+  a.parse("v2:127.0.0.1:6810/1234");
+  o.push_back(osd_core_hint_t(3, entity_addrvec_t(a)));
+  return o;
+}
+
 void objectstore_perf_stat_t::dump(Formatter *f) const
 {
   // *_ms values just for compatibility.
