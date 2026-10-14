@@ -8372,6 +8372,14 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
   return 0;
 }
 
+// Whether the pending changes remove the erasure code profile name with the
+// last pool that used it.
+bool OSDMonitor::erasure_code_profile_removal_pending(const string& name) const
+{
+  return std::ranges::find(pending_inc.old_erasure_code_profiles, name) !=
+    pending_inc.old_erasure_code_profiles.end();
+}
+
 // Whether the pending changes remove the committed rule rule_id, named
 // rule_name, with the last pool that used it.
 bool OSDMonitor::crush_rule_removal_pending(const string& rule_name,
@@ -13113,7 +13121,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string plugin = profile_map["plugin"];
 
-    if (pending_inc.has_erasure_code_profile(name)) {
+    // a profile being added, or removed with its last pool, is decided once
+    // the pending changes are committed
+    if (pending_inc.has_erasure_code_profile(name) ||
+        erasure_code_profile_removal_pending(name)) {
       dout(20) << "erasure code profile " << name << " try again" << dendl;
       goto wait;
     } else {
@@ -15304,9 +15315,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       // the pending changes may remove the profile with the last pool that
       // used it; decide once they are committed
-      if (std::ranges::find(pending_inc.old_erasure_code_profiles,
-                            erasure_code_profile) !=
-          pending_inc.old_erasure_code_profiles.end()) {
+      if (erasure_code_profile_removal_pending(erasure_code_profile)) {
         dout(20) << "EC profile " << erasure_code_profile
                  << " is being removed" << dendl;
         goto wait;

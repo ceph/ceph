@@ -573,6 +573,7 @@ private:
 				 std::ostream *ss);
   void maybe_remove_unused_crush_rule(int64_t skip_pool, int old_rule_id);
   bool crush_rule_removal_pending(const std::string& rule_name, int rule_id);
+  bool erasure_code_profile_removal_pending(const std::string& name) const;
   int prepare_pool_size(const unsigned pool_type,
 			const std::string &erasure_code_profile,
                         uint8_t repl_size,
