@@ -1250,6 +1250,62 @@ TEST_P(log_manager_fastinfo_test_t, entry_larger_than_node_trim)
   });
 }
 
+// On crimson, PGLog::merge_log rewrites the whole pg log: it removes all log
+// keys and writes the log entries again in the same transaction. The removed
+// copies stay in their nodes, so a node can start with removed log keys that
+// are newer than its live ones. The trim must still remove the live ones.
+struct log_manager_trim_test_t : log_manager_fastinfo_test_t {
+  // PGLog::_write_log_and_missing with dirty_to = max, for the log
+  // (tail, head]
+  void rewrite_log(omap_root_t &root, uint64_t tail) {
+    std::map<std::string, bufferlist> kvs;
+    for (auto v = tail + 1; v <= head; ++v) {
+      kvs[log_key(v)] = rand_buffer(LOG_VAL);
+    }
+    // omap_rm_key_range() keeps references to the keys across suspension
+    // points, so the keys must outlive the call
+    const auto first = log_key(0);
+    const auto last = log_key(std::numeric_limits<uint64_t>::max());
+    auto t = create_mutate_transaction();
+    with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_rm_key_range(root, t, first, last);
+    }).unsafe_get();
+    with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_set_keys(root, t, kvs);
+    }).unsafe_get();
+    submit_transaction(std::move(t));
+  }
+
+  bool has_key(omap_root_t &root, uint64_t v) {
+    auto t = create_read_transaction();
+    return with_trans_intr(*t, [&](auto &t) {
+      return get_lm().omap_get_value(root, t, log_key(v));
+    }).unsafe_get().has_value();
+  }
+};
+
+// the log is (first - 3, first + 1], where first is the oldest log entry of
+// the tail, then the log is rewritten into the tail and the trim removes
+// first - 2 and first - 1
+TEST_P(log_manager_trim_test_t, trim_after_log_rewrite)
+{
+  run_async([this] {
+    auto root = init_root();
+    for (auto old_tail = root.addr; root.addr == old_tail; ) {
+      write_one(root, LOG_VAL);
+    }
+    const uint64_t first = head;
+    write_one(root, LOG_VAL);
+    trim(root, 1, first - 3);
+    rewrite_log(root, first - 3);
+    trim(root, first - 2, first - 1);
+    EXPECT_FALSE(has_key(root, first - 2));
+    EXPECT_FALSE(has_key(root, first - 1));
+    EXPECT_TRUE(has_key(root, first));
+    EXPECT_TRUE(has_key(root, first + 1));
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   omap_manager_test,
   omap_manager_test_t,
@@ -1266,6 +1322,19 @@ INSTANTIATE_TEST_SUITE_P(
 INSTANTIATE_TEST_SUITE_P(
   log_manager_fastinfo_test,
   log_manager_fastinfo_test_t,
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK)
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  log_manager_trim_test,
+  log_manager_trim_test_t,
   ::testing::Combine(
     ::testing::Values (
       "segmented",
