@@ -9579,17 +9579,36 @@ int OSDMonitor::prepare_command_pool_set_replica(
 
     set<int> roots;
     crush.find_takes_by_rule(old_crush_rule, &roots);
-    if (roots.size() != 1) {
-      ss << "pool CRUSH rule must have exactly one take operation to change replica";
+    int zone_type = -1;
+    int root = CRUSH_ITEM_NONE;
+    if (roots.size() == 1) {
+      root = *roots.begin();
+    } else if (std::ssize(roots) == num_zones) {
+      // a rule that takes each zone in turn, as global stretch mode's rules
+      // may: the zones' common parent is the root
+      for (int zone : roots) {
+        int parent = CRUSH_ITEM_NONE;
+        if (zone >= 0 || crush.get_immediate_parent_id(zone, &parent) < 0 ||
+            (root != CRUSH_ITEM_NONE && parent != root) ||
+            (zone_type >= 0 && crush.get_bucket_type(zone) != zone_type)) {
+          root = CRUSH_ITEM_NONE;
+          break;
+        }
+        root = parent;
+        zone_type = crush.get_bucket_type(zone);
+      }
+    }
+    if (root == CRUSH_ITEM_NONE) {
+      ss << "pool CRUSH rule must take one root, or each zone under one root, "
+         << "to change replica";
       return -EINVAL;
     }
-    const char *root_name = crush.get_item_name(*roots.begin());
+    const char *root_name = crush.get_item_name(root);
     if (!root_name) {
       ss << "pool CRUSH rule references an unnamed root";
       return -EINVAL;
     }
 
-    int zone_type = -1;
     int osd_type = -1;
     const int rule_len = crush.get_rule_len(old_crush_rule);
     for (int step = 0; step < rule_len; ++step) {
