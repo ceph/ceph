@@ -6,6 +6,7 @@
 # cluster in stretch mode.
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/mon-stretch/mon-stretch-helpers.sh
 
 function run() {
     local dir=$1
@@ -53,12 +54,9 @@ function TEST_commands_wait_for_commit() {
 
     expect_failure $dir "require-osd-release umbrella" \
         ceph osd pool create early 8 8 || return 1
-    expect_failure $dir "errno 1\]" \
-        python3 -c "
-import rados
-with rados.Rados(conffile='$dir/ceph.conf') as r:
-    r.create_pool('early')
-" || return 1
+    # librados creates pools as earlier releases do, for example for RGW
+    librados_create_pool $dir rados_early || return 1
+    test "$(pool_field rados_early size)" = 3 || return 1
     # the defaults can always be shown
     ceph osd pool default get || return 1
     expect_failure $dir "require-osd-release umbrella" \
@@ -83,11 +81,13 @@ with rados.Rados(conffile='$dir/ceph.conf') as r:
     ceph osd pool set late num_zones 1 || return 1
 }
 
-# zones iris (mon.a, osd.0, osd.1) and pze (mon.b, osd.2, osd.3), tiebreaker mon.c
+# zones iris (mon.a, osd.0, osd.1) and pze (mon.b, osd.2, osd.3), tiebreaker
+# mon.c; ceph osd pool create works before the commit unless $2 is false
 function stretchable_cluster() {
     local dir=$1
+    local allow_create=${2:-true}
 
-    run_mons $dir --mon-debug-allow-pool-create-before-commit=true || return 1
+    run_mons $dir --mon-debug-allow-pool-create-before-commit=$allow_create || return 1
     local zone host osd
     for zone in iris pze; do
         ceph osd crush add-bucket $zone zone || return 1
@@ -183,6 +183,23 @@ function TEST_legacy_stretch_mode_then_commit() {
     test "$(ceph config get mon osd_pool_default_num_zones)" = 1 || return 1
     test "$(ceph config get mon osd_pool_default_replica)" = 3 || return 1
     wait_for_clean || return 1
+}
+
+# Test librados creates pools before the commit, except in stretch mode,
+# where earlier releases stretched them
+function TEST_librados_pool_before_commit() {
+    local dir=$1
+    stretchable_cluster $dir false || return 1
+    librados_create_pool $dir rep || return 1
+    wait_for_clean || return 1
+
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    expect_failure $dir "errno 1\]" librados_create_pool $dir late || return 1
+
+    ceph osd require-osd-release umbrella || return 1
+    librados_create_pool $dir late || return 1
+    test "$(pool_num_zones late)" = 2 || return 1
+    test "$(pool_field late size)" = 4 || return 1
 }
 
 # Test the commit gives a pool that uses the default profile a copy of it
