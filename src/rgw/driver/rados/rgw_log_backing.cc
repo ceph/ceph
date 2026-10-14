@@ -714,3 +714,114 @@ logback_generations::handle_notify(sys::error_code ec,
     }
   }
 }
+
+asio::awaitable<void> LazyFIFO::lazy_init(const DoutPrefixProvider *dpp) {
+  std::unique_lock l(m);
+  if (fifo) {
+    co_return;
+  } else {
+    l.unlock();
+    // FIFO supports multiple clients by design, so it's safe to
+    // race to create them.
+    auto fifo_tmp = co_await fifo::FIFO::create(dpp, r, oid, loc,
+						asio::use_awaitable);
+    l.lock();
+    if (!fifo) {
+      // We won the race
+      fifo = std::move(fifo_tmp);
+    }
+  }
+  l.unlock();
+  co_return;
+}
+
+void LazyFIFO::lazy_init(const DoutPrefixProvider *dpp, asio::yield_context y) {
+  std::unique_lock l(m);
+  if (fifo) {
+    return;
+  } else {
+    l.unlock();
+    // FIFO supports multiple clients by design, so it's safe to
+    // race to create them.
+    auto fifo_tmp = fifo::FIFO::create(dpp, r, oid, loc, y);
+    l.lock();
+    if (!fifo) {
+      // We won the race
+      fifo = std::move(fifo_tmp);
+    }
+  }
+  l.unlock();
+  return;
+}
+
+asio::awaitable<void> LazyFIFO::push(const DoutPrefixProvider *dpp,
+				     std::deque<ceph::buffer::list> entries) {
+  co_await lazy_init(dpp);
+  co_return co_await fifo->push(dpp, std::move(entries), asio::use_awaitable);
+}
+
+asio::awaitable<void> LazyFIFO::push(const DoutPrefixProvider *dpp,
+				     ceph::buffer::list entry) {
+  co_await lazy_init(dpp);
+  co_return co_await fifo->push(dpp, std::move(entry), asio::use_awaitable);
+}
+
+void LazyFIFO::push(const DoutPrefixProvider *dpp,
+		    ceph::buffer::list entry,
+		    asio::yield_context y) {
+  lazy_init(dpp, y);
+  fifo->push(dpp, std::move(entry), y);
+}
+
+void LazyFIFO::push(const DoutPrefixProvider *dpp,
+		    std::deque<ceph::buffer::list> entries,
+		    asio::yield_context y) {
+  lazy_init(dpp, y);
+  fifo->push(dpp, std::move(entries), y);
+}
+
+asio::awaitable<std::tuple<std::span<fifo::entry>, std::optional<std::string>>>
+LazyFIFO::list(const DoutPrefixProvider *dpp, std::string markstr,
+	       std::span<fifo::entry> entries) {
+  co_await lazy_init(dpp);
+  auto [cur, next] = co_await fifo->list(dpp, markstr, entries,
+                                         asio::use_awaitable);
+  co_return std::tuple{cur, next.empty()
+                            ? std::nullopt
+                            : std::optional<std::string>{std::move(next)}};
+}
+
+std::tuple<std::span<fifo::entry>, std::optional<std::string>>
+LazyFIFO::list(const DoutPrefixProvider *dpp, std::string markstr,
+	       std::span<fifo::entry> entries, asio::yield_context y) {
+  lazy_init(dpp, y);
+  auto [cur, next] = fifo->list(dpp, markstr, entries, y);
+  return {cur, next.empty()
+               ? std::nullopt
+               : std::optional<std::string>{std::move(next)}};
+}
+
+asio::awaitable<void> LazyFIFO::trim(const DoutPrefixProvider *dpp,
+				     std::string markstr, bool exclusive) {
+  co_await lazy_init(dpp);
+  co_return co_await fifo->trim(dpp, markstr, exclusive, asio::use_awaitable);
+}
+
+void LazyFIFO::trim(const DoutPrefixProvider *dpp,
+		    std::string markstr, bool exclusive,
+		    asio::yield_context y) {
+  lazy_init(dpp, y);
+  fifo->trim(dpp, markstr, exclusive, y);
+}
+
+asio::awaitable<std::tuple<std::string, ceph::real_time>>
+LazyFIFO::last_entry_info(const DoutPrefixProvider *dpp) {
+  co_await lazy_init(dpp);
+  co_return co_await fifo->last_entry_info(dpp, asio::use_awaitable);
+}
+
+std::tuple<std::string, ceph::real_time>
+LazyFIFO::last_entry_info(const DoutPrefixProvider *dpp, asio::yield_context y) {
+  lazy_init(dpp, y);
+  return fifo->last_entry_info(dpp, y);
+}
