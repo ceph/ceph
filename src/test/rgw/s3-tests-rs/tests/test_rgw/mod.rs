@@ -10,6 +10,7 @@
 
 mod admin;
 mod bucket_profile;
+mod custom_bucket_path;
 mod driver_hint;
 mod features;
 mod identity;
