@@ -244,6 +244,18 @@ function TEST_pool_create_uses_defaults() {
     test "$(pool_field rep3 size)" = 3 || return 1
 }
 
+# Test the default rule must be a replicated rule: replicated pools fall back
+# on it
+function TEST_set_rule_must_be_replicated() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set p21 k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd crush rule create-erasure ecr p21 || return 1
+    ! ceph osd pool default set --rule ecr > $dir/out 2>&1 || return 1
+    grep "rule 'ecr' is not a replicated rule" $dir/out || return 1
+    ceph osd pool create r 8 8 || return 1
+}
+
 main mon-stretch-pool-defaults "$@"
 
 # Local Variables:
