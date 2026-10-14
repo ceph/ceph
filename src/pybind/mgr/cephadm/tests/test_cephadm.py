@@ -1,5 +1,6 @@
 import asyncio
 import json
+import socket
 import logging
 
 from contextlib import contextmanager
@@ -244,6 +245,20 @@ class TestCephadm(object):
 
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1::4')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.socket.getaddrinfo")
+    def test_check_valid_addr_follows_mgr_address_family(self, getaddrinfo, cephadm_module):
+        getaddrinfo.return_value = [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, 'test', ('2001:db8::5', 0, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, 'test', ('192.0.2.5', 0)),
+        ]
+        with mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '2001:db8::1'):
+            assert cephadm_module._check_valid_addr('test', 'test') == '2001:db8::5'
+        with mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.0.2.1'):
+            assert cephadm_module._check_valid_addr('test', 'test') == '192.0.2.5'
+        with mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: 'mgrhost'):
+            assert cephadm_module._check_valid_addr('test', 'test') == '192.0.2.5'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.utils.resolve_ip")
