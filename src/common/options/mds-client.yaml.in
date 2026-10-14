@@ -333,6 +333,8 @@ options:
   default: false
   services:
   - mds_client
+  flags:
+  - startup
 - name: fuse_use_invalidate_cb
   type: bool
   level: advanced
