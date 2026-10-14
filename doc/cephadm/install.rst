@@ -243,6 +243,36 @@ available options.
   subcommand. This parameter must be a subnet in CIDR notation (for example
   ``10.90.90.0/24`` or ``fe80::/64``).
 
+* To bootstrap a cluster on IPv6, pass an IPv6 address to ``--mon-ip``.
+  If you also specify a port, the address must be enclosed in square
+  brackets so that the port can be distinguished from the last group of the
+  address:
+
+  .. prompt:: bash #
+
+     cephadm bootstrap --mon-ip 2001:db8::11
+     cephadm bootstrap --mon-ip '[2001:db8::11]:3300'
+
+  The same applies to ``--mon-addrv``, and ``--mon-net`` accepts an IPv6
+  subnet in CIDR notation:
+
+  .. prompt:: bash #
+
+     cephadm bootstrap --mon-addrv '[v2:[2001:db8::11]:3300,v1:[2001:db8::11]:6789]'
+     cephadm bootstrap --mon-net 2001:db8::/64
+
+  Quote the bracketed forms so that the shell does not interpret the brackets.
+
+  When the Monitor address or the ``--cluster-network`` is IPv6, bootstrap sets
+  ``ms_bind_ipv6`` to ``true`` and ``ms_bind_ipv4`` to ``false`` in the
+  cluster configuration, because Ceph does not support dual-stack operation.
+  The ``public_network`` is inferred from the host's IPv6 routes unless
+  ``--skip-mon-network`` is given or a ``public_network`` is set in the file
+  passed with ``--config``. When adding further hosts, pass their IPv6
+  address explicitly (``ceph orch host add <hostname> <ipv6-address>``);
+  on a host that has both an IPv4 and an IPv6 address, name resolution
+  otherwise prefers the IPv4 address.
+
 * ``cephadm bootstrap`` writes to ``/etc/ceph`` files needed to access
   the new cluster. This central location makes it possible for Ceph
   packages installed on the host (e.g., packages that give access to the
