@@ -3792,8 +3792,13 @@ private:
   }
 private:
   ceph::mutex qlock = ceph::make_mutex("BlueStore::Alerts::qlock");
-  std::string failed_cmode;
-  std::set<std::string> failed_compressors;
+  // compression alerts, grouped by who raises and clears them:
+  // global config (rebuilt by _set_compression),
+  // per-pool config (set/erased by set_collection_opts),
+  // read path (raised by _decompress, never cleared)
+  std::set<std::string> global_compression_alerts;
+  std::map<int64_t, std::string> pool_compression_alerts; // pool -> alert
+  std::set<std::string> failed_decompressors;
   std::string spillover_alert;
   std::string legacy_statfs_alert;
   std::string no_per_pool_omap_alert;
@@ -3810,19 +3815,25 @@ private:
   void _add_slow_op_event();
   void _add_slow_scrub_op_event();
   void _log_alerts(osd_alert_list_t& alerts);
-  bool _set_compression_alert(bool cmode, const char* s) {
+  bool _set_global_compression_alert(const std::string& s) {
     std::lock_guard l(qlock);
-    if (cmode) {
-      bool ret = failed_cmode.empty();
-      failed_cmode = s;
-      return ret;
-    }
-    return failed_compressors.emplace(s).second;
+    return global_compression_alerts.emplace(s).second;
   }
-  void _clear_compression_alert() {
+  void _clear_global_compression_alert() {
     std::lock_guard l(qlock);
-    failed_compressors.clear();
-    failed_cmode.clear();
+    global_compression_alerts.clear();
+  }
+  void _set_pool_compression_alert(int64_t pool, const std::string& s) {
+    std::lock_guard l(qlock);
+    if (s.empty()) {
+      pool_compression_alerts.erase(pool);
+    } else {
+      pool_compression_alerts[pool] = s;
+    }
+  }
+  bool _set_decompression_alg_alert(const char* s) {
+    std::lock_guard l(qlock);
+    return failed_decompressors.emplace(s).second;
   }
 
   void _check_legacy_statfs_alert();

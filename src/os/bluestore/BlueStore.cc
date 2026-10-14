@@ -6036,40 +6036,89 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
 
 void BlueStore::_set_compression()
 {
+  _clear_global_compression_alert();
   auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
   if (m) {
-    _clear_compression_alert();
     comp_mode = *m;
   } else {
-    derr << __func__ << " unrecognized value '"
+    derr << "_set_compression: Unrecognized value for bluestore_compression_mode = '"
          << cct->_conf->bluestore_compression_mode
-         << "' for bluestore_compression_mode, reverting to 'none'"
+         << "', reverting to 'none'"
          << dendl;
     comp_mode = Compressor::COMP_NONE;
     string s("unknown mode: ");
     s += cct->_conf->bluestore_compression_mode;
-    _set_compression_alert(true, s.c_str());
+    _set_global_compression_alert(s);
   }
-
+  auto validate_and_assign = [&](std::atomic<uint64_t>& var,
+                                int64_t val,
+                                uint64_t unit,
+                                const char* name) {
+    if ((val % unit) != 0) {
+      derr << "_set_compression: Invalid value for " << name
+           << " = " << val << ", not aligned with " << unit
+           << ", not applied"
+           << dendl;
+      string s("invalid value: ");
+      s += name;
+      s += " = ";
+      s += stringify(val);
+      _set_global_compression_alert(s);
+    } else {
+      var = val;
+    }
+  };
   if (cct->_conf->bluestore_compression_min_blob_size) {
-    comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
+    validate_and_assign(comp_min_blob_size,
+      cct->_conf->bluestore_compression_min_blob_size,
+      min_alloc_size,
+      "bluestore_compression_min_blob_size");
   } else {
     ceph_assert(bdev);
     if (_use_rotational_settings()) {
-      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_hdd;
+      validate_and_assign(comp_min_blob_size,
+        cct->_conf->bluestore_compression_min_blob_size_hdd,
+        min_alloc_size,
+        "bluestore_compression_min_blob_size_hdd");
     } else {
-      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_ssd;
+      validate_and_assign(comp_min_blob_size,
+        cct->_conf->bluestore_compression_min_blob_size_ssd,
+        min_alloc_size,
+        "bluestore_compression_min_blob_size_ssd");
     }
   }
 
   if (cct->_conf->bluestore_compression_max_blob_size) {
-    comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+    validate_and_assign(comp_max_blob_size,
+      cct->_conf->bluestore_compression_max_blob_size,
+      min_alloc_size,
+      "bluestore_compression_max_blob_size");
   } else {
     ceph_assert(bdev);
     if (_use_rotational_settings()) {
-      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_hdd;
+      validate_and_assign(comp_max_blob_size,
+        cct->_conf->bluestore_compression_max_blob_size_hdd,
+        min_alloc_size,
+        "bluestore_compression_max_blob_size_hdd");
     } else {
-      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_ssd;
+      validate_and_assign(comp_max_blob_size,
+        cct->_conf->bluestore_compression_max_blob_size_ssd,
+        min_alloc_size,
+        "bluestore_compression_max_blob_size_ssd");
+    }
+  }
+  {
+    uint64_t min_bs = comp_min_blob_size;
+    uint64_t max_bs = comp_max_blob_size;
+    if (min_bs > max_bs) {
+      derr << "_set_compression: Invalid values, compression min_blob_size = "
+           << min_bs << " exceeds max_blob_size = " << max_bs
+           << dendl;
+      string s("invalid value: compression min_blob_size = ");
+      s += stringify(min_bs);
+      s += " > max_blob_size = ";
+      s += stringify(max_bs);
+      _set_global_compression_alert(s);
     }
   }
   if (compressors.size() == 0) {
@@ -6092,9 +6141,7 @@ void BlueStore::_set_compression()
     if (!alg_name.empty()) {
       derr << __func__ << " unable to initialize " << alg_name.c_str() << " compressor"
            << dendl;
-      _set_compression_alert(false, alg_name.c_str());
-    } else {
-      _clear_compression_alert();
+      _set_global_compression_alert("unable to load: " + alg_name);
     }
     def_compressor_alg = Compressor::COMP_ALG_NONE;
     alg_name = "(none)";
@@ -12966,6 +13013,8 @@ int BlueStore::set_collection_opts(
   std::unique_lock l{c->lock};
   c->pool_opts = opts;
 
+  int64_t pool_id = c->cid.is_pg() ? c->cid.pool() : META_POOL_ID;
+  string pool_alert;
   string val;
   c->compression_algorithm.reset();
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
@@ -12974,7 +13023,10 @@ int BlueStore::set_collection_opts(
     if (alg.has_value() && *alg != Compressor::COMP_ALG_NONE) {
       cp = *alg < compressors.size() ? compressors[*alg] : cp;
       if (!cp) {
-        _set_compression_alert(false, val.c_str());
+        pool_alert += "unable to load: pool ";
+        pool_alert += stringify(pool_id);
+        pool_alert += " compression_algorithm = ";
+        pool_alert += val;
         derr << __func__ << " unable to load compressor plugin for " << val.c_str()
              << dendl;
       } else {
@@ -13003,24 +13055,58 @@ int BlueStore::set_collection_opts(
       c->csum_type = Checksummer::CSumType(ival);
     }
   }
+  auto validate_and_assign = [&](std::optional<int64_t>& var,
+                                 int64_t val,
+                                 const char* name) {
+    if (val <= 0) {
+      derr << "set_collection_opts: invalid " << name << ": " << val
+           << dendl;
+    } else if ((val % min_alloc_size) != 0) {
+      derr << "set_collection_opts: Invalid value for pool " << pool_id
+           << " " << name << " = " << val
+           << ", not aligned with " << min_alloc_size
+           << ", not applied"
+           << dendl;
+      if (!pool_alert.empty()) {
+        pool_alert += ", ";
+      }
+      pool_alert += "invalid value: pool ";
+      pool_alert += stringify(pool_id);
+      pool_alert += " ";
+      pool_alert += name;
+      pool_alert += " = ";
+      pool_alert += stringify(val);
+    } else {
+      var = val;
+    }
+  };
   c->comp_min_blob_size.reset();
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &ival)) {
-    if (ival <= 0) {
-      derr << __func__ << " invalid min compression blob size: " << ival
-           << dendl;
-    } else {
-      c->comp_min_blob_size = ival;
-    }
+    validate_and_assign(c->comp_min_blob_size, ival,
+      "compression_min_blob_size");
   }
   c->comp_max_blob_size.reset();
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &ival)) {
-    if (ival <= 0) {
-      derr << __func__ << " invalid max compression blob size: " << ival
-           << dendl;
-    } else {
-      c->comp_max_blob_size = ival;
-    }
+    validate_and_assign(c->comp_max_blob_size, ival,
+      "compression_max_blob_size");
   }
+  if (c->comp_min_blob_size && c->comp_max_blob_size &&
+      *c->comp_min_blob_size > *c->comp_max_blob_size) {
+    derr << "set_collection_opts: Invalid values for pool " << pool_id
+         << " compression_min_blob_size = " << *c->comp_min_blob_size
+         << " exceeds compression_max_blob_size = " << *c->comp_max_blob_size
+         << dendl;
+    if (!pool_alert.empty()) {
+      pool_alert += ", ";
+    }
+    pool_alert += "invalid value: pool ";
+    pool_alert += stringify(pool_id);
+    pool_alert += " compression_min_blob_size = ";
+    pool_alert += stringify(*c->comp_min_blob_size);
+    pool_alert += " > compression_max_blob_size = ";
+    pool_alert += stringify(*c->comp_max_blob_size);
+  }
+  _set_pool_compression_alert(pool_id, pool_alert);
   double dval;
   c->compression_req_ratio.reset();
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &dval)) {
@@ -13651,7 +13737,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       const char* alg_name = Compressor::get_comp_alg_name(alg);
       derr << __func__ << " can't locate compressor plugin for " << alg_name
            << dendl;
-      _set_compression_alert(false, alg_name);
+      _set_decompression_alg_alert(alg_name);
       r = -EIO;
     } else {
       dout(0) << __func__
@@ -20129,25 +20215,26 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
       "BLUESTORE_LEGACY_MIN_ALLOC_SIZE",
       legacy_min_alloc_size_alert);
   }
-  string s0(failed_cmode);
-
-  if (!failed_compressors.empty()) {
-    if (!s0.empty()) {
-      s0 += ", ";
+  string comp_alert;
+  auto add_comp_alert = [&](const string& s) {
+    if (!comp_alert.empty()) {
+      comp_alert += ", ";
     }
-    s0 += "unable to load:";
-    bool first = true;
-    for (auto& s : failed_compressors) {
-      if (first) {
-	first = false;
-      } else {
-	s0 += ", ";
-      }
-      s0 += s;
-    }
+    comp_alert += s;
+  };
+  for (auto& s : global_compression_alerts) {
+    add_comp_alert(s);
+  }
+  for (auto& [pool, s] : pool_compression_alerts) {
+    add_comp_alert(s);
+  }
+  for (auto& s : failed_decompressors) {
+    add_comp_alert("unable to load for decompression: " + s);
+  }
+  if (!comp_alert.empty()) {
     alerts.emplace(
       "BLUESTORE_NO_COMPRESSION",
-      s0);
+      comp_alert);
   }
   if (logger->get(l_bluestore_fragmentation) >
     cct->_conf.get_val<double>("bluestore_warn_on_free_fragmentation") * 1e6) {
