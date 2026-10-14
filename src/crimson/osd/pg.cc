@@ -1022,7 +1022,12 @@ void PG::dump_primary(Formatter* f)
   f->close_section();
 
   // TODO: snap_trimq
-  // TODO: scrubber state
+
+  // Dump scrubber state
+  if (is_primary() && is_active()) {
+    scrubber.dump_scrub_metrics(f);
+  }
+
   // TODO: agent state
 }
 
