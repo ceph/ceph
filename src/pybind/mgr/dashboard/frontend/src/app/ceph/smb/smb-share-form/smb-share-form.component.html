@@ -283,6 +283,20 @@
         </cds-checkbox>
       </div>
 
+      <!-- Continuous Availability -->
+      <div class="form-item">
+        <cds-checkbox
+          id="continuous_availability"
+          formControlName="continuous_availability"
+          i18n
+          >Continuous Availability
+        </cds-checkbox>
+        <cd-helper i18n>
+          Enable continuous availability for this share. Allows clients to maintain persistent
+          connections and recover file handles after failover.
+        </cd-helper>
+      </div>
+
       <!-- QoS rate limiting -->
       <div
         class="form-header"

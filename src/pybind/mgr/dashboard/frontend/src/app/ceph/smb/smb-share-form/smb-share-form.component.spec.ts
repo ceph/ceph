@@ -16,6 +16,7 @@ import {
 } from 'carbon-components-angular';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { CONTINUOUS_AVAILABILITY } from '../smb.model';
 
 describe('SmbShareFormComponent', () => {
   let component: SmbShareFormComponent;
@@ -91,6 +92,7 @@ describe('SmbShareFormComponent', () => {
       inputPath: '/',
       browseable: true,
       readonly: false,
+      continuous_availability: false,
       read_iops_limit: 0,
       write_iops_limit: 0,
       read_bw_limit: 0,
@@ -102,6 +104,36 @@ describe('SmbShareFormComponent', () => {
     });
     component.submitAction();
     expect(component).toBeTruthy();
+  });
+
+  it('should default continuous_availability to false', () => {
+    expect(component.smbShareForm.get('continuous_availability').value).toBe(false);
+  });
+
+  it('should map continuous_availability true to enabled in buildRequest', () => {
+    component.clusterId = 'cluster1';
+    component.smbShareForm.patchValue({
+      share_id: 'share1',
+      name: 'My Share',
+      volume: 'fs1',
+      inputPath: '/',
+      continuous_availability: true
+    });
+    const request = component.buildRequest();
+    expect(request.share_resource.continuous_availability).toBe(CONTINUOUS_AVAILABILITY.Enabled);
+  });
+
+  it('should map continuous_availability false to default in buildRequest', () => {
+    component.clusterId = 'cluster1';
+    component.smbShareForm.patchValue({
+      share_id: 'share1',
+      name: 'My Share',
+      volume: 'fs1',
+      inputPath: '/',
+      continuous_availability: false
+    });
+    const request = component.buildRequest();
+    expect(request.share_resource.continuous_availability).toBe(CONTINUOUS_AVAILABILITY.Default);
   });
 
   describe('QoS', () => {
