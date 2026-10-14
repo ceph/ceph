@@ -8366,6 +8366,15 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
   return 0;
 }
 
+// Whether the pending changes remove the committed rule rule_id, named
+// rule_name, with the last pool that used it.
+bool OSDMonitor::crush_rule_removal_pending(const string& rule_name,
+                                            int rule_id)
+{
+  return pending_inc.crush.length() &&
+    _get_pending_crush().get_rule_id(rule_name) != rule_id;
+}
+
 int OSDMonitor::get_crush_rule(const string &rule_name,
 			       int *crush_rule,
 			       ostream *ss)
@@ -8375,8 +8384,7 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   if (ret != -ENOENT) {
     // the pending changes may remove the rule with the last pool that used
     // it; decide once they are committed
-    if (pending_inc.crush.length() &&
-        _get_pending_crush().get_rule_id(rule_name) != ret) {
+    if (crush_rule_removal_pending(rule_name, ret)) {
       dout(20) << __func__ << ": rule " << rule_name
                << " is being removed, try again" << dendl;
       return -EAGAIN;
@@ -9897,9 +9905,15 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << cpp_strerror(id);
       return -ENOENT;
     }
+    if (crush_rule_removal_pending(val, id)) {
+      return -EAGAIN;
+    }
     if (!osdmap.crush->rule_valid_for_pool_type(id, p.get_type())) {
       ss << "crush rule " << id << " type does not match pool";
       return -EINVAL;
+    }
+    if (id != p.crush_rule) {
+      maybe_remove_unused_crush_rule(pool, p.crush_rule);
     }
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
@@ -10493,6 +10507,9 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     ss << "crush rule " << crush_rule_str << " does not exist";
     return -ENOENT;
   }
+  if (crush_rule_removal_pending(crush_rule_str, crush_rule)) {
+    return -EAGAIN;
+  }
   if (!crush.rule_valid_for_pool_type(crush_rule, p.get_type())) {
     ss << "crush rule " << crush_rule << " type does not match pool";
     return -EINVAL;
@@ -10594,6 +10611,9 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
   p.peering_crush_bucket_target = static_cast<uint32_t>(bucket_target);
   p.peering_crush_bucket_barrier = static_cast<uint32_t>(bucket_barrier);
+  if (crush_rule != p.crush_rule) {
+    maybe_remove_unused_crush_rule(pool, p.crush_rule);
+  }
   p.crush_rule = static_cast<__u8>(crush_rule);
   p.size = static_cast<__u8>(pool_size);
   // Store num_zones (extracted from CRUSH rule topology)
@@ -10650,6 +10670,9 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   if (crush_rule < 0) {
     ss << "crush rule " << crush_rule_str << " does not exist";
     return -ENOENT;
+  }
+  if (crush_rule_removal_pending(crush_rule_str, crush_rule)) {
+    return -EAGAIN;
   }
 
   if (!crush.rule_valid_for_pool_type(crush_rule, p.get_type())) {
@@ -10713,6 +10736,9 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   p.peering_crush_bucket_count = 0;
   p.peering_crush_bucket_target = 0;
   p.peering_crush_bucket_barrier = 0;
+  if (crush_rule != p.crush_rule) {
+    maybe_remove_unused_crush_rule(pool, p.crush_rule);
+  }
   p.crush_rule = static_cast<__u8>(crush_rule);
   p.size = static_cast<__u8>(pool_size);
   p.min_size = static_cast<__u8>(pool_min_size);

@@ -285,8 +285,13 @@ deletes that profile (unless it is the ``default`` profile), and deletes the
 pool's CRUSH rule if no other pool uses it. See
 :ref:`erasure-code-profile-lifecycle`.
 
-If there are custom CRUSH rules that are no longer in use or needed, consider
-deleting those rules.
+Deleting a pool of any type, or giving a pool another CRUSH rule, deletes the
+CRUSH rule that it used if no other pool uses it, unless it is the default
+replicated rule. This applies to custom rules too: to keep a rule that no pool
+uses, create it again when it is needed.
+
+Custom CRUSH rules that no pool has used yet are not deleted automatically. If
+they are no longer needed, consider deleting those rules.
 
 .. prompt:: bash $
 
@@ -489,7 +494,7 @@ You may set values for the following keys:
 
 .. describe:: crush_rule
    
-   :Description: Sets the CRUSH rule that Ceph uses to map the pool's RADOS objects to appropriate OSDs.
+   :Description: Sets the CRUSH rule that Ceph uses to map the pool's RADOS objects to appropriate OSDs. The rule that the pool used before is deleted if no other pool uses it, unless it is the default replicated rule.
    :Type: String
 
 .. _allow_ec_overwrites:
