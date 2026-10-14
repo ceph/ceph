@@ -543,6 +543,19 @@
             automatically move between nodes running Samba containers.</cd-helper
           >
         </div>
+
+        <!-- Client Compatibility -->
+        <div class="form-item">
+          <cds-checkbox
+            id="client_compat"
+            formControlName="client_compat"
+            i18n
+            >macOS Compatibility
+          </cds-checkbox>
+          <cd-help-text i18n>
+            Enable macOS-specific SMB compatibility features (AAPL extensions, fruit VFS module).
+          </cd-help-text>
+        </div>
       </cd-form-advanced-fieldset>
       <cd-form-button-panel
         (submitActionEvent)="submitAction()"
