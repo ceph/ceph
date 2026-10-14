@@ -194,6 +194,8 @@ function TEST_pool_create_two_zone_ec_fields() {
     test "$(pool_field e peering_crush_bucket_target)" = 2 || return 1
     test "$(ceph osd pool ls detail -f json |
         jq -r '.[]|select(.pool_name=="e")|.nonprimary_shards')" = "{1,5}" || return 1
+    # FastEC's stripe unit of 16 KiB in each of the k=2 data chunks
+    test "$(pool_field e stripe_width)" = $((2 * 16384)) || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
     wait_for_clean || return 1
     # each zone's 4 shards are in one datacenter (dc1 is osd.0-3), and the
