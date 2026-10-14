@@ -1446,7 +1446,7 @@ class Module(MgrModule, OrchestratorClientMixin):
             pools[pool_name].add(namespace_name)
 
         rbd_stats_pools = {}
-        for pool_id in self.rbd_stats['pools'].keys():
+        for pool_id in list(self.rbd_stats['pools']):
             name = self.rbd_stats['pools'][pool_id]['name']
             if name not in pools:
                 del self.rbd_stats['pools'][pool_id]
