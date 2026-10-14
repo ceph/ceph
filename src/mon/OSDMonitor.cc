@@ -9014,22 +9014,10 @@ void OSDMonitor::maybe_remove_unused_crush_rule(int64_t skip_pool,
   if (old_rule_id == osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct)) {
     return;
   }
-  // Check whether any pool other than current still references old_rule_id.
-  for (const auto& [pid, committed_pool] : osdmap.pools) {
-    if (pid == skip_pool || pending_inc.old_pools.count(pid)) {
-      continue;
-    }
-    const auto it = pending_inc.new_pools.find(pid);
-    const auto& pp = (it != pending_inc.new_pools.end()) ? it->second : committed_pool;
-    if (pp.crush_rule == old_rule_id) {
-      return;
-    }
-  }
-  for (const auto& [pid, pp] : pending_inc.new_pools) {
-    if (pid != skip_pool && !pending_inc.old_pools.count(pid) &&
-        pp.crush_rule == old_rule_id) {
-      return;
-    }
+  if (other_pool(skip_pool, [old_rule_id](const pg_pool_t& p) {
+        return p.crush_rule == old_rule_id;
+      })) {
+    return;
   }
 
   // The rule is no longer referenced, remove it from the pending crush.
@@ -9191,27 +9179,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         return r;
       }
       ss << "pool unstretched (num_zones=1); ";
-      bool any_pool_stretched = false;
-      for (const auto& [pid, committed_pool] : osdmap.pools) {
-        if (pid == pool || pending_inc.old_pools.count(pid)) {
-          continue;
-        }
-        const auto it = pending_inc.new_pools.find(pid);
-        const auto& other_pool =
-            it != pending_inc.new_pools.end() ? it->second : committed_pool;
-        if (other_pool.is_stretch_pool()) {
-          any_pool_stretched = true;
-          break;
-        }
-      }
-      for (const auto& [pid, other_pool] : pending_inc.new_pools) {
-        if (pid != pool && !pending_inc.old_pools.count(pid) &&
-            other_pool.is_stretch_pool()) {
-          any_pool_stretched = true;
-          break;
-        }
-      }
-      if (!any_pool_stretched) {
+      if (!other_pool(pool, [](const pg_pool_t& p) {
+            return p.is_stretch_pool();
+          })) {
         mon.monmon()->clear_stretch_mode_state();
         pending_inc.change_stretch_mode = true;
         pending_inc.stretch_mode_enabled = false;
@@ -16853,22 +16823,33 @@ bool OSDMonitor::is_last_stretch_pool(int64_t pool)
       !osdmap.stretch_mode_enabled) {
     return false;
   }
-  for (const auto &_pool : osdmap.pools) {
-    // Skip the pool being removed
-    if (_pool.first == pool) {
+  return !other_pool(pool, [](const pg_pool_t& p) {
+    return p.is_stretch_pool();
+  });
+}
+
+std::optional<int64_t> OSDMonitor::other_pool(
+  int64_t skip_pool,
+  const std::function<bool(const pg_pool_t&)>& pred) const
+{
+  for (const auto& [pid, committed_pool] : osdmap.pools) {
+    if (pid == skip_pool || pending_inc.old_pools.contains(pid)) {
       continue;
     }
-
-    const pg_pool_t &p = _pool.second;
-    if (p.peering_crush_bucket_count > 0 && p.peering_crush_bucket_target > 0) {
-      dout(10) << __func__ << " pool " << _pool.first
-               << " still has stretch mode enabled (bucket_count="
-               << p.peering_crush_bucket_count << ", bucket_target="
-               << p.peering_crush_bucket_target << ")" << dendl;
-      return false;
+    const auto it = pending_inc.new_pools.find(pid);
+    if (pred(it != pending_inc.new_pools.end() ? it->second : committed_pool)) {
+      dout(10) << __func__ << " pool " << pid << dendl;
+      return pid;
     }
   }
-  return true;
+  for (const auto& [pid, p] : pending_inc.new_pools) {
+    if (pid != skip_pool && !osdmap.pools.contains(pid) &&
+        !pending_inc.old_pools.contains(pid) && pred(p)) {
+      dout(10) << __func__ << " new pool " << pid << dendl;
+      return pid;
+    }
+  }
+  return std::nullopt;
 }
 
 int OSDMonitor::_prepare_remove_pool(

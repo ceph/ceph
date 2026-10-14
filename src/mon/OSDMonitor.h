@@ -493,6 +493,11 @@ private:
       int *err, std::ostream *ss) const;
 
   bool is_last_stretch_pool(int64_t pool);
+  // a pool other than skip_pool that matches pred once the pending changes
+  // are committed
+  std::optional<int64_t> other_pool(
+    int64_t skip_pool,
+    const std::function<bool(const pg_pool_t&)>& pred) const;
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 
