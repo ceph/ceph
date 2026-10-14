@@ -2436,26 +2436,24 @@ def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[
 
 def prepare_mon_addresses(ctx: CephadmContext) -> Tuple[str, bool, Optional[str]]:
     """Get mon public network configuration."""
-    ipv6 = False
     addrv_args: List[EndPoint] = []
     mon_addrv: str = ''  # i.e: [v2:192.168.100.1:3300,v1:192.168.100.1:6789]
 
     if ctx.mon_ip:
-        ipv6 = is_ipv6(ctx.mon_ip)
-        if ipv6:
+        if is_ipv6(ctx.mon_ip):
             ctx.mon_ip = wrap_ipv6(ctx.mon_ip)
         addrv_args = parse_mon_ip(ctx.mon_ip)
         mon_addrv = build_addrv_params(addrv_args)
     elif ctx.mon_addrv:
-        ipv6 = ctx.mon_addrv.count('[') > 1
         addrv_args = parse_mon_addrv(ctx.mon_addrv)
         mon_addrv = ctx.mon_addrv
     elif ctx.mon_net:
         selected_ip = select_ip_from_network(ctx, ctx.mon_net)
         ctx.mon_ip = selected_ip
-        ipv6 = is_ipv6(selected_ip)
         addrv_args = parse_mon_ip(selected_ip)
         mon_addrv = build_addrv_params(addrv_args)
+
+    ipv6 = any(not ep.is_ipv4 for ep in addrv_args)
 
     if addrv_args:
         for end_point in addrv_args:
