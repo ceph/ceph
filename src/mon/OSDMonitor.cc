@@ -7699,10 +7699,13 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   bool bulk = false;
   bool force_create = false;
   int ret = 0;
-  // librados creates a single-zone replicated pool from the defaults
+  // librados creates a replicated pool from the defaults, as
+  // ceph osd pool create <pool> does
   PoolCreateParams params = load_pool_defaults(g_conf());
   params.pool_type = pg_pool_t::TYPE_REPLICATED;
-  params.num_zones = 1;
+  if (!num_zones_supported()) {
+    params.num_zones = 1;
+  }
   {
     CrushWrapper crush = _get_pending_crush();
     ret = check_pool_params(params, pool_create_cluster(crush), &ss);
@@ -7711,9 +7714,27 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
       return ret;
     }
   }
-  ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
+  const int64_t num_zones = params.num_zones;
+  int crush_rule = m->crush_rule;
+  string zone_failure_domain;
+  if (num_zones > 1) {
+    zone_failure_domain = effective_zone_failure_domain(params);
+    // the default rule, when it suits the pool, instead of a generated one
+    CrushWrapper crush = _get_pending_crush();
+    if (crush_rule < 0 &&
+        default_rule_suits_pool(crush, params.default_rule,
+                                pg_pool_t::TYPE_REPLICATED, num_zones,
+                                zone_failure_domain, osdmap.pools,
+                                params.replica)) {
+      crush_rule = params.default_rule;
+    }
+  }
+  ret = prepare_new_pool(m->name, crush_rule, rule_name,
        0, 0, 0, 0, 0, 0, 0.0, 0,
-                         erasure_code_profile, "", 1, 0, 1, "", "", "",
+                         erasure_code_profile, params.root, num_zones,
+                         num_zones > 1 ? params.replica : 0, params.replica,
+                         zone_failure_domain, params.osd_failure_domain,
+                         params.device_class,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
                          force_create, &ss);
@@ -16805,7 +16826,17 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 bool OSDMonitor::prepare_pool_op_create(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
+  preparing_op = op;
+  auto clear_preparing_op = make_scope_guard([this] { preparing_op.reset(); });
   int err = prepare_new_pool(op);
+  if (err == -EAGAIN) {
+    // the rule generated for the pool is committed first
+    wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+    return true;
+  }
+  if (err < 0) {
+    remove_what_failed_op_created(op);
+  }
   wait_for_finished_proposal(op, new OSDMonitor::C_PoolOp(this, op, err, pending_inc.epoch));
   return true;
 }
