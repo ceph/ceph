@@ -1031,6 +1031,22 @@ public:
   placed_bucket_dir(const DoutPrefixProvider* dpp, const std::string& name,
 		    const std::string& tenant);
 
+  /* The Directory for a bucket at an absolute path:  no parent, and
+   * seeded with the strategies the base path's Directory is given. */
+  std::unique_ptr<nsfs::Directory> make_placed_dir(const std::string& path);
+
+  /* Where a new bucket goes, as NooBaa's CreateBucket decides it:  the
+   * owner's new_buckets_path, or the base path for an owner created in
+   * RGW (DECISIONS.md 2026-10-13).  A tenant's bucket is named
+   * `<tenant>$<name>` there, since the directory name is the only thing
+   * keeping two tenants apart.
+   *
+   * -EACCES for an owner imported from NooBaa without a path, which
+   * NooBaa does not let create buckets.  -EEXIST for a name a NooBaa
+   * bucket record holds, since that bucket is visible already. */
+  int new_bucket_path(const DoutPrefixProvider* dpp, const rgw_owner& owner,
+		      const rgw_bucket& b, std::string& path);
+
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;
@@ -1583,7 +1599,7 @@ public:
 
   /* A bucket served from a Directory already built, with the info
    * provided -- P2's placed arm, where the directory is an absolute
-   * path rather than a child of the data root, so it cannot be
+   * path rather than a child of the base path, so it cannot be
    * rendered from the name. */
   NSFSBucket(NSFSDriver *_dr, std::unique_ptr<nsfs::Directory> _this_dir,
 	     const RGWBucketInfo& _i)

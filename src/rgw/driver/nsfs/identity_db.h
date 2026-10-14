@@ -93,16 +93,13 @@ struct Identity {
   bool local() const { return uid.has_value(); }
 };
 
-/* Where a bucket's storage is, when it is not under the data root.
+/* Where a bucket's storage is.
  *
- * P1 of `NSFS_BUCKET_PLACEMENT_PLAN.md`.  **The column and the
- * accessor only:  nothing reads a path yet.**  Resolution is P2 and
- * enumeration is P3.
- *
- * `path` empty means the default location, `<data root>/<bucket>`,
- * which is where every bucket is today.  So a bucket at the default
- * location needs no row at all -- the same rule §7's third arm states
- * -- and an existing deployment behaves exactly as it does now.
+ * Every bucket nsfs creates has one, carrying its path, as every NooBaa
+ * bucket record carries `path` (DECISIONS.md 2026-10-13:  nsfs enacts
+ * NooBaa's placement model).  A bucket at the base path has a row naming
+ * `<base path>/<bucket>` like any other;  there is no empty path meaning
+ * "the default".
  *
  * Whether the bucket owns its directory is not here:  it is kept on the
  * directory itself, as user.nsfs.owns_storage, and nowhere else
@@ -116,7 +113,7 @@ struct BucketPlacement {
    * inherit that. */
   std::string tenant;
 
-  /* absolute, canonical, no `..`.  Empty is the default location. */
+  /* absolute, canonical, no `..`.  Never empty. */
   std::string path;
 };
 
@@ -179,6 +176,9 @@ class IdentityDB : public rgw::store::POSIXUserDB {
    * that is the one to use. */
   sqlite3* handle() const { return reinterpret_cast<sqlite3*>(DB::db); }
 
+  int write_bucket_placement(const DoutPrefixProvider* dpp,
+			     const BucketPlacement& bp, bool repoint);
+
 public:
   IdentityDB(std::string db_name, CephContext* cct)
     : POSIXUserDB(db_name, cct),
@@ -194,15 +194,16 @@ public:
 
   int Initialize(std::string logfile, int loglevel);
 
-  /* Bucket placement.  Write, read, and remove;  **enumeration is
-   * P3's**, which is where the union with the data root's readdir is
-   * defined and where a de-duplication rule is needed.  Adding it
-   * here would be a reader for nobody.
+  /* Bucket placement.  Write, read, and remove;  enumeration is P3's.
    *
-   * `put` refuses a path `placement_path_is_acceptable()` rejects,
-   * with -EINVAL;  `get` returns -ENOENT when a bucket has no row,
-   * which is the ordinary case for a bucket at the default
-   * location. */
+   * Both writers refuse a path `placement_path_is_acceptable()` rejects,
+   * with -EINVAL.  `insert` is creation's:  -EEXIST when the name is
+   * taken, so of two creations of one name exactly one succeeds.  `put`
+   * repoints an existing row instead.  Both return -EADDRINUSE when
+   * another bucket's directory is this path, contains it, or lies inside
+   * it.  `get` returns -ENOENT when a bucket has no row. */
+  int insert_bucket_placement(const DoutPrefixProvider* dpp,
+			      const BucketPlacement& bp);
   int put_bucket_placement(const DoutPrefixProvider* dpp,
 			   const BucketPlacement& bp);
   int get_bucket_placement(const DoutPrefixProvider* dpp,
@@ -233,6 +234,10 @@ public:
   int put_noobaa_id(const DoutPrefixProvider* dpp,
 		    const std::string& noobaa_id,
 		    const std::string& owner_key);
+
+  /* Whether `owner_key` was imported from NooBaa. */
+  int owner_was_imported(const DoutPrefixProvider* dpp,
+			 const std::string& owner_key, bool& imported) const;
 
   /* The re-import lookup.  -ENOENT when the id was never imported. */
   int get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,

@@ -4999,6 +4999,10 @@ public:
     ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE), 0);
     ASSERT_STREQ(b->profile_name(), "base");
     ASSERT_STREQ(b->get_format()->name(), "noobaa");
+    /* NooBaa made this bucket, so nsfs holds no row for it:  what places
+     * a NooBaa bucket is its record, until the import writes a row. */
+    ASSERT_EQ(driver->get_identity_db()->remove_bucket_placement(
+		  env->dpp, testname, ""), 0);
   }
 
   sf::path bucket_path() const { return bp / "root" / testname; }
@@ -10809,13 +10813,13 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   EXPECT_EQ(got.tenant, "");
   EXPECT_EQ(got.path, "/ibm/gpfs/fs1/elsewhere");
 
-  /* the default location, stored explicitly:  empty is accepted and
-   * means what a missing row means */
+  /* every row carries a path:  an empty one is refused, and there is
+   * no row meaning "the default" */
   nsfs::BucketPlacement deflt;
   deflt.bucket_name = "ordinary";
-  ASSERT_EQ(db->put_bucket_placement(env->dpp, deflt), 0);
-  ASSERT_EQ(db->get_bucket_placement(env->dpp, "ordinary", "", got), 0);
-  EXPECT_TRUE(got.path.empty());
+  EXPECT_EQ(db->put_bucket_placement(env->dpp, deflt), -EINVAL);
+  EXPECT_EQ(db->get_bucket_placement(env->dpp, "ordinary", "", got),
+	    -ENOENT);
 
   /* rewritten in place rather than duplicated */
   bp.path = "/ibm/gpfs/fs2/elsewhere";
@@ -10863,6 +10867,44 @@ TEST_F(NSFSIdentityDBTest, TheTenantIsPartOfTheKey)
   /* and the untenanted row is a third */
   EXPECT_EQ(db->get_bucket_placement(env->dpp, "shared-name", "", got),
 	    -ENOENT);
+}
+
+/* No two rows share a directory, and none lies inside another's.
+ *
+ * Two buckets in one tree would be one tree served twice.  `/a/bc`
+ * beside `/a/b` is the control:  it shares a prefix and is not nested,
+ * so a check that compared raw prefixes would refuse it. */
+TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
+{
+  nsfs::BucketPlacement x;
+  x.bucket_name = "x";
+  x.path = "/ibm/gpfs/fs1/a/b";
+  ASSERT_EQ(db->insert_bucket_placement(env->dpp, x), 0);
+
+  nsfs::BucketPlacement y;
+  y.bucket_name = "y";
+  for (const char* clash : {"/ibm/gpfs/fs1/a/b", "/ibm/gpfs/fs1/a/b/c",
+			    "/ibm/gpfs/fs1/a"}) {
+    y.path = clash;
+    EXPECT_EQ(db->insert_bucket_placement(env->dpp, y), -EADDRINUSE)
+	<< clash;
+    EXPECT_EQ(db->put_bucket_placement(env->dpp, y), -EADDRINUSE)
+	<< clash;
+  }
+  nsfs::BucketPlacement got;
+  EXPECT_EQ(db->get_bucket_placement(env->dpp, "y", "", got), -ENOENT);
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "x", "", got), 0);
+  EXPECT_EQ(got.path, "/ibm/gpfs/fs1/a/b") << "a refused write moved x";
+
+  y.path = "/ibm/gpfs/fs1/a/bc";
+  EXPECT_EQ(db->insert_bucket_placement(env->dpp, y), 0)
+      << "a sibling sharing a prefix was taken for a nested path";
+
+  /* insert is exclusive on the name;  put repoints the name's own row,
+   * which is not a clash with itself */
+  x.path = "/ibm/gpfs/fs1/elsewhere";
+  EXPECT_EQ(db->insert_bucket_placement(env->dpp, x), -EEXIST);
+  EXPECT_EQ(db->put_bucket_placement(env->dpp, x), 0);
 }
 
 /* A path we will not accept is refused where it is stored.
@@ -12294,6 +12336,61 @@ TEST_F(NooBaaBucketImportTest, ItRecordsWhetherTheBucketOwnsItsStorage)
   }
 }
 
+/* A name NooBaa's store holds is not created again in RGW:  that bucket
+ * is visible already, served from its record.  The control is a name
+ * the store does not hold. */
+TEST_F(NooBaaBucketImportTest, CreationRefusesANameNooBaaHolds)
+{
+  write_file(conf_root() / "buckets" / "held.json",
+	     R"({"_id":"6560e1f1c0ffee00000000bb","name":"held",)"
+	     R"("path":"/ibm/gpfs/fs1/held"})");
+
+  auto create = [this](const char* name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = owner;
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    return b->create(env->dpp, cp, null_yield);
+  };
+  EXPECT_EQ(create("held"), -EEXIST);
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "held", "", row), -ENOENT);
+  EXPECT_EQ(create("not-held"), 0);
+}
+
+/* A record whose name nsfs already holds at another path is refused,
+ * not merged into the bucket nsfs has.  The control is the same record
+ * with nsfs's row at the record's own path, which imports. */
+TEST_F(NooBaaBucketImportTest, ARecordForANameNsfsHoldsElsewhereIsRefused)
+{
+  write_their_record("DISABLED");
+  nsfs::BucketPlacement row;
+  row.bucket_name = testname;
+  row.path = (bp / "another-filesystem" / testname).string();
+  ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp, row),
+	    0);
+
+  EXPECT_EQ(run(), -EIO);
+  EXPECT_EQ(result.buckets_written, 0u);
+  bool said = false;
+  for (const auto& f : result.failures) {
+    if (f.find("nsfs already has a bucket of this name") !=
+	std::string::npos) {
+      said = true;
+    }
+  }
+  EXPECT_TRUE(said) << why();
+
+  row.path = bucket_path().string();
+  ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp, row),
+	    0);
+  EXPECT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u);
+}
+
 TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
 {
   write_their_record("DISABLED");
@@ -12391,7 +12488,7 @@ TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
     if (d.find("notifications") != std::string::npos) {
       notif = true;
     }
-    if (d.find("not under the data root") != std::string::npos) {
+    if (d.find("not under the base path") != std::string::npos) {
       path = true;
     }
   }
@@ -12852,15 +12949,13 @@ public:
   }
 };
 
-/* Without a row, nothing changes.
- *
- * This is the arm every existing deployment is on -- no index, no
- * migration -- so it is the one whose breaking would matter most. */
-TEST_F(NSFSPlacedBucketTest, WithoutARowTheBucketIsWhereItAlwaysWas)
+/* An owner with no path of its own creates at the base path, where
+ * every bucket was before rows existed. */
+TEST_F(NSFSPlacedBucketTest, AnOwnerWithoutAPathCreatesAtTheBasePath)
 {
   auto bucket = make_bucket("ordinary");
   EXPECT_TRUE(sf::is_directory(bp / "root" / "ordinary"))
-      << "a bucket with no placement row moved";
+      << "a bucket whose owner has no path left the base path";
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "ordinary"},
@@ -12968,21 +13063,192 @@ TEST_F(NSFSPlacedBucketTest, ThePathIsBoundPerLookup)
       << "the second lookup did not follow the moved row";
 }
 
-/* A row recording the default location is the same result as no row.
+/* Creation writes the row, naming the bucket's directory.
  *
- * P4 writes a row for every bucket it creates, including the ones at
- * the default location, so an empty Path has to mean exactly what an
- * absent row means or every ordinary bucket breaks. */
-TEST_F(NSFSPlacedBucketTest, AnEmptyPathMeansTheDefault)
+ * Every bucket nsfs creates is recorded with its path, as every NooBaa
+ * bucket record carries one (DECISIONS.md 2026-10-13).  An owner with
+ * no path of its own, created in RGW, gets the base path. */
+TEST_F(NSFSPlacedBucketTest, ACreatedBucketRecordsItsDirectory)
 {
-  nsfs::BucketPlacement bp2;
-  bp2.bucket_name = "defaulted";
-  ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
-							    bp2), 0);
+  auto bucket = make_bucket("made");
+  const sf::path at = bp / "root" / "made";
+  EXPECT_TRUE(sf::is_directory(at));
 
-  auto bucket = make_bucket("defaulted");
-  EXPECT_TRUE(sf::is_directory(bp / "root" / "defaulted"))
-      << "an empty Path did not mean the default location";
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "made", "", row), 0)
+      << "creation wrote no row";
+  EXPECT_EQ(row.path, at.string());
+}
+
+/* An owner with a new_buckets_path gets its buckets there.
+ *
+ * NooBaa's CreateBucket places a bucket at
+ * `<new_buckets_path>/<name>` (`bucketspace_fs.js` create_bucket). */
+TEST_F(NSFSPlacedBucketTest, AnOwnerWithAPathGetsItsBucketsThere)
+{
+  const sf::path acct = elsewhere() / "acct";
+  sf::create_directories(acct);
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  id.new_buckets_path = acct.string() + "/";	/* a trailing slash, as an
+						   operator might write it */
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+
+  auto bucket = make_bucket("routed");
+  EXPECT_TRUE(sf::is_directory(acct / "routed"))
+      << "the bucket did not go to its owner's path";
+  EXPECT_FALSE(sf::exists(bp / "root" / "routed"))
+      << "the bucket went to the base path as well";
+
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "routed", "", row), 0);
+  EXPECT_EQ(row.path, (acct / "routed").string());
+}
+
+/* An owner imported from NooBaa without a path cannot create buckets,
+ * as it could not in NooBaa.  The control is the same owner before it
+ * is marked imported, which creates at the base path. */
+TEST_F(NSFSPlacedBucketTest, AnImportedOwnerWithoutAPathIsRefused)
+{
+  auto before = make_bucket("allowed");
+  ASSERT_TRUE(sf::is_directory(bp / "root" / "allowed"));
+
+  ASSERT_EQ(driver->get_identity_db()->put_noobaa_id(
+		env->dpp, "6560e1f1c0ffee00000000aa", to_string(owner)), 0);
+
+  RGWBucketInfo info;
+  info.bucket.name = "refused";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EACCES);
+  EXPECT_FALSE(sf::exists(bp / "root" / "refused"));
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "refused", "", row), -ENOENT);
+}
+
+/* A tenant's bucket at the base path is `<tenant>$<name>`, so two
+ * tenants' buckets of one name are two directories. */
+TEST_F(NSFSPlacedBucketTest, ATenantsBucketIsNamedForItsTenant)
+{
+  auto plain = make_bucket("same");
+
+  RGWBucketInfo info;
+  info.bucket.tenant = "t1";
+  info.bucket.name = "same";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  ASSERT_EQ(b->create(env->dpp, cp, null_yield), 0);
+
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "same"));
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "t1$same"));
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "same", "t1", row), 0);
+  EXPECT_EQ(row.path, (bp / "root" / "t1$same").string());
+}
+
+/* Of two creations of one name, one succeeds:  the row is the
+ * exclusive step, as NooBaa's exclusive create of its record is. */
+TEST_F(NSFSPlacedBucketTest, ATakenNameIsRefused)
+{
+  auto first = make_bucket("once");
+
+  RGWBucketInfo info;
+  info.bucket.name = "once";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EEXIST);
+}
+
+/* A bucket is not created over a directory that is already there, as
+ * NooBaa's mkdir fails;  the directory is left as it was, and the row
+ * is taken back.  The control is a name with no directory. */
+TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRefused)
+{
+  const sf::path pre = bp / "root" / "pre";
+  sf::create_directories(pre);
+
+  RGWBucketInfo info;
+  info.bucket.name = "pre";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EEXIST);
+
+  EXPECT_LT(::getxattr(pre.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
+      << "the refused creation wrote to the directory";
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "pre", "", row), -ENOENT);
+
+  auto fresh = make_bucket("fresh");
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "fresh"));
+}
+
+/* A directory that cannot be made takes its row back, as NooBaa deletes
+ * its record when _create_uls fails. */
+TEST_F(NSFSPlacedBucketTest, AFailedMkdirLeavesNoRow)
+{
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  id.new_buckets_path = (elsewhere() / "no-such-parent").string();
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+
+  RGWBucketInfo info;
+  info.bucket.name = "unmade";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  rgw::sal::Bucket::CreateParams cp;
+  cp.owner = owner;
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -ENOENT);
+
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "unmade", "", row), -ENOENT)
+      << "the row outlived the directory it named";
+}
+
+/* Deleting a bucket deletes its row. */
+TEST_F(NSFSPlacedBucketTest, RemovalDeletesTheRow)
+{
+  auto bucket = make_bucket("gone");
+  nsfs::BucketPlacement row;
+  ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "gone", "", row), 0);
+
+  ASSERT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "gone", "", row), -ENOENT);
+}
+
+/* An upload's staging directory is RGW's, not a client's bucket, and
+ * gets no row. */
+TEST_F(NSFSPlacedBucketTest, AStagingBucketGetsNoRow)
+{
+  auto bucket = make_bucket("staged");
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload("obj", upload_id);
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs),
+	    0);
+
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, upload_id, "", row), -ENOENT);
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, "staged", "", row), 0)
+      << "the control:  the bucket itself has a row";
 }
 
 /* The tenant is part of the lookup, as it is of the key.
@@ -13146,29 +13412,28 @@ TEST_F(NSFSRecordedPathTest, OurRowWinsOverTheirRecord)
       << "their recorded path was used although we had a row";
 }
 
-/* A row recording the default location stops there.
+/* A row naming the base path stops there.
  *
- * It is the nsfs record, so it must not fall through to NooBaa's record --
- * otherwise adopting a bucket to the default location would be undone
- * by the record that named somewhere else. */
-TEST_F(NSFSRecordedPathTest, ARowForTheDefaultDoesNotFallThrough)
+ * It is the nsfs record, so it must not fall through to NooBaa's record
+ * -- otherwise adopting a bucket to the base path would be undone by
+ * the record that named somewhere else. */
+TEST_F(NSFSRecordedPathTest, ARowForTheBasePathDoesNotFallThrough)
 {
   const sf::path theirs = their_storage() / "elsewhere";
   sf::create_directories(theirs);
   record_at(theirs);
 
   nsfs::BucketPlacement row;
-  row.bucket_name = testname;	/* empty path:  the default location */
+  row.bucket_name = testname;
+  row.path = bucket_path().string();
   ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
 							    row), 0);
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
 				&loaded, null_yield), 0);
-  /* the default location renders as the bucket's own name under the
-   * data root, not as an absolute path of NooBaa's */
-  EXPECT_NE(resolved_at(loaded.get()), theirs.string())
-      << "a row for the default location fell through to their record";
+  EXPECT_EQ(resolved_at(loaded.get()), bucket_path().string())
+      << "a row for the base path fell through to their record";
 }
 
 /* A path NooBaa's record names that we would not store is refused.

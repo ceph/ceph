@@ -240,17 +240,22 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
      * place a guard survives a caller written later.  It cannot
      * express the whole rule -- stock SQLite has no regex -- so it
      * rejects what matters most:  a relative path, and `..` in any
-     * position. */
+     * position.
+     *
+     * Every row carries a path, and no two rows share one:  two
+     * buckets in one directory would be one tree served twice.  That a
+     * path lies inside another row's is refused by the writers, since
+     * a CHECK cannot see other rows. */
     "CREATE TABLE IF NOT EXISTS '" + placement_table + "' ("
     "  BucketName TEXT NOT NULL,"
     "  Tenant TEXT NOT NULL DEFAULT '',"
-    "  Path TEXT,"
+    "  Path TEXT NOT NULL,"
     "  PRIMARY KEY (BucketName, Tenant),"
-    "  CHECK (Path IS NULL OR Path = '' OR ("
-    "           Path GLOB '/*'"
-    "           AND Path NOT GLOB '*/../*'"
-    "           AND Path NOT GLOB '*/..'"
-    "           AND Path NOT GLOB '*//*'))"
+    "  UNIQUE (Path),"
+    "  CHECK (Path GLOB '/*'"
+    "         AND Path NOT GLOB '*/../*'"
+    "         AND Path NOT GLOB '*/..'"
+    "         AND Path NOT GLOB '*//*')"
     ");";
 
   ret = exec(&dp, schema.c_str(), nullptr);
@@ -400,6 +405,31 @@ int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int IdentityDB::owner_was_imported(const DoutPrefixProvider* dpp,
+				   const std::string& owner_key,
+				   bool& imported) const
+{
+  const std::string sql =
+    "SELECT 1 FROM '" + noobaa_id_table + "' WHERE Owner = ? LIMIT 1;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, owner_key.c_str(), -1, SQLITE_TRANSIENT);
+
+  const int step = sqlite3_step(st);
+  if ((step != SQLITE_ROW) && (step != SQLITE_DONE)) {
+    ldpp_dout(dpp, 0) << "ERROR: " << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  imported = (step == SQLITE_ROW);
+  return 0;
+}
+
 int IdentityDB::remove_identity(const DoutPrefixProvider* dpp,
 				const std::string& key)
 {
@@ -528,26 +558,44 @@ constexpr const char* PLACEMENT_COLUMNS =
 
 } // namespace
 
-int IdentityDB::put_bucket_placement(const DoutPrefixProvider* dpp,
-				     const BucketPlacement& bp)
+/* Both writers.  `repoint` is put's:  an existing row for the key
+ * takes the new path.  Without it a second row for the key is refused,
+ * which is what makes creation exclusive.
+ *
+ * Neither uses OR REPLACE.  With UNIQUE (Path) it would delete
+ * whichever other bucket's row held the path, silently. */
+int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
+				       const BucketPlacement& bp,
+				       bool repoint)
 {
   if (bp.bucket_name.empty()) {
     return -EINVAL;
   }
-  /* Empty is the default location and is stored as empty;  anything
-   * else has to be a path we will accept.  Refused here with a
-   * message rather than left to the CHECK, so an operator learns what
-   * was wrong with it (`NSFS_BUCKET_PLACEMENT_PLAN.md` §9). */
-  if (!bp.path.empty() && !placement_path_is_acceptable(bp.path)) {
+  /* Refused here with a message rather than left to the CHECK, so an
+   * operator learns what was wrong with it
+   * (`NSFS_BUCKET_PLACEMENT_PLAN.md` §9). */
+  if (!placement_path_is_acceptable(bp.path)) {
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name
-      << " refused: " << bp.path << " is not an absolute canonical path"
-      << dendl;
+      << " refused: \"" << bp.path
+      << "\" is not an absolute canonical path" << dendl;
     return -EINVAL;
   }
 
-  const std::string sql =
-    "INSERT OR REPLACE INTO '" + placement_table + "' ("
-    + PLACEMENT_COLUMNS + ") VALUES (?,?,?);";
+  /* One statement, so that the containment test and the write cannot
+   * be separated by another writer:  the row goes in only if no other
+   * bucket's path contains this one or lies inside it.  Equality is
+   * UNIQUE (Path)'s. */
+  std::string sql =
+    "INSERT INTO '" + placement_table + "' (" + PLACEMENT_COLUMNS + ") "
+    "SELECT ?1, ?2, ?3 WHERE NOT EXISTS ("
+    "  SELECT 1 FROM '" + placement_table + "'"
+    "  WHERE NOT (BucketName = ?1 AND Tenant = ?2)"
+    "  AND (substr(?3, 1, length(Path) + 1) = Path || '/'"
+    "       OR substr(Path, 1, length(?3) + 1) = ?3 || '/'))";
+  if (repoint) {
+    sql += " ON CONFLICT (BucketName, Tenant) DO UPDATE SET Path = excluded.Path";
+  }
+  sql += ";";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -559,18 +607,39 @@ int IdentityDB::put_bucket_placement(const DoutPrefixProvider* dpp,
 
   sqlite3_bind_text(st, 1, bp.bucket_name.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(st, 2, bp.tenant.c_str(), -1, SQLITE_TRANSIENT);
-  /* The empty path is stored as the empty string rather than NULL.
-   * Both mean the default location and one of them is enough;  the
-   * CHECK accepts either, because a row written by hand is a thing
-   * this table will see. */
   sqlite3_bind_text(st, 3, bp.path.c_str(), -1, SQLITE_TRANSIENT);
 
   if (sqlite3_step(st) != SQLITE_DONE) {
-    ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name
-      << " refused: " << sqlite3_errmsg(handle()) << dendl;
+    const int ext = sqlite3_extended_errcode(handle());
+    ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "
+      << bp.path << " refused: " << sqlite3_errmsg(handle()) << dendl;
+    if (ext == SQLITE_CONSTRAINT_PRIMARYKEY) {
+      return -EEXIST;
+    }
+    if (ext == SQLITE_CONSTRAINT_UNIQUE) {
+      return -EADDRINUSE;
+    }
     return -EINVAL;
   }
+  if (sqlite3_changes(handle()) == 0) {
+    ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "
+      << bp.path << " refused: another bucket's directory contains it or "
+      << "lies inside it" << dendl;
+    return -EADDRINUSE;
+  }
   return 0;
+}
+
+int IdentityDB::put_bucket_placement(const DoutPrefixProvider* dpp,
+				     const BucketPlacement& bp)
+{
+  return write_bucket_placement(dpp, bp, true);
+}
+
+int IdentityDB::insert_bucket_placement(const DoutPrefixProvider* dpp,
+					const BucketPlacement& bp)
+{
+  return write_bucket_placement(dpp, bp, false);
 }
 
 int IdentityDB::get_bucket_placement(const DoutPrefixProvider* dpp,

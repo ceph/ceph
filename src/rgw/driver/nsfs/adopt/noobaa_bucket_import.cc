@@ -407,7 +407,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       attrs[RGW_ATTR_OWNERSHIP_CONTROLS] = std::move(bl);
     }
 
-    /* `path` outside the data root.
+    /* `path` not under the base path.
      *
      * Serving it from there is done -- P2 resolves an index row and
      * P5 falls back to this very record -- so what is left is
@@ -420,13 +420,28 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     } catch (const JSONDecoder::err&) {
       their_path.clear();
     }
+    /* A bucket nsfs already holds under this name, somewhere else, is a
+     * different bucket:  creation refuses a name NooBaa's store holds,
+     * so this is a record that appeared after the bucket did.  Refused,
+     * not merged into it. */
+    {
+      nsfs::BucketPlacement row;
+      if ((driver->get_identity_db()->get_bucket_placement(
+	     dpp, rec.name, "", row) == 0) &&
+	  !their_path.empty() && (row.path != their_path)) {
+	result.failures.push_back(
+	    rec.name + ": nsfs already has a bucket of this name, at " +
+	    row.path + ";  their record says " + their_path);
+	continue;
+      }
+    }
     if (!their_path.empty()) {
       const std::string expected =
 	driver->get_base_path() + "/" + rec.name;
       if (their_path != expected) {
 	result.deferred.push_back(
 	    rec.name + ": its storage is at " + their_path +
-	    ", which is not under the data root;  it is served from their "
+	    ", which is not under the base path;  it is served from their "
 	    "record until the index records it (P6)");
       }
     }

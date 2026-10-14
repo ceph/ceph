@@ -1997,7 +1997,7 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 
   /* AT_FDCWD with no parent, which is how `Directory::open()` has
    * always resolved one:  a parentless entry's `fname` is an absolute
-   * path.  The data root is such an entry and so is a bucket served
+   * path.  The base path is such an entry and so is a bucket served
    * from a stored path (P2), and this dereferenced the null. */
   int ret = statx(parent ? parent->get_fd() : AT_FDCWD, fname.c_str(),
 		  AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
@@ -2788,7 +2788,10 @@ int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_fi
    * one, decides who can reach a bucket from outside. */
   const mode_t dir_mode = nsfs::impersonation_enabled()
       ? (S_ISVTX | 0777) : nsfs::dir_create_mode();
-  int ret = mkdirat(parent->get_fd(), fname.c_str(), dir_mode);
+  /* A bucket at a stored path has no parent entry, and its fname is the
+   * whole path:  AT_FDCWD, as Directory::open() resolves one. */
+  const int at = parent ? parent->get_fd() : AT_FDCWD;
+  int ret = mkdirat(at, fname.c_str(), dir_mode);
   const bool made = (ret == 0);
   if (ret < 0) {
     ret = -errno;
@@ -2810,14 +2813,13 @@ int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_fi
    * The gateway owns this directory, so it sets the mode outright
    * rather than asking for it. */
   if (nsfs::impersonation_enabled() &&
-      (::fchmodat(parent->get_fd(), fname.c_str(), S_ISVTX | 0777, 0) < 0)) {
+      (::fchmodat(at, fname.c_str(), S_ISVTX | 0777, 0) < 0)) {
     ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
       << ": " << cpp_strerror(errno) << dendl;
     return -errno;
   }
   if (!nsfs::impersonation_enabled() && made) {
-    ret = nsfs::apply_create_mode_at(dpp, parent->get_fd(), fname.c_str(),
-				     dir_mode);
+    ret = nsfs::apply_create_mode_at(dpp, at, fname.c_str(), dir_mode);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
 	<< ": " << cpp_strerror(-ret) << dendl;
@@ -4546,13 +4548,8 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
 
   nsfs::BucketPlacement bp;
   if (userDB->get_bucket_placement(dpp, name, tenant, bp) == 0) {
-    /* An empty Path is a row recording the default location, which P4
-     * writes for every bucket it creates;  the same result as no row,
-     * and it stops here rather than falling through to NooBaa's record
-     * -- a row is nsfs's and is authoritative. */
-    if (bp.path.empty()) {
-      return nullptr;
-    }
+    /* A row is nsfs's and is authoritative:  it stops here rather than
+     * falling through to NooBaa's record. */
     path = bp.path;
   } else {
     /* P5.  No row in the index, so ask NooBaa's record.
@@ -4592,15 +4589,21 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
     }
   }
 
-  /* No parent, and the whole path as the name -- which is how the
-   * data root itself is built.  The FSStrategy has to be passed
-   * explicitly for the same reason it is there:  a Directory built
-   * without one leaves every File below it with a null strategy. */
   ldpp_dout(dpp, 10) << "nsfs: bucket " << name << " is placed at "
     << path << dendl;
+  return make_placed_dir(path);
+}
+
+std::unique_ptr<nsfs::Directory>
+NSFSDriver::make_placed_dir(const std::string& path)
+{
+  /* No parent, and the whole path as the name -- which is how the
+   * base path itself is built.  The FSStrategy has to be passed
+   * explicitly for the same reason it is there:  a Directory built
+   * without one leaves every File below it with a null strategy. */
   auto d = std::make_unique<nsfs::Directory>(path, nullptr, ctx(),
 					     fs_strategy.get());
-  /* Seeded exactly as the data root is.
+  /* Seeded exactly as the base path is.
    *
    * A child inherits its strategies from its parent, and this has no
    * parent -- so without this its xattr strategy is null and the first
@@ -4617,6 +4620,56 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
   d->set_path_strategy(path_strategy.get());
   d->set_reserved_names(&reserved_names);
   return d;
+}
+
+int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
+				const rgw_owner& owner, const rgw_bucket& b,
+				std::string& path)
+{
+  /* NooBaa has no tenants, so only an untenanted name can be one of
+   * its buckets. */
+  if (b.tenant.empty() && nb_bucket_state_strategy) {
+    auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+      nb_bucket_state_strategy.get());
+    std::string recorded;
+    if (theirs->recorded_path(dpp, b.name, recorded) != -ENOENT) {
+      ldpp_dout(dpp, 1) << "nsfs: not creating bucket " << b.name
+	<< ":  a NooBaa bucket record holds the name" << dendl;
+      return -EEXIST;
+    }
+  }
+
+  const std::string dname =
+    b.tenant.empty() ? b.name : (b.tenant + "$" + b.name);
+  const std::string key = to_string(owner);
+
+  nsfs::Identity id;
+  int ret = userDB->get_identity(dpp, key, id);
+  if ((ret < 0) && (ret != -ENOENT)) {
+    return ret;
+  }
+  if ((ret == 0) && !id.new_buckets_path.empty()) {
+    std::string at = id.new_buckets_path;
+    while ((at.size() > 1) && (at.back() == '/')) {
+      at.pop_back();
+    }
+    path = at + "/" + dname;
+    return 0;
+  }
+
+  bool imported = false;
+  ret = userDB->owner_was_imported(dpp, key, imported);
+  if (ret < 0) {
+    return ret;
+  }
+  if (imported) {
+    ldpp_dout(dpp, 1) << "nsfs: " << key << " has no new_buckets_path, and "
+      << "an account imported from NooBaa without one cannot create "
+      << "buckets" << dendl;
+    return -EACCES;
+  }
+  path = base_path + "/" + dname;
+  return 0;
 }
 
 int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
@@ -4938,9 +4991,39 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  /* A client's bucket is placed the way NooBaa places one:  the record
+   * first, carrying the path, then the directory, and the record taken
+   * back if the directory cannot be made (`bucketspace_fs.js`
+   * create_bucket and _create_uls).  The row is what makes the name
+   * taken:  of two creations of one name, one insert succeeds. */
+  if (!is_internal()) {
+    nsfs::BucketPlacement bp;
+    bp.bucket_name = get_name();
+    bp.tenant = get_tenant();
+    ret = driver->new_bucket_path(dpp, params.owner, get_key(), bp.path);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = driver->get_identity_db()->insert_bucket_placement(dpp, bp);
+    if (ret == -EADDRINUSE) {
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << ":  "
+	<< bp.path << " is another bucket's directory, or nested with one"
+	<< dendl;
+      return -EEXIST;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    dir = driver->make_placed_dir(bp.path);
+  }
+
   bool existed = false;
   ret = create(dpp, y, &existed);
   if (ret < 0) {
+    if (!is_internal()) {
+      driver->get_identity_db()->remove_bucket_placement(dpp, get_name(),
+							 get_tenant());
+    }
     return ret;
   }
 
@@ -5997,6 +6080,14 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 
   driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
 
+  ret = driver->get_identity_db()->remove_bucket_placement(dpp, get_name(),
+							   get_tenant());
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " was deleted, "
+      << "but its placement row was not:  " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
   return ret;
 }
 
@@ -6047,7 +6138,7 @@ int NSFSBucket::set_owns_storage(const DoutPrefixProvider* dpp, bool owns)
  *
  * Deleting what adoption wrote is the inverse of adopting, and it
  * leaves the directory in the state it was in beforehand:  present,
- * found by the data root's readdir, and carrying nothing of nsfs's.
+ * found by the base path's readdir, and carrying nothing of nsfs's.
  * That is the same state every directory an operator has not adopted
  * is in, so this introduces no condition the driver did not already
  * have to handle.
@@ -8602,6 +8693,17 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
   int ret = dir->create(dpp, existed);
   if (ret < 0) {
     return ret;
+  }
+
+  /* A client's bucket is never created over a directory that is already
+   * there:  NooBaa's mkdir fails and the bucket with it, and a directory
+   * nobody recorded is not ours to take.  Refused before anything is
+   * written to it. */
+  if (!is_internal() && existed && *existed) {
+    ldpp_dout(dpp, 1) << "nsfs: not creating bucket " << get_name()
+      << ":  its directory " << dir->get_name() << " already exists"
+      << dendl;
+    return -EEXIST;
   }
 
   /* Stamp a bucket we made, so that everything this deployment creates
