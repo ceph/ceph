@@ -787,7 +787,8 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
     // already queued on the connection, so priv is gone by the time
     // we run. The connection is already marked down, so a reply could
     // not be delivered anyway: drop the command. Clients abort one-shot
-    // commands on the reset (-EPIPE); others have to time out.
+    // commands on the reset (-EPIPE) and resend the others on the new
+    // session.
     dout(1) << __func__ << " no session on "
             << m->get_connection()->get_peer_socket_addr()
             << ", dropping command tid " << m->get_tid()
