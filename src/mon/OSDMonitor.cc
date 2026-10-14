@@ -9962,6 +9962,15 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << id << " type does not match pool";
       return -EINVAL;
     }
+    if (p.num_zones > 1 && p.peering_crush_bucket_barrier) {
+      const char *zone_type =
+        osdmap.crush->get_type_name(p.peering_crush_bucket_barrier);
+      if (int r = check_rule_places_pool(id, p.get_type(), p.num_zones,
+                                         zone_type ? zone_type : "", p.size,
+                                         &ss); r) {
+        return r;
+      }
+    }
     if (id != p.crush_rule) {
       maybe_remove_unused_crush_rule(pool, p.crush_rule);
     }
