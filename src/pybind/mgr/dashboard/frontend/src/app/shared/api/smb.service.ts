@@ -1,6 +1,7 @@
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 import {
   ClusterRequestModel,
@@ -10,7 +11,8 @@ import {
   SMBJoinAuth,
   SMBResource,
   SMBShare,
-  SMBUsersGroups
+  SMBUsersGroups,
+  SMBApplyResponse
 } from '~/app/ceph/smb/smb.model';
 import { NotificationService } from '../services/notification.service';
 import { NotificationType } from '../enum/notification-type.enum';
@@ -79,7 +81,9 @@ export class SmbService {
   }
 
   createCluster(requestModel: ClusterRequestModel) {
-    return this.http.post(`${this.baseURL}/cluster`, requestModel);
+    return this.http
+      .post<SMBApplyResponse>(`${this.baseURL}/cluster`, requestModel)
+      .pipe(tap((resp) => this.notifyWarnings(resp)));
   }
 
   removeCluster(clusterId: string) {
@@ -101,11 +105,13 @@ export class SmbService {
   }
 
   createShare(requestModel: ShareRequestModel) {
-    return this.http.post(`${this.baseURL}/share`, requestModel);
+    return this.http
+      .post<SMBApplyResponse>(`${this.baseURL}/share`, requestModel)
+      .pipe(tap((resp) => this.notifyWarnings(resp)));
   }
 
-  getShare(cluster_id: string, share_id: string) {
-    return this.http.get(`${this.baseURL}/share/${cluster_id}/${share_id}`);
+  getShare(cluster_id: string, share_id: string): Observable<SMBShare> {
+    return this.http.get<SMBShare>(`${this.baseURL}/share/${cluster_id}/${share_id}`);
   }
 
   deleteShare(clusterId: string, shareId: string): Observable<HttpResponse<null>> {
@@ -146,7 +152,18 @@ export class SmbService {
     });
   }
 
-  getCluster(cluster_id: string) {
-    return this.http.get(`${this.baseURL}/cluster/${cluster_id}`);
+  getCluster(cluster_id: string): Observable<SMBCluster> {
+    return this.http.get<SMBCluster>(`${this.baseURL}/cluster/${cluster_id}`);
+  }
+
+  private notifyWarnings(resp: SMBApplyResponse) {
+    const recap = resp?.warnings_summary?.recap;
+    if (recap?.length) {
+      this.notificationService.show(
+        NotificationType.warning,
+        $localize`SMB configuration warnings`,
+        recap.join('\n')
+      );
+    }
   }
 }

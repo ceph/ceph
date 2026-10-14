@@ -42,7 +42,14 @@ CLUSTER_SCHEMA = {
     }], "Public Address"),
     "placement": ({
         "count": (int, "Number of instances to place")
-    }, "Placement configuration for the resource")
+    }, "Placement configuration for the resource"),
+    "persistent_handles_durability": (
+        str, "Persistent handles durability policy: 'full_outage' or 'partial_outage'"),
+    "share_defaults": ({
+        "availability": ({
+            "persistent_handles": (bool, "Enable persistent handles by default for CephFS shares")
+        }, "Availability defaults for CephFS shares")
+    }, "Default share configuration")
 }
 
 LIST_CLUSTER_SCHEMA = [CLUSTER_SCHEMA]
@@ -55,6 +62,9 @@ SHARE_SCHEMA = {
     "name": (str, "Name of the share"),
     "readonly": (bool, "Indicates if the share is read-only"),
     "browseable": (bool, "Indicates if the share is browseable"),
+    "availability": ({
+        "persistent_handles": (bool, "Indicates if persistent handles are enabled for the share")
+    }, "Availability configuration for the CephFS share"),
     "cephfs": ({
         "volume": (str, "Name of the CephFS file system"),
         "path": (str, "Path within the CephFS file system"),
