@@ -1101,6 +1101,26 @@ TEST_F(TestMigration, CloneFlatten)
   test_children(false, initial_image_name);
 }
 
+TEST_F(TestMigration, CloneDiscardSnapShrink)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  auto size = m_ictx->size;
+  uint64_t object_size = 1 << m_ictx->order;
+
+  write(size - object_size, object_size, 'A');
+  snap_create("snap1");
+  clone("snap1");
+
+  // snap2 hides the parent data in the last object, then the shrink
+  // trims that object from HEAD
+  discard(size - object_size, object_size);
+  snap_create("snap2");
+  resize(size >> 1);
+
+  migrate(m_ioctx, m_image_name);
+}
+
 TEST_F(TestMigration, TriggerAssertSnapcSeq)
 {
   auto size = m_ictx->size;
