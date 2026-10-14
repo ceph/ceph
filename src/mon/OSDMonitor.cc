@@ -7840,6 +7840,9 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
     // The name is uniquely associated to a ruleid and the rule it contains
       // From the user point of view, the rule is more meaningfull.
       *rule = osdmap.crush->get_rule_id(name);
+      if (crush_rule_removal_pending(name, *rule)) {
+        return -EAGAIN;
+      }
       return -EEXIST;
   }
   CrushWrapper newcrush = _get_pending_crush();
@@ -7897,6 +7900,9 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
   int ruleid = osdmap.crush->get_rule_id(name);
   if (ruleid != -ENOENT) {
     *rule = ruleid;
+    if (crush_rule_removal_pending(name, ruleid)) {
+      return -EAGAIN;
+    }
     return -EEXIST;
   }
 
@@ -12916,6 +12922,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "rule " << name << " already exists";
 	err = 0;
 	break;
+      case -EAGAIN: // the rule is pending
+        goto wait;
       default: // non recoverable error
  	goto reply_no_propose;
       }
@@ -12952,6 +12960,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "rule " << name << " already exists";
 	err = 0;
 	break;
+      case -EAGAIN: // the rule is pending
+        goto wait;
       default: // non recoverable error
 	goto reply_no_propose;
       }
@@ -13161,6 +13171,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "rule " << name << " already exists";
 	err = 0;
 	break;
+      case -EAGAIN: // the rule or its profile is pending
+        goto wait;
       default: // non recoverable error
  	goto reply_no_propose;
       }
