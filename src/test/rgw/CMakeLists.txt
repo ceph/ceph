@@ -618,3 +618,40 @@ add_rgw_cargo_test_binary(
   UNIT_TEST
   DEPENDS   ceph_rgw_sal_test_env)
 endif()
+
+# ---- S3 Inventory ----
+# config data model: no Arrow dependency, always built
+add_executable(unittest_rgw_inventory_s3 test_rgw_inventory_s3.cc)
+target_include_directories(unittest_rgw_inventory_s3
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_inventory_s3
+  rgw_common ${rgw_libs} Catch2::Catch2WithMain)
+add_test(NAME unittest_rgw_inventory_s3
+         COMMAND unittest_rgw_inventory_s3
+         WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+
+# manifest generation: no Arrow dependency, always built
+add_executable(unittest_rgw_inventory_manifest test_rgw_inventory_manifest.cc)
+target_include_directories(unittest_rgw_inventory_manifest
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_inventory_manifest
+  rgw_common ${rgw_libs} Catch2::Catch2WithMain)
+add_test(NAME unittest_rgw_inventory_manifest
+         COMMAND unittest_rgw_inventory_manifest
+         WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+
+# Parquet writer and runner: need Arrow. The in-tree Arrow include path is
+# listed explicitly so system Arrow headers can't shadow it (ABI mismatch).
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  foreach(t unittest_rgw_inventory_parquet unittest_rgw_inventory)
+    string(REPLACE "unittest_" "test_" src ${t})
+    add_executable(${t} ${src}.cc)
+    target_include_directories(${t}
+      SYSTEM PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/rgw"
+        "${CMAKE_BINARY_DIR}/src/arrow/include")
+    target_link_libraries(${t} rgw_common ${rgw_libs} Catch2::Catch2WithMain)
+    add_test(NAME ${t} COMMAND ${t}
+             WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+  endforeach()
+endif()

@@ -25,6 +25,10 @@
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"
+#include "rgw_inventory_s3.h"
+#ifdef _ARROW_EXIST
+#include "rgw_inventory.h"
+#endif
 #include "rgw_perf_counters.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -347,6 +351,9 @@ void RGWLC::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   char cookie_buf[COOKIE_LEN + 1];
   gen_rand_alphanumeric(cct, cookie_buf, sizeof(cookie_buf) - 1);
   cookie = cookie_buf;
+#ifdef _ARROW_EXIST
+  rgw::inventory::cleanup_stale_temp_files(this, cct);
+#endif
 }
 
 void RGWLC::finalize()
@@ -1965,6 +1972,23 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return ret;
   }
 
+  // S3 Inventory rides the lifecycle work list. Only act on the bucket
+  // instance this entry was created for (a recreated same-name bucket gets
+  // its own entry). Errors are logged inside process_bucket() and never
+  // change this bucket's lifecycle result.
+  if (bucket->get_key().marker == bucket_marker) {
+#ifdef _ARROW_EXIST
+    (void) rgw::inventory::process_bucket(this, driver, bucket.get(), yield);
+#endif
+    // Inventory-only bucket: no lifecycle rules to apply. Return 0 so
+    // bucket_lc_post() records completion instead of treating the missing
+    // RGW_ATTR_LC as a stale entry (-ENOENT) and removing it.
+    if (bucket->get_attrs().count(RGW_ATTR_LC) == 0 &&
+        rgw::inventory::bucket_has_inventory(bucket->get_attrs())) {
+      return 0;
+    }
+  }
+
   /*
    * Validate the bucket before initializing per-bucket LC counters or
    * spawning a workpool. Stamping start_time/end_time for stale index
@@ -3247,6 +3271,15 @@ int RGWLC::remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
 			 << b.name << " returned err=" << ret << dendl;
       return ret;
     }
+  }
+
+  // S3 Inventory shares the lifecycle work list: keep the entry while the
+  // bucket still has an inventory configuration.
+  if (rgw::inventory::bucket_has_inventory(attrs)) {
+    ldpp_dout(dpp, 20) << "RGWLC::remove_bucket_config(): bucket=" << b.name
+                       << " still has an inventory configuration; keeping"
+                       << " lifecycle work-list entry" << dendl;
+    return ret;
   }
 
   ret = guard_lc_modify(dpp, driver, sal_lc.get(), b, cookie,
