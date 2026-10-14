@@ -1,4 +1,4 @@
-FROM quay.ceph.io/ceph-ci/ceph:main
+FROM quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0
 COPY ./tmp_build/orchestrator /usr/share/ceph/mgr/orchestrator
 COPY ./tmp_build/rook /usr/share/ceph/mgr/rook
 COPY ./tmp_build/ceph/ /tmp/python-common/ceph/

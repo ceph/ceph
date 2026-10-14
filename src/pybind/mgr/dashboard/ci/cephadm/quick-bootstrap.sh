@@ -13,7 +13,7 @@ show_help() {
   echo "  -e, --expanded-cluster     To add all the hosts and deploy OSDs on top of it."
   echo "  -c, --clusters          Number of clusters to be created. Default is 1."
   echo "  -n, --nodes           Number of nodes to be created per cluster. Default is 3."
-  echo "  -i, --ceph-image       The cephadm image to be used for bootstrapping the cluster. Default is quay.ceph.io/ceph-ci/ceph:main."
+  echo "  -i, --ceph-image       The cephadm image to be used for bootstrapping the cluster. Default is quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0."
   echo "  -h, --help             Display this help message."
   echo ""
   echo "Example:"
@@ -64,7 +64,7 @@ for arg in "$@"; do
   esac
 done
 
-image_name="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
+image_name="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0}"
 extra_args+=" -P nodes=${NODES}"
 
 if [[ ${use_cached_image} == false ]]; then

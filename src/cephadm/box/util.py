@@ -168,7 +168,7 @@ def run_cephadm_shell_command(command: str, expect_error=False) -> str:
     keyring = Config.get('keyring')
     fsid = Config.get('fsid')
 
-    with_cephadm_image = 'CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:main'
+    with_cephadm_image = 'CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0'
     out = run_shell_command(
         f'{with_cephadm_image} cephadm --verbose shell --fsid {fsid} --config {config} --keyring {keyring} -- {command}',
         expect_error,

@@ -9,7 +9,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
-IMAGE_MAIN=${IMAGE_MAIN:-'quay.ceph.io/ceph-ci/ceph:main'}
+IMAGE_MAIN=${IMAGE_MAIN:-'quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0'}
 IMAGE_REEF=${IMAGE_REEF:-'quay.ceph.io/ceph-ci/ceph:reef'}
 IMAGE_SQUID=${IMAGE_SQUID:-'quay.ceph.io/ceph-ci/ceph:squid'}
 

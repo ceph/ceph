@@ -142,7 +142,7 @@ spec:
   crashCollector:
     disable: false
   cephVersion:
-    image: quay.ceph.io/ceph-ci/ceph:main
+    image: quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0
     allowUnsupported: true
   skipUpgradeChecks: false
   continueUpgradeAfterChecksEvenIfNotHealthy: false

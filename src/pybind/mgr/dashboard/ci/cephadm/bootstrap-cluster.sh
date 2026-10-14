@@ -5,7 +5,7 @@ set -x
 export PATH=/root/bin:$PATH
 mkdir /root/bin
 
-export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
+export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0}"
 
 CEPHADM="/root/bin/cephadm"
 CEPHADM_SRC="/mnt/{{ ceph_dev_folder }}/src/cephadm/cephadm"
@@ -33,7 +33,7 @@ shell_image=''
 
 quick_install_options=''
 {% if quick_install is defined %}
-  export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
+  export CEPHADM_IMAGE="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0}"
   quick_install_options="--image localhost:5000/ceph" 
   shell_image="--image localhost:5000/ceph"
 
@@ -53,7 +53,7 @@ fi
   bootstrap_extra_options+=" --shared_ceph_folder /mnt/{{ ceph_dev_folder }}"
 {% endif %}
 
-$CEPHADM ${quick_install_options} bootstrap --mon-ip $mon_ip --initial-dashboard-password {{ admin_password }} ${bootstrap_extra_options}
+$CEPHADM ${quick_install_options} bootstrap --allow-mismatched-release --mon-ip $mon_ip --initial-dashboard-password {{ admin_password }} ${bootstrap_extra_options}
 
 fsid=$(awk '/fsid/ {print $3}' /etc/ceph/ceph.conf)
 cephadm_shell="$CEPHADM ${shell_image} shell --fsid ${fsid} -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring"

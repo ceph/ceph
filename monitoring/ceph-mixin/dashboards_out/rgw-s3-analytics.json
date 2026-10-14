@@ -59,7 +59,7 @@
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "",
+         "description": "Cumulative bytes uploaded via PUT operations across all RGW daemons.",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -83,7 +83,7 @@
          },
          "gridPos": {
             "h": 3,
-            "w": 6,
+            "w": 4,
             "x": 0,
             "y": 1
          },
@@ -115,14 +115,14 @@
                "refId": "A"
             }
          ],
-         "title": "Total PUTs",
+         "title": "Total PUT Bytes",
          "transparent": false,
          "type": "stat"
       },
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "",
+         "description": "Cumulative bytes downloaded via GET operations across all RGW daemons.",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -146,8 +146,8 @@
          },
          "gridPos": {
             "h": 3,
-            "w": 6,
-            "x": 6,
+            "w": 4,
+            "x": 4,
             "y": 1
          },
          "id": 4,
@@ -178,14 +178,14 @@
                "refId": "A"
             }
          ],
-         "title": "Total GETs",
+         "title": "Total GET Bytes",
          "transparent": false,
          "type": "stat"
       },
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "",
+         "description": "Cumulative PUT object operation count across all RGW daemons.",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -209,8 +209,8 @@
          },
          "gridPos": {
             "h": 3,
-            "w": 6,
-            "x": 12,
+            "w": 4,
+            "x": 8,
             "y": 1
          },
          "id": 5,
@@ -241,14 +241,77 @@
                "refId": "A"
             }
          ],
-         "title": "Total Objects",
+         "title": "Total PUT Ops",
          "transparent": false,
          "type": "stat"
       },
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "",
+         "description": "Cumulative GET object operation count across all RGW daemons.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 4,
+            "x": 12,
+            "y": 1
+         },
+         "id": 6,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Total GET Ops",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Average size per PUT object (total PUT bytes ÷ total PUT ops).",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -272,11 +335,11 @@
          },
          "gridPos": {
             "h": 3,
-            "w": 6,
-            "x": 18,
+            "w": 4,
+            "x": 16,
             "y": 1
          },
-         "id": 6,
+         "id": 7,
          "links": [ ],
          "options": {
             "colorMode": "none",
@@ -304,9 +367,91 @@
                "refId": "A"
             }
          ],
-         "title": "Average Object Size",
+         "title": "Avg Object Size",
          "transparent": false,
          "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Total number of objects currently stored across all buckets (usage metric).",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 4,
+            "x": 20,
+            "y": 1
+         },
+         "id": 8,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(ceph_rgw_bucket_usage_objects)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Stored Objects",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 4
+         },
+         "id": 9,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Request Activity",
+         "titleSize": "h6",
+         "type": "row"
       },
       {
          "datasource": "${datasource}",
@@ -331,9 +476,9 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 4
+            "y": 5
          },
-         "id": 7,
+         "id": 10,
          "options": {
             "displayMode": "gradient",
             "orientation": "horizontal",
@@ -413,7 +558,7 @@
                "refId": "G"
             }
          ],
-         "title": "Total Operations",
+         "title": "Total Operations by Type",
          "type": "bargauge"
       },
       {
@@ -453,9 +598,9 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 4
+            "y": 5
          },
-         "id": 8,
+         "id": 11,
          "options": {
             "displayMode": "gradient",
             "orientation": "horizontal",
@@ -506,7 +651,7 @@
                "refId": "D"
             }
          ],
-         "title": "Total Size",
+         "title": "Total Bandwidth by Operation",
          "type": "bargauge"
       },
       {
@@ -546,9 +691,9 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 4
+            "y": 5
          },
-         "id": 9,
+         "id": 12,
          "options": {
             "displayMode": "gradient",
             "orientation": "horizontal",
@@ -628,18 +773,39 @@
                "refId": "G"
             }
          ],
-         "title": "Total Latencies",
+         "title": "Total Latency by Operation",
          "type": "bargauge"
       },
       {
-         "columns": [ ],
-         "datasource": "${datasource}",
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 13
+         },
+         "id": 13,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Top Users & Top Buckets",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Ranked by total bytes stored in all buckets owned by each user. Source: usage metrics (ceph_rgw_bucket_usage_bytes). Click a user to open S3 Analytics – Users.",
          "fieldConfig": {
             "defaults": {
                "custom": {
                   "align": "auto",
                   "cellOptions": {
-                     "type": "color-text"
+                     "type": "auto"
                   },
                   "filterable": false,
                   "inspect": false
@@ -657,8 +823,483 @@
             "overrides": [
                {
                   "matcher": {
-                     "id": "byType",
-                     "options": "number"
+                     "id": "byName",
+                     "options": "owner"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "User"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "User"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Stored Bytes"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Stored Bytes"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Stored Bytes"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 10,
+            "w": 12,
+            "x": 0,
+            "y": 14
+         },
+         "id": 14,
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 0,
+            "showHeader": true,
+            "sortBy": [
+               {
+                  "desc": true,
+                  "displayName": "Stored Bytes"
+               }
+            ]
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "exemplar": false,
+               "expr": "sum by (owner) (ceph_rgw_bucket_usage_bytes)",
+               "format": "table",
+               "hide": false,
+               "instant": true,
+               "interval": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Top Users by Stored Bytes",
+         "type": "table"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Ranked by total bytes stored in each bucket. Source: usage metrics (ceph_rgw_bucket_usage_bytes). Click a bucket to open S3 Analytics – Buckets.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": false,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bucket"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "owner"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Owner"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Owner"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "zone"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Zone"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Stored Bytes"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Stored Bytes"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Stored Bytes"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 10,
+            "w": 12,
+            "x": 12,
+            "y": 14
+         },
+         "id": 15,
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 0,
+            "showHeader": true,
+            "sortBy": [
+               {
+                  "desc": true,
+                  "displayName": "Stored Bytes"
+               }
+            ]
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "exemplar": false,
+               "expr": "sum by (bucket, owner, zone) (ceph_rgw_bucket_usage_bytes)",
+               "format": "table",
+               "hide": false,
+               "instant": true,
+               "interval": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Top Buckets by Stored Bytes",
+         "type": "table"
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+         },
+         "id": 16,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Bucket Performance",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "PUT bytes per bucket per daemon. Click a bucket name to open S3 Analytics – Buckets.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": false,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bucket"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Daemon"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bandwidth"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bandwidth"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bandwidth"
                   },
                   "properties": [
                      {
@@ -673,10 +1314,9 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 25
          },
-         "id": 10,
-         "links": [ ],
+         "id": 17,
          "options": {
             "footer": {
                "countRows": false,
@@ -687,17 +1327,16 @@
                ],
                "show": false
             },
-            "frameIndex": 1,
+            "frameIndex": 0,
             "showHeader": true,
             "sortBy": [
                {
                   "desc": true,
-                  "displayName": "PUTs"
+                  "displayName": "Bandwidth"
                }
             ]
          },
          "pluginVersion": "9.4.7",
-         "styles": [ ],
          "targets": [
             {
                "datasource": {
@@ -711,175 +1350,19 @@
                "instant": true,
                "interval": "",
                "intervalFactor": 1,
-               "legendFormat": "Upload Objects",
+               "legendFormat": "",
                "range": false,
                "refId": "A"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Get Objects",
-               "range": false,
-               "refId": "B"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Delete Objects",
-               "range": false,
-               "refId": "C"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Copy Objects",
-               "range": false,
-               "refId": "D"
             }
          ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Summary Per Bucket by Bandwidth",
-         "transformations": [
-            {
-               "id": "merge",
-               "options": { }
-            },
-            {
-               "id": "groupBy",
-               "options": {
-                  "fields": {
-                     "Bucket": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #A": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #B": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #D": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #F": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "bucket": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "ceph_daemon": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     }
-                  }
-               }
-            },
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time 1": true,
-                     "Time 2": true,
-                     "Time 3": true,
-                     "Time 4": true,
-                     "Time 5": true,
-                     "Time 6": true,
-                     "Time 7": true,
-                     "__name__ 1": true,
-                     "__name__ 2": true,
-                     "__name__ 3": true,
-                     "__name__ 4": true,
-                     "__name__ 5": true,
-                     "__name__ 6": true,
-                     "__name__ 7": true,
-                     "ceph_daemon 1": false,
-                     "ceph_daemon 2": true,
-                     "ceph_daemon 3": true,
-                     "ceph_daemon 4": true,
-                     "instance 1": true,
-                     "instance 2": true,
-                     "instance 3": true,
-                     "instance 4": true,
-                     "instance 5": true,
-                     "instance 6": true,
-                     "instance 7": true,
-                     "instance_id 1": true,
-                     "instance_id 2": true,
-                     "instance_id 3": true,
-                     "instance_id 4": true,
-                     "instance_id 5": true,
-                     "instance_id 6": true,
-                     "instance_id 7": true,
-                     "job 1": true,
-                     "job 2": true,
-                     "job 3": true,
-                     "job 4": true,
-                     "job 5": true,
-                     "job 6": true,
-                     "job 7": true
-                  },
-                  "indexByName": {
-                     "Value #A": 2,
-                     "Value #B": 3,
-                     "Value #D": 4,
-                     "Value #F": 5,
-                     "bucket": 1,
-                     "ceph_daemon": 0
-                  },
-                  "renameByName": {
-                     "Bucket": "",
-                     "Value #A": "PUTs",
-                     "Value #B": "GETs",
-                     "Value #C": "List",
-                     "Value #D": "Delete",
-                     "Value #E": "Copy",
-                     "Value #F": "Copy",
-                     "Value #G": "",
-                     "bucket": "Bucket",
-                     "ceph_daemon": "Daemon",
-                     "ceph_daemon 1": "Daemon"
-                  }
-               }
-            }
-         ],
          "type": "table"
       },
       {
-         "columns": [ ],
-         "datasource": "${datasource}",
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "PUT operation latency per bucket per daemon. Click a bucket name to open S3 Analytics – Buckets.",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -903,8 +1386,92 @@
             "overrides": [
                {
                   "matcher": {
-                     "id": "byType",
-                     "options": "number"
+                     "id": "byName",
+                     "options": "bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bucket"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Daemon"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "ms"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "ms"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Latency (ms)"
                   },
                   "properties": [
                      {
@@ -919,10 +1486,9 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 25
          },
-         "id": 11,
-         "links": [ ],
+         "id": 18,
          "options": {
             "footer": {
                "countRows": false,
@@ -933,17 +1499,16 @@
                ],
                "show": false
             },
-            "frameIndex": 1,
+            "frameIndex": 0,
             "showHeader": true,
             "sortBy": [
                {
                   "desc": true,
-                  "displayName": "PUTs"
+                  "displayName": "Latency (ms)"
                }
             ]
          },
          "pluginVersion": "9.4.7",
-         "styles": [ ],
          "targets": [
             {
                "datasource": {
@@ -951,209 +1516,44 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
+               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
                "interval": "",
                "intervalFactor": 1,
-               "legendFormat": "List Objects",
+               "legendFormat": "",
                "range": false,
                "refId": "A"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Upload Objects",
-               "range": false,
-               "refId": "B"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Get Objects",
-               "range": false,
-               "refId": "C"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Delete Objects",
-               "range": false,
-               "refId": "D"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Copy Objects",
-               "range": false,
-               "refId": "E"
             }
          ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Latency(ms) Per Bucket",
-         "transformations": [
-            {
-               "id": "merge",
-               "options": { }
-            },
-            {
-               "id": "joinByField",
-               "options": {
-                  "byField": "Bucket",
-                  "mode": "outer"
-               }
-            },
-            {
-               "id": "groupBy",
-               "options": {
-                  "fields": {
-                     "Bucket": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #A": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #B": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #C": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #D": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #F": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "bucket": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "ceph_daemon": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     }
-                  }
-               }
-            },
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time 1": true,
-                     "Time 2": true,
-                     "Time 3": true,
-                     "Time 4": true,
-                     "Time 5": true,
-                     "Time 6": true,
-                     "Time 7": true,
-                     "__name__ 1": true,
-                     "__name__ 2": true,
-                     "__name__ 3": true,
-                     "__name__ 4": true,
-                     "__name__ 5": true,
-                     "__name__ 6": true,
-                     "__name__ 7": true,
-                     "ceph_daemon 1": true,
-                     "ceph_daemon 2": true,
-                     "ceph_daemon 3": true,
-                     "ceph_daemon 4": true,
-                     "ceph_daemon 5": true,
-                     "instance 1": true,
-                     "instance 2": true,
-                     "instance 3": true,
-                     "instance 4": true,
-                     "instance 5": true,
-                     "instance 6": true,
-                     "instance 7": true,
-                     "instance_id 1": true,
-                     "instance_id 2": true,
-                     "instance_id 3": true,
-                     "instance_id 4": true,
-                     "instance_id 5": true,
-                     "instance_id 6": true,
-                     "instance_id 7": true,
-                     "job 1": true,
-                     "job 2": true,
-                     "job 3": true,
-                     "job 4": true,
-                     "job 5": true,
-                     "job 6": true,
-                     "job 7": true
-                  },
-                  "indexByName": {
-                     "Value #A": 2,
-                     "Value #B": 3,
-                     "Value #C": 4,
-                     "Value #D": 5,
-                     "Value #F": 6,
-                     "bucket": 1,
-                     "ceph_daemon": 0
-                  },
-                  "renameByName": {
-                     "Bucket": "",
-                     "Value #A": "PUTs",
-                     "Value #B": "GETs",
-                     "Value #C": "List",
-                     "Value #D": "Delete",
-                     "Value #E": "Copy",
-                     "Value #F": "Copy",
-                     "Value #G": "",
-                     "bucket": "Bucket",
-                     "ceph_daemon": "Daemon"
-                  }
-               }
-            }
-         ],
          "type": "table"
       },
       {
-         "columns": [ ],
-         "datasource": "${datasource}",
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 33
+         },
+         "id": 19,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "User Performance",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "PUT bytes per user per daemon. Click a user name to open S3 Analytics – Users.",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -1177,8 +1577,92 @@
             "overrides": [
                {
                   "matcher": {
-                     "id": "byType",
-                     "options": "number"
+                     "id": "byName",
+                     "options": "user"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "User"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "User"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Daemon"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bandwidth"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bandwidth"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bandwidth"
                   },
                   "properties": [
                      {
@@ -1193,10 +1677,9 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 34
          },
-         "id": 12,
-         "links": [ ],
+         "id": 20,
          "options": {
             "footer": {
                "countRows": false,
@@ -1207,17 +1690,16 @@
                ],
                "show": false
             },
-            "frameIndex": 1,
+            "frameIndex": 0,
             "showHeader": true,
             "sortBy": [
                {
                   "desc": true,
-                  "displayName": "PUTs"
+                  "displayName": "Bandwidth"
                }
             ]
          },
          "pluginVersion": "9.4.7",
-         "styles": [ ],
          "targets": [
             {
                "datasource": {
@@ -1225,183 +1707,25 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
+               "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
                "interval": "",
                "intervalFactor": 1,
-               "legendFormat": "Upload Objects",
+               "legendFormat": "",
                "range": false,
                "refId": "A"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Get Objects",
-               "range": false,
-               "refId": "B"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Delete Objects",
-               "range": false,
-               "refId": "C"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "Copy Objects",
-               "range": false,
-               "refId": "D"
             }
          ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Summary Per User By Bandwidth",
-         "transformations": [
-            {
-               "id": "merge",
-               "options": { }
-            },
-            {
-               "id": "groupBy",
-               "options": {
-                  "fields": {
-                     "User": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #A": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #B": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #D": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #F": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "ceph_daemon": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "instance": {
-                        "aggregations": [ ]
-                     },
-                     "user": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     }
-                  }
-               }
-            },
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time 1": true,
-                     "Time 2": true,
-                     "Time 3": true,
-                     "Time 4": true,
-                     "Time 5": true,
-                     "Time 6": true,
-                     "Time 7": true,
-                     "__name__ 1": true,
-                     "__name__ 2": true,
-                     "__name__ 3": true,
-                     "__name__ 4": true,
-                     "__name__ 5": true,
-                     "__name__ 6": true,
-                     "__name__ 7": true,
-                     "ceph_daemon 1": true,
-                     "ceph_daemon 2": true,
-                     "ceph_daemon 3": true,
-                     "ceph_daemon 4": true,
-                     "instance 1": true,
-                     "instance 2": true,
-                     "instance 3": true,
-                     "instance 4": true,
-                     "instance 5": true,
-                     "instance 6": true,
-                     "instance 7": true,
-                     "instance_id 1": true,
-                     "instance_id 2": true,
-                     "instance_id 3": true,
-                     "instance_id 4": true,
-                     "instance_id 5": true,
-                     "instance_id 6": true,
-                     "instance_id 7": true,
-                     "job 1": true,
-                     "job 2": true,
-                     "job 3": true,
-                     "job 4": true,
-                     "job 5": true,
-                     "job 6": true,
-                     "job 7": true
-                  },
-                  "indexByName": {
-                     "Value #A": 2,
-                     "Value #B": 3,
-                     "Value #D": 4,
-                     "Value #F": 5,
-                     "ceph_daemon": 0,
-                     "user": 1
-                  },
-                  "renameByName": {
-                     "Bucket": "",
-                     "Value #A": "PUTs",
-                     "Value #B": "GETs",
-                     "Value #C": "List",
-                     "Value #D": "Delete",
-                     "Value #E": "Copy",
-                     "Value #F": "Copy",
-                     "Value #G": "",
-                     "ceph_daemon": "Daemon",
-                     "user": "User"
-                  }
-               }
-            }
-         ],
          "type": "table"
       },
       {
-         "columns": [ ],
-         "datasource": "${datasource}",
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "PUT operation latency per user per daemon. Click a user name to open S3 Analytics – Users.",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -1425,8 +1749,92 @@
             "overrides": [
                {
                   "matcher": {
-                     "id": "byType",
-                     "options": "number"
+                     "id": "byName",
+                     "options": "user"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "User"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "User"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Daemon"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "ms"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "ms"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Latency (ms)"
                   },
                   "properties": [
                      {
@@ -1441,10 +1849,9 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 34
          },
-         "id": 13,
-         "links": [ ],
+         "id": 21,
          "options": {
             "footer": {
                "countRows": false,
@@ -1455,17 +1862,16 @@
                ],
                "show": false
             },
-            "frameIndex": 1,
+            "frameIndex": 0,
             "showHeader": true,
             "sortBy": [
                {
                   "desc": true,
-                  "displayName": "PUTs"
+                  "displayName": "Latency (ms)"
                }
             ]
          },
          "pluginVersion": "9.4.7",
-         "styles": [ ],
          "targets": [
             {
                "datasource": {
@@ -1473,204 +1879,18 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
+               "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
                "interval": "",
                "intervalFactor": 1,
-               "legendFormat": "__auto",
+               "legendFormat": "",
                "range": false,
                "refId": "A"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": false,
-               "refId": "B"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": false,
-               "refId": "C"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": false,
-               "refId": "D"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": false,
-               "refId": "E"
             }
          ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Latency(ms) Per User",
-         "transformations": [
-            {
-               "id": "merge",
-               "options": { }
-            },
-            {
-               "id": "joinByField",
-               "options": {
-                  "byField": "User",
-                  "mode": "outer"
-               }
-            },
-            {
-               "id": "groupBy",
-               "options": {
-                  "fields": {
-                     "User": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #A": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #B": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #C": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #D": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "Value #F": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "ceph_daemon": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     },
-                     "user": {
-                        "aggregations": [ ],
-                        "operation": "groupby"
-                     }
-                  }
-               }
-            },
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time 1": true,
-                     "Time 2": true,
-                     "Time 3": true,
-                     "Time 4": true,
-                     "Time 5": true,
-                     "Time 6": true,
-                     "Time 7": true,
-                     "__name__ 1": true,
-                     "__name__ 2": true,
-                     "__name__ 3": true,
-                     "__name__ 4": true,
-                     "__name__ 5": true,
-                     "__name__ 6": true,
-                     "__name__ 7": true,
-                     "ceph_daemon 1": true,
-                     "ceph_daemon 2": true,
-                     "ceph_daemon 3": true,
-                     "ceph_daemon 4": true,
-                     "ceph_daemon 5": true,
-                     "instance 1": true,
-                     "instance 2": true,
-                     "instance 3": true,
-                     "instance 4": true,
-                     "instance 5": true,
-                     "instance 6": true,
-                     "instance 7": true,
-                     "instance_id 1": true,
-                     "instance_id 2": true,
-                     "instance_id 3": true,
-                     "instance_id 4": true,
-                     "instance_id 5": true,
-                     "instance_id 6": true,
-                     "instance_id 7": true,
-                     "job 1": true,
-                     "job 2": true,
-                     "job 3": true,
-                     "job 4": true,
-                     "job 5": true,
-                     "job 6": true,
-                     "job 7": true
-                  },
-                  "indexByName": {
-                     "Value #A": 2,
-                     "Value #B": 3,
-                     "Value #C": 4,
-                     "Value #D": 5,
-                     "Value #F": 6,
-                     "ceph_daemon": 0,
-                     "user": 1
-                  },
-                  "renameByName": {
-                     "Bucket": "",
-                     "Value #A": "PUTs",
-                     "Value #B": "GETs",
-                     "Value #C": "List",
-                     "Value #D": "Delete",
-                     "Value #E": "Copy",
-                     "Value #F": "Copy",
-                     "Value #G": "",
-                     "ceph_daemon": "Daemon",
-                     "user": "User"
-                  }
-               }
-            }
-         ],
          "type": "table"
       },
       {
@@ -1680,9 +1900,9 @@
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 28
+            "y": 42
          },
-         "id": 14,
+         "id": 22,
          "panels": [
             {
                "datasource": "${datasource}",
@@ -1727,7 +1947,7 @@
                   "x": 0,
                   "y": 29
                },
-               "id": 15,
+               "id": 23,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -1795,7 +2015,7 @@
                   "x": 6,
                   "y": 29
                },
-               "id": 16,
+               "id": 24,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -1844,7 +2064,7 @@
                   "x": 12,
                   "y": 29
                },
-               "id": 17,
+               "id": 25,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -1891,7 +2111,7 @@
                   "x": 18,
                   "y": 29
                },
-               "id": 18,
+               "id": 26,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -1990,7 +2210,7 @@
                   "x": 0,
                   "y": 37
                },
-               "id": 19,
+               "id": 27,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2064,6 +2284,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2100,7 +2321,7 @@
                   "x": 6,
                   "y": 37
                },
-               "id": 20,
+               "id": 28,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2174,6 +2395,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2210,7 +2432,7 @@
                   "x": 12,
                   "y": 37
                },
-               "id": 21,
+               "id": 29,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2284,6 +2506,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2320,7 +2543,7 @@
                   "x": 18,
                   "y": 37
                },
-               "id": 22,
+               "id": 30,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2394,6 +2617,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2430,7 +2654,7 @@
                   "x": 0,
                   "y": 45
                },
-               "id": 23,
+               "id": 31,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2504,6 +2728,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2540,7 +2765,7 @@
                   "x": 6,
                   "y": 45
                },
-               "id": 24,
+               "id": 32,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2614,6 +2839,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2650,7 +2876,7 @@
                   "x": 12,
                   "y": 45
                },
-               "id": 25,
+               "id": 33,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2724,6 +2950,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2760,7 +2987,7 @@
                   "x": 18,
                   "y": 45
                },
-               "id": 26,
+               "id": 34,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2834,6 +3061,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2870,7 +3098,7 @@
                   "x": 0,
                   "y": 53
                },
-               "id": 27,
+               "id": 35,
                "options": {
                   "legend": {
                      "calcs": [
@@ -2906,8 +3134,9 @@
                "type": "timeseries"
             },
             {
-               "columns": [ ],
-               "datasource": "${datasource}",
+               "datasource": {
+                  "uid": "${datasource}"
+               },
                "fieldConfig": {
                   "defaults": {
                      "custom": {
@@ -2939,6 +3168,24 @@
                               "value": "none"
                            }
                         ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "Bucket"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
                      }
                   ]
                },
@@ -2948,8 +3195,7 @@
                   "x": 12,
                   "y": 53
                },
-               "id": 28,
-               "links": [ ],
+               "id": 36,
                "options": {
                   "footer": {
                      "countRows": false,
@@ -2970,7 +3216,6 @@
                   ]
                },
                "pluginVersion": "9.4.7",
-               "styles": [ ],
                "targets": [
                   {
                      "datasource": {
@@ -3053,8 +3298,6 @@
                      "refId": "E"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Summary Per Bucket by Operations",
                "transformations": [
                   {
@@ -3111,6 +3354,7 @@
                      "id": "organize",
                      "options": {
                         "excludeByName": {
+                           "Time": true,
                            "Time 1": true,
                            "Time 2": true,
                            "Time 3": true,
@@ -3150,16 +3394,19 @@
                            "job 4": true,
                            "job 5": true,
                            "job 6": true,
-                           "job 7": true
+                           "job 7": true,
+                           "time": true
                         },
                         "indexByName": {
+                           "Bucket": 0,
+                           "Daemon": 1,
                            "Value #A": 2,
                            "Value #B": 3,
                            "Value #C": 4,
                            "Value #D": 5,
                            "Value #F": 6,
-                           "bucket": 1,
-                           "ceph_daemon": 0
+                           "bucket": 0,
+                           "ceph_daemon": 1
                         },
                         "renameByName": {
                            "Bucket": "",
@@ -3172,6 +3419,22 @@
                            "Value #G": "",
                            "bucket": "Bucket",
                            "ceph_daemon": "Daemon"
+                        }
+                     }
+                  },
+                  {
+                     "id": "filterFieldsByName",
+                     "options": {
+                        "include": {
+                           "names": [
+                              "Bucket",
+                              "Daemon",
+                              "PUTs",
+                              "GETs",
+                              "List",
+                              "Delete",
+                              "Copy"
+                           ]
                         }
                      }
                   }
@@ -3194,9 +3457,9 @@
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 29
+            "y": 43
          },
-         "id": 29,
+         "id": 37,
          "panels": [
             {
                "datasource": "${datasource}",
@@ -3241,7 +3504,7 @@
                   "x": 0,
                   "y": 62
                },
-               "id": 30,
+               "id": 38,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -3309,7 +3572,7 @@
                   "x": 6,
                   "y": 62
                },
-               "id": 31,
+               "id": 39,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -3358,7 +3621,7 @@
                   "x": 12,
                   "y": 62
                },
-               "id": 32,
+               "id": 40,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -3405,7 +3668,7 @@
                   "x": 18,
                   "y": 62
                },
-               "id": 33,
+               "id": 41,
                "options": {
                   "displayMode": "gradient",
                   "orientation": "horizontal",
@@ -3467,6 +3730,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3503,7 +3767,7 @@
                   "x": 0,
                   "y": 70
                },
-               "id": 34,
+               "id": 42,
                "options": {
                   "legend": {
                      "calcs": [
@@ -3577,6 +3841,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3613,7 +3878,7 @@
                   "x": 6,
                   "y": 70
                },
-               "id": 35,
+               "id": 43,
                "options": {
                   "legend": {
                      "calcs": [
@@ -3687,6 +3952,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3723,7 +3989,7 @@
                   "x": 12,
                   "y": 70
                },
-               "id": 36,
+               "id": 44,
                "options": {
                   "legend": {
                      "calcs": [
@@ -3797,6 +4063,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3833,7 +4100,7 @@
                   "x": 18,
                   "y": 70
                },
-               "id": 37,
+               "id": 45,
                "options": {
                   "legend": {
                      "calcs": [
@@ -3907,6 +4174,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3943,7 +4211,7 @@
                   "x": 0,
                   "y": 78
                },
-               "id": 38,
+               "id": 46,
                "options": {
                   "legend": {
                      "calcs": [
@@ -4017,6 +4285,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4053,7 +4322,7 @@
                   "x": 6,
                   "y": 78
                },
-               "id": 39,
+               "id": 47,
                "options": {
                   "legend": {
                      "calcs": [
@@ -4127,6 +4396,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4163,7 +4433,7 @@
                   "x": 12,
                   "y": 78
                },
-               "id": 40,
+               "id": 48,
                "options": {
                   "legend": {
                      "calcs": [
@@ -4237,6 +4507,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4273,7 +4544,7 @@
                   "x": 18,
                   "y": 78
                },
-               "id": 41,
+               "id": 49,
                "options": {
                   "legend": {
                      "calcs": [
@@ -4347,6 +4618,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4383,7 +4655,7 @@
                   "x": 0,
                   "y": 86
                },
-               "id": 42,
+               "id": 50,
                "options": {
                   "legend": {
                      "calcs": [
@@ -4419,8 +4691,9 @@
                "type": "timeseries"
             },
             {
-               "columns": [ ],
-               "datasource": "${datasource}",
+               "datasource": {
+                  "uid": "${datasource}"
+               },
                "fieldConfig": {
                   "defaults": {
                      "custom": {
@@ -4452,6 +4725,24 @@
                               "value": "none"
                            }
                         ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "User"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
                      }
                   ]
                },
@@ -4461,8 +4752,7 @@
                   "x": 12,
                   "y": 86
                },
-               "id": 43,
-               "links": [ ],
+               "id": 51,
                "options": {
                   "footer": {
                      "countRows": false,
@@ -4483,7 +4773,6 @@
                   ]
                },
                "pluginVersion": "9.4.7",
-               "styles": [ ],
                "targets": [
                   {
                      "datasource": {
@@ -4566,8 +4855,6 @@
                      "refId": "E"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Summary Per User By Operations",
                "transformations": [
                   {
@@ -4623,15 +4910,79 @@
                   {
                      "id": "organize",
                      "options": {
-                        "excludeByName": { },
+                        "excludeByName": {
+                           "Time": true,
+                           "Time 1": true,
+                           "Time 2": true,
+                           "Time 3": true,
+                           "Time 4": true,
+                           "Time 5": true,
+                           "Time 6": true,
+                           "Time 7": true,
+                           "__name__": true,
+                           "__name__ 1": true,
+                           "__name__ 2": true,
+                           "__name__ 3": true,
+                           "__name__ 4": true,
+                           "__name__ 5": true,
+                           "__name__ 6": true,
+                           "__name__ 7": true,
+                           "ceph_daemon 1": true,
+                           "ceph_daemon 2": true,
+                           "ceph_daemon 3": true,
+                           "ceph_daemon 4": true,
+                           "cluster": true,
+                           "cluster 1": true,
+                           "cluster 2": true,
+                           "cluster 3": true,
+                           "cluster 4": true,
+                           "cluster 5": true,
+                           "cluster 6": true,
+                           "cluster 7": true,
+                           "instance": true,
+                           "instance 1": true,
+                           "instance 2": true,
+                           "instance 3": true,
+                           "instance 4": true,
+                           "instance 5": true,
+                           "instance 6": true,
+                           "instance 7": true,
+                           "instance_id": true,
+                           "instance_id 1": true,
+                           "instance_id 2": true,
+                           "instance_id 3": true,
+                           "instance_id 4": true,
+                           "instance_id 5": true,
+                           "instance_id 6": true,
+                           "instance_id 7": true,
+                           "job": true,
+                           "job 1": true,
+                           "job 2": true,
+                           "job 3": true,
+                           "job 4": true,
+                           "job 5": true,
+                           "job 6": true,
+                           "job 7": true,
+                           "tenant": true,
+                           "tenant 1": true,
+                           "tenant 2": true,
+                           "tenant 3": true,
+                           "tenant 4": true,
+                           "tenant 5": true,
+                           "tenant 6": true,
+                           "tenant 7": true,
+                           "time": true
+                        },
                         "indexByName": {
+                           "Daemon": 1,
+                           "User": 0,
                            "Value #A": 2,
                            "Value #B": 3,
                            "Value #C": 4,
                            "Value #D": 5,
                            "Value #F": 6,
-                           "ceph_daemon": 0,
-                           "user": 1
+                           "ceph_daemon": 1,
+                           "user": 0
                         },
                         "renameByName": {
                            "Value #A": "PUTs",
@@ -4641,6 +4992,22 @@
                            "Value #F": "COPY",
                            "ceph_daemon": "Daemon",
                            "user": "User"
+                        }
+                     }
+                  },
+                  {
+                     "id": "filterFieldsByName",
+                     "options": {
+                        "include": {
+                           "names": [
+                              "User",
+                              "Daemon",
+                              "PUTs",
+                              "GETs",
+                              "LIST",
+                              "DELETE",
+                              "COPY"
+                           ]
                         }
                      }
                   }
@@ -4662,8 +5029,7 @@
    "schemaVersion": 22,
    "style": "dark",
    "tags": [
-      "ceph-mixin",
-      "protocol"
+      "ceph-mixin"
    ],
    "templating": {
       "list": [
@@ -4760,7 +5126,7 @@
       ]
    },
    "timezone": "",
-   "title": "Ceph Object - S3 Analytics",
+   "title": "Ceph Object - S3 Analytics - Overview",
    "uid": "BnxelG7Sz",
    "version": 0
 }

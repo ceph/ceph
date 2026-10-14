@@ -26,7 +26,7 @@ from util import (
     get_seed_name
 )
 
-CEPH_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
+CEPH_IMAGE = 'quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0'
 BOX_IMAGE = 'cephadm-box:latest'
 
 # NOTE: this image tar is a trickeroo so cephadm won't pull the image everytime
@@ -173,9 +173,9 @@ class Cluster(Target):
         # cephadm guid error because it sometimes tries to use quay.ceph.io/ceph-ci/ceph:<none>
         # instead of main branch's tag
         run_shell_command('export CEPH_SOURCE_FOLDER=/ceph')
-        run_shell_command('export CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:main')
+        run_shell_command('export CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0')
         run_shell_command(
-            'echo "export CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:main" >> ~/.bashrc'
+            'echo "export CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0" >> ~/.bashrc'
         )
 
         extra_args = []

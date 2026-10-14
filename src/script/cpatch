@@ -9,7 +9,7 @@ if [ ! -e Makefile ] && [ ! -e build.ninja ] || [ ! -e ../do_cmake.sh ]; then
     exit 1
 fi
 
-base="quay.ceph.io/ceph-ci/ceph:main"
+base="quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0"
 target=""
 push=0
 strip=1

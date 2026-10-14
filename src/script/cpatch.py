@@ -21,7 +21,7 @@ import time
 log = logging.getLogger()
 
 
-BASE_IMAGE = "quay.ceph.io/ceph-ci/ceph:main"
+BASE_IMAGE = "quay.ceph.io/ceph-ci/ceph:163b023c76c18fb6af07ce28b1585de014ab9ce0"
 DEST_IMAGE = "ceph/ceph:wip"
 
 # Set CLEANUP to false to skip cleaning up temporary files for debugging.
