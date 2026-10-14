@@ -216,7 +216,8 @@ int check_command_line(const PoolCreateParams& p, PoolCommand command,
     return -EINVAL;
   }
   if (create && replicated && p.num_zones == 1 && p.crush_params_given()) {
-    *ss << CRUSH_PARAMS << " require num_zones > 1 for a replicated pool";
+    *ss << CRUSH_PARAMS << " require num_zones > 1 for a replicated pool"
+        << p.from_default("num_zones");
     return -EINVAL;
   }
   if (p.is_given("size") && p.is_given("replica")) {
@@ -380,6 +381,11 @@ int check_pool_params(const PoolCreateParams& p,
   if (p.num_zones > 1 && cluster.validate_stretch) {
     if (int r = cluster.validate_stretch(zone_failure_domain, p.num_zones, ss);
         r < 0) {
+      if (!p.is_given("num_zones")) {
+        *ss << p.from_default("num_zones");
+      } else if (zone_failure_domain == p.zone_failure_domain) {
+        *ss << p.from_default("zone_failure_domain");
+      }
       return r;
     }
   }

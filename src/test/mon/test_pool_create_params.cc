@@ -435,14 +435,19 @@ TEST_F(PoolParamsTest, ReplicaForErasure) {
   EXPECT_EQ("replica is only applicable to replicated pools", ss.str());
 }
 
-// Test CRUSH parameters fail for a single-zone replicated pool, but not as
-// defaults
+// Test CRUSH parameters fail for a single-zone replicated pool, naming the
+// option when one zone is the default, but not as defaults
 TEST_F(PoolParamsTest, CrushParamsForSingleZoneReplicated) {
   const PoolCreateParams p = with({{"root", string("default")}});
   EXPECT_EQ(-EINVAL, check_line(p, PoolCommand::CREATE));
+  EXPECT_EQ(CRUSH_PARAMS + " require num_zones > 1 for a replicated pool "
+            "(osd_pool_default_num_zones)", ss.str());
+  EXPECT_EQ(0, check_line(p, PoolCommand::DEFAULT_SET)) << ss.str();
+  EXPECT_EQ(-EINVAL, check_line(with({{"root", string("default")},
+                                      {"num_zones", int64_t(1)}}),
+                                PoolCommand::CREATE));
   EXPECT_EQ(CRUSH_PARAMS + " require num_zones > 1 for a replicated pool",
             ss.str());
-  EXPECT_EQ(0, check_line(p, PoolCommand::DEFAULT_SET)) << ss.str();
 }
 
 // Test success for a two-zone replicated pool with CRUSH parameters
@@ -780,6 +785,19 @@ TEST_F(PoolParamsTest, TwoZonesValidateStretch) {
   EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(2)},
                                  {"zone_failure_domain", string("zone")}})));
   EXPECT_EQ("Failed to validate monitor stretch mode: no tiebreaker", ss.str());
+}
+
+// Test a failed stretch mode check names the option that made the pool
+// stretched, or gave its zone type
+TEST_F(PoolParamsTest, StretchFailureNamesDefault) {
+  stretch_result = -EINVAL;
+  EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(2)}})));
+  EXPECT_EQ("Failed to validate monitor stretch mode: no tiebreaker "
+            "(osd_pool_default_zone_failure_domain)", ss.str());
+  set("osd_pool_default_num_zones", "2");
+  EXPECT_EQ(-EINVAL, check(with({{"zone_failure_domain", string("zone")}})));
+  EXPECT_EQ("Failed to validate monitor stretch mode: no tiebreaker "
+            "(osd_pool_default_num_zones)", ss.str());
 }
 
 // Test one zone does not validate stretch mode
