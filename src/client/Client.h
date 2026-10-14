@@ -2327,11 +2327,13 @@ private:
   std::unique_ptr<FSMap> fsmap;
   std::unique_ptr<FSMapUser> fsmap_user;
 
+protected:
   // This mutex only protects command_table
   ceph::mutex command_lock = ceph::make_mutex("Client::command_lock");
   // MDS command state
   CommandTable<MDSCommandOp> command_table;
 
+private:
   bool _use_faked_inos;
 
   // Cluster fsid
