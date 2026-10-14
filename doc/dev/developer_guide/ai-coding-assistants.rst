@@ -65,25 +65,18 @@ Attribution
 
 When AI tools contribute to Ceph development, proper attribution helps track
 the evolving role of AI in the development process. Contributions should
-include an ``Assisted-by`` tag in the following format (items in square
-brackets are optional)::
+include an ``Assisted-by`` tag in the following format::
 
-    Assisted-by: AGENT_NAME-AGENT_VERSION[:MODEL_NAME] [TOOL1] [TOOL2]
+    Assisted-by: LLM [TOOL1] [TOOL2]
 
-Where:
-
-- ``AGENT_NAME`` is the name of the AI tool or framework
-- ``AGENT_VERSION`` is the version of the agent (required), appended with ``-``
-- ``MODEL_NAME`` is the specific underlying model used, if applicable
 - ``[TOOL1] [TOOL2]`` are optional specialised analysis tools used
   (e.g., ``clang-tidy``, ``clang-format``, ``cppcheck``, ``mypy``)
 
 Basic development tools (git, gcc, make, editors) should not be listed.
 
-Examples::
+Example::
 
-    Assisted-by: Claude-v2.1.199:claude-4-5-sonnet clang-tidy
-    Assisted-by: IBM-Bob-v2.0.1 clangd
+    Assisted-by: LLM clang-tidy
 
 Transcripts
 -----------
