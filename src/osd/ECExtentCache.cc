@@ -106,7 +106,7 @@ void ECExtentCache::Object::request(OpRef &op) {
 }
 
 void ECExtentCache::Object::send_reads() {
-  if (reading || requesting.empty())
+  if (reading || invalidate_write_pending || requesting.empty())
     return; // Read busy
 
   reading_ops.swap(requesting_ops);
@@ -153,9 +153,14 @@ void ECExtentCache::Object::insert(shard_extent_map_t const &buffers) const {
 }
 
 void ECExtentCache::Object::write_done(shard_extent_map_t const &buffers,
-                                       uint64_t new_size) {
+                                       uint64_t new_size,
+                                       bool did_invalidate) {
   insert(buffers);
   current_size = new_size;
+  if (did_invalidate) {
+    invalidate_write_pending = false;
+    send_reads();
+  }
 }
 
 void ECExtentCache::Object::unpin(Op &op) const {
@@ -199,9 +204,9 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
   requesting_ops.clear();
   reading_ops.clear();
 
-  /* Current size should reflect the actual size of the object, which was set
-   * by the previous write. We are going to replay all the writes now, so set
-   * the projected size to that of this op.
+  /* Replay from the size the invalidating op leaves. What it leaves (a clone,
+   * or the zeros of a truncate or recreate) is only on disk once its write
+   * has been issued, so the reads of the ops behind it wait for write_done().
    */
   projected_size = invalidating_op->projected_size;
 
@@ -211,11 +216,14 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
 
   cache_invalidate_expected = false;
 
-  // We now need to reply all outstanding ops to regenerate the read
+  /* We now need to replay all outstanding ops to regenerate the read. The
+   * invalidating op is the first, and the only one whose reads are sent now.
+   */
   for (auto &op : pg.waiting_ops) {
     if (op->object.oid == oid) {
       op->read_done = false;
       request(op);
+      invalidate_write_pending = true;
     }
   }
 }
