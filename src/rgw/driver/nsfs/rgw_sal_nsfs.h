@@ -782,8 +782,13 @@ protected:
   nsfs::BucketProfile shared_profile;
   nsfs::BucketProfile extended_profile;
   nsfs::ReservedNames reserved_names;
-  std::string base_path;
-  std::unique_ptr<nsfs::Directory> root_dir;
+  /* rgw_nsfs_base_path.  Read only through default_bucket_location()
+   * and fs_reference_path(), which name its two purposes:  nothing is a
+   * bucket because of where it sits, so it is never a bucket's parent
+   * (DECISIONS.md 2026-10-13). */
+  std::string base_path_;
+  /* a descriptor on it, for the filesystem-wide facilities */
+  int base_fd{-1};
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
@@ -881,6 +886,9 @@ public:
    * than changed here. */
   virtual ~NSFSDriver() {
     multipart_cache.reset();
+    if (base_fd >= 0) {
+      ::close(base_fd);
+    }
   }
 
   void set_context(CephContext *_cct) {
@@ -896,13 +904,18 @@ public:
 
   /* Construct the strategies, the profiles and the reserved-name union.
    * Called by initialize(), and directly by a test driver which does not
-   * want the rest of initialization.  base_path must be set first.
+   * want the rest of initialization.  base_path_ must be set first.
    *
    * shares_extents replaces the filesystem probe when supplied, which
    * is how the strided staging layout is reached on a filesystem that
    * does share extents. */
   void init_strategies(const DoutPrefixProvider* dpp,
 		       std::optional<bool> shares_extents = std::nullopt);
+
+  /* Open the base path, creating it if it is missing, since buckets
+   * default to it.  Called by initialize() and by a test driver, after
+   * the strategies. */
+  int open_base_path(const DoutPrefixProvider* dpp);
 
   /* Read rgw_posix_sync_policy and, under `relaxed`, start syncing every
    * filesystem that holds a bucket, beginning with the base path's.
@@ -1369,7 +1382,6 @@ public:
   bool fsio_skip_cleanup_injected() const { return inject_fsio_skip_cleanup; }
 
   /* Internal APIs */
-  int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
   nsfs::IdentityDB* get_identity_db() { return userDB.get(); }
 
@@ -1388,8 +1400,16 @@ public:
 		      std::string* row = nullptr) const {
     return nsfs::resolve_credentials(dpp, *userDB, s, out, row);
   }
-  nsfs::Directory* get_root_dir() { return root_dir.get(); }
-  const std::string& get_base_path() const { return base_path; }
+  /* Where a bucket goes whose owner has no new_buckets_path, read once
+   * at creation and copied into its row. */
+  const std::string& default_bucket_location() const { return base_path_; }
+  /* A path on the filesystem the buckets are on, for what measures or
+   * acts on a filesystem rather than a bucket:  the GPFS check, the
+   * extents probe, statvfs, the bucket cache's watch, and the relaxed
+   * sync set's first entry.  One filesystem type per deployment is
+   * assumed;  one filesystem is not, which is why the sync set learns
+   * the others as buckets are opened. */
+  const std::string& fs_reference_path() const { return base_path_; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }
   nsfs::MultipartCache* get_multipart_cache() { return multipart_cache.get(); }
   UserCache& get_user_cache() { return user_cache; }

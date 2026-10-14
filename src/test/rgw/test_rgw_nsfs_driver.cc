@@ -612,7 +612,7 @@ public:
 	   uint64_t mp_parts = 2, uint64_t mp_budget = 64)
   {
     std::string cache_base = driver_base + "/cache";
-    base_path = driver_base + "/root";
+    base_path_ = driver_base + "/root";
 
     /* A database of this test's own.
      *
@@ -635,39 +635,27 @@ public:
     set_context(env->cct.get());
 
     /* The base path first, because the extents probe reads it, then the
-     * strategies, then the root directory -- which takes the FSStrategy
-     * as a constructor argument and passes it to every child.  The real
-     * driver orders these the same way;  building the root first leaves
-     * every File below it with a null fs_strategy. */
+     * strategies, then the base path's descriptor, which open_base_path()
+     * makes with the FSStrategy.  The real driver orders these the same
+     * way. */
     std::error_code ec;
-    sf::create_directories(base_path, ec);
+    sf::create_directories(base_path_, ec);
     if (ec) {
       ldpp_dout(env->dpp, 0) << " ERROR: could not create base path ("
-			     << base_path << "): " << ec.message() << dendl;
+			     << base_path_ << "): " << ec.message() << dendl;
       return -ec.value();
     }
 
     init_strategies(dpp, shares_extents);
 
-    root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr,
-						 env->cct.get(),
-						 fs_strategy.get());
-    root_dir->set_mpu_strategy(mpu_strategy.get());
-    root_dir->set_xattr_strategy(xattr_strategy.get());
-    root_dir->set_path_strategy(path_strategy.get());
-    root_dir->set_reserved_names(&reserved_names);
-
-    int ret = root_dir->open(env->dpp);
+    int ret = open_base_path(env->dpp);
     if (ret < 0) {
-      ldpp_dout(env->dpp, 0) << " ERROR: could not open base path ("
-			     << base_path << "): " << cpp_strerror(-ret)
-			     << dendl;
       return ret;
     }
 
     quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     bucket_cache.reset(new nsfs::BucketCache(
-        this, base_path, cache_base, 100, 3, 3, 3));
+        this, fs_reference_path(), cache_base, 100, 3, 3, 3));
 
     /* as initialize() does, from rgw_posix_sync_policy */
     init_sync_policy(dpp);
@@ -12691,7 +12679,7 @@ TEST_F(NooBaaModeTest, CommandIsTheDefaultAndAdoptsNothing)
   EXPECT_EQ(st["configured"], "true") << "the fixture has a store";
   EXPECT_EQ(st["mode"], "command") << "the default changed";
   /* and it says what it serves */
-  EXPECT_EQ(st["base_path"], driver->get_base_path());
+  EXPECT_EQ(st["base_path"], driver->default_bucket_location());
   EXPECT_EQ(st["config_root"], conf_root().string());
 
   /* a write, through the gate every mutation takes */

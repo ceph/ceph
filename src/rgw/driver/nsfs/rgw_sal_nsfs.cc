@@ -3850,7 +3850,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
   bool gpfs_lwe = g_conf().get_val<bool>("rgw_nsfs_gpfs_lwe_locking");
   bool gpfs_batch = g_conf().get_val<bool>("rgw_nsfs_gpfs_batch_xattrs");
-  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib, base_path,
+  fs_strategy = nsfs::GPFSStrategy::try_create(dpp, gpfs_lib,
+					       fs_reference_path(),
                                                gpfs_clone, gpfs_lwe,
                                                gpfs_batch);
   if (!fs_strategy) {
@@ -3864,7 +3865,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
    * means to exercise them has to be able to say so. */
   fs_strategy->set_shares_extents(
       shares_extents ? *shares_extents
-		     : nsfs::probe_shares_extents(dpp, base_path));
+		     : nsfs::probe_shares_extents(dpp, fs_reference_path()));
 
   /* Which staging layout.
    *
@@ -4148,9 +4149,9 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   int ret = -1;
-  base_path = g_conf().get_val<std::string>("rgw_nsfs_base_path");
+  base_path_ = g_conf().get_val<std::string>("rgw_nsfs_base_path");
 
-  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
+  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path_ << dendl;
 
   /* Refuse rather than run in a mode we cannot honour.
    *
@@ -4213,7 +4214,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   /* ordered listing cache */
   bucket_cache.reset(
     new BucketCache(
-      this, base_path,
+      this, fs_reference_path(),
       g_conf().get_val<std::string>("rgw_nsfs_database_root"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_max_buckets"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_lanes"),
@@ -4243,25 +4244,9 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   /* user info cache */
   user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_nsfs_cache_max_users"));
 
-  root_dir = std::make_unique<Directory>(base_path, nullptr, ctx(), fs_strategy.get());
-  root_dir->set_mpu_strategy(mpu_strategy.get());
-  root_dir->set_xattr_strategy(xattr_strategy.get());
-  root_dir->set_path_strategy(path_strategy.get());
-  root_dir->set_reserved_names(&reserved_names);
-  ret = root_dir->open(dpp);
+  ret = open_base_path(dpp);
   if (ret < 0) {
-    if (ret == -ENOTDIR) {
-      ldpp_dout(dpp, 0) << " ERROR: base path (" << base_path
-	<< "): was not a directory." << dendl;
-      return ret;
-    } else if (ret == -ENOENT) {
-      ret = root_dir->create(dpp);
-      if (ret < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not create base path ("
-	  << base_path << "): " << cpp_strerror(-ret) << dendl;
-	return ret;
-      }
-    }
+    return ret;
   }
   lc = new RGWLC();
   lc->initialize(cct, this);
@@ -4275,7 +4260,6 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     lc->start_processor();
   }
 
-  ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
   init_sync_policy(dpp);
@@ -4305,6 +4289,38 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   return 0;
 }
 
+int NSFSDriver::open_base_path(const DoutPrefixProvider* dpp)
+{
+  /* Made as a bucket directory is made, so its mode is the one the
+   * gateway gives directories;  then held only as a descriptor, not as
+   * a Directory, so that nothing can open a bucket relative to it. */
+  {
+    nsfs::Directory d(base_path_, nullptr, ctx(), fs_strategy.get());
+    int ret = d.open(dpp);
+    if (ret == -ENOTDIR) {
+      ldpp_dout(dpp, 0) << " ERROR: base path (" << base_path_
+	<< "): was not a directory." << dendl;
+      return ret;
+    }
+    if (ret == -ENOENT) {
+      ret = d.create(dpp);
+      if (ret < 0) {
+	ldpp_dout(dpp, 0) << " ERROR: could not create base path ("
+	  << base_path_ << "): " << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+    }
+  }
+  base_fd = ::open(base_path_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  if (base_fd < 0) {
+    const int ret = -errno;
+    ldpp_dout(dpp, 0) << " ERROR: could not open base path (" << base_path_
+      << "): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  return 0;
+}
+
 void NSFSDriver::init_sync_policy(const DoutPrefixProvider* dpp)
 {
   const auto& name = g_conf().get_val<std::string>("rgw_posix_sync_policy");
@@ -4316,8 +4332,9 @@ void NSFSDriver::init_sync_policy(const DoutPrefixProvider* dpp)
     g_conf().get_val<uint64_t>("rgw_posix_sync_interval_ms");
   sync_set = std::make_unique<nsfs::SyncFsSet>(interval_ms);
   /* the default location's filesystem, before any bucket is loaded */
-  if (root_dir->stat(dpp) == 0) {
-    note_bucket_filesystem(dpp, root_dir->get_stx(), root_dir->get_fd());
+  struct statx stx{};
+  if (::statx(base_fd, "", AT_EMPTY_PATH, STATX_INO, &stx) == 0) {
+    note_bucket_filesystem(dpp, stx, base_fd);
   }
   sync_set->start();
   ldpp_dout(dpp, 1) << "sync policy: relaxed (syncfs every " << interval_ms
@@ -4687,7 +4704,7 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
       << "buckets" << dendl;
     return -EACCES;
   }
-  path = base_path + "/" + dname;
+  path = default_bucket_location() + "/" + dname;
   return 0;
 }
 
@@ -4761,7 +4778,7 @@ int NSFSDriver::cluster_stat(RGWClusterStat& stats)
    * asks for this on every statfs, and a client uses it to decide
    * whether a write can fit, so leaving it unfilled is not harmless */
   struct statvfs vfs;
-  if (::statvfs(base_path.c_str(), &vfs) < 0) {
+  if (::statvfs(fs_reference_path().c_str(), &vfs) < 0) {
     return -errno;
   }
 
@@ -14981,7 +14998,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["configured"] = adoption_configured() ? "true" : "false";
       /* what this gateway serves, so a caller can tell whether it is the
        * gateway over the tree it means before adopting through it */
-      (*out)["base_path"] = get_base_path();
+      (*out)["base_path"] = default_bucket_location();
       (*out)["config_root"] =
 	g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
       (*out)["mode"] =
