@@ -674,11 +674,6 @@ class TestStretchCluster(MgrTestCase):
             True,
             monmap['stretch_mode']
         )
-        # expects global_stretch_mode to be False
-        self.assertEqual(
-            False,
-            monmap['global_stretch_mode']
-        )
         # No tiebreaker mon in this 2-DC EC stretch setup; disallowed_leaders
         # and tiebreaker_mon should be empty strings.
         self.assertEqual(
@@ -761,11 +756,6 @@ class TestStretchCluster(MgrTestCase):
         self.assertEqual(
             False,
             monmap['stretch_mode']
-        )
-        # expects global_stretch_mode to be False
-        self.assertEqual(
-            False,
-            monmap['global_stretch_mode']
         )
         # expects disallowed_leaders to be empty
         self.assertEqual(

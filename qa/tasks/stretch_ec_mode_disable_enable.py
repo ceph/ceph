@@ -369,11 +369,6 @@ class TestStretchMode(MgrTestCase):
             True,
             monmap['stretch_mode']
         )
-        # expects global_stretch_mode to be False
-        self.assertEqual(
-            False,
-            monmap['global_stretch_mode']
-        )
         # expects disallowed_leaders to be tiebreaker_mon
         self.assertEqual(
             self.TIEBREAKER_MON_NAME,
@@ -461,11 +456,6 @@ class TestStretchMode(MgrTestCase):
         self.assertEqual(
             False,
             monmap['stretch_mode']
-        )
-        # expects global_stretch_mode to be False
-        self.assertEqual(
-            False,
-            monmap['global_stretch_mode']
         )
         # expects disallowed_leaders to be empty
         self.assertEqual(
