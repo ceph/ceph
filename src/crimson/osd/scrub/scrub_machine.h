@@ -171,6 +171,9 @@ struct ScrubContext {
   /// notifies implementation of scrub start
   virtual void notify_scrub_start(bool deep) = 0;
 
+  /// notifies implementation of scrub end; default no-op, override to observe.
+  virtual void notify_scrub_end(bool /*deep*/) {}
+
   /// requests range to scrub starting at start
   struct request_range_result_t {
     hobject_t start;
@@ -590,6 +593,7 @@ struct Scrubbing : ScrubState<Scrubbing, PrimaryActive, ReservingReplicas> {
     if (m_reservations) {
       m_reservations.reset();
     }
+    get_scrub_context().notify_scrub_end(deep);
   }
 
   sc::result react(const events::op_stats_t &event) {
