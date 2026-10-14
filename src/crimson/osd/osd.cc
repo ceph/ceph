@@ -681,6 +681,7 @@ seastar::future<> OSD::start()
     DEBUG("replacing unkwnown addrs of cluster messenger");
     cluster_msgr->set_myaddrs(addrs);
   }
+  co_await start_cluster_lanes(osd_required);
   co_await heartbeat->start(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             pick_addresses(CEPH_PICK_ADDRESS_CLUSTER));
   // create the admin-socket server, and the objects that register
@@ -689,6 +690,18 @@ seastar::future<> OSD::start()
   co_await log_client.set_fsid(monc->get_fsid());
   DEBUG("starting boot");
   co_await start_boot();
+}
+
+seastar::future<> OSD::start_cluster_lanes(uint64_t osd_required)
+{
+  LOG_PREFIX(OSD::start_cluster_lanes);
+  INFO("starting a cluster messenger on each reactor");
+  co_await shard_services.invoke_on_all(
+    [this, osd_required, addrs=cluster_msgr->get_myaddrs()]
+    (auto &local_service) {
+    return local_service.start_cluster_lane(
+      nonce, addrs, osd_required, *this, monc.get(), monc.get());
+  });
 }
 
 seastar::future<> OSD::start_boot()
@@ -927,6 +940,9 @@ seastar::future<> OSD::stop()
     DEBUG("prepared to stop");
     public_msgr->stop();
     cluster_msgr->stop();
+    co_await shard_services.invoke_on_all([](auto &local_service) {
+      local_service.stop_cluster_lane();
+    });
     auto gate_close_fut = gate.close_all();
     co_await asok->stop();
     co_await heartbeat->stop();
@@ -936,6 +952,9 @@ seastar::future<> OSD::stop()
     co_await pg_shard_manager.stop_pgs();
     co_await monc->stop();
     co_await mgrc->stop();
+    co_await shard_services.invoke_on_all([](auto &local_service) {
+      return local_service.shutdown_cluster_lane();
+    });
     co_await shard_services.stop();
     co_await osd_states.stop();
     co_await osd_singleton_state.stop();
@@ -1366,8 +1385,12 @@ seastar::future<> OSD::committed_osd_maps(
       // osd_id came from old_map->get_all_osds(); if it was purged in the new
       // osdmap, osdmap->get_cluster_addrs(osd_id) would ceph_assert(exists()).
       // old_map is guaranteed to contain osd_id and holds its last-known addr.
-      co_await cluster_msgr->mark_down(
-        old_map->get_cluster_addrs(osd_id).front());
+      const auto addr = old_map->get_cluster_addrs(osd_id).front();
+      // its lanes connected to us from their own ports
+      co_await cluster_msgr->mark_down_all_ports(addr);
+      co_await shard_services.invoke_on_all([addr](auto &local_service) {
+        return local_service.mark_down_cluster_lane(addr);
+      });
     });
 
     co_await pg_shard_manager.update_map(std::move(o));
