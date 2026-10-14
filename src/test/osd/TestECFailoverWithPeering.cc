@@ -17,6 +17,7 @@
 #include <gtest/gtest-spi.h>
 #include "test/osd/ECPeeringTestFixture.h"
 #include "osd/osd_perf_counters.h"
+#include "osd/PrimaryLogPG.h"
 #include "test/osd/TestCommon.h"
 
 using namespace std;
@@ -3503,3 +3504,25 @@ INSTANTIATE_TEST_SUITE_P(
   }
 );
 
+// Test the shard versions of an object of a pool over two zones: the shards
+// of each zone have the versions of the first zone's shards
+TEST(PrimaryLogPG, get_shard_versions_over_zones)
+{
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  pool.size = 6;
+  pool.num_zones = 2;
+  object_info_t oi;
+  oi.version = eversion_t(1, 5);
+  oi.shard_versions[shard_id_t(0)] = eversion_t(1, 5);
+  oi.shard_versions[shard_id_t(1)] = eversion_t(1, 3);
+  oi.shard_versions[shard_id_t(2)] = eversion_t(1, 5);
+
+  const auto versions = PrimaryLogPG::get_shard_versions(oi, pool);
+  ASSERT_EQ(6u, versions.size());
+  for (int zone = 0; zone < 2; ++zone) {
+    EXPECT_EQ(eversion_t(1, 5), versions.at(shard_id_t(zone * 3)));
+    EXPECT_EQ(eversion_t(1, 3), versions.at(shard_id_t(zone * 3 + 1)));
+    EXPECT_EQ(eversion_t(1, 5), versions.at(shard_id_t(zone * 3 + 2)));
+  }
+}
