@@ -447,6 +447,27 @@ function TEST_lrc_min_size() {
     test "$(ceph osd pool get l min_size | awk '{print $2}')" = 5 || return 1
 }
 
+# A pool deleted in the update that gives it another rule takes that rule
+# with it
+function TEST_pool_delete_after_rule_change() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated r1 default host || return 1
+    ceph osd crush rule create-replicated r2 default host || return 1
+    ceph osd pool create p 8 8 replicated r1 || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool set p crush_rule r2 &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool rm p p --yes-i-really-really-mean-it || return 1
+    wait $pid || return 1
+    ! ceph osd crush rule ls | grep -qx r1 || return 1
+    ! ceph osd crush rule ls | grep -qx r2 || return 1
+}
+
 main osd-pool-create "$@"
 
 # Local Variables:
