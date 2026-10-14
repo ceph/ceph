@@ -309,7 +309,7 @@ inline void decode(ana_state_t& st, ceph::buffer::list::const_iterator &bl) {
 inline void encode(
   const GwSubsystems& subsystems,  ceph::bufferlist &bl, uint64_t features) {
   uint8_t version = 1;
-  if (HAVE_FEATURE(features, NVMEOFHA)) {
+  {
     version = 2;
   }
   ENCODE_START(version, version, bl);
@@ -388,7 +388,7 @@ inline  void decode(
 inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl,
   uint64_t features) {
   uint8_t version = 1;
-  if (HAVE_FEATURE(features, NVMEOFHA)) {
+  {
     version = 2;
   }
   ENCODE_START(version, version, bl);
@@ -509,10 +509,10 @@ inline void decode(
 inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
   uint64_t features) {
   uint8_t version = 1;
-  if (HAVE_FEATURE(features, NVMEOFHA)) {
+  {
     version = 2;
   }
-  if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+  {
     version = 3;
   }
   ENCODE_START(version, version, bl);
