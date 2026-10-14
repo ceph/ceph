@@ -6538,6 +6538,14 @@ def _test_multipart_get_part(storage_class=None):
     client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
     assert len(parts) == part_count
 
+    if storage_class is not None:
+        response = client.head_object(Bucket=bucket_name, Key=key)
+        assert response['StorageClass'] == storage_class
+
+        response = client.get_object_attributes(Bucket=bucket_name, Key=key, ObjectAttributes=['ObjectParts'])
+        check_parts_count(response['ObjectParts'], part_count)
+        assert [part['Size'] for part in response['ObjectParts']['Parts']] == part_sizes
+
     for part, size in zip(parts, part_sizes):
         response = client.head_object(Bucket=bucket_name, Key=key, PartNumber=part['PartNumber'])
         assert response['PartsCount'] == part_count
@@ -6561,6 +6569,18 @@ def _test_multipart_get_part(storage_class=None):
 @pytest.mark.fails_on_dbstore
 def test_multipart_get_part():
     _test_multipart_get_part()
+
+@pytest.mark.storage_class
+@pytest.mark.fails_on_dbstore
+def test_multipart_get_part_storage_class():
+    sc = configured_storage_classes()
+    if len(sc) < 2:
+        pytest.skip('requires a storage class other than STANDARD')
+
+    # without the fix, the part head was looked up in the bucket's default
+    # (STANDARD) pool instead of the storage class pool, so every partNumber
+    # read returned 400 InvalidPart
+    _test_multipart_get_part(storage_class=sc[1])
 
 @pytest.mark.encryption
 @pytest.mark.fails_on_dbstore
