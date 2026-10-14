@@ -434,6 +434,19 @@ function TEST_pool_set_num_zones_checks() {
     ! ceph osd crush rule ls | grep -qx nosuch || return 1
 }
 
+# The min_size of an LRC pool is checked against its chunks
+function TEST_lrc_min_size() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set lrcp plugin=lrc k=4 m=2 l=3 \
+        crush-failure-domain=osd || return 1
+    ! ceph osd pool create l 8 8 erasure lrcp --min_size 9 > $dir/out 2>&1 || return 1
+    grep "pool min_size must be between 4 and 8" $dir/out || return 1
+    ceph osd pool create l 8 8 erasure lrcp --min_size 5 || return 1
+    test "$(ceph osd pool get l min_size | awk '{print $2}')" = 5 || return 1
+}
+
 main osd-pool-create "$@"
 
 # Local Variables:
