@@ -195,6 +195,30 @@ int set_pool_num_zones(Rados &cluster, const std::string &pool_name,
 
 
 
+// Whether the CRUSH map has the two datacenters that a pool over two zones
+// needs. The tests that create one are skipped on other clusters.
+bool has_two_datacenters(Rados &cluster) {
+  bufferlist outbl;
+  if (cluster.mon_command(
+        "{\"prefix\": \"osd crush tree\", \"format\": \"json\"}",
+        {}, &outbl, nullptr) != 0) {
+    return false;
+  }
+  const std::string tree = outbl.to_str();
+  const std::string datacenter = "\"type\":\"datacenter\"";
+  int count = 0;
+  for (size_t pos = tree.find(datacenter); pos != std::string::npos;
+       pos = tree.find(datacenter, pos + 1)) {
+    ++count;
+  }
+  return count == 2;
+}
+
+#define SKIP_WITHOUT_TWO_DATACENTERS(cluster)                         \
+  if (!has_two_datacenters(cluster)) {                                 \
+    GTEST_SKIP() << "the CRUSH map does not have two datacenters";     \
+  }
+
 // Test basic EC pool creation with K and M parameters
 TEST(ECPoolCreatePP, BasicKM) {
   Rados cluster;
@@ -221,6 +245,7 @@ TEST(ECPoolCreatePP, BasicKM) {
 TEST(ECPoolCreatePP, StretchECWithNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_stretch_");
   constexpr int k = 2, m = 1, num_zones = 2;
@@ -447,6 +472,7 @@ TEST(ECPoolCreatePP, DefaultProfile) {
 TEST(ECPoolCreatePP, ReplicatedPoolStoresNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("repl_num_zones_");
   std::string cmd = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
@@ -492,6 +518,7 @@ TEST(ECPoolCreatePP, AutoProfileAndAutoCrushRule) {
 TEST(ECPoolCreatePP, AutoProfileAndRuleWithNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_auto_stretch_");
   constexpr int k = 2, m = 1, num_zones = 2;
@@ -558,6 +585,7 @@ TEST(ECPoolCreatePP, SharedProfileRetention) {
 TEST(ECPoolCreatePP, ErasurePoolSetNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_set_num_zones_");
   constexpr int k = 2;
@@ -571,6 +599,12 @@ TEST(ECPoolCreatePP, ErasurePoolSetNumZones) {
   // For k=2, m=1 the base EC chunk count is k+m=3, so initial size == 3.
   const int initial_size = get_pool_size(cluster, pool_name);
   ASSERT_EQ(k + m, initial_size);
+
+  // only a FastEC pool can be stretched
+  std::string cmd = "{\"prefix\": \"osd pool set\", \"pool\": \"" +
+    pool_name + "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}";
+  bufferlist outbl;
+  ASSERT_EQ(0, cluster.mon_command(std::move(cmd), {}, &outbl, nullptr));
 
   // double pool size to num_zones * (k+m) == 6.
   ASSERT_EQ(0, set_pool_num_zones(cluster, pool_name, 2));
@@ -624,6 +658,7 @@ TEST(ECPoolCreatePP, SetNumZonesFailureLeavesPoolUnchanged) {
 TEST(ECPoolCreatePP, ReplicatedPoolSetNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("repl_set_num_zones_");
   std::string cmd = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
