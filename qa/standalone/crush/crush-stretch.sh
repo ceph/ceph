@@ -632,6 +632,8 @@ function TEST_stretch_ec_stretch_set() {
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
     run_mon $dir b --public-addr=$CEPH_MON_B || return 1
     run_mon $dir c --public-addr=$CEPH_MON_C || return 1
+    # wait_for_clean reads the PGs from the manager
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
@@ -701,8 +703,19 @@ function TEST_stretch_ec_stretch_set() {
     ceph osd pool create data0 erasure --erasure_code_profile=stretch_ec_profile || return 1
     ceph osd pool create data1 erasure --erasure_code_profile=stretch_ec_profile || return 1
 
-    ceph osd pool set data0 allow_ec_optimizations true
-    ceph osd pool set data1 allow_ec_optimizations true
+    ceph osd pool set data0 allow_ec_optimizations true || return 1
+    ceph osd pool set data1 allow_ec_optimizations true || return 1
+
+    # an erasure coded pool is stretched with num_zones, not stretch set
+    ceph osd pool stretch set data0 2 2 datacenter stretch_ec 12 8 2>&1 |
+        grep "not supported for EC pools" || return 1
+    ceph osd pool set data0 num_zones 2 || return 1
+    ceph osd pool set data1 num_zones 2 || return 1
+    for pool in data0 data1; do
+        test "$(ceph osd pool get $pool size | awk '{print $2}')" = 12 || return 1
+    done
+    ceph osd dump | grep "^stretch_mode_enabled true" || return 1
+    wait_for_clean || return 1
 }
 
 function TEST_stretch_diff_bucket_barrier() {
@@ -778,6 +791,27 @@ function TEST_stretch_diff_bucket_barrier() {
 
 # Test that unstretching the last pool cleanly disables stretch mode globally and clears leader memory
 # across all transition states: Healthy, Degraded, and Recovery.
+# Wait until the output of a command matches a pattern
+function wait_for_output() {
+    local pattern=$1
+    shift
+    for ((i=0; i < 60; i++)); do
+        "$@" 2>/dev/null | grep -q "$pattern" && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# Stretch mode is left in the OSDMap and the MonMap, whose change follows
+function stretch_mode_left() {
+    ceph osd dump | grep "^stretch_mode_enabled false" || return 1
+    for ((i=0; i < 60; i++)); do
+        ceph mon dump 2>/dev/null | grep -q "stretch_mode_enabled" || return 0
+        sleep 1
+    done
+    return 1
+}
+
 function TEST_stretch_unstretch_clean() {
     local dir=$1
     run_mon $dir a --public-addr=$CEPH_MON_A || return 1
@@ -818,14 +852,13 @@ function TEST_stretch_unstretch_clean() {
     # ==========================================
     ceph osd pool create data_healthy --num-zones 2 --replica 2 || return 1
 
-    # Verify we are in healthy stretch mode (meaning force_healthy should fail on active stretched cluster)
-    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
+    # healthy stretch mode
+    ceph osd dump | grep "^stretch_mode_enabled true" || return 1
+    ceph osd dump | grep "^degraded_stretch_mode 0" || return 1
 
     # Unstretch the pool
     ceph osd pool set data_healthy num_zones 1 || return 1
-
-    # Verify global stretch mode is disabled and force_healthy still fails as expected
-    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
+    stretch_mode_left || return 1
 
     # ==========================================
     # 2. Test Unstretching from Degraded Stretch Mode
@@ -838,13 +871,12 @@ function TEST_stretch_unstretch_clean() {
     kill_daemons $dir TERM osd.3
     ceph osd down 2 3 || return 1
 
-    # Wait and verify that degraded stretch mode has been activated
-    ceph osd dump | grep "degraded_stretch_mode 1" || return 1
+    wait_for_output "^degraded_stretch_mode 1" ceph osd dump || return 1
 
     # Unstretch the pool while in degraded stretch mode
     ceph osd pool set data_degraded num_zones 1 || return 1
-
-    # Verify that the cluster cleanly exited stretch mode and leader's degraded/recovering flags are reset
+    stretch_mode_left || return 1
+    # the leader's degraded and recovering state went with it
     ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
 
     # Restart monitor and wait for quorum of 3 monitors to form first
@@ -863,27 +895,19 @@ function TEST_stretch_unstretch_clean() {
     # ==========================================
     ceph osd pool create data_recovery --num-zones 2 --replica 2 || return 1
 
-    # To reach recovery stretch mode the cluster must first enter degraded stretch
-    # mode (go_recovery_stretch_mode() is a no-op unless is_degraded_stretch_mode()).
-    # Kill dc2 OSDs (but NOT mon.b) to trigger degraded stretch mode.
-    # go_recovery_stretch_mode() asserts if dead_mon_buckets is non-empty, so
-    # mon.b must be alive before force_recovery_stretch_mode is called.
+    # Recovery stretch mode is entered from degraded stretch mode, and only
+    # with a monitor in quorum in every zone: kill the OSDs of dc2, not mon.b
     kill_daemons $dir TERM osd.2
     kill_daemons $dir TERM osd.3
     ceph osd down 2 3 || return 1
+    wait_for_output "^degraded_stretch_mode 1" ceph osd dump || return 1
 
-    # Wait for degraded stretch mode to activate
-    ceph osd dump | grep "degraded_stretch_mode 1" || return 1
-
-    # Transition to recovery stretch mode.  mon.b is still up so dead_mon_buckets
-    # is empty — go_recovery_stretch_mode() will proceed without asserting.
     ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
-    ceph osd dump | grep "recovering_stretch_mode 1" || return 1
+    wait_for_output "^recovering_stretch_mode 1" ceph osd dump || return 1
 
     # Unstretch the pool while in recovery stretch mode
     ceph osd pool set data_recovery num_zones 1 || return 1
-
-    # Verify that the cluster cleanly exited stretch mode and leader's recovering flags are reset
+    stretch_mode_left || return 1
     ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
 
     # Restore dc2 OSDs so teardown can clean up normally
