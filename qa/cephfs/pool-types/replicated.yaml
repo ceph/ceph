@@ -1,0 +1,2 @@
+# replicated metadata + replicated data (the default)
+# Absence of pool_types means replicated for both pools.
