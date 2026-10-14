@@ -90,4 +90,28 @@ function TEST_pool_create_existing_rule_zone_size() {
     ceph osd pool create f erasure --k 2 --m 1 --num_zones 2 || return 1
 }
 
+# A pool over two zones needs an erasure code profile that supports FastEC,
+# and a refused create leaves no pool and stretch mode off
+function TEST_pool_create_zones_need_fast_ec() {
+    local dir=$1
+
+    two_zone_cluster $dir 3 || return 1
+
+    ceph osd erasure-code-profile set cauchy plugin=jerasure \
+        technique=cauchy_good k=2 m=1 || return 1
+    ! ceph osd pool create c erasure --erasure_code_profile cauchy --num_zones 2 \
+        > $dir/out 2>&1 || return 1
+    grep "Multi-zone erasure coded pools require FastEC support" $dir/out || return 1
+    ! ceph osd pool ls | grep -qx c || return 1
+
+    ceph osd erasure-code-profile set lrc plugin=lrc k=2 m=1 l=3 || return 1
+    ! ceph osd pool create l erasure --erasure_code_profile lrc --num_zones 2 \
+        > $dir/out 2>&1 || return 1
+    grep "LRC erasure code does not support stretch" $dir/out || return 1
+    ! ceph osd pool ls | grep -qx l || return 1
+
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = false || return 1
+}
+
 main mon-stretch-pool-create-rule "$@"
