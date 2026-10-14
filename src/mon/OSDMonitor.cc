@@ -8649,24 +8649,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   // the rule, given, the default or one left with the pool's name, must place
   // a pool over zones in its zones, and its share in each
   if (num_zones > 1) {
-    CrushWrapper newcrush = _get_pending_crush();
-    const char *name = osdmap.crush->get_rule_name(crush_rule);
-    const string rule_name = name ? name : stringify(crush_rule);
-    if (!default_rule_suits_pool(newcrush, crush_rule, pool_type, num_zones,
-                                 effective_zone_failure_domain, osdmap.pools)) {
-      *ss << "crush rule " << rule_name
-          << " does not place the pool in " << num_zones << " buckets of type "
-          << effective_zone_failure_domain;
-      return -EINVAL;
-    }
-    const unsigned zone_size = size / num_zones;
-    if (rule_items_per_zone(newcrush, crush_rule,
-                            newcrush.get_type_id(effective_zone_failure_domain),
-                            size) != int(zone_size)) {
-      *ss << "crush rule " << rule_name
-          << " does not place " << zone_size << " items in each "
-          << effective_zone_failure_domain;
-      return -EINVAL;
+    r = check_rule_places_pool(crush_rule, pool_type, num_zones,
+                               effective_zone_failure_domain, size, ss);
+    if (r) {
+      return r;
     }
   }
 
@@ -9056,6 +9042,35 @@ void OSDMonitor::maybe_remove_unused_crush_rule(int64_t skip_pool,
   newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
 }
 
+// A pool over zones needs a rule that places it in num_zones buckets of the
+// zone type, with its share of the size in each.
+int OSDMonitor::check_rule_places_pool(int rule, unsigned pool_type,
+                                       int64_t num_zones,
+                                       const string& zone_failure_domain,
+                                       unsigned size, ostream *ss)
+{
+  CrushWrapper newcrush = _get_pending_crush();
+  const char *name = newcrush.get_rule_name(rule);
+  const string rule_name = name ? name : stringify(rule);
+  if (!default_rule_suits_pool(newcrush, rule, pool_type, num_zones,
+                               zone_failure_domain, osdmap.pools)) {
+    *ss << "crush rule " << rule_name
+        << " does not place the pool in " << num_zones << " buckets of type "
+        << zone_failure_domain;
+    return -EINVAL;
+  }
+  const unsigned zone_size = size / num_zones;
+  if (rule_items_per_zone(newcrush, rule,
+                          newcrush.get_type_id(zone_failure_domain),
+                          size) != int(zone_size)) {
+    *ss << "crush rule " << rule_name
+        << " does not place " << zone_size << " items in each "
+        << zone_failure_domain;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int OSDMonitor::update_nonprimary_shards(pg_pool_t& p, ostream *ss)
 {
   if (!p.is_erasure() || !p.has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
@@ -9078,10 +9093,14 @@ int OSDMonitor::prepare_num_zones_crush_rule(
     const pg_pool_t& p, int *crush_rule, ostream *ss)
 {
   *crush_rule = -1;
+  // a rule named with --crush_rule must exist, whatever the pool type
+  if (const string given = cmd_getval_or<string>(cmdmap, "crush_rule", "");
+      !given.empty()) {
+    return get_crush_rule(given, crush_rule, ss);
+  }
   const PoolCreateParams d = load_pool_defaults(g_conf());
   if (n == 1) {
-    const string rule_name = cmd_getval_or<string>(
-        cmdmap, "crush_rule", p.is_erasure() ? poolstr + "-single-zone" : "");
+    const string rule_name = p.is_erasure() ? poolstr + "-single-zone" : "";
     const string root = cmd_getval_or<string>(cmdmap, "root", d.root);
     return prepare_pool_crush_rule(
         p.get_type(), poolstr, p.erasure_code_profile, rule_name, 1, root,
@@ -9089,10 +9108,9 @@ int OSDMonitor::prepare_num_zones_crush_rule(
   }
   const string zone_failure_domain = cmd_getval_or<string>(
       cmdmap, "zone_failure_domain", d.zone_failure_domain);
-  string rule_name = cmd_getval_or<string>(cmdmap, "crush_rule", "");
   if (p.is_replicated()) {
     return prepare_pool_crush_rule(
-        p.get_type(), poolstr, "", rule_name, n,
+        p.get_type(), poolstr, "", "", n,
         cmd_getval_or<string>(cmdmap, "root", d.root),
         cmd_getval_or<int64_t>(cmdmap, "replica", d.replica),
         zone_failure_domain,
@@ -9102,11 +9120,8 @@ int OSDMonitor::prepare_num_zones_crush_rule(
         crush_rule, ss);
   }
   // an EC pool's profile gives what is not on the command line
-  if (rule_name.empty()) {
-    rule_name = poolstr + "-stretch";
-  }
   return prepare_pool_crush_rule(
-      p.get_type(), poolstr, p.erasure_code_profile, rule_name, n,
+      p.get_type(), poolstr, p.erasure_code_profile, poolstr + "-stretch", n,
       cmd_getval_or<string>(cmdmap, "root", ""), 0, zone_failure_domain,
       cmd_getval_or<string>(cmdmap, "osd_failure_domain", ""),
       cmd_getval_or<string>(cmdmap, "class", ""), crush_rule, ss);
@@ -9291,6 +9306,10 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         min_size < 1 || min_size > size) {
       ss << "resulting pool size or min_size exceeds the supported range";
       return -ERANGE;
+    }
+    if (int r = check_rule_places_pool(crush_rule, p.get_type(), n,
+                                       zone_failure_domain, size, &ss); r) {
+      return r;
     }
     if (size != p.size || crush_rule != old_crush_rule) {
       int r = check_pg_num(pool, p.get_pg_num(), size, crush_rule, &ss);

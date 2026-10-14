@@ -991,6 +991,11 @@ public:
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(CrushWrapper& crush);
 
+  // -EINVAL unless rule places a pool over zones in num_zones buckets of the
+  // zone type, with its share of size in each.
+  int check_rule_places_pool(int rule, unsigned pool_type, int64_t num_zones,
+                             const std::string& zone_failure_domain,
+                             unsigned size, std::ostream *ss);
   // Whether a rule can serve a new pool: a rule of the pool's type that, for
   // more than one zone, divides the cluster as the pool's zones would.
   // A zone_size other than 0 is the number of items each zone must get.
