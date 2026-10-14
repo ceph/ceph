@@ -137,6 +137,37 @@ function TEST_create_while_profile_removed() {
     fi
 }
 
+# Deleting an erasure coded pool deletes its profile once no pool uses it,
+# never the default profile, and also when the profile's pools are deleted
+# in one epoch
+function TEST_profile_removed_with_last_pool() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph config set mon mon_allow_pool_delete true || return 1
+    ceph osd erasure-code-profile set p21 k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create a 8 8 erasure p21 || return 1
+    ceph osd pool create b 8 8 erasure p21 || return 1
+    ceph osd pool rm a a --yes-i-really-really-mean-it || return 1
+    ceph osd erasure-code-profile ls | grep -qx p21 || return 1
+    ceph osd pool rm b b --yes-i-really-really-mean-it || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx p21 || return 1
+
+    ceph osd pool create d 8 8 erasure || return 1
+    ceph osd pool rm d d --yes-i-really-really-mean-it || return 1
+    ceph osd erasure-code-profile ls | grep -qx default || return 1
+
+    ceph osd erasure-code-profile set q21 k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create c1 8 8 erasure q21 || return 1
+    ceph osd pool create c2 8 8 erasure q21 || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd pool rm c1 c1 --yes-i-really-really-mean-it &
+    local pid=$!
+    ceph osd pool rm c2 c2 --yes-i-really-really-mean-it || return 1
+    wait $pid || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx q21 || return 1
+}
+
 function TEST_get() {
     local dir=$1
     local id=$2
