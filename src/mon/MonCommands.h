@@ -1422,7 +1422,7 @@ COMMAND("osd pool stretch set "
 		"name=peering_crush_bucket_target,type=CephInt,range=0 "
 		"name=peering_crush_bucket_barrier,type=CephString "
 		"name=crush_rule,type=CephString "
-		"name=size,type=CephInt,range=0 "
+                "name=size,type=CephInt,range=0,req=false "
 		"name=min_size,type=CephInt,range=0 "
                 "name=replica,type=CephInt,range=1,req=false "
 		"name=yes_i_really_mean_it,type=CephBool,req=false",
@@ -1431,7 +1431,7 @@ COMMAND("osd pool stretch set "
 COMMAND("osd pool stretch unset "
 		"name=pool,type=CephPoolname "
 		"name=crush_rule,type=CephString "
-		"name=size,type=CephInt,range=0 "
+                "name=size,type=CephInt,range=0,req=false "
 		"name=min_size,type=CephInt,range=0 "
                 "name=replica,type=CephInt,range=1,req=false",
 		"unset the stretch mode for the pool",

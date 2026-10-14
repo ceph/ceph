@@ -841,6 +841,12 @@ To set values for a stretch pool, run a command of the following form:
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
 
+or, giving the replicas in each zone in place of ``{size}``:
+
+.. prompt:: bash $
+
+   ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} --min_size {min_size} --replica {replica} [--yes-i-really-mean-it]
+
 This command configures an individual stretch pool, which is an alternative to
 stretch mode. It fails while stretch mode is enabled, and stretch mode cannot be
 enabled while such a pool exists. See :ref:`stretch_mode`. Individual stretch
@@ -898,10 +904,19 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {size}
          
-   The number of replicas for RADOS objects (and thus PGs) in the pool.
+   The number of replicas for RADOS objects (and thus PGs) in the pool. It
+   must divide by the number of zones that the CRUSH rule spans.
    
    :Type: Integer
-   :Required: Yes.
+   :Required: Yes, unless ``--replica`` is given.
+
+.. describe:: {--replica}
+
+   The number of replicas in each zone, in place of ``{size}``: the pool's
+   ``size`` is the number of zones that the CRUSH rule spans times ``replica``.
+
+   :Type: Integer
+   :Required: No.
 
 .. describe:: {min_size}
             
@@ -931,7 +946,8 @@ To move the pool back to non-stretch, run a command of the following form:
 
    ceph osd pool stretch unset {pool-name} {crush_rule} {size} {min_size}
 
-This command fails while stretch mode is enabled.
+``--replica {replica}`` can be given in place of ``{size}``, with
+``--min_size {min_size}``. This command fails while stretch mode is enabled.
 
 .. note::
 
