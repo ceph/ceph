@@ -223,11 +223,17 @@ function TEST_disable_unstretches_every_pool() {
     setup_osds $dir || return 1
     create_pools || return 1
     ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    # a pool confined to one zone, with the stretched replica default
+    ceph osd pool create local 8 8 --num_zones 1 || return 1
+    test "$(pool_field local size)" = 2 || return 1
     wait_for_clean || return 1
 
     expect_failure $dir "yes-i-really-mean-it" \
         ceph mon disable_stretch_mode || return 1
     ceph mon disable_stretch_mode --yes-i-really-mean-it || return 1
+    # only pools over zones change
+    test "$(pool_num_zones local)" = 1 || return 1
+    test "$(pool_field local size)" = 2 || return 1
 
     test "$(pool_num_zones rep)" = 1 || return 1
     test "$(pool_field rep size)" = 3 || return 1
