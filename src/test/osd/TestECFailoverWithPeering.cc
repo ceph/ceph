@@ -1719,6 +1719,283 @@ TEST_P(TestECRollbackPartialWrites, QueuedBehindGrowingRollback) {
   delete_object(obj);
 }
 
+// ---------------------------------------------------------------------------
+// Writes queued behind an op that invalidates the extent cache
+// ---------------------------------------------------------------------------
+
+// Another object's RMW read is held at the head of the extent cache queue, so
+// the invalidating op (rollback, recreate, truncate) and the writes queued
+// behind it are replayed together when it completes. The invalidating op
+// reads nothing itself, so the queued writes' reads of shard 1 must not
+// overtake its write.
+class TestECInvalidateReplay : public TestECRollbackPartialWrites {
+public:
+  const std::string other = "replay_other";
+
+  void prepare_other()
+  {
+    const uint64_t sw = get_stripe_width();
+    ASSERT_EQ(0, create_and_write(other, nonzero_pattern(2 * sw, 2)));
+    // A shrinking truncate drops the object from the extent cache LRU.
+    ASSERT_EQ(0, truncate_and_write(other, 2 * sw, sw, {}));
+  }
+
+  void hold_other_rmw()
+  {
+    suspend_primary_to_osd(1);
+    ASSERT_EQ(-EINPROGRESS,
+              write(other, stripe_unit, nonzero_pattern(512, 4),
+                    get_stripe_width(), false));
+  }
+
+  void release()
+  {
+    event_loop->run_until_idle();
+    unsuspend_primary_to_osd(1);
+    event_loop->run_until_idle();
+  }
+
+  // Remove the object and write data at off to a new one, in one op.
+  void recreate(const std::string& obj_name, uint64_t old_size, uint64_t off,
+                const std::string& data)
+  {
+    run_primary_op(
+      [this, obj_name, old_size, off, data](std::shared_ptr<int> result) {
+        hobject_t hoid = make_test_object(obj_name);
+        PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+        ObjectContextRef obc = get_object_context(hoid, false);
+        pg_t->obc_map[hoid] = obc;
+        TestPG* test_pg = get_test_pg();
+        test_pg->outstanding_writes[hoid]++;
+
+        pg_t->remove(hoid);
+        pg_t->create(hoid);
+        bufferlist bl;
+        bl.append(data);
+        pg_t->write(hoid, off, bl.length(), bl);
+
+        eversion_t prior_version = obc->obs.oi.version;
+        eversion_t at_version = get_next_version();
+        object_info_t new_oi = obc->obs.oi;
+        new_oi.version = at_version;
+        new_oi.prior_version = prior_version;
+        new_oi.size = off + data.size();
+        {
+          bufferlist oi_bl;
+          new_oi.encode(oi_bl,
+            osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+          pg_t->setattr(hoid, OI_ATTR, oi_bl);
+          bufferlist bss;
+          encode(SnapSet(), bss);
+          pg_t->setattr(hoid, SS_ATTR, bss);
+        }
+        obc->obs.oi = new_oi;
+
+        object_stat_sum_t delta_stats;
+        std::vector<pg_log_entry_t> log_entries;
+        pg_log_entry_t entry;
+        entry.op = pg_log_entry_t::MODIFY;
+        entry.soid = hoid;
+        entry.version = at_version;
+        entry.prior_version = prior_version;
+        log_entries.push_back(entry);
+
+        auto complete = make_write_completion(
+          test_pg, hoid, result,
+          [obc, prior_version, old_size]() {
+            obc->obs.oi.version = prior_version;
+            obc->obs.oi.size = old_size;
+            obc->attr_cache.clear();
+          },
+          nullptr);
+        do_transaction(hoid, std::move(pg_t), delta_stats, at_version,
+                       std::move(log_entries), complete);
+      }, false);
+  }
+};
+
+// Remove and recreate in one op, writing one chunk of shard 0, with writes
+// queued in pages of shard 1 the new object does not write.
+TEST_P(TestECInvalidateReplay, Recreate) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 3 * sw + stripe_unit / 3;
+  const std::string obj = "replay_recreate";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  prepare_other();
+
+  hold_other_rmw();
+  const std::string data = nonzero_pattern(stripe_unit, 7);
+  recreate(obj, size, 2 * sw, data);
+  expected.assign(2 * sw, '\0');
+  expected += data;
+  queue_writes(obj, expected.size(),
+               {{stripe_unit + 7, nonzero_pattern(100, 5)},
+                {sw + stripe_unit + 50, nonzero_pattern(100, 6)}},
+               expected);
+  release();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+// As Recreate, with the object kept in the extent cache by an attr op.
+TEST_P(TestECInvalidateReplay, CachedRecreate) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 3 * sw + stripe_unit / 3;
+  const std::string obj = "replay_recreate_cached";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  prepare_other();
+
+  write_attribute(obj, "c", "1", false, false);
+  hold_other_rmw();
+  const std::string data = nonzero_pattern(stripe_unit, 7);
+  recreate(obj, size, 2 * sw, data);
+  expected.assign(2 * sw, '\0');
+  expected += data;
+  queue_writes(obj, expected.size(),
+               {{stripe_unit + 7, nonzero_pattern(100, 5)},
+                {sw + stripe_unit + 50, nonzero_pattern(100, 6)}},
+               expected);
+  release();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+// A truncate that grows the object with one chunk of the last data shard,
+// then a write to that chunk, whose parity needs the other data shards,
+// which the truncate left short.
+TEST_P(TestECInvalidateReplay, TruncateGrowShortShard) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 2 * sw;
+  const std::string obj = "replay_tr_short";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  prepare_other();
+
+  hold_other_rmw();
+  const uint64_t grow_off = 3 * sw - stripe_unit;
+  const std::string grow = nonzero_pattern(stripe_unit, 7);
+  truncate_and_write(obj, size, sw, {{grow_off, grow}}, false);
+  expected.resize(sw);
+  expected.resize(grow_off, '\0');
+  expected += grow;
+  queue_writes(obj, expected.size(),
+               {{grow_off + 100, nonzero_pattern(200, 5)}}, expected);
+  release();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+// A rollback of an object that is not in the extent cache, with writes that
+// partly overwrite pages of shard 1 queued behind it.
+TEST_P(TestECInvalidateReplay, Rollback) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 5 * sw + stripe_unit / 3;
+  const std::string obj = "replay_rb";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  ASSERT_EQ(0, create_snapshot(obj, size));
+  ASSERT_EQ(0, write(obj, 0, nonzero_pattern(size, 3), size));
+  prepare_other();
+
+  hold_other_rmw();
+  rollback(obj, size, false);
+  queue_writes(obj, size, {{stripe_unit + 7, nonzero_pattern(1500, 5)},
+                           {2 * sw + stripe_unit + 11, nonzero_pattern(900, 6)}},
+               expected);
+  release();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+// As Rollback, with the object kept in the extent cache by an attr op.
+TEST_P(TestECInvalidateReplay, CachedRollback) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 5 * sw + stripe_unit / 3;
+  const std::string obj = "replay_rb_cached";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  ASSERT_EQ(0, create_snapshot(obj, size));
+  ASSERT_EQ(0, write(obj, 0, nonzero_pattern(size, 3), size));
+  prepare_other();
+
+  write_attribute(obj, "c", "1", false, false);
+  hold_other_rmw();
+  rollback(obj, size, false);
+  queue_writes(obj, size, {{stripe_unit + 7, nonzero_pattern(1500, 5)},
+                           {2 * sw + stripe_unit + 11, nonzero_pattern(900, 6)}},
+               expected);
+  release();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+// A stripe-aligned truncate plus a full-stripe write beyond the old end (so
+// the op reads nothing), with writes queued in the truncated region.
+TEST_P(TestECInvalidateReplay, TruncateGrow) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 3 * sw + stripe_unit / 3;
+  const std::string obj = "replay_tr_grow";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  prepare_other();
+
+  hold_other_rmw();
+  const uint64_t trunc = sw;
+  const uint64_t grow_off = 4 * sw;
+  const std::string grow = nonzero_pattern(sw, 7);
+  truncate_and_write(obj, size, trunc, {{grow_off, grow}}, false);
+  expected.resize(trunc);
+  expected.resize(grow_off, '\0');
+  expected += grow;
+  queue_writes(obj, expected.size(),
+               {{sw + stripe_unit + 7, nonzero_pattern(100, 5)},
+                {3 * sw + stripe_unit + 50, nonzero_pattern(100, 6)}},
+               expected);
+  release();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+// A truncate into the middle of a page of shard 1, then a write further
+// into that page. The truncate reads its partial stripe, which the queued
+// write's reads already wait for.
+TEST_P(TestECInvalidateReplay, UnalignedTruncate) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 3 * sw;
+  const std::string obj = "replay_tr_page";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  prepare_other();
+
+  hold_other_rmw();
+  const uint64_t trunc = sw + stripe_unit + 1000;
+  truncate_and_write(obj, size, trunc, {}, false);
+  expected.resize(trunc);
+  queue_writes(obj, expected.size(),
+               {{sw + stripe_unit + 3000, nonzero_pattern(500, 5)}}, expected);
+  release();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  ECConfigs,
+  TestECInvalidateReplay,
+  ::testing::ValuesIn(kECPeeringConfigs),
+  [](const ::testing::TestParamInfo<BackendConfig>& info) {
+    return info.param.label;
+  }
+);
+
 INSTANTIATE_TEST_SUITE_P(
   ECConfigs,
   TestECRollbackPartialWrites,
