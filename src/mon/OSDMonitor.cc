@@ -16654,9 +16654,11 @@ bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
     _pool_op_reply(op, 0, osdmap.get_epoch());
     return true;
   }
-  if (!num_zones_supported() &&
+  // before the commit librados creates single-zone pools as earlier releases
+  // do, except in stretch mode, where they stretched them
+  if (!num_zones_supported() && osdmap.stretch_mode_enabled &&
       !g_conf().get_val<bool>("mon_debug_allow_pool_create_before_commit")) {
-    dout(10) << __func__ << " pool creation is refused until "
+    dout(10) << __func__ << " pool creation in stretch mode is refused until "
              << num_zones_upgrade_hint() << dendl;
     _pool_op_reply(op, -EPERM, osdmap.get_epoch());
     return true;
