@@ -2703,6 +2703,15 @@ def create_mgr(
     is_available(ctx, 'mgr', is_mgr_available)
 
 
+def bootstrap_host_addr(ctx: CephadmContext) -> Optional[str]:
+    if ctx.mon_ip:
+        mon_ip = wrap_ipv6(ctx.mon_ip) if is_ipv6(ctx.mon_ip) else ctx.mon_ip
+        return parse_mon_ip(mon_ip)[0].ip
+    if ctx.mon_addrv:
+        return parse_mon_addrv(ctx.mon_addrv)[0].ip
+    return None
+
+
 def prepare_ssh(
     ctx: CephadmContext,
     cli: Callable, wait_for_mgr_restart: Callable
@@ -2749,11 +2758,9 @@ def prepare_ssh(
     logger.info('Adding host %s...' % host)
     try:
         args = ['orch', 'host', 'add', host]
-        if ctx.mon_ip:
-            args.append(unwrap_ipv6(ctx.mon_ip))
-        elif ctx.mon_addrv:
-            addrv_args = parse_mon_addrv(ctx.mon_addrv)
-            args.append(unwrap_ipv6(addrv_args[0].ip))
+        host_addr = bootstrap_host_addr(ctx)
+        if host_addr:
+            args.append(host_addr)
         cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
