@@ -38,6 +38,7 @@
 #include "identity_db.h"
 #include "impersonate.h"
 #include "bucket_profile.h"
+#include "sync_fs_set.h"
 
 class RGWLC;
 
@@ -740,7 +741,8 @@ protected:
   /* the two waits;  see the constants they are seeded from */
   std::chrono::milliseconds mutation_gate_wait{5000};
   std::chrono::milliseconds gate_drain_wait{60000};
-  std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
+  /* under the relaxed sync policy only;  see init_sync_policy() */
+  std::unique_ptr<nsfs::SyncFsSet> sync_set;
   UserCache user_cache;
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
   std::unique_ptr<nsfs::MPUStrategy> mpu_strategy;
@@ -901,6 +903,23 @@ public:
    * does share extents. */
   void init_strategies(const DoutPrefixProvider* dpp,
 		       std::optional<bool> shares_extents = std::nullopt);
+
+  /* Read rgw_posix_sync_policy and, under `relaxed`, start syncing every
+   * filesystem that holds a bucket, beginning with the base path's.
+   * Called by initialize() and by a test driver, after the base path is
+   * open. */
+  void init_sync_policy(const DoutPrefixProvider* dpp);
+
+  /* A bucket's directory was opened:  under the relaxed policy its
+   * filesystem joins the set that is synced.  `stx` is the directory's,
+   * and `fd` a descriptor on it. */
+  void note_bucket_filesystem(const DoutPrefixProvider* dpp,
+			      const struct statx& stx, int fd);
+
+  /* The filesystems the relaxed policy syncs;  empty under any other. */
+  std::vector<dev_t> synced_filesystems() const {
+    return sync_set ? sync_set->devices() : std::vector<dev_t>{};
+  }
 
   /* Construct the multipart part cache.  Sizing is the caller's, because
    * it decides whether eviction -- and so the stabilize callback -- is

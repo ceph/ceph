@@ -669,6 +669,9 @@ public:
     bucket_cache.reset(new nsfs::BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
 
+    /* as initialize() does, from rgw_posix_sync_policy */
+    init_sync_policy(dpp);
+
     /* Small, like the bucket cache above:  the configured defaults are
      * large enough that nothing is ever evicted, and eviction is what
      * runs the stabilize callback.  writeback is the policy that has
@@ -13727,6 +13730,71 @@ TEST_F(NSFSPlacedEvictingTest, APlacedBucketsEvictedPartsSurvive)
 TEST_F(NSFSPlacedEvictingTest, ATenantsPlacedBucketsEvictedPartsSurvive)
 {
   evict_and_complete("t1");
+}
+
+/* The relaxed sync policy syncs every filesystem that holds a bucket.
+ * Under it a write is not fsync'd, and syncfs() flushes only the
+ * filesystem its descriptor is on;  one descriptor on the base path
+ * left a bucket on another filesystem's writes unflushed.  The policy is
+ * set the way a deployment sets it, before the driver is built. */
+class NSFSRelaxedSyncTest : public NSFSPlacedBucketTest {
+public:
+  void SetUp() override {
+    g_conf().set_val("rgw_posix_sync_policy", "relaxed");
+    NSFSPlacedBucketTest::SetUp();
+  }
+  void TearDown() override {
+    NSFSPlacedBucketTest::TearDown();
+    g_conf().set_val("rgw_posix_sync_policy", "complete");
+  }
+
+  static dev_t dev_of(const sf::path& p) {
+    struct stat st{};
+    EXPECT_EQ(::stat(p.c_str(), &st), 0) << p;
+    return st.st_dev;
+  }
+};
+
+TEST_F(NSFSRelaxedSyncTest, EveryBucketsFilesystemIsSynced)
+{
+  const sf::path other = sf::path{"/dev/shm"} / testname;
+  std::error_code ec;
+  sf::create_directories(other, ec);
+  if (ec || (dev_of(other) == dev_of(bp / "root"))) {
+    GTEST_SKIP() << "/dev/shm is not a second filesystem here";
+  }
+  auto clean = make_scope_guard([&other] { sf::remove_all(other); });
+
+  auto here = make_bucket("on-base");
+  const sf::path at = other / "elsewhere";
+  sf::create_directories(at);
+  place("elsewhere", at);
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "elsewhere"},
+				&loaded, null_yield), 0);
+
+  auto devs = driver->synced_filesystems();
+  std::sort(devs.begin(), devs.end());
+  std::vector<dev_t> want{dev_of(bp / "root"), dev_of(at)};
+  std::sort(want.begin(), want.end());
+  EXPECT_EQ(devs, want) << "a bucket's filesystem is not synced";
+}
+
+/* The control:  buckets on one filesystem are one entry, and the set
+ * is not a list of buckets. */
+TEST_F(NSFSRelaxedSyncTest, OneFilesystemIsOneEntry)
+{
+  auto a = make_bucket("one");
+  auto b = make_bucket("two");
+  EXPECT_EQ(driver->synced_filesystems(),
+	    std::vector<dev_t>{dev_of(bp / "root")});
+}
+
+/* Under any other policy there is no set. */
+TEST_F(NSFSPlacedBucketTest, NoSetUnlessTheRelaxedPolicy)
+{
+  auto a = make_bucket("plain");
+  EXPECT_TRUE(driver->synced_filesystems().empty());
 }
 
 /* ------------------------------------------------------------------ *

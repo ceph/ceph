@@ -14,6 +14,7 @@
  */
 
 #include <sys/resource.h>
+#include <sys/sysmacros.h>
 
 #include "rgw_sal_nsfs.h"
 #include "rgw_rest_user.h"
@@ -4277,19 +4278,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
-  auto policy = rgw::posix::parse_sync_policy(
-    cct->_conf.get_val<std::string>("rgw_posix_sync_policy"));
-  if (policy == rgw::posix::SyncPolicy::RELAXED) {
-    uint64_t interval_ms = cct->_conf.get_val<uint64_t>("rgw_posix_sync_interval_ms");
-    syncfs_thread = std::make_unique<rgw::posix::SyncFsThread>(
-      root_dir->get_fd(), interval_ms);
-    syncfs_thread->start();
-    ldpp_dout(dpp, 1) << "sync policy: relaxed (syncfs every "
-      << interval_ms << "ms)" << dendl;
-  } else {
-    ldpp_dout(dpp, 1) << "sync policy: "
-      << cct->_conf.get_val<std::string>("rgw_posix_sync_policy") << dendl;
-  }
+  init_sync_policy(dpp);
 
   if (!RGWPubSubEndpoint::init_all(cct)) {
     ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
@@ -4316,10 +4305,42 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   return 0;
 }
 
+void NSFSDriver::init_sync_policy(const DoutPrefixProvider* dpp)
+{
+  const auto& name = g_conf().get_val<std::string>("rgw_posix_sync_policy");
+  if (rgw::posix::parse_sync_policy(name) != rgw::posix::SyncPolicy::RELAXED) {
+    ldpp_dout(dpp, 1) << "sync policy: " << name << dendl;
+    return;
+  }
+  const uint64_t interval_ms =
+    g_conf().get_val<uint64_t>("rgw_posix_sync_interval_ms");
+  sync_set = std::make_unique<nsfs::SyncFsSet>(interval_ms);
+  /* the default location's filesystem, before any bucket is loaded */
+  if (root_dir->stat(dpp) == 0) {
+    note_bucket_filesystem(dpp, root_dir->get_stx(), root_dir->get_fd());
+  }
+  sync_set->start();
+  ldpp_dout(dpp, 1) << "sync policy: relaxed (syncfs every " << interval_ms
+    << "ms, on every filesystem that holds a bucket)" << dendl;
+}
+
+void NSFSDriver::note_bucket_filesystem(const DoutPrefixProvider* dpp,
+					const struct statx& stx, int fd)
+{
+  if (!sync_set) {
+    return;
+  }
+  const dev_t dev = makedev(stx.stx_dev_major, stx.stx_dev_minor);
+  if (sync_set->add(dev, fd)) {
+    ldpp_dout(dpp, 1) << "sync policy: relaxed now syncs filesystem "
+      << stx.stx_dev_major << ":" << stx.stx_dev_minor << dendl;
+  }
+}
+
 void NSFSDriver::finalize()
 {
-  if (syncfs_thread) {
-    syncfs_thread->shutdown();
+  if (sync_set) {
+    sync_set->shutdown();
   }
   RGWPubSubEndpoint::shutdown_all();
   RGWQuotaHandler::free_handler(quota_handler);
@@ -4981,6 +5002,9 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
 							 get_tenant());
     }
     return ret;
+  }
+  if (!is_internal() && (dir->stat(dpp) == 0) && (dir->open(dpp) == 0)) {
+    driver->note_bucket_filesystem(dpp, dir->get_stx(), dir->get_fd());
   }
 
   return 0;
@@ -7951,6 +7975,11 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   ret = dir->open(dpp);
   if (ret < 0) {
     return ret;
+  }
+  /* a write reaches a bucket only after it is loaded, so its filesystem
+   * is in the relaxed policy's set before the write is */
+  if (!is_internal()) {
+    driver->note_bucket_filesystem(dpp, dir->get_stx(), dir->get_fd());
   }
 
   /* before the attributes, because which names are nsfs's to read is
