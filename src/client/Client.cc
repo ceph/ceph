@@ -2051,6 +2051,12 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
           auto& repmap = repmapit->second;
           auto r = ceph::util::generate_random_number<uint64_t>(0, repmap.size()-1);
           mds = repmap.at(r);
+        } else if (auto it = in->fragmap.find(fg); it != in->fragmap.end()) {
+          // not replicated: the auth of the fragment is the only rank that
+          // can answer without forwarding
+          mds = it->second;
+          if (phash_diri)
+            *phash_diri = in;
         }
       } else {
         auto it = in->fragmap.find(fg);
@@ -5866,6 +5872,15 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<
     }
     // reflush any/all caps (if we are now the auth_cap)
     kick_flushing_caps(in, session);
+
+    /*
+     * A cap message sent to the exporting MDS while the export was in
+     * progress, such as the one that gives up Fx/Fw and the wanted caps
+     * after the last close, is dropped there, and the importing MDS hands
+     * back the caps and wanted from before it.  Nothing would send it
+     * again, and other clients then have to revoke those caps from us.
+     */
+    check_caps(in, 0);
   }
 }
 
@@ -14523,8 +14538,27 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
     }
   }
 
+  /*
+   * FUSE revalidates every dentry of a path with a lookup (ceph-fuse
+   * replies with zero entry and attribute timeouts), and a stat goes
+   * through ll_getattr().  For a directory we already have, do not ask
+   * for Fs here: Fs only covers the dirstat (size, mtime), which a stat
+   * fetches anyway, and a directory whose fragments are spread over
+   * several MDSs keeps its filelock in MIX, where Fs is not issued.
+   * Asking for it then sends every revalidation to the MDS, which moves
+   * the filelock to SYNC and back to MIX for the next create or unlink
+   * in that directory, across the MDSs.
+   */
+  unsigned mask = CEPH_STAT_CAP_INODE_ALL;
+  if (parent->dir) {
+    auto it = parent->dir->dentries.find(name);
+    if (it != parent->dir->dentries.end() && it->second->inode &&
+	it->second->inode->is_dir())
+      mask &= ~CEPH_CAP_FILE_SHARED;
+  }
+
   InodeRef in;
-  r = path_walk(parent, filepath(name), &in, perms, {.followsym = false, .mask = CEPH_STAT_CAP_INODE_ALL});
+  r = path_walk(parent, filepath(name), &in, perms, {.followsym = false, .mask = mask});
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
