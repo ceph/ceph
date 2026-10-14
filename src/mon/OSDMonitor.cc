@@ -12938,6 +12938,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       mode = "firstn";
 
     if (osdmap.crush->rule_exists(name)) {
+      if (crush_rule_removal_pending(name, osdmap.crush->get_rule_id(name))) {
+        goto wait;
+      }
       // The name is uniquely associated to a ruleid and the rule it contains
       // From the user point of view, the rule is more meaningfull.
       ss << "rule " << name << " already exists";
