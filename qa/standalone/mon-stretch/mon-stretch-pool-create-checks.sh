@@ -53,6 +53,8 @@ function TEST_pool_create_checks() {
         ceph osd pool create p --size 11 || return 1
     expect_refused $dir "replica must be between 1 and 10" \
         ceph osd pool create p --replica 11 || return 1
+    expect_refused $dir "not in range" \
+        ceph osd pool create p --replica 0 || return 1
     expect_refused $dir "pool min_size must be between 2 and 3" \
         ceph osd pool create p erasure --k 2 --m 1 --min_size 4 || return 1
     expect_refused $dir "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'" \
@@ -64,6 +66,9 @@ function TEST_pool_create_checks() {
     ceph osd pool create p 8 || return 1
     test "$(ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "p") | .pool_id')" = 1 || return 1
     ceph osd pool create p 8 2>&1 | grep "already exists" || return 1
+
+    ! ceph osd pool set p num_zones 1 --replica 0 > $dir/out 2>&1 || return 1
+    grep -F "not in range" $dir/out || return 1
 }
 
 function TEST_pool_create_min_size() {

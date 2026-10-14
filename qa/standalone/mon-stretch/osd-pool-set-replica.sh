@@ -113,7 +113,7 @@ function TEST_pool_replica_crush_rule_name() {
         ! ceph osd pool set "$poolname" num_zones 2 \
             --replica "$replica" --zone_failure_domain zone \
             --osd_failure_domain host > "$dir/error.txt" 2>&1 || return 1
-        grep -E 'replica must be at least 1|between 1 and 10|maximum supported value' \
+        grep -E 'not in range|between 1 and 10|maximum supported value' \
             "$dir/error.txt" || return 1
     done
     ! ceph osd pool set "$poolname" num_zones 3 \
