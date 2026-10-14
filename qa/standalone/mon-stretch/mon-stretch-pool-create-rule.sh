@@ -140,6 +140,25 @@ function TEST_individual_stretch_pool_blocks_stretch_mode() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
 }
 
+# osd pool set num_zones 1 on an individual stretch pool, while stretch mode is
+# off, keeps the monitors' settings and leaves the pool with no mandatory zone
+function TEST_individual_stretch_pool_to_one_zone() {
+    local dir=$1
+
+    two_zone_cluster $dir 2 || return 1
+    ceph mon set election_strategy disallow || return 1
+    ceph mon add disallowed_leader c || return 1
+    ceph osd crush rule create-stretch-replicated --rule-name two_dc \
+        --num-replica-per-zone 2 || return 1
+    ceph osd pool create ind 8 8 replicated two_dc || return 1
+    ceph osd pool stretch set ind 2 2 datacenter two_dc 4 2 || return 1
+    test "$(pool_field ind num_zones)" = 2 || return 1
+
+    ceph osd pool set ind num_zones 1 || return 1
+    ceph mon dump | grep '^disallowed_leaders' | grep -q c || return 1
+    test "$(pool_field ind peering_crush_bucket_mandatory_member)" = 2147483647 || return 1
+}
+
 # What osd pool create gives an EC pool over two zones
 function TEST_pool_create_two_zone_ec_fields() {
     local dir=$1
