@@ -2446,14 +2446,15 @@ TEST_F(PeeringStateTest, RebuildStatsCountAccumulates) {
 
 // ============================================================================
 // Test 5: Latch is discarded when the OSD loses its primary role mid-rebuild.
+// But the departing primary's own in-progress segment is now recorded rather
+// than silently discarded.
 //
-// If a new interval begins while rebuild_start_time is set and the OSD
-// transitions from primary to stray, clear_primary_state() must discard the
-// stale latch so no spurious rebuild event is emitted for a recovery that the
-// OSD no longer owns.
+// The original interim design discarded the stale latch during the
+// primary -> stray transition with no recording. This discarded real rebuild
+// episodes whenever the failed OSD was held primary for the affected PG.
 // ============================================================================
-TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
-  dout(0) << "== RebuildStatsLatchClearedOnRoleChange ==" << dendl;
+TEST_F(PeeringStateTest, RebuildStatsRecordsSegmentOnRoleChange) {
+  dout(0) << "== RebuildStatsRecordsSegmentOnRoleChange ==" << dendl;
   test_create_peering_state();
   test_init();
   test_event_initialize();
@@ -2481,6 +2482,11 @@ TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
   ASSERT_NE(get_ps(0)->get_rebuild_start_time(), utime_t())
       << "latch must be set before role change";
 
+  // Sleep so the departing primary's segment has a real, nonzero duration
+  // to record -- mirrors the sleep pattern used by the other RebuildStats*
+  // tests for the same reason.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
   // --- Phase 2: change the primary before recovery completes. ---
   // Swap acting[0] from OSD 0 to OSD 7. OSD 0 leaves the acting set
   // entirely and becomes a stray; OSD 7 takes over as primary.
@@ -2491,22 +2497,25 @@ TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
   test_init(7);
   test_event_initialize(7);
 
-  // advance_map on OSD 0: the new acting set excludes OSD 0, so
-  // should_restart_peering()->start_peering_interval() resets the
-  // three latch variables since the role of OSD 0 is now changed.
+  // should_restart_peering()->start_peering_interval() now closes out and
+  // records OSD 0's own segment before resetting the three latch variables.
   test_event_advance_map();
 
-  // --- Phase 3: verify latch is cleared on the old primary. ---
+  // --- Phase 3: latch fields still reset on the departing primary. ---
+  // This part of the behavior is unchanged from before: a stale
+  // start time/baseline must never be reused across a role change.
   EXPECT_EQ(get_ps(0)->get_rebuild_start_time(), utime_t());
   EXPECT_EQ(get_ps(0)->get_rebuild_base_recovered(), 0);
   EXPECT_FALSE(get_ps(0)->get_rebuild_had_redundancy_loss());
 
-  // No rebuild record must have been emitted: the latch was discarded, not
-  // fired. A spurious emission here would record a duration spanning a
-  // recovery that OSD 0 did not complete.
+  // --- Phase 4: the segment IS now recorded, not silently dropped. ---
+  // OSD 0 had real degraded objects at latch time (rebuild_had_redundancy_
+  // loss == true), so the genuine-event filter passes even though no
+  // recovery I/O had completed yet (delta_recovered == 0 at handover time).
   auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
-  EXPECT_EQ(count, 0u);
-  EXPECT_EQ(sum_ns,  0u);
+  EXPECT_EQ(count, 1u)
+    << "the departing primary's segment must be recorded, not discarded";
+  EXPECT_GT(sum_ns,  0u);
 }
 
 // ============================================================================
@@ -2568,6 +2577,128 @@ TEST_F(PeeringStateTest, RebuildStatsLatchSurvivesSamePrimaryIntervalRestart) {
   PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
   auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_EQ(count, 0u);
+}
+
+// ============================================================================
+// Test 7: A PG that changes primary TWICE while continuously vulnerable
+// records a SEPARATE partial segment on each departing primary, instead of
+// losing the whole episode, and demonstrates its accepted trade-off concretely:
+// one true, continuous vulnerability episode is recorded as THREE separate
+// avgcount samples, not one.
+//
+// The test chains two primary handovers back to back (0 -> 7 -> 8) while
+// up_acting keeps accumulating every historical OSD (modify_up_acting() only
+// ever pushes; see osd_down() for the only helper that erases).
+// test_event_advance_map() with no target therefore re-processes
+// already-departed OSDs on the second handover too; this is expected to be
+// harmless because try_record_rebuild_segment() is only invoked when
+// rebuild_start_time != utime_t(), and the departing OSD's latch is
+// unconditionally reset to utime_t() immediately after its segment is recorded
+// on the first handover -- so a redundant advance_map on an already-departed
+// OSD cannot re-fire or double-record.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsMultiHopHandoverRecordsEachSegment) {
+  dout(0) << "== RebuildStatsMultiHopHandoverRecordsEachSegment ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Stamp last_clean so the new_failure guard is satisfied for OSD 0.
+  call_prepare_stats(acting_primary);        // acting_primary = OSD 0
+
+  // --- Degrade the PG while OSD 0 is primary. ---
+  // Replace acting[1] (OSD 1) with OSD 9; OSD 9 needs recovery. This keeps
+  // the PG degraded (rebuild_had_redundancy_loss latches true at every
+  // hop) all the way through both handovers below, without needing to
+  // actually complete the recovery until the very end.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  // PG is now active+recovering+degraded; OSD 0 remains primary.
+
+  PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
+
+  // Latch fires on OSD 0.
+  call_prepare_stats(acting_primary);
+  ASSERT_NE(get_ps(0)->get_rebuild_start_time(), utime_t())
+      << "latch must be set before the first handover";
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // --- Hop 1: OSD 0 -> OSD 7. OSD 0 leaves the acting set entirely. ---
+  modify_up_acting(0, 7);
+  acting_primary = 7;
+  up_primary = 7;
+  test_create_peering_state(7, 0);
+  test_init(7);
+  test_event_initialize(7);
+  test_event_advance_map();   // closes out and records OSD 0's segment
+  test_peering();
+
+  // OSD 0's segment must be recorded now, not silently discarded.
+  {
+    auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
+    EXPECT_EQ(count, 1u)
+        << "OSD 0's segment must be recorded on the first handover";
+    EXPECT_GT(sum_ns, 0u);
+  }
+  EXPECT_EQ(get_ps(0)->get_rebuild_start_time(), utime_t())
+      << "OSD 0's latch fields must still reset after recording";
+
+  PerfCounters *perf_osd7 = get_listener(7)->recoverystate_perf;
+
+  // OSD 7 must reliably re-arm its own fresh latch: the PG is still
+  // degraded (OSD 9 still needs recovery), and last_change was just
+  // bumped by this interval restart while last_clean is still the old,
+  // pre-failure value -- confirmed reliable in the pg-state-machine skill.
+  call_prepare_stats(acting_primary);
+  ASSERT_NE(get_ps(7)->get_rebuild_start_time(), utime_t())
+      << "a fresh primary must reliably re-arm mid-vulnerability";
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // --- Hop 2: OSD 7 -> OSD 8. OSD 7 leaves the acting set entirely. ---
+  modify_up_acting(0, 8);
+  acting_primary = 8;
+  up_primary = 8;
+  test_create_peering_state(8, 0);
+  test_init(8);
+  test_event_initialize(8);
+  test_event_advance_map();   // closes out and records OSD 7's segment
+  test_peering();
+
+  // OSD 7's segment must ALSO be recorded, independently of OSD 0's.
+  {
+    auto [sum_ns, count] = perf_osd7->get_tavg_ns(rs_pg_rebuild_duration);
+    EXPECT_EQ(count, 1u)
+        << "OSD 7's segment must be recorded on the second handover";
+    EXPECT_GT(sum_ns, 0u);
+  }
+
+  PerfCounters *perf_osd8 = get_listener(8)->recoverystate_perf;
+
+  // OSD 8 arms its own fresh latch the same way OSD 7 did.
+  call_prepare_stats(acting_primary);
+  ASSERT_NE(get_ps(8)->get_rebuild_start_time(), utime_t());
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // --- Finally: drive the recovery to completion under OSD 8. ---
+  test_recover_got(8, v);
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+  call_prepare_stats(acting_primary);   // "reached-clean" record fires on OSD 8
+
+  auto [sum_ns, count] = perf_osd8->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_EQ(count, 1u)
+      << "OSD 8's own segment must be recorded once it reaches clean";
+  EXPECT_GT(sum_ns, 0u);
 }
 
 // ============================================================================
