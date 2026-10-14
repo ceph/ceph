@@ -159,6 +159,24 @@ function TEST_enable_stretches_every_pool() {
     wait_for_clean || return 1
 }
 
+# Test enable_stretch_mode picks the monitor outside both zones as the
+# tiebreaker when none is given; the rule and bucket are then given by name
+function TEST_enable_without_tiebreaker() {
+    local dir=$1
+    setup_zones $dir || return 1
+    setup_osds $dir || return 1
+    ceph osd pool create rep 8 8 replicated || return 1
+
+    ! ceph mon enable_stretch_mode stretch_rule zone > $dir/out 2>&1 || return 1
+    grep "missing required parameter dividing_bucket" $dir/out || return 1
+    ceph mon enable_stretch_mode --new_crush_rule stretch_rule \
+        --dividing_bucket zone || return 1
+    test "$(ceph mon dump -f json | jq .stretch_mode)" = true || return 1
+    test "$(ceph mon dump -f json | jq -r .tiebreaker_mon)" = c || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
+    test "$(pool_num_zones rep)" = 2 || return 1
+}
+
 # Test disabling unstretches every pool and sets the local defaults
 function TEST_disable_unstretches_every_pool() {
     local dir=$1
