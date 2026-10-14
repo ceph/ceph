@@ -185,6 +185,19 @@ function TEST_legacy_stretch_mode_then_commit() {
     wait_for_clean || return 1
 }
 
+# Test a legacy stretch mode min_size that the zones do not divide rounds up
+# per zone, so the pool never takes writes with fewer copies than asked for
+function TEST_legacy_stretch_mode_min_size_rounds_up() {
+    local dir=$1
+    stretchable_cluster $dir || return 1
+    ceph config set mon mon_stretch_pool_min_size 3 || return 1
+    ceph osd pool create rep 8 8 replicated || return 1
+
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    test "$(pool_field rep size)" = 4 || return 1
+    test "$(pool_field rep min_size)" = 2 || return 1
+}
+
 # Test the commit leaves the defaults of a cluster without stretch mode alone
 function TEST_commit_without_stretch_mode() {
     local dir=$1
