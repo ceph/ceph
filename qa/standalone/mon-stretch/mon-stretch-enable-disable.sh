@@ -159,6 +159,45 @@ function TEST_enable_stretches_every_pool() {
     wait_for_clean || return 1
 }
 
+# Test enabling checks that its rule places a pool already over two zones
+# with its new share in each zone
+function TEST_enable_checks_rule_of_pools_over_zones() {
+    local dir=$1
+    setup_zones $dir || return 1
+    local osd
+    for osd in 0 1 2 3 4 5; do
+        run_osd $dir $osd || return 1
+    done
+    ceph osd crush move osd.0 host=node-2 || return 1
+    ceph osd crush move osd.1 host=node-2 || return 1
+    ceph osd crush move osd.2 host=node-3 || return 1
+    ceph osd crush move osd.3 host=node-4 || return 1
+    ceph osd crush move osd.4 host=node-4 || return 1
+    ceph osd crush move osd.5 host=node-5 || return 1
+    ceph osd crush remove $(hostname -s) || return 1
+    ceph osd crush rule create-stretch-replicated --rule_name three_per_zone \
+        --zone_failure_domain zone --osd_failure_domain osd \
+        --num_replica_per_zone 3 || return 1
+    ceph osd pool create rep3 --num_zones 2 --replica 3 \
+        --zone_failure_domain zone --osd_failure_domain osd || return 1
+    local rule=$(pool_field rep3 crush_rule)
+
+    ! ceph mon enable_stretch_mode c three_per_zone zone > $dir/out 2>&1 || return 1
+    grep "pool 'rep3': crush rule three_per_zone does not place 2 items in each zone" \
+        $dir/out || return 1
+    test "$(pool_field rep3 size)" = 6 || return 1
+    test "$(pool_field rep3 crush_rule)" = "$rule" || return 1
+
+    # nor does it change the size of a pool with nosizechange
+    ceph osd pool set rep3 nosizechange true || return 1
+    ! ceph mon enable_stretch_mode c stretch_rule zone > $dir/out 2>&1 || return 1
+    grep "pool 'rep3': pool size change is disabled" $dir/out || return 1
+    ceph osd pool set rep3 nosizechange false || return 1
+
+    ceph mon enable_stretch_mode c stretch_rule zone || return 1
+    test "$(pool_field rep3 size)" = 4 || return 1
+}
+
 # Test enable_stretch_mode picks the monitor outside both zones as the
 # tiebreaker when none is given; the rule and bucket are then given by name
 function TEST_enable_without_tiebreaker() {
