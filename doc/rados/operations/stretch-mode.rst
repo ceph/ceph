@@ -50,7 +50,7 @@ place that will cause the cluster to re-replicate the data until the
 
 
 Changing Per-Pool Zone and Replica Counts
-========================================
+=========================================
 
 ``ceph osd pool set <pool> num_zones`` supports one or two zones. Setting the
 current zone count again leaves the pool and its CRUSH rule unchanged.
@@ -182,25 +182,24 @@ Creating Stretch Pools
 ----------------------
 
 You can create a pool with stretch mode configuration at creation time by
-specifying the ``zone`` parameter:
+specifying the ``num_zones`` parameter:
 
 .. prompt:: bash $
 
-   ceph osd pool create mypool 32 32 replicated --num_zones=2
+   ceph osd pool create mypool 32 32 replicated --num_zones=2 --replica=2
 
-This creates a replicated pool named ``mypool`` with 32 placement groups,
-using the ``num_zones`` parameter, the pool is configured to span 2 zones
-and will automatically create and apply a crush the following crush rule:
+This creates a replicated pool named ``mypool`` with 32 placement groups that
+spans two zones, with two replicas in each zone. The monitors create and apply
+the following CRUSH rule::
 
-::
-rule mypool {
-	id 1
-	type replicated
-	step take default
-	step choose firstn 2 type datacenter
-	step chooseleaf firstn 2 type host
-	step emit
-}
+   rule mypool {
+           id 1
+           type replicated
+           step take default
+           step choose firstn 2 type datacenter
+           step chooseleaf firstn 2 type host
+           step emit
+   }
 
 
 Per-pool stretch mode provides the same stretch mode benefits (zone-aware
@@ -472,69 +471,32 @@ Two Monitors must be run in each data center, plus a tiebreaker in a third
 will connect only to Monitors within the data center in which they are located.
 OSDs **do not** connect to the tiebreaker Monitor.
 
-Erasure-coded pools cannot be used with stretch mode. Attempts to use erasure
-coded pools with stretch mode will fail. Erasure coded pools cannot be created
-while in stretch mode.
+Ceph creates the CRUSH rules that most stretched pools need. A pool created
+with ``--num_zones 2``, or set to ``num_zones`` 2, gets a rule of its own that
+places its replicas, or the shards of an erasure-coded pool, in both data
+centers (see `Creating Stretch Pools`_ and `Changing Per-Pool Zone and Replica
+Counts`_). Erasure-coded pools must be FastEC pools.
 
-To use stretch mode, you will need to create a CRUSH rule that provides two
-replicas in each data center. Ensure that there are four total replicas: two in
-each data center. If pools exist in the cluster that do not have the default
-``size`` or ``min_size``, Ceph will not enter stretch mode. An example of such
-a CRUSH rule is given above.
+A CRUSH rule of your own is an advanced case. ``ceph mon enable_stretch_mode``
+takes one for the replicated pools, such as the one given above, which must
+provide two replicas in each data center, and gives every replicated pool two
+replicas in each data center, whatever its size. ``--crush_rule`` gives a rule
+of your own to a single pool.
 
-Because stretch mode runs with pools' ``min_size`` set to ``1``,
-we recommend enabling stretch mode only when using OSDs on
-SSDs. Hybrid HDD+SSD or HDD-only OSDs are not recommended
-due to the long time it takes for them to recover after connectivity between
-data centers has been restored. This reduces the potential for data loss.
+A pool with two replicas in each data center has, by default, a ``min_size``
+of ``1`` in each data center, so while one data center is down, stretch mode
+serves I/O from a single replica. We therefore recommend enabling stretch mode
+only when using OSDs on SSDs. Hybrid HDD+SSD or HDD-only OSDs are not recommended due to
+the long time it takes for them to recover after connectivity between data
+centers has been restored. This reduces the potential for data loss.
 
-.. warning:: Do not specify a device class in the CRUSH rule used for stretch
-   mode. Ceph accepts such a rule and reports healthy stretch mode, but the PGs
-   will fail to peer if a data center is later lost.
+A CRUSH rule used for stretch mode can select the OSDs of one device class, for
+example with ``step take default class ssd``. Each OSD is counted in its data
+center's real CRUSH bucket, not in the shadow bucket of its class, so the PGs of
+such a rule also peer in degraded stretch mode.
 
-   A device class makes CRUSH select OSDs from a shadow tree, in which
-   ``zone1`` is a separate bucket named ``zone1~ssd``::
-
-      rule stretch_replicated_rule {
-                 id 1
-                 type replicated
-                 step take default class ssd
-                 step choose firstn 0 type datacenter
-                 step chooseleaf firstn 2 type host
-                 step emit
-      }
-
-   The class is honored and the placement is correct: OSDs of that class are
-   chosen from both data centers, as asked. The problem is in the peering
-   check. Stretch mode resolves each OSD to its ``datacenter`` through the
-   pool's CRUSH rule, so with the rule above it sees ``zone1~ssd`` rather than
-   ``zone1``. You will not notice this while both data centers are up, because
-   peering only counts how many distinct buckets the acting set spans, and two
-   shadow buckets count as two.
-
-   The mismatch matters once a data center is lost. When the cluster enters
-   degraded stretch mode, the Monitors record the surviving data center by its
-   real bucket, ``zone1``, and require every PG to include it. That never
-   matches the ``zone1~ssd`` the rule reports, so every PG of every pool using
-   that rule goes inactive and its data is unavailable.
-
-   Restoring the lost data center does not clear this. The cluster returns to
-   healthy stretch mode only once no PG is left degraded, inactive, or unknown,
-   and these PGs stay inactive for as long as that requirement stands, so
-   recovery never finishes on its own. Breaking the loop takes ``ceph osd
-   force_healthy_stretch_mode --yes-i-really-mean-it``, which drops the
-   requirement and lets the PGs peer.
-
-   Use a rule without a device class from the start, such as the one under
-   :ref:`entering_stretch_mode`. If a cluster is already in stretch mode, check
-   the rule that each of its pools uses and correct it while both data centers
-   are up. Switching a pool to another rule moves most of its data, because the
-   shadow tree and the real tree place data differently even when they hold the
-   same OSDs.
-
-In the future, stretch mode could support erasure-coded pools,
-enable deployments across more than two data centers,
-and accommodate multiple CRUSH device classes.
+In the future, stretch mode could enable deployments across more than two data
+centers, and accommodate multiple CRUSH device classes.
 
 
 Other commands
