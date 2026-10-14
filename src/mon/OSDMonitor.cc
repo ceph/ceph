@@ -17595,6 +17595,10 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 {
   dout(20) << __func__ << dendl;
   *okay = false;
+  // a pool joining an enabled stretch mode must not reset its state, which
+  // may be degraded or recovering, nor be refused for zone weights that
+  // drifted apart after stretch mode was entered
+  const bool already_enabled = !legacy && osdmap.stretch_mode_enabled;
   int dividing_id = -1;
   if (auto type_id = crush.get_validated_type_id(dividing_bucket);
       !type_id.has_value()) {
@@ -17637,8 +17641,8 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   double stretch_max_weight_delta = g_conf().get_val<double>("mon_stretch_max_bucket_weight_delta");
   int weight1 = crush.get_item_weight(subtrees[0]);
   int weight2 = crush.get_item_weight(subtrees[1]);
-  bool exceeds_threshold = abs(weight1 - weight2) >
-      (stretch_max_weight_delta * std::min(weight1, weight2));
+  bool exceeds_threshold = !already_enabled && abs(weight1 - weight2) >
+    (stretch_max_weight_delta * std::min(weight1, weight2));
   if (exceeds_threshold) {
     ss << "the 2 " << dividing_bucket
        << "instances in the cluster have differing weights "
@@ -17652,9 +17656,6 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   }
   // TODO: check CRUSH rules for pools so that we are appropriately divided
   if (commit) {
-    // a pool joining an enabled stretch mode must not reset its state,
-    // which may be degraded or recovering
-    bool already_enabled = !legacy && osdmap.stretch_mode_enabled;
     for (auto pool : pools) {
       if (!new_crush_rule.empty()) {
       pool->crush_rule = new_rule;
