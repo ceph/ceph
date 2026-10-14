@@ -140,4 +140,32 @@ function TEST_individual_stretch_pool_blocks_stretch_mode() {
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
 }
 
+# What osd pool create gives an EC pool over two zones
+function TEST_pool_create_two_zone_ec_fields() {
+    local dir=$1
+
+    two_zone_cluster $dir 4 || return 1
+
+    ceph osd pool create e erasure --k 2 --m 2 --num_zones 2 || return 1
+    test "$(pool_field e size)" = 8 || return 1
+    test "$(pool_field e min_size)" = 3 || return 1
+    test "$(pool_field e num_zones)" = 2 || return 1
+    test "$(pool_field e peering_crush_bucket_count)" = 2 || return 1
+    test "$(pool_field e peering_crush_bucket_target)" = 2 || return 1
+    test "$(ceph osd pool ls detail -f json |
+        jq -r '.[]|select(.pool_name=="e")|.nonprimary_shards')" = "{1,5}" || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
+    wait_for_clean || return 1
+    # each zone's 4 shards are in one datacenter (dc1 is osd.0-3), and the
+    # two zones in different ones
+    local pg up
+    for pg in $(ceph pg ls-by-pool e -f json | jq -r '.pg_stats[].pgid'); do
+        up=$(ceph pg map $pg -f json | jq -c '.up')
+        test "$(echo $up | jq -c '[(.[0:4]|map(. < 4)|unique), (.[4:8]|map(. < 4)|unique)]')" \
+            = "[[true],[false]]" -o \
+            "$(echo $up | jq -c '[(.[0:4]|map(. < 4)|unique), (.[4:8]|map(. < 4)|unique)]')" \
+            = "[[false],[true]]" || return 1
+    done
+}
+
 main mon-stretch-pool-create-rule "$@"
