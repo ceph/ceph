@@ -1082,9 +1082,11 @@ class HostData:
                     self.mgr._kick_serve_loop()
 
             if up_to_date and (data.get('ls') or 'ls' in unchanged):
-                was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()
+                # Only this host's flag changes here, so all the hosts can only
+                # become up to date when this host does.
+                host_was_out_of_date = not self.mgr.cache.host_metadata_up_to_date(host)
                 self.mgr.cache.metadata_up_to_date[host] = True
-                if was_out_of_date and self.mgr.cache.all_host_metadata_up_to_date():
+                if host_was_out_of_date and self.mgr.cache.all_host_metadata_up_to_date():
                     self.mgr.log.debug(
                         'New metadata from agent has made all hosts up to date. Kicking serve loop')
                     self.mgr._kick_serve_loop()

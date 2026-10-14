@@ -1772,12 +1772,19 @@ class HostCache():
         return True
 
     def all_host_metadata_up_to_date(self) -> bool:
-        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and not self.is_host_unreachable(h))]:
-            # this function is primarily for telling if it's safe to try and apply a service
-            # spec. Since offline/maintenance hosts aren't considered in that process anyway
-            # we don't want to return False if the host without up-to-date metadata is in one
-            # of those two categories.
-            return False
+        # this function is primarily for telling if it's safe to try and apply a service
+        # spec. Since offline/maintenance hosts aren't considered in that process anyway
+        # we don't want to return False if the host without up-to-date metadata is in one
+        # of those two categories.
+        unreachable: Optional[Set[str]] = None
+        for h in self.get_hosts():
+            if self.host_metadata_up_to_date(h):
+                continue
+            if unreachable is None:
+                # Built once, on the first host that is not up to date.
+                unreachable = {spec.hostname for spec in self.get_unreachable_hosts()}
+            if h not in unreachable:
+                return False
         return True
 
     def add_daemon(self, host, dd):
