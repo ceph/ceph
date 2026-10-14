@@ -9180,6 +9180,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
           ss << "default pool size exceeds the supported range";
           return -ERANGE;
         }
+        if (int r = check_pool_replica_copies(size, "replica", &ss); r < 0) {
+          return r;
+        }
         p.size = size;
         p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
         p.replica = p.size;
@@ -9250,6 +9253,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       if (replica < 1) {
         ss << "replica must be at least 1";
         return -EINVAL;
+      }
+      if (int r = check_pool_replica_copies(replica, "replica", &ss); r < 0) {
+        return r;
       }
       if (replica > std::numeric_limits<decltype(p.replica)>::max() ||
           n > std::numeric_limits<decltype(p.size)>::max() / replica) {
