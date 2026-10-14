@@ -52,6 +52,28 @@ EXPORT_SCHEMA = {
 }
 
 
+CLUSTER_SCHEMA = {
+    'name': (str, 'Cluster identifier'),
+    'deployment_type': (str, 'Deployment type (standalone, active-active, or active-passive)'),
+    'virtual_ip': (str, 'Virtual IP address', True),
+    'backend': ([{
+        'hostname': (str, 'Backend hostname'),
+        'ip': (str, 'Backend IP address'),
+        'port': (int, 'Backend port', True),
+        'status': (str, 'Backend daemon status', True)
+    }], 'List of NFS backend daemons'),
+    'placement': ({
+        'hosts': ([str], 'List of hosts', True),
+        'count': (int, 'Number of daemons', True),
+        'label': (str, 'Host label', True)
+    }, 'Orchestrator placement specification'),
+    'enable_rdma': (bool, 'Whether RDMA transport is enabled for the cluster'),
+    'ingress_mode': (str, 'Ingress mode', True),
+    'port': (int, 'Ingress port', True),
+    'monitor_port': (int, 'Monitor port', True),
+}
+
+
 CREATE_EXPORT_SCHEMA = {
     'path': (str, 'Export path'),
     'cluster_id': (str, 'Cluster identifier'),
@@ -88,6 +110,12 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
 class NFSGaneshaCluster(RESTController):
     @ReadPermission
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
+    @EndpointDoc("List NFS-Ganesha clusters",
+                 parameters={
+                     'info': (bool, 'If true, return detailed cluster info including '
+                              'backends, placement, and enable_rdma')
+                 },
+                 responses={200: [CLUSTER_SCHEMA]})
     def list(self, info: Optional[bool] = False):
         if str_to_bool(info):
             return [

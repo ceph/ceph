@@ -33,13 +33,14 @@
               >
                 -- Select a realm --
               </option>
-              <option
-                *ngFor="let realmName of realmList"
-                [value]="realmName.name"
-                [selected]="realmName.name === multisiteZonegroupForm.getValue('selectedRealm')"
-              >
-                {{ realmName.name }}
-              </option>
+              @for (realmName of realmList; track realmName) {
+                <option
+                  [value]="realmName.name"
+                  [selected]="realmName.name === multisiteZonegroupForm.getValue('selectedRealm')"
+                >
+                  {{ realmName.name }}
+                </option>
+              }
             </select>
           </div>
         </div>
@@ -59,18 +60,20 @@
               name="zonegroupName"
               formControlName="zonegroupName"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteZonegroupForm.showError('zonegroupName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteZonegroupForm.showError('zonegroupName', formDir, 'uniqueName')"
-              i18n
-              >The chosen zonegroup name is already in use.</span
-            >
+            @if (multisiteZonegroupForm.showError('zonegroupName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (multisiteZonegroupForm.showError('zonegroupName', formDir, 'uniqueName')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The chosen zonegroup name is already in use.</span
+              >
+            }
             <div class="custom-control custom-checkbox">
               <input
                 class="form-check-input"
@@ -86,18 +89,23 @@
                 i18n
                 >Default</label
               >
-              <span *ngIf="disableDefault && action === actionLabels.CREATE">
-                <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
-              </span>
-              <cd-helper *ngIf="action === actionLabels.EDIT && !info.data.is_default">
-                <span i18n
-                  >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to follow
-                  the failover mechanism</span
-                >
-              </cd-helper>
-              <cd-helper *ngIf="action === actionLabels.EDIT && info.data.is_default">
-                <span i18n>You cannot unset the default flag.</span> </cd-helper
-              ><br />
+              @if (disableDefault && action === actionLabels.CREATE) {
+                <span>
+                  <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
+                </span>
+              }
+              @if (action === actionLabels.EDIT && !info.data.is_default) {
+                <cd-helper>
+                  <span i18n
+                    >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to
+                    follow the failover mechanism</span
+                  >
+                </cd-helper>
+              }
+              @if (action === actionLabels.EDIT && info.data.is_default) {
+                <cd-helper> <span i18n>You cannot unset the default flag.</span> </cd-helper>
+              }
+              <br />
               <input
                 class="form-check-input"
                 id="master_zonegroup"
@@ -112,22 +120,28 @@
                 i18n
                 >Master</label
               >
-              <span *ngIf="disableMaster && action === actionLabels.CREATE">
-                <cd-helper i18n
-                  >Multiple master zonegroups can't be configured. If you want to create a new
-                  zonegroup and make it the master zonegroup, you must delete the default
-                  zonegroup.</cd-helper
-                >
-              </span>
-              <cd-helper *ngIf="action === actionLabels.EDIT && !info.data.is_master">
-                <span i18n
-                  >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to follow
-                  the failover mechanism</span
-                >
-              </cd-helper>
-              <cd-helper *ngIf="action === actionLabels.EDIT && info.data.is_master">
-                <span i18n>You cannot unset the master flag.</span>
-              </cd-helper>
+              @if (disableMaster && action === actionLabels.CREATE) {
+                <span>
+                  <cd-helper i18n
+                    >Multiple master zonegroups can't be configured. If you want to create a new
+                    zonegroup and make it the master zonegroup, you must delete the default
+                    zonegroup.</cd-helper
+                  >
+                </span>
+              }
+              @if (action === actionLabels.EDIT && !info.data.is_master) {
+                <cd-helper>
+                  <span i18n
+                    >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to
+                    follow the failover mechanism</span
+                  >
+                </cd-helper>
+              }
+              @if (action === actionLabels.EDIT && info.data.is_master) {
+                <cd-helper>
+                  <span i18n>You cannot unset the master flag.</span>
+                </cd-helper>
+              }
             </div>
           </div>
         </div>
@@ -147,155 +161,158 @@
               name="zonegroup_endpoints"
               formControlName="zonegroup_endpoints"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteZonegroupForm.showError('zonegroup_endpoints', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteZonegroupForm.showError('zonegroup_endpoints', formDir, 'invalidURL')"
-              i18n
-              >Please enter a valid URL.</span
-            >
-          </div>
-        </div>
-        <div
-          class="form-group row"
-          *ngIf="action === actionLabels.EDIT"
-        >
-          <label
-            i18n
-            for="zones"
-            class="cd-col-form-label"
-            >Zones</label
-          >
-          <div class="cd-col-form-input">
-            <cd-select-badges
-              id="zones"
-              [data]="zonegroupZoneNames"
-              [options]="labelsOption"
-              [customBadges]="true"
-            >
-            </cd-select-badges
-            ><br />
-            <span
-              class="invalid-feedback"
-              *ngIf="isRemoveMasterZone"
-              i18n
-              >Cannot remove master zone.</span
-            >
-          </div>
-        </div>
-        <div *ngIf="action === actionLabels.EDIT">
-          <legend>Placement targets</legend>
-          <ng-container formArrayName="placementTargets">
-            <div
-              *ngFor="let item of placementTargets.controls; let index = index; trackBy: trackByFn"
-            >
-              <div
-                class="card"
-                [formGroup]="item"
+            @if (multisiteZonegroupForm.showError('zonegroup_endpoints', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
               >
-                <div class="card-header">
-                  {{ index + 1 | ordinal }}
-                  <span
-                    class="float-end clickable"
-                    name="remove_placement_target"
-                    (click)="removePlacementTarget(index)"
-                    tabindex="0"
-                    (keydown.enter)="removePlacementTarget(index)"
-                    ngbTooltip="Remove"
-                    >&times;</span
-                  >
-                </div>
-
-                <div class="card-body">
-                  <!-- Placement Id -->
-                  <div class="form-group row">
-                    <label
-                      i18n
-                      class="cd-col-form-label required"
-                      for="placement_id"
-                      >Placement Id</label
-                    >
-                    <div class="cd-col-form-input">
-                      <input
-                        type="text"
-                        class="form-control"
-                        name="placement_id"
-                        id="placement_id"
-                        formControlName="placement_id"
-                        placeholder="eg. default-placement"
-                      />
-                      <span class="invalid-feedback">
-                        <span
-                          *ngIf="showError(index, 'placement_id', formDir, 'required')"
-                          i18n
-                          >This field is required.</span
-                        >
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Tags-->
-                  <div class="form-group row">
-                    <label
-                      i18n
-                      class="cd-col-form-label"
-                      for="tags"
-                      >Tags</label
-                    >
-                    <div class="cd-col-form-input">
-                      <input
-                        type="text"
-                        class="form-control"
-                        name="tags"
-                        id="tags"
-                        formControlName="tags"
-                        placeholder="comma separated tags, eg. default-placement, ssd"
-                      />
-                    </div>
-                  </div>
-
-                  <!-- Storage Class -->
-                  <div class="form-group row">
-                    <label
-                      i18n
-                      class="cd-col-form-label"
-                      for="storage_class"
-                      >Storage Class</label
-                    >
-                    <div class="cd-col-form-input">
-                      <input
-                        type="text"
-                        class="form-control"
-                        name="storage_class"
-                        id="storage_class"
-                        formControlName="storage_class"
-                        placeholder="eg. Standard-tier"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </ng-container>
-          <button
-            type="button"
-            id="add-plc"
-            class="btn btn-light float-end my-3"
-            (click)="addPlacementTarget()"
-          >
-            <svg
-              [cdsIcon]="icons.add"
-              [size]="icons.size16"
-              class="cds-info-color"
-            ></svg>
-            <ng-container i18n>Add placement target</ng-container>
-          </button>
+            }
+            @if (multisiteZonegroupForm.showError('zonegroup_endpoints', formDir, 'invalidURL')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Please enter a valid URL.</span
+              >
+            }
+          </div>
         </div>
+        @if (action === actionLabels.EDIT) {
+          <div class="form-group row">
+            <label
+              i18n
+              for="zones"
+              class="cd-col-form-label"
+              >Zones</label
+            >
+            <div class="cd-col-form-input">
+              <cd-select-badges
+                id="zones"
+                [data]="zonegroupZoneNames"
+                [options]="labelsOption"
+                [customBadges]="true"
+              >
+              </cd-select-badges
+              ><br />
+              @if (isRemoveMasterZone) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >Cannot remove master zone.</span
+                >
+              }
+            </div>
+          </div>
+        }
+        @if (action === actionLabels.EDIT) {
+          <div>
+            <legend>Placement targets</legend>
+            <ng-container formArrayName="placementTargets">
+              @for (
+                item of placementTargets.controls;
+                track trackByFn(index, item);
+                let index = $index
+              ) {
+                <div>
+                  <div
+                    class="card"
+                    [formGroup]="item"
+                  >
+                    <div class="card-header">
+                      {{ index + 1 | ordinal }}
+                      <span
+                        class="float-end clickable"
+                        name="remove_placement_target"
+                        (click)="removePlacementTarget(index)"
+                        tabindex="0"
+                        (keydown.enter)="removePlacementTarget(index)"
+                        ngbTooltip="Remove"
+                        >&times;</span
+                      >
+                    </div>
+                    <div class="card-body">
+                      <!-- Placement Id -->
+                      <div class="form-group row">
+                        <label
+                          i18n
+                          class="cd-col-form-label required"
+                          for="placement_id"
+                          >Placement Id</label
+                        >
+                        <div class="cd-col-form-input">
+                          <input
+                            type="text"
+                            class="form-control"
+                            name="placement_id"
+                            id="placement_id"
+                            formControlName="placement_id"
+                            placeholder="eg. default-placement"
+                          />
+                          <span class="invalid-feedback">
+                            @if (showError(index, 'placement_id', formDir, 'required')) {
+                              <span i18n>This field is required.</span>
+                            }
+                          </span>
+                        </div>
+                      </div>
+                      <!-- Tags-->
+                      <div class="form-group row">
+                        <label
+                          i18n
+                          class="cd-col-form-label"
+                          for="tags"
+                          >Tags</label
+                        >
+                        <div class="cd-col-form-input">
+                          <input
+                            type="text"
+                            class="form-control"
+                            name="tags"
+                            id="tags"
+                            formControlName="tags"
+                            placeholder="comma separated tags, eg. default-placement, ssd"
+                          />
+                        </div>
+                      </div>
+                      <!-- Storage Class -->
+                      <div class="form-group row">
+                        <label
+                          i18n
+                          class="cd-col-form-label"
+                          for="storage_class"
+                          >Storage Class</label
+                        >
+                        <div class="cd-col-form-input">
+                          <input
+                            type="text"
+                            class="form-control"
+                            name="storage_class"
+                            id="storage_class"
+                            formControlName="storage_class"
+                            placeholder="eg. Standard-tier"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              }
+            </ng-container>
+            <button
+              type="button"
+              id="add-plc"
+              class="btn btn-light float-end my-3"
+              (click)="addPlacementTarget()"
+            >
+              <svg
+                [cdsIcon]="icons.add"
+                [size]="icons.size16"
+                class="cds-info-color"
+              ></svg>
+              <ng-container i18n>Add placement target</ng-container>
+            </button>
+          </div>
+        }
       </div>
       <div class="modal-footer">
         <cd-form-button-panel

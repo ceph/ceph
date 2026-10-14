@@ -204,8 +204,11 @@ TransactionManager::mount()
   }).safe_then([this] {
     return epm->open_for_write();
   }).safe_then([FNAME, this] {
-    epm->start_background();
+    // start_background() may run a background cycle right away (e.g.
+    // trim_dirty rewriting replayed dirty extents, retiring their absent
+    // shadow copies): the cache must be out of its boot mode by then.
     cache->boot_done();
+    epm->start_background();
     INFO("done");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -557,9 +560,12 @@ TransactionManager::relocate_logical_extent(
   } else {
     auto extent = co_await v.get_child_fut_as<LogicalChildNode>();
 
-    if (extent->is_stable()) {
+    if (extent->is_stable_clean()) {
       cache->retire_extent(t, extent);
     } else {
+      // A stable-dirty extent may hold un-flushed deltas -- callers must
+      // relocate it via move_region()'s alloc-and-copy path instead.
+      assert(!extent->is_stable_dirty());
       //TODO: relocating logical extents doesn't support
       //      mutation pending extents yet.
       assert(extent->is_initial_pending() || extent->is_exist_clean());
@@ -1189,6 +1195,29 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   });
 }
 
+TransactionManager::move_region_iertr::future<>
+TransactionManager::alloc_and_copy_data_extents(
+  Transaction &t,
+  laddr_t dst_key,
+  extent_len_t length,
+  LBAMapping &dst,
+  ceph::bufferlist bl)
+{
+  auto extents = co_await alloc_data_extents<ObjectDataBlock>(
+    t, laddr_hint_t::create_as_fixed(dst_key), length, dst
+  ).handle_error_interruptible(
+    move_region_iertr::pass_further(),
+    crimson::ct_error::assert_all("invalid error"));
+  auto iter = bl.begin();
+  extent_len_t off = 0;
+  for (auto &extent : extents) {
+    auto &ext = *extent;
+    assert(off + ext.get_length() <= length);
+    iter.copy(ext.get_length(), ext.get_bptr().c_str());
+    off += ext.get_length();
+  }
+}
+
 TransactionManager::move_region_ret
 TransactionManager::move_region(
   Transaction &t,
@@ -1222,58 +1251,35 @@ TransactionManager::move_region(
         dst = co_await resolve_cursor_to_mapping(t, std::move(ret.dest));
       } else {
         using namespace crimson::os::seastore::omap_manager;
+        auto this_dst_key = calc_dst_key();
         switch (src.get_extent_type()) {
         case extent_types_t::OBJECT_DATA_BLOCK:
           {
             auto maybe_indirect_extent = co_await read_pin<ObjectDataBlock>(
-              t, src, src.get_intermediate_offset(), src.get_length());
-            auto extents = co_await alloc_data_extents<ObjectDataBlock>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length(),
-              dst
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            [[maybe_unused]] auto off = 0;
-            auto bl = maybe_indirect_extent.get_range(
-              src.get_intermediate_offset(),
-              src.get_length());
-            auto iter = bl.begin();
-            for (auto &extent : extents) {
-              auto &ext = *extent;
-              assert(off + ext.get_length() <= src.get_length());
-              iter.copy(ext.get_length(), ext.get_bptr().c_str());
-              off += ext.get_length();
-            }
+              t, src);
+            co_await alloc_and_copy_data_extents(
+              t, this_dst_key, src.get_length(), dst,
+              maybe_indirect_extent.get_bl());
+            // alloc_and_copy_data_extents() above inserted a new mapping
+            src = co_await src.refresh();
           }
           break;
         case extent_types_t::OMAP_LEAF:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapLeafNode>(
-              t, src, src.get_intermediate_offset(), src.get_length());
-            auto extent = co_await alloc_non_data_extent<OMapLeafNode>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length()
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            extent->set_bptr(maybe_indirect_extent.extent->get_bptr());
+              t, src);
+            co_await alloc_and_copy_non_data_extent<OMapLeafNode>(
+              t, this_dst_key, src.get_length(),
+              *maybe_indirect_extent.extent);
           }
           break;
         case extent_types_t::OMAP_INNER:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapInnerNode>(
-              t, src, src.get_intermediate_offset(), src.get_length());
-            auto extent = co_await alloc_non_data_extent<OMapInnerNode>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length()
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            extent->set_bptr(maybe_indirect_extent.extent->get_bptr());
+              t, src);
+            co_await alloc_and_copy_non_data_extent<OMapInnerNode>(
+              t, this_dst_key, src.get_length(),
+              *maybe_indirect_extent.extent);
           }
           break;
         default:
@@ -1285,18 +1291,86 @@ TransactionManager::move_region(
         ).handle_error_interruptible(
           move_region_iertr::pass_further(),
           crimson::ct_error::assert_all("invalid error"));
+        // Mirror _remove: decrement the target direct's refcount too,
+        // undoing the increment that clone_mapping did when creating this indirect.
+        co_await src.direct_cursor->refresh();
+        co_await _remove(t, LBAMapping::create_direct(std::move(src.direct_cursor))
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
         src = co_await resolve_cursor_to_mapping(t, std::move(cursor));
-        dst = co_await dst.refresh();
+        // dst can alias src's own entry (just erased above via the
+        // update_mapping_refcount() call) whenever src and dst are the
+        // only two related mappings in the tree.
+        auto fresh_dst = co_await get_pin(t, this_dst_key
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
+        dst = co_await fresh_dst.next();
       }
     } else if (!src.is_zero_reserved()) {
-      auto laddr = calc_dst_key();
-      auto extent = co_await relocate_logical_extent(t, src, laddr);
-      assert(extent->get_laddr() == laddr);
-      auto ret = co_await lba_manager->move_direct_mapping(
-        t, src.get_effective_cursor_ref(),
-        laddr, dst.get_effective_cursor_ref(), *extent);
-      src = co_await resolve_cursor_to_mapping(t, std::move(ret.src));
-      dst = co_await resolve_cursor_to_mapping(t, std::move(ret.dest));
+      // A loaded, stable-dirty extent may hold un-flushed deltas -- copy
+      // its current content into a fresh extent rather than relocate paddr.
+      auto v = get_extent_if_linked(t, *(src.direct_cursor));
+      LogicalChildNodeRef loaded_extent;
+      if (v.has_child()) {
+        loaded_extent = co_await v.get_child_fut_as<LogicalChildNode>();
+      }
+      if (loaded_extent && loaded_extent->is_stable_dirty()) {
+        using namespace crimson::os::seastore::omap_manager;
+        ceph_assert(!src.has_shadow_val());
+        auto this_dst_key = calc_dst_key();
+        auto category = get_extent_category(src.get_extent_type());
+        if (!loaded_extent->is_fully_loaded()) {
+          ceph_assert(category == data_category_t::DATA);
+          auto data_ext = co_await cache->read_extent_maybe_partial(
+            t, loaded_extent->cast<ObjectDataBlock>(), 0,
+            loaded_extent->get_length());
+          loaded_extent = data_ext->cast<LogicalChildNode>();
+        }
+        switch (src.get_extent_type()) {
+        case extent_types_t::OBJECT_DATA_BLOCK:
+          {
+            ceph::bufferlist bl;
+            bl.append(loaded_extent->get_bptr());
+            co_await alloc_and_copy_data_extents(
+              t, this_dst_key, src.get_length(), dst, bl);
+          }
+          break;
+        case extent_types_t::OMAP_LEAF:
+          co_await alloc_and_copy_non_data_extent<OMapLeafNode>(
+            t, this_dst_key, src.get_length(),
+            *loaded_extent->cast<OMapLeafNode>());
+          break;
+        case extent_types_t::OMAP_INNER:
+          co_await alloc_and_copy_non_data_extent<OMapInnerNode>(
+            t, this_dst_key, src.get_length(),
+            *loaded_extent->cast<OMapInnerNode>());
+          break;
+        default:
+          ceph_abort("unexpected extent type");
+          break;
+        }
+        src = co_await src.refresh();
+        src = co_await remove(t, std::move(src)
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
+        auto fresh_dst = co_await get_pin(t, this_dst_key
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
+        dst = co_await fresh_dst.next();
+      } else {
+        auto laddr = calc_dst_key();
+        auto extent = co_await relocate_logical_extent(t, src, laddr);
+        assert(extent->get_laddr() == laddr);
+        auto ret = co_await lba_manager->move_direct_mapping(
+          t, src.get_effective_cursor_ref(),
+          laddr, dst.get_effective_cursor_ref(), *extent);
+        src = co_await resolve_cursor_to_mapping(t, std::move(ret.src));
+        dst = co_await resolve_cursor_to_mapping(t, std::move(ret.dest));
+      }
     } else { // src is direct mapping
       auto len = src.get_length();
       auto dst_key = calc_dst_key();
@@ -1504,7 +1578,7 @@ TransactionManager::promote_extents_from_disk(
     co_await promote_extent(t, extent);
     size += length;
     if (size >= crimson::common::get_conf<
-        Option::size_t>("seastore_cache_promotion_size")) {
+        Option::size_t>("seastore_lbc_promote_size")) {
       co_return seastar::stop_iteration::yes;
     } else {
       co_return seastar::stop_iteration::no;
@@ -1749,16 +1823,17 @@ TransactionManager::~TransactionManager() {}
 
 TransactionManagerRef make_transaction_manager(
     Device *primary_device,
-    const std::vector<Device*> &secondary_devices,
+    const std::vector<Device*> &cache_devices,
+    const std::vector<Device*> &data_devices,
     shard_stats_t& shard_stats,
     store_index_t store_index,
     bool is_test)
 {
   LOG_PREFIX(make_transaction_manager);
   rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
-    "seastore_hot_tier_generations");
+    "seastore_cache_device_generations");
   rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
-    "seastore_cold_tier_generations");
+    "seastore_data_device_generations");
   auto epm = std::make_unique<ExtentPlacementManager>(
     hot_tier_generations, cold_tier_generations, store_index);
   auto cache = std::make_unique<Cache>(*epm, store_index);
@@ -1766,72 +1841,101 @@ TransactionManagerRef make_transaction_manager(
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
-  SegmentManagerGroupRef cold_sms = nullptr;
-  RBMDeviceGroupRef cold_rbs = nullptr;
+  SegmentManagerGroupRef cache_sms = nullptr;
+  RBMDeviceGroupRef cache_rbs = nullptr;
   std::vector<SegmentProvider*> segment_providers_by_id{DEVICE_ID_MAX, nullptr};
+  backend_type_t data_backend_type = backend_type_t::NONE;
+  segment_off_t segment_size = 0;
+  for (auto &device : data_devices) {
+    auto d_backend_type = device->get_backend_type();
+    if (data_backend_type == backend_type_t::NONE) {
+      data_backend_type = d_backend_type;
+    }
+    ceph_assert(data_backend_type == d_backend_type);
+    INFO("data device backend: {}", d_backend_type);
 
-  auto p_backend_type = primary_device->get_backend_type();
-  INFO("primary backend: {}", p_backend_type);
-
-  if (p_backend_type == backend_type_t::SEGMENTED) {
-    auto dtype = primary_device->get_device_type();
-    ceph_assert(dtype != device_type_t::HDD &&
-		dtype != device_type_t::EPHEMERAL_COLD);
-    sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
-  } else {
-    assert(p_backend_type != backend_type_t::NONE);
-    auto rbm = std::make_unique<BlockRBManager>(
-      static_cast<RBMDevice*>(primary_device), "", is_test);
-    rbs->add_rb_manager(std::move(rbm));
-  }
-
-  for (auto &p_dev : secondary_devices) {
-    if (p_dev->get_backend_type() == backend_type_t::SEGMENTED) {
-      if (p_dev->get_device_type() == primary_device->get_device_type()) {
-	INFO("add {} to main segment backend", device_id_printer_t{p_dev->get_device_id()});
-        sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
-      } else {
-        if (!cold_sms) {
-          cold_sms = std::make_unique<SegmentManagerGroup>();
-        }
-	INFO("add {} to cold segment backend", device_id_printer_t{p_dev->get_device_id()});
-        cold_sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+    if (d_backend_type == backend_type_t::SEGMENTED) {
+      auto sm = static_cast<SegmentManager*>(device);
+      if (segment_size == 0) {
+        segment_size = sm->get_segment_size();
       }
+      ceph_assert(segment_size == sm->get_segment_size());
+      sms->add_segment_manager(sm);
     } else {
-      assert(p_backend_type != backend_type_t::NONE);
+      assert(d_backend_type != backend_type_t::NONE);
       auto rbm = std::make_unique<BlockRBManager>(
-	static_cast<RBMDevice*>(p_dev), "", is_test);
-      if (p_dev->get_device_type() == primary_device->get_device_type()) {
-	INFO("add {} to rbm backend", device_id_printer_t{p_dev->get_device_id()});
-	rbs->add_rb_manager(std::move(rbm));
-      } else {
-	if (!cold_rbs) {
-	  cold_rbs = std::make_unique<RBMDeviceGroup>();
-	}
-	INFO("add {} to cold rbm backend", device_id_printer_t{p_dev->get_device_id()});
-	cold_rbs->add_rb_manager(std::move(rbm));
-      }
+        static_cast<RBMDevice*>(device), "", is_test);
+      rbs->add_rb_manager(std::move(rbm));
     }
   }
 
-  auto backend_type = p_backend_type;
+  backend_type_t cache_backend_type = backend_type_t::NONE;
+  segment_size = 0;
+  for (auto &dev : cache_devices) {
+    auto dtype = dev->get_device_type();
+    ceph_assert(dtype == device_type_t::SSD ||
+                dtype == device_type_t::EPHEMERAL_MAIN);
+    auto c_backend_type = dev->get_backend_type();
+    if (cache_backend_type == backend_type_t::NONE) {
+      cache_backend_type = c_backend_type;
+    }
+    ceph_assert(cache_backend_type == c_backend_type);
+    if (c_backend_type == backend_type_t::SEGMENTED) {
+      if (!cache_sms) {
+        cache_sms = std::make_unique<SegmentManagerGroup>();
+      }
+      INFO("add {} to cache segment backend", device_id_printer_t{dev->get_device_id()});
+      auto sm = static_cast<SegmentManager*>(dev);
+      if (segment_size == 0) {
+        segment_size = sm->get_segment_size();
+      }
+      ceph_assert(segment_size == sm->get_segment_size());
+      cache_sms->add_segment_manager(sm);
+    } else {
+      assert(c_backend_type != backend_type_t::NONE);
+      auto rbm = std::make_unique<BlockRBManager>(
+      static_cast<RBMDevice*>(dev), "", is_test);
+      if (!cache_rbs) {
+        cache_rbs = std::make_unique<RBMDeviceGroup>();
+      }
+      INFO("add {} to cache rbm backend", device_id_printer_t{dev->get_device_id()});
+      cache_rbs->add_rb_manager(std::move(rbm));
+    }
+  }
+
+  auto journal_backend_type =
+    (cache_backend_type == backend_type_t::NONE)
+      ? data_backend_type : cache_backend_type;
   device_off_t roll_size;
   device_off_t roll_start;
-  if (backend_type == backend_type_t::SEGMENTED) {
-    roll_size = static_cast<SegmentManager*>(primary_device)->get_segment_size();
+  if (journal_backend_type == backend_type_t::SEGMENTED) {
+    if (!cache_devices.empty()) {
+      roll_size = static_cast<SegmentManager*>(
+        cache_devices.front())->get_segment_size();
+    } else {
+      roll_size = static_cast<SegmentManager*>(
+        data_devices.front())->get_segment_size();
+    }
     roll_start = 0;
   } else {
-    roll_size = static_cast<random_block_device::RBMDevice*>(primary_device)
-		->get_journal_size() - primary_device->get_block_size();
+    random_block_device::RBMDevice* rbm_dev = nullptr;
+    if (!cache_devices.empty()) {
+      rbm_dev = static_cast<random_block_device::RBMDevice*>(
+        cache_devices.front());
+    } else {
+      rbm_dev = static_cast<random_block_device::RBMDevice*>(
+        data_devices.front());
+    }
+
+    roll_size = rbm_dev->get_journal_size() - rbm_dev->get_block_size();
     // see CircularBoundedJournal::get_records_start()
-    roll_start = static_cast<random_block_device::RBMDevice*>(primary_device)
-		 ->get_shard_journal_start() + primary_device->get_block_size();
+    roll_start = rbm_dev->get_shard_journal_start() + rbm_dev->get_block_size();
     ceph_assert_always(roll_size <= DEVICE_OFF_MAX);
     ceph_assert_always((std::size_t)roll_size + roll_start <=
-                       primary_device->get_available_size());
+                       rbm_dev->get_available_size());
+    ceph_assert(roll_size % rbm_dev->get_block_size() == 0);
+    ceph_assert(roll_start % rbm_dev->get_block_size() == 0);
   }
-  ceph_assert(roll_size % primary_device->get_block_size() == 0);
-  ceph_assert(roll_start % primary_device->get_block_size() == 0);
 
   bool cleaner_is_detailed;
   SegmentCleaner::config_t cleaner_config;
@@ -1840,84 +1944,104 @@ TransactionManagerRef make_transaction_manager(
     cleaner_is_detailed = true;
     cleaner_config = SegmentCleaner::config_t::get_test();
     trimmer_config = JournalTrimmerImpl::config_t::get_test(
-        roll_size, backend_type);
+        roll_size, journal_backend_type);
   } else {
     cleaner_is_detailed = false;
     cleaner_config = SegmentCleaner::config_t::get_default();
     trimmer_config = JournalTrimmerImpl::config_t::get_default(
-        roll_size, backend_type);
+        roll_size, journal_backend_type);
   }
 
   bool pure_rbm_backend =
-      (p_backend_type == backend_type_t::RANDOM_BLOCK) && !cold_sms;
+    (cache_backend_type == backend_type_t::RANDOM_BLOCK ||
+     cache_backend_type == backend_type_t::NONE) &&
+    (data_backend_type == backend_type_t::RANDOM_BLOCK);
   auto journal_trimmer = JournalTrimmerImpl::create(
       store_index,
       *backref_manager, trimmer_config,
-      backend_type, roll_start, roll_size,
+      journal_backend_type, roll_start, roll_size,
       !pure_rbm_backend
         || crimson::common::get_conf<bool>(
-            "seastore_logical_bucket_cache_test_stress")
+            "seastore_lbc_test_stress")
     );
 
   AsyncCleanerRef cleaner;
   JournalRef journal;
 
-  AsyncCleanerRef cold_cleaner = nullptr;
-  bool scan_alloc_on_boot = false;
+  AsyncCleanerRef cache_cleaner = nullptr;
 
-  if (cold_sms) {
-    assert(!cold_rbs);
-    auto segment_cleaner = SegmentCleaner::create(
-      store_index,
-      cleaner_config,
-      std::move(cold_sms),
-      *backref_manager,
-      epm->get_ool_segment_seq_allocator(),
-      hot_tier_generations + cold_tier_generations - 1,
-      cleaner_is_detailed,
-      /* is_cold = */ true);
-    if (backend_type == backend_type_t::SEGMENTED) {
-      for (auto id : segment_cleaner->get_device_ids()) {
-        segment_providers_by_id[id] =
-          static_cast<SegmentProvider*>(segment_cleaner.get());
-      }
-    }
-    cold_cleaner = std::move(segment_cleaner);
-  } else if (cold_rbs) {
-    scan_alloc_on_boot = true;
-    cold_cleaner = RBMCleaner::create(
-      store_index,
-      std::move(cold_rbs),
-      *backref_manager,
-      *lba_manager,
-      cleaner_is_detailed,
-      true);
-  }
-
-  if (backend_type == backend_type_t::SEGMENTED) {
+  if (data_backend_type == backend_type_t::SEGMENTED) {
+    ceph_assert(sms);
     cleaner = SegmentCleaner::create(
       store_index,
       cleaner_config,
       std::move(sms),
       *backref_manager,
       epm->get_ool_segment_seq_allocator(),
-      hot_tier_generations - 1,
-      cleaner_is_detailed);
+      ((cache_backend_type == backend_type_t::NONE)
+        ? hot_tier_generations - 1
+        : hot_tier_generations + cold_tier_generations - 1),
+      cleaner_is_detailed,
+      !cache_devices.empty() /*if we have cache devices, data devices are
+                               considered cold*/);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
     for (auto id : segment_cleaner->get_device_ids()) {
       segment_providers_by_id[id] =
         static_cast<SegmentProvider*>(segment_cleaner);
+    }
+    if (cache_backend_type == backend_type_t::NONE) {
+      segment_cleaner->set_journal_trimmer(*journal_trimmer);
+      journal = journal::make_segmented(
+        store_index,
+        *segment_cleaner,
+        *journal_trimmer,
+        cache_backend_type == backend_type_t::RANDOM_BLOCK);
+    }
+  } else {
+    ceph_assert(rbs);
+    cleaner = RBMCleaner::create(
+      store_index,
+      std::move(rbs),
+      *backref_manager,
+      *lba_manager,
+      cleaner_is_detailed,
+      !cache_devices.empty() /*if we have cache devices, data devices are
+                               considered cold*/);
+    if (cache_backend_type == backend_type_t::NONE) {
+      journal = journal::make_circularbounded(
+        store_index,
+        *journal_trimmer,
+        static_cast<random_block_device::RBMDevice*>(primary_device),
+        "");
+    }
+  }
+
+  if (cache_sms) {
+    assert(!cache_rbs);
+    auto segment_cleaner = SegmentCleaner::create(
+      store_index,
+      cleaner_config,
+      std::move(cache_sms),
+      *backref_manager,
+      epm->get_ool_segment_seq_allocator(),
+      hot_tier_generations - 1,
+      cleaner_is_detailed,
+      false);
+    for (auto id : segment_cleaner->get_device_ids()) {
+      segment_providers_by_id[id] =
+        static_cast<SegmentProvider*>(segment_cleaner.get());
     }
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
     journal = journal::make_segmented(
       store_index,
       *segment_cleaner,
       *journal_trimmer,
-      scan_alloc_on_boot);
-  } else {
-    cleaner = RBMCleaner::create(
+      data_backend_type == backend_type_t::RANDOM_BLOCK);
+    cache_cleaner = std::move(segment_cleaner);
+  } else if (cache_rbs) {
+    cache_cleaner = RBMCleaner::create(
       store_index,
-      std::move(rbs),
+      std::move(cache_rbs),
       *backref_manager,
       *lba_manager,
       cleaner_is_detailed,
@@ -1928,17 +2052,21 @@ TransactionManagerRef make_transaction_manager(
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
   }
-
-  cache->set_segment_providers(std::move(segment_providers_by_id));
-
-  epm->init(std::move(journal_trimmer),
-	    std::move(cleaner),
-	    std::move(cold_cleaner),
-	    cache->get_extent_pinboard());
+  if (cache_backend_type != backend_type_t::NONE) {
+    epm->init(std::move(journal_trimmer),
+              std::move(cache_cleaner),
+              std::move(cleaner),
+              cache->get_extent_pinboard());
+  } else {
+    epm->init(std::move(journal_trimmer),
+              std::move(cleaner),
+              nullptr,
+              cache->get_extent_pinboard());
+  }
   epm->set_primary_device(primary_device);
 
   INFO("main backend type: {}, cold tier: {}",
-    epm->get_main_backend_type(), (bool)cold_sms);
+    epm->get_main_backend_type(), (bool)cache_cleaner);
   return std::make_unique<TransactionManager>(
     std::move(journal),
     std::move(cache),

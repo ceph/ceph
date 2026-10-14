@@ -56,6 +56,7 @@ set(common_srcs
   ceph_argparse.cc
   ceph_context.cc
   ceph_crypto.cc
+  debug_level_guard.cc
   ceph_frag.cc
   ceph_fs.cc
   ceph_hash.cc
@@ -232,14 +233,18 @@ if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
   if(HAVE_NASM_X64)
-    set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
+    list(APPEND crc32_asm_flags "-i${PROJECT_SOURCE_DIR}/src/isa-l/include/")
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_01.asm
       crc32c_intel_fast_zero_asm.s)
   endif(HAVE_NASM_X64)
   if(HAVE_NASM_X64_AVX512_VPCLMUL)
-    set(CMAKE_ASM_FLAGS "-DAS_FEATURE_LEVEL=10 ${CMAKE_ASM_FLAGS}")
-    list(APPEND crc32_srcs ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm)
+    list(APPEND crc32_asm_flags
+      "-DAS_FEATURE_LEVEL=10"
+      "-i${PROJECT_SOURCE_DIR}/src/isa-l/crc/")
+    list(APPEND crc32_srcs
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc_const.asm
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm)
   endif(HAVE_NASM_X64_AVX512_VPCLMUL)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
@@ -266,13 +271,13 @@ elseif(HAVE_RISCV_ZVBC OR HAVE_RISCV_ZBC)
 endif(HAVE_INTEL)
 
 add_library(crc32 OBJECT ${crc32_srcs})
-
+target_compile_options(crc32 PRIVATE
+  $<$<COMPILE_LANGUAGE:ASM>:${crc32_asm_flags}>)
 if(HAVE_ARMV8_CRC)
-  set_target_properties(crc32 PROPERTIES
-    COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
+  target_compile_options(crc32 PRIVATE ${ARMV8_CRC_COMPILE_FLAGS})
 endif()
 if(HAVE_RISCV)
-  set_target_properties(crc32 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${SIMD_COMPILE_FLAGS}")
+  target_compile_options(crc32 PRIVATE ${SIMD_COMPILE_FLAGS})
   if(HAVE_RISCV_ZBC)
     target_compile_definitions(crc32 PRIVATE HAVE_RISCV_ZBC)
   endif()
@@ -289,9 +294,14 @@ if(HAVE_KEYUTILS)
   set(parse_secret_srcs
     secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_srcs})
+endif()
 
-  set(keyring_srcs
-    keyring.cc)
-  add_library(keyring STATIC ${keyring_srcs})
+# keyring.cc already guards its Linux Key Retention Service paths and falls
+# back to UnsupportedKeyring elsewhere, so build it everywhere - callers of
+# Keyring::get_best() are not Linux-only.  Only keyutils itself is optional.
+set(keyring_srcs
+  keyring.cc)
+add_library(keyring STATIC ${keyring_srcs})
+if(HAVE_KEYUTILS)
   target_link_libraries(keyring keyutils::keyutils)
 endif()

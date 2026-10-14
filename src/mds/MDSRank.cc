@@ -512,7 +512,6 @@ MDSRank::MDSRank(
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
-  objecter->set_balanced_budget();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 
@@ -3134,6 +3133,12 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "qos get") {
     std::lock_guard l(mds_lock);
     mds_dmclock_scheduler->process_asok_qos_get(cmdmap, *css, f);
+  } else if (command == "quarantine enable") {
+    command_quarantine_dir(cmdmap, std::move(on_finish), QUARANTINE_ADD);
+    return;
+  } else if (command == "quarantine disable") {
+    command_quarantine_dir(cmdmap, std::move(on_finish), QUARANTINE_DEL);
+    return;
   } else {
     r = -ENOSYS;
   }

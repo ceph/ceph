@@ -12,6 +12,7 @@
 #include "include/stringify.h"
 #include "common/errno.h"
 
+#include "libaio_probe.h"
 #include "blk/BlockDevice.h"
 
 using namespace std;
@@ -45,6 +46,7 @@ private:
 };
 
 TEST(KernelDevice, Ticket45337) {
+  SKIP_IF_NO_LIBAIO();
    // Large (>=2 GB) writes are incomplete when bluefs_buffered_io = true
 
   uint64_t size = 1048576ull * 8192;

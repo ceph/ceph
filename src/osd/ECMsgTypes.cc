@@ -14,6 +14,7 @@
  */
 
 #include "ECMsgTypes.h"
+#include "common/Formatter.h"
 
 #include "common/ceph_context.h"
 

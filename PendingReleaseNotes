@@ -1,9 +1,57 @@
 >=22.0.0
 
+* RBD: The ``schedule_time`` field in the output of
+  ``rbd mirror snapshot schedule status`` and
+  ``rbd trash purge schedule status`` has been renamed to
+  ``next_scheduled_time``. Scripts or tools that parse this output
+  must be updated accordingly.
+* RBD: The ``rbd mirror snapshot schedule add`` and
+  ``rbd trash purge schedule add`` commands now accept a ``w`` suffix to
+  specify the schedule interval in weeks (e.g. ``2w``), in addition to the
+  existing ``d``, ``h``, and ``m`` suffixes.
+
+* Cephadm: ``ceph orch upgrade start`` and ``ceph orch upgrade check`` now
+  verify that every host's CPU supports the x86-64 microarchitecture level
+  required by the target release (official builds of 21.x and later require
+  ``x86-64-v3``). An upgrade that would deploy binaries a host's CPU cannot
+  execute is refused, or paused with a new ``UPGRADE_INCOMPATIBLE_HOST_CPU``
+  health alert. cephadm now reports the host's detected level as a new
+  ``cpu_isa_level`` host fact (e.g. ``x86-64-v2``). The check can be disabled
+  with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
+  when running custom-built images targeting an older CPU generation.
+
+* RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
+  containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
+  hold the lock, instead of an empty list. Callers should check the
+  ``lockers`` field rather than the truth value of the returned object
+  to determine whether any clients hold the lock.
+* RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
+  in Standard mode.
+
+* RGW: Changing ``rgw_dynamic_resharding`` used to turn queuing buckets
+  for reshard on or off while not affecting resharding itself until the
+  next realm reload. Now changes to ``rgw_dynamic_resharding`` require a
+  restart. Running RGWs will ignore the change.
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
   from ``2`` to ``30`` seconds.
+* RGW: ``radosgw-admin bilog trim`` without ``--end-marker`` now requires
+  ``--yes-i-really-mean-it``, because such a trim has no upper bound and can
+  remove bilog entries that other zones have not synced yet.
+* RGW: ``radosgw-admin bilog trim`` no longer accepts ``--start-marker``, since
+  FIFO-backed bilogs can only be trimmed from the front.
+
+* RGW: Fixed a bug in same-account evaluation of bucket policy statements that
+  allow the account principal. Users and roles in that account now require a
+  corresponding allow from identity policy to match AWS behavior. The evaluation
+  of bucket policy against user or role principals is unchanged and still does
+  not require identity policy.
+* RGW: The STS AssumeRole and AssumeRoleWithWebIdentity actions now consult
+  identity policy according to the AWS same-account and cross-account policy
+  evaluation rules. They had previously only consulted the role's trust policy.
+  This means that account users will now require an Allow from identity policy
+  to assume roles in other accounts.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
@@ -30,6 +78,46 @@
   a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
+* BlueStore: The experimental PMEM device backend has been removed, together
+  with the ``pmem`` value of the ``bdev_type`` option and the DML/DSA offload
+  path. The hardware it targeted, Intel Optane DC persistent memory, was
+  discontinued in 2022.
+
+  Existing OSDs backed by persistent memory in fsdax mode (a block device such
+  as ``/dev/pmem0``) keep working on the default ``aio`` backend over the same
+  data. Remove any explicit ``bdev_type = pmem`` from their configuration. OSDs
+  on a devdax namespace (a character device such as ``/dev/dax0.0``) will no
+  longer start, because no remaining backend can open one; reconfigure the
+  namespace to fsdax with ``ndctl`` or re-provision them before upgrading.
+
+* RBD: The PMEM backend of the persistent write log cache has been removed,
+  together with the ``rwl`` value of the ``rbd_persistent_cache_mode`` option
+  and the ``WITH_RBD_RWL`` build option. It targeted the same discontinued
+  Intel Optane DC persistent memory as the BlueStore backend above, and with
+  both gone Ceph no longer builds against PMDK at all.
+
+  The ``ssd`` cache mode is unaffected, but ``rwl`` was enabled in the shipped
+  x86_64 packages, so drain any cache it left **before** upgrading, and in this
+  order. While still running the old version, close or unmap each image that
+  has one: a clean shutdown flushes the cache and removes it, after which
+  ``rbd status`` no longer reports a dirty cache. If the client crashed and the
+  workload will not be restarted, use ``rbd persistent-cache flush`` instead.
+  Only then change ``rbd_persistent_cache_mode`` and upgrade.
+
+  Changing the mode first strands the cache instead. Either way the image then
+  fails to acquire its exclusive lock, so all of its I/O fails: with the cache
+  disabled, one that still records a dirty cache is refused outright, and with
+  the cache enabled, one whose metadata records a dirty ``rwl`` cache is
+  refused because the backend that could replay it is gone. Recovering means
+  setting the mode to ``ssd``, giving the client ``rbd_plugins = pwl_cache``,
+  and running ``rbd persistent-cache invalidate``, which discards the cache
+  along with whatever it had not flushed.
+
+  A stale ``rwl`` in ceph.conf or the Monitor config store is merely ignored,
+  and such an image simply runs without a cache. Note that ``ceph config set
+  ... rwl`` now fails, which may break automation.
+
+>=21.0.0
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
@@ -68,6 +156,25 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+* RGW: PutBucketEncryption and GetBucketEncryption now support the
+  ``BlockedEncryptionTypes`` element. Blocking ``SSE-C`` on a bucket rejects new
+  SSE-C uploads with ``403 AccessDenied`` while leaving existing SSE-C objects
+  readable. Newly created buckets are unchanged by default. Enable the new
+  ``rgw_s3_block_sse_c_by_default`` option to block SSE-C on them instead,
+  matching the AWS behavior for new buckets.
+* RGW: New config option ``rgw_keystone_accepted_project_reader_roles``.
+  A Keystone user whose only access-granting role is one of the configured project-reader
+  roles is capped to read-only access within its project, mirroring the
+  ``project_reader_roles`` behavior of Swift's keystoneauth middleware. A bucket
+  policy naming the user can still grant additional access. The reader role
+  admits the user on its own; it need not also be in
+  ``rgw_keystone_accepted_roles``.
+* RGW: New config option ``rgw_keystone_implicit_deny_roles``.
+  A Keystone user whose only access-granting role is one of the configured
+  implicit-deny roles is authenticated but granted no implicit permissions.
+  Access must be granted explicitly through a bucket policy or IAM policy, and
+  applies only to the buckets and objects the policy names. The role admits the
+  user on its own.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
@@ -222,7 +329,9 @@
 * CephX: a new key type ``aes256k`` has been introduced to address
   vulnerabilities in the existing encryption schemes. It is necessary to
   perform an upgrade of all CephX keys used by daemons or clients. Please see
-  :ref:`cephx-upgrade` for more information.
+  :ref:`cephx-upgrade` for more information. New clusters allow only
+  ``aes256k``, which kernel clients support since Linux 7.0; see
+  :ref:`cephx-older-kernel-clients`.
 * The ``auth_supported`` config has been removed.
 * The monitor map includes new settings relating to CephX: auth_service_cipher,
   auth_allowed_ciphers, and auth_preferred_cipher. These are used to control
@@ -233,6 +342,16 @@
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
   `mon_stretch_max_bucket_weight_delta`.
+
+* RADOS: Added a debug-level guard that protects against accidentally leaving
+  debug subsystems at high log levels in production. When `high_debug_level_threshold`
+  is set (default `0` = disabled), any subsystem whose log level sits at or above
+  the threshold for longer than `high_debug_level_reset_timeout` seconds (default
+  `300`) is automatically set back to the level it had before it was raised, and a
+  `HIGH_DEBUG_LEVEL` health warning surfaces in `ceph health detail` while the
+  level remains elevated. Setting `high_debug_level_reset_timeout` to `0` gives
+  warn-only mode (health warning without auto-revert).
+  Related Tracker: https://tracker.ceph.com/issues/75467
 
 * CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
   and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of
@@ -335,6 +454,12 @@
   state and a subsequent redundancy loss occurs. Used in conjunction with
   ``last_clean``, the ``last_degraded`` timestamp enables the calculation of
   data vulnerability and durability scores.
+* Two new perf counters, ``pg_vulnerability_duration`` and
+  ``pg_rebuild_duration`` (each with a companion ``_min`` gauge and a
+  ``max_inc``), track how long PGs spend at reduced redundancy and how
+  much of that time was active data movement. See
+  :ref:`rados_operations_monitoring_pg_vulnerability_rebuild_duration`
+  for details and example PromQL queries.
 * RBD: It's possible to specify source cluster's ``mon_host`` and ``key`` for
   ``native`` format migration via the migration spec now.  This eliminates the
   dependency on ``<cluster-name>.conf`` file in a known location which is
@@ -345,18 +470,6 @@
   error when invoked on a non-existent group. The C APIs `rbd_group_image_list`,
   `rbd_snap_list`, `rbd_group_snap_list` and C++ API `group_image_list` will now
   return ENOENT instead of masking the error and returning 0.
-* BlueStore: The experimental PMEM device backend has been removed, together
-  with the ``pmem`` value of the ``bdev_type`` option and the DML/DSA offload
-  path. The hardware it targeted, Intel Optane DC persistent memory, was
-  discontinued in 2022. The RBD persistent write-back cache, which also uses
-  PMDK, is unaffected.
-
-  Existing OSDs backed by persistent memory in fsdax mode (a block device such
-  as ``/dev/pmem0``) keep working on the default ``aio`` backend over the same
-  data. Remove any explicit ``bdev_type = pmem`` from their configuration. OSDs
-  on a devdax namespace (a character device such as ``/dev/dax0.0``) will no
-  longer start, because no remaining backend can open one; reconfigure the
-  namespace to fsdax with ``ndctl`` or re-provision them before upgrading.
 * BlueStore: fsck no longer aborts on an undecodable onode; it reports the object
   and continues. Post-crash allocation recovery tolerates corruption only during
   read-only fsck, gated by the new ``bluestore_accept_corrupted_onode_recovery``
@@ -1190,3 +1303,9 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   prior to Pacific that have not been resharded yet with
   ``ceph-bluestore-tool reshard``. This warning can be disabled with the new
   ``bluestore_warn_on_no_db_sharding`` option.
+* RADOS: A new ``BLUESTORE_LEGACY_MIN_ALLOC_SIZE`` health warning reports
+  OSDs that use an allocation unit (``min_alloc_size``) that differs from
+  the one a newly deployed OSD would use on the same device, e.g. HDD-backed
+  OSDs deployed prior to the Pacific release with a 64 KiB allocation unit.
+  It can be disabled with the new ``bluestore_warn_on_legacy_min_alloc_size``
+  option, globally or per OSD / device class using a configuration mask.

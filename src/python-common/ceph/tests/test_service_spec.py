@@ -24,6 +24,7 @@ from ceph.deployment.service_spec import (
     ServiceSpec,
     YamlLiteralString,
     TunedProfileSpec,
+    MgmtGatewaySpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -804,6 +805,45 @@ def test_nfs_spec_client_object_cache_validation():
         client_object_cache_size='1MiB',
         client_object_cache_max_dirty='512KiB',
     ).validate()
+
+
+def test_nfs_spec_cephfs_client_log_dir_path():
+    """cephfs_client_log_dir must be an absolute path and not '/' when set."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_cephfs_client_log=True,
+        cephfs_client_log_dir='/var/log/ceph/custom',
+    )
+    spec.validate()
+
+    with pytest.raises(SpecValidationError, match='absolute path'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir='relative/log/dir',
+        ).validate()
+
+    with pytest.raises(SpecValidationError, match='filesystem root'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir='/',
+        ).validate()
+
+
+@pytest.mark.parametrize('log_dir', ['//', '/..', '/tmp/..', '/etc', '/var'])
+def test_nfs_spec_cephfs_client_log_dir_rejects_root_aliases(log_dir):
+    """Paths that are, escape to, or name a protected system dir are refused."""
+    with pytest.raises(SpecValidationError):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir=log_dir,
+        ).validate()
 
 
 def test_repr():
@@ -1807,3 +1847,26 @@ def test_tuned_profile_spec_profile_name_validation(spec_yaml, expect_error, err
         assert spec.placement is not None
         # round-trip
         assert TunedProfileSpec.from_json(spec.to_json()).profile_name == spec.profile_name
+
+@pytest.mark.parametrize(
+    "virtual_ip, valid",
+    [
+        ("10.128.8.255", True),
+        ("2001:db8::1", True),
+        ("[2001:db8::1]", True),
+        ("ceph.example.com", False),
+        ("10.128.8.255/22", False),
+        ("invalid", False),
+    ],
+)
+def test_mgmt_gateway_virtual_ip_validation(virtual_ip, valid):
+    spec = MgmtGatewaySpec(virtual_ip=virtual_ip)
+
+    if valid:
+        spec.validate()
+    else:
+        with pytest.raises(
+            SpecValidationError,
+            match=r"Invalid virtual_ip: .*\. Must be a valid IP address\.",
+        ):
+            spec.validate()

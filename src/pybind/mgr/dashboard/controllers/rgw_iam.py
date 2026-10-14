@@ -192,3 +192,50 @@ class RgwUserAccountsController(RgwRESTController):
         :rtype: Dict[str, Any]
         """
         return RgwAccounts.set_quota_status(quota_type, account_id, quota_status)
+
+
+@APIRouter('/rgw/accounts/{account_id}/roles/{role_name}/policy', Scope.RGW)
+@APIDoc("RGW Role Policy API", "RgwRolePolicy")
+class RgwRolePolicyController(RESTController):
+    @EndpointDoc("List RGW role policies",
+                 parameters={'role_name': (str, 'Role name'),
+                             'account_id': (str, 'Account id')})
+    def list(self, role_name: str, account_id: str):
+        """
+        List all permission policy names attached to the specified role.
+        """
+        return RgwAccounts.list_role_policies(role_name, account_id)
+
+    @EndpointDoc("Get RGW role policy document",
+                 parameters={'role_name': (str, 'Role name'),
+                             'policy_name': (str, 'Policy name'),
+                             'account_id': (str, 'Account id')})
+    def get(self, role_name: str, policy_name: str, account_id: str):
+        """
+        Get policy document for the specified role policy.
+        """
+        return RgwAccounts.get_role_policy(role_name, policy_name, account_id)
+
+    @EndpointDoc("Attach RGW role policy",
+                 parameters={'role_name': (str, 'Role name'),
+                             'policy_name': (str, 'Policy name'),
+                             'policy_doc': (str, 'Policy document JSON'),
+                             'account_id': (str, 'Account id')})
+    @allow_empty_body
+    def create(self, role_name: str, policy_name: str, policy_doc: str, account_id: str):
+        """
+        Attach a permission policy document to the specified role.
+        """
+        RgwAccounts.put_role_policy(role_name, policy_name, policy_doc, account_id)
+        return f'Policy {policy_name} attached to role {role_name} successfully'
+
+    @EndpointDoc("Delete RGW role policy",
+                 parameters={'role_name': (str, 'Role name'),
+                             'policy_name': (str, 'Policy name'),
+                             'account_id': (str, 'Account id')})
+    def delete(self, role_name: str, policy_name: str, account_id: str):
+        """
+        Delete/Detach a permission policy from the specified role.
+        """
+        RgwAccounts.delete_role_policy(role_name, policy_name, account_id)
+        return f'Policy {policy_name} deleted from role {role_name} successfully'

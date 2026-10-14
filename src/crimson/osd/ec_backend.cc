@@ -1,5 +1,3 @@
-#include <boost/iterator/counting_iterator.hpp>
-
 #include "crimson/common/log.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/shard_services.h"
@@ -496,13 +494,6 @@ ECBackend::handle_rep_write_reply(ECSubWriteReply&& op)
   return write_iertr::now();
 }
 
-bool ECBackend::is_single_chunk(const hobject_t& obj, const ECSubRead& op)
-{
-  return (op.subchunks.find(obj)->second.size() == 1) &&
-    (op.subchunks.find(obj)->second.front().second ==
-      ec_impl->get_sub_chunk_count());
-}
-
 ECBackend::ll_read_errorator::future<ceph::bufferlist>
 ECBackend::maybe_chunked_read(
   const hobject_t& obj,
@@ -514,44 +505,9 @@ ECBackend::maybe_chunked_read(
   LOG_PREFIX(ECBackend::maybe_chunked_read);
   DEBUGDPP("tid={} hoid={} off={} size={} flags={}", dpp, op.tid, obj, off, size, flags);
   DEBUGDPP("tid={} ghobj={}", dpp, op.tid, ghobject_t{obj, ghobject_t::NO_GEN, get_shard()});
-  if (is_single_chunk(obj, op)) {
-    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
-      store,
-      coll, ghobject_t{obj, ghobject_t::NO_GEN, get_shard()}, off, size, flags);
-  } else {
-    return seastar::do_with(ceph::bufferlist{}, [=, this] (auto&& result_bl) {
-      const int subchunk_size =
-        sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-      return crimson::do_for_each(
-        boost::make_counting_iterator(0UL),
-        boost::make_counting_iterator(1 + (size-1) / sinfo.get_chunk_size()),
-        [off, flags, subchunk_size, &obj, &op, &result_bl, this] (const auto m) {
-          const auto& sub_spec = op.subchunks.find(obj)->second;
-          return crimson::do_for_each(
-            std::begin(sub_spec),
-            std::end(sub_spec),
-            [&obj, off, flags, subchunk_size, m, &result_bl, this] (const auto& subchunk) {
-              const auto [sub_off_count, sub_size_count] = subchunk;
-              return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
-                store,
-                coll,
-                ghobject_t{obj, ghobject_t::NO_GEN, get_shard()},
-                off + m*sinfo.get_chunk_size() + sub_off_count*subchunk_size,
-                sub_size_count * subchunk_size,
-                flags
-              ).safe_then([&result_bl] (auto&& sub_bl) {
-		result_bl.claim_append(sub_bl);
-                return ll_read_errorator::now();
-              });
-            }
-          );
-        }
-      ).safe_then([&result_bl] {
-        return ll_read_errorator::make_ready_future<ceph::bufferlist>(
-          std::move(result_bl));
-      });
-    });
-  }
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+    store,
+    coll, ghobject_t{obj, ghobject_t::NO_GEN, get_shard()}, off, size, flags);
 }
 
 void ECBackend::objects_read_and_reconstruct(
@@ -763,8 +719,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
 
       int err = -EIO; // If attributes needed but not read.
       if (!rop.to_read.at(oid).want_attrs || rop.complete.at(oid).attrs) {
-        err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
-                                         nullptr);
+        err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum);
       }
 
       if (err) {

@@ -509,7 +509,6 @@ int log_record(rgw::sal::Driver* driver,
   }
   input.http_ret = s->err.http_ret;
   input.err_code = s->err.err_code;
-  input.content_length = s->content_length;
   input.granted_by_acl = s->granted_by_acl;
   input.src_object = s->src_object.get();
   input.src_bucket_name = s->src_bucket_name;
@@ -579,7 +578,7 @@ int log_record(rgw::sal::Driver* driver,
   RGWObjVersionTracker objv_tracker;
   ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, &objv_tracker);
   if (ret == 0) {
-    const auto time_to_commit = time_from_name(obj_name, dpp) + std::chrono::seconds(conf.obj_roll_time);
+    const auto time_to_commit = time_from_name(obj_name, dpp) + ceph::timespan{std::chrono::seconds{conf.obj_roll_time}};
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to logging bucket '" <<
         target_bucket_id << "'" << dendl;
@@ -649,7 +648,7 @@ int log_record(rgw::sal::Driver* driver,
         input.request_params,
         dash_if_zero(input.http_ret),
         dash_if_empty(input.err_code),
-        dash_if_zero(input.content_length),
+        "-", // not supported - bytes sent as response.
         dash_if_zero(size),
         "-", // no total time when logging record
         input.time_elapsed,
@@ -1102,7 +1101,8 @@ int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
     rgw::IAM::Environment env;
     const auto arn_it = env.emplace("aws:SourceArn", std::move(source_bucket_arn));
     const auto acct_it = env.emplace("aws:SourceAccount", std::move(source_account));
-    if (policy.eval(dpp, env, ident, rgw::IAM::s3PutObject, target_resource_arn) != rgw::IAM::Effect::Allow) {
+    boost::optional<rgw::auth::Principal> principal; // ignored
+    if (policy.eval(dpp, env, ident, rgw::IAM::s3PutObject, target_resource_arn, principal) != rgw::IAM::Effect::Allow) {
       ldpp_dout(dpp, 1) << "ERROR: logging bucket: '" << target_bucket_id <<
         "' must have a bucket policy that allows logging service principal to put objects in the following resource ARN: '" <<
         target_resource_arn.to_string() << "' from source bucket ARN: '" << arn_it->second <<
@@ -1135,6 +1135,18 @@ int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
                                      err_message);
 }
 
+/*
+ * a bucket encryption config that only blocks encryption types doesn't
+ * encrypt anything, so it doesn't disqualify a logging target
+ */
+static bool has_default_encryption(const bufferlist& bl) {
+  RGWBucketEncryptionConfig conf;
+  if (decode_bl(bl, conf) < 0) {
+    return true;
+  }
+  return !conf.sse_algorithm().empty();
+}
+
 int verify_target_bucket_attributes(const DoutPrefixProvider* dpp, rgw::sal::Bucket* target_bucket, std::string* err_message) {
   const auto& target_info = target_bucket->get_info();
   if (target_info.requester_pays) {
@@ -1155,7 +1167,8 @@ int verify_target_bucket_attributes(const DoutPrefixProvider* dpp, rgw::sal::Buc
     }
     return -EINVAL;
   }
-  if (target_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY) != target_attrs.end()) {
+  if (const auto i = target_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+      i != target_attrs.end() && has_default_encryption(i->second)) {
     // verify target bucket does not have encryption
     ldpp_dout(dpp, 1) << "ERROR: logging bucket '" << target_bucket->get_key() << "', is configured with encryption" << dendl;
     if (err_message) {

@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <cerrno>
+#include <array>
+#include <concepts>
 #include <optional>
 #include <cstdlib>
 #include <system_error>
@@ -63,6 +65,7 @@
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
+#include "rgw_lua_request.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_bucket_logging.h"
@@ -1954,20 +1957,24 @@ int RGWOp::read_global_cors()
   string allow_origins, allow_headers, allow_methods, expose_headers;
   int ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
   if (ret < 0 || allow_origins.empty()) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS allow origins found, ret=" << cpp_strerror(ret) << dendl;
+    return 0;
   }
   ret = g_conf().get_val("rgw_gcors_allow_headers", &allow_headers);
   if (ret < 0 || allow_headers.empty()) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS allow headers found, ret=" << cpp_strerror(ret) << dendl;
+    return 0;
   }
   ret = g_conf().get_val("rgw_gcors_allow_methods", &allow_methods);
   if (ret < 0 || allow_methods.empty()) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS allow methods found, ret=" << cpp_strerror(ret) << dendl;
+    return 0;
   }
   g_conf().get_val("rgw_gcors_expose_headers", &expose_headers);
   if (RGWCORSRule::create_rule(allow_origins.c_str(), allow_headers.c_str(), expose_headers.c_str(), allow_methods.c_str(),
                                optional_global_cors) < 0) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS configuration found" << dendl;
+    return 0;
   }
 
   cors_exist = true;
@@ -2023,11 +2030,10 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   cors_exist = false;
   origin = orig;
 
-  const int read_global_cors_ret = read_global_cors();
-  const int temp_op_ret = read_bucket_cors();
+  read_global_cors();
+  op_ret = read_bucket_cors();
   if (!cors_exist) {
     ldpp_dout(this, 2) << "No global CORS or bucket CORS configuration set yet" << dendl;
-    op_ret = std::min(temp_op_ret, read_global_cors_ret);
     return false;
   }
 
@@ -2077,6 +2083,53 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   }
 
   return false;
+}
+
+int RGWOp::verify_cors_match()
+{
+  if (get_type() == RGW_OP_OPTIONS_CORS) {
+    return 0;
+  }
+
+  const char *orig = s->info.env->get("HTTP_ORIGIN");
+  if (!orig || !*orig) {
+    return 0;
+  }
+
+  // if we have global/bucket cors config, it will set cors_exist=true
+  cors_exist = false;
+  read_global_cors();
+  read_bucket_cors();
+
+  if (!cors_exist) {
+    /* No CORS configuration at all — nothing to enforce. */
+    ldpp_dout(this, 20) << "verify_cors_origin: no CORS config, skipping verification" << dendl;
+    return 0;
+  }
+
+  const char *req_meth = s->info.method;
+  if (!req_meth || strcmp(req_meth, "") == 0) {
+    return 0;
+  }
+
+  RGWCORSRule *rule = bucket_cors.match_rule(orig, req_meth, nullptr);
+  if (rule) {
+    ldpp_dout(this, 10) << "verify_cors_match: origin=" << orig
+                        << " method=" << req_meth << " allowed by bucket CORS rule" << dendl;
+    return 0;
+  }
+
+  if (optional_global_cors.has_value() &&
+      optional_global_cors->matches(orig, req_meth, nullptr)) {
+    ldpp_dout(this, 10) << "verify_cors_match: origin=" << orig
+                        << " method=" << req_meth << " allowed by global CORS rule" << dendl;
+    return 0;
+  }
+
+  ldpp_dout(this, 5) << "verify_cors_match: origin=" << orig
+                     << " method=" << req_meth
+                     << " rejected — not in CORS AllowedMethods" << dendl;
+  return -EACCES;
 }
 
 int rgw_policy_from_attrset(const DoutPrefixProvider *dpp, CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy)
@@ -2646,18 +2699,34 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
-int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb) {
-  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::getData);
-  if (rc == -ENOENT) {
-    // no script, nothing to do
+template <typename LuaFilterT, typename BaseFilterT>
+requires std::derived_from<LuaFilterT, BaseFilterT>
+static int make_lua_data_filter(req_state * const s,
+                                const DoutPrefixProvider * const dpp,
+                                const rgw::lua::context ctx,
+                                std::unique_ptr<BaseFilterT>& filter,
+                                BaseFilterT * const cb)
+{
+  const auto [script, rc] = rgw::lua::read_script_or_bytecode(
+    s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, ctx);
+
+  if (-ENOENT == rc) {
     return 0;
-  } else if (rc < 0) {
-    ldpp_dout(this, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
+  }
+
+  if (rc < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
     return rc;
   }
-  filter->reset(new rgw::lua::RGWGetObjFilter(s, script, cb));
+
+  filter = std::make_unique<LuaFilterT>(s, script, cb);
   return 0;
+}
+
+int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb)
+{
+  return make_lua_data_filter<rgw::lua::RGWGetObjFilter>(
+    s, this, rgw::lua::context::getData, *filter, cb);
 }
 
 bool RGWGetObj::prefetch_data()
@@ -4113,6 +4182,16 @@ int put_swift_bucket_metadata(const DoutPrefixProvider* dpp,
       y);
 }
 
+static void set_default_bucket_encryption(
+    CephContext* cct, rgw::sal::Attrs& attrs)
+{
+  if (cct->_conf->rgw_s3_block_sse_c_by_default) {
+    RGWBucketEncryptionConfig config(
+        std::vector<std::string>{"SSE-C"});
+    config.encode(attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY]);
+  }
+}
+
 void RGWCreateBucket::execute(optional_yield y)
 {
   op_ret = get_params(y);
@@ -4310,6 +4389,8 @@ void RGWCreateBucket::execute(optional_yield y)
     filter_out_website(createparams.attrs, rmattr_names, info.website_conf);
     info.has_website = !info.website_conf.is_empty();
   }
+
+  set_default_bucket_encryption(s->cct, createparams.attrs);
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
@@ -4758,18 +4839,10 @@ auto RGWPutObj::get_torrent_filter(rgw::sal::DataProcessor* cb)
   return RGWPutObj_Torrent{cb, max_len, piece_len};
 }
 
-int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
-  const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::putData);
-  if (rc == -ENOENT) {
-    // no script, nothing to do
-    return 0;
-  } else if (rc < 0) {
-    ldpp_dout(this, 5) << "WARNING: failed to read data script. error: " << rc << dendl;
-    return rc;
-  }
-  filter->reset(new rgw::lua::RGWPutObjFilter(s, script, cb));
-  return 0;
+int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb)
+{
+  return make_lua_data_filter<rgw::lua::RGWPutObjFilter>(
+    s, this, rgw::lua::context::putData, *filter, cb);
 }
 
 void RGWPutObj::execute(optional_yield y)
@@ -5233,6 +5306,7 @@ void RGWPutObj::execute(optional_yield y)
 
   populate_with_generic_attrs(s, attrs);
   op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
+
   if (op_ret < 0) {
     return;
   }
@@ -5283,24 +5357,8 @@ void RGWPutObj::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
-
-  auto ret = rgw::bucketlogging::log_record(driver,
-      rgw::bucketlogging::LoggingType::Standard,
-      s->object.get(),
-      s,
-      (multipart ? "REST.PUT.PART" : canonical_name()),
-      etag,
-      s->object->get_size(),
-      this,
-      y,
-      true,
-      false);
-  if (ret  < 0) {
-    ldpp_dout(this, 5) << "WARNING: in Standard mode, put object operation ignores bucket logging failure: " << ret << dendl;
- }
-
   // send request to notification manager
-  ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
+  auto ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6702,7 +6760,6 @@ void RGWCopyObj::execute(optional_yield y)
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: COPY operation ignores bucket logging failure of the GET part: " << ret << dendl;
   }
-
   if (op_ret < 0) {
     return;
   }
@@ -7053,7 +7110,7 @@ void RGWPutLC::execute(optional_yield y)
   }
 
   bufferlist bl;
-  
+
   RGWLifecycleConfiguration_S3 config(s->cct);
   RGWXMLParser parser;
   RGWLifecycleConfiguration_S3 new_config(s->cct);
@@ -7303,8 +7360,8 @@ int RGWOptionsCORS::validate_global_cors_request(RGWCORSRule *global_cors_rule) 
 void RGWOptionsCORS::execute(optional_yield y)
 {
   op_ret = read_bucket_cors();
-  int ret = read_global_cors();
-  if (ret < 0 && op_ret < 0) {
+  read_global_cors();
+  if (!cors_exist) {
       ldpp_dout(this, 2) << "No CORS configuration set yet for this bucket nor globally" << dendl;
       return;
   }
@@ -7740,6 +7797,11 @@ void RGWCompleteMultipart::execute(optional_yield y)
 		     << " ret=" << op_ret << dendl;
     return;
   }
+
+  op_ret = verify_encryption(meta_obj->get_attrs(), upload->cksum_type);
+  if (op_ret < 0) {
+    return;
+  }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
   jspan_context trace_ctx(false, false);
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
@@ -7849,17 +7911,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
                      s->object.get(), processed_prefixes, if_match, if_nomatch);
+
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
   }
 
-  // size is logged in stadared mode
-  int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->object.get(), s, canonical_name(), "", ofs, this, y, true, false);
-  if (ret < 0) {
-    ldpp_dout(this, 5) << "WARNING: in Standard mode, complete MPU operation ignores bucket logging failure: " << ret << dendl;
-  }
-
+  s->obj_size = ofs;
   remove_objs.clear();
 
   // use cls_version_check() when deleting the meta object to detect part uploads that raced
@@ -7905,7 +7963,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
 
   // send request to notification manager
-  ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
+  auto ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -8222,6 +8280,33 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
+int RGWDeleteMultiObj::run_lua_script(rgw::lua::context ctx,
+                                      const rgw::sal::Object* multi_delete_obj,
+                                      optional_yield y)
+{
+  auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                  s->bucket_tenant, y, ctx);
+  if (rc == -ENOENT) {
+    // no script, nothing to do
+  } else if (rc < 0) {
+    ldpp_dout(this, 5) <<
+      "WARNING: failed to execute " << rgw::lua::to_string(ctx) << " script. "
+      "error: " << rc << dendl;
+  } else {
+    int script_return_code = 0;
+    rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, this,
+                                    lua_script, script_return_code, multi_delete_obj);
+
+    if (rc < 0) {
+      ldpp_dout(this, 5) <<
+        "WARNING: failed to execute " << rgw::lua::to_string(ctx) << " script. "
+        "error: " << rc << dendl;
+    }
+    return script_return_code;
+  }
+  return 0;
+}
+
 void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object,
                                                  optional_yield y,
                                                  const bool skip_olh_obj_update)
@@ -8318,11 +8403,16 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  r = del_op->delete_obj(dpp, y,
-                         rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-  if (r == -ENOENT) {
-    r = 0;
+  // allow skipping deletion of the current object when the Lua postAuth script returns RGW_ABORT_REQUEST
+  int script_return_code = run_lua_script(rgw::lua::context::postAuth, obj.get(), y);
+  if (script_return_code != -EPERM) {
+    r = del_op->delete_obj(dpp, y,
+                          rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
+    if (r == -ENOENT) {
+      r = 0;
+    }
   }
+  std::ignore = run_lua_script(rgw::lua::context::postRequest, obj.get(), y);
 
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
     // don't reply with an error in case of failed delete logging
@@ -8369,6 +8459,9 @@ void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& obj
                         bool skip_update_olh,
                         boost::asio::yield_context y) {
         handle_individual_object(objects[item.index], y, skip_update_olh);
+      },
+      [this] (const rgw_obj_key& key, boost::asio::yield_context y) {
+        bucket->get_object(key)->update_olh(this, y, rgw::sal::FLAG_LOG_OP);
       },
       [this] {
         rgw_flush_formatter(s, s->formatter);
@@ -8787,6 +8880,8 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
     policy.encode(aclbl);
     createparams.attrs[RGW_ATTR_ACL] = std::move(aclbl);
   }
+
+  set_default_bucket_encryption(s->cct, createparams.attrs);
 
   if (!driver->is_meta_master()) {
     // apply bucket creation on the master zone first
@@ -9277,7 +9372,8 @@ void RGWGetObjLayout::execute(optional_yield y)
 
 int RGWConfigBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
+  if (!verify_owner_permission(*s->auth.identity, s->perm_mask,
+                               s->bucket_owner.id, RGW_PERM_WRITE)) {
     return -EACCES;
   }
 
@@ -9310,7 +9406,8 @@ void RGWConfigBucketMetaSearch::execute(optional_yield y)
 
 int RGWGetBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
+  if (!verify_owner_permission(*s->auth.identity, s->perm_mask,
+                               s->bucket_owner.id, RGW_PERM_READ)) {
     return -EACCES;
   }
 
@@ -9324,7 +9421,8 @@ void RGWGetBucketMetaSearch::pre_exec()
 
 int RGWDelBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
+  if (!verify_owner_permission(*s->auth.identity, s->perm_mask,
+                               s->bucket_owner.id, RGW_PERM_WRITE)) {
     return -EACCES;
   }
 
@@ -10438,7 +10536,7 @@ int get_decrypt_filter(
 
   // in case of a multipart upload, we need to know the part lengths to
   // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
+  std::vector<uint64_t> parts_len;
 
   // Read (S3 part number, GCM salt) pairs from the attribute (set by Complete).
   std::vector<std::pair<uint32_t, std::string>> part_keys;
@@ -10514,7 +10612,7 @@ int get_decrypt_filter(
   if (encrypted_total_size == 0 &&
       block_crypt->get_block_size() != block_crypt->get_encrypted_block_size()) {
     if (!parts_len.empty()) {
-      for (size_t part_len : parts_len) {
+      for (uint64_t part_len : parts_len) {
         encrypted_total_size += part_len;
       }
     } else if (!attrs.count(RGW_ATTR_COMPRESSION)) {

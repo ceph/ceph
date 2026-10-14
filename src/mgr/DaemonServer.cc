@@ -103,11 +103,11 @@ DaemonServer::DaemonServer(MonClient *monc_,
 				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
-      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
+      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messages",
 				     g_conf().get_val<uint64_t>("mgr_mds_messages"))),
       mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mon_bytes"))),
-      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
+      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messages",
 				     g_conf().get_val<uint64_t>("mgr_mon_messages"))),
       msgr(nullptr),
       monc(monc_),
@@ -140,24 +140,6 @@ DaemonServer::DaemonServer(MonClient *monc_,
                                                     cct->_conf->mgr_op_history_slow_op_threshold);
 }
 
-void DaemonServer::shutdown()
-{
-  bool expected = false;
-  if (!shutting_down.compare_exchange_strong(expected, true)) {
-    return;
-  }
-
-  op_tracker.on_shutdown();
-
-  delete msgr;
-  msgr = nullptr;
-  g_conf().remove_observer(this);
-}
-
-DaemonServer::~DaemonServer() {
-  shutdown();
-}
-
 class DaemonServerHook : public AdminSocketHook {
   DaemonServer *daemon_server;
 public:
@@ -180,6 +162,43 @@ public:
     return r;
   }
 };
+
+void DaemonServer::shutdown()
+{
+  bool expected = false;
+  if (!shutting_down.compare_exchange_strong(expected, true)) {
+    return;
+  }
+
+  op_tracker.on_shutdown();
+
+  {
+    std::lock_guard l(lock);
+    timer.shutdown();
+  }
+
+  if (asok_hook) {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    admin_socket->unregister_commands(asok_hook);
+    delete asok_hook;
+    asok_hook = nullptr;
+  }
+
+  if (msgr) {
+    msgr->shutdown();
+    msgr->wait();
+    delete msgr;
+    msgr = nullptr;
+  }
+
+  monc->set_handle_authentication_dispatcher(nullptr);
+
+  g_conf().remove_observer(this);
+}
+
+DaemonServer::~DaemonServer() {
+  shutdown();
+}
 
 int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 {

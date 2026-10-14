@@ -22,6 +22,7 @@ enum class OpType {
   Read,                  // Read
   Read2,                 // Two reads in a single op
   Read3,                 // Three reads in a single op
+  SparseRead,            // Sparse read (CEPH_OSD_OP_SPARSE_READ)
   Write,                 // Write
   Write2,                // Two writes in a single op
   Write3,                // Three writes in a single op
@@ -77,6 +78,8 @@ struct fmt::formatter<ceph::io_exerciser::OpType> {
         return fmt::format_to(ctx.out(), "Read2");
       case ceph::io_exerciser::OpType::Read3:
         return fmt::format_to(ctx.out(), "Read3");
+      case ceph::io_exerciser::OpType::SparseRead:
+        return fmt::format_to(ctx.out(), "SparseRead");
       case ceph::io_exerciser::OpType::Write:
         return fmt::format_to(ctx.out(), "Write");
       case ceph::io_exerciser::OpType::Write2:

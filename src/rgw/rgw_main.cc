@@ -108,9 +108,15 @@ int main(int argc, char *argv[])
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
 
+#if defined(__linux__)
+  // defined in keyring.cc under the same guard
   LinuxKeyringSecret::initialize_process_keyring();
+#else
+  ldpp_dout(&dp, 0) << "the Linux kernel keyring is not available on this "
+		    << "platform, so the SSE-KMS key cache is disabled" << dendl;
+#endif
 
-  main.init_frontends1(false /* nfs */);
+  main.init_frontends1(rgw::InstanceType::Daemon, rgw::ProtocolType::HTTP_S3);
   main.init_numa();
 
   if (g_conf()->daemonize) {
@@ -166,6 +172,9 @@ int main(int argc, char *argv[])
   main.init_tracepoints();
   main.init_lua();
   main.init_kms_cache();
+#ifdef WITH_RADOSGW_LANCEDB
+  main.init_s3vector();
+#endif
 #ifdef WITH_RADOSGW_RADOS
   main.init_dedup();
 #endif

@@ -34,6 +34,7 @@
 
 #include "include/btree_map.h"
 #include "include/common_fwd.h"
+#include "common/Formatter.h"
 #include "include/fs_types.h" // for struct file_layout_t
 #include "include/types.h"
 #include "common/ceph_releases.h"
@@ -1599,7 +1600,7 @@ private: // Bunch of internal functions used only by calc_pg_upmaps (result of c
     float pgs_per_weight,
     std::map<int,float>& osd_deviation,
     std::multimap<float,int>& deviation_osd,
-    float& stddev
+    double& bal_score
   );  // return current max deviation
 
   void fill_overfull_underfull (

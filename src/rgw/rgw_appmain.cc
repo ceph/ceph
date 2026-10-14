@@ -82,6 +82,9 @@
 #endif
 #include "rgw_lua_background.h"
 #include "services/svc_zone.h"
+#ifdef WITH_RADOSGW_LANCEDB
+#include "rgw_s3vector_background.h"
+#endif
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -148,20 +151,55 @@ void rgw::AppMain::unregister_heap_profiler_hook()
   }
 }
 
-void rgw::AppMain::init_frontends1(bool nfs) 
+
+// Helper methods for instance and protocol handling
+bool rgw::AppMain::is_library_instance() const {
+  return instance_type == InstanceType::Library;
+}
+
+bool rgw::AppMain::is_http_protocol() const {
+  return protocol_type == ProtocolType::HTTP_S3;
+}
+
+std::string rgw::AppMain::get_config_prefix() const {
+  switch (protocol_type) {
+    case ProtocolType::NFS: return "rgw_nfs";
+    case ProtocolType::SMB: return "rgw_smb";
+    case ProtocolType::HTTP_S3:
+    default: return "rgw";
+  }
+}
+
+std::string rgw::AppMain::get_frontend_name() const {
+  switch (protocol_type) {
+    case ProtocolType::NFS: return "rgw-nfs";
+    case ProtocolType::SMB: return "rgw-smb";
+    case ProtocolType::HTTP_S3:
+    default: return "rgw";
+  }
+}
+
+
+void rgw::AppMain::init_frontends1(InstanceType inst_type, ProtocolType proto_type)
 {
-  this->nfs = nfs;
-  std::string fe_key = (nfs) ? "rgw_nfs_frontends" : "rgw_frontends";
+  this->instance_type = inst_type;
+  this->protocol_type = proto_type;
+
+  std::string fe_key = (protocol_type == ProtocolType::HTTP_S3)
+                       ? "rgw_frontends"
+                       : get_config_prefix() + "_frontends";
+
   std::vector<std::string> frontends;
   std::string rgw_frontends_str = g_conf().get_val<string>(fe_key);
   g_conf().early_expand_meta(rgw_frontends_str, &cerr);
   get_str_vec(rgw_frontends_str, ",", frontends);
 
   /* default frontends */
-  if (nfs) {
-    const auto is_rgw_nfs = [](const auto& s){return s == "rgw-nfs";};
-    if (std::find_if(frontends.begin(), frontends.end(), is_rgw_nfs) == frontends.end()) {
-      frontends.push_back("rgw-nfs");
+  if (is_library_instance()) {
+    std::string default_fe = get_frontend_name();
+    auto is_default = [&default_fe](const auto& s){return s == default_fe;};
+    if (std::find_if(frontends.begin(), frontends.end(), is_default) == frontends.end()) {
+      frontends.push_back(default_fe);
     }
   } else {
     if (frontends.empty()) {
@@ -225,7 +263,7 @@ void rgw::AppMain::init_frontends1(bool nfs)
 
 void rgw::AppMain::init_numa()
 {
-  if (nfs) {
+  if (is_library_instance()) {
     return;
   }
 
@@ -266,25 +304,35 @@ int rgw::AppMain::init_storage()
   }
   env.site = &site;
 
-  auto run_gc =
-    (g_conf()->rgw_enable_gc_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_gc_threads)));
+  // Helper lambda to get thread config flag based on protocol type
+  auto get_thread_flag = [this](const char* thread_type) -> bool {
+    if (protocol_type == ProtocolType::HTTP_S3) {
+      return true;  // HTTP/S3 always runs threads if enabled
+    }
 
-  auto run_lc =
-    (g_conf()->rgw_enable_lc_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_lc_threads)));
+    if (protocol_type == ProtocolType::NFS) {
+      if (strcmp(thread_type, "gc") == 0) return g_conf()->rgw_nfs_run_gc_threads;
+      if (strcmp(thread_type, "lc") == 0) return g_conf()->rgw_nfs_run_lc_threads;
+      if (strcmp(thread_type, "restore") == 0) return g_conf()->rgw_nfs_run_restore_threads;
+      if (strcmp(thread_type, "quota") == 0) return g_conf()->rgw_nfs_run_quota_threads;
+      if (strcmp(thread_type, "sync") == 0) return g_conf()->rgw_nfs_run_sync_thread;
+      return false;
+    } else if (protocol_type == ProtocolType::SMB) {
+      if (strcmp(thread_type, "gc") == 0) return g_conf()->rgw_smb_run_gc_threads;
+      if (strcmp(thread_type, "lc") == 0) return g_conf()->rgw_smb_run_lc_threads;
+      if (strcmp(thread_type, "restore") == 0) return g_conf()->rgw_smb_run_restore_threads;
+      if (strcmp(thread_type, "quota") == 0) return g_conf()->rgw_smb_run_quota_threads;
+      if (strcmp(thread_type, "sync") == 0) return g_conf()->rgw_smb_run_sync_thread;
+      return false;
+    }
+    return true;  // Default to true
+  };
 
-  auto run_restore =
-    (g_conf()->rgw_enable_restore_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_restore_threads)));
-
-  auto run_quota =
-    (g_conf()->rgw_enable_quota_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_quota_threads)));
-
-  auto run_sync =
-    (g_conf()->rgw_run_sync_thread &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_sync_thread)));
+  auto run_gc = g_conf()->rgw_enable_gc_threads && get_thread_flag("gc");
+  auto run_lc = g_conf()->rgw_enable_lc_threads && get_thread_flag("lc");
+  auto run_restore = g_conf()->rgw_enable_restore_threads && get_thread_flag("restore");
+  auto run_quota = g_conf()->rgw_enable_quota_threads && get_thread_flag("quota");
+  auto run_sync = g_conf()->rgw_run_sync_thread && get_thread_flag("sync");
 
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
@@ -361,6 +409,7 @@ void rgw::AppMain::cond_init_apis()
     const bool iam_enabled = apis_set.contains("iam");
     const bool pubsub_enabled =
         apis_set.contains("pubsub") || apis_set.contains("notifications");
+    const bool s3vectors_enabled = apis_set.contains("s3vectors");
     // Swift API entrypoint could placed in the root instead of S3
     const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
     if (apis_set.contains("s3") || s3website_enabled) {
@@ -368,7 +417,7 @@ void rgw::AppMain::cond_init_apis()
         rest.register_default_mgr(set_logging(
             rest_filter(env.driver, RGW_REST_S3,
                         new RGWRESTMgr_S3(s3control_enabled, s3website_enabled, sts_enabled,
-                                          iam_enabled, pubsub_enabled))));
+                                          iam_enabled, pubsub_enabled, s3vectors_enabled))));
       } else {
         derr << "Cannot have the S3 or S3 Website enabled together with "
              << "Swift API placed in the root of hierarchy" << dendl;
@@ -536,7 +585,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
                 : nullopt);
       }
     }
-    else if (framework == "rgw-nfs") {
+    else if ((framework == "rgw-nfs") || (framework == "rgw-smb")) {
       fe = new RGWLibFrontend(env, config);
       if (rgwlib) {
         rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe));
@@ -576,13 +625,12 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     fes.push_back(fe);
   }
 
-  std::string daemon_type = (nfs) ? "rgw-nfs" : "rgw";
-  r = env.driver->register_to_service_map(dpp, daemon_type, service_map_meta);
+  std::string fe_name = get_frontend_name();
+  r = env.driver->register_to_service_map(dpp, fe_name, service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
     /* ignore error */
   }
-
 #ifdef WITH_RADOSGW_RADOS
   if (env.driver->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
@@ -603,6 +651,11 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     if (dedup_background) {
       rgw_pauser->add_pauser(dedup_background.get());
     }
+#ifdef WITH_RADOSGW_LANCEDB
+    if (s3vector_pauser) {
+      rgw_pauser->add_pauser(s3vector_pauser.get());
+    }
+#endif
       reloader = std::make_unique<RGWRealmReloader>(
           env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
       realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
@@ -656,9 +709,21 @@ void rgw::AppMain::init_lua()
 #ifdef WITH_RADOSGW_RADOS
 void rgw::AppMain::init_dedup()
 {
-  auto run_dedup =
-    (g_conf()->rgw_enable_dedup_threads &&
-      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_dedup_threads)));
+  // Helper lambda to get dedup thread config flag based on protocol type
+  auto get_dedup_flag = [this]() -> bool {
+    if (protocol_type == ProtocolType::HTTP_S3) {
+      return true;  // HTTP/S3 always runs dedup threads if enabled
+    }
+
+    if (protocol_type == ProtocolType::NFS) {
+      return g_conf()->rgw_nfs_run_dedup_threads;
+    } else if (protocol_type == ProtocolType::SMB) {
+      return g_conf()->rgw_smb_run_dedup_threads;
+    }
+    return true;  // Default to true
+  };
+
+  auto run_dedup = g_conf()->rgw_enable_dedup_threads && get_dedup_flag();
 
   if (!run_dedup) {
     return;
@@ -686,6 +751,14 @@ void rgw::AppMain::init_kms_cache()
   env.kms_cache = std::make_unique<rgw::kms::KMSCache>(
       dpp->get_cct(), Keyring::get_best());
 }
+
+#ifdef WITH_RADOSGW_LANCEDB
+void rgw::AppMain::init_s3vector()
+{
+  s3vector::init(dpp, env.driver);
+  s3vector_pauser = std::make_unique<S3VectorPauser>(dpp);
+}
+#endif
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
@@ -726,6 +799,11 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   if (lua_background) {
     lua_background->shutdown();
   }
+
+#ifdef WITH_RADOSGW_LANCEDB
+  s3vector::shutdown();
+  s3vector_pauser.reset();
+#endif
 
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into

@@ -13,11 +13,14 @@
  *
  */
 
+#include <iomanip> // for std::setprecision()
 #include <memory>
 #include <functional>
 
 #include "mclock_common.h"
 #include "debug.h"
+
+#include "common/Clock.h" // for ceph_clock_now()
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
@@ -207,6 +210,10 @@ void MclockConfig::set_from_config()
           << ", osd_bandwidth_capacity_per_shard "
           << osd_bandwidth_capacity_per_shard << " bytes/second"
           << dendl;
+
+  scheduler_max_starve_time = is_rotational
+    ? cct->_conf.get_val<double>("osd_mclock_max_starve_time_hdd")
+    : scheduler_max_starve_time_ssd;
 
   auto mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
   if (mclock_profile == "high_client_ops") {
@@ -435,6 +442,10 @@ uint32_t MclockConfig::calc_scaled_cost(int item_cost)
   auto cost_per_io = static_cast<uint32_t>(osd_bandwidth_cost_per_io);
 
   return std::max<uint32_t>(cost, cost_per_io);
+}
+
+double MclockConfig::get_scheduler_max_starve_time() const {
+    return scheduler_max_starve_time;
 }
 
 void MclockConfig::handle_conf_change(const ConfigProxy& conf,

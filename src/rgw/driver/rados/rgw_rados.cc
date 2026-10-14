@@ -1359,6 +1359,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (ret < 0)
     return ret;
 
+  ret = open_vector_pool_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
   pools_initialized = true;
 
   index_completion_manager = new RGWIndexCompletionManager(this);
@@ -1399,7 +1403,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     return ret;
   }
 
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
+  quota_handler = RGWQuotaHandler::generate_handler(this->driver, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
                              zone.bucket_index_max_shards);
@@ -1650,6 +1654,11 @@ int RGWRados::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool,
 {
   constexpr bool create = true; // create the pool if it doesn't exist
   return rgw_init_ioctx(dpp, get_rados_handle(), pool, io_ctx, create, mostly_omap, bulk);
+}
+
+int RGWRados::open_vector_pool_ctx(const DoutPrefixProvider *dpp)
+{
+  return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().vector_pool, vector_pool_ctx, true, true);
 }
 
 /**** logs ****/
@@ -2529,6 +2538,8 @@ void RGWRados::create_bucket_id(string *bucket_id)
 			   instance_id(), next_bucket_id());
 }
 
+constexpr int MAX_CREATE_RETRIES= 20; /* need to bound retries */
+
 int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
                             optional_yield y,
                             const rgw_bucket& bucket,
@@ -2548,7 +2559,6 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
 {
   int ret = 0;
 
-#define MAX_CREATE_RETRIES 20 /* need to bound retries */
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     RGWObjVersionTracker& objv_tracker = info.objv_tracker;
     objv_tracker.read_version.clear();
@@ -2598,14 +2608,14 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
     }
 
     constexpr bool exclusive = true;
-    ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true, dpp, y);
+    ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true, dpp, y, ctl.bucket);
     if (ret == -ECANCELED) {
       ret = -EEXIST;
     }
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
       RGWBucketInfo orig_info;
-      int r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, dpp);
+      int r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, dpp, ctl.bucket);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -2637,6 +2647,91 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
 
   /* this is highly unlikely */
   ldpp_dout(dpp, 0) << "ERROR: could not create bucket, continuously raced with bucket creation and removal" << dendl;
+  return -ENOENT;
+}
+
+int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            const rgw_bucket& bucket,
+                            const rgw_owner& owner,
+                            const std::string& zonegroup_id,
+                            const rgw_placement_rule& placement_rule,
+                            const std::map<std::string, bufferlist>& attrs,
+                            const std::optional<RGWQuotaInfo>& quota,
+                            std::optional<ceph::real_time> creation_time,
+                            std::optional<rgw::BucketIndexType> index_type,
+                            std::optional<uint32_t> index_shards,
+                            obj_version* pep_objv,
+                            RGWBucketInfo& info)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucke called" << dendl;
+  int ret = 0;
+
+  for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
+    RGWObjVersionTracker& objv_tracker = info.objv_tracker;
+    objv_tracker.read_version.clear();
+    objv_tracker.generate_new_write_ver(cct);
+
+    if (bucket.marker.empty()) {
+      create_bucket_id(&info.bucket.marker);
+      info.bucket.bucket_id = info.bucket.marker;
+    } else {
+      info.bucket = bucket;
+    }
+
+    info.owner = owner;
+    info.zonegroup = zonegroup_id;
+    info.placement_rule = placement_rule;
+
+    // vector buckets have no bucket index, so no index is initialized here.
+    // the layout still needs to be filled in, otherwise it defaults to a
+    // Normal index layout that does not exist
+    init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
+                               index_type, index_shards);
+
+    if (creation_time) {
+      info.creation_time = *creation_time;
+    } else {
+      info.creation_time = ceph::real_clock::now();
+    }
+    if (quota) {
+      info.quota = *quota;
+    }
+
+    constexpr bool exclusive = true;
+    ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true, dpp, y, ctl.vector_bucket);
+    if (ret == -ECANCELED) {
+      ret = -EEXIST;
+    }
+    if (ret == -EEXIST) {
+       /* we need to reread the info and return it, caller will have a use for it */
+      RGWBucketInfo orig_info;
+      int r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, dpp, ctl.vector_bucket);
+      if (r < 0) {
+        if (r == -ENOENT) {
+          continue;
+        }
+        ldpp_dout(dpp, 0) << "get s3vector bucket info returned " << r << dendl;
+        return r;
+      }
+
+      /* only remove it if it's a different bucket instance */
+      if (orig_info.bucket.bucket_id != bucket.bucket_id) {
+        r = ctl.vector_bucket->remove_bucket_instance_info(info.bucket, info, y, dpp);
+        if (r < 0) {
+          ldpp_dout(dpp, 0) << "WARNING: " << __func__ << "(): failed to remove s3vector bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;
+          /* continue anyway */
+        }
+      }
+
+      info = std::move(orig_info);
+      /* ret == -EEXIST here */
+    }
+    return ret;
+  }
+
+  /* this is highly unlikely */
+  ldpp_dout(dpp, 0) << "ERROR: could not create s3vector bucket, continuously raced with bucket creation and removal" << dendl;
   return -ENOENT;
 }
 
@@ -3122,7 +3217,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   RGWBucketInfo dest_bucket_info;
 
-  r = get_bucket_info(&svc, bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, y, NULL);
+  r = get_bucket_info(&svc, bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, y, dpp, ctl.bucket, NULL);
   if (r < 0) {
     ldpp_dout(dpp, 10) << "failed to read dest bucket info: r=" << r << dendl;
     if (r == -ENOENT) {
@@ -3206,7 +3301,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 
   int ret = get_bucket_info(&svc, bucket_info.bucket.tenant,
                             bucket_info.swift_ver_location,
-			    archive_binfo, nullptr, y, nullptr);
+			    archive_binfo, nullptr, y, dpp, ctl.bucket, nullptr);
   if (ret < 0) {
     return ret;
   }
@@ -3357,10 +3452,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->manifest = manifest;
   target->state = state;
   RGWObjState* current_state = target->state;
-  if (!target->obj.key.instance.empty()) {
+  RGWObjState no_current_version;
+  if (!target->obj.key.instance.empty() || is_olh) {
     r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
     if (r == -ENOENT) {
-      current_state = target->state;
+      current_state = &no_current_version;
     } else if (r < 0) {
       return r;
     }
@@ -3811,7 +3907,7 @@ public:
         // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
         if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
             !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
-          std::vector<size_t> parts_len;
+          std::vector<uint64_t> parts_len;
           int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
                                                               parts_len);
           if (r < 0) {
@@ -4269,6 +4365,10 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   Bucket bkt(this, bucket_info);
   RGWRados::Bucket::UpdateIndex update_idx(&bkt, head_obj);
 
+  // Preserve the object category
+  const RGWObjCategory category = (head_manifest && head_manifest->is_tier_type_s3()) ?
+				  RGWObjCategory::CloudTiered : RGWObjCategory::Main;
+
   // note: we can skip calling prepare() since there's no transaction
   // and we don't specify a write tag (i.e., transaction tag)
   ret = update_idx.complete(dpp,
@@ -4281,7 +4381,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			    content_type,
 			    storage_class,
 			    owner,
-			    RGWObjCategory::Main, // RGWObjCategory category,
+			    category, // RGWObjCategory category,
 			    nullptr, // remove_objs list
 			    y,
 			    nullptr, // user data string
@@ -4303,7 +4403,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 
     // write OLH and instance entries
     rgw_bucket_dir_entry_meta meta;
-    meta.category = RGWObjCategory::Main;
+    meta.category = category;
     meta.mtime = head_state->mtime;
     meta.size = head_state->size;
     meta.accounted_size = head_state->accounted_size;
@@ -5614,7 +5714,7 @@ int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &
   // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
   if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
       !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
 							parts_len);
     if (r < 0) {
@@ -6451,6 +6551,58 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
   return 0;
 }
 
+int RGWRados::delete_vector_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::delete_vector_bucket called" << dendl;
+  const rgw_bucket& bucket = bucket_info.bucket;
+
+  bool remove_ep = true;
+
+  int r;
+  if (objv_tracker.read_version.empty()) {
+    RGWBucketEntryPoint ep;
+    r = ctl.vector_bucket->read_bucket_entrypoint_info(bucket_info.bucket,
+                                                &ep,
+						y,
+                                                dpp,
+                                                RGWBucketCtl::Bucket::GetParams()
+                                                .set_objv_tracker(&objv_tracker));
+    if (r < 0 ||
+        (!bucket_info.bucket.bucket_id.empty() &&
+         ep.bucket.bucket_id != bucket_info.bucket.bucket_id)) {
+      if (r != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: read_bucket_entrypoint_info() s3vector bucket=" << bucket_info.bucket << " returned error: r=" << r << dendl;
+        /* we have no idea what caused the error, will not try to remove it */
+      }
+      /*
+       * either failed to read bucket entrypoint, or it points to a different bucket instance than
+       * requested
+       */
+      remove_ep = false;
+    }
+  }
+
+  if (remove_ep) {
+    r = ctl.vector_bucket->remove_bucket_entrypoint_info(bucket_info.bucket, y, dpp,
+                                                  RGWBucketCtl::Bucket::RemoveParams()
+                                                  .set_objv_tracker(&objv_tracker));
+    if (r < 0)
+      return r;
+  }
+
+  /*
+   * vector buckets are never synced between zones
+   * the meta file could always be removed right away
+   */
+  r = ctl.vector_bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+// TODO add vector bucket support
 int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner, const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWBucketInfo info;
@@ -6458,7 +6610,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner, const DoutPr
   int r;
 
   if (bucket.bucket_id.empty()) {
-    r = get_bucket_info(&svc, bucket.tenant, bucket.name, info, NULL, y, dpp, &attrs);
+    r = get_bucket_info(&svc, bucket.tenant, bucket.name, info, NULL, y, dpp, ctl.bucket, &attrs);
   } else {
     r = get_bucket_instance_info(bucket, info, nullptr, &attrs, y, dpp);
   }
@@ -6469,7 +6621,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner, const DoutPr
 
   info.owner = owner.id;
 
-  r = put_bucket_instance_info(info, false, real_time(), &attrs, dpp, y);
+  r = put_bucket_instance_info(info, false, real_time(), &attrs, dpp, y, ctl.bucket);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -6479,6 +6631,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner, const DoutPr
 }
 
 
+// TODO add vector bucket support
 int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled, const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret = 0;
@@ -6495,7 +6648,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled, con
 
     RGWBucketInfo info;
     map<string, bufferlist> attrs;
-    int r = get_bucket_info(&svc, bucket.tenant, bucket.name, info, NULL, y, dpp, &attrs);
+    int r = get_bucket_info(&svc, bucket.tenant, bucket.name, info, NULL, y, dpp, ctl.bucket, &attrs);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -6507,7 +6660,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled, con
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_instance_info(info, false, real_time(), &attrs, dpp, y);
+    r = put_bucket_instance_info(info, false, real_time(), &attrs, dpp, y, ctl.bucket);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -6517,10 +6670,11 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled, con
   return ret;
 }
 
+// TODO add vector bucket support
 int RGWRados::bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket, bool *suspended, optional_yield y)
 {
   RGWBucketInfo bucket_info;
-  int ret = get_bucket_info(&svc, bucket.tenant, bucket.name, bucket_info, NULL, y, dpp);
+  int ret = get_bucket_info(&svc, bucket.tenant, bucket.name, bucket_info, NULL, y, dpp, ctl.bucket);
   if (ret < 0) {
     return ret;
   }
@@ -9152,7 +9306,7 @@ int RGWRados::check_reshard_logrecord_status(RGWBucketInfo& bucket_info, optiona
 
     map<string, bufferlist> bucket_attrs;
     int ret = get_bucket_info(&svc, bucket_info.bucket.tenant, bucket_info.bucket.name,
-                              bucket_info, nullptr, y, dpp, &bucket_attrs);
+                              bucket_info, nullptr, y, dpp, ctl.bucket, &bucket_attrs);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
         " ERROR: failed to refresh bucket info : " << cpp_strerror(-ret) << dendl;
@@ -9178,7 +9332,7 @@ int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
       bucket_info.bucket.bucket_id << "; expected if resharding underway" << dendl;
     // update the judge time
     bucket_info.layout.judge_reshard_lock_time = real_clock::now();
-    ret = put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs, dpp, y);
+    ret = put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs, dpp, y, ctl.bucket);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ <<
         " ERROR: error putting bucket instance info: " << cpp_strerror(-ret) << dendl;
@@ -9244,7 +9398,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   auto fetch_new_bucket_info =
     [this, bs, &obj_instance, &bucket_info, &bucket_attrs, &y, dpp](const std::string& log_tag) -> int {
     int ret = get_bucket_info(&svc, bs->bucket.tenant, bs->bucket.name,
-			      bucket_info, nullptr, y, dpp, &bucket_attrs);
+			      bucket_info, nullptr, y, dpp, ctl.bucket, &bucket_attrs);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR: failed to refresh bucket info after reshard at " <<
@@ -10582,12 +10736,12 @@ int RGWRados::get_bucket_info(RGWServices *svc,
                               RGWBucketInfo& info,
                               real_time *pmtime,
                               optional_yield y,
-                              const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs)
+                              const DoutPrefixProvider *dpp, RGWBucketCtl* bucket_ctl, map<string, bufferlist> *pattrs)
 {
   rgw_bucket bucket;
   bucket.tenant = tenant;
   bucket.name = bucket_name;
-  return ctl.bucket->read_bucket_info(bucket, &info, y, dpp,
+  return bucket_ctl->read_bucket_info(bucket, &info, y, dpp,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(pmtime)
 				      .set_attrs(pattrs));
@@ -10596,14 +10750,15 @@ int RGWRados::get_bucket_info(RGWServices *svc,
 int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
                                       ceph::real_time *pmtime,
                                       const DoutPrefixProvider *dpp, optional_yield y,
-                                      map<string, bufferlist> *pattrs)
+                                      map<string, bufferlist> *pattrs,
+                                      RGWBucketCtl* bucket_ctl)
 {
   rgw_bucket bucket = info.bucket;
   bucket.bucket_id.clear();
 
   auto rv = info.objv_tracker.read_version;
 
-  return ctl.bucket->read_bucket_info(bucket, &info, y, dpp,
+  return bucket_ctl->read_bucket_info(bucket, &info, y, dpp,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(pmtime)
 				      .set_attrs(pattrs)
@@ -10612,9 +10767,9 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
                               real_time mtime, const map<string, bufferlist> *pattrs,
-                              const DoutPrefixProvider *dpp, optional_yield y)
+                              const DoutPrefixProvider *dpp, optional_yield y, RGWBucketCtl* bucket_ctl)
 {
-  return ctl.bucket->store_bucket_instance_info(info.bucket, info, y, dpp,
+  return bucket_ctl->store_bucket_instance_info(info.bucket, info, y, dpp,
 						RGWBucketCtl::BucketInstance::PutParams()
 						.set_exclusive(exclusive)
 						.set_mtime(mtime)
@@ -10623,11 +10778,11 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
                                      const map<string, bufferlist> *pattrs, bool create_entry_point,
-                                     const DoutPrefixProvider *dpp, optional_yield y)
+                                     const DoutPrefixProvider *dpp, optional_yield y, RGWBucketCtl* bucket_ctl)
 {
   bool create_head = !info.has_instance_obj || create_entry_point;
 
-  int ret = put_bucket_instance_info(info, exclusive, mtime, pattrs, dpp, y);
+  int ret = put_bucket_instance_info(info, exclusive, mtime, pattrs, dpp, y, bucket_ctl);
   if (ret < 0) {
     return ret;
   }
@@ -10649,7 +10804,7 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
       *pep_objv = ot.write_version;
     }
   }
-  ret = ctl.bucket->store_bucket_entrypoint_info(info.bucket, entry_point, y, dpp, RGWBucketCtl::Bucket::PutParams()
+  ret = bucket_ctl->store_bucket_entrypoint_info(info.bucket, entry_point, y, dpp, RGWBucketCtl::Bucket::PutParams()
 						                          .set_exclusive(exclusive)
 									  .set_objv_tracker(&ot)
 									  .set_mtime(mtime));
@@ -12155,7 +12310,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.size = object.meta.size;
   list_state.meta.accounted_size = object.meta.accounted_size;
   list_state.meta.mtime = object.meta.mtime;
-  list_state.meta.category = main_category;
+  // Preserve the cloud-tiered category when reconciling the index entry from
+  // the head object.
+  list_state.meta.category = (manifest && manifest->is_tier_type_s3()) ?
+			     RGWObjCategory::CloudTiered : main_category;
   list_state.meta.etag = etag;
   list_state.meta.appendable = appendable;
   list_state.meta.content_type = content_type;

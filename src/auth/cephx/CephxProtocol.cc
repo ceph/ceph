@@ -514,6 +514,57 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
     return false;
   }
 
+  // AuthTicket::encode writes a constant uid; a different one means tampering.
+  if (ticket_info.ticket.auid != CEPH_AUTH_UID_DEFAULT) {
+    ldout(cct, 0) << "verify_authorizer bad auid in ticket for "
+                  << ticket_info.ticket.name << ", rejecting" << dendl;
+    return false;
+  }
+
+  // the monitor never sets allow_all in a service ticket.
+  if (ticket_info.ticket.caps.allow_all) {
+    ldout(cct, 0) << "verify_authorizer allow_all set in ticket for "
+                  << ticket_info.ticket.name << ", rejecting" << dendl;
+    return false;
+  }
+
+  // Ticket and session-key creation are stamped in adjacent statements at
+  // issuance. Allow five minutes either way for a clock step or scheduling
+  // delay, without depending on the verifier's clock or its configured TTL.
+  const utime_t created = ticket_info.ticket.created;
+  const utime_t expires = ticket_info.ticket.expires;
+  const utime_t session_created = ticket_info.session_key.get_created();
+  const utime_t slop(300, 0);
+  if (static_cast<uint32_t>(created.nsec()) > 1000000000u ||
+      static_cast<uint32_t>(expires.nsec()) > 1000000000u ||
+      static_cast<uint32_t>(session_created.nsec()) > 1000000000u ||
+      expires < created ||
+      (created < session_created ? session_created - created > slop
+                                 : created - session_created > slop)) {
+    ldout(cct, 0) << "verify_authorizer bad ticket timestamps for "
+                  << ticket_info.ticket.name << ", rejecting" << dendl;
+    return false;
+  }
+
+  // Non-empty caps.caps must contain exactly one encoded string.
+  if (ticket_info.ticket.caps.caps.length()) {
+    auto p = ticket_info.ticket.caps.caps.cbegin();
+    std::string str;
+    try {
+      decode(str, p);
+    } catch (const ceph::buffer::error&) {
+      ldout(cct, 0) << "verify_authorizer undecodable caps in ticket for "
+                    << ticket_info.ticket.name << ", rejecting" << dendl;
+      return false;
+    }
+    if (!p.end()) {
+      ldout(cct, 0)
+          << "verify_authorizer trailing bytes after caps in ticket for "
+          << ticket_info.ticket.name << ", rejecting" << dendl;
+      return false;
+    }
+  }
+
   ldout(cct, 10) << __func__ << ": global_id=" << global_id << dendl;
   ldout(cct, 30) << __func__ << ": session key=" << ticket_info.session_key << dendl;
 

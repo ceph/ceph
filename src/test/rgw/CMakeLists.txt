@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 #
 # Helper for adding RGW tests built with Catch2:
 # Note: to define a test that does not use Catch2::main(), use:
@@ -29,10 +31,6 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
       kafka_stub.cc)
     add_library(kafka_stub STATIC ${kafka_stub_src})
   endif()
-endif()
-
-if(WITH_RADOSGW_LUA_PACKAGES)
-  list(APPEND rgw_libs Boost::filesystem)
 endif()
 
 if(WITH_JAEGER)
@@ -127,6 +125,14 @@ add_executable(unittest_rgw_cors
   $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_cors)
 target_link_libraries(unittest_rgw_cors ${rgw_libs})
+
+
+# unittest_rgw_frontend_type
+add_executable(unittest_rgw_frontend_type
+  test_rgw_frontend_type.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_frontend_type)
+target_link_libraries(unittest_rgw_frontend_type ${rgw_libs} heap_profiler)
 
 
 # unittest_rgw_bucket_sync_cache
@@ -314,6 +320,10 @@ target_link_libraries(unittest_rgw_iam_policy
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
+
+add_executable(unittest_rgw_keystone test_rgw_keystone.cc)
+add_ceph_unittest(unittest_rgw_keystone)
+target_link_libraries(unittest_rgw_keystone ${rgw_libs})
 endif()
 
 add_executable(unittest_rgw_string test_rgw_string.cc)
@@ -482,7 +492,7 @@ target_include_directories(unittest_rgw_posix_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
 target_link_libraries(unittest_rgw_posix_driver
   ${UNITTEST_LIBS}
-  rgw_a_standalone
+  ${rgw_libs}
   ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
@@ -537,10 +547,17 @@ add_ceph_unittest(unittest_rgw_http_client)
 target_link_libraries(unittest_rgw_http_client
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
+
 # unittest_rgw_rest_conn
 add_executable(unittest_rgw_rest_conn test_rgw_rest_conn.cc)
 add_ceph_unittest(unittest_rgw_rest_conn)
 target_link_libraries(unittest_rgw_rest_conn
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_yield_completion
+add_executable(unittest_yield_completion test_yield_completion.cc)
+add_ceph_unittest(unittest_yield_completion)
+target_link_libraries(unittest_yield_completion
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
 if(WITH_RADOSGW_FDB)
@@ -550,4 +567,54 @@ if(WITH_RADOSGW_FDB)
  add_catch2_test_rgw(fdb_query)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_content)
+endif()
+
+if(WITH_RADOSGW_LANCEDB)
+add_executable(unittest_rgw_s3vector test_rgw_s3vector.cc)
+add_ceph_unittest(unittest_rgw_s3vector)
+target_link_libraries(unittest_rgw_s3vector ${rgw_libs} ${UNITTEST_LIBS})
+if(WITH_SYSTEM_ARROW)
+  target_include_directories(unittest_rgw_s3vector PRIVATE ${ARROW_INCLUDE_DIR})
+else()
+  target_include_directories(unittest_rgw_s3vector PRIVATE ${CMAKE_BINARY_DIR}/src/arrow/include)
+endif()
+
+add_executable(ceph_test_rgw_sal_wrapper test_rgw_sal_wrapper.cc)
+target_link_libraries(ceph_test_rgw_sal_wrapper
+  rgw_common
+  ${rgw_libs}
+  ${UNITTEST_LIBS})
+install(TARGETS ceph_test_rgw_sal_wrapper DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# libtest (used by the LanceDB ObjectStore cargo tests) owns main(), so the
+# ceph context and SAL driver are brought up in this shared library instead.
+# Linking rgw_common also makes it re-export the rgw_sal_wrapper API, so the
+# cargo test binary links this one .so rather than the full RGW link line.
+add_library(ceph_rgw_sal_test_env SHARED rgw_sal_test_env.cc)
+target_link_libraries(ceph_rgw_sal_test_env
+  rgw_common
+  ${rgw_libs})
+target_include_directories(ceph_rgw_sal_test_env PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/rgw)
+install(TARGETS ceph_rgw_sal_test_env DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# The LanceDB ObjectStore tests are Rust `cargo test` functions
+# (lancedb-rgw-store/tests/object_store.rs).  They link against
+# libceph_rgw_sal_test_env.so for driver bring-up and the rgw_sal_wrapper API.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cargo_test_binary.cmake)
+add_rgw_cargo_test_binary(
+  NAME    ceph_test_rgw_lancedb_object_store
+  PACKAGE lancedb-rgw-store
+  TEST    object_store
+  DEPENDS ceph_rgw_sal_test_env)
+
+# The crate's own #[cfg(test)] unit tests (errno mapping in store.rs, FFI struct
+# defaults in ffi.rs).  They need no cluster, so they run under `make check`
+# rather than being installed.  They still link libceph_rgw_sal_test_env.so,
+# since the FFI reaches through it to rgw_sal_wrapper_version().
+add_rgw_cargo_test_binary(
+  NAME      unittest_rgw_lancedb_store
+  PACKAGE   lancedb-rgw-store
+  UNIT_TEST
+  DEPENDS   ceph_rgw_sal_test_env)
 endif()

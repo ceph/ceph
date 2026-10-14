@@ -193,9 +193,9 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 //
 // The called function must return an integer, negative on error. In
 // general, they should just return op_ret.
-template<typename F>
+template<typename F, typename B=rgw::sal::Bucket>
 int retry_raced_bucket_write(const DoutPrefixProvider *dpp,
-                             rgw::sal::Bucket *b,
+                             B* b,
                              const F &f,
                              optional_yield y) {
   auto r = f();
@@ -262,6 +262,8 @@ public:
   virtual ~RGWOp() override;
 
   int get_ret() const { return op_ret; }
+  req_state* get_req_state() const { return s; }
+  rgw::sal::User* get_user() const { return s ? s->user.get() : nullptr; }
 
   virtual int init_processing(optional_yield y) {
     if (dialect_handler->supports_quota()) {
@@ -283,6 +285,15 @@ public:
   int read_bucket_cors();
   int read_global_cors();
   bool generate_cors_headers(std::string& origin, std::string& method, std::string& headers, std::string& exp_headers, unsigned *max_age);
+
+  /* Enforce CORS policy for cross-origin non-preflight requests.
+   *
+   * The check is skipped when:
+   *  - no Origin header is present
+   *  - getting a preflight request (handled entirely by RGWOptionsCORS)
+   *  - no bucket/global CORS configuration exists
+   */
+  int verify_cors_match();
 
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
@@ -1407,7 +1418,6 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
-  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWPostObj : public RGWOp {
@@ -2125,12 +2135,13 @@ public:
   void complete() override;
 
   virtual int get_params(optional_yield y) = 0;
+  virtual int verify_encryption(std::map<std::string, bufferlist>& attrs,
+                                rgw::cksum::Type cksum_type) { return 0; }
   void send_response() override = 0;
   const char* name() const override { return "complete_multipart"; }
   std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWAbortMultipart : public RGWOp {
@@ -2279,6 +2290,10 @@ class RGWDeleteMultiObj : public RGWOp {
 
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
+
+  int run_lua_script(rgw::lua::context ctx,
+                     const rgw::sal::Object* multi_delete_obj,
+                     optional_yield y);
 
 protected:
   std::vector<delete_multi_obj_entry> ops_log_entries;

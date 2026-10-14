@@ -41,7 +41,7 @@ class TestCustomContainer:
                             },
                             "meta": {
                                 'service_name': 'container.tsettinu',
-                                'ports': [],
+                                'ports': [9090],
                                 'ip': None,
                                 'deployed_by': [],
                                 'rank': None,
@@ -111,7 +111,7 @@ class TestCustomContainer:
             },
             'meta': {
                 'service_name': 'container.tsettinu',
-                'ports': [],
+                'ports': [9090],
                 'ip': None,
                 'deployed_by': [],
                 'rank': None,

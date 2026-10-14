@@ -285,9 +285,49 @@ the dumped metrics by prefix.
 Prometheus Text Protocol
 ------------------------
 
-The listening port and address can be configured using the command line
-option ``--prometheus_port``.
+The endpoint is active only when :confval:`crimson_prometheus_port_base`
+is set to a non-zero value. OSD ``N`` listens on the TCP port
+``base + N``. Set the base before deploying the OSDs, the same way as
+:confval:`crimson_cpu_num`. A restart is required only when the value
+changes after an OSD is already running. Each ``base + N`` port must be
+unbound.
 
-See `Prometheus`_ in the Seastar documentation for more details.
+Ports below 1024 are privileged. Choose a base so that every
+``base + N`` is at least 1024. If the range crosses 1024, an OSD that
+would bind a privileged port fails to start unless it can bind
+privileged ports, while an OSD with a higher id starts normally.
+
+.. prompt:: bash #
+
+   ceph config set osd crimson_prometheus_port_base 29180
+
+``osd.0`` then serves ``http://<host>:29180/metrics`` and ``osd.1`` serves
+port 29181. With the default :confval:`crimson_prometheus_prefix`,
+``reactor_utilization`` from ``dump_metrics`` appears as
+``osd_reactor_utilization``. :confval:`crimson_prometheus_address` sets
+the bind address. The default ``0.0.0.0`` listens on every network
+interface. Set a specific address to expose the endpoint on that
+interface only. The endpoint does not authenticate clients.
+
+After the OSDs are up:
+
+.. prompt:: bash #
+
+   curl -s http://<host>:29180/metrics | grep osd_reactor_utilization
+   ceph tell osd.0 dump_metrics reactor_utilization
+
+A scrape contains lines of the following form::
+
+   # HELP osd_reactor_utilization CPU utilization
+   # TYPE osd_reactor_utilization gauge
+   osd_reactor_utilization{shard="0"} 12.500000
+   osd_reactor_utilization{shard="1"} 100.000000
+   osd_reactor_utilization{shard="2"} 100.000000
+
+
+``dump_metrics`` prints the same family without the ``osd_`` prefix.
+
+See `Prometheus`_ in the Seastar documentation for ``/metrics`` query
+parameters such as ``__name__``, ``shard``, and ``__aggregate__``.
 
 .. _Prometheus: https://github.com/scylladb/seastar/blob/master/doc/prometheus.md

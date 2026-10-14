@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "osd_operation.h"
+#include "common/ceph_time_fmt.h"
 #include "common/Formatter.h"
 #include "crimson/common/log.h"
 #include "crimson/osd/osd_operations/client_request.h"

@@ -69,6 +69,9 @@ using boost::endian::native_to_big;
 #ifdef HAVE_GETENTROPY
 
 #include <unistd.h>
+#ifdef HAVE_SYS_RANDOM_H
+#include <sys/random.h> // for getentropy() on Darwin
+#endif
 
 static bool getentropy_works()
 {

@@ -23,6 +23,7 @@
 
 #include "include/encoding.h"
 #include "msg/msg_types.h" // for struct entity_addr_t
+#include "include/filepath.h"
 
 #include <boost/optional.hpp>
 
@@ -49,6 +50,10 @@ struct MDSCapSpec {
   static const unsigned SNAPSHOT	= (1 << 4);
   // if the capability permits to bypass osd full check
   static const unsigned FULL	        = (1 << 5);
+  // if the capability permits access to a specific quarantined dir
+  static const unsigned Q               = (1 << 6);
+  // if the capability permits access to all quarantined dirs
+  static const unsigned Q_PRIME         = (1 << 7);
 
   static const unsigned RW		= (READ|WRITE);
   static const unsigned RWF		= (READ|WRITE|FULL);
@@ -63,6 +68,8 @@ struct MDSCapSpec {
   MDSCapSpec(unsigned _caps) : caps(_caps) {
     if (caps & ALL)
       caps |= RWFPS;
+    // Q and Q_PRIME are never implied by ALL — quarantine access
+    // must be granted explicitly to limit who can access compromised data.
   }
 
   bool allow_all() const {
@@ -93,6 +100,14 @@ struct MDSCapSpec {
   }
   bool allow_full() const {
     return (caps & FULL);
+  }
+  // check access for specific dir
+  bool allow_qtine_access() const {
+    return (caps & Q);
+  }
+  // check access for all dirs (superset access to all quarantined dirs)
+  bool allow_qtine_prime_access() const {
+    return (caps & Q_PRIME);
   }
 
   unsigned get_caps() {
@@ -262,7 +277,8 @@ public:
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, const std::vector<uint64_t> *caller_gid_list,
 		  unsigned mask, uid_t new_uid, gid_t new_gid,
-		  const entity_addr_t& addr, std::string_view trimmed_inode_path) const;
+		  const entity_addr_t& addr, std::string_view trimmed_inode_path,
+                  bool check_quarantine_access) const;
   bool path_capable(std::string_view inode_path) const;
 
   bool fs_name_capable(std::string_view fs_name, unsigned mask) const {
@@ -298,6 +314,40 @@ public:
     for (const MDSCapGrant& g : grants) {
       if (g.match.match_fs(fs_name)) {
         if (g.match.root_squash) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool quarantine_access_in_caps(std::string_view fs_name, std::string_view path) const {
+    for (const MDSCapGrant& g : grants) {
+      if (g.match.match_fs(fs_name)) {
+        // Check if this grant has quarantine access
+        if (!(g.spec.allow_qtine_access() || g.spec.allow_qtine_prime_access())) {
+          continue;
+        }
+        
+        // Check if the path matches this grant
+        // Handle empty or root path specially
+        if (path.empty() || path == "/") {
+          if (g.match.match_path("")) {
+            return true;
+          }
+          continue;
+        }
+        
+        filepath fp(path);
+        bool path_matched = g.match.match_path(fp.get_path()); // Check current path
+        
+        // If not matched, try parent paths
+        while (!path_matched && fp.depth()) {
+          fp.pop_dentry();
+          path_matched = g.match.match_path(fp.get_path());
+        }
+        
+        if (path_matched) {
           return true;
         }
       }

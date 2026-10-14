@@ -100,7 +100,7 @@ Using Curl to Install Cephadm
 -----------------------------
 
 #. Determine which version of Ceph you will install. Use the releases page to
-   find the :ref:`active-releases`.  For example,
+   find the `latest active releases`_.  For example,
    you might find that ``18.2.1`` is the latest active release.
 
 #. Use ``curl`` to fetch a build of cephadm for that release.
@@ -388,7 +388,7 @@ Enabling OSD Memory Autotuning
 
 See :ref:`osd_autotune`.
 
-To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/cephadm.html#scenario-deploy-hyperconverged-ceph>`_
+To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/deployed_ceph.html#scenario-deploy-hyperconverged-ceph>`_
 
 In other cases where the cluster hardware is not exclusively used by Ceph (converged infrastructure),
 reduce the memory consumption of Ceph like so:
@@ -610,3 +610,8 @@ would simply be a matter of getting another key signed by the same CA and provid
 cephadm with the new private key and the new signed certificate. No additional distribution of
 keys to cluster nodes is needed after the initial setup of the CA key as a trusted key,
 no matter how many new private key/signed cert pairs are rotated in.
+
+
+.. Needs to be an external link because doc/releases/index.rst is not in
+   stable branches and we want to always use the main branch version
+.. _latest active releases: https://docs.ceph.com/en/latest/releases/#active-releases

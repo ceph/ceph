@@ -13,6 +13,7 @@ from ceph.deployment.service_spec import (
     NFSServiceSpec,
     PatternType,
     HostPattern,
+    SMBSpec,
 )
 from ceph.deployment.hostspec import SpecValidationError
 
@@ -209,6 +210,34 @@ def test_daemon_placement_renumber(dp, n, result):
         (
             DaemonPlacement(daemon_type='mgr', hostname='host1', name='a'),
             DaemonDescription('mgr', 'b', 'host1'),
+            False
+        ),
+        # Upgrade scenario: spec gained extra default ports (e.g. NFS gained monitoring
+        # and qos ports after upgrade).  The existing daemon only has [2049]; the new
+        # spec wants [2049, 9587, 31311].  The old ports are a leading subset of the
+        # new spec ports so the daemon should still be considered matching - no spurious
+        # redeploy should be triggered.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2049, 9587, 31311]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049]),
+            True
+        ),
+        # All ports match exactly - still matches.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2049, 9587, 31311]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049, 9587, 31311]),
+            True
+        ),
+        # The NFS port itself changed (2049 -> 2222) - must NOT match so a redeploy fires.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2222, 9587, 31311]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049]),
+            False
+        ),
+        # Ports reduced (feature removed) - must NOT match.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2049]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049, 9587, 31311]),
             False
         ),
     ])
@@ -1644,6 +1673,32 @@ class RescheduleFromOfflineTest(NamedTuple):
                                  [[]],
                              ),
                              RescheduleFromOfflineTest(
+                                 'smb',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [],
+                                 ['host2'],
+                                 [
+                                     DaemonDescription('smb', 'a', 'host1'),
+                                     DaemonDescription('smb', 'b', 'host2'),
+                                 ],
+                                 [['host3']],
+                                 [[]],
+                             ),
+                             RescheduleFromOfflineTest(
+                                 'smb',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 ['host2'],
+                                 [],
+                                 [
+                                     DaemonDescription('smb', 'a', 'host1'),
+                                     DaemonDescription('smb', 'b', 'host2'),
+                                 ],
+                                 [[]],
+                                 [[]],
+                             ),
+                             RescheduleFromOfflineTest(
                                  'mon',
                                  PlacementSpec(count=2),
                                  'host1 host2 host3'.split(),
@@ -1681,6 +1736,14 @@ def test_remove_from_offline(service_type, placement, hosts, maintenance_hosts, 
                 monitor_port=8888,
                 virtual_ip='10.0.0.20/8',
                 backend_service='nfs-ha.foo',
+                placement=placement,
+            )
+    elif service_type == 'smb':
+        spec = \
+            SMBSpec(
+                service_id='test',
+                cluster_id='test',
+                config_uri='mem:test/config.json',
                 placement=placement,
             )
     else:

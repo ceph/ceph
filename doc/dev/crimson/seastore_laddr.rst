@@ -202,7 +202,7 @@ after the upgrade finishes.
 TODO: fsck/tooling must support scanning and migrating all mappings
 between upgrades.
 
-//create tracker after PR merged/ready.
+.. TODO:: create tracker after PR merged/ready.
 
 Multi-push Recovery
 -------------------

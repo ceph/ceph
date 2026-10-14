@@ -75,16 +75,18 @@ def get_binary_url(
     # that include the desired arch
     if arch:
         result = [r for r in result if ('archs' in r and arch in r['archs'])]
+        if len(result) == 0:
+            raise RuntimeError(f'no results for arch {arch} at {resp.url}')
 
-    # TODO: Is there any further filtering we should do beyond arch?
-    # We already use flavor, ref, etc. in our search.
-
-    # TODO: After filtering, does it matter which result we take?
-    result = result[0]
-
-    status = result['status']
-    if status != 'ready':
-        raise RuntimeError(f'cannot pull file with status: {status}')
+    # Results are newest-first, and a ref that is being rebuilt has its
+    # newest build in 'building' status while older completed builds
+    # remain available; take the newest ready build rather than failing
+    # (https://tracker.ceph.com/issues/80122).
+    ready = [r for r in result if r['status'] == 'ready']
+    if len(ready) == 0:
+        statuses = ', '.join(sorted({r['status'] for r in result}))
+        raise RuntimeError(f'cannot pull file with status: {statuses}')
+    result = ready[0]
 
     # build the chacra url
     chacra_host = urlparse(result['url']).netloc

@@ -101,6 +101,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_dedup_skip_compressed
+  type: bool
+  level: advanced
+  desc: Skip server-side compressed objects during dedup.
+  long_desc: When true, compressed objects are skipped during the dedup process.
+    When false (default), compressed objects participate in dedup and their
+    uncompressed data is hashed on-the-fly for matching.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_max_chunk_size
   type: size
   level: advanced
@@ -340,7 +351,7 @@ options:
   note: Enabling the ``s3`` API is a requirement for
     any ``radosgw`` instance that is meant to
     participate in a :ref:`multisite` configuration.
-  default: s3, s3control, s3website, swift, swift_auth, admin, sts, iam, notifications
+  default: s3, s3control, s3website, swift, swift_auth, admin, sts, iam, notifications, s3vectors
   services:
   - rgw
   with_legacy: true
@@ -745,15 +756,13 @@ options:
     For compatibility, setting this configuration variable to the empty string causes
     the default ``swift`` to be used; if you do want an empty prefix, set this option
     to ``/``.
-
-    .. warning::
-
-       If you set this option to ``/``, you must disable the S3 API by modifying
-       ``rgw_enable_apis`` to exclude ``s3``. It is not possible to operate radosgw
-       with ``rgw_swift_url_prefix = /`` and simultaneously support both the S3 and
-       Swift APIs. If you do need to support both APIs without prefixes, deploy
-       multiple radosgw instances to listen on different hosts (or ports) instead,
-       enabling some for S3 and some for Swift.
+  warning: |
+    If you set this option to ``/``, you must disable the S3 API by modifying
+    ``rgw_enable_apis`` to exclude ``s3``. It is not possible to operate radosgw
+    with ``rgw_swift_url_prefix = /`` and simultaneously support both the S3 and
+    Swift APIs. If you do need to support both APIs without prefixes, deploy
+    multiple radosgw instances to listen on different hosts (or ports) instead,
+    enabling some for S3 and some for Swift.
   example: /swift-testing
   default: swift
   services:
@@ -1001,7 +1010,40 @@ options:
 - name: rgw_keystone_accepted_reader_roles
   type: str
   level: advanced
-  desc: List of roles that can only be used for reads (Keystone).
+  desc: Keystone roles granting system-scoped read access.
+  long_desc: >-
+    Keystone roles granting system-scoped read access (Swift
+    system_reader_roles equivalent). The role must also be listed in
+    rgw_keystone_accepted_admin_roles.
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_accepted_project_reader_roles
+  type: str
+  level: advanced
+  desc: Keystone roles granting project-scoped read-only access.
+  long_desc: >-
+    Keystone roles granting project-scoped read-only access (Swift
+    project_reader_roles equivalent). A role here admits the user on its own
+    and caps it to read-only. This is a floor, not a hard cap: a bucket
+    policy naming the user can grant more. All members of a project map to
+    the same RGW account (the project), so the reader sees every bucket that
+    account owns; this scoping is by ownership and holds regardless of
+    rgw_keystone_implicit_tenants, which only controls the bucket-name
+    namespace.
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_implicit_deny_roles
+  type: str
+  level: advanced
+  desc: Keystone roles granting no implicit permissions.
+  long_desc: >-
+    Keystone roles that authenticate a user without granting any implicit
+    permissions. A role here admits the user on its own; a user whose only
+    access-granting role is such a role is authenticated but denied every
+    operation by default, so access must be granted explicitly through a
+    bucket policy or IAM policy.
   services:
   - rgw
   with_legacy: true
@@ -1516,6 +1558,73 @@ options:
   services:
   - rgw
   with_legacy: true
+# overrides for librgw/smb
+- name: rgw_smb_run_gc_threads
+  type: bool
+  level: advanced
+  desc: run GC threads in librgw/smb (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_smb_run_lc_threads
+  type: bool
+  level: advanced
+  desc: run lifecycle threads in librgw/smb (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_smb_run_quota_threads
+  type: bool
+  level: advanced
+  desc: run quota threads in librgw/smb (default on)
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_smb_run_restore_threads
+  type: bool
+  level: advanced
+  desc: run objects' restore threads in librgw/smb (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_smb_run_dedup_threads
+  type: bool
+  level: advanced
+  desc: run dedup threads in librgw/smb (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_smb_run_sync_thread
+  type: bool
+  level: advanced
+  desc: run sync thread in librgw/smb (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_smb_frontends
+  type: str
+  level: basic
+  desc: RGW frontends configuration when running as librgw/smb
+  long_desc: A comma-delimited list of frontends configuration. Each configuration
+    contains the type of the frontend followed by an optional space delimited set
+    of key=value config parameters.
+  fmt_desc: Configures the rgw-smb frontend(s). The configuration for multiple
+    frontends can be provided in a comma-delimited list. Each frontend
+    configuration may include a list of options separated by spaces,
+    where each option is in the form "key=value" or "key". See
+    `RGW_SMB Frontends`_ for more on supported options.
+  default: rgw-smb
+  services:
+  - rgw
+  with_legacy: true
+  see_also:
+  - rgw_frontends
 - name: rgw_nfs_frontends
   type: str
   level: basic
@@ -2822,6 +2931,23 @@ options:
   default: 0
   services:
   - rgw
+  flags:
+  - runtime
+  with_legacy: true
+- name: rgw_sync_data_inject_err_list
+  type: str
+  level: dev
+  desc: object keys and error codes for data sync error injection
+  long_desc: Intended for multisite testing. Accepts a comma-separated list of
+    `key=errno` entries. When non-empty, error injection only applies to object
+    keys with an exact match in this list, using the corresponding positive
+    errno value. When empty, error injection defaults to EIO.
+  services:
+  - rgw
+  flags:
+  - runtime
+  see_also:
+  - rgw_sync_data_inject_err_probability
   with_legacy: true
 - name: rgw_sync_meta_inject_err_probability
   type: float
@@ -3086,6 +3212,28 @@ options:
   - rgw
   - rgw
   min: 16
+- name: rgw_bucket_reshard_counters_cache
+  type: bool
+  level: advanced
+  default: false
+  desc: enable a rgw perf counters cache for counters with bucket reshard
+  long desc: If set to true, rgw creates perf counters labeled by bucket for
+    bucket resharding and stores them in a perf counters cache.
+  see_also:
+  - rgw_bucket_reshard_counters_cache_size
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_bucket_reshard_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the bucket resharding counters cache can store
+  default: 10000
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_reshard_counters_cache
+  with_legacy: true
 - name: rgw_trust_forwarded_https
   type: bool
   level: advanced
@@ -3116,6 +3264,17 @@ options:
   level: advanced
   desc: Requests including encryption key headers must be sent over ssl
   default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3_block_sse_c_by_default
+  type: bool
+  level: advanced
+  desc: Block SSE-C uploads on newly created buckets
+  long_desc: When enabled, RGW configures all newly created buckets to block
+    SSE-C uploads. Existing buckets are not affected. Use PutBucketEncryption
+    to change this setting on a bucket.
+  default: false
   services:
   - rgw
   with_legacy: true
@@ -3667,6 +3826,8 @@ options:
   default: true
   services:
   - rgw
+  flags:
+  - startup
   see_also:
   - rgw_max_objs_per_shard
   - rgw_max_dynamic_shards
@@ -4045,19 +4206,6 @@ options:
   see_also:
   - rgw_dmclock_metadata_res
   - rgw_dmclock_metadata_wgt
-- name: rgw_default_data_log_backing
-  type: str
-  level: advanced
-  desc: Default backing store for the RGW data sync log
-  long_desc: Whether to use the older OMAP backing store or the high performance FIFO
-    based backing store by default. This only covers the creation of the log on startup
-    if none exists.
-  default: fifo
-  services:
-  - rgw
-  enum_values:
-  - fifo
-  - omap
 - name: rgw_default_bucket_bilog_type
   type: str
   level: advanced
@@ -4351,14 +4499,13 @@ options:
   type: str
   level: advanced
   desc: experimental Option to set backend store type
-  long_desc: defaults to rados. Other valid values are dbstore, motr, and daos (All experimental).
+  long_desc: defaults to rados. Other valid values are dbstore and daos (All experimental).
   default: rados
   services:
   - rgw
   enum_values:
   - rados
   - dbstore
-  - motr
   - daos
   - posix
 - name: rgw_config_store
@@ -4414,61 +4561,6 @@ options:
   default: /var/lib/ceph/radosgw/config.json
   see_also:
   - rgw_config_store
-  services:
-  - rgw
-- name: motr_profile_fid
-  type: str
-  level: advanced
-  desc: experimental Option to set Motr profile fid
-  long_desc: example value 0x7000000000000001:0x4f
-  default: 0x7000000000000001:0x0
-  services:
-  - rgw
-- name: motr_my_fid
-  type: str
-  level: advanced
-  desc: experimental Option to set my Motr fid
-  long_desc: example value 0x7200000000000001:0x29
-  default: 0x7200000000000001:0x0
-  services:
-  - rgw
-- name: motr_admin_fid
-  type: str
-  level: advanced
-  desc: Admin Tool Motr FID for admin-level access.
-  long_desc: example value 0x7200000000000001:0x2c
-  default: 0x7200000000000001:0x0
-  services:
-  - rgw
-- name: motr_admin_endpoint
-  type: str
-  level: advanced
-  desc:  experimental Option to set Admin Motr endpoint address
-  long_desc: example value 192.168.180.182@tcp:12345:4:1
-  default: 192.168.180.182@tcp:12345:4:1
-  services:
-  - rgw
-- name: motr_my_endpoint
-  type: str
-  level: advanced
-  desc: experimental Option to set my Motr endpoint address
-  long_desc: example value 192.168.180.182@tcp:12345:4:1
-  default: 192.168.180.182@tcp:12345:4:1
-  services:
-  - rgw
-- name: motr_ha_endpoint
-  type: str
-  level: advanced
-  desc: experimental Option to set Motr HA agent endpoint address
-  long_desc: example value 192.168.180.182@tcp:12345:1:1
-  default: 192.168.180.182@tcp:12345:1:1
-  services:
-  - rgw
-- name: motr_tracing_enabled
-  type: bool
-  level: advanced
-  desc: Set to true when Motr client debugging is needed
-  default: false
   services:
   - rgw
 - name: rgw_posix_base_path
@@ -4966,7 +5058,40 @@ options:
   default: 11
   services:
     - rgw
-
+- name: rgw_s3vector_topk_post_filter_factor
+  type: float
+  level: advanced
+  desc: Oversampling factor for topK when JSON metadata post-filtering is used
+  long_desc: When a vector query uses metadata filtering on non-column fields,
+    multiply topK by this factor to fetch more candidates from the index before
+    post-filtering. Higher values increase the chance of returning the full topK
+    results after filtering, at the cost of more work.
+  default: 1
+  services:
+  - rgw
+  min: 1
+  max: 10
+  flags:
+  - runtime
+  with_legacy: true
+- name: rgw_s3vector_max_put_vectors
+  type: uint
+  level: advanced
+  desc: Maximum number of vectors in a single PutVectors request
+  long_desc: A PutVectors request that holds more vectors than this value is
+    rejected. All the vectors of a request are written together, so higher values
+    allow for fewer and larger writes, at the cost of larger requests. Note that
+    the size of the request is also limited by rgw_max_put_param_size.
+  default: 500
+  services:
+  - rgw
+  min: 1
+  max: 10000
+  flags:
+  - runtime
+  see_also:
+  - rgw_max_put_param_size
+  with_legacy: true
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
@@ -5016,7 +5141,6 @@ options:
   flags:
   - runtime
   with_legacy: true
-
 - name: rgw_sigv4_insecure
   type: bool
   level: advanced
@@ -5032,3 +5156,47 @@ options:
   flags:
   - runtime
   with_legacy: true
+# S3 Vector (LanceDB) backend configuration
+- name: rgw_s3vector_backend
+  type: str
+  level: advanced
+  desc: S3 Vector backend type
+  long_desc: Specifies the storage backend for S3 Vector (LanceDB). Use "local" for
+    local filesystem storage, or "rgw" for RGW's internal Storage Abstraction Layer
+    (same Ceph cluster).
+  default: rgw
+  enum_values:
+  - local
+  - rgw
+  services:
+  - rgw
+  flags:
+  - runtime
+  with_legacy: true
+- name: rgw_s3vector_local_path
+  type: str
+  level: advanced
+  desc: Local path for S3 Vector LanceDB storage
+  long_desc: The local filesystem path where LanceDB databases will be stored when
+    using the "local" backend. Each vector bucket will be created as a subdirectory.
+  default: /var/lib/ceph/radosgw/$cluster-$id/s3vector-lancedb
+  services:
+  - rgw
+  flags:
+  - runtime
+  with_legacy: true
+- name: rgw_s3vector_max_request_size
+  type: size
+  level: advanced
+  desc: The maximum size (in bytes) of the payload of an S3 Vector request
+  long_desc: The payload of S3 Vector requests, such as PutVectors, holds the
+    vectors themselves, and is therefore not limited by rgw_max_put_param_size.
+    Requests with a larger payload are rejected with EntityTooLarge. Note that
+    the payload is read into memory before the request is authenticated.
+  default: 20_M
+  services:
+  - rgw
+  flags:
+  - runtime
+  see_also:
+  - rgw_max_put_param_size

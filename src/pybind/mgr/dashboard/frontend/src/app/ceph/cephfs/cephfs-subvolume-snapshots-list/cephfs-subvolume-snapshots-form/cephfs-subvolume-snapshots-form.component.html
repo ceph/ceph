@@ -47,18 +47,20 @@
             />
           </cds-text-label>
           <ng-template #snapshotNameError>
-            <span
-              class="invalid-feedback"
-              *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="snapshotForm.showError('snapshotName', formDir, 'notUnique')"
-              i18n
-              >The snapshot already exists.</span
-            >
+            @if (snapshotForm.showError('snapshotName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (snapshotForm.showError('snapshotName', formDir, 'notUnique')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The snapshot already exists.</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -81,51 +83,46 @@
 
         <!--Subvolume Group name -->
         <div class="form-item">
-          <cds-select
-            label="Subvolume group"
-            for="subvolumeGroupName"
-            formControlName="subvolumeGroupName"
-            name="subvolumeGroupName"
-            id="subvolumeGroupName"
-            *ngIf="subVolumeGroups"
-          >
-            <ng-container *ngFor="let subvolumegroup of subVolumeGroups">
-              <option
-                *ngIf="subvolumegroup == ''"
-                value=""
-              >
-                Default
-              </option>
-              <option
-                [value]="subvolumegroup"
-                *ngIf="subvolumegroup !== ''"
-              >
-                {{ subvolumegroup }}
-              </option>
-            </ng-container>
-          </cds-select>
+          @if (subVolumeGroups) {
+            <cds-select
+              label="Subvolume group"
+              for="subvolumeGroupName"
+              formControlName="subvolumeGroupName"
+              name="subvolumeGroupName"
+              id="subvolumeGroupName"
+            >
+              @for (subvolumegroup of subVolumeGroups; track subvolumegroup) {
+                @if (subvolumegroup == '') {
+                  <option value="">Default</option>
+                }
+                @if (subvolumegroup !== '') {
+                  <option [value]="subvolumegroup">
+                    {{ subvolumegroup }}
+                  </option>
+                }
+              }
+            </cds-select>
+          }
         </div>
 
         <!--Subvolume name -->
-        <div
-          class="form-item"
-          *ngIf="subVolumes$ | async as subVolumes"
-        >
-          <cds-select
-            label="Subvolume"
-            id="subVolumeName"
-            name="subVolumeName"
-            formControlName="subVolumeName"
-            (registerOnChange)="resetValidators(selection.value)"
-          >
-            <option
-              *ngFor="let subVolume of subVolumes"
-              [value]="subVolume.name"
+        @if (subVolumes$ | async; as subVolumes) {
+          <div class="form-item">
+            <cds-select
+              label="Subvolume"
+              id="subVolumeName"
+              name="subVolumeName"
+              formControlName="subVolumeName"
+              (registerOnChange)="resetValidators(selection.value)"
             >
-              {{ subVolume.name }}
-            </option>
-          </cds-select>
-        </div>
+              @for (subVolume of subVolumes; track subVolume) {
+                <option [value]="subVolume.name">
+                  {{ subVolume.name }}
+                </option>
+              }
+            </cds-select>
+          </div>
+        }
       </div>
 
       <cd-form-button-panel

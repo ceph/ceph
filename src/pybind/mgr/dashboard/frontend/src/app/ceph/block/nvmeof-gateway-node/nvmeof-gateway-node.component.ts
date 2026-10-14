@@ -87,6 +87,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   icons = Icons;
   HostStatus = HostStatus;
   private tableContext: CdTableFetchDataContext | undefined;
+  private selectionInitialized = false;
   count = 0;
   orchStatus: OrchestratorStatus | undefined;
   private destroy$ = new Subject<void>();
@@ -153,6 +154,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       !changes['preSelectedHostnames'].firstChange &&
       changes['preSelectedHostnames'].currentValue?.length > 0
     ) {
+      this.selectionInitialized = false;
       this.table.refreshBtn();
     }
   }
@@ -162,11 +164,16 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       return;
     }
 
+    if (this.selectionInitialized) {
+      return;
+    }
+
     const hostsToSelect = this.hosts.filter((host) =>
       this.preSelectedHostnames.includes(host.hostname)
     );
 
     if (hostsToSelect.length > 0) {
+      this.selectionInitialized = true;
       this.selection.selected = hostsToSelect;
       this.selectionChange.emit(this.selection);
 
@@ -179,6 +186,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
             this.table.model.selectRow(rowIndex, true);
           }
         });
+        // Sync the table's internal selection so toggling a pre-selected row
+        // filters from the correct list instead of an empty one.
+        this.table.selection.selected = hostsToSelect;
         this.table.updateSelection.emit(this.selection);
       });
     }

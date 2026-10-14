@@ -18,15 +18,18 @@
 #include "os/memstore/MemStore.h"
 #include <map>
 #include <mutex>
+#include <memory>
+#include <string>
 
 /**
- * MockMemStore - MemStore wrapper with error injection capabilities
+ * MockStore - MemStore wrapper with error injection
  *
- * This class extends MemStore to allow injecting read errors for specific
- * objects. This is useful for testing error handling in EC recovery scenarios.
+ * This class extends MemStore to allow injecting read errors for specific objects,
+ * which is useful for testing EC recovery scenarios. An injected error is a
+ * one-time injection: it fires on the next read() for that object and is then
+ * automatically cleared.
  *
- * Error injection is one-time: after an error is injected and returned,
- * it is automatically cleared so subsequent reads succeed.
+ * Each OSD gets its own independent MockStore instance with its own data directory.
  */
 class MockStore : public MemStore {
 private:
@@ -41,6 +44,18 @@ public:
     : MemStore(cct, path) {}
   
   ~MockStore() override = default;
+
+  /**
+   * Factory method to create a new MockStore instance in memory-only mode.
+   *
+   * @param cct CephContext to use for store creation
+   * @param osd_id OSD ID (for identification purposes)
+   * @return Shared pointer to a new MockStore instance
+   */
+  static std::shared_ptr<MockStore> create(CephContext *cct, int osd_id);
+
+  /// The on-disk directory this store's contents are loaded from and saved to.
+  const std::string& get_data_dir() const { return path; }
 
   /**
    * Inject a read error for a specific object.

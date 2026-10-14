@@ -22,6 +22,7 @@ import datetime
 from cloudevents.http import from_http
 from dateutil import parser
 import requests
+import urllib.parse
 
 from . import(
     configfile,
@@ -509,6 +510,15 @@ def _kafka_ca_cert_path():
         ca_path = os.path.join(kafka_dir, 'y-ca.crt')
         if os.path.exists(ca_path):
             return ca_path
+    return None
+
+
+def _kafka_ca_cert_pem():
+    """Read and return the PEM content of y-ca.crt as a string, or None."""
+    ca_path = _kafka_ca_cert_path()
+    if ca_path:
+        with open(ca_path) as f:
+            return f.read()
     return None
 
 
@@ -3419,6 +3429,79 @@ def test_persistent_topic_stats_http():
     persistent_topic_stats(conn, 'http')
 
 
+def wait_for_shard_owner(topic_name, retries=30):
+    """ wait for at least one queue shard to be owned by a gateway """
+    for _ in range(retries):
+        stats = get_stats_persistent_topic(topic_name)
+        shards = stats['Topic Stats']['Shards']
+        if any('Owner Address' in shard for shard in shards):
+            return shards
+        time.sleep(1)
+    return get_stats_persistent_topic(topic_name)['Topic Stats']['Shards']
+
+
+@pytest.mark.http_test
+def test_persistent_topic_stats_shard_owner():
+    """ test that topic stats report which gateway owns each queue shard """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    receiver = HTTPServerWithEvents((host, port))
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+
+    # create topic and notification
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert status/100 == 2
+
+    try:
+        # write an object so that the queue is processed and its shards locked
+        key = bucket.new_key('foo')
+        key.set_contents_from_string('bar')
+        wait_for_queue_to_drain(topic_name, http_port=port)
+
+        shards = wait_for_shard_owner(topic_name)
+        # every shard of the queue is reported, owned or not
+        assert len(shards) > 0
+        for shard in shards:
+            assert 'Name' in shard
+            # ownership is reported as a whole: a shard that has an owner has
+            # all of the lock's details, one without an owner has none of them
+            owner_keys = {'Owner', 'Owner Address', 'Ownership Expiration'}
+            present = owner_keys.intersection(shard.keys())
+            assert present == owner_keys or not present, \
+                'partial ownership reported for shard: %s' % shard
+
+        owned = [shard for shard in shards if 'Owner Address' in shard]
+        assert len(owned) > 0, 'no shard is owned while the queue is processed'
+        # all gateways here are new enough to record their name in the lock
+        for shard in owned:
+            assert shard['Owner'] != ''
+            assert shard['Owner Address'] != ''
+    finally:
+        s3_notification_conf.del_config()
+        topic_conf.del_config()
+        for key in bucket.list():
+            key.delete()
+        conn.delete_bucket(bucket_name)
+        receiver.close()
+
+
 @pytest.mark.kafka_test
 def test_persistent_topic_stats_kafka():
     """ test persistent topic stats, kafka endpoint """
@@ -4762,7 +4845,8 @@ def test_topic_no_permissions():
 
 
 def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=False,
-                   verify_ssl=True, include_ca_location=True, use_mtls=False):
+                   verify_ssl=True, include_ca_location=True, use_mtls=False,
+                   use_ca_cert_pem=False):
     """ test pushing kafka notification securly to master """
     # Setup SCRAM users if needed
     if mechanism.startswith('SCRAM'):
@@ -4834,7 +4918,12 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
     else:
         kafka_cert_dir = _kafka_cert_dir()
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true'
-        if include_ca_location:
+        if use_ca_cert_pem:
+            pem_content = _kafka_ca_cert_pem()
+            if pem_content is None:
+                pytest.skip('ca-cert PEM test requires KAFKA_CERT_DIR or KAFKA_DIR with y-ca.crt')
+            endpoint_args += '&ca-cert=' + urllib.parse.quote(pem_content, safe='')
+        elif include_ca_location:
             endpoint_args += '&ca-location='+kafka_cert_dir+'/y-ca.crt'
         if not verify_ssl:
             endpoint_args += '&verify-ssl=false'
@@ -4968,6 +5057,11 @@ def test_notification_kafka_security_ssl_sasl_gssapi():
 def test_notification_kafka_security_ssl_mtls():
     """test mTLS client certificate authentication to Kafka"""
     kafka_security('SSL', use_mtls=True)
+
+
+@pytest.mark.kafka_security_test
+def test_notification_kafka_security_ssl_ca_cert_pem():
+    kafka_security('SSL', use_ca_cert_pem=True)
 
 
 @pytest.mark.http_test

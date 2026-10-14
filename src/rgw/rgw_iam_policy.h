@@ -219,6 +219,24 @@ enum action_t {
   organizationsListTargetsForPolicy,
   organizationsAll,
 
+  s3vectorsCreateIndex,
+  s3vectorsCreateVectorBucket,
+  s3vectorsDeleteIndex,
+  s3vectorsDeleteVectorBucket,
+  s3vectorsDeleteVectorBucketPolicy,
+  s3vectorsDeleteVectors,
+  s3vectorsGetIndex,
+  s3vectorsGetVectorBucket,
+  s3vectorsGetVectorBucketPolicy,
+  s3vectorsGetVectors,
+  s3vectorsListIndexes,
+  s3vectorsListVectorBuckets,
+  s3vectorsListVectors,
+  s3vectorsPutVectorBucketPolicy,
+  s3vectorsPutVectors,
+  s3vectorsQueryVectors,
+  s3vectorsAll,
+
   allCount
 };
 
@@ -248,6 +266,7 @@ static const Action_t iamAllValue = set_cont_bits<allCount>(s3objectlambdaAll+1,
 static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
 static const Action_t snsAllValue = set_cont_bits<allCount>(stsAll+1, snsAll);
 static const Action_t organizationsAllValue = set_cont_bits<allCount>(snsAll+1,organizationsAll);
+static const Action_t s3vectorsAllValue = set_cont_bits<allCount>(organizationsAll+1, s3vectorsAll);
 static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
@@ -338,6 +357,16 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketOwnershipControls:
     return RGW_PERM_WRITE_ACP;
 
+  case snsGetTopicAttributes:
+  case snsListTopics:
+    return RGW_PERM_READ;
+
+  case snsCreateTopic:
+  case snsSetTopicAttributes:
+  case snsDeleteTopic:
+  case snsPublish:
+    return RGW_PERM_WRITE;
+
   case s3All:
     return RGW_PERM_FULL_CONTROL;
   }
@@ -346,12 +375,6 @@ inline int op_to_perm(std::uint64_t op) {
 }
 
 std::string_view action_bit_string(action_t action);
-
-enum class PolicyPrincipal {
-  Role,
-  Session,
-  Other
-};
 
 using Environment = std::unordered_multimap<std::string, std::string>;
 
@@ -702,13 +725,13 @@ struct Statement {
               std::uint64_t action,
               boost::optional<const ARN&> resource,
               const LogOut& eval_log,
-              boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+              boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect eval_principal(
     const Environment& e,
     boost::optional<const rgw::auth::Identity&> ida,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type = boost::none) const;
+    boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect
   eval_conditions(const Environment& e,
@@ -755,16 +778,16 @@ struct Policy {
               boost::optional<const rgw::auth::Identity&> ida,
               std::uint64_t action,
               boost::optional<const ARN&> resource,
-              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
-    return eval(e, ida, action, resource, out, princ_type);
+              boost::optional<rgw::auth::Principal>& principal) const {
+    return eval(e, ida, action, resource, out, principal);
   }
 
   Effect eval(const Environment& e,
               boost::optional<const rgw::auth::Identity&> ida,
               std::uint64_t action,
               boost::optional<const ARN&> resource,
-              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
-    return eval(e, ida, action, resource, {}, princ_type);
+              boost::optional<rgw::auth::Principal>& principal) const {
+    return eval(e, ida, action, resource, {}, principal);
   }
 
   Effect eval(const DoutPrefixProvider* dpp,
@@ -772,15 +795,15 @@ struct Policy {
               boost::optional<const rgw::auth::Identity&> ida,
               std::uint64_t action,
               boost::optional<const ARN&> resource,
-              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
-      return eval(e, ida, action, resource, dpp, princ_type);
+              boost::optional<rgw::auth::Principal>& principal) const {
+      return eval(e, ida, action, resource, dpp, principal);
   }
 
   Effect eval_principal(
       const Environment& e,
       boost::optional<const rgw::auth::Identity&> ida,
       const LogOut& eval_log,
-      boost::optional<PolicyPrincipal&> princ_type = boost::none) const;
+      boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect eval_conditions(const Environment& e,
                          const LogOut& eval_log) const;
@@ -825,7 +848,7 @@ private:
               std::uint64_t action,
               boost::optional<const ARN&> resource,
               const LogOut& eval_log,
-              boost::optional<PolicyPrincipal&> princ_type  =boost::none) const;
+              boost::optional<rgw::auth::Principal>& principal) const;
 
 };
 

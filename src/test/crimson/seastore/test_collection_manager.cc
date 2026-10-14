@@ -87,10 +87,10 @@ struct collection_manager_test_t :
   void checking_mappings(coll_root_t &coll_root, Transaction &t) {
     auto coll_list = list(coll_root, t);
     EXPECT_EQ(test_coll_mappings.size(), coll_list.size());
-    for (std::pair<coll_t, coll_info_t> p : test_coll_mappings) {
-      EXPECT_NE(
-        std::find(coll_list.begin(), coll_list.end(), p),
-        coll_list.end());
+    for (auto& [coll, coll_info] : coll_list) {
+      auto found = test_coll_mappings.find(coll);
+      ASSERT_TRUE(found != test_coll_mappings.end());
+      EXPECT_EQ(found->second, coll_info);
     }
   }
 
@@ -108,8 +108,8 @@ TEST_P(collection_manager_test_t, basic)
       auto t = create_mutate_transaction();
       for (int i = 0; i < 20; i++) {
         coll_t cid(spg_t(pg_t(i+1,i+2), shard_id_t::NO_SHARD));
-        create(coll_root, *t, cid, coll_info_t(i));
-        test_coll_mappings.emplace(cid, coll_info_t(i));
+        create(coll_root, *t, cid, coll_info_t(i, L_ADDR_NULL));
+        test_coll_mappings.emplace(cid, coll_info_t(i, L_ADDR_NULL));
       }
       checking_mappings(coll_root, *t);
       submit_transaction(std::move(t));
@@ -146,8 +146,8 @@ TEST_P(collection_manager_test_t, overflow)
     auto t = create_mutate_transaction();
     for (int i = 0; i < 412; i++) {
       coll_t cid(spg_t(pg_t(i+1,i+2), shard_id_t::NO_SHARD));
-      create(coll_root, *t, cid, coll_info_t(i));
-      test_coll_mappings.emplace(cid, coll_info_t(i));
+      create(coll_root, *t, cid, coll_info_t(i, L_ADDR_NULL));
+      test_coll_mappings.emplace(cid, coll_info_t(i, L_ADDR_NULL));
     }
     submit_transaction(std::move(t));
     EXPECT_NE(old_location, coll_root.get_location());
@@ -166,8 +166,8 @@ TEST_P(collection_manager_test_t, update)
       auto t = create_mutate_transaction();
       for (int i = 0; i < 2; i++) {
         coll_t cid(spg_t(pg_t(1,i+1), shard_id_t::NO_SHARD));
-	create(coll_root, *t, cid, coll_info_t(i));
-        test_coll_mappings.emplace(cid, coll_info_t(i));
+	create(coll_root, *t, cid, coll_info_t(i, L_ADDR_NULL));
+        test_coll_mappings.emplace(cid, coll_info_t(i, L_ADDR_NULL));
       }
       submit_transaction(std::move(t));
     }
@@ -178,7 +178,7 @@ TEST_P(collection_manager_test_t, update)
        auto t = create_mutate_transaction();
        update(coll_root, *t, iter1->first, iter2->second);
        submit_transaction(std::move(t));
-       iter1->second.split_bits = iter2->second.split_bits;
+       iter1->second = iter2->second;
     }
     replay();
     checking_mappings(coll_root);

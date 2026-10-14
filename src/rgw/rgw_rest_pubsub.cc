@@ -162,42 +162,15 @@ auto get_policy_from_text(req_state* const s, const std::string& policy_text)
 }
 
 using rgw::IAM::Effect;
-using rgw::IAM::Policy;
 
 bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const rgw_owner& owner, const rgw::ARN& arn,
-                             const boost::optional<Policy>& policy,
+                             const boost::optional<rgw::IAM::Policy>& policy,
                              uint64_t op)
 {
-  if (s->auth.identity->get_account()) {
-    const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
-    if (!s->auth.identity->is_owner_of(owner)) {
-      ldpp_dout(dpp, 4) << "cross-account request for resource owner "
-          << owner << " != " << s->owner.id << dendl;
-      // cross-account requests evaluate the identity-based policies separately
-      // from the resource-based policies and require Allow from both
-      const auto identity_res = evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn,
-          {}, s->iam_identity_policies, s->session_policies);
-      if (identity_res == Effect::Deny) {
-        return false;
-      }
-      const auto resource_res = evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, false, op, arn,
-          policy, {}, {});
-      return identity_res == Effect::Allow && resource_res == Effect::Allow;
-    } else {
-      // require an Allow from either identity- or resource-based policy
-      return Effect::Allow == evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn,
-          policy, s->iam_identity_policies, s->session_policies);
-    }
-  }
-
-  constexpr bool account_root = false;
-  const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->auth.identity, account_root, op, arn,
-      policy, s->iam_identity_policies, s->session_policies);
+  const auto effect = evaluate_resource_permission(
+      dpp, s->env, *s->auth.identity, op, arn, arn, owner, policy,
+      s->iam_identity_policies, s->session_policies);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -205,6 +178,20 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
     return true;
   }
 
+  // A capped identity (e.g. a project reader) may reach a topic only within
+  // its perm_mask (reads) or via an explicit policy Allow (handled above):
+  // the ownership and publish/legacy default-allows below never lift the cap.
+  if (is_capped_keystone_identity(s->perm_mask, *s->auth.identity)) {
+    return verify_owner_permission(*s->auth.identity, s->perm_mask, owner,
+                                   rgw::IAM::op_to_perm(op));
+  }
+
+  if (s->auth.identity->get_account()) {
+    // enforce implicit deny for account users
+    return false;
+  }
+
+  // non-account users fall back to ownership
   if (s->auth.identity->is_owner_of(owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted to resource owner" << dendl;
     return true;
@@ -233,7 +220,7 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const rgw_pubsub_topic& topic,
                              const rgw::ARN& arn, uint64_t op)
 {
-  boost::optional<Policy> policy;
+  boost::optional<rgw::IAM::Policy> policy;
   if (!topic.policy_text.empty()) {
     policy = get_policy_from_text(s, topic.policy_text);
     if (!policy) {
@@ -305,7 +292,7 @@ class RGWPSCreateTopicOp : public RGWOp {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
       }
-      dest.push_endpoint_args.append(param.first+"="+param.second+"&");
+      dest.push_endpoint_args.append(param.first+"="+url_encode(param.second, true)+"&");
     }
 
     if (!dest.push_endpoint_args.empty()) {
@@ -810,7 +797,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       const auto replace_str = [&](const std::string& param,
                                    const std::string& val) {
         auto& push_endpoint_args = dest.push_endpoint_args;
-        const std::string replaced_str = param + "=" + val;
+        const std::string replaced_str = param + "=" + url_encode(val, true);
         const auto pos = push_endpoint_args.find(param);
         if (pos == std::string::npos) {
           dest.push_endpoint_args.append("&" + replaced_str);
@@ -822,7 +809,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
         push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
       };
       static constexpr std::initializer_list<const char*> args = {
-          "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
+          "verify-ssl",    "use-ssl",         "ca-location", "ca-cert", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
           "user-name",     "password",
           "ssl-certificate-location", "ssl-key-location", "ssl-key-password",
@@ -1702,4 +1689,3 @@ RGWOp* RGWHandler_REST_PSNotifs_S3::create_put_op() {
 RGWOp* RGWHandler_REST_PSNotifs_S3::create_delete_op() {
   return new RGWPSDeleteNotifOp();
 }
-

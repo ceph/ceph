@@ -19,6 +19,7 @@
 
 #if defined(WITH_CRIMSON) && !defined(WITH_BLUESTORE)
 
+#include <concepts>
 #include <type_traits>
 
 namespace ceph {
@@ -51,29 +52,23 @@ namespace ceph {
     // We need to differentiate with SFINAE as std::atomic offers beefier
     // interface for integral types.
 
-    template<class TT=T>
-    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT>  operator++() {
+    T operator++() requires std::integral<T> {
       return ++value;
     }
-    template<class TT=T>
-    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator++(int) {
+    T operator++(int) requires std::integral<T> {
       return value++;
     }
-    template<class TT=T>
-    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator--() {
+    T operator--() requires std::integral<T> {
       return --value;
     }
-    template<class TT=T>
-    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator--(int) {
+    T operator--(int) requires std::integral<T> {
       return value--;
     }
-    template<class TT=T>
-    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator+=(const dummy_atomic& b) {
+    T operator+=(const dummy_atomic& b) requires std::integral<T> {
       value += b;
       return value;
     }
-    template<class TT=T>
-    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator-=(const dummy_atomic& b) {
+    T operator-=(const dummy_atomic& b) requires std::integral<T> {
       value -= b;
       return value;
     }

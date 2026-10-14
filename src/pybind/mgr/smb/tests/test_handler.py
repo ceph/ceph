@@ -578,7 +578,7 @@ def test_error_result():
         ),
     )
     err = smb.handler.ErrorResult(share, msg='test error')
-    assert isinstance(err, smb.handler.Result)
+    assert isinstance(err, smb.handler.ResourceResult)
     assert isinstance(err, Exception)
 
     data = err.to_simplified()

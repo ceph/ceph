@@ -182,6 +182,26 @@ def test_orch_ls(_describe_service):
     assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
 
 
+@mock.patch("orchestrator.OrchestratorCli.describe_service", return_value=OrchResult([]))
+def test_orch_ls_empty(_describe_service):
+    m = OrchestratorCli('orchestrator', 0, 0)
+
+    # plain format keeps the human-readable message
+    r = m._handle_command(None, {'prefix': 'orch ls'})
+    assert r == HandleCommandResult(retval=0, stdout='No services reported', stderr='')
+
+    # structured formats must stay parseable when nothing matches,
+    # e.g. 'orch ls --service-type nvmeof --format json'
+    r = m._handle_command(None, {'prefix': 'orch ls', 'format': 'json'})
+    assert json.loads(r.stdout) == []
+
+    r = m._handle_command(None, {'prefix': 'orch ls', 'format': 'yaml'})
+    assert yaml.safe_load(r.stdout) is None
+
+    r = m._handle_command(None, {'prefix': 'orch ls', 'export': True})
+    assert yaml.safe_load(r.stdout) is None
+
+
 dlist = OrchResult([DaemonDescription(daemon_type="osd", daemon_id="1"), DaemonDescription(
     daemon_type="osd", daemon_id="10"), DaemonDescription(daemon_type="osd", daemon_id="2")])
 
@@ -399,6 +419,53 @@ class TestApplyOAuth2Proxy:
         assert (
             'unrecognized command -i; -h or --help for usage'
         ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+    def test_cli_args_propagated_to_spec(self, mock_apply_misc):
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        res = self.m._apply_oauth2_proxy(
+            provider_display_name="My OIDC Provider",
+            oidc_issuer_url="https://idp.example.com",
+            client_id="oauth-client",
+            client_secret="oauth-secret",
+        )
+
+        assert res.retval == 0
+        mock_apply_misc.assert_called_once()
+        spec = mock_apply_misc.call_args[0][0][0]
+        assert spec.provider_display_name == "My OIDC Provider"
+        assert spec.oidc_issuer_url == "https://idp.example.com"
+        assert spec.client_id == "oauth-client"
+        assert spec.client_secret == "oauth-secret"
+
+    def test_cli_args_with_https_address(self, mock_apply_misc):
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        res = self.m._apply_oauth2_proxy(
+            provider_display_name="My OIDC Provider",
+            oidc_issuer_url="https://idp.example.com",
+            client_id="oauth-client",
+            client_secret="oauth-secret",
+            https_address="gateway.example.com:443",
+        )
+
+        assert res.retval == 0
+        spec = mock_apply_misc.call_args[0][0][0]
+        assert spec.https_address == "gateway.example.com:443"
+        assert spec.provider_display_name == "My OIDC Provider"
+        assert spec.oidc_issuer_url == "https://idp.example.com"
+        assert spec.client_id == "oauth-client"
+        assert spec.client_secret == "oauth-secret"
+
+    def test_partial_cli_args_raises_error(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy(
+            provider_display_name="My OIDC Provider",
+            client_id="oauth-client",
+        )
+
+        assert res.retval != 0
+        assert 'Missing required fields for oauth2-proxy' in res.stderr
         mock_apply_misc.assert_not_called()
 
 

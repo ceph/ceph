@@ -100,6 +100,11 @@ using SegmentManagerRef = std::unique_ptr<SegmentManager>;
 
 class SegmentManager : public Device {
 public:
+  SegmentManager(
+    const std::string &path,
+    device_type_t dtype,
+    device_id_t id)
+    : Device(path, dtype, id) {}
   backend_type_t get_backend_type() const final {
     return backend_type_t::SEGMENTED;
   }
@@ -126,7 +131,10 @@ public:
   virtual ~SegmentManager() {}
 
   static seastar::future<SegmentManagerRef>
-  get_segment_manager(const std::string &device, device_type_t dtype);
+  get_segment_manager(
+    const std::string &device,
+    device_type_t dtype,
+    device_id_t id);
 };
 
 }

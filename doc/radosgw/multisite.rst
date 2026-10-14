@@ -4,6 +4,12 @@
 Multi-Site
 ==========
 
+.. toctree::
+   :maxdepth: 1
+
+   Multisite Sync Policy Configuration <multisite-sync-policy>
+
+
 Single-zone Configurations and Multi-site Configurations
 ========================================================
 

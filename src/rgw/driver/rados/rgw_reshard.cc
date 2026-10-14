@@ -11,6 +11,7 @@
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_perf_counters.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/Clock.h" // for ceph_clock_now()
@@ -490,7 +491,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     if (ret = fault.check("set_target_layout");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp, y);
+                                                        real_time(), &bucket_attrs, dpp, y, store->ctl()->bucket);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -571,7 +572,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
         ret == 0) { // no fault injected, revert the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
                                                         real_time(),
-                                                        &bucket_attrs, dpp, y);
+                                                        &bucket_attrs, dpp, y, store->ctl()->bucket);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -695,7 +696,7 @@ static int change_reshard_state(rgw::sal::RadosStore* store,
     if (ret = fault.check("change_reshard_state");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp, y);
+                                                        real_time(), &bucket_attrs, dpp, y, store->ctl()->bucket);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -817,7 +818,7 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   int ret = fault.check("commit_target_layout");
   if (ret == 0) { // no fault injected, write the bucket instance metadata
     ret = store->getRados()->put_bucket_instance_info(
-        bucket_info, false, real_time(), &bucket_attrs, dpp, y);
+        bucket_info, false, real_time(), &bucket_attrs, dpp, y, store->ctl()->bucket);
   } else if (ret == -ECANCELED) {
     fault.clear(); // clear the fault so a retry can succeed
   }
@@ -1286,12 +1287,57 @@ int RGWBucketReshard::execute(int num_shards,
   if (ret < 0) {
     return ret;
   }
-  // TODO: release the lock when purging the old index shards or unsucessful new index shards
+
+  // TODO: release the lock when purging the old index shards or
+  // unsucessful new index shards
   auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
+
+  const utime_t start_time = ceph_clock_now();
+  const auto current_num_shards =
+    rgw::num_shards(bucket_info.layout.current_index);
+
+  // NB: if this reshard is a result of a radosgw-admin rather than
+  // initiated by a radosgw daemon, then the perf counters will not
+  // have been created, and these both will be nullptrs
+  auto counters =
+    rgw::bucket_reshard_counters::get(bucket_info.bucket.name,
+                                      bucket_info.bucket.tenant);
+
+  if (perfcounter) {
+    perfcounter->inc(l_rgw_bucket_reshard_active, 1);
+    perfcounter->inc(l_rgw_bucket_reshard_active_shard_count,
+                     current_num_shards);
+    perfcounter->set(l_rgw_bucket_reshard_start_time, start_time.sec());
+  }
+  if (counters) {
+    counters->inc(l_rgw_bucket_reshard_per_bucket_active_shard_count,
+                  current_num_shards);
+    counters->set(l_rgw_bucket_reshard_per_bucket_start_time,
+                  start_time.sec());
+  }
+
+  auto perf_counter_failure_complete = [counters, current_num_shards]() {
+    const auto fail_time = ceph_clock_now().sec();
+    if (perfcounter) {
+      perfcounter->dec(l_rgw_bucket_reshard_active, 1);
+      perfcounter->dec(l_rgw_bucket_reshard_active_shard_count,
+                       current_num_shards);
+      perfcounter->inc(l_rgw_bucket_reshard_failed, 1);
+      perfcounter->set(l_rgw_bucket_reshard_failed_end_time, fail_time);
+    }
+    if (counters) {
+      counters->dec(l_rgw_bucket_reshard_per_bucket_active_shard_count,
+                    current_num_shards);
+      counters->inc(l_rgw_bucket_reshard_per_bucket_failed, 1);
+      counters->set(l_rgw_bucket_reshard_per_bucket_failed_end_time,
+                    fail_time);
+    }
+  };
 
   if (reshard_log) {
     ret = reshard_log->update(dpp, bucket_info, initiator, y);
     if (ret < 0) {
+      perf_counter_failure_complete();
       return ret;
     }
   }
@@ -1301,6 +1347,7 @@ int RGWBucketReshard::execute(int num_shards,
   ret = init_reshard(store, bucket_info, bucket_attrs, fault, num_shards,
                      support_logrecord, dpp, y);
   if (ret < 0) {
+    perf_counter_failure_complete();
     return ret;
   }
 
@@ -1314,16 +1361,38 @@ int RGWBucketReshard::execute(int num_shards,
 
   if (ret < 0) {
     cancel_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
+    perf_counter_failure_complete();
 
     ldpp_dout(dpp, 1) << __func__ << " INFO: reshard of bucket \""
         << bucket_info.bucket.name << "\" canceled due to errors" << dendl;
     return ret;
   }
 
-  auto current_num_shards = rgw::num_shards(bucket_info.layout.current_index);
   ret = commit_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
   if (ret < 0) {
+    perf_counter_failure_complete();
     return ret;
+  }
+
+  const auto succeed_time = ceph_clock_now();
+  if (perfcounter) {
+    perfcounter->dec(l_rgw_bucket_reshard_active, 1);
+    perfcounter->dec(l_rgw_bucket_reshard_active_shard_count,
+                     current_num_shards);
+    perfcounter->inc(l_rgw_bucket_reshard_ok, 1);
+    perfcounter->set(l_rgw_bucket_reshard_ok_end_time,
+                     succeed_time.sec());
+    perfcounter->tinc(l_rgw_bucket_reshard_ok_time_avg,
+                      succeed_time - start_time);
+  }
+  if (counters) {
+    counters->dec(l_rgw_bucket_reshard_per_bucket_active_shard_count,
+                  current_num_shards);
+    counters->inc(l_rgw_bucket_reshard_per_bucket_ok, 1);
+    counters->set(l_rgw_bucket_reshard_per_bucket_ok_end_time,
+                  succeed_time.sec());
+    counters->tinc(l_rgw_bucket_reshard_per_bucket_ok_time_avg,
+                      succeed_time - start_time);
   }
 
   ldpp_dout(dpp, 1) << __func__ << " INFO: reshard of bucket \"" <<
@@ -1581,6 +1650,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 					       entry.bucket_name,
                                                bucket_info, nullptr,
                                                y, dpp,
+                                               store->ctl()->bucket,
 					       &bucket_attrs);
   if (ret < 0 || bucket_info.bucket.bucket_id != entry.bucket_id) {
     if (ret < 0) {
@@ -1665,7 +1735,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
       reshard_reduction_wait_hours = reshard_reduction_wait_hours * debug_interval / secs_per_day;
     }
 
-    auto timespan = std::chrono::seconds(int(60 * 60 * reshard_reduction_wait_hours));
+    const ceph::timespan timespan = std::chrono::seconds(int(60 * 60 * reshard_reduction_wait_hours));
     if (now < when_queued + timespan) {
       // too early to reshard; log and skip
       ldpp_dout(dpp, 20) <<  __func__ <<

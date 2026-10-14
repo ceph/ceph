@@ -855,7 +855,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         const paginate_obs = new PaginateObservable<any>(of([mockService]));
         const cephServiceSpy = spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
         component.ngOnInit();
-        expect(cephServiceSpy).toBeCalledTimes(2);
+        expect(cephServiceSpy).toHaveBeenCalledTimes(2);
         expect(component.action).toBe('Edit');
 
         // Wait for async observable to complete before checking disabled state

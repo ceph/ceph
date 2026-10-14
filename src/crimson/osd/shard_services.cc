@@ -106,6 +106,24 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
     });
 }
 
+void ShardServices::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  for (size_t i = 0; i < static_cast<size_t>(OperationTypeCode::last_op); ++i) {
+    auto label = sm::label("op_type")(OP_NAMES[i]);
+    metrics.add_group("osd_pg_shard", {
+      sm::make_counter("op_local", pg_op_shard_local[i],
+        sm::description(
+          "PG ops dispatched on the shard that already owns the pg"),
+        {label}),
+      sm::make_counter("op_remote", pg_op_shard_remote[i],
+        sm::description(
+          "PG ops that needed a cross-shard hop to reach the pg's owning shard"),
+        {label}),
+    });
+  }
+}
+
 seastar::future<Ref<PG>> ShardServices::extract_pg(spg_t pgid) {
   auto pg = local_state.pg_map.get_pg(pgid);
   ceph_assert(pg);

@@ -427,6 +427,31 @@ def test_rgw_credential_stub_written_to_priv_store(split_handler):
     assert opts['ceph_rgw:secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
 
 
+def test_rgw_credential_stub_survives_last_share_removal(split_handler):
+    """Deleting the last RGW share in a cluster must not prune the
+    credential stub from the private store.
+    """
+    h, pub, priv = split_handler
+    cluster, share = _rgw_cluster_and_share(
+        'c1',
+        's1',
+        'mybucket',
+        bucket='mybucket',
+        user_id='testuser',
+    )
+    rg = h.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+    assert priv['c1', 'config.smb.rgw'].exists()
+
+    rmshare = smb.resources.RemovedShare(cluster_id='c1', share_id='s1')
+    rg = h.apply([rmshare])
+    assert rg.success, rg.to_simplified()
+
+    stub_entry = priv['c1', 'config.smb.rgw']
+    assert stub_entry.exists()
+    assert stub_entry.get()['config:merge']['shares'] == {}
+
+
 def test_no_priv_store_entry_for_non_rgw_cluster(split_handler):
     """A cluster with no RGW shares must not write a credential stub."""
     h, pub, priv = split_handler
@@ -863,3 +888,49 @@ def test_external_cluster_no_user_validation(thandler):
             fsid='12345678-1234-1234-1234-123456789abc',
             mon_host='10.0.1.10:6789',
         )
+
+
+def test_rgw_share_acl_configuration(thandler):
+    """Test that RGW shares include proper ACL configuration."""
+    cluster = _cluster(
+        cluster_id='rgwacl',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    share = smb.resources.Share(
+        cluster_id='rgwacl',
+        share_id='aclshare',
+        name='ACL Test Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='acl-bucket',
+            user_id='acluser',
+        ),
+    )
+    rg = thandler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify the share was created
+    assert ('shares', 'rgwacl.aclshare') in thandler.internal_store.data
+
+    # Sync to generate the configuration
+    thandler._sync_clusters(['rgwacl'])
+
+    # Verify ACL configuration in public store
+    cfg = thandler.public_store['rgwacl', 'config.smb'].get()
+    assert cfg
+    assert 'shares' in cfg
+    assert 'ACL Test Share' in cfg['shares']
+
+    share_opts = cfg['shares']['ACL Test Share']['options']
+
+    # Verify ACL-related VFS objects are present
+    assert 'vfs objects' in share_opts
+    assert share_opts['vfs objects'] == 'acl_xattr ceph_rgw'
+
+    # Verify ACL xattr security name is configured
+    assert 'acl_xattr:security_acl_name' in share_opts
+    assert share_opts['acl_xattr:security_acl_name'] == 'user.NTACL'

@@ -41,6 +41,7 @@
 #include "MetricsHandler.h"
 #include "cephfs_features.h"
 #include "MDSContext.h"
+#include "QuarantineManager.h"
 
 #include "messages/MClientReconnect.h"
 #include "messages/MClientReply.h"
@@ -3500,19 +3501,64 @@ bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask)
 {
   if (mdr->session) {
     std::string_view fs_name = mds->mdsmap->get_fs_name();
+    bool check_qtine = in->is_under_quarantine()
+                       && mdr->session->info.has_feature(CEPHFS_FEATURE_QUARANTINE);
     int r = mdr->session->check_access(
       fs_name, in, mask,
       mdr->client_request->get_caller_uid(),
       mdr->client_request->get_caller_gid(),
       &mdr->client_request->get_caller_gid_list(),
       mdr->client_request->head.args.setattr.uid,
-      mdr->client_request->head.args.setattr.gid);
+      mdr->client_request->head.args.setattr.gid,
+      check_qtine);
     if (r < 0) {
       respond_to_request(mdr, r);
       return false;
     }
   }
   return true;
+}
+
+/**
+ * Block client requests from non-quarantine-aware clients when the target
+ * inode is under quarantine. Drops the request's locks and adds a waiter on
+ * the subvolume root inode so the request will be retried when quarantine
+ * is lifted.
+ *
+ * Returns true if the request was blocked (caller should return nullptr).
+ */
+bool Server::check_quarantine_block(const MDRequestRef& mdr, CInode *in)
+{
+  if (!mdr->client_request || !mdr->session)
+    return false;
+
+  if (mdr->session->info.has_feature(CEPHFS_FEATURE_QUARANTINE))
+    return false;
+
+  if (!in->is_under_quarantine())
+    return false;
+
+  auto snaprealm = in->find_snaprealm();
+  while (snaprealm) {
+    inodeno_t subvol_ino = snaprealm->get_subvolume_ino();
+    auto *subvol_in = mdcache->get_inode(subvol_ino);
+    if (subvol_in &&
+        (subvol_in->is_being_quarantined() || subvol_in->has_quarantined())) {
+      dout(10) << __func__ << " blocking request from old client "
+               << mdr->get_client() << " on quarantined inode " << *in
+               << " (subvol root " << subvol_ino << ")" << dendl;
+      // Drop the locks taken during path traversal (and auth pins) before
+      // waiting: they include snaplock rdlocks on the subvolume root, which
+      // the in-progress quarantine operation needs to xlock -- holding them
+      // here deadlocks quarantine enable. The request re-traverses on retry.
+      subvol_in->add_waiter(CInode::WAIT_QUARANTINE,
+                            CF_MDS_RetryRequestFactory(mdcache, mdr, true).build());
+      return true;
+    }
+    snaprealm = snaprealm->parent;
+  }
+
+  return false;
 }
 
 /**
@@ -3880,6 +3926,9 @@ CInode* Server::rdlock_path_pin_ref(const MDRequestRef& mdr,
   CInode *ref = mdr->in[0];
   dout(10) << "ref is " << *ref << dendl;
 
+  if (check_quarantine_block(mdr, ref))
+    return nullptr;
+
   if (want_auth) {
     // auth_pin?
     //   do NOT proceed if freezing, as cap release may defer in that case, and
@@ -3974,6 +4023,9 @@ CDentry* Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr,
   CDentry *dn = mdr->dn[0].back();
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
+
+  if (check_quarantine_block(mdr, diri))
+    return nullptr;
 
   if (!mdr->reqid.name.is_mds()) {
     if (diri->is_system() && !diri->is_root() &&
@@ -4076,6 +4128,10 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
   CDir *srcdir = srcdn->get_dir();
   CDentry *destdn = mdr->dn[0].back();
   CDir *destdir = destdn->get_dir();
+
+  if (check_quarantine_block(mdr, srcdir->get_inode()) ||
+      check_quarantine_block(mdr, destdir->get_inode()))
+    return std::make_pair(nullptr, nullptr);
 
   if (!mdr->reqid.name.is_mds()) {
     if ((srcdir->get_inode()->is_system() && !srcdir->get_inode()->is_root()) ||
@@ -4411,6 +4467,9 @@ void Server::handle_client_lookup_ino(const MDRequestRef& mdr,
     return;
   }
 
+  if (check_quarantine_block(mdr, in))
+    return;
+
   // check for nothing (not read or write); this still applies the
   // path check.
   if (!check_access(mdr, in, 0))
@@ -4510,6 +4569,9 @@ void Server::_lookup_snap_ino(const MDRequestRef& mdr)
   }
 
   if (in) {
+    if (!check_access(mdr, in, MAY_READ))
+      return;
+
     dout(10) << "reply to lookup_snap_ino " << *in << dendl;
     mdr->snapid = vino.snapid;
     mdr->tracei = in;
@@ -5317,6 +5379,46 @@ public:
       get_mds()->locker->share_inode_max_size(in);
   }
 };
+
+
+class C_MDS_quarantine_inode_update_finish : public C_MDS_inode_update_finish {
+  QtineMgr qtine_mgr;
+  inodeno_t qtine_root_ino;
+  public:
+  C_MDS_quarantine_inode_update_finish(Server *s, const MDRequestRef& r, CInode *i, QtineMgr qm, inodeno_t ino) :
+    C_MDS_inode_update_finish(s, r, i), qtine_mgr(qm), qtine_root_ino(ino) { }
+
+  void finish(int r) override {
+    C_MDS_inode_update_finish::finish(r);
+
+    auto mds = get_mds();
+
+    dout(20) << " C_MDS_quarantine_inode_update_finish" << dendl;
+    if (auto *root = mds->mdcache->get_inode(qtine_root_ino); root) {
+      root->clear_being_quarantined();
+    }
+    // caps should have been revoked by now
+    // so we declare the inode as quarantined
+    qtine_mgr->work_done();
+    dout(20) << __PRETTY_FUNCTION__ << " PUT" << dendl;
+    qtine_mgr->put();
+  }
+};
+
+void Server::journal_quarantine_inode(MDRequestRef const& mdr, CInode *cur, unsigned qtine_op, QtineMgr qtine_mgr)
+{
+  // log + wait
+  std::string op_str = (qtine_op == QUARANTINE_ADD ? "add" : "del");
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, ("quarantine flag " + op_str));
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+
+  journal_and_reply(mdr, cur, 0, le,
+                    new C_MDS_quarantine_inode_update_finish(this, mdr, cur,
+                                                             qtine_mgr,
+                                                             mdr->qtine_root_ino));
+}
 
 void Server::handle_client_file_setlock(const MDRequestRef& mdr)
 {
@@ -6250,6 +6352,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   string name(req->get_path2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
+
   dout(10) << "handle_client_setvxattr " << name
            << " val " << value.length()
            << " bytes on " << *cur
@@ -6681,6 +6784,9 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       respond_to_request(mdr, -EDOM);
       return;
     } else if (mdcache->export_ephemeral_random_max < val) {
+      dout(10) << "value " << val << " for " << name << " exceeds "
+	       << "mds_export_ephemeral_random_max ("
+	       << mdcache->export_ephemeral_random_max << ")" << dendl;
       respond_to_request(mdr, -EINVAL);
       return;
     }
@@ -6859,8 +6965,8 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
-								   false, false, adjust_realm));
+  auto* c = new C_MDS_inode_update_finish(this, mdr, cur, false, false, adjust_realm);
+  journal_and_reply(mdr, cur, 0, le, c);
   return;
 }
 
@@ -11379,6 +11485,10 @@ void Server::handle_client_lssnap(const MDRequestRef& mdr)
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
     return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
+    return;
 
   if (!diri->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
@@ -11497,6 +11607,10 @@ void Server::handle_client_mksnap(const MDRequestRef& mdr)
 
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
+    return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
     return;
 
   // dir only
@@ -11683,6 +11797,10 @@ void Server::handle_client_rmsnap(const MDRequestRef& mdr)
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
     return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
+    return;
 
   if (!diri->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
@@ -11815,6 +11933,10 @@ void Server::handle_client_renamesnap(const MDRequestRef& mdr)
 
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
+    return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
     return;
 
   if (!diri->is_dir()) { // dir only
@@ -12361,6 +12483,7 @@ void Server::_readdir_diff(
   size_t rollback_pos = 0;
   size_t rollback_num = 0;
 
+  bool waiting = false;
   bool end = build_snap_diff(
     mdr,
     dir,
@@ -12432,7 +12555,11 @@ void Server::_readdir_diff(
       mdcache->lru.lru_touch(dn);
       ++numfiles;
       return true;
-    });
+    },
+    &waiting);
+
+  if (waiting)
+    return;
 
   __u16 flags = 0;
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
@@ -12454,7 +12581,8 @@ bool Server::build_snap_diff(
   snapid_t snapid,
   unsigned diff_mask,
   const bufferlist& dnbl,
-  std::function<bool (CDentry*, CInode*, bool)> add_result_cb)
+  std::function<bool (CDentry*, CInode*, bool)> add_result_cb,
+  bool *waiting)
 {
   struct EntryInfo {
     CDentry* dn = nullptr;
@@ -12505,6 +12633,36 @@ bool Server::build_snap_diff(
                           mask, res_mask);
     }
   } before;
+
+  auto snapflush_pending = [&](CInode *in) -> bool {
+    if (!in->is_head() && !in->client_snap_caps.empty())
+      return true;
+    CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+    if (!head)
+      return true;
+    for (const auto& p : head->client_need_snapflush) {
+      if (p.first >= snapid_prev && p.first <= snapid && !p.second.empty())
+	return true;
+    }
+    return false;
+  };
+
+  // rdlock filelock so pending snapflush completes before metadata is read.
+  auto rdlock_file_start = [&](CInode *in) -> bool {
+    if (!mds->locker->rdlock_start(&in->filelock, mdr)) {
+      dout(10) << __func__ << " waiting for snapflush, deferring readdir_snapdiff on "
+           << *in << " snap " << snapid_prev << " vs. " << snapid << dendl;
+      if (waiting)
+        *waiting = true;
+      return false;
+    }
+    return true;
+  };
+  auto rdlock_file_finish = [&](CInode *in) {
+    auto lit = mdr->locks.find(&in->filelock);
+    ceph_assert(lit != mdr->locks.end());
+    mds->locker->rdlock_finish(lit, mdr.get(), nullptr);
+  };
 
   auto insert_deleted = [&](EntryInfo& ei) {
     dout(20) << "build_snap_diff deleted file " << ei.dn->get_name() << " "
@@ -12626,17 +12784,22 @@ bool Server::build_snap_diff(
         // Do not infer that the inode is unchanged solely because this
         // dentry spans both snapshots.
         CInode* head = in->is_head() ? in : mdcache->get_inode(in->ino());
+
+        bool locked = false;
+        if (snapflush_pending(in)) {
+          if (before.valid() && !insert_deleted(before))
+            break;
+          if (!rdlock_file_start(in))
+            return false;
+          locked = true;
+        }
+
         // A replica's first can lag the inode auth MDS, so only use the
         // range as a fast path when it is authoritative.
         const bool inode_state_authoritative = head && head->is_auth();
         bool inode_spans_both =
           inode_state_authoritative &&
           snapid_prev >= in->first && snapid <= in->last;
-        if (inode_spans_both) {
-	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
-	    << dn->first << "/" << dn->last << dendl;
-	  continue;
-        }
 
         unsigned res_mask = 0;
         bool attrs_known = false;
@@ -12653,6 +12816,15 @@ bool Server::build_snap_diff(
             attrs_changed = EntryInfo::meta_differs(
               *prev_inode, *snap_inode, diff_mask, res_mask);
           }
+        }
+
+        if (locked)
+          rdlock_file_finish(in);
+
+        if (inode_spans_both) {
+          dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+            << dn->first << "/" << dn->last << dendl;
+          continue;
         }
 
         if (attrs_known && !attrs_changed) {
@@ -12719,12 +12891,35 @@ bool Server::build_snap_diff(
 		<< " result mask: 0x" << std::hex << res_mask << std::dec
 		<< dendl;
 	      before.reset();
-	    } else {
-	      dout(30) << __func__ << " attrs not changed " << dn->get_name() << " "
-		<< dn->first << "/" << dn->last
-		<< dendl;
-	      before.reset();
-	      continue;
+        } else if (!snapflush_pending(in)) {
+          dout(30) << __func__ << " attrs not changed " << dn->get_name() << " "
+          << dn->first << "/" << dn->last
+          << dendl;
+          before.reset();
+          continue;
+        } else {
+          /* attrs match but snapflush is pending; rdlock so metadata is
+           * read after writeback completes.
+           */
+          if (!rdlock_file_start(in))
+            return false;
+          bool differs = before.meta_differs(in, diff_mask, res_mask);
+          rdlock_file_finish(in);
+          if (differs) {
+            dout(30) << __func__ << " attrs changed " << dn->get_name() << " "
+            << dn->first << "/" << dn->last
+            << " result mask: 0x" << std::hex << res_mask << std::dec
+            << " (after snapflush)"
+            << dendl;
+            before.reset();
+          } else {
+            dout(30) << __func__ << " attrs not changed " << dn->get_name() << " "
+            << dn->first << "/" << dn->last
+            << " (after snapflush)"
+            << dendl;
+            before.reset();
+            continue;
+          }
 	    }
 	  }
 	}

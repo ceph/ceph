@@ -65,6 +65,8 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   watch.cc
+  watch_conn.cc
+  watch_timeout_request.cc
   )
 if(HAS_VTA)
   set_source_files_properties(main.cc
@@ -101,7 +103,8 @@ else()
     dmclock::dmclock)
 endif()
 set_target_properties(crimson-osd PROPERTIES
-  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
+  JOB_POOL_LINK heavy_link_job_pool)
 install(TARGETS crimson-osd DESTINATION bin)
 if(WITH_TESTS)
   add_dependencies(tests crimson-osd)

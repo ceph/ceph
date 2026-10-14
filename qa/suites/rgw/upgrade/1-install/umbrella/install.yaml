@@ -1,0 +1,6 @@
+tasks:
+- install:
+    branch: umbrella
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-osd-crimson

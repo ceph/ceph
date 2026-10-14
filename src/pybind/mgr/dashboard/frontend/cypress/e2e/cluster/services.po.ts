@@ -9,11 +9,11 @@ export class ServicesPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    service_name: 2,
-    placement: 3,
-    running: 4,
-    size: 5,
-    last_refresh: 6
+    service_name: 1,
+    placement: 2,
+    running: 3,
+    size: 4,
+    last_refresh: 5
   };
 
   serviceDetailColumnIndex = {
@@ -29,11 +29,19 @@ export class ServicesPageHelper extends PageHelper {
     return this.selectOption('service_type', serviceType);
   }
 
+  private getServiceSidebarLabel(tabName: string) {
+    const legacyToSidebarLabel: Record<string, string> = {
+      Daemons: 'Service Instances',
+      Events: 'Service Events'
+    };
+    return legacyToSidebarLabel[tabName] || tabName;
+  }
+
   clickServiceTab(serviceName: string, tabName: string) {
-    this.getExpandCollapseElement(serviceName).click();
-    cy.get('cd-service-details').within(() => {
-      this.getCdsTab(tabName).click();
-    });
+    const sidebarLabel = this.getServiceSidebarLabel(tabName);
+    this.getResourcePage(serviceName).click({ force: true });
+    cy.get('cd-service-resource-page').should('exist');
+    cy.contains('cds-sidenav a.cds--side-nav__link', sidebarLabel).click({ force: true });
   }
 
   addService(
@@ -180,7 +188,10 @@ export class ServicesPageHelper extends PageHelper {
 
   checkExist(serviceName: string, exist: boolean) {
     this.getTableCell(this.columnIndex.service_name, serviceName).should(($elements) => {
-      const services = $elements.map((_, el) => el.textContent).get();
+      const services = $elements
+        .map((_, el) => (el.textContent || '').trim())
+        .get()
+        .filter((value) => value.length > 0);
       if (exist) {
         expect(services).to.include(serviceName);
       } else {

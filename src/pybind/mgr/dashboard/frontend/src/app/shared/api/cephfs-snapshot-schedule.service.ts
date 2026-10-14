@@ -99,7 +99,6 @@ export class CephfsSnapshotScheduleService {
     return this.getSnapshotSchedule(path, fs, false).pipe(
       map((response) => {
         let errorIndex = -1;
-        let exists = false;
         const index = response.findIndex((x) =>
           isSubvolume ? x.path.startsWith(path) : x.path === path
         );
@@ -111,7 +110,7 @@ export class CephfsSnapshotScheduleService {
               retentionFrequencies
             )
           : [];
-        exists = !!result?.length;
+        const exists = !!result?.length;
         result?.forEach((r) => (errorIndex = retentionFrequencies.indexOf(r)));
 
         return { exists, errorIndex };

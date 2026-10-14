@@ -52,11 +52,9 @@ Installing the Required Software
 --------------------------------
 
 If your cluster has been manually deployed, you will need to install Ceph
-software packages manually. For details, see `Installing Ceph (Manual)`_.
+software packages manually. For details, see :ref:`install_storage_cluster`.
 Configure SSH for the appropriate user to have both passwordless authentication
 and root permissions.
-
-.. _Installing Ceph (Manual): ../../../install
 
 
 Adding an OSD (Manual)

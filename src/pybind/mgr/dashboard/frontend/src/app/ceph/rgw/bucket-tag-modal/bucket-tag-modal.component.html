@@ -40,24 +40,27 @@
           />
         </cds-text-label>
         <ng-template #keyError>
-          <span
-            class="invalid-feedback"
-            *ngIf="form.showError('key', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="form.showError('key', formDir, 'unique')"
-            i18n
-            >This key must be unique.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="form.showError('key', formDir, 'maxLength')"
-            i18n
-            >Length of the key must be maximum of 128 characters</span
-          >
+          @if (form.showError('key', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (form.showError('key', formDir, 'unique')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This key must be unique.</span
+            >
+          }
+          @if (form.showError('key', formDir, 'maxLength')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Length of the key must be maximum of 128 characters</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -80,18 +83,20 @@
           />
         </cds-text-label>
         <ng-template #valueError>
-          <span
-            class="invalid-feedback"
-            *ngIf="form.showError('value', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="form.showError('value', formDir, 'maxLength')"
-            i18n
-            >Length of the value must be a maximum of 128 characters</span
-          >
+          @if (form.showError('value', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (form.showError('value', formDir, 'maxLength')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Length of the value must be a maximum of 128 characters</span
+            >
+          }
         </ng-template>
       </div>
     </div>

@@ -169,6 +169,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.FromString,
                 )
+        self.get_connection_extended_io_statistics = channel.unary_unary(
+                '/Gateway/get_connection_extended_io_statistics',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_extended_io_statistics_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_extended_io_statistics.FromString,
+                )
         self.create_listener = channel.unary_unary(
                 '/Gateway/create_listener',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.create_listener_req.SerializeToString,
@@ -471,6 +476,13 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def get_connection_extended_io_statistics(self, request, context):
+        """Gets connection's extended IO statistics
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def create_listener(self, request, context):
         """Creates a listener for a subsystem at a given IP/Port
         """
@@ -740,6 +752,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.get_connection_io_statistics,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.SerializeToString,
+            ),
+            'get_connection_extended_io_statistics': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_connection_extended_io_statistics,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_extended_io_statistics_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_extended_io_statistics.SerializeToString,
             ),
             'create_listener': grpc.unary_unary_rpc_method_handler(
                     servicer.create_listener,
@@ -1355,6 +1372,23 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/get_connection_io_statistics',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_connection_extended_io_statistics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/get_connection_extended_io_statistics',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_extended_io_statistics_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_extended_io_statistics.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

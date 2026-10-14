@@ -151,7 +151,7 @@ add_executable(unittest_util
   ${CMAKE_SOURCE_DIR}/src/common/util.cc
   )
 add_ceph_unittest(unittest_util)
-target_link_libraries(unittest_util global StdFilesystem::filesystem)
+target_link_libraries(unittest_util global)
 
 # unittest_random
 add_executable(unittest_random
@@ -166,7 +166,8 @@ add_executable(unittest_throttle
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_throttle PARALLEL)
-target_link_libraries(unittest_throttle global) 
+set_property(TEST unittest_throttle PROPERTY RUN_SERIAL TRUE)
+target_link_libraries(unittest_throttle global)
 
 # unittest_lru
 add_executable(unittest_lru
@@ -446,6 +447,10 @@ add_ceph_unittest(unittest_cdc)
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
 target_link_libraries(unittest_ceph_timer global ceph-common)
+
+add_executable(unittest_debug_level_guard test_debug_level_guard.cc)
+target_link_libraries(unittest_debug_level_guard global ceph-common)
+add_ceph_unittest(unittest_debug_level_guard)
 
 add_executable(unittest_option test_option.cc)
 target_link_libraries(unittest_option ceph-common GTest::Main)

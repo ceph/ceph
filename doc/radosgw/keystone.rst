@@ -51,6 +51,88 @@ only use implicit tenants, and the other protocol will
 never use implicit tenants.  Some older versions of Ceph
 only supported implicit tenants with Swift.
 
+Project-scoped reader role
+--------------------------
+
+By default any Keystone user accepted by the gateway is granted full control
+over its project's object storage. ``rgw keystone accepted project reader
+roles`` designates one or more Keystone roles as *project-scoped readers*
+(the Swift ``project_reader_roles`` equivalent)::
+
+   rgw keystone accepted roles = member
+   rgw keystone accepted project reader roles = objectstore_viewer
+
+When the reader role is the only access-granting role a user holds, the user
+is capped to read-only within its Keystone project: it may read objects and
+inspect bucket configuration (ACLs, policy, versioning, location, ...), but
+not write. Every user of a project maps to the same RGW account (the project
+itself), so a reader lists and reads every bucket the project owns through the
+normal owner-scoped paths, and cannot reach another project (a different
+owner). This scoping is by ownership and holds regardless of ``rgw keystone
+implicit tenants``, which only controls the bucket-name namespace: with it
+off, a reader reaching another project's bucket gets ``403`` (the bucket is
+in the shared namespace, visible but not owned); with it on, it gets ``404``
+(the bucket is in a separate namespace and not visible). Either way the
+reader stays confined to its own project.
+
+Note the following:
+
+- **A project reader role admits the user on its own.** It need not also
+  appear in ``rgw keystone accepted roles`` (mirroring Swift's
+  ``project_reader_roles``): a user whose only granting role is a project
+  reader role is admitted and capped to read-only.
+
+- **The cap is a floor, not a hard ceiling.** A bucket policy that names the
+  user (via a ``keystone:userid`` / ``keystone:role`` condition or a principal
+  ARN) can still grant specific actions such as writes on specific buckets;
+  an explicit policy ``Deny`` can likewise remove access. Only bucket creation
+  and Swift account-metadata writes are refused up front regardless of policy.
+
+- **A role that grants more than read overrides the cap.** If the same user
+  also holds ``admin`` or any other role in ``rgw keystone accepted roles``
+  (for example ``member``), that role wins and the user receives full control.
+  To keep a user read-only, assign it *only* the reader role. Roles that are
+  in no accepted list at all are ignored and do not affect the cap.
+
+Implicit-deny roles
+-------------------
+
+``rgw keystone implicit deny roles`` designates Keystone roles
+that authenticate a user without granting any implicit permissions::
+
+   rgw keystone accepted roles = member
+   rgw keystone implicit deny roles = objectstore_authenticated
+
+A user whose only access-granting role is such a role is denied every
+operation by default. Access must be granted explicitly through a bucket
+policy or IAM policy (for example with a ``keystone:userid`` or
+``keystone:role`` condition), and an explicit ``Allow`` then applies only to
+the buckets and objects the policy names. Unlike a project reader, a user
+with only an implicit-deny role cannot list the buckets of its project;
+bucket creation and Swift account-metadata writes are always refused.
+
+The project-reader notes above apply here as well: the role admits the user
+on its own (no co-listing in ``rgw keystone accepted roles`` needed), an
+explicit policy ``Deny`` always wins, and any role granting more (``admin``,
+a project reader role, or another accepted role such as ``member``) takes
+precedence over the implicit-deny cap.
+
+.. note:: These tiers cap what a request may do at authorization time. They
+   apply to the default Keystone mapping, where each project maps to a plain
+   tenant-scoped gateway user reaching the gateway over S3 or Swift. They do
+   **not** apply in the following cases:
+
+   - **The librgw frontend (NFS-Ganesha).** It authorizes every request with
+     full control, so a gateway reached over that path is not capped. Assign
+     these roles only where clients use S3 or Swift.
+   - **Keystone users associated with an** :doc:`RGW account <account>`.
+     Access for an account is governed entirely by IAM policy (evaluated
+     before the permission mask), so the tiers place no cap there. Use them
+     with the default (non-account) mapping.
+   - **The** ``radosgw-admin`` **command and the admin REST API.** These are
+     backend administration paths that do not authenticate a Keystone user,
+     so they are not subject to these roles at all.
+
 Configuring Keystone Service and Endpoints
 ------------------------------------------
 

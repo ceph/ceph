@@ -73,12 +73,14 @@ TEMPLATE = '''
 {%- endif %}
 {% if opt.note %}
    .. note::
-      {{ opt.note }}
-{%- endif -%}
-{%- if opt.warning %}
+
+      {{ opt.note | trim | indent(6) }}
+{% endif %}
+{% if opt.warning %}
    .. warning::
-      {{ opt.warning }}
-{%- endif %}
+
+      {{ opt.warning | trim | indent(6) }}
+{% endif %}
 '''
 
 

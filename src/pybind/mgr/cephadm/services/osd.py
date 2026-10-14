@@ -15,10 +15,10 @@ import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.utils import SpecialHostLabels, can_apply_post_create
 from ceph.utils import datetime_now
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
 from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
@@ -235,7 +235,8 @@ class OSDService(CephService):
                     daemon_type='osd',
                     network='',  # required arg but only really needed for mons
                 )
-                daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+                daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                    DaemonDeployContext(daemon_spec, spec))
                 self._apply_osd_config_to_daemon(str(osd_id), post_create_cfg or {})
 
                 await CephadmServe(self.mgr)._create_daemon(
@@ -279,7 +280,8 @@ class OSDService(CephService):
                 daemon_type='osd',
                 network='',  # required arg but only really needed for mons
             )
-            daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+            daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                DaemonDeployContext(daemon_spec, spec))
             self._apply_osd_config_to_daemon(osd_id, post_create_cfg or {})
             await CephadmServe(self.mgr)._create_daemon(
                 daemon_spec,
@@ -506,8 +508,12 @@ class OSDService(CephService):
         if not is_failed_deploy:
             super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        config, parent_deps = super().generate_config(daemon_spec)
+    def generate_config(
+            self,
+            deploy_ctx: DaemonDeployContext,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
+        config, parent_deps = super().generate_config(deploy_ctx)
         if daemon_spec.service_name in self.mgr.spec_store:
             svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
@@ -874,6 +880,22 @@ class OSD:
     def safe_to_destroy(self) -> bool:
         return self.rm_util.safe_to_destroy([self.osd_id])
 
+    def daemon_is_error(self) -> bool:
+        try:
+            dd = self.rm_util.mgr.cache.get_daemon(f'osd.{self.osd_id}', self.hostname)
+        except OrchestratorError:
+            return False
+        return dd.status == DaemonDescriptionStatus.error
+
+    def update_from(self, other: "OSD") -> None:
+        self.force = other.force
+        self.zap = other.zap
+        self.replace = other.replace
+        self.replace_block = other.replace_block
+        self.replace_db = other.replace_db
+        self.replace_wal = other.replace_wal
+        self.no_destroy = other.no_destroy
+
     def down(self) -> bool:
         return self.rm_util.set_osd_flag([self], 'down')
 
@@ -1017,63 +1039,65 @@ class OSDRemovalQueue(object):
         # Check all osds for their state and take action (remove, purge etc)
         new_queue: Set[OSD] = set()
         for osd in all_osds:  # type: OSD
-            if not osd.force:
-                # skip criteria
+            # --force, or an already-failed empty daemon, must not wait on
+            # osd safe-to-destroy (it stays false while the cluster is degraded).
+            skip_safety = osd.force or (osd.daemon_is_error() and osd.get_pg_count() <= 0)
+            if not skip_safety:
                 if not osd.is_empty:
                     logger.debug(f"{osd} is not empty yet. Waiting a bit more")
                     new_queue.add(osd)
                     continue
 
-            if not osd.safe_to_destroy():
-                logger.debug(
-                    f"{osd} is not safe-to-destroy yet. Waiting a bit more")
-                new_queue.add(osd)
-                continue
+                if not osd.safe_to_destroy():
+                    logger.debug(
+                        f"{osd} is not safe-to-destroy yet. Waiting a bit more")
+                    new_queue.add(osd)
+                    continue
 
-            # abort criteria
-            if not osd.down():
-                # also remove it from the remove_osd list and set a health_check warning?
-                raise orchestrator.OrchestratorError(
-                    f"Could not mark {osd} down")
-
-            # stop and remove daemon
-            assert osd.hostname is not None
-
-            if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
-                CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
-                logger.info(f"Successfully removed {osd} on {osd.hostname}")
-                result = True
-            else:
-                logger.info(f"Daemon {osd} on {osd.hostname} was already removed")
-
-            any_replace_params: bool = any([osd.replace,
-                                            osd.replace_block,
-                                            osd.replace_db,
-                                            osd.replace_wal])
-            if any_replace_params:
-                # mark destroyed in osdmap
-                if not osd.destroy():
+            try:
+                if not osd.down():
                     raise orchestrator.OrchestratorError(
-                        f"Could not destroy {osd}")
-                logger.info(
-                    f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
-                if any_replace_params:
-                    osd.zap = True
-            else:
-                # purge from osdmap
-                if not osd.purge():
-                    raise orchestrator.OrchestratorError(f"Could not purge {osd}")
-                logger.info(f"Successfully purged {osd} on {osd.hostname}")
+                        f"Could not mark {osd} down")
 
-            if osd.zap:
-                try:
-                    logger.info(f"Zapping devices for {osd} on {osd.hostname}")
-                    osd.do_zap()
-                    logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
-                except Exception:
-                    logger.exception(f"Failed to zap devices for {osd} on {osd.hostname}")
-            self.mgr.cache.invalidate_host_devices(osd.hostname)
-            logger.debug(f"Removing {osd} from the queue.")
+                assert osd.hostname is not None
+
+                if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
+                    CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
+                    logger.info(f"Successfully removed {osd} on {osd.hostname}")
+                    result = True
+                else:
+                    logger.info(f"Daemon {osd} on {osd.hostname} was already removed")
+
+                any_replace_params: bool = any([osd.replace,
+                                                osd.replace_block,
+                                                osd.replace_db,
+                                                osd.replace_wal])
+                if any_replace_params:
+                    if not osd.destroy():
+                        raise orchestrator.OrchestratorError(
+                            f"Could not destroy {osd}")
+                    logger.info(
+                        f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
+                    # device replace needs a zap so ceph-volume can set being_replaced
+                    if any([osd.replace_block, osd.replace_db, osd.replace_wal]):
+                        osd.zap = True
+                else:
+                    if not osd.purge():
+                        raise orchestrator.OrchestratorError(f"Could not purge {osd}")
+                    logger.info(f"Successfully purged {osd} on {osd.hostname}")
+
+                if osd.zap:
+                    try:
+                        logger.info(f"Zapping devices for {osd} on {osd.hostname}")
+                        osd.do_zap()
+                        logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
+                    except Exception:
+                        logger.exception(f"Failed to zap devices for {osd} on {osd.hostname}")
+                self.mgr.cache.invalidate_host_devices(osd.hostname)
+                logger.debug(f"Removing {osd} from the queue.")
+            except Exception as e:
+                logger.exception(f"Failed to complete removal of {osd}: {e}")
+                new_queue.add(osd)
 
         # self could change while this is processing (osds get added from the CLI)
         # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
@@ -1149,9 +1173,17 @@ class OSDRemovalQueue(object):
     def enqueue(self, osd: "OSD") -> None:
         if not osd.exists:
             raise NotFoundError()
+        start_new = False
         with self.lock:
-            self.osds.add(osd)
-        osd.start()
+            for queued in self.osds:
+                if queued.osd_id == osd.osd_id:
+                    queued.update_from(osd)
+                    break
+            else:
+                self.osds.add(osd)
+                start_new = True
+        if start_new:
+            osd.start()
 
     def rm_by_osd_id(self, osd_id: int) -> None:
         osd: Optional["OSD"] = None

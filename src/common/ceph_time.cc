@@ -101,8 +101,8 @@ using std::chrono::duration_cast;
 using std::chrono::seconds;
 using std::chrono::microseconds;
 
-template<typename Clock,
-	 typename std::enable_if<Clock::is_steady>::type*>
+template<typename Clock>
+requires(Clock::is_steady)
 std::ostream& operator<<(std::ostream& m,
 			 const std::chrono::time_point<Clock>& t) {
   return m << std::fixed << std::chrono::duration<double>(
@@ -110,8 +110,8 @@ std::ostream& operator<<(std::ostream& m,
 	   << 's';
 }
 
-template<typename Clock,
-	 typename std::enable_if<!Clock::is_steady>::type*>
+template<typename Clock>
+requires(!Clock::is_steady)
 std::ostream& operator<<(std::ostream& m,
 			 const std::chrono::time_point<Clock>& t) {
   m.setf(std::ios::right);

@@ -178,7 +178,7 @@ int NVMeofGwMap::cfg_delete_gw(
 		   /*prevent failover because blocklisting right now cause IO errors */
 		   dout(4) << "Delete GW: set skip-failovers for group " << gw_id
 				   << " group " << group_key << dendl;
-		   skip_failovers_for_group(group_key, 5);
+		   skip_failovers_for_group(group_key, DELAY_FAILOVERS_INTERVAL_SEC);
 		}
         state.availability = gw_availability_t::GW_DELETING;
         dout(4) << " Deleting  GW :"<< gw_id  << " in state  "
@@ -272,7 +272,6 @@ int NVMeofGwMap::cfg_admin_state_change(const NvmeGwId &gw_id,
         dout(4) << "GW-id set admin Disabled " << group_key
                 << " " << gw_id << dendl;
         if (st.availability == gw_availability_t::GW_AVAILABLE) {
-          skip_failovers_for_group(group_key, 5);
           process_gw_map_gw_down(gw_id, group_key, propose_pending);
         }
         st.gw_admin_state = state;
@@ -291,6 +290,39 @@ int NVMeofGwMap::cfg_admin_state_change(const NvmeGwId &gw_id,
      return -EINVAL;
   }
   return 0;
+}
+
+int NVMeofGwMap::is_ok_to_stop(const NvmeGroupKey& group_key)
+{
+  auto grp_it = created_gws.find(group_key);
+  if (grp_it == created_gws.end()) {
+    return -ENOENT;
+  }
+
+  const uint32_t num_gws = grp_it->second.size();
+  uint32_t num_down_gws = 0;
+  uint32_t num_avail_gws = 0;
+
+  for (const auto& [gw_id, state] : grp_it->second) {
+    if (state.availability != gw_availability_t::GW_AVAILABLE) {
+      num_down_gws++; // GWs passing redeploy process
+    } else {
+      num_avail_gws++;
+    }
+  }
+  const uint64_t max_down_gws =
+      g_conf().get_val<uint64_t>("mon_nvmeofgw_max_down_gws");
+
+  dout(10) << "num gws " << num_gws << " num down gws " << num_down_gws
+           << " configured max down " << max_down_gws << dendl;
+
+  if (num_avail_gws == 0) {
+    return -EBUSY;
+  } else if (max_down_gws == 0 || max_down_gws > num_down_gws) {
+    return 0;
+  } else {
+    return -EBUSY;
+  }
 }
 
 bool NVMeofGwMap::validate_number_locations(int num_gws, int num_locations)
@@ -393,18 +425,20 @@ bool NVMeofGwMap::get_location_in_disaster_cleanup(const NvmeGroupKey& group_key
   return false;
 }
 
-void NVMeofGwMap::disaster_map_remove_location(const NvmeGroupKey& group_key,
+bool NVMeofGwMap::disaster_map_remove_location(const NvmeGroupKey& group_key,
            NvmeLocation& location) {
   // this function called when GW with last location removed from the group
   //or when removed location from the disaster_location map
   auto grp_it = disaster_locations.find(group_key);
   if (grp_it != disaster_locations.end()) {
     auto& locs = grp_it->second;
-    locs.erase(location);
+    const bool erased = locs.erase(location) != 0;
     if (locs.empty()) {
       disaster_locations.erase(grp_it);
     }
+    return erased;
   }
+  return false;
 }
 
 int NVMeofGwMap::cfg_location_disaster_set(
@@ -858,13 +892,16 @@ void NVMeofGwMap::check_relocate_ana_groups(const NvmeGroupKey& group_key,
           }
         }
       }
-      if (num_gw_in_location == num_active_ana_in_location) {// All ana groups of disaster location are in Active
-        disaster_map_remove_location(group_key, location);
-        dout(4) <<  "the location entry is erased "<< location
-            << " from disaster-locations num_ana_groups in location "
-            << num_gw_in_location
-            << " from the failbacks-in-progress of group " << group_key <<dendl;
-        propose = true;
+      if (disaster && (num_gw_in_location == num_active_ana_in_location))
+      { // All ana groups of disaster location are in Active state
+        bool removed_loc = disaster_map_remove_location(group_key, location);
+        if (removed_loc) {
+          dout(4) <<  "the location entry is erased "<< location
+                  << " from disaster-locations num_ana_groups in location "
+                  << num_gw_in_location
+                  << " from the failbacks-in-progress of group " << group_key <<dendl;
+          propose = true;
+        }
         return;
       }
     // for all ana groups in the list do relocate
@@ -1101,7 +1138,7 @@ void  NVMeofGwMap::find_failover_candidate(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
   NvmeAnaGrpId grpid, bool &propose_pending)
 {
-  dout(10) << __func__<< " " << gw_id << dendl;
+  dout(10) << __func__<< " for " << gw_id << " Ana-grp " << grpid << dendl;
   std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   NvmeGwId min_loaded_gw_id = ILLEGAL_GW_ID;
   auto& gws_states = created_gws[group_key];

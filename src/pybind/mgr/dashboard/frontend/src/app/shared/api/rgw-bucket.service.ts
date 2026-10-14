@@ -58,13 +58,15 @@ export class RgwBucketService extends ApiClient {
       map((buckets: Bucket[]) => {
         let totalNumObjects = 0;
         let totalUsedCapacity = 0;
-        let averageObjectSize = 0;
         const transformedBuckets = buckets.map((bucket) => this.transformBucket(bucket));
         transformedBuckets.forEach((bucket) => {
           totalNumObjects += bucket?.num_objects || 0;
           totalUsedCapacity += bucket?.bucket_size || 0;
         });
-        averageObjectSize = this.calculateAverageObjectSize(totalNumObjects, totalUsedCapacity);
+        const averageObjectSize = this.calculateAverageObjectSize(
+          totalNumObjects,
+          totalUsedCapacity
+        );
         this.bucketsSubject.next(transformedBuckets);
         this.totalNumObjectsSubject.next(totalNumObjects);
         this.totalUsedCapacitySubject.next(totalUsedCapacity);

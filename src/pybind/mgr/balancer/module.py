@@ -1022,6 +1022,13 @@ class Module(MgrModule):
         pe = self.calc_eval(ms, pools)
         return pe.show(verbose=verbose)
 
+    def has_backfill_toofull(self, pg_status: Dict[str, Any]) -> bool:
+        """Return True if any PGs are currently in the backfill_toofull state."""
+        for s in pg_status.get('pgs_by_state', []):
+            if s.get('count', 0) > 0 and 'backfill_toofull' in s.get('state_name', ''):
+                return True
+        return False
+
     def optimize(self, plan: Plan) -> Tuple[int, str]:
         max_misplaced = cast(float, self.get_ceph_option('target_max_misplaced_ratio'))
         self.log.info('Optimize plan %s, mode %s, max misplaced %f' %
@@ -1035,11 +1042,24 @@ class Module(MgrModule):
         plan.pg_status = info
         self.log.debug('unknown %f degraded %f inactive %f misplaced %g',
                        unknown, degraded, inactive, misplaced)
+
+        # When a large number of OSDs fail (e.g. a shared block.db), OSDs in
+        # the same CRUSH bucket can get an oversubscription of PGs and end up
+        # stuck backfill_toofull, which leaves objects degraded/misplaced
+        # indefinitely because backfill cannot make progress. The upmap
+        # balancer optimizes the UP set (not the ACTING set), so it can move
+        # PGs off the too-full OSDs and let recovery proceed. In that specific
+        # situation, allow balancing to proceed even though PGs are degraded or
+        # misplaced beyond the usual thresholds. Only the upmap modes can help
+        # here, so leave the guards in place for the other modes.
+        backfill_toofull = self.has_backfill_toofull(info)
+        override_toofull = backfill_toofull and plan.mode in ('upmap', 'upmap-read')
+
         if unknown > 0.0:
             detail = 'Some PGs (%f) are unknown; try again later' % unknown
             self.log.info(detail)
             return -errno.EAGAIN, detail
-        elif degraded > 0.0:
+        elif degraded > 0.0 and not override_toofull:
             detail = 'Some objects (%f) are degraded; try again later' % degraded
             self.log.info(detail)
             return -errno.EAGAIN, detail
@@ -1047,12 +1067,17 @@ class Module(MgrModule):
             detail = 'Some PGs (%f) are inactive; try again later' % inactive
             self.log.info(detail)
             return -errno.EAGAIN, detail
-        elif misplaced >= max_misplaced:
+        elif misplaced >= max_misplaced and not override_toofull:
             detail = 'Too many objects (%f > %f) are misplaced; ' \
                      'try again later' % (misplaced, max_misplaced)
             self.log.info(detail)
             return -errno.EAGAIN, detail
         else:
+            if override_toofull and (degraded > 0.0 or misplaced >= max_misplaced):
+                self.log.info('Some PGs are backfill_toofull; balancing upmaps '
+                              'despite degraded (%f) / misplaced (%f) objects '
+                              'to help recovery make progress',
+                              degraded, misplaced)
             if plan.mode == 'upmap':
                 return self.do_upmap(plan)
             elif plan.mode == 'crush-compat':

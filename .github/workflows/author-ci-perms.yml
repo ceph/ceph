@@ -2,7 +2,7 @@ name: Check PR Author Permissions
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   check-permissions:
@@ -20,6 +20,63 @@ jobs:
             const issueNumber = pr.number;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+
+            // Handle the 'labeled' event separately and exit early: the
+            // revocation logic below must not run when someone has just
+            // granted approval, or it would strip the new 'ci-approved' label.
+            if (context.payload.action === 'labeled') {
+              if (context.payload.label.name !== 'ci-approved') {
+                return;
+              }
+              // Labels only need triage permission, a lower bar than the
+              // write access required of authors whose CI runs
+              // automatically; hold approvers to the same bar.  Lookup
+              // failures count as no permission, like the author check.
+              const sender = context.payload.sender.login;
+              let senderPermission = 'none';
+              try {
+                const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner,
+                  repo,
+                  username: sender,
+                });
+                senderPermission = response.data.permission;
+              } catch (error) {
+                console.log(`Failed to fetch permissions for ${sender}: ${error.message}`);
+              }
+              if (['admin', 'write'].includes(senderPermission)) {
+                if (pr.labels.some(label => label.name === 'needs-ci-approval')) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner,
+                      repo,
+                      issue_number: issueNumber,
+                      name: 'needs-ci-approval',
+                    });
+                  } catch (error) {
+                    console.log('Failed to remove needs-ci-approval label:', error);
+                  }
+                }
+              } else {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    name: 'ci-approved',
+                  });
+                } catch (error) {
+                  console.log('Failed to remove ci-approved label:', error);
+                }
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: `@${sender} \`ci-approved\` can only be granted by someone with write access to ceph/ceph; the label has been removed.`,
+                });
+              }
+              return;
+            }
 
             let permission = 'none';
             try {
