@@ -241,6 +241,7 @@ configuration. The following configuration options are available:
 - ``container_image_promtail``
 - ``container_image_haproxy``
 - ``container_image_keepalived``
+- ``container_image_pushgateway``
 - ``container_image_snmp_gateway``
 - ``container_image_elasticsearch``
 - ``container_image_jaeger_agent``
@@ -362,6 +363,7 @@ overridden. These are the names to be used when storing with ``ceph config-key s
 - ``services/oauth2-proxy/oauth2-proxy.conf``
 - ``services/prometheus/prometheus.yml``
 - ``services/prometheus/web.yml``
+- ``services/pushgateway/web.yml``
 - ``services/loki.yml``
 - ``services/promtail.yml``
 
@@ -384,6 +386,7 @@ You can look up the file templates that are currently used by cephadm in
 - ``services/oauth2-proxy/oauth2-proxy.conf.j2``
 - ``services/prometheus/prometheus.yml.j2``
 - ``services/prometheus/web.yml.j2``
+- ``services/pushgateway/web.yml.j2``
 - ``services/loki.yml.j2``
 - ``services/promtail.yml.j2``
 
@@ -670,6 +673,32 @@ Since deploying Grafana with anonymous access set to false without an initial
 admin password set would make the dashboard inaccessible, cephadm requires
 setting the ``initial_admin_password`` when ``anonymous_access`` is set to false.
 
+
+Setting up Pushgateway
+----------------------
+
+Prometheus `Pushgateway <https://prometheus.io/docs/instrumenting/pushing/>`_
+acts as a metric cache for batch jobs. Short-lived or periodic jobs push their
+metrics to the Pushgateway, and Prometheus scrapes them from there. Pushgateway
+is **not** auto-deployed during bootstrap. To deploy it:
+
+.. prompt:: bash #
+
+  ceph orch apply pushgateway
+
+The default port is ``9091``.  Pushed metrics persist across container restarts.
+Prometheus automatically discovers pushgateway via the HTTP service discovery
+endpoint, so no manual Prometheus configuration is needed.
+
+Pushgateway uses TLS when ``secure_monitoring_stack`` is enabled or a
+``mgmt-gateway`` service is deployed. Mutual TLS (client-certificate
+authentication) is required only when ``mgmt-gateway`` is deployed.
+
+To remove the service:
+
+.. prompt:: bash #
+
+  ceph orch rm pushgateway
 
 Setting up Alertmanager
 -----------------------
