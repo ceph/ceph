@@ -1826,6 +1826,14 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
+    /* A tree whose adoption is complete has nothing left to import or
+     * adopt, and the gateway refuses every command against it. */
+    let (_, body) = rgw_call(&admin, "DELETE", &hint)?;
+    if json_bool(&body, "complete") == Some(true) {
+        println!("{tag} adoption completed at {};  nothing to do",
+                 json_str(&body, "completed_at").unwrap_or_default());
+        return Ok(());
+    }
     let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&identities=true"))?;
     if status != 200 || json_bool(&body, "ran") != Some(true) {
         return Err(format!("importing the identities failed ({status}):\n{body}"));
@@ -1885,6 +1893,21 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
                  json_str(&body, "profile").unwrap_or_default(),
                  json_str(&body, "objects").unwrap_or_default(),
                  json_str(&body, "versions").unwrap_or_default());
+    }
+
+    /* Every bucket is adopted, so a full pass observes the store
+     * consumed and writes the completion record (DECISIONS.md
+     * 2026-10-13).  Required here, because a pass that does not write it
+     * has found something the per-bucket adoption above missed. */
+    if step == "adopt" {
+        let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&run=true"))?;
+        if status != 200 || json_bool(&body, "complete") != Some(true) {
+            return Err(format!(
+                "the full pass did not complete adoption ({status}):  {}\n{body}",
+                json_str(&body, "why_not_complete").unwrap_or_default()));
+        }
+        println!("{tag} adoption complete at {}",
+                 json_str(&body, "completed_at").unwrap_or_default());
     }
     Ok(())
 }
