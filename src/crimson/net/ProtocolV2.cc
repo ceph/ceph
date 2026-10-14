@@ -531,6 +531,90 @@ ProtocolV2::banner_exchange(bool is_connect)
   });
 }
 
+// AUTH
+
+namespace {
+
+// Buffer refcounts aren't atomic in crimson, so a buffer must never be
+// referenced from two reactors. Bytes cross to and from the auth reactor
+// only as fresh copies.
+ceph::bufferlist copy_bl(const ceph::bufferlist& bl)
+{
+  ceph::bufferlist ret;
+  if (bl.length()) {
+    ceph::bufferptr p(bl.length());
+    bl.cbegin().copy(bl.length(), p.c_str());
+    ret.append(std::move(p));
+  }
+  return ret;
+}
+
+ceph::bufferlist to_bl(const std::string& s)
+{
+  ceph::bufferlist ret;
+  ret.append(s);
+  return ret;
+}
+
+} // anonymous namespace
+
+/*
+ * Run func(meta) on the reactor the auth client and server live on. If
+ * that is another reactor, func runs there on remote_auth_meta, which
+ * mirrors auth_method and con_mode, and finish_remote_auth() copies the
+ * negotiated keys back. func may read the caller's state, but must copy
+ * buffers with copy_bl() and return only plain values.
+ */
+template <typename Func>
+seastar::future<std::invoke_result_t<Func&, AuthConnectionMeta&>>
+ProtocolV2::call_auth(Func func)
+{
+  const auto auth_shard = messenger.get_auth_shard();
+  if (auth_shard == seastar::this_shard_id()) {
+    co_return std::invoke(func, *auth_meta);
+  }
+  if (!remote_auth_meta) {
+    remote_auth_meta = co_await seastar::smp::submit_to(auth_shard, [] {
+      return seastar::make_foreign(std::make_unique<AuthConnectionMeta>());
+    });
+  }
+  co_return co_await seastar::smp::submit_to(auth_shard,
+    [meta=remote_auth_meta.get(),
+     auth_method=auth_meta->auth_method,
+     con_mode=auth_meta->con_mode,
+     &func] {
+    meta->auth_method = auth_method;
+    meta->con_mode = con_mode;
+    return std::invoke(func, *meta);
+  });
+}
+
+seastar::future<> ProtocolV2::finish_remote_auth()
+{
+  if (!remote_auth_meta) {
+    co_return;
+  }
+  auto [session_key, connection_secret] = co_await seastar::smp::submit_to(
+    remote_auth_meta.get_owner_shard(), [meta=remote_auth_meta.get()] {
+    std::optional<std::string> session_key;
+    if (!meta->session_key.empty()) {
+      using ceph::encode;
+      ceph::bufferlist bl;
+      encode(meta->session_key, bl);
+      session_key = bl.to_str();
+    }
+    return std::make_pair(std::move(session_key), meta->connection_secret);
+  });
+  if (session_key) {
+    using ceph::decode;
+    auto bl = to_bl(*session_key);
+    auto p = bl.cbegin();
+    decode(auth_meta->session_key, p);
+  }
+  auth_meta->connection_secret = std::move(connection_secret);
+  remote_auth_meta = {};
+}
+
 // CONNECTING state
 
 seastar::future<> ProtocolV2::handle_auth_reply()
@@ -546,10 +630,14 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                     conn, bad_method.method(), cpp_strerror(bad_method.result()),
                     bad_method.allowed_methods(), bad_method.allowed_modes());
       ceph_assert(messenger.get_auth_client());
-      int r = messenger.get_auth_client()->handle_auth_bad_method(
-          conn, *auth_meta,
-          bad_method.method(), bad_method.result(),
-          bad_method.allowed_methods(), bad_method.allowed_modes());
+      int r = co_await call_auth(
+        [this, ac=messenger.get_auth_client(),
+         &bad_method](AuthConnectionMeta &meta) {
+        return ac->handle_auth_bad_method(
+            conn, meta,
+            bad_method.method(), bad_method.result(),
+            bad_method.allowed_methods(), bad_method.allowed_modes());
+      });
       if (r < 0) {
         logger().warn("{} auth_client handle_auth_bad_method returned {}",
                       conn, r);
@@ -566,8 +654,12 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                      conn, auth_more.auth_payload().length());
       ceph_assert(messenger.get_auth_client());
       // let execute_connecting() take care of the thrown exception
-      auto reply = messenger.get_auth_client()->handle_auth_reply_more(
-        conn, *auth_meta, auth_more.auth_payload());
+      auto reply = to_bl(co_await call_auth(
+        [this, ac=messenger.get_auth_client(),
+         &auth_more](AuthConnectionMeta &meta) {
+        return ac->handle_auth_reply_more(
+          conn, meta, copy_bl(auth_more.auth_payload())).to_str();
+      }));
       auto more_reply = AuthRequestMoreFrame::Encode(reply);
       logger().debug("{} WRITE AuthRequestMoreFrame: payload_len={}",
                      conn, reply.length());
@@ -584,17 +676,22 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                      ceph_con_mode_name(auth_done.con_mode()),
                      auth_done.auth_payload().length());
       ceph_assert(messenger.get_auth_client());
-      int r = messenger.get_auth_client()->handle_auth_done(
-          conn,
-          *auth_meta,
-          auth_done.global_id(),
-          auth_done.con_mode(),
-          auth_done.auth_payload());
+      int r = co_await call_auth(
+        [this, ac=messenger.get_auth_client(),
+         &auth_done](AuthConnectionMeta &meta) {
+        return ac->handle_auth_done(
+            conn,
+            meta,
+            auth_done.global_id(),
+            auth_done.con_mode(),
+            copy_bl(auth_done.auth_payload()));
+      });
       if (r < 0) {
         logger().warn("{} auth_client handle_auth_done returned {}", conn, r);
         abort_in_fault();
       }
       auth_meta->con_mode = auth_done.con_mode();
+      co_await finish_remote_auth();
       frame_assembler->create_session_stream_handlers(*auth_meta, false);
       co_await finish_auth();
       co_return;
@@ -611,14 +708,20 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
   // send_auth_request() logic
   ceph_assert(messenger.get_auth_client());
 
-  crimson::auth::AuthClient::auth_request_t request;
+  using request_t = std::tuple<uint32_t, std::vector<uint32_t>, std::string>;
+  request_t request;
   try {
-    request = messenger.get_auth_client()->get_auth_request(conn, *auth_meta);
+    request = co_await call_auth(
+      [this, ac=messenger.get_auth_client()](AuthConnectionMeta &meta) {
+      auto [auth_method, preferred_modes, bl] = ac->get_auth_request(conn, meta);
+      return request_t{auth_method, std::move(preferred_modes), bl.to_str()};
+    });
   } catch (const crimson::auth::error& e) {
     logger().error("{} get_initial_auth_request returned {}", conn, e.what());
     ABORT_IN_CLOSE(true);
   }
-  auto& [auth_method, preferred_modes, bl] = request;
+  auto& [auth_method, preferred_modes, bl_str] = request;
+  auto bl = to_bl(bl_str);
   auth_meta->auth_method = auth_method;
   auto frame = AuthRequestFrame::Encode(auth_method, preferred_modes, bl);
   logger().debug("{} WRITE AuthRequestFrame: method={},"
@@ -943,6 +1046,7 @@ void ProtocolV2::execute_connecting()
       return seastar::now();
     }).then([this] {
       auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
+      remote_auth_meta = {};
       frame_assembler->reset_handlers();
       frame_assembler->start_recording();
       return banner_exchange(true);
@@ -1052,11 +1156,12 @@ seastar::future<> ProtocolV2::_auth_bad_method(int r)
 {
   // _auth_bad_method() logic
   ceph_assert(r < 0);
-  auto allowed_methods =
-      messenger.get_auth_server()->get_supported_auth_methods(conn.get_peer_type());
-  auto allowed_modes =
-      messenger.get_auth_server()->get_supported_con_modes(conn.get_peer_type(),
-							  auth_meta->auth_method);
+  auto [allowed_methods, allowed_modes] = co_await call_auth(
+    [this, as=messenger.get_auth_server()](AuthConnectionMeta &meta) {
+    return std::make_pair(
+      as->get_supported_auth_methods(conn.get_peer_type()),
+      as->get_supported_con_modes(conn.get_peer_type(), meta.auth_method));
+  });
   auto bad_method = AuthBadMethodFrame::Encode(
       auth_meta->auth_method, r, allowed_methods, allowed_modes);
   logger().warn("{} WRITE AuthBadMethodFrame: method={}, result={}, "
@@ -1071,18 +1176,27 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
 {
   // _handle_auth_request() logic
   ceph_assert(messenger.get_auth_server());
-  bufferlist reply;
-  int r = messenger.get_auth_server()->handle_auth_request(
-      conn,
-      *auth_meta,
-      more,
-      auth_meta->auth_method,
-      auth_payload,
-      &conn.peer_global_id,
-      &reply);
+  auto [r, peer_global_id, reply_str] = co_await call_auth(
+    [this, as=messenger.get_auth_server(), more, &auth_payload,
+     gid=conn.peer_global_id]
+    (AuthConnectionMeta &meta) mutable {
+    bufferlist reply;
+    int ret = as->handle_auth_request(
+        conn,
+        meta,
+        more,
+        meta.auth_method,
+        copy_bl(auth_payload),
+        &gid,
+        &reply);
+    return std::make_tuple(ret, gid, reply.to_str());
+  });
+  conn.peer_global_id = peer_global_id;
+  auto reply = to_bl(reply_str);
   switch (r) {
    // successful
    case 1: {
+    co_await finish_remote_auth();
     auto auth_done = AuthDoneFrame::Encode(
         conn.peer_global_id, auth_meta->con_mode, reply);
     logger().debug("{} WRITE AuthDoneFrame: gid={}, con_mode={}, payload_len={}",
@@ -1133,9 +1247,11 @@ seastar::future<> ProtocolV2::server_auth()
                  conn, request.method(), request.preferred_modes(),
                  request.auth_payload().length());
   auth_meta->auth_method = request.method();
-  auth_meta->con_mode = messenger.get_auth_server()->pick_con_mode(
-      conn.get_peer_type(), auth_meta->auth_method,
-      request.preferred_modes());
+  auth_meta->con_mode = co_await call_auth(
+    [this, as=messenger.get_auth_server(), &request](AuthConnectionMeta &meta) {
+    return as->pick_con_mode(
+        conn.get_peer_type(), meta.auth_method, request.preferred_modes());
+  });
   if (auth_meta->con_mode == CEPH_CON_MODE_UNKNOWN) {
     logger().warn("{} auth_server pick_con_mode returned mode CEPH_CON_MODE_UNKNOWN", conn);
     co_await _auth_bad_method(-EOPNOTSUPP);
@@ -1632,6 +1748,7 @@ void ProtocolV2::execute_accepting()
       }
 #endif
       auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
+      remote_auth_meta = {};
       frame_assembler->reset_handlers();
       frame_assembler->start_recording();
       return banner_exchange(false);
