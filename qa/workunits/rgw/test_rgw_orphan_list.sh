@@ -225,6 +225,12 @@ mys3cmd ls
 mys3cmd ls s3://multipart-bkt
 
 ####################################
+# an object name starting with '_' gives the head a rados locator
+
+mys3cmd mb s3://underscore-bkt
+mys3upload $big_obj underscore-bkt _under
+
+####################################
 # multipart test with incomplete uploads
 
 bkt="incomplete-mp-bkt-1"
@@ -629,6 +635,16 @@ done
 
 if [ -n "$ol_error" ] ;then
     echo "ERROR: orphans found when none expected"
+    exit 1
+fi
+
+########################################
+# DO GAP LIST
+
+rgw-gap-list -p $pool
+
+if grep -F 'Object: "_under"' gap-list-*.gap ;then
+    echo "ERROR: object with a locator reported as a gap"
     exit 1
 fi
 

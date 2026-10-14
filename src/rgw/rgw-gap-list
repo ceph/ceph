@@ -118,7 +118,8 @@ rados_ls() {
   done
   if [ ! -e "$rados_flag" ]; then
     log "Sorting 'rados ls' output(s)."
-    sort -T ${temp_prefix} -u "$rados_out" >"$rados_temp"
+    # drop the locator that rados ls prints after the oid
+    cut -f1 "$rados_out" | sort -T ${temp_prefix} -u >"$rados_temp"
     checkReturn $? "Sorting 'rados ls' output(s)" 1
 
     log "Moving sorted output(s)."
