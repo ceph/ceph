@@ -22,6 +22,7 @@
 #ifndef CEPH_OSDMONITOR_H
 #define CEPH_OSDMONITOR_H
 
+#include <functional>
 #include <map>
 #include <set>
 #include <utility>
@@ -1042,6 +1043,19 @@ public:
   // The data and coding chunk counts of profile's plugin.
   int profile_chunk_counts(const std::map<std::string, std::string>& profile,
                            unsigned *k, unsigned *m, std::ostream *ss) const;
+
+  // The name for a pool's own copy of a profile with these contents: base,
+  // else the first base-<n>, that lookup finds free or holding the same
+  // contents.
+  static std::string profile_copy_name(
+      const std::string& base,
+      const std::map<std::string, std::string>& contents,
+      const std::function<const std::map<std::string, std::string>*(
+        const std::string&)>& lookup);
+
+  // At the upgrade commit: every EC pool that refers to the default profile
+  // gets a verbatim copy of its own, in the pending OSDMap.
+  void copy_default_profile_to_pools();
 
   // What ceph mon enable_stretch_mode or disable_stretch_mode does to a pool.
   enum class StretchModeChange {

@@ -13650,6 +13650,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         mon.configmon()->propose_global_options(defaults,
                                                 "osd require-osd-release");
       }
+      copy_default_profile_to_pools();
     }
     pending_inc.new_require_osd_release = rel;
     goto update;
@@ -17774,6 +17775,60 @@ int OSDMonitor::profile_chunk_counts(const map<string, string>& profile,
   *k = erasure_code->get_data_chunk_count();
   *m = erasure_code->get_chunk_count() - *k;
   return 0;
+}
+
+string OSDMonitor::profile_copy_name(
+    const string& base,
+    const map<string, string>& contents,
+    const std::function<const map<string, string>*(const string&)>& lookup)
+{
+  string name = base;
+  for (int n = 1; ; ++n) {
+    const auto existing = lookup(name);
+    if (!existing || *existing == contents) {
+      return name;
+    }
+    name = base + "-" + stringify(n);
+  }
+}
+
+void OSDMonitor::copy_default_profile_to_pools()
+{
+  if (!osdmap.has_erasure_code_profile("default")) {
+    return;
+  }
+  const auto& profile = osdmap.get_erasure_code_profile("default");
+  auto lookup = [this](const string& name) -> const map<string, string>* {
+    if (auto p = pending_inc.new_erasure_code_profiles.find(name);
+        p != pending_inc.new_erasure_code_profiles.end()) {
+      return &p->second;
+    }
+    return osdmap.has_erasure_code_profile(name)
+      ? &osdmap.get_erasure_code_profile(name) : nullptr;
+  };
+  for (const auto& [id, pool] : osdmap.get_pools()) {
+    if (!pool.is_erasure() || pool.erasure_code_profile != "default") {
+      continue;
+    }
+    unsigned k = 0, m = 0;
+    std::ostringstream err;
+    string base;
+    if (profile_chunk_counts(profile, &k, &m, &err) == 0) {
+      base = osdmap.get_pool_name(id) + "-k" + stringify(k) + "-m" +
+             stringify(m);
+    } else {
+      dout(0) << __func__ << " " << err.str() << dendl;
+      base = osdmap.get_pool_name(id) + "-default";
+    }
+    const string name = profile_copy_name(base, profile, lookup);
+    pending_inc.set_erasure_code_profile(name, profile);
+    pg_pool_t *p = pending_inc.get_new_pool(id, &pool);
+    p->erasure_code_profile = name;
+    p->last_change = pending_inc.epoch;
+    mon.clog->info() << "pool '" << osdmap.get_pool_name(id)
+                     << "' now uses erasure code profile '" << name
+                     << "', a copy of profile 'default'";
+  }
 }
 
 map<string, string> OSDMonitor::stretch_pool_defaults(
