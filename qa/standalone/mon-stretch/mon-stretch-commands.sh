@@ -50,6 +50,14 @@ function TEST_stretch_set_replicated_pool() {
     ceph osd pool stretch unset rep replicated_rule 3 2 || return 1
     test "$(pool_field rep peering_crush_bucket_count)" = 0 || return 1
     test "$(pool_field rep size)" = 3 || return 1
+
+    # --replica in place of size
+    ceph osd pool stretch set rep 2 2 zone replicated_rule --min_size 2 \
+        --replica 3 || return 1
+    test "$(pool_field rep size)" = 6 || return 1
+    ceph osd pool stretch unset rep replicated_rule --min_size 2 \
+        --replica 2 || return 1
+    test "$(pool_field rep size)" = 2 || return 1
 }
 
 function TEST_stretch_set_ec_pool() {
