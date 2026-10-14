@@ -9068,8 +9068,16 @@ void OSDMonitor::note_created_crush_rule(const string& name)
   }
 }
 
-// A request that fails removes the rules it created in an earlier update,
-// unless a pool uses them. Returns whether a removal is pending.
+void OSDMonitor::note_created_ec_profile(const string& name)
+{
+  if (preparing_op) {
+    preparing_op->created_ec_profiles.insert(name);
+  }
+}
+
+// A request that fails removes the rules and profiles it created in an
+// earlier update, unless a pool uses them. Returns whether a removal is
+// pending.
 bool OSDMonitor::remove_what_failed_op_created(MonOpRequestRef op)
 {
   bool removed = false;
@@ -9099,6 +9107,21 @@ bool OSDMonitor::remove_what_failed_op_created(MonOpRequestRef op)
       removed = true;
     }
   }
+  for (const auto& name : op->created_ec_profiles) {
+    if (!osdmap.has_erasure_code_profile(name) ||
+        pending_inc.has_erasure_code_profile(name) ||
+        erasure_code_profile_removal_pending(name) ||
+        other_pool(-1, [&name](const pg_pool_t& p) {
+          return p.is_erasure() && p.erasure_code_profile == name;
+        })) {
+      continue;
+    }
+    dout(10) << __func__ << " removing erasure code profile " << name
+             << " of a failed command" << dendl;
+    pending_inc.old_erasure_code_profiles.push_back(name);
+    removed = true;
+  }
+  op->created_ec_profiles.clear();
   return removed;
 }
 
@@ -15365,6 +15388,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           dout(20) << "auto-creating EC Profile " << name << "=" << profile_map
                    << dendl;
           pending_inc.set_erasure_code_profile(name, profile_map);
+          note_created_ec_profile(name);
           goto wait;
         }
         erasure_code_profile = name;

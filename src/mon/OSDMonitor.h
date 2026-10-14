@@ -574,6 +574,7 @@ private:
 				 std::ostream *ss);
   void maybe_remove_unused_crush_rule(int64_t skip_pool, int old_rule_id);
   void note_created_crush_rule(const std::string& name);
+  void note_created_ec_profile(const std::string& name);
   bool remove_what_failed_op_created(MonOpRequestRef op);
   // the command or pool operation being prepared
   MonOpRequestRef preparing_op;
