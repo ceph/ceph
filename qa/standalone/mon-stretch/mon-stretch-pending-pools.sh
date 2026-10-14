@@ -26,7 +26,7 @@ function stretch_flags() {
 # a pool over two zones on an existing rule, so that its create needs no
 # proposal of its own
 function create_stretch_pool() {
-    ceph osd pool create $1 --num_zones 2 --replica 2 --rule two_dc
+    ceph osd pool create $1 --num_zones 2 --replica 2 --rule ${2:-two_dc}
 }
 
 # two pools over two zones, and a long proposal interval so that the next
@@ -63,10 +63,16 @@ function TEST_delete_last_stretch_pool_while_creating_one() {
     local dir=$1
     two_stretch_pools $dir || return 1
     ceph tell mon.\* config set paxos_propose_interval 1 || return 1
+    # the new pools get rules of their own: a rule that its last pool leaves
+    # is removed, also in the epoch that creates the next pool
+    for rule in rule_c rule_d; do
+        ceph osd crush rule create-stretch-replicated --rule-name $rule \
+            --num-replica-per-zone 2 || return 1
+    done
     ceph osd pool rm a a --yes-i-really-really-mean-it || return 1
     ceph tell mon.\* config set paxos_propose_interval 5 || return 1
 
-    create_stretch_pool c &
+    create_stretch_pool c rule_c &
     local pid_c=$!
     ceph osd pool rm b b --yes-i-really-really-mean-it || return 1
     wait $pid_c || return 1
@@ -75,7 +81,7 @@ function TEST_delete_last_stretch_pool_while_creating_one() {
 
     ceph osd pool rm c c --yes-i-really-really-mean-it &
     local pid_rm=$!
-    create_stretch_pool d || return 1
+    create_stretch_pool d rule_d || return 1
     wait $pid_rm || return 1
     test "$(pool_field d num_zones)" = 2 || return 1
     test "$(stretch_flags)" = "true true" || return 1
