@@ -4,12 +4,8 @@ Umbrella
 
 Umbrella is the 21st stable release of Ceph.
 
-v21.1.0 Umbrella
+v21.2.0 Umbrella
 ================
-
-**DRAFT** — this is a draft for RC0, the first release candidate in the
-Umbrella series. Content is subject to change before the final RC0
-release.
 
 .. warning::
 
@@ -26,7 +22,7 @@ release.
 Release Date
 ------------
 
-October 19, 2026
+October 26, 2026
 
 Notable Changes
 ---------------
@@ -212,6 +208,7 @@ Changelog
 * (DRAFT) rgw/d4n: Add cache_request for cache API (`pr#65314 <https://github.com/ceph/ceph/pull/65314>`_, Samarah Uriarte)
 * .github/milestone: add umbrella (`pr#69407 <https://github.com/ceph/ceph/pull/69407>`_, Patrick Donnelly)
 * 21.1.1 (`pr#71756 <https://github.com/ceph/ceph/pull/71756>`_, Ceph Release Team)
+* 21.1.2 (`pr#72542 <https://github.com/ceph/ceph/pull/72542>`_, Ceph Release Team)
 * [DNM] ProtocolV2: make handle_existing_connection check for cookie mismatch first (`pr#63413 <https://github.com/ceph/ceph/pull/63413>`_, Kamoltat Sirivadhna)
 * [Docs]: Corrected spelling mistake (`pr#64088 <https://github.com/ceph/ceph/pull/64088>`_, Instelligence.io)
 * [mgr/dashboard]: Mismatch in the object size observed in Advance section in Tiering (`pr#65170 <https://github.com/ceph/ceph/pull/65170>`_, Dnyaneshwari Talwekar)
@@ -1219,6 +1216,7 @@ Changelog
 * ec: validate tcache retrievals in ErasureCodeIsaDefault::prepare() (`pr#68131 <https://github.com/ceph/ceph/pull/68131>`_, Radoslaw Zarzynski)
 * encode: Fix bad use of DENC_DUMP_PRE (`pr#66410 <https://github.com/ceph/ceph/pull/66410>`_, Adam Kupczyk)
 * Enhance mgr cache - from cache based on ttl to cache based on changes (`pr#64805 <https://github.com/ceph/ceph/pull/64805>`_, Nitzan Mordechai)
+* erasure-code/clay: decode sub-chunks in place (`pr#72401 <https://github.com/ceph/ceph/pull/72401>`_, Lumir Sliva)
 * erasure-code/clay: minor cleanups (`pr#64223 <https://github.com/ceph/ceph/pull/64223>`_, Kefu Chai)
 * erasure-code/consistency: Fixed signed-compare warning in Consistency Checker (`pr#65174 <https://github.com/ceph/ceph/pull/65174>`_, Jon Bailey)
 * erasure-code/isa: eliminate redundant map lookups (`pr#67202 <https://github.com/ceph/ceph/pull/67202>`_, Kefu Chai)
@@ -1452,6 +1450,7 @@ Changelog
 * mgr/cephadm: Allow registry credentials to define multiple container registries (`pr#64642 <https://github.com/ceph/ceph/pull/64642>`_, Shweta Bhosale)
 * mgr/cephadm: allow removing OSDs stuck in error state (`pr#71729 <https://github.com/ceph/ceph/pull/71729>`_, Guillaume Abrioux)
 * mgr/cephadm: block deploying nvmeof daemons on the same host (`pr#62585 <https://github.com/ceph/ceph/pull/62585>`_, Adam King)
+* mgr/cephadm: block upgrades onto hosts whose CPU cannot run the target release (`pr#72512 <https://github.com/ceph/ceph/pull/72512>`_, David Galloway)
 * mgr/cephadm: bump monitoring stack versions (`pr#65855 <https://github.com/ceph/ceph/pull/65855>`_, Nizamudeen A)
 * mgr/cephadm: Ceph orch apply command does not give error if 'placement' is passed as both positional and keyword argument (`pr#61017 <https://github.com/ceph/ceph/pull/61017>`_, Shweta Bhosale)
 * mgr/cephadm: Cephadm support for NFS-Ganesha TLS configuration (`pr#65644 <https://github.com/ceph/ceph/pull/65644>`_, Shweta Bhosale)
@@ -2234,6 +2233,8 @@ Changelog
 * osd/PeeringState: handle race condition of DeferBackfill event for Backfilling state (`pr#63572 <https://github.com/ceph/ceph/pull/63572>`_, Naveen Naidu)
 * osd/PeeringState: handle race condition of RemoteReservationRevoked event for Backfilling state (`pr#67122 <https://github.com/ceph/ceph/pull/67122>`_, Naveen Naidu)
 * osd/PeeringState: re-evaluate full OSDs while waiting for recovery re… (`pr#63296 <https://github.com/ceph/ceph/pull/63296>`_, Nitzan Mordechai)
+* osd/PeeringState: Record the departing primary's rebuild segment on handover & survive a PG split (`pr#72178 <https://github.com/ceph/ceph/pull/72178>`_, Sridhar Seshasayee)
+* osd/PeeringState: track the PG vulnerability window via last_degraded/last_clean, repurpose PG rebuild duration counter (`pr#72496 <https://github.com/ceph/ceph/pull/72496>`_, Sridhar Seshasayee)
 * osd/PrimaryLogPG: avoid redundant container clones and lookups (`pr#65513 <https://github.com/ceph/ceph/pull/65513>`_, Garry Drankovich)
 * osd/PrimaryLogPG: Do not log REPLACE until require_osd_release is umbrella (`pr#71183 <https://github.com/ceph/ceph/pull/71183>`_, Aishwarya Mathuria)
 * osd/PrimaryLogPG: encode an empty data_bl for empty sparse reads (`pr#66912 <https://github.com/ceph/ceph/pull/66912>`_, Ilya Dryomov)
@@ -2312,6 +2313,7 @@ Changelog
 * osd: Fix fast EC truncate to whole stripe (`pr#66542 <https://github.com/ceph/ceph/pull/66542>`_, Alex Ainscow)
 * osd: fix for "data digests are inconsistent" (`pr#65623 <https://github.com/ceph/ceph/pull/65623>`_, Jon Bailey)
 * osd: Fix for num_bytes mismatch occurring from snapshot workloads with partial writes in fast_ec (`pr#67136 <https://github.com/ceph/ceph/pull/67136>`_, Jon Bailey)
+* osd: Fix inconsistency in how we check if writes are blocked by scrub (`pr#72196 <https://github.com/ceph/ceph/pull/72196>`_, Jon Bailey)
 * osd: Fix incorrect rollback logic for partial write OI (`pr#68609 <https://github.com/ceph/ceph/pull/68609>`_, Alex Ainscow)
 * osd: fix init of op_queue_type_t due to returnable ceph_assert() (`pr#62809 <https://github.com/ceph/ceph/pull/62809>`_, Radoslaw Zarzynski)
 * osd: Fix memory leak of ECDummyOp (`pr#66961 <https://github.com/ceph/ceph/pull/66961>`_, Alex Ainscow)
@@ -2327,6 +2329,7 @@ Changelog
 * osd: Perform shard look up correctly in partial EC writes (`pr#66453 <https://github.com/ceph/ceph/pull/66453>`_, Alex Ainscow)
 * osd: PGLog Attach correct version to missing list when ignoring log entries (`pr#67870 <https://github.com/ceph/ceph/pull/67870>`_, Alex Ainscow)
 * osd: prevent OSDMap::check_health() from asserting due to new OSDs found in subtree (`pr#64009 <https://github.com/ceph/ceph/pull/64009>`_, Radoslaw Zarzynski)
+* osd: pwlc was able to retain values larger than the last_update (`pr#72193 <https://github.com/ceph/ceph/pull/72193>`_, Jon Bailey)
 * osd: recalculate coll_t::_str during decode() to fix stale values (`pr#63938 <https://github.com/ceph/ceph/pull/63938>`_, Kefu Chai)
 * osd: Reduce pg_stats invalidations occurring in fast ec (`pr#67292 <https://github.com/ceph/ceph/pull/67292>`_, Jon Bailey)
 * osd: Reduce reads when rebalancing healthy Erasure Coded PGs (`pr#64502 <https://github.com/ceph/ceph/pull/64502>`_, Alex Ainscow)
@@ -2343,6 +2346,7 @@ Changelog
 * osd: Twiddle should create a full sized vector for optimized EC (`pr#67974 <https://github.com/ceph/ceph/pull/67974>`_, Alex Ainscow)
 * osd: unregister admin socket commands in fast shutdown (`pr#69061 <https://github.com/ceph/ceph/pull/69061>`_, Jane Zhu)
 * osd_types: Restore new_object marking for delete missing entries (`pr#62705 <https://github.com/ceph/ceph/pull/62705>`_, Nitzan Mordechai)
+* osdc: Add minimum allowable split size for replica IOs (`pr#72197 <https://github.com/ceph/ceph/pull/72197>`_, Jon Bailey)
 * osdc: add missing include (`pr#68629 <https://github.com/ceph/ceph/pull/68629>`_, Max Kellermann)
 * osdc: deliver neorados completions to associated executor (`pr#69741 <https://github.com/ceph/ceph/pull/69741>`_, Radoslaw Zarzynski, Shilpa Jagannath)
 * osdc: deliver neorados completions to associated executor (`pr#69253 <https://github.com/ceph/ceph/pull/69253>`_, Casey Bodley)
@@ -2408,6 +2412,7 @@ Changelog
 * qa/cephadm: fix test_set_mon_crush_locations test (`pr#67436 <https://github.com/ceph/ceph/pull/67436>`_, Adam King)
 * qa/cephadm: ignore CEPHADM_HOST_TIMEOUT_ERROR in timeout test (`pr#67428 <https://github.com/ceph/ceph/pull/67428>`_, Adam King)
 * qa/cephadm: ignore transient CEPHADM_FAILED_DAEMON in smoke-singlehost (`pr#67622 <https://github.com/ceph/ceph/pull/67622>`_, Kefu Chai)
+* qa/cephadm: pull compiled cephadm for squid branch (`pr#71943 <https://github.com/ceph/ceph/pull/71943>`_, Yonatan Zaken)
 * qa/cephadm: query iSCSI gateway FQDN from inside the container (`pr#69214 <https://github.com/ceph/ceph/pull/69214>`_, Kefu Chai)
 * qa/cephadm: start upgrade tests from tentacle instead of reef on main (`pr#68848 <https://github.com/ceph/ceph/pull/68848>`_, Adam King)
 * qa/cephfs: don't return undefined variable (`pr#65805 <https://github.com/ceph/ceph/pull/65805>`_, Rishabh Dave)
@@ -2528,6 +2533,7 @@ Changelog
 * qa/tasks/rbd_mirror_thrash: don't use random.randrange() on floats (`pr#67144 <https://github.com/ceph/ceph/pull/67144>`_, Ilya Dryomov)
 * qa/tasks/thrashosds-health: fine tune ignorelist for degraded and undersized pgs (`pr#64844 <https://github.com/ceph/ceph/pull/64844>`_, Laura Flores)
 * qa/tasks/workunit: fix no module named 'pipes' (`pr#65891 <https://github.com/ceph/ceph/pull/65891>`_, Kyr Shatskyy)
+* qa/tasks/workunit: skip keyring merge if ceph-authtool is absent (`pr#72435 <https://github.com/ceph/ceph/pull/72435>`_, Avan Thakkar)
 * qa/tasks: Add a task which performs an offline check of the consistency of parity shards (`pr#59903 <https://github.com/ceph/ceph/pull/59903>`_, Connor Fawcett)
 * qa/tasks: capture CommandCrashedError when running nvme list cmd (`pr#69163 <https://github.com/ceph/ceph/pull/69163>`_, Redouane Kachach)
 * qa/tasks: fix import error (`pr#67201 <https://github.com/ceph/ceph/pull/67201>`_, Nizamudeen A)
@@ -2700,6 +2706,7 @@ Changelog
 * rgw-nfs: run quota threads by default (`pr#67473 <https://github.com/ceph/ceph/pull/67473>`_, Matt Benjamin)
 * rgw/account: bucket acls are not completely migrated once the user is migrated to an account (`pr#65370 <https://github.com/ceph/ceph/pull/65370>`_, kchheda3)
 * rgw/account: Support backward compatibility for s3:PutAcls calls for users migrated to account (`pr#66170 <https://github.com/ceph/ceph/pull/66170>`_, Krunal Chheda, kchheda3, Casey Bodley)
+* rgw/admin: add --yes-i-really-mean-it gate to bilog trim admin command (`pr#72403 <https://github.com/ceph/ceph/pull/72403>`_, Oguzhan Ozmen)
 * rgw/admin: Add max-entries and marker to bucket list (`pr#62777 <https://github.com/ceph/ceph/pull/62777>`_, Tobias Urdin)
 * rgw/admin: allow listing account's root users (`pr#65366 <https://github.com/ceph/ceph/pull/65366>`_, Casey Bodley)
 * rgw/admin: enhance bucket list --marker to support versioned bucket pagination (`pr#68163 <https://github.com/ceph/ceph/pull/68163>`_, Oguzhan Ozmen)

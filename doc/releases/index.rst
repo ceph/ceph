@@ -21,7 +21,7 @@ security fixes.
    :maxdepth: 1
    :hidden:
 
-   Umbrella (v21.1.*) <umbrella>
+   Umbrella (v21.2.*) <umbrella>
    Tentacle (v20.2.*) <tentacle>
    Squid (v19.2.*) <squid>
 
@@ -66,7 +66,7 @@ Release timeline
 .. ceph_timeline:: releases.yml umbrella tentacle squid reef
 
 .. _Umbrella: umbrella
-.. _21.1.0: umbrella#v21-1-0-umbrella
+.. _21.2.0: umbrella#v21-2-0-umbrella
 
 .. _Tentacle: tentacle
 .. _20.2.0: tentacle#v20-2-0-tentacle
