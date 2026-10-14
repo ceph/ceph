@@ -603,6 +603,13 @@ class CephadmService(metaclass=ABCMeta):
 
 class CephService(CephadmService):
 
+    def rgw_profile_supported(self) -> bool:
+        mons = [('mon', m['name']) for m in self.mgr.get('mon_map')['mons']]
+        osds = [('osd', str(o['osd'])) for o in self.mgr.get('osd_map')['osds']]
+        versions = [re.match(r'ceph version (\d+)\.(\d+)\.(\d+)\b',
+                             (self.mgr.get_metadata(t, i) or {}).get('ceph_version', '')) for t, i in mons + osds]
+        return bool(mons and osds) and all(v and tuple(map(int, v.groups())) >= (20, 2, 5) for v in versions)
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # Ceph.daemons (mon, mgr, mds, osd, etc)
         cephadm_config = self.get_config_and_keyring(
@@ -1254,11 +1261,15 @@ class RgwService(CephService):
         return daemon_spec
 
     def get_keyring(self, rgw_id: str) -> str:
-        keyring = self.get_keyring_with_caps(self.get_auth_entity(rgw_id),
-                                             ['mon', 'allow *',
-                                              'mgr', 'allow rw',
-                                              'osd', 'allow rwx tag rgw *=*'])
-        return keyring
+        if self.rgw_profile_supported():
+            caps = ['mon', 'profile rgw',
+                    'mgr', 'profile rgw',
+                    'osd', 'profile rgw']
+        else:
+            caps = ['mon', 'allow *',
+                    'mgr', 'allow rw',
+                    'osd', 'allow rwx tag rgw *=*']
+        return self.get_keyring_with_caps(self.get_auth_entity(rgw_id), caps)
 
     def purge(self, service_name: str) -> None:
         self.mgr.check_mon_command({
