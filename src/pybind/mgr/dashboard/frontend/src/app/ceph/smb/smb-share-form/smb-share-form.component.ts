@@ -12,7 +12,7 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 import _ from 'lodash';
-import { Observable, of } from 'rxjs';
+import { forkJoin, Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -20,7 +20,14 @@ import { SMB_CONTEXT, StorageBackend } from '~/app/shared/constants/smb.constant
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
-import { Filesystem, PROVIDER, SHARE_RESOURCE, ShareRequestModel, SMBShare } from '../smb.model';
+import {
+  Filesystem,
+  PROVIDER,
+  SHARE_RESOURCE,
+  ShareRequestModel,
+  SMBShare,
+  ShareAvailability
+} from '../smb.model';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
 
@@ -79,6 +86,8 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   readBwMax = getBwMaxForUnit(QOS_BW_UNITS[1]);
   writeBwMax = getBwMaxForUnit(QOS_BW_UNITS[1]);
   isRgw = false;
+  // Cluster-wide share default; null when it could not be determined.
+  clusterPersistentHandles: boolean | null = null;
   bucketItems: ComboBoxItem[] = [];
   bucketHelperText = $localize`Name of the RGW bucket to share. Type the bucket name.`;
   hasNoBuckets = false;
@@ -122,9 +131,9 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       this.loadRgwUsers();
     }
     if (this.isEdit) {
-      this.smbService.getShare(this.clusterId, this.share_id).subscribe((resp: SMBShare) => {
-        this.shareResponse = resp;
-        if (this.isRgw) {
+      if (this.isRgw) {
+        this.smbService.getShare(this.clusterId, this.share_id).subscribe((resp: SMBShare) => {
+          this.shareResponse = resp;
           this.smbShareForm.patchValue({
             share_id: this.shareResponse.share_id,
             name: this.shareResponse.name,
@@ -135,9 +144,18 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           this.setBucket(this.shareResponse.rgw?.bucket);
           this.smbShareForm.get('share_id').disable();
           this.smbShareForm.get('name').disable();
-        } else {
+        });
+      } else {
+        forkJoin({
+          share: this.smbService.getShare(this.clusterId, this.share_id),
+          // A failing cluster lookup must not block editing the share.
+          cluster: this.loadClusterPersistentHandlesDefault()
+        }).subscribe(({ share, cluster }) => {
+          this.shareResponse = share;
+          this.clusterPersistentHandles = cluster;
           const cephfs = this.shareResponse?.cephfs;
           const qos = cephfs?.qos;
+          const explicitPersistentHandles = this.shareResponse.availability?.persistent_handles;
 
           this.smbShareForm.patchValue({
             share_id: this.shareResponse.share_id,
@@ -148,6 +166,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
             inputPath: cephfs?.path,
             readonly: this.shareResponse.readonly ?? false,
             browseable: this.shareResponse.browseable ?? true,
+            persistent_handles: explicitPersistentHandles ?? cluster ?? false,
             read_iops_limit: qos?.read_iops_limit,
             write_iops_limit: qos?.write_iops_limit,
             read_burst_mult: qos?.read_burst_mult,
@@ -159,7 +178,12 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           this.setBwLimitFromBytes('write_bw_limit', qos?.write_bw_limit);
 
           this.getSubVolGrp(cephfs?.volume);
-        }
+        });
+      }
+    } else if (!this.isRgw && this.clusterId) {
+      this.loadClusterPersistentHandlesDefault().subscribe((cluster) => {
+        this.clusterPersistentHandles = cluster;
+        this.smbShareForm.get('persistent_handles').setValue(cluster ?? false);
       });
     }
     this.smbShareForm.get('read_bw_limit_unit').valueChanges.subscribe((unit: string) => {
@@ -214,6 +238,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       user_id: new FormControl(''),
       browseable: new FormControl(true),
       readonly: new FormControl(false),
+      persistent_handles: new FormControl(false),
       read_iops_limit: new FormControl(0, [Validators.min(0), Validators.max(QOS_IOPS_MAX)]),
       write_iops_limit: new FormControl(0, [Validators.min(0), Validators.max(QOS_IOPS_MAX)]),
       read_bw_limit: new FormControl(0, [Validators.min(0), Validators.max(this.readBwMax)]),
@@ -482,6 +507,10 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
         requestModel.share_resource.rgw.user_id = userId;
       }
     } else {
+      const availability = this.buildAvailability(!!rawFormValue.persistent_handles);
+      if (availability) {
+        requestModel.share_resource.availability = availability;
+      }
       requestModel.share_resource.cephfs = {
         volume: rawFormValue.volume,
         path: rawFormValue.inputPath,
@@ -539,5 +568,25 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           component.smbShareForm.setErrors({ cdSubmitButton: true });
         }
       });
+  }
+
+  private loadClusterPersistentHandlesDefault(): Observable<boolean | null> {
+    return this.smbService.getCluster(this.clusterId).pipe(
+      map((cluster) => Boolean(cluster.share_defaults?.availability?.persistent_handles)),
+      catchError(() => of(null))
+    );
+  }
+
+  /**
+   * Only send an explicit override when it differs from the cluster default (or when the share
+   * already had one), so that shares keep inheriting the default otherwise.
+   */
+  private buildAvailability(enabled: boolean): ShareAvailability | undefined {
+    const hadOverride = this.shareResponse?.availability?.persistent_handles != null;
+    const isOverride =
+      this.clusterPersistentHandles === null
+        ? this.smbShareForm.get('persistent_handles').dirty
+        : enabled !== this.clusterPersistentHandles;
+    return isOverride || hadOverride ? { persistent_handles: enabled } : undefined;
   }
 }

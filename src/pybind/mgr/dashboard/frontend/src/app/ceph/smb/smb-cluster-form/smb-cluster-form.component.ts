@@ -1,4 +1,11 @@
-import { ChangeDetectorRef, Component, inject, OnInit } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  inject,
+  OnInit,
+  TemplateRef,
+  ViewChild
+} from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -7,6 +14,7 @@ import _ from 'lodash';
 import {
   AUTHMODE,
   CLUSTERING,
+  PERSISTENT_HANDLES_DURABILITY,
   PLACEMENT,
   RESOURCE,
   DomainSettings,
@@ -17,10 +25,11 @@ import {
   PublicAddress,
   SMBCluster,
   CLIENT_COMPAT,
-  ClientCompat
+  ClientCompat,
+  ShareDefaults
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
+import { SMB_CONTEXT, StorageBackend } from '~/app/shared/constants/smb.constant';
 import { Icons } from '~/app/shared/enum/icons.enum';
 
 import { FormArray, FormControl, UntypedFormControl, Validators } from '@angular/forms';
@@ -29,6 +38,7 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -48,6 +58,7 @@ import { Host } from '~/app/shared/models/host.interface';
 })
 export class SmbClusterFormComponent extends CdForm implements OnInit {
   private readonly ctx = inject(SMB_CONTEXT);
+  readonly isRgw = this.ctx.backend === StorageBackend.RGW;
   private readonly clusterPath = `${this.ctx.basePath}/cluster`;
   private readonly usersGroupsPath = `${this.ctx.basePath}/standalone`;
   smbForm: CdFormGroup;
@@ -57,6 +68,14 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   allClustering: string[] = [];
   CLUSTERING = CLUSTERING;
   AUTHMODE = AUTHMODE;
+  allDurability = Object.values(PERSISTENT_HANDLES_DURABILITY);
+  PERSISTENT_HANDLES_DURABILITY = PERSISTENT_HANDLES_DURABILITY;
+  durabilityLabels: Record<string, string> = {
+    [PERSISTENT_HANDLES_DURABILITY.FullOutage]: $localize`Full outage`,
+    [PERSISTENT_HANDLES_DURABILITY.PartialOutage]: $localize`Partial outage`
+  };
+  @ViewChild('disablePersistentHandlesTpl', { static: false })
+  disablePersistentHandlesTpl: TemplateRef<any>;
   selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   action: string;
@@ -131,6 +150,14 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
           const upperCaseCluster = upperFirstPipe.transform(responseClustering);
           this.smbForm.get('clustering').setValue(upperCaseCluster || '');
         }
+        this.smbForm
+          .get('persistent_handles')
+          .setValue(Boolean(this.clusterResponse.share_defaults?.availability?.persistent_handles));
+
+        const durability =
+          this.clusterResponse.persistent_handles_durability ||
+          PERSISTENT_HANDLES_DURABILITY.FullOutage;
+        this.smbForm.get('persistent_handles_durability').setValue(durability);
         if (customDnsList?.length) {
           customDnsList.forEach((dns: string) => {
             customDnsFormArray.push(new FormControl(dns));
@@ -219,7 +246,9 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         CLUSTERING.Default.charAt(0).toUpperCase() + CLUSTERING.Default.slice(1)
       ),
       public_addrs: new FormArray([]),
-      client_compat: [false]
+      client_compat: [false],
+      persistent_handles: [false],
+      persistent_handles_durability: [PERSISTENT_HANDLES_DURABILITY.FullOutage]
     });
 
     this.orchService.status().subscribe((status) => {
@@ -301,10 +330,35 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       return;
     }
     if (this.isEdit) {
+      if (this.isDisablingPersistentHandles()) {
+        this.confirmDisablePersistentHandles();
+        return;
+      }
       this.handleTaskRequest(URLVerbs.EDIT);
     } else {
       this.handleTaskRequest(URLVerbs.CREATE);
     }
+  }
+
+  private isDisablingPersistentHandles(): boolean {
+    return (
+      !this.isRgw &&
+      !!this.clusterResponse?.share_defaults?.availability?.persistent_handles &&
+      !this.smbForm.get('persistent_handles').value
+    );
+  }
+
+  private confirmDisablePersistentHandles() {
+    this.modalService.show(ConfirmationModalComponent, {
+      titleText: $localize`Disable persistent handles`,
+      buttonText: $localize`Disable`,
+      warning: true,
+      bodyTpl: this.disablePersistentHandlesTpl,
+      onSubmit: () => {
+        this.modalService.dismissAll();
+        this.handleTaskRequest(URLVerbs.EDIT);
+      }
+    });
   }
 
   handleTaskRequest(urlVerb: string) {
@@ -396,11 +450,37 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       : CLIENT_COMPAT.Default;
     requestModel.cluster_resource.client_compat = clientCompat;
 
+    if (!this.isRgw) {
+      const shareDefaults = this.buildShareDefaults(Boolean(rawFormValue.persistent_handles));
+      if (shareDefaults) {
+        requestModel.cluster_resource.share_defaults = shareDefaults;
+      }
+
+      // Durability can only change before the first orchestration. On edit always send the
+      // stored value, even when persistent handles are off, so the backend never sees a change.
+      if (rawFormValue.persistent_handles || this.isEdit) {
+        requestModel.cluster_resource.persistent_handles_durability =
+          values.persistent_handles_durability;
+      }
+    }
+
     if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;
     }
 
     return requestModel;
+  }
+
+  private buildShareDefaults(persistentHandles: boolean): ShareDefaults | undefined {
+    // Start from the stored defaults so unrelated fields (e.g. acl_support) are preserved.
+    const result: ShareDefaults = _.omit(
+      _.cloneDeep(this.clusterResponse?.share_defaults ?? {}),
+      'availability'
+    );
+    if (persistentHandles) {
+      result.availability = { persistent_handles: true };
+    }
+    return _.isEmpty(result) ? undefined : result;
   }
 
   getPlacementSpec(values: CephServicePlacement) {
