@@ -126,3 +126,80 @@ def test_offline_watcher_uses_cephadm_check_online(run_cephadm, cephadm_module):
         'test', cephadmNoImage, ['_orch', 'check-online'], [],
         no_fsid=True, log_output=cephadm_module.log_refresh_metadata
     )
+
+
+@pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
+class TestAsyncSSHLogLevel:
+    """Test that asyncssh log verbosity is controlled by the module options
+    asyncssh_log_level and asyncssh_debug_level rather than being hardcoded.
+    """
+
+    @mock.patch("asyncssh.set_debug_level")
+    @mock.patch("asyncssh.set_log_level")
+    @mock.patch("asyncssh.connect")
+    def test_default_options_reset_debug_level(
+        self, mock_connect, mock_set_log_level, mock_set_debug_level, cephadm_module
+    ):
+        """With the shipped defaults (INFO, debug_level=0) set_log_level must
+        be called with INFO and set_debug_level must be called with asyncssh's
+        own default (1) so the global debug level is not left stuck at any
+        previously-set value."""
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+
+        defaults = {o['name']: o.get('default') for o in cephadm_module.MODULE_OPTIONS}
+        assert defaults['asyncssh_log_level'] == 'INFO'
+        assert defaults['asyncssh_debug_level'] == 0
+        cephadm_module.asyncssh_log_level = defaults['asyncssh_log_level']
+        cephadm_module.asyncssh_debug_level = defaults['asyncssh_debug_level']
+
+        cephadm_module.wait_async(cephadm_module.ssh._remote_connection('test', '1::4'))
+
+        mock_set_log_level.assert_called_with('INFO')
+        # 0 is not a valid asyncssh debug level; we pass 1 (asyncssh default)
+        # so the global state is always explicitly reset on each connection.
+        mock_set_debug_level.assert_called_with(1)
+
+    @pytest.mark.parametrize("log_level", ['DEBUG', 'INFO', 'WARNING', 'ERROR'])
+    @mock.patch("asyncssh.set_debug_level")
+    @mock.patch("asyncssh.set_log_level")
+    @mock.patch("asyncssh.connect")
+    def test_log_level_option_is_forwarded(
+        self, mock_connect, mock_set_log_level, mock_set_debug_level, cephadm_module, log_level
+    ):
+        """asyncssh.set_log_level must be called with whatever value the
+        module option asyncssh_log_level holds. With debug_level=0,
+        set_debug_level must be called with 1 (asyncssh's own default)."""
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+
+        cephadm_module.asyncssh_log_level = log_level
+        cephadm_module.asyncssh_debug_level = 0
+
+        cephadm_module.wait_async(cephadm_module.ssh._remote_connection('test', '1::4'))
+
+        mock_set_log_level.assert_called_with(log_level)
+        mock_set_debug_level.assert_called_with(1)
+
+    @pytest.mark.parametrize("debug_level", [1, 2, 3])
+    @mock.patch("asyncssh.set_debug_level")
+    @mock.patch("asyncssh.set_log_level")
+    @mock.patch("asyncssh.connect")
+    def test_debug_level_option_is_forwarded(
+        self, mock_connect, mock_set_log_level, mock_set_debug_level, cephadm_module, debug_level
+    ):
+        """asyncssh.set_debug_level must be called with the exact integer
+        value from asyncssh_debug_level when it is 1-3."""
+        if not AsyncMock:
+            return
+        mock_connect.side_effect = async_side_effect(mock.MagicMock())
+
+        cephadm_module.asyncssh_log_level = 'DEBUG'
+        cephadm_module.asyncssh_debug_level = debug_level
+
+        cephadm_module.wait_async(cephadm_module.ssh._remote_connection('test', '1::4'))
+
+        mock_set_log_level.assert_called_with('DEBUG')
+        mock_set_debug_level.assert_called_with(debug_level)
