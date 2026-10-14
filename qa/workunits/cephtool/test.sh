@@ -871,7 +871,7 @@ function without_test_dup_command()
     local saved=${CEPH_CLI_TEST_DUP_COMMAND}
     unset CEPH_CLI_TEST_DUP_COMMAND
     $@
-    CEPH_CLI_TEST_DUP_COMMAND=saved
+    export CEPH_CLI_TEST_DUP_COMMAND="$saved"
   fi
 }
 
