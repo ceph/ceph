@@ -235,6 +235,29 @@ function TEST_pool_replica_limits() {
     test "$(ceph osd pool get single min_size | awk '{print $2}')" = 1 || return 1
 }
 
+# The options of num_zones are refused with other variables, which would
+# ignore them
+function TEST_pool_set_num_zones_options_only() {
+    local dir=$1
+
+    CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A"
+    run_mon $dir a --public-addr "$CEPH_MON_A" || return 1
+    wait_for_quorum 300 1 || return 1
+
+    ceph osd pool create single 8 8 replicated || return 1
+    local size=$(ceph osd pool get single size | awk '{print $2}')
+    local opt
+    for opt in "--replica 2" "--crush_rule replicated_rule" \
+               "--zone_failure_domain host" "--osd_failure_domain osd" \
+               "--root default" "--class ssd"; do
+        ! ceph osd pool set single size 2 $opt > "$dir/error.txt" 2>&1 || return 1
+        grep "only for 'ceph osd pool set <pool> num_zones'" "$dir/error.txt" || return 1
+    done
+    ! ceph osd pool set single size 2 --min_size 1 > "$dir/error.txt" 2>&1 || return 1
+    test "$(ceph osd pool get single size | awk '{print $2}')" = $size || return 1
+    ceph osd pool set single num_zones 1 --replica 2 --root default || return 1
+}
+
 # A pool over two zones on a rule that takes each zone in turn, as the rules
 # of global stretch mode do, can change its replicas too
 function TEST_pool_replica_two_take_rule() {
