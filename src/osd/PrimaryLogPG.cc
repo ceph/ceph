@@ -2622,7 +2622,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     OpRequest* op_raw = op.get();
 
     // Spawn a coroutine to handle the message
-    auto resumer = std::make_shared<resume_token_t>(
+    start_coroutine(coro_resumer,
       [this, op_raw](yield_token_t& yield) {
         op_raw->coro_handles.emplace(CoroHandles{ yield, coro_resumer });
         {
@@ -2633,11 +2633,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
         // Cleanup
         on_coroutine_complete();
       });
-
-    coro_resumer = std::move(resumer);
-
-    // Startup the coroutine
-    (*coro_resumer)();
   } else {
     // Handle the message directly in the current thread
     do_op_impl(op);
