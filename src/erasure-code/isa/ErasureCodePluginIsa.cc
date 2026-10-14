@@ -36,9 +36,12 @@ int ErasureCodePluginIsa::factory(const std::string &directory,
                                   std::ostream *ss)
 {
   ErasureCodeIsa *interface;
-    std::string technique;
-    technique = profile.find("technique")->second;
-    std::string _m = profile.find("m")->second;
+    profile.try_emplace("technique", "reed_sol_van");
+    const auto& technique = profile.at("technique");
+    std::string _m = ErasureCodeIsaDefault::DEFAULT_M;
+    if (auto it = profile.find("m"); it != profile.end()) {
+      _m = it->second;
+    }
     if ((technique == "reed_sol_van")) {
       interface = new ErasureCodeIsaDefault(tcache,
                                             technique,
