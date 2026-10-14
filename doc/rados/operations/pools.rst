@@ -188,15 +188,16 @@ following:
 
    :Type: String
    :Required: No.
-   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist. A replicated pool with ``num_zones`` greater than 1 uses this rule only if it places the pool in its zones as described above, and otherwise the ``{pool-name}`` rule.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` :ref:`erasure code profile <erasure-code-profiles>` is used and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
+   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist. A replicated pool with ``num_zones`` greater than 1 uses this rule only if it places the pool in its zones as described above, and otherwise the ``{pool-name}`` rule.  For ``erasure`` pools, it is the ``erasure-code`` rule if neither an :ref:`erasure code profile <erasure-code-profiles>` nor ``--k``, ``--m`` or a CRUSH option is given and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
    For ``erasure`` pools only. Instructs Ceph to use the specified :ref:`erasure
    code profile <erasure-code-profiles>`. This profile must be an existing profile as defined via
-   the dashboard or invoking ``osd erasure-code-profile set``. Alternatively,
-   pass ``--k`` and ``--m`` instead of a profile to have a profile created for
-   the pool (see :ref:`erasure-code-profile-lifecycle`).  Note that
+   the dashboard or invoking ``osd erasure-code-profile set``. Without a
+   profile, or with ``default``, a profile of the pool's own is created from
+   the ``default`` profile and ``--k`` and ``--m``, if given (see
+   :ref:`erasure-code-profile-lifecycle`).  Note that
    changes to the EC profile of a pool after creation do *not* take effect.
    To change the EC profile of an existing pool one must modify the pool to
    use a different CRUSH rule defined with the desired profile.
@@ -403,10 +404,11 @@ value first, as :ref:`pool-default-config-override` describes, and then run
 two zones and two replicas per zone has a ``size`` of ``4``. ``--size`` is the
 legacy name of ``--replica``: it gives the size of a single-zone pool and is
 refused together with ``--replica``, or with a ``num_zones``, given or default,
-greater than ``1``. ``--k`` and ``--m`` change the
-default erasure code profile, and ``--erasure_code_profile`` copies an existing
-profile into it. ``--rule`` names a default CRUSH rule, and ``--rule none``
-returns to generated rules.
+greater than ``1``. ``--k`` and ``--m`` are not written to the configuration
+database: they change ``k`` and ``m`` of the ``default`` erasure code profile,
+which new erasure-coded pools copy (see :ref:`erasure-code-profile-lifecycle`).
+``--rule`` names a default CRUSH rule, and ``--rule none`` returns to generated
+rules.
 
 .. _setpoolvalues:
 

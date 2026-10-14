@@ -126,7 +126,8 @@ int check_pool_defaults(const PoolCreateParams& p,
 // code profile's, else the default.
 std::string effective_zone_failure_domain(const PoolCreateParams& p);
 
-// The option that ceph osd pool default set writes for each parameter.
+// The option that ceph osd pool default set writes for each parameter. k and
+// m are not options: they are kept in the default erasure code profile.
 const std::map<std::string, std::string>& pool_default_options();
 
 // The options that ceph osd pool default set writes.
@@ -147,7 +148,8 @@ int check_pool_replica_copies(int64_t n, std::string_view what,
                               std::ostream* ss);
 
 // The value of param in p, in the form its option (pool_default_options())
-// holds it: the rule as its id, and k and m as the whole profile.
+// holds it, the rule as its id. k and m are values of the default profile,
+// not options.
 std::string pool_default_value(const PoolCreateParams& p,
                                const std::string& param);
 

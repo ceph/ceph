@@ -52,18 +52,27 @@ A profile is created in one of two ways:
 
 * explicitly, with ``ceph osd erasure-code-profile set`` (see below), before
   creating the pool that uses it, or
-* automatically, when an erasure-coded pool is created with ``k`` and ``m``
-  instead of a profile name. The profile is named ``{pool-name}-k{k}-m{m}`` and
-  is based on the profile named by ``osd_pool_default_erasure_code_profile``,
-  with the given ``k`` and ``m``. For example, the following command creates a
-  profile named ``ecpool-k4-m2`` and a pool that uses it:
+* automatically, when an erasure-coded pool is created without a profile name
+  (or with ``default``). The pool gets a profile of its own, named
+  ``{pool-name}-k{k}-m{m}``: a copy of the ``default`` profile with the
+  ``k``, ``m`` and CRUSH options given on the command line. For example, the
+  following command creates a profile named ``ecpool-k4-m2`` and a pool that
+  uses it:
 
   .. prompt:: bash $
 
      ceph osd pool create ecpool erasure --k 4 --m 2
 
-  If a profile of that name already exists with the same ``k`` and ``m``, it is
-  used. If it exists with a different ``k`` or ``m``, the command fails.
+  If a profile of that name already exists with the same contents, it is used.
+  If it exists with other contents, the command fails: remove that profile, or
+  name it with ``--erasure_code_profile``.
+
+The ``default`` profile is a template that no pool uses. It holds what a pool
+gets when it names no profile. ``ceph osd pool default set --k {k} --m {m}``
+changes its ``k`` and ``m``, and ``ceph osd erasure-code-profile set default
+... --force --yes-i-really-mean-it`` changes its other keys. Pools created
+before the change keep their own copies. When a cluster is upgraded to this
+release, each pool that used ``default`` gets a copy of its own.
 
 When the last pool that uses a profile is deleted, the profile is deleted as
 well, however it was created. The ``default`` profile is never deleted in this

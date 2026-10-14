@@ -1034,6 +1034,15 @@ public:
       int stretch_mode_bucket,
       uint64_t stretch_pool_size);
 
+  // Set the default EC profile, the template of generated profiles, and
+  // propose it.
+  void propose_default_profile(
+      const std::map<std::string, std::string>& profile);
+
+  // The data and coding chunk counts of profile's plugin.
+  int profile_chunk_counts(const std::map<std::string, std::string>& profile,
+                           unsigned *k, unsigned *m, std::ostream *ss) const;
+
   // What ceph mon enable_stretch_mode or disable_stretch_mode does to a pool.
   enum class StretchModeChange {
     STRETCH,    // num_zones 1 to 2
