@@ -5,7 +5,7 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import { SmbClusterResourcePageComponent } from './smb-cluster-resource-page.component';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
-import { SMBCluster } from '../smb.model';
+import { CLIENT_COMPAT, SMBCluster } from '../smb.model';
 
 describe('SmbClusterResourcePageComponent', () => {
   let component: SmbClusterResourcePageComponent;
@@ -61,14 +61,32 @@ describe('SmbClusterResourcePageComponent', () => {
   });
 
   it('should build overviewFields with correct labels and values after init', () => {
-    expect(component.overviewFields.length).toBe(2);
+    expect(component.overviewFields.length).toBe(3);
     expect(component.overviewFields[0]).toEqual({
-      label: 'Name', // Matches $localize`Name`
+      label: 'Name',
       value: 'test-cluster'
     });
     expect(component.overviewFields[1]).toEqual({
-      label: 'Authentication Mode', // Matches $localize`Authentication Mode`
+      label: 'Authentication Mode',
       value: 'active_directory'
+    });
+    expect(component.overviewFields[2]).toEqual({
+      label: 'Compatibility',
+      value: CLIENT_COMPAT.Default
+    });
+  });
+
+  it('should show macos compatibility when client_compat is set', () => {
+    clusterSubject.next({
+      cluster_id: 'test-cluster',
+      auth_mode: 'active_directory',
+      client_compat: CLIENT_COMPAT.MacOS
+    } as SMBCluster);
+    fixture.detectChanges();
+
+    expect(component.overviewFields[2]).toEqual({
+      label: 'Compatibility',
+      value: CLIENT_COMPAT.MacOS
     });
   });
 

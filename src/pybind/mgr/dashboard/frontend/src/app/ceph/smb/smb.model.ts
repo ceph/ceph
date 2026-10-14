@@ -11,8 +11,16 @@ export interface SMBCluster {
   placement?: CephServicePlacement;
   clustering?: Clustering;
   public_addrs?: PublicAddress[];
+  client_compat?: ClientCompat;
   count?: number;
 }
+
+export const CLIENT_COMPAT = {
+  Default: 'default',
+  MacOS: 'macos'
+} as const;
+
+export type ClientCompat = (typeof CLIENT_COMPAT)[keyof typeof CLIENT_COMPAT];
 
 export interface ClusterRequestModel {
   cluster_resource: SMBCluster;
