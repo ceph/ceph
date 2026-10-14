@@ -827,6 +827,18 @@ function get_mds_gids()
     ceph fs get $fs_name --format=json | python3 -c "import json; import sys; print(' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['mdsmap']['info'].values()]))"
 }
 
+function wait_mds_gids_change()
+{
+  local fs_name=$1
+  local old_gids=$2
+  local gids=$old_gids
+  while [ -z "$gids" ] || [ "$gids" = "$old_gids" ] ; do
+    sleep 5
+    gids=$(get_mds_gids $fs_name)
+  done
+  echo $gids
+}
+
 function fail_all_mds()
 {
   fs_name=$1
@@ -941,20 +953,13 @@ function test_mds_tell()
 
   # Test respawn by rank
   without_test_dup_command ceph tell mds.0 respawn
-  new_mds_gids=$old_mds_gids
-  while [ $new_mds_gids -eq $old_mds_gids ] ; do
-      sleep 5
-      new_mds_gids=$(get_mds_gids $FS_NAME)
-  done
+  new_mds_gids=$(wait_mds_gids_change $FS_NAME "$old_mds_gids")
   echo New GIDs: $new_mds_gids
 
   # Test respawn by ID
+  old_mds_gids=$new_mds_gids
   without_test_dup_command ceph tell mds.a respawn
-  new_mds_gids=$old_mds_gids
-  while [ $new_mds_gids -eq $old_mds_gids ] ; do
-      sleep 5
-      new_mds_gids=$(get_mds_gids $FS_NAME)
-  done
+  new_mds_gids=$(wait_mds_gids_change $FS_NAME "$old_mds_gids")
   echo New GIDs: $new_mds_gids
 
   test_tell_output_file mds."$FS_NAME":0
