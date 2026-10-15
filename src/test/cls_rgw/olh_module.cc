@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -232,5 +233,23 @@ TEST_CASE("OLH input and storage errors retain native status and read boundaries
         context.reads.clear();
         CHECK(invoke(context, std::move(prefix)).first == -EINVAL);
         CHECK(context.reads.empty());
+    }
+}
+
+TEST_CASE("OLH native action type preserves every wire byte", "[rgw][cls][olh]")
+{
+    static_assert(std::is_same_v<std::underlying_type_t<::OLHLogOp>, std::uint32_t>);
+    static_assert(sizeof(::OLHLogOp) == 4);
+    for (unsigned raw = 0; raw < 256; ++raw) {
+        auto value = log_fixture(1, false);
+        value.pending_log.begin()->second.front().op = static_cast<::OLHLogOp>(raw);
+        auto context = fixture(value);
+        auto op = request();
+        op.get_stales = true;
+        const auto [status, bytes] = query(context, op);
+        REQUIRE(status == 0);
+        const auto reply = decode_reply(bytes);
+        REQUIRE(reply.log.size() == 1);
+        CHECK(static_cast<unsigned>(reply.log.begin()->second.front().op) == raw);
     }
 }

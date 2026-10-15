@@ -522,7 +522,8 @@ struct rgw_cls_bi_entry {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
-enum OLHLogOp {
+// Preserve the native 32-bit layout and admit every uint8 wire action.
+enum OLHLogOp : uint32_t {
   CLS_RGW_OLH_OP_UNKNOWN         = 0,
   // link OLH entry to a specific object version
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
