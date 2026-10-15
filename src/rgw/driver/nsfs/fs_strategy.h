@@ -222,10 +222,11 @@ protected:
   int clone_file_by_copy(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
-                         bool excl);
+                         bool excl, const nsfs::FSIdentity& id = {});
 
   int clone_fd_by_copy(const DoutPrefixProvider* dpp, int src_fd,
-                       int dst_dir_fd, const std::string& dst_name);
+                       int dst_dir_fd, const std::string& dst_name,
+                       const nsfs::FSIdentity& id = {});
 
   int copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                     int src_fd, off_t src_off,
@@ -250,17 +251,26 @@ public:
   /* excl: fail with -EEXIST rather than overwrite an existing
    * destination.  shadow forks pass it so that two instances racing to
    * fork the same object cannot clobber each other;  the loser joins
-   * the winner's shadow instead. */
+   * the winner's shadow instead.
+   *
+   * id:  who reads the source and owns the clone.  A copy is a read of
+   * the source and a write of the destination, so both are the
+   * requester's:  the source's permissions are checked against it,
+   * and the destination is created as it. */
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
-                         bool excl = false) = 0;
+                         bool excl = false,
+                         const nsfs::FSIdentity& id = {}) = 0;
 
   /* clone from an open source fd — used when the source pathname is
-   * no longer valid (e.g. versioned self-copy after demote). */
+   * no longer valid (e.g. versioned self-copy after demote).  `id` as
+   * for clone_file();  the source is reopened as it, through the
+   * descriptor, so its permissions are checked. */
   virtual int clone_fd(const DoutPrefixProvider* dpp,
                        int src_fd,
-                       int dst_dir_fd, const std::string& dst_name) = 0;
+                       int dst_dir_fd, const std::string& dst_name,
+                       const nsfs::FSIdentity& id = {}) = 0;
 
   /* remove the hidden clone parent associated with name, if any.
    * Call when an object created by clone_file is deleted or
@@ -341,11 +351,13 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
-                 bool excl = false) override;
+                 bool excl = false,
+                 const nsfs::FSIdentity& id = {}) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
-               int dst_dir_fd, const std::string& dst_name) override;
+               int dst_dir_fd, const std::string& dst_name,
+               const nsfs::FSIdentity& id = {}) override;
 
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override {}
@@ -458,11 +470,13 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
-                 bool excl = false) override;
+                 bool excl = false,
+                 const nsfs::FSIdentity& id = {}) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
-               int dst_dir_fd, const std::string& dst_name) override;
+               int dst_dir_fd, const std::string& dst_name,
+               const nsfs::FSIdentity& id = {}) override;
 
   void cleanup_clone(const DoutPrefixProvider* dpp,
                      int dir_fd, const std::string& name) override;

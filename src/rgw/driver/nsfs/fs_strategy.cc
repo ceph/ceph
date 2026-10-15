@@ -483,8 +483,12 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
                                    const std::string& src_name,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
-                                   bool excl)
+                                   bool excl,
+                                   const nsfs::FSIdentity& id)
 {
+  /* the whole copy as `id`:  opening the source is its read, checked
+   * against it, and the destination is created as it */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
   if (src_fd < 0) {
     int err = errno;
@@ -531,12 +535,37 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
   }
   return ret;
+  });
 }
 
 int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
-                                 int src_fd,
-                                 int dst_dir_fd, const std::string& dst_name)
+                                 int gw_src_fd,
+                                 int dst_dir_fd, const std::string& dst_name,
+                                 const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity(dpp, id, [&]() -> int {
+  /* As `id`, the source reopened through the descriptor:  an open of
+   * the magic link checks the file's permissions against the caller,
+   * so the read is the requester's and not the gateway's, which holds
+   * `gw_src_fd`. */
+  int own_fd = -1;
+  if (id.active()) {
+    const std::string via = "/proc/self/fd/" + std::to_string(gw_src_fd);
+    own_fd = ::open(via.c_str(), O_RDONLY | O_CLOEXEC);
+    if (own_fd < 0) {
+      int err = errno;
+      ldpp_dout(dpp, 0) << "ERROR: clone_fd: reopening the source failed: "
+        << cpp_strerror(err) << dendl;
+      return -err;
+    }
+  }
+  auto close_own = make_scope_guard([own_fd] {
+    if (own_fd >= 0) {
+      ::close(own_fd);
+    }
+  });
+  const int src_fd = (own_fd >= 0) ? own_fd : gw_src_fd;
+
   struct statx stx;
   if (statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
     int err = errno;
@@ -570,22 +599,24 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
   ret = link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp);
   ::close(tmp_fd);
   return ret;
+  });
 }
 
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
                               int dst_dir_fd, const std::string& dst_name,
-                              bool excl)
+                              bool excl, const nsfs::FSIdentity& id)
 {
   return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                            dst_dir_fd, dst_name, excl);
+                            dst_dir_fd, dst_name, excl, id);
 }
 
 int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
                             int src_fd,
-                            int dst_dir_fd, const std::string& dst_name)
+                            int dst_dir_fd, const std::string& dst_name,
+                            const nsfs::FSIdentity& id)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name);
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id);
 }
 
 /* --- GPFSStrategy ----------------------------------------------------- */
@@ -872,13 +903,20 @@ static std::string clone_parent_name(const std::string& name)
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              int src_dir_fd, const std::string& src_name,
                              int dst_dir_fd, const std::string& dst_name,
-                             bool excl)
+                             bool excl, const nsfs::FSIdentity& id)
 {
   if (!has_clone()) {
     ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
       << "falling back to copy" << dendl;
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl);
+                              dst_dir_fd, dst_name, excl, id);
+  }
+  /* The clone path makes its parent and child as the gateway.  As a
+   * requester, copy instead, so the clone is theirs and the read of the
+   * source is checked against them. */
+  if (id.active()) {
+    return clone_file_by_copy(dpp, src_dir_fd, src_name,
+                              dst_dir_fd, dst_name, excl, id);
   }
 
   /* gpfs_clone_copy() has no exclusive-create mode, so the best we can
@@ -949,9 +987,10 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
 
 int GPFSStrategy::clone_fd(const DoutPrefixProvider* dpp,
                            int src_fd,
-                           int dst_dir_fd, const std::string& dst_name)
+                           int dst_dir_fd, const std::string& dst_name,
+                           const nsfs::FSIdentity& id)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name);
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id);
 }
 
 void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,

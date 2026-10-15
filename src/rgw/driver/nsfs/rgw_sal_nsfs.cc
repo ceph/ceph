@@ -2754,8 +2754,11 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
     dst_dir_fd = dst_dir->get_fd();
   }
 
+  /* as this entry's identity:  the requester reads the source and
+   * owns the copy */
   return fs_strategy->clone_file(dpp, src_dir_fd, get_name(),
-                                 dst_dir_fd, dst_name);
+                                 dst_dir_fd, dst_name, /*excl=*/false,
+                                 identity);
 }
 
 int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
@@ -9716,6 +9719,18 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   NSFSBucket *sb = static_cast<NSFSBucket*>(src_bucket);
   NSFSObject *dobj = static_cast<NSFSObject*>(dest_object);
 
+  /* Who copies:  the requester reads the source and owns the copy, as
+   * NooBaa's copy runs as its requester.  `remote_user` is the
+   * authenticated user (rgw_op.cc).  Refused where it cannot be
+   * applied, as the writers refuse. */
+  nsfs::FSIdentity identity;
+  {
+    const int pret = pin_personality_for(dpp, driver, remote_user, &identity);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
+
   if (!db || !sb) {
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket to copy " << get_name()
                       << dendl;
@@ -9738,6 +9753,9 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     ldpp_dout(dpp, 0) << "ERROR: could not stat object " << get_name() << ": "
                       << cpp_strerror(ret) << dendl;
     return -ret;
+  }
+  if (identity.active() && ent) {
+    ent->set_identity(identity);
   }
 
   /* check copy-source preconditions against the source object */
@@ -9846,13 +9864,17 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       src_fd = ent->get_fd();
     }
     ret = driver->get_fs_strategy()->clone_fd(
-      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name);
+      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, identity);
     if (ret < 0) {
       return ret;
     }
   }
   vlock.reset();
   dobj->make_ent(ent->get_type());
+  /* the copy is the requester's, so its attributes are written as it */
+  if (identity.active() && dobj->get_fsent()) {
+    dobj->get_fsent()->set_identity(identity);
+  }
 
   /* Set up attributes for destination */
   Attrs src_attrs = state.attrset;
@@ -9963,8 +9985,12 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     int obj_fd = dobj->get_fsent()->get_fd();
     if (obj_fd >= 0) {
       std::string vid_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-      ::fsetxattr(obj_fd, vid_xattr.c_str(),
-                  new_ver_id.c_str(), new_ver_id.size(), 0);
+      /* as the copy's owner */
+      nsfs::with_identity(dpp, identity, [&]() -> int {
+        ::fsetxattr(obj_fd, vid_xattr.c_str(),
+                    new_ver_id.c_str(), new_ver_id.size(), 0);
+        return 0;
+      });
     }
 
     auto* bcache = driver->get_bucket_cache();
