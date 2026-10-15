@@ -306,6 +306,9 @@ private:
   seastar::future<> handle_get_purged_snaps_reply(
     Ref<MMonGetPurgedSnapsReply> m);
 
+  /// called on every tick: scrub the purged snaps once per scrub interval
+  void maybe_scrub_purged_snaps();
+
 public:
   seastar::future<> send_beacon();
   /// find the clones still mapped to purged snaps (in all PGs), and

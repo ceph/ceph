@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <random>
 #include <ranges>
 
 #include <boost/iterator/counting_iterator.hpp>
@@ -146,6 +147,7 @@ OSD::OSD(int id, uint32_t nonce,
       ).then([this] {
 	update_stats();
 	check_debug_levels();
+	maybe_scrub_purged_snaps();
         mgrc->update_daemon_health(get_health_metrics());
 	if (++trim_queue_length_countdown >= TRIM_QLENGTHS_UPDATE_PERIOD) {
 	  trim_queue_length_countdown = 0;
@@ -1449,6 +1451,31 @@ seastar::future<> OSD::handle_get_purged_snaps_reply(
   }
   // the monitor limits the size of each reply
   co_await (all_recorded ? start_boot() : get_purged_snaps());
+}
+
+void OSD::maybe_scrub_purged_snaps()
+{
+  LOG_PREFIX(OSD::maybe_scrub_purged_snaps);
+  if (purged_snaps_scrub_running) {
+    return;
+  }
+  // as Classic: once per (randomized) scrub interval
+  const auto& conf = local_conf();
+  const utime_t last = superblock.last_purged_snaps_scrub;
+  // a seed that is stable for each scrub interval, but varies by OSD,
+  // to avoid any herds
+  std::mt19937 rng(whoami + last.sec());
+  const double r = (rng() % 1024) / 1024.0;
+  utime_t next = last;
+  next += conf->osd_scrub_min_interval *
+          (1.0 + conf->osd_scrub_interval_randomize_ratio * r);
+  if (next >= ceph_clock_now()) {
+    return;
+  }
+  DEBUG("last_purged_snaps_scrub {}, was due at {}", last, next);
+  gate.dispatch_in_background("purged_snaps_scrub", *this, [this] {
+    return scrub_purged_snaps();
+  });
 }
 
 seastar::future<> OSD::scrub_purged_snaps()
