@@ -450,6 +450,10 @@ void MgrClient::_send_report()
   }
 
   session->con->send_message2(report);
+  // The mgr sends nothing back on this lossy session, and the idle check
+  // counts only received traffic. The keepalive ack keeps the session
+  // from being reset every ms_connection_idle_timeout.
+  session->con->send_keepalive();
 }
 
 void MgrClient::send_pgstats()
