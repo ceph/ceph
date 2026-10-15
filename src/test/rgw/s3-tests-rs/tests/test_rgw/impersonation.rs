@@ -235,6 +235,167 @@ async fn test_impersonation_owns_a_nested_key() {
     unbind_identities().await;
 }
 
+/// A completed multipart upload belongs to the identity that uploaded it.
+///
+/// Completion assembles the parts into a new file, or links in a data
+/// file the parts were written to, and publishes it.  Unless that runs
+/// as the uploader the object is the gateway's, and the uploader is then
+/// refused its own object.  The isolation test's argument again:  bob is
+/// granted the read by bucket policy, so his refusal is the filesystem's.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_impersonation_owns_a_completed_upload() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let cfg = get_config();
+    bind_identities(None).await;
+
+    let alice = get_client();
+    let bob = get_alt_client();
+    let bucket = get_new_bucket(Some(&alice)).await;
+    let key = "alices-upload";
+
+    /* three equal parts and a short one, so a layout that can link the
+     * parts' data file in as the object does */
+    let part = 64 * 1024;
+    let up = s3_tests_rs::fixtures::multipart_upload(
+        &alice, &bucket, key, 3 * part + 100, Some(part), None, None, None)
+        .await;
+    let done = alice.complete_multipart_upload()
+        .bucket(&bucket).key(key).upload_id(&up.upload_id)
+        .multipart_upload(aws_sdk_s3::types::CompletedMultipartUpload::builder()
+                          .set_parts(Some(up.parts.clone())).build())
+        .send().await;
+    assert!(done.is_ok(), "alice could not complete her upload: {done:?}");
+
+    let resource = make_arn_resource(&format!("{bucket}/*"));
+    let doc = make_json_policy(
+        "s3:GetObject", &resource,
+        Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
+                                                cfg.alt_user_id)]})),
+        None, None);
+    let pol = alice.put_bucket_policy()
+        .bucket(&bucket).policy(&doc).send().await;
+    assert!(pol.is_ok(), "could not grant bob s3:GetObject: {pol:?}");
+
+    /* the control, and the case that failed:  alice reads her own
+     * completed object, all of it */
+    let mine = alice.get_object().bucket(&bucket).key(key).send().await;
+    assert!(mine.is_ok(),
+        "alice could not read the object her upload completed;  it was \
+         made as the gateway: {mine:?}");
+    let body = mine.unwrap().body.collect().await
+        .expect("reading the body").into_bytes();
+    assert_eq!(&body[..], &up.data[..], "the completed object's bytes differ");
+
+    let theirs = bob.get_object().bucket(&bucket).key(key).send().await;
+    assert!(theirs.is_err(),
+        "bob read alice's completed upload although S3 was the only thing \
+         permitting it;  it is not owned by her");
+
+    unbind_identities().await;
+}
+
+/// A copy is the requester's:  it reads the source as them, and it
+/// belongs to them.
+///
+/// The read half is the one with teeth.  bob is granted `s3:GetObject`
+/// on alice's object by bucket policy and refused it by the filesystem,
+/// as in the isolation test.  A copy that read the source as the gateway
+/// would hand him the same bytes as an object of his own;  so his copy
+/// of it must be refused too.  The ownership half:  alice's copy of her
+/// own object is hers, so she reads it and bob, granted it by policy, is
+/// refused.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_impersonation_copies_as_the_requester() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let cfg = get_config();
+    bind_identities(None).await;
+
+    let alice = get_client();
+    let bob = get_alt_client();
+    let bucket = get_new_bucket(Some(&alice)).await;
+    let bobs_bucket = get_new_bucket(Some(&bob)).await;
+    let key = "alices-object";
+
+    let put = alice.put_object()
+        .bucket(&bucket).key(key)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"alice wrote this"))
+        .send().await;
+    assert!(put.is_ok(), "alice could not write her own object: {put:?}");
+
+    let resource = make_arn_resource(&format!("{bucket}/*"));
+    let doc = make_json_policy(
+        "s3:GetObject", &resource,
+        Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
+                                                cfg.alt_user_id)]})),
+        None, None);
+    let pol = alice.put_bucket_policy()
+        .bucket(&bucket).policy(&doc).send().await;
+    assert!(pol.is_ok(), "could not grant bob s3:GetObject: {pol:?}");
+
+    /* the premise:  the filesystem refuses bob the read S3 permits */
+    let theirs = bob.get_object().bucket(&bucket).key(key).send().await;
+    assert!(theirs.is_err(),
+        "bob read alice's object;  the premise of this test does not hold");
+
+    /* the control:  bob can copy at all -- his own object, in his bucket */
+    let put = bob.put_object()
+        .bucket(&bobs_bucket).key("bobs-object")
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"bob wrote this"))
+        .send().await;
+    assert!(put.is_ok(), "bob could not write his own object: {put:?}");
+    let cp = bob.copy_object()
+        .bucket(&bobs_bucket).key("bobs-copy")
+        .copy_source(format!("{bobs_bucket}/bobs-object"))
+        .send().await;
+    assert!(cp.is_ok(), "bob could not copy his own object: {cp:?}");
+
+    /* and cannot copy what the filesystem will not let him read */
+    let stolen = bob.copy_object()
+        .bucket(&bobs_bucket).key("stolen")
+        .copy_source(format!("{bucket}/{key}"))
+        .send().await;
+    assert!(stolen.is_err(),
+        "bob copied an object the filesystem refuses him;  the copy read \
+         the source as the gateway");
+
+    /* alice's copy of her own object is hers */
+    let cp = alice.copy_object()
+        .bucket(&bucket).key("alices-copy")
+        .copy_source(format!("{bucket}/{key}"))
+        .send().await;
+    assert!(cp.is_ok(), "alice could not copy her own object: {cp:?}");
+    let mine = alice.get_object().bucket(&bucket).key("alices-copy").send().await;
+    assert!(mine.is_ok(),
+        "alice could not read her own copy;  it was made as the gateway: \
+         {mine:?}");
+    let theirs = bob.get_object().bucket(&bucket).key("alices-copy").send().await;
+    assert!(theirs.is_err(),
+        "bob read alice's copy although S3 was the only thing permitting \
+         it;  it is not owned by her");
+
+    unbind_identities().await;
+}
+
 /// The group vector, which is the case worth the fixture.
 ///
 /// `grouped.txt` is `0040 root:rgwfix` — owner and other bits empty
