@@ -29,7 +29,8 @@ function TEST_ec_pool_create_in_degraded_stretch_mode() {
     # so does a pool set to num_zones 2
     ceph osd pool create data2 erasure --k 2 --m 1 || return 1
     ceph osd pool set data2 allow_ec_optimizations true || return 1
-    ceph osd pool set data2 num_zones 2 || return 1
+    # its PGs may have a pg_temp of the old size
+    timeout 120 ceph osd pool set data2 num_zones 2 || return 1
     test "$(pool_field data2 peering_crush_bucket_count)" == 1 || return 1
     test "$(pool_field data2 peering_crush_bucket_mandatory_member)" == "$dc1" || return 1
     # the transitions never change size, min_size or the bucket target
