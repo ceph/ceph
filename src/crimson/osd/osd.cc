@@ -996,6 +996,13 @@ OSD::do_ms_dispatch(
   case CEPH_MSG_OSD_MAP:
     return handle_osd_map(boost::static_pointer_cast<MOSDMap>(m));
   case MSG_MON_GET_PURGED_SNAPS_REPLY:
+    if (!conn->peer_is_mon()) {
+      // only the monitor may tell us which snaps were purged
+      LOG_PREFIX(OSD::do_ms_dispatch);
+      WARN("ignoring a purged snaps reply from non-monitor {}",
+           conn->get_peer_name());
+      return seastar::now();
+    }
     return handle_get_purged_snaps_reply(
       boost::static_pointer_cast<MMonGetPurgedSnapsReply>(m));
   case CEPH_MSG_OSD_OP:
