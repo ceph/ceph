@@ -76,6 +76,9 @@ void ConfigMonitor::create_initial()
 {
   dout(10) << __func__ << dendl;
   version = 0;
+  if (ceph_release() > ceph_release_t::umbrella) {
+    format_version = 1;
+  }
   create_pending();
 }
 
@@ -762,12 +765,17 @@ void ConfigMonitor::tick()
     changed = true;
   }
   if (changed && mon.kvmon()->is_writeable()) {
-    paxos.plug();
-    encode_pending_to_kvmon();
-    mon.kvmon()->propose_pending();
-    paxos.unplug();
-    propose_pending();
+    propose_pending_config();
   }
+}
+
+void ConfigMonitor::propose_pending_config()
+{
+  paxos.plug();
+  encode_pending_to_kvmon();
+  mon.kvmon()->propose_pending();
+  paxos.unplug();
+  propose_pending();
 }
 
 void ConfigMonitor::on_active()
@@ -876,6 +884,36 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
     }
     it->next();
   }
+}
+
+void ConfigMonitor::upgrade_format()
+{
+  if (format_version >= 1) {
+    return;
+  }
+
+  if (!mon.kvmon()->is_writeable()) {
+    dout(10) << __func__ << " waiting for kv mon to be writeable" << dendl;
+    mon.kvmon()->wait_for_writeable_ctx(new C_MonContext{&mon, [this](int r) {
+                                                           if (r >= 0)
+                                                             upgrade_format();
+                                                         }});
+    return;
+  }
+
+  // Persist config values where we want to change the default for new clusters,
+  // but not to update the value on clusters which have already been created
+  format_version = 1;
+  if (current.find("global/rados_replica_read_policy") == current.end()) {
+    dout(1)
+        << __func__
+        << " preserving global/rados_replica_read_policy=default for cluster"
+        << dendl;
+    bufferlist bl;
+    bl.append("default");
+    pending["global/rados_replica_read_policy"] = bl;
+  }
+  propose_pending_config();
 }
 
 bool ConfigMonitor::refresh_config(MonSession *s)
