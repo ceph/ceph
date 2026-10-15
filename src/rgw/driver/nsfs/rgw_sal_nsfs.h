@@ -1132,9 +1132,16 @@ public:
    * account chose -- its new_buckets_path or a custom path -- never the
    * base path, which is the gateway's own default and was never the
    * account's to write.  -EACCES when the account may not write
-   * `path`'s parent (DECISIONS.md 2026-10-14). */
+   * `path`'s parent, the parent itself and not the path to it
+   * (DECISIONS.md 2026-10-14, 2026-10-15). */
   int check_owner_can_create_at(const DoutPrefixProvider* dpp,
 				const rgw_owner& owner, const std::string& path);
+  /* `mode` on the directory `path` itself as the owner, the directories
+   * above it not consulted;  under impersonation only.  -EACCES when
+   * refused */
+  int check_owner_access(const DoutPrefixProvider* dpp,
+			 const rgw_owner& owner, const std::string& path,
+			 int mode);
 
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,

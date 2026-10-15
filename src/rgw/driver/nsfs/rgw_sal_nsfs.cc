@@ -4793,9 +4793,9 @@ int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
-					  const rgw_owner& owner,
-					  const std::string& path)
+int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
+				   const rgw_owner& owner,
+				   const std::string& path, int mode)
 {
   /* Only when the gateway writes as identities:  without impersonation
    * an account's uid never touches the filesystem, and a gateway that
@@ -4812,18 +4812,36 @@ int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
-  const std::string parent = std::filesystem::path(path).parent_path().string();
-  ret = nsfs::run_as(dpp, cred, [&parent]() -> int {
-      return (::faccessat(AT_FDCWD, parent.c_str(), W_OK | X_OK,
-			  AT_EACCESS) < 0) ? -errno : 0;
-    });
+  /* The directory itself, not the path to it:  the gateway opens a
+   * bucket's directory and serves everything below it from that handle,
+   * so the directories above it are never the owner's to pass through
+   * (DECISIONS.md 2026-10-15).  NooBaa resolves the whole path as the
+   * account, because it serves by path. */
+  const int fd = ::open(path.c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC);
+  if (fd < 0) {
+    ret = -errno;
+  } else {
+    ret = nsfs::run_as(dpp, cred, [fd, mode]() -> int {
+	return (::faccessat(fd, "", mode, AT_EMPTY_PATH | AT_EACCESS) < 0)
+	  ? -errno : 0;
+      });
+    ::close(fd);
+  }
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "nsfs: " << to_string(owner) << " (uid " << cred.uid
-      << ") may not create buckets in " << parent << ":  "
-      << cpp_strerror(-ret) << dendl;
+      << ") may not access " << path << ":  " << cpp_strerror(-ret) << dendl;
     return -EACCES;
   }
   return 0;
+}
+
+int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
+					  const rgw_owner& owner,
+					  const std::string& path)
+{
+  return check_owner_access(
+    dpp, owner, std::filesystem::path(path).parent_path().string(),
+    W_OK | X_OK);
 }
 
 int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
