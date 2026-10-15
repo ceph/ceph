@@ -243,6 +243,8 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
 				  const std::set <std::string> &changed)
 {
   if (changed.count("crush_location")) {
+    // the CephContext's observer may not have parsed it yet
+    cct->crush_location.update_from_conf();
     update_crush_location();
   }
   if (changed.count("rados_mon_op_timeout")) {

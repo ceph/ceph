@@ -694,6 +694,20 @@ TEST_F(TestReplicaLocalizeZoneFiltering, FilteredSetSizeEqualsZoneSize)
   }
 }
 
+// The config proxy calls its observers in no fixed order, so the Objecter can
+// see a crush_location change before the CephContext has parsed it.
+TEST(ObjecterCrushLocation, ChangeSeenBeforeTheCephContextObserver) {
+  boost::asio::io_context ioc;
+  Objecter objecter(g_ceph_context, nullptr, nullptr, ioc);
+  objecter.init();
+  auto &conf = g_ceph_context->_conf;
+  conf.set_val_or_die("crush_location", "datacenter=dc2");
+  objecter.handle_conf_change(conf, {"crush_location"});
+  const std::multimap<std::string, std::string> expected = {{"datacenter", "dc2"}};
+  EXPECT_EQ(expected, objecter.crush_location);
+  objecter.shutdown();
+}
+
 /*
  * ---------------------------------------------------------------------------
  * Baseline: the cases the single-direct-read path exists to catch.
