@@ -11006,6 +11006,31 @@ int RGWRados::bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo
   return 0;
 }
 
+int RGWRados::bi_get_delete_marker(
+    const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+    const rgw_obj& obj, rgw_bucket_dir_entry* dirent, optional_yield y)
+{
+  rgw_obj index_obj = obj;
+  if (obj.key.have_null_instance()) {
+    // Existing NULL-marker index suffix; use only as a read selector.
+    index_obj.key.instance.assign("\0d", 2);
+  }
+  int ret = bi_get_instance(dpp, bucket_info, index_obj, dirent, y);
+  if (ret < 0) {
+    return ret;
+  }
+  const std::string instance = obj.key.have_null_instance() ? ""
+                                                            : obj.key.instance;
+  if (!dirent->is_delete_marker() ||
+      dirent->key.name != obj.key.get_index_key_name() ||
+      dirent->key.instance != instance) {
+    ldpp_dout(dpp, 0) << "ERROR: invalid delete-marker index entry for " << obj
+                      << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
 int RGWRados::bi_get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          rgw_bucket_olh_entry *olh, optional_yield y)
 {

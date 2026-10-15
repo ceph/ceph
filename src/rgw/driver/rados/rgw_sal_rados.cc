@@ -3136,8 +3136,13 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   RGWObjState *pstate{nullptr};
 
   int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
-  if (ret < 0) {
-    if (ret == -ENOENT) {
+  // Preserve metadata for the explicit NULL OLH/no-data deletion preflight,
+  // without turning an absent payload into a successful object read.
+  const bool null_instance_without_data = ret == -ENOENT && pstate &&
+                                          get_instance() == "null" &&
+                                          pstate->is_olh && !pstate->exists;
+  if (ret < 0  && !null_instance_without_data) {
+    if (ret == -ENOENT && pstate) {
       state.is_dm = pstate->is_dm;
     }
     return ret;
