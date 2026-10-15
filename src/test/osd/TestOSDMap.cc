@@ -3099,6 +3099,83 @@ TEST_F(OSDMapTest, read_balance_random_map) {
   }
 }
 
+TEST_F(OSDMapTest, read_balance_large_pg_num) {
+  // Regression test for https://tracker.ceph.com/issues/80443
+  //
+  // calc_desired_primary_distribution_simple() accumulated the desired
+  // distribution in a float and compared it against pg_num with a fixed
+  // absolute epsilon (0.01). The accumulated float rounding error grows
+  // with pg_num and OSD count while the epsilon stays constant, so on
+  // large pools the ceph_assert aborted the mgr (balancer thread) even on
+  // a perfectly healthy cluster with all primary affinities at 1.
+  //
+  // 500 OSDs / 32768 PGs is a combination whose float rounding error
+  // exceeds the old epsilon, so the old code aborts on it.
+  const int n_osds = 500;
+  const int pg_num = 32768;
+  set_up_map(n_osds, true);
+
+  OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+  new_pool_inc.new_pool_max = osdmap.get_pool_max();
+  new_pool_inc.fsid = osdmap.get_fsid();
+  uint64_t pid = set_rep_pool("large_reppool", new_pool_inc, false);
+  new_pool_inc.new_pools[pid].set_pg_num(pg_num);
+  new_pool_inc.new_pools[pid].set_pgp_num(pg_num);
+  osdmap.apply_incremental(new_pool_inc);
+
+  vector<uint64_t> osds_to_check;
+  for (int i = 0; i < n_osds; i++) {
+    osds_to_check.push_back(i);
+  }
+
+  map<uint64_t,float> desired_prim_dist;
+  int rc = osdmap.calc_desired_primary_distribution(g_ceph_context, pid,
+                                                    osds_to_check,
+                                                    desired_prim_dist);
+  ASSERT_EQ(rc, 0);
+
+  // the desired distribution is defined to sum to pg_num
+  double sum = 0.0;
+  for (const auto & [osd, count] : desired_prim_dist) {
+    sum += count;
+  }
+  ASSERT_NEAR(sum, (double)pg_num, pg_num * 1e-4);
+}
+
+TEST_F(OSDMapTest, read_balance_huge_pg_num) {
+  // Second combination for https://tracker.ceph.com/issues/80443 (see
+  // read_balance_large_pg_num): fewer OSDs, larger pool. Also aborts
+  // with the old float accumulator and fixed epsilon.
+  const int n_osds = 100;
+  const int pg_num = 131072;
+  set_up_map(n_osds, true);
+
+  OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+  new_pool_inc.new_pool_max = osdmap.get_pool_max();
+  new_pool_inc.fsid = osdmap.get_fsid();
+  uint64_t pid = set_rep_pool("huge_reppool", new_pool_inc, false);
+  new_pool_inc.new_pools[pid].set_pg_num(pg_num);
+  new_pool_inc.new_pools[pid].set_pgp_num(pg_num);
+  osdmap.apply_incremental(new_pool_inc);
+
+  vector<uint64_t> osds_to_check;
+  for (int i = 0; i < n_osds; i++) {
+    osds_to_check.push_back(i);
+  }
+
+  map<uint64_t,float> desired_prim_dist;
+  int rc = osdmap.calc_desired_primary_distribution(g_ceph_context, pid,
+                                                    osds_to_check,
+                                                    desired_prim_dist);
+  ASSERT_EQ(rc, 0);
+
+  double sum = 0.0;
+  for (const auto & [osd, count] : desired_prim_dist) {
+    sum += count;
+  }
+  ASSERT_NEAR(sum, (double)pg_num, pg_num * 1e-4);
+}
+
 TEST_F(OSDMapTest, rb_osdsize_opt_1small_osd) {
   //TO-REMOVE (the comment) - look ar 43124 for examples
   vector <pair<int, int>> weights = {
