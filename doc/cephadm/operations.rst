@@ -34,8 +34,11 @@ You can see recent events by running the following command:
 
   ceph log last cephadm
 
-These events are also logged to the ``ceph.cephadm.log`` file on
-monitor hosts as well as to the Monitor daemons' stderr.
+Monitors that cephadm deploys with Podman 2.1.0 or later send these events to
+journald by default. With Docker, or with an older Podman, the events go to
+the Monitor container's stderr. If you enable logging to files (see
+:ref:`cephadm-logs`), the Monitors also write them to
+``/var/log/ceph/<cluster-fsid>/ceph.cephadm.log`` on Monitor hosts.
 
 
 Ceph Daemon Control
@@ -48,17 +51,23 @@ You can stop, start, or restart a daemon with:
 
 .. prompt:: bash #
 
-   ceph orch daemon stop <daemonid>
-   ceph orch daemon start <daemonid>
-   ceph orch daemon restart <daemonid>
+   ceph orch daemon stop <daemon-name>
+   ceph orch daemon start <daemon-name>
+   ceph orch daemon restart <daemon-name>
+
+A daemon name has the form ``<type>.<id>``, for example ``osd.0``.
+``ceph orch ps`` lists the names.
 
 You can also do the same for all daemons for a service with:
 
 .. prompt:: bash #
 
-   ceph orch stop <serviceid>
-   ceph orch start <serviceid>
-   ceph orch restart <serviceid>
+   ceph orch stop <service-name>
+   ceph orch start <service-name>
+   ceph orch restart <service-name>
+
+A service name is the name that ``ceph orch ls`` shows, for example
+``mds.myfs``.
 
 .. note::
     It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
@@ -99,11 +108,13 @@ You can preview what would happen without making changes by using the dry-run mo
 
 The shutdown process performs the following steps in order:
 
-1. Checks cluster health and warns if the cluster is not healthy
+1. Checks cluster health. The command stops with an error unless the cluster
+   reports ``HEALTH_OK`` and all placement groups are ``active+clean``. With
+   ``--force`` it logs a warning and continues.
 2. Pauses the cephadm orchestrator to prevent daemon restarts
 3. Sets the OSD ``noout`` flag to prevent rebalancing on startup
 4. Fails all CephFS filesystems to prevent client I/O
-5. Stops client-facing daemons (MDS, NFS, RGW, iSCSI)
+5. Stops client-facing daemons (NVMe-oF, iSCSI, NFS, SMB, RGW, MDS)
 6. Saves cluster state to a local file for later startup
 7. Stops all hosts sequentially (admin host last)
 
@@ -196,8 +207,8 @@ remove the state file and retry:
 **Hosts fail to start**: If some hosts fail to start, check:
 
 - SSH connectivity from the admin host to the failed hosts
-- That the ``ceph.target`` systemd unit exists on those hosts
-- System logs on the failed hosts (``journalctl -u ceph.target``)
+- That the ``ceph-<fsid>.target`` systemd unit exists on those hosts
+- System logs on the failed hosts (``journalctl -u ceph-<fsid>.target``)
 
 **Cluster not becoming healthy after startup**: After startup, if PGs don't
 become ``active+clean``, check:
@@ -220,9 +231,12 @@ A container image name can optionally be provided to force a
 particular image to be used (instead of the image specified by the
 ``container_image`` config value).
 
-If only the Ceph configuration needs to be regenerated, you can also
-issue a ``reconfig`` command, which will rewrite the ``ceph.conf``
-file but will not trigger a restart of the daemon.
+If only the configuration needs to be regenerated, you can also
+issue a ``reconfig`` command, which rewrites the daemon's configuration
+files. For ``mon``, ``mgr``, ``osd``, ``mds``, ``rgw``, ``rbd-mirror``,
+``cephfs-mirror``, ``crash`` and ``ceph-exporter`` daemons this does not
+restart the daemon. For other daemon types, cephadm normally restarts the
+daemon after it rewrites the files.
 
 .. prompt:: bash #
 
@@ -233,15 +247,10 @@ Rotating a Daemon's Authentication Key
 --------------------------------------
 
 All Ceph and gateway daemons in the cluster have a secret key that is used to connect
-to and authenticate with the cluster.  This key can be rotated (i.e., replaced with a
-new key) with the following command:
-
-.. prompt:: bash #
-
-   ceph orch daemon rotate-key <name>
-
-For MDS, OSD, and Manager daemons, this does not require a daemon restart.  For other
-daemons, however (e.g., RGW), the daemon may be restarted to switch to the new key.
+to and authenticate with the cluster.  The ``ceph orch daemon rotate-key``
+command is disabled. It is rejected on main, in Squid from 19.2.6 and in
+Tentacle from 20.2.4, because it did not work for some daemon types that have
+client keys (for example NFS and NVMe-oF) and could take those daemons down.
 
 
 .. _cephadm-logs:
@@ -256,7 +265,9 @@ Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph daemons log to
 journald by default and Ceph logs are captured by the container runtime
 environment. They are accessible via ``journalctl``.
 
-.. note:: Prior to Quincy, Ceph daemons logged to stderr.
+.. note:: When the container engine is Docker, or a Podman version without
+   split cgroups support, Ceph daemons log to stderr and the container
+   runtime captures the output.
 
 
 Example of Logging to Journald
@@ -277,8 +288,8 @@ Logging to Files
 ----------------
 
 You can also configure Ceph daemons to log to files instead of
-journald if you prefer logs to appear in files (as they did in earlier,
-pre-cephadm, pre-Octopus versions of Ceph). When Ceph logs to files,
+journald if you prefer logs to appear in files (as they do in clusters
+that are not deployed with cephadm). When Ceph logs to files,
 the logs appear in ``/var/log/ceph/<cluster-fsid>``. If you choose to
 configure Ceph to log to files instead of journald, remember to
 configure Ceph so that it will not log to journald (the commands for
@@ -319,7 +330,7 @@ Modifying the Log Retention Schedule
 
 By default, cephadm sets up log rotation on each host to rotate these
 files.  You can configure the logging retention schedule by modifying
-``/etc/logrotate.d/ceph.<cluster-fsid>``.
+``/etc/logrotate.d/ceph-<cluster-fsid>``.
 
 
 Per-node Cephadm Logs
@@ -352,7 +363,7 @@ For example:
 
 If you want to manually specify exactly what log destination to use
 during bootstrap, independent from the ``--log-dest`` options, you may add
-a configuration key :confval:`mgr/cephadm/cephadm_log_destination` to the
+a configuration key ``mgr/cephadm/cephadm_log_destination`` to the
 initial configuration file, under the ``[mgr]`` section. Valid values for
 the key are: ``file``, ``syslog``, and ``file,syslog``.
 
@@ -371,20 +382,27 @@ Setting a Cephadm Log Destination on an Existing Cluster
 --------------------------------------------------------
 
 An existing Ceph cluster can be configured to use a specific cephadm log
-destination by setting the :confval:`mgr/cephadm/cephadm_log_destination`
+destination by setting the ``mgr/cephadm/cephadm_log_destination``
 configuration value to one of ``file``, ``syslog``, or ``file,syslog``. This
 will cause the cephadm orchestration module to run ``cephadm`` so that logs go
 to ``/var/log/ceph/cephadm.log``, the syslog/journal, or both, respectively.
 
-For example:
+To log to syslog:
 
 .. prompt:: bash #
 
-  # set the cephadm executable to log to syslog
   ceph config set mgr mgr/cephadm/cephadm_log_destination syslog
-  # set the cephadm executable to log to both the log file and syslog
+
+To log to both the log file and syslog:
+
+.. prompt:: bash #
+
   ceph config set mgr mgr/cephadm/cephadm_log_destination file,syslog
-  # set the cephadm executable to log to the log file
+
+To log to the log file only:
+
+.. prompt:: bash #
+
   ceph config set mgr mgr/cephadm/cephadm_log_destination file
 
 .. note:: If you execute ``cephadm`` commands directly, such as ``cephadm shell``,
@@ -402,7 +420,7 @@ output. Valid levels are ``info``, ``debug``, ``error``, and ``warning``.
 The default is ``debug``.
 
 When the cephadm orchestration module runs ``cephadm`` on cluster hosts, it
-uses the :confval:`mgr/cephadm/cephadm_binary_logging_level` configuration
+uses the ``mgr/cephadm/cephadm_binary_logging_level`` configuration
 value:
 
 .. prompt:: bash #
@@ -424,13 +442,14 @@ For manual invocations, pass ``--logging-level`` on the command line:
 Data Location
 =============
 
-Cephadm stores daemon data and logs in different locations than did
-older, pre-cephadm (pre-Octopus) versions of Ceph:
+Cephadm stores daemon data and logs in different locations than
+clusters that are not deployed with cephadm:
 
 * ``/var/log/ceph/<cluster-fsid>`` contains all cluster logs. By
-  default, cephadm logs via stderr and the container runtime. These
-  logs will not exist unless you have enabled logging to files as
-  described in :ref:`cephadm-logs`.
+  default, Ceph daemons log to journald (to stderr when the container
+  engine is Docker or a Podman version older than 2.1.0), so these logs
+  will not exist unless you have enabled logging to files as described
+  in :ref:`cephadm-logs`.
 * ``/var/lib/ceph/<cluster-fsid>`` contains all cluster daemon data
   (besides logs).
 * ``/var/lib/ceph/<cluster-fsid>/<daemon-name>`` contains all data for
@@ -463,16 +482,19 @@ checks fall into two categories:
   focus on the configuration of the hosts in the cluster.
 
 
-Cephadm Operations
-------------------
+Cephadm Operation Checks
+------------------------
 
 ``CEPHADM_PAUSED``
 ~~~~~~~~~~~~~~~~~~
 
 This indicates that cephadm background work has been paused with
-``ceph orch pause``.  Cephadm continues to perform passive monitoring
-activities (like checking host and daemon status), but it will not
-make any changes (like deploying or removing daemons).
+``ceph orch pause``. While paused, the background loop does not apply
+service specifications, run scheduled daemon actions, process OSD removals
+or continue an upgrade. It still checks hosts, refreshes daemon and device
+information, writes the client keyrings and ``ceph.conf`` files that it
+manages, and adjusts ``osd_memory_target`` where memory autotuning is
+enabled.
 
 Resume cephadm work by running the following command:
 
@@ -610,21 +632,9 @@ by running the following command:
 States Returned by Cluster Configuration Checks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Configuration checks are triggered after each host scan. The
-cephadm log entries will show the current state and outcome of the
-configuration checks as follows:
-
-Disabled state (``config_checks_enabled`` set to false):
-
-.. code-block:: console
-
-  ALL cephadm checks are disabled, use 'ceph config set mgr mgr/cephadm/config_checks_enabled true' to enable
-
-Enabled state (``config_checks_enabled`` set to true):
-
-.. code-block:: console
-
-  CEPHADM 8/8 checks enabled and executed (0 bypassed, 0 disabled). No issues detected
+Configuration checks are run after each host scan. Their outcome is
+reported through the ``CEPHADM_CHECK_*`` health checks described below, which
+you can see with ``ceph health detail``.
 
 
 Managing Configuration Checks (Subcommands)
@@ -650,14 +660,14 @@ To list all the configuration checks and their current states, run the following
 .. code-block:: console
 
   NAME             HEALTHCHECK                      STATUS   DESCRIPTION
-  kernel_security  CEPHADM_CHECK_KERNEL_LSM         enabled  check that SELINUX/Apparmor profiles are consistent across cluster hosts
-  os_subscription  CEPHADM_CHECK_SUBSCRIPTION       enabled  check that subscription states are consistent for all cluster hosts
-  public_network   CEPHADM_CHECK_PUBLIC_MEMBERSHIP  enabled  check that all hosts have a network interface on the Ceph public_network
+  kernel_security  CEPHADM_CHECK_KERNEL_LSM         enabled  checks SELINUX/Apparmor profiles are consistent across cluster hosts
+  os_subscription  CEPHADM_CHECK_SUBSCRIPTION       enabled  checks subscription states are consistent for all cluster hosts
+  public_network   CEPHADM_CHECK_PUBLIC_MEMBERSHIP  enabled  check that all hosts have a NIC on the Ceph public_network
   osd_mtu_size     CEPHADM_CHECK_MTU                enabled  check that OSD hosts share a common MTU setting
-  osd_linkspeed    CEPHADM_CHECK_LINKSPEED          enabled  check that OSD hosts share a common network link speed
-  network_missing  CEPHADM_CHECK_NETWORK_MISSING    enabled  check that the cluster/public networks as defined exist on the Ceph hosts
-  ceph_release     CEPHADM_CHECK_CEPH_RELEASE       enabled  check for Ceph version consistency: all Ceph daemons should be the same release unless upgrade is in progress
-  kernel_version   CEPHADM_CHECK_KERNEL_VERSION     enabled  checks that the maj.min version of the kernel is consistent across Ceph hosts
+  osd_linkspeed    CEPHADM_CHECK_LINKSPEED          enabled  check that OSD hosts share a common linkspeed
+  network_missing  CEPHADM_CHECK_NETWORK_MISSING    enabled  checks that the cluster/public networks defined exist on the Ceph hosts
+  ceph_release     CEPHADM_CHECK_CEPH_RELEASE       enabled  check for Ceph version consistency - ceph daemons should be on the same release (unless upgrade is active)
+  kernel_version   CEPHADM_CHECK_KERNEL_VERSION     enabled  checks that the MAJ.MIN of the kernel on Ceph hosts is consistent
 
 The name of each configuration check can be used to enable or disable a specific check by running a command of the following form:
 
@@ -729,7 +739,7 @@ a health check warning is raised.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Under normal operations, the Ceph cluster runs daemons that are of the same Ceph
-release (for example, Reef).  This check determines the active release for each daemon, and
+release (for example, Tentacle).  This check determines the active release for each daemon, and
 reports any anomalies as a health check warning. *This check is bypassed if an upgrade
 is in process.*
 
@@ -748,17 +758,20 @@ Management of Client Keyrings and Configs
 =========================================
 
 Cephadm can distribute copies of the ``ceph.conf`` file and client keyring
-files to hosts. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy),
-in addition to the default location ``/etc/ceph`` cephadm also stores config
-and keyring files in the ``/var/lib/ceph/<fsid>/config`` directory. It is usually
+files to hosts. In addition to the default location ``/etc/ceph``, cephadm also
+stores config and keyring files in the ``/var/lib/ceph/<fsid>/config``
+directory. It is usually
 a good idea to store a copy of the config and ``client.admin`` keyring on any host
 used to administer the cluster via the CLI. By default, cephadm does this for any
 nodes that have the ``_admin`` label (which normally includes the bootstrap host).
 
-.. note:: Ceph daemons will still use files on ``/etc/ceph``. The new configuration
-   location ``/var/lib/ceph/<fsid>/config`` is used by cephadm only. Having this config
-   directory under the fsid helps cephadm to load the configuration associated with
-   the cluster.
+.. note:: Clients such as the ``ceph`` command still read the files in
+   ``/etc/ceph``. Ceph daemons that cephadm deploys do not: each daemon's
+   container gets the daemon's own file,
+   ``/var/lib/ceph/<fsid>/<daemon-name>/config``, mounted as
+   ``/etc/ceph/ceph.conf``. The ``/var/lib/ceph/<fsid>/config`` directory is
+   used by cephadm only. Having this config directory under the fsid helps
+   cephadm to load the configuration associated with the cluster.
 
 
 When a client keyring is placed under management, cephadm will:
@@ -768,8 +781,9 @@ When a client keyring is placed under management, cephadm will:
   - store a copy of the ``/etc/ceph/ceph.conf`` file on the specified host(s)
   - store a copy of the ``ceph.conf`` file at ``/var/lib/ceph/<fsid>/config/ceph.conf``
     on the specified host(s)
-  - store a copy of the ``ceph.client.admin.keyring`` file at ``/var/lib/ceph/<fsid>/config/ceph.client.admin.keyring``
-    on the specified host(s)
+  - store a copy of the keyring file at
+    ``/var/lib/ceph/<fsid>/config/ceph.<entity>.keyring`` on the specified
+    host(s)
   - store a copy of the keyring file on the specified host(s)
   - update the ``ceph.conf`` file as needed (e.g., due to a change in the cluster Monitors)
   - update the keyring file if the entity's key is changed (e.g., via ``ceph
@@ -797,11 +811,12 @@ To enable management of a keyring file, run a command of the following form:
 
 .. prompt:: bash #
 
-  ceph orch client-keyring set <entity> <placement> [--mode=<mode>] [--owner=<uid>.<gid>] [--path=<path>]
+  ceph orch client-keyring set <entity> <placement> [--mode=<mode>] [--owner=<uid>:<gid>] [--no-ceph-conf]
 
-- By default, the ``path`` is ``/etc/ceph/client.{entity}.keyring``, which is
-  where Ceph looks by default.  Be careful when specifying alternate locations,
-  as existing files may be overwritten.
+- The keyring is written to ``/etc/ceph/ceph.<entity>.keyring`` (for example,
+  ``/etc/ceph/ceph.client.rbd.keyring``), which is where Ceph looks by default.
+  The path cannot be changed. An existing file at that path is replaced.
+- The entity name must start with ``client.``.
 - A placement of ``*`` (all hosts) is common.
 - The mode defaults to ``0600`` and ownership to ``0:0`` (user root, group root).
 
@@ -818,7 +833,7 @@ The resulting keyring file is:
 
 .. code-block:: console
 
-  -rw-r-----. 1 qemu qemu 156 Apr 21 08:47 /etc/ceph/client.client.rbd.keyring
+  -rw-r-----. 1 qemu qemu 156 Apr 21 08:47 /etc/ceph/ceph.client.rbd.keyring
 
 By default, cephadm will also manage ``/etc/ceph/ceph.conf`` on hosts where it writes the keyrings.
 This feature can be suppressed by passing ``--no-ceph-conf`` when setting the keyring.
@@ -918,11 +933,18 @@ Commands requiring passwordless sudo support:
    python command to add to the ``sudo`` configuration.
    In some rare configurations ``/usr/bin/cephadm`` will be used instead.
 
+.. note:: This list is correct for Squid and Tentacle. On the main branch the
+   Manager no longer runs ``which``, ``python3``, ``rm``, ``sysctl`` or
+   ``true`` over SSH. It runs the cephadm binary directly, as
+   ``sudo /var/lib/ceph/<fsid>/cephadm.<sha256 of the binary>``, and uses
+   ``ls``, ``mkdir``, ``touch``, ``chown``, ``chmod`` and ``mv`` to install
+   that binary. The example ``sudoers`` line below does not allow that path.
+
 
 Configuring the ``sudoers`` file can be performed using a tool like ``visudo``
 and adding or replacing a user configuration line such as the following:
 
-.. code-block:: console
+.. code-block:: none
 
   # assuming the cephadm user is named "ceph"
   ceph ALL=(ALL) NOPASSWD:/usr/bin/chmod,/usr/bin/chown,/usr/bin/ls,/usr/bin/mkdir,/usr/bin/mv,/usr/bin/rm,/usr/sbin/sysctl,/usr/bin/touch,/usr/bin/true,/usr/bin/which,/usr/bin/cephadm,/usr/bin/python3
@@ -946,11 +968,11 @@ Then verify the FSID of the cluster:
 
   ceph fsid
 
-Purge Ceph daemons from all hosts in the cluster:
+Purge Ceph daemons from all hosts in the cluster by running the following
+command on each host:
 
 .. prompt:: bash #
 
-  # For each host:
   cephadm rm-cluster --force --zap-osds --fsid <fsid>
 
 
@@ -984,7 +1006,7 @@ If you know what you are doing, you can go ahead and pass ``--yes-i-really-mean-
 .. prompt:: bash # auto
 
   # ceph orch device replace osd-1 /dev/vdd --yes-i-really-mean-it
-  Scheduled to destroy osds: ['6', '7', '8'] and mark /dev/vdd as being replaced.
+  Scheduled to destroy osds: ['0', '1'] and mark /dev/vdd as being replaced.
 
 ``cephadm`` will execute ``ceph-volume`` to zap and destroy all related devices
 and mark the corresponding OSD as ``destroyed`` so the different OSD(s) ID(s)
@@ -995,7 +1017,7 @@ will be preserved:
   # ceph osd tree
   ID  CLASS  WEIGHT   TYPE NAME         STATUS     REWEIGHT  PRI-AFF
   -1         0.97659  root default
-  -3         0.97659      host devel-1
+  -3         0.97659      host osd-1
    0    hdd  0.29300          osd.0     destroyed   1.00000  1.00000
    1    hdd  0.29300          osd.1     destroyed   1.00000  1.00000
    2    hdd  0.19530          osd.2            up   1.00000  1.00000
@@ -1010,7 +1032,7 @@ preventing ``cephadm`` from redeploying the OSDs too fast:
   HOST     PATH      TYPE  DEVICE ID   SIZE  AVAILABLE  REFRESHED  REJECT REASONS
   osd-1  /dev/vdb  hdd               200G  Yes        13s ago
   osd-1  /dev/vdc  hdd               200G  Yes        13s ago
-  osd-1  /dev/vdd  hdd               200G  Yes        13s ago    Is being replaced
+  osd-1  /dev/vdd  hdd               200G  No         13s ago    Is being replaced
   osd-1  /dev/vde  hdd               200G  No         13s ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
   osd-1  /dev/vdf  hdd               200G  No         13s ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
 
