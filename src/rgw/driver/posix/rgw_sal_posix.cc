@@ -5315,7 +5315,7 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
       if (chunk <= 0) {
         chunk = READ_SIZE;
       }
-      UringReadWindow win(dpp, y, fd, qd, chunk, dio);
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio, /*nsfs=*/false);
       return win.iterate(cur_ofs, left,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
@@ -6080,7 +6080,7 @@ int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
       uring_write = std::make_unique<UringWriteWindow>(
-          dpp, yield, part_file->get_fd(), qd, dio);
+          dpp, yield, part_file->get_fd(), qd, dio, /*nsfs=*/false);
       part_file->set_sync_on_close(true);
     }
     return uring_write->process(std::move(data), offset);
@@ -6197,7 +6197,8 @@ int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
-      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio);
+      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio,
+                                                       /*nsfs=*/false);
       if (obj->get_fsent()) {
         obj->get_fsent()->set_sync_on_close(true);
       }

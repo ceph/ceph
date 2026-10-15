@@ -414,8 +414,18 @@ io_uring_sqe* get_sqe_retry(const DoutPrefixProvider* dpp)
 }
 
 int prep_rw(const DoutPrefixProvider* dpp, IoSlot& slot, int fd, bool write,
-            uint16_t personality)
+            bool nsfs, uint16_t personality)
 {
+  /* A window yields between submissions, and its coroutine may resume
+   * on another of the frontend's threads.  The ring is per thread, so
+   * this thread's is the one to submit on, made here if it has none.
+   * -ENXIO when it cannot be made:  the caller transfers synchronously
+   * (run_sync()). */
+  if (!posix_uring_ensure_ring(dpp, nsfs)) {
+    ldpp_dout(dpp, 20) << "URING: this thread has no ring;  transferring "
+		       << slot.aligned_len << " bytes synchronously" << dendl;
+    return -ENXIO;
+  }
   io_uring_sqe* sqe = get_sqe_retry(dpp);
   if (!sqe) {
     ldpp_dout(dpp, 0) << "ERROR: URING: failed to get SQE" << dendl;
@@ -437,6 +447,26 @@ int prep_rw(const DoutPrefixProvider* dpp, IoSlot& slot, int fd, bool write,
   }
   io_uring_sqe_set_data(sqe, &slot.disp);
   return 0;
+}
+
+/* The transfer prep_rw() would have queued, done on this thread, for a
+ * thread with no ring.  The slot is complete before it joins the
+ * window, so wait_slot() finds it done and does not suspend, and the
+ * window's order is kept.  Runs with the thread's own credentials, as
+ * the sync engine's transfers do. */
+void run_sync(IoSlot& slot, int fd, bool write)
+{
+  ssize_t n;
+  do {
+    n = write ? ::pwrite(fd, slot.buf.c_str(), slot.aligned_len,
+			 slot.aligned_ofs)
+	      : ::pread(fd, slot.buf.c_str(), slot.aligned_len,
+			slot.aligned_ofs);
+  } while ((n < 0) && (errno == EINTR));
+  const int res = (n < 0) ? -errno : static_cast<int>(n);
+  std::lock_guard lock(slot.mutex);
+  slot.result = res;
+  slot.done = true;
 }
 
 } // anonymous namespace
@@ -653,14 +683,15 @@ struct UringReadWindow::Impl {
   std::deque<std::unique_ptr<IoSlot>> inflight;
   unsigned pending_sqes = 0;
 
+  bool nsfs;
   uint16_t personality{POSIX_URING_NO_PERSONALITY};
 
   Impl(const DoutPrefixProvider* dpp, optional_yield y, int fd, unsigned qd,
-       int64_t chunk_size, bool direct_io, uint16_t personality)
+       int64_t chunk_size, bool direct_io, bool nsfs, uint16_t personality)
     : dpp(dpp), y(y), fd(fd),
       qd(std::clamp(qd, 1u, POSIX_URING_MAX_IODEPTH)),
       chunk_size(chunk_size > 0 ? chunk_size : 128 * 1024),
-      direct_io(direct_io), personality(personality) {}
+      direct_io(direct_io), nsfs(nsfs), personality(personality) {}
 
   int flush_submit() {
     if (pending_sqes == 0) {
@@ -685,7 +716,12 @@ struct UringReadWindow::Impl {
     }
     slot->buf = bufferptr(
         buffer::create_small_page_aligned(slot->aligned_len));
-    int r = prep_rw(dpp, *slot, fd, /*write=*/false, personality);
+    int r = prep_rw(dpp, *slot, fd, /*write=*/false, nsfs, personality);
+    if (r == -ENXIO) {
+      run_sync(*slot, fd, /*write=*/false);
+      inflight.push_back(std::move(slot));
+      return 0;
+    }
     if (r < 0) {
       return r;
     }
@@ -734,8 +770,8 @@ struct UringReadWindow::Impl {
 UringReadWindow::UringReadWindow(const DoutPrefixProvider* dpp,
                                  optional_yield y, int fd, unsigned qd,
                                  int64_t chunk_size, bool direct_io,
-                                 uint16_t personality)
-  : impl(std::make_unique<Impl>(dpp, y, fd, qd, chunk_size, direct_io,
+                                 bool nsfs, uint16_t personality)
+  : impl(std::make_unique<Impl>(dpp, y, fd, qd, chunk_size, direct_io, nsfs,
                                 personality))
 {}
 
@@ -807,13 +843,14 @@ struct UringWriteWindow::Impl {
   bool needs_truncate = false;
   std::deque<std::unique_ptr<IoSlot>> inflight;
 
+  bool nsfs;
   uint16_t personality{POSIX_URING_NO_PERSONALITY};
 
   Impl(const DoutPrefixProvider* dpp, optional_yield y, int fd, unsigned qd,
-       bool direct_io, uint16_t personality)
+       bool direct_io, bool nsfs, uint16_t personality)
     : dpp(dpp), y(y), fd(fd),
       qd(std::clamp(qd, 1u, POSIX_URING_MAX_IODEPTH)),
-      direct_io(direct_io), personality(personality) {}
+      direct_io(direct_io), nsfs(nsfs), personality(personality) {}
 
   int wait_oldest() {
     if (inflight.empty()) {
@@ -901,7 +938,12 @@ struct UringWriteWindow::Impl {
 
     logical_end = std::max(logical_end, ofs + len);
 
-    int r = prep_rw(dpp, *slot, fd, /*write=*/true, personality);
+    int r = prep_rw(dpp, *slot, fd, /*write=*/true, nsfs, personality);
+    if (r == -ENXIO) {
+      run_sync(*slot, fd, /*write=*/true);
+      inflight.push_back(std::move(slot));
+      return 0;
+    }
     if (r < 0) {
       return r;
     }
@@ -912,8 +954,10 @@ struct UringWriteWindow::Impl {
 
 UringWriteWindow::UringWriteWindow(const DoutPrefixProvider* dpp,
                                    optional_yield y, int fd, unsigned qd,
-                                   bool direct_io, uint16_t personality)
-  : impl(std::make_unique<Impl>(dpp, y, fd, qd, direct_io, personality))
+                                   bool direct_io, bool nsfs,
+                                   uint16_t personality)
+  : impl(std::make_unique<Impl>(dpp, y, fd, qd, direct_io, nsfs,
+                                personality))
 {}
 
 UringWriteWindow::~UringWriteWindow()
@@ -1007,11 +1051,11 @@ void posix_uring_unregister_personality(const DoutPrefixProvider* dpp,
 UringReadWindow::UringReadWindow(const DoutPrefixProvider* dpp,
                                  optional_yield y, int fd, unsigned qd,
                                  int64_t chunk_size, bool direct_io,
-                                 uint16_t personality)
+                                 bool nsfs, uint16_t personality)
   : impl(std::make_unique<Impl>())
 {
   (void)dpp; (void)y; (void)fd; (void)qd; (void)chunk_size; (void)direct_io;
-  (void)personality;
+  (void)nsfs; (void)personality;
 }
 
 UringReadWindow::~UringReadWindow() = default;
@@ -1025,11 +1069,12 @@ int UringReadWindow::iterate(int64_t ofs, int64_t left,
 
 UringWriteWindow::UringWriteWindow(const DoutPrefixProvider* dpp,
                                    optional_yield y, int fd, unsigned qd,
-                                   bool direct_io, uint16_t personality)
+                                   bool direct_io, bool nsfs,
+                                   uint16_t personality)
   : impl(std::make_unique<Impl>())
 {
   (void)dpp; (void)y; (void)fd; (void)qd; (void)direct_io;
-  (void)personality;
+  (void)nsfs; (void)personality;
 }
 
 UringWriteWindow::~UringWriteWindow() = default;

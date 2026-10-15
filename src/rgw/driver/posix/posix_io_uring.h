@@ -129,9 +129,14 @@ class UringReadWindow {
 public:
   /* `personality` names a credential registered on this thread's
    * ring;  POSIX_URING_NO_PERSONALITY means the submitting task's
-   * own, which is the default and what posix passes. */
+   * own, which is the default and what posix passes.
+   *
+   * `nsfs` says which driver's options size a ring this window makes:
+   * it submits on whichever thread it is running on, and a coroutine
+   * may resume on a thread that has not made one yet. */
   UringReadWindow(const DoutPrefixProvider* dpp, optional_yield y,
                   int fd, unsigned qd, int64_t chunk_size, bool direct_io,
+                  bool nsfs,
                   uint16_t personality = POSIX_URING_NO_PERSONALITY);
   ~UringReadWindow();
   UringReadWindow(const UringReadWindow&) = delete;
@@ -150,7 +155,7 @@ class UringWriteWindow {
 
 public:
   UringWriteWindow(const DoutPrefixProvider* dpp, optional_yield y,
-                   int fd, unsigned qd, bool direct_io,
+                   int fd, unsigned qd, bool direct_io, bool nsfs,
                    uint16_t personality = POSIX_URING_NO_PERSONALITY);
   ~UringWriteWindow();
   UringWriteWindow(const UringWriteWindow&) = delete;

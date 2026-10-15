@@ -12216,7 +12216,7 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
       const uint16_t pid = personality.valid()
 	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
 
-      UringReadWindow win(dpp, y, fd, qd, chunk, dio, pid);
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio, /*nsfs=*/true, pid);
       return win.iterate(cur_ofs, left,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
@@ -14355,7 +14355,7 @@ int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
       const uint16_t pid = personality.valid()
 	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
       uring_write = std::make_unique<UringWriteWindow>(
-          dpp, yield, df->get_fd(), qd, dio, pid);
+          dpp, yield, df->get_fd(), qd, dio, /*nsfs=*/true, pid);
       df->set_sync_on_close(true);
     }
     return uring_write->process(std::move(data), offset);
@@ -14662,7 +14662,7 @@ int NSFSAtomicWriter::process(bufferlist&& data, uint64_t offset)
       const uint16_t pid = personality.valid()
 	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
       uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd,
-						       dio, pid);
+						       dio, /*nsfs=*/true, pid);
       if (obj->get_fsent()) {
         obj->get_fsent()->set_sync_on_close(true);
       }
