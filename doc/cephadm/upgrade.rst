@@ -320,7 +320,7 @@ Using Customized Container Images
 For most users, upgrading requires nothing more complicated than specifying the
 Ceph version to which to upgrade. In such cases, cephadm locates the specific
 Ceph container image to use by combining the :confval:`container_image_base`
-configuration option (default: ``docker.io/ceph/ceph``) with a tag of
+configuration option (default: ``quay.io/ceph/ceph``) with a tag of
 ``vX.Y.Z``.
 
 But it is possible to upgrade to an arbitrary container image, if that's what
