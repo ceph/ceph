@@ -904,14 +904,23 @@ TransactionManager::do_submit_transaction(
     std::move(record),
     tref.get_handle(),
     tref.get_src(),
-    [&locker, this, FNAME, &tref](record_locator_t submit_result) {
+    [&locker, this, FNAME, &tref, &journal_start](record_locator_t submit_result) {
     SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
+    tref.get_phase_durations().journal_batch_wait +=
+      submit_result.write_start - journal_start;
+    tref.get_phase_durations().journal_disk_write +=
+      submit_result.write_end - submit_result.write_start;
+    tref.get_phase_durations().journal_finalize_wait +=
+      submit_result.finalize_wait;
     auto start_seq = submit_result.write_result.start_seq;
     journal->get_trimmer().set_journal_head(start_seq);
+    auto complete_commit_start = std::chrono::steady_clock::now();
     cache->complete_commit(
       tref,
       submit_result.record_block_base,
       start_seq);
+    tref.get_phase_durations().complete_commit +=
+      std::chrono::steady_clock::now() - complete_commit_start;
     locker.release_lock();
     journal->get_trimmer().update_journal_tails(
       cache->get_oldest_dirty_from().value_or(start_seq),

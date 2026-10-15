@@ -173,7 +173,9 @@ public:
 
   // Set the write result and reset for reuse
   using maybe_result_t = std::optional<extent_len_t>;
-  void set_result(maybe_result_t maybe_write_length);
+  void set_result(
+      maybe_result_t maybe_write_length,
+      std::chrono::steady_clock::time_point write_start);
 
   // The fast path that is equivalent to submit a single record as a batch.
   //
@@ -211,6 +213,8 @@ private:
   struct promise_result_t {
     extent_len_t write_length;
     extent_len_t mdlength;
+    std::chrono::steady_clock::time_point write_start;
+    std::chrono::steady_clock::time_point write_end;
   };
   using maybe_promise_result_t = std::optional<promise_result_t>;
   std::optional<seastar::shared_promise<maybe_promise_result_t> > io_promise;
@@ -317,7 +321,10 @@ private:
   void account_submission(const record_group_t&);
 
   using maybe_result_t = RecordBatch::maybe_result_t;
-  void finish_submit_batch(RecordBatch*, maybe_result_t);
+  void finish_submit_batch(
+      RecordBatch*,
+      maybe_result_t,
+      std::chrono::steady_clock::time_point write_start);
 
   void flush_current_batch();
 

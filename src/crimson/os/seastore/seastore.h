@@ -64,6 +64,10 @@ enum class txn_stage_t : uint8_t {
     SUBMIT_PREPARE_ENTER,  // enter(prepare) pipeline stage (global OrderedExclusive wait)
     SUBMIT_PREPARE_RECORD, // prepare_record (record encoding)
     SUBMIT_JOURNAL,        // journal->submit_record -- POST-lock (not part of the hold)
+    SUBMIT_COMPLETE_COMMIT, // cache->complete_commit inside journal callback (subset of SUBMIT_JOURNAL)
+    SUBMIT_JOURNAL_BATCH_WAIT, // submit_record until its journal write starts (subset of SUBMIT_JOURNAL)
+    SUBMIT_JOURNAL_DISK_WRITE, // journal write start until complete (subset of SUBMIT_JOURNAL)
+    SUBMIT_JOURNAL_FINALIZE_WAIT, // wait to enter the journal finalize phase (subset of SUBMIT_JOURNAL)
     MAX
 };
 

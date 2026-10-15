@@ -545,6 +545,10 @@ public:
     std::chrono::steady_clock::duration prepare_enter{0};   // enter(prepare) pipeline stage
     std::chrono::steady_clock::duration prepare_record{0};  // prepare_record
     std::chrono::steady_clock::duration journal{0};         // journal->submit_record (post-lock)
+    std::chrono::steady_clock::duration complete_commit{0}; // cache->complete_commit, part of journal
+    std::chrono::steady_clock::duration journal_batch_wait{0}; // submit_record until its journal write starts, part of journal
+    std::chrono::steady_clock::duration journal_disk_write{0}; // journal write start until complete, part of journal
+    std::chrono::steady_clock::duration journal_finalize_wait{0}; // wait to enter the journal finalize phase, part of journal
     // ool_* time for the current OOL write attempt; moved into the
     // fields above only when ool_write itself is counted
     std::chrono::steady_clock::duration attempt_ool_throttle{0};

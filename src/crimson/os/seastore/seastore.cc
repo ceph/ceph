@@ -239,6 +239,10 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
     {txn_stage_t::SUBMIT_PREPARE_ENTER,  sm::label_instance("stage", "submit_prepare_enter")},
     {txn_stage_t::SUBMIT_PREPARE_RECORD, sm::label_instance("stage", "submit_prepare_record")},
     {txn_stage_t::SUBMIT_JOURNAL,        sm::label_instance("stage", "submit_journal")},
+    {txn_stage_t::SUBMIT_COMPLETE_COMMIT, sm::label_instance("stage", "submit_complete_commit")},
+    {txn_stage_t::SUBMIT_JOURNAL_BATCH_WAIT, sm::label_instance("stage", "submit_journal_batch_wait")},
+    {txn_stage_t::SUBMIT_JOURNAL_DISK_WRITE, sm::label_instance("stage", "submit_journal_disk_write")},
+    {txn_stage_t::SUBMIT_JOURNAL_FINALIZE_WAIT, sm::label_instance("stage", "submit_journal_finalize_wait")},
   };
   // Three tiers of the same per-stage histograms
   std::pair<std::array<seastar::metrics::histogram, STAGE_MAX>*, const char*>
@@ -2132,6 +2136,10 @@ seastar::future<> SeaStore::Shard::run_one_batch(
         {txn_stage_t::SUBMIT_PREPARE_ENTER,  pd.prepare_enter},
         {txn_stage_t::SUBMIT_PREPARE_RECORD, pd.prepare_record},
         {txn_stage_t::SUBMIT_JOURNAL,        pd.journal},
+        {txn_stage_t::SUBMIT_COMPLETE_COMMIT, pd.complete_commit},
+        {txn_stage_t::SUBMIT_JOURNAL_BATCH_WAIT, pd.journal_batch_wait},
+        {txn_stage_t::SUBMIT_JOURNAL_DISK_WRITE, pd.journal_disk_write},
+        {txn_stage_t::SUBMIT_JOURNAL_FINALIZE_WAIT, pd.journal_finalize_wait},
       }};
 
     for (auto& [stage, dur] : stage_samples) {

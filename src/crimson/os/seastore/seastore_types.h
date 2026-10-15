@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <deque>
 #include <limits>
 #include <numeric>
@@ -3075,6 +3076,12 @@ std::ostream& operator<<(std::ostream&, const write_result_t&);
 struct record_locator_t {
   paddr_t record_block_base;
   write_result_t write_result;
+  // when the journal write carrying this record was sent to the
+  // device and when it completed, for submit-path timing
+  std::chrono::steady_clock::time_point write_start{};
+  std::chrono::steady_clock::time_point write_end{};
+  // time spent waiting to enter the journal finalize phase
+  std::chrono::steady_clock::duration finalize_wait{0};
 };
 std::ostream& operator<<(std::ostream&, const record_locator_t&);
 
