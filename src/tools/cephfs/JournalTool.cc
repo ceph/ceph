@@ -69,7 +69,9 @@ void JournalTool::usage()
     << "\n"
     << "Special options\n"
     << "  --alternate-pool <name>     Alternative metadata pool to target\n"
-    << "                              when using recover_dentries.\n";
+    << "                              when using recover_dentries.\n"
+    << "  --max-rss <bytes>           Maximum RSS allowed per batch during\n"
+    << "                              event recover_dentries.\n";
 
   generic_client_usage();
 }
@@ -451,6 +453,9 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   }
 
   std::string output_path = "dump";
+  uint64_t batch_size = 0;
+  uint64_t batch_bytes = 0;
+  JournalScanner::EventCallback flush = nullptr;
   while(arg != argv.end()) {
     std::string arg_str;
     if (ceph_argparse_witharg(argv, arg, &arg_str, "--path", (char*)NULL)) {
@@ -461,6 +466,16 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       int r = rados.ioctx_create(arg_str.c_str(), output);
       ceph_assert(r == 0);
       other_pool = true;
+    } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--max-rss",
+				     nullptr)) {
+      std::string parse_err;
+      /* an estimate based on calculating journal event sizes, a decoded event 
+      holds ~3x its encoded stream */
+      batch_size = strict_strtoll(arg_str.c_str(), 0, &parse_err) / 3;
+      if (!parse_err.empty()) {
+        derr << "Invalid --max-rss value '" << arg_str << "': " << parse_err << dendl;
+        return -EINVAL;
+      }
     } else {
       cerr << "Unknown argument: '" << *arg << "'" << std::endl;
       return -EINVAL;
@@ -479,34 +494,65 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       return r;
     }
   } else if (command == "recover_dentries") {
-    r = js.scan();
-    if (r) {
+    std::set<inodeno_t> consumed_inos;
+    
+    // decode the journal first to check if the journal pointer and header are valid
+    r = js.scan(false);
+    if (r < 0) {
       derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
       return r;
     }
+    if (!js.pointer_present) {
+      derr << "Cannot recover dentries: journal pointer is missing" << dendl;
+      return 0;
+    }
+    // if header_valid is false, header_present is also false
+    if (!js.header_valid) {
+      derr << "Cannot recover dentries: journal header is missing or invalid" << dendl;
+      return 0;
+    }
 
-    /**
-     * Iterate over log entries, attempting to scavenge from each one
-     */
-    std::set<inodeno_t> consumed_inos;
-    for (JournalScanner::EventMap::iterator i = js.events.begin();
-         i != js.events.end(); ++i) {
-      auto& le = i->second.log_event;
-      EMetaBlob const *mb = le->get_metablob();
-      if (mb) {
-        int scav_r = recover_dentries(*mb, dry_run, &consumed_inos);
-        if (scav_r) {
-          dout(1) << "Error processing event 0x" << std::hex << i->first << std::dec
-                  << ": " << cpp_strerror(scav_r) << ", continuing..." << dendl;
-          if (r == 0) {
-            r = scav_r;
+    auto flush_events = [&]() {
+      for (auto it = js.events.begin(); it != js.events.end(); ) {
+        const auto& le = it->second.log_event;
+        EMetaBlob const *mb = le->get_metablob();
+        if (mb) {
+          int scav_r = recover_dentries(*mb, dry_run, &consumed_inos);
+          if (scav_r) {
+            dout(1) << "Error processing event 0x" << std::hex << it->first << std::dec
+                    << ": " << cpp_strerror(scav_r) << ", continuing..." << dendl;
+            js.errors.insert(std::make_pair(it->first,
+                  JournalScanner::EventError(scav_r, cpp_strerror(scav_r))));
           }
-          // Our goal is to read all we can, so don't stop on errors, but
-          // do record them for possible later output
-          js.errors.insert(std::make_pair(i->first,
-                JournalScanner::EventError(scav_r, cpp_strerror(r))));
         }
+        it = js.events.erase(it);
       }
+      batch_bytes = 0;
+    };
+
+    if (batch_size) {
+      std::cout << "Batch size: " << batch_size << " bytes" << std::endl;
+
+      flush = [&](uint64_t offset, JournalScanner::EventRecord& er) {
+        batch_bytes += er.raw_size;
+        bool flushable = er.log_event
+            // factor in mds_debug_subtrees conf
+            && (er.log_event->get_type() == EVENT_SUBTREEMAP || er.log_event->get_type() == EVENT_SUBTREEMAP_TEST)
+            && batch_bytes >= batch_size;
+        js.events.insert_or_assign(offset, std::move(er));
+        if (flushable) {
+          flush_events();
+        }
+      };
+    }
+
+    r = js.scan_events(flush);
+
+    flush_events();
+
+    if (r) {
+      derr << "Failed to scan events (" << cpp_strerror(r) << ")" << dendl;
+      return r;
     }
 
     /**

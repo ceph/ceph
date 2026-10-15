@@ -150,6 +150,8 @@ Filtering:
 * ``--dname <string>`` only include events referring to this named dentry within a directory
   fragment (may only be used in conjunction with ``--frag``
 * ``--client <int>`` only include events from this client session ID
+* ``--max-rss <bytes>`` (works only with ``recover_dentries`` for now) limits the RSS of the cephfs-journal-tool
+  by scanning and flushing journal events in batches
 
 Filters may be combined on an AND basis (i.e. only the intersection of events from each filter).
 
