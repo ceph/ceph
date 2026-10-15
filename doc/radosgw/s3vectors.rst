@@ -161,6 +161,11 @@ A session that is not used by any vector operation is removed after:
 The next vector operation on the bucket creates the session again, with empty
 caches. The vector bucket and its data are not affected.
 
+A negative timeout, such as ``-1``, disables sessions altogether: no session is
+created, existing sessions are removed, and every vector operation uses a
+connection of its own, without caches. The vector buckets and their data are
+not affected.
+
 Multisite
 ---------
 

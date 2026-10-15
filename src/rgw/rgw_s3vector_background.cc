@@ -161,6 +161,15 @@ private:
     return fmt::format("{}/{}.{}", ns, bucket_name, table_name.second);
   }
 
+  void remove_all_sessions() {
+    std::unique_lock l(sessions_mutex);
+    if (!sessions.empty()) {
+      ldpp_dout(this, 5) << "INFO: sessions are disabled, removing " << sessions.size() <<
+        " existing sessions" << dendl;
+      sessions.clear();
+    }
+  }
+
   void remove_inactive_sessions(std::chrono::seconds timeout) {
     const auto now = ceph::coarse_real_clock::now();
     std::vector<session_name_t> sessions_to_remove;
@@ -248,6 +257,11 @@ private:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << session_name.second <<
                 " of namespace: " << session_name.first << dendl;
+              if (!sessions_enabled(cct)) {
+                ldpp_dout(this, 20) << "INFO: sessions are disabled, not creating a session for bucket: " <<
+                  session_name.second << " of namespace: " << session_name.first << dendl;
+                return;
+              }
               std::unique_lock l(sessions_mutex);
               if (sessions.find(session_name) != sessions.end()) {
                 ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << session_name.second <<
@@ -328,11 +342,14 @@ private:
       }
 
       const auto session_inactive_timeout = std::chrono::seconds(
-          cct->_conf.get_val<uint64_t>("rgw_s3vector_session_inactive_timeout"));
+          cct->_conf.get_val<int64_t>("rgw_s3vector_session_inactive_timeout"));
       const auto now = ceph::coarse_real_clock::now();
       const auto session_cleanup_interval = std::max(
           std::chrono::seconds(1), session_inactive_timeout / 2);
-      if (session_inactive_timeout.count() > 0 &&
+      if (session_inactive_timeout.count() < 0) {
+        // sessions were disabled, maybe at runtime: drop the existing ones
+        remove_all_sessions();
+      } else if (session_inactive_timeout.count() > 0 &&
           now - last_session_cleanup >= session_cleanup_interval) {
         ldpp_dout(this, 20) << "INFO: starting session cleanup..." <<  dendl;
         remove_inactive_sessions(session_inactive_timeout);
@@ -522,6 +539,10 @@ void pause() {
 
 void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver) {
   init(dpp, driver);
+}
+
+bool sessions_enabled(const CephContext* cct) {
+  return cct->_conf.get_val<int64_t>("rgw_s3vector_session_inactive_timeout") >= 0;
 }
 
 bool notify_index_update(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name, const std::string& index_name) {

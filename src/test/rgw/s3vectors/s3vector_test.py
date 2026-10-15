@@ -736,6 +736,58 @@ def test_vector_bucket_session_inactivity():
             'rgw_s3vector_session_inactive_timeout', 0)[1] == 0
 
 
+def test_vector_bucket_session_disabled():
+    """ a negative inactivity timeout disables sessions: the vector operations
+    work without one, and an existing session is removed """
+    conn = connection()
+    dimension = 8
+    index_name = 'test-index'
+    bucket_name = gen_bucket_name()
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector=generate_data(dimension, 1), topK=5)
+    try:
+        _create_vector_bucket(conn, bucket_name)
+        wait_for_vector_bucket_session(bucket_name, True)
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        assert set_rgw_config_option(
+            'rgw_s3vector_session_inactive_timeout', -1)[1] == 0
+        # the existing session is removed by the manager
+        wait_for_vector_bucket_session(bucket_name, False)
+
+        # the vector operations work without a session, and do not create one
+        vectors = generate_vectors(10, dimension)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  keys=[v['key'] for v in vectors], returnData=True)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result['vectors']) == len(vectors)
+        result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result['vectors']) == len(vectors)
+        result = conn.query_vectors(**query_args)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result['vectors']) == 5
+        time.sleep(2)
+        assert get_vector_bucket_session(bucket_name)['session']['active'] is False
+
+        # once enabled again, the next vector operation creates a session
+        assert set_rgw_config_option(
+            'rgw_s3vector_session_inactive_timeout', 0)[1] == 0
+        result = conn.query_vectors(**query_args)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        wait_for_vector_bucket_session(bucket_name, True)
+    finally:
+        assert set_rgw_config_option(
+            'rgw_s3vector_session_inactive_timeout', 0)[1] == 0
+        _cleanup_vector_bucket(conn, bucket_name)
+
+
 def _delete_all_indexes(conn, bucket_name):
     """
     Delete all indexes of a vector bucket. must be done before the vector bucket

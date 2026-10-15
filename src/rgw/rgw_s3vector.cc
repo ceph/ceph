@@ -264,6 +264,14 @@ namespace rgw::s3vector {
       return {};
     }
 
+    if (!rgw::s3vector::sessions_enabled(cct)) {
+      ldpp_dout(dpp, 20) << "INFO: sessions are disabled, connecting without a session to: " <<
+        vector_bucket_name << dendl;
+      return LanceDBSessionConnHandle{
+        .conn = connect(dpp, driver, ns, vector_bucket_name, result)
+      };
+    }
+
     auto session_sp = rgw::s3vector::get_session(dpp, ns, vector_bucket_name);
     if (!session_sp) {
       // No cached session — create a short-lived connection using caller's driver/dpp

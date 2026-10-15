@@ -10,6 +10,9 @@
 namespace rgw::sal {
   class Driver;
 }
+namespace TOPNSPC::common {
+class CephContext;
+}
 class DoutPrefixProvider;
 struct LanceDBSession;
 
@@ -17,6 +20,9 @@ namespace rgw::s3vector {
   struct bucket_namespace_t;
 
   bool init(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
+  // whether vector operations use sessions. a negative
+  // rgw_s3vector_session_inactive_timeout disables them
+  bool sessions_enabled(const TOPNSPC::common::CephContext* cct);
   void shutdown();
   void pause();
   void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
