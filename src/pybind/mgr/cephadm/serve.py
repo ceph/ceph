@@ -1095,7 +1095,8 @@ class CephadmServe:
                 dd.hostname, dd.name())
             if last_deps is None:
                 last_deps = []
-            action = self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name())
+            action = scheduled_action = self.mgr.cache.get_scheduled_daemon_action(
+                dd.hostname, dd.name())
             if not last_config:
                 self.log.info('Reconfiguring %s (unknown last config time)...' % (
                     dd.name()))
@@ -1143,6 +1144,27 @@ class CephadmServe:
                 if self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
                         and action == 'reconfig':
                     action = 'redeploy'
+                # For OSD redeploy/reconfig that was NOT explicitly scheduled by
+                # the user (i.e. scheduled_action was None), check ok-to-stop
+                # before proceeding.  A redeploy/reconfig stops the OSD; running
+                # it when the cluster cannot afford to lose that OSD risks data
+                # unavailability.  If the OSD is not safe to stop right now,
+                # defer the action to the next serve-loop iteration.
+                if (
+                    dd.daemon_type == 'osd'
+                    and action in ('redeploy', 'reconfig')
+                    and not scheduled_action
+                ):
+                    svc_obj = self.mgr.cephadm_services[
+                        daemon_type_to_service(dd.daemon_type)]
+                    r = svc_obj.ok_to_stop([dd.daemon_id])
+                    if r.retval:
+                        self.log.info(
+                            'Skipping %s of %s (not ok-to-stop: %s); '
+                            'will retry next serve loop',
+                            action, dd.name(), r.stderr,
+                        )
+                        continue
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
                     self.mgr._daemon_action(daemon_spec, action=action)
