@@ -34,6 +34,7 @@
 #include "osd/PGPeeringEvent.h"
 
 class MCommand;
+class MMonGetPurgedSnapsReply;
 class MOSDMap;
 class MOSDPGPCT;
 class MOSDRepOpReply;
@@ -131,6 +132,17 @@ class OSD final : public crimson::net::Dispatcher,
   /// caching the total snap trim queue length across all PGs,
   /// updated periodically by the tick_timer
   uint64_t snap_trim_queue_total = 0;
+
+  /// the epochs (start, last] asked of the monitor by the pending
+  /// purged-snaps request
+  struct purged_snaps_request_t {
+    epoch_t start = 0;
+    epoch_t last = 0;
+  };
+  std::optional<purged_snaps_request_t> purged_snaps_request;
+  /// re-sends the purged-snaps request, if not answered in time (the
+  /// request or the reply may be lost with the monitor session)
+  seastar::timer<seastar::lowres_clock> purged_snaps_retry_timer;
 
   DebugLevelGuard debug_level_guard;
 
@@ -283,6 +295,12 @@ private:
   seastar::future<> record_purged_snaps(
     ceph::os::Transaction& t,
     const ceph::osd::purged_snaps::by_epoch_t& new_purged);
+
+  /// before booting: ask the monitor for the purged snaps of the epochs
+  /// not yet recorded (since superblock.purged_snaps_last)
+  seastar::future<> get_purged_snaps(bool retry = false);
+  seastar::future<> handle_get_purged_snaps_reply(
+    Ref<MMonGetPurgedSnapsReply> m);
 
 public:
   seastar::future<> send_beacon();
