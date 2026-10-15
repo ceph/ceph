@@ -910,10 +910,12 @@ if(WITH_RADOSGW_FDB)
   /usr/include/foundationdb)
 
  # Use the zpp_bits back-end for serialization:
- add_library(zpp_bits INTERFACE)
+ if(NOT TARGET zpp_bits)
+  add_library(zpp_bits INTERFACE)
 
- # JFW: there must be a nicer way to refer to this path (or ask it to be installed somewhere?):
- target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+  # JFW: there must be a nicer way to refer to this path (or ask it to be installed somewhere?):
+  target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ endif()
 
  target_link_libraries(rgw_fdb INTERFACE zpp_bits)
 
