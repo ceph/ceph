@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
+#include <seastar/util/defer.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 
@@ -901,6 +902,8 @@ seastar::future<> OSD::stop()
     co_await asok->stop();
     co_await heartbeat->stop();
     co_await pg_shard_manager.stop_registries();
+    // the scrub is not a registered operation, and reads from the store
+    co_await purged_snaps_scrub_gate.close();
     co_await store.umount();
     co_await store.stop();
     co_await pg_shard_manager.stop_pgs();
@@ -1446,6 +1449,47 @@ seastar::future<> OSD::handle_get_purged_snaps_reply(
   }
   // the monitor limits the size of each reply
   co_await (all_recorded ? start_boot() : get_purged_snaps());
+}
+
+seastar::future<> OSD::scrub_purged_snaps()
+{
+  LOG_PREFIX(OSD::scrub_purged_snaps);
+  const auto holder = purged_snaps_scrub_gate.try_hold();
+  if (!holder) {
+    DEBUG("stopping");
+    co_return;
+  }
+  if (purged_snaps_scrub_running) {
+    INFO("already running");
+    co_return;
+  }
+  purged_snaps_scrub_running = true;
+  const auto done = seastar::defer([this] {
+    purged_snaps_scrub_running = false;
+  });
+
+  clog->debug() << "purged_snaps scrub starts";
+  auto meta_coll = pg_shard_manager.get_meta_coll();
+  const purged_snaps::index_t purged{co_await meta_coll.load_purged_snaps()};
+  INFO("{} purged intervals", purged.size());
+  if (const auto requeued = co_await pg_shard_manager.scrub_purged_snaps(purged);
+      requeued > 0) {
+    clog->debug() << fmt::format("purged_snaps scrub found {} strays", requeued);
+  } else {
+    clog->debug() << "purged_snaps scrub ok";
+  }
+
+  if (pg_shard_manager.is_stopping()) {
+    co_return;
+  }
+  const auto lock = co_await seastar::get_unique_lock(handle_osd_map_lock);
+  // reported to the monitor by the next beacon
+  superblock.last_purged_snaps_scrub = ceph_clock_now();
+  ceph::os::Transaction t;
+  meta_coll.store_superblock(t, superblock);
+  co_await pg_shard_manager.set_superblock(superblock);
+  co_await store.get_sharded_store().do_transaction(
+    meta_coll.collection(), std::move(t));
 }
 
 seastar::future<> OSD::committed_osd_maps(

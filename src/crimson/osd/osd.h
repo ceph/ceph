@@ -143,6 +143,10 @@ class OSD final : public crimson::net::Dispatcher,
   /// re-sends the purged-snaps request, if not answered in time (the
   /// request or the reply may be lost with the monitor session)
   seastar::timer<seastar::lowres_clock> purged_snaps_retry_timer;
+  bool purged_snaps_scrub_running = false;
+  /// held by the purged snaps scrub. Closed (i.e. waited for) before the
+  /// store is stopped.
+  seastar::gate purged_snaps_scrub_gate;
 
   DebugLevelGuard debug_level_guard;
 
@@ -304,6 +308,9 @@ private:
 
 public:
   seastar::future<> send_beacon();
+  /// find the clones still mapped to purged snaps (in all PGs), and
+  /// requeue those snaps for trimming
+  seastar::future<> scrub_purged_snaps();
   seastar::future<double> run_bench(int64_t count,
     int64_t bsize,
     int64_t osize,
