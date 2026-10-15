@@ -25,6 +25,10 @@ class ConfigMonitor : public PaxosService
 
   void encode_pending_to_kvmon();
 
+  void propose_pending_config();
+
+  bool prepare_format_upgrade();
+
 public:
   ConfigMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 
@@ -32,6 +36,8 @@ public:
 
   void load_config();
   void load_changeset(version_t v, ConfigChangeSet *ch);
+
+  void upgrade_format() override;
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;

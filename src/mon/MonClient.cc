@@ -126,6 +126,20 @@ int MonClient::get_monmap()
   return 0;
 }
 
+static std::map<std::string, std::string, std::less<>>
+apply_config_upgrade_defaults(
+    std::map<std::string, std::string, std::less<>> config,
+    ceph_release_t min_mon_release)
+{
+  if (min_mon_release != ceph_release_t::unknown &&
+      min_mon_release <= ceph_release_t::umbrella &&
+      ceph_release() > ceph_release_t::umbrella &&
+      config.find("rados_replica_read_policy") == config.end()) {
+    config["rados_replica_read_policy"] = "default";
+  }
+  return config;
+}
+
 int MonClient::get_monmap_and_config()
 {
   ldout(cct, 10) << __func__ << dendl;
@@ -167,6 +181,7 @@ int MonClient::get_monmap_and_config()
   });
 
   ceph::ref_t<MConfig> config;
+  ceph_release_t min_mon_release{ceph_release_t::unknown};
   while (tries-- > 0) {
     r = init();
     if (r < 0) {
@@ -199,6 +214,7 @@ int MonClient::get_monmap_and_config()
       if (bootstrap_config) {
 	ldout(cct,10) << __func__ << " success" << dendl;
 	config = std::move(bootstrap_config);
+	min_mon_release = monmap.min_mon_release;
 	r = 0;
 	break;
       }
@@ -211,7 +227,9 @@ int MonClient::get_monmap_and_config()
   if (config) {
     // apply the bootstrap config to ensure its applied prior to completing
     // the bootstrap
-    cct->_conf.set_mon_vals(cct, config->config, config_cb);
+    cct->_conf.set_mon_vals(
+        cct, apply_config_upgrade_defaults(config->config, min_mon_release),
+        config_cb);
   }
 
   shutdown();
@@ -518,8 +536,12 @@ void MonClient::handle_config(MConfig *m)
   boost::asio::post(finish_strand,
 		    [m, cct = boost::intrusive_ptr<CephContext>(cct),
 		     config_notify_cb = config_notify_cb,
-		     config_cb = config_cb]() {
-		      cct->_conf.set_mon_vals(cct.get(), m->config, config_cb);
+		     config_cb = config_cb,
+		     min_mon_release = monmap.min_mon_release]() {
+		      cct->_conf.set_mon_vals(cct.get(),
+		                              apply_config_upgrade_defaults(
+		                                  m->config, min_mon_release),
+		                              config_cb);
 		      if (config_notify_cb) {
 			config_notify_cb();
 		      }
