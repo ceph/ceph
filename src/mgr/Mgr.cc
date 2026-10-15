@@ -234,7 +234,6 @@ void Mgr::background_init(Context *completion)
   ceph_assert(!initializing);
   ceph_assert(!initialized);
   initializing = true;
-  initialization_start_time = ceph::coarse_mono_clock::now();
 
   finisher.start();
 
@@ -449,6 +448,8 @@ void Mgr::init()
     pre_init_store, mon_allows_kv_sub,
     *monc, clog, audit_clog, *objecter,
     finisher, server);
+  // start clock only after `active_modules` is created
+  initialization_start_time = ceph::coarse_mono_clock::now();
 
   cluster_state.final_init();
 
@@ -867,6 +868,7 @@ bool Mgr::got_mgr_map(const MgrMap& m)
 
 bool Mgr::exceeded_initialization_expiration()
 {
+  std::lock_guard l(lock);
   // initialization_start_time=0 when initialization hasn't started yet,
   // so know we can't have exceeded the time expiration.
   if (ceph::coarse_mono_clock::is_zero(initialization_start_time)) {
@@ -878,14 +880,14 @@ bool Mgr::exceeded_initialization_expiration()
   dout(20) << "time elapsed since mgr initialization: " << time_elapsed << dendl;
 
   // Reset start time if the expiration time has been exceeded.
-  // Signal initialization=true so the mgr forcibly sends an "active" beacon
+  // initialized=false still, since the modules have not finished initializing yet. In other areas of
+  // the code, this boolean will be checked before querying anything about the active modules,
+  // so we don't want to falsely claim that they are initialized. We only want to
+  // communicate to the beacon that the expiration was exceeded.
   auto expiration = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_expiration");
   bool exceeded_expiration = time_elapsed > expiration;
   if (exceeded_expiration) {
-    std::lock_guard l(lock);
     initialization_start_time = ceph::coarse_mono_clock::zero();
-    initializing = false;
-    initialized = true;
   }
 
   return exceeded_expiration;
