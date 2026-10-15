@@ -198,4 +198,17 @@ function TEST_fake_pool_delete_keeps_profile_and_rule() {
     rule_exists e || return 1
 }
 
+# An error of building the rule of a pool over zones names the defaults that
+# gave its values
+function TEST_rule_errors_name_defaults() {
+    local dir=$1
+    two_zone_cluster $dir 2 || return 1
+
+    expect_failure $dir "requires at least 3 hosts (osd_pool_default_replica, osd_pool_default_zone_failure_domain, osd_pool_default_osd_failure_domain, osd_pool_default_root)" \
+        ceph osd pool create p --num_zones 2 || return 1
+    expect_failure $dir "requires at least 3 hosts (osd_pool_default_zone_failure_domain, osd_pool_default_osd_failure_domain, osd_pool_default_root)" \
+        ceph osd pool create p --num_zones 2 --replica 3 || return 1
+    ! ceph osd pool ls | grep -qx p || return 1
+}
+
 main mon-stretch-pool-zone-commands "$@"
