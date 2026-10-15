@@ -4,6 +4,7 @@
 #include "include/types.h"
 
 #include <cerrno>
+#include <cstddef>
 #include <exception>
 #include <new>
 #include <type_traits>
@@ -3156,6 +3157,14 @@ enum class PlainEntriesRegion {
   Low, Both, High
 };
 
+template <typename EntriesT>
+static void reserve_bi_entries(EntriesT& entries, std::size_t incoming)
+{
+  if constexpr (requires { entries.reserve(entries.size() + incoming); }) {
+    entries.reserve(entries.size() + incoming);
+  }
+}
+
 
 /* Queries the omap for plain entries in the range of start_after_key
  * to end_key, non-inclusive. Both of those values must either be
@@ -3187,6 +3196,7 @@ static int list_plain_entries_help(cls_method_context_t hctx,
   }
 
   end_key_reached = false;
+  reserve_bi_entries(*entries, raw_entries.size());
   for (auto& iter : raw_entries) {
     if (!end_key.empty() && iter.first >= end_key) {
       CLS_LOG(20, "%s: end key reached at \"%s\"",
@@ -3378,6 +3388,7 @@ static int list_special_entries(cls_method_context_t hctx,
     keys[start_after_key] = std::move(k);
   }
 
+  reserve_bi_entries(*entries, keys.size());
   for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
     typename EntriesT::value_type entry;
     entry.type = Kind;
@@ -3447,6 +3458,7 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
     return ret;
   }
 
+  reserve_bi_entries(entries, keys.size());
   map<string, bufferlist>::iterator iter;
   for (iter = keys.begin(); iter != keys.end(); ++iter) {
     if (iter->first.compare(end_key) >= 0) {
@@ -3649,7 +3661,6 @@ try {
   int ret;
 #ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::reply op_ret;
-  op_ret.entries.reserve(max);
 #else
   rgw_cls_bi_list_ret op_ret;
 #endif
