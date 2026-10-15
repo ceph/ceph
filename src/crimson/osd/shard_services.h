@@ -369,8 +369,13 @@ private:
                     epoch_t e, bufferlist&& bl);
   void store_inc_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
-  seastar::future<> store_maps(ceph::os::Transaction& t,
-                               epoch_t start, Ref<MOSDMap> m);
+  /// store the maps of 'm' (from 'start'), and collect the snaps they
+  /// report as newly purged into 'new_purged'
+  seastar::future<> store_maps(
+    ceph::os::Transaction& t,
+    epoch_t start,
+    Ref<MOSDMap> m,
+    ceph::osd::purged_snaps::by_epoch_t& new_purged);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 
   // -- PG merging --

@@ -271,6 +271,19 @@ private:
   seastar::future<> update_heartbeat_peers();
   friend class PGAdvanceMap;
 
+  // --- purged snaps (see osd/purged_snaps.h)
+
+  /// merge the rows of the purged_snaps object, if any of them overlap or
+  /// touch (as they may if written by Classic). Makes sure the object
+  /// exists.
+  seastar::future<> normalize_purged_snaps();
+
+  /// add to 't' the update of the purged_snaps rows with 'new_purged'.
+  /// handle_osd_map_lock must be held until 't' is committed.
+  seastar::future<> record_purged_snaps(
+    ceph::os::Transaction& t,
+    const ceph::osd::purged_snaps::by_epoch_t& new_purged);
+
 public:
   seastar::future<> send_beacon();
   seastar::future<double> run_bench(int64_t count,

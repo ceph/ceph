@@ -797,12 +797,14 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
 
 seastar::future<> OSDSingletonState::store_maps(
   ceph::os::Transaction& t,
-  epoch_t start, Ref<MOSDMap> m)
+  epoch_t start,
+  Ref<MOSDMap> m,
+  ceph::osd::purged_snaps::by_epoch_t& new_purged)
 {
   LOG_PREFIX(OSDSingletonState::store_maps);
   return seastar::do_with(
     std::map<epoch_t, local_cached_map_t>(),
-    [&t, FNAME, m, start, this](auto &added_maps) {
+    [&t, FNAME, m, start, &new_purged, this](auto &added_maps) {
     return seastar::do_for_each(
       boost::make_counting_iterator(start),
       boost::make_counting_iterator(m->get_last() + 1),
@@ -836,7 +838,13 @@ seastar::future<> OSDSingletonState::store_maps(
 	ERROR("MOSDMap lied about what maps it had?");
 	return seastar::now();
       }
-    }).then([&t, FNAME, this, &added_maps] {
+    }).then([&t, FNAME, this, &added_maps, &new_purged] {
+      for (const auto& [e, map] : added_maps) {
+        if (const auto& purged = map->get_new_purged_snaps();
+            !purged.empty()) {
+          new_purged.emplace(e, purged);
+        }
+      }
       epoch_t last_map_epoch = superblock.get_newest_map();
       auto last_map_fut = last_map_epoch > 0
 	? get_local_map(last_map_epoch)
