@@ -1973,9 +1973,9 @@ do_rgw()
 
         if [ "$CEPH_NUM_MON" -gt 0 ]; then
             ceph_adm auth get-or-create $rgw_name \
-                mon 'allow rw' \
-                osd 'allow rwx' \
-                mgr 'allow rw' \
+                mon 'profile rgw' \
+                osd 'profile rgw' \
+                mgr 'profile rgw' \
                 >> "$keyring_fn"
         fi
 

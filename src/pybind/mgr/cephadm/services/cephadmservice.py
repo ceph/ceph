@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
 
+# the release that added 'profile rgw'
+RGW_PROFILE_RELEASE = utils.ceph_release_to_major('umbrella')
+
 
 def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEntity:
     """
@@ -1114,11 +1117,24 @@ class RgwService(CephService):
         return daemon_spec
 
     def get_keyring(self, rgw_id: str) -> str:
-        keyring = self.get_keyring_with_caps(self.get_auth_entity(rgw_id),
-                                             ['mon', 'allow *',
-                                              'mgr', 'allow rw',
-                                              'osd', 'allow rwx tag rgw *=*'])
-        return keyring
+        """
+        SMB and NFS services embed librgw. If the RGW service capabilities are
+        updated, verify whether the same changes are required for these
+        services as well.
+        """
+        # a mon or osd from before the profile reads it as granting nothing.
+        # require_osd_release only moves up once all of them are upgraded
+        osdmap = self.mgr.get('osd_map')
+        release = osdmap.get('require_osd_release', 'argonaut')
+        if utils.ceph_release_to_major(release) >= RGW_PROFILE_RELEASE:
+            caps = ['mon', 'profile rgw',
+                    'mgr', 'profile rgw',
+                    'osd', 'profile rgw']
+        else:
+            caps = ['mon', 'allow *',
+                    'mgr', 'allow rw',
+                    'osd', 'allow rwx tag rgw *=*']
+        return self.get_keyring_with_caps(self.get_auth_entity(rgw_id), caps)
 
     def purge(self, service_name: str) -> None:
         self.mgr.check_mon_command({
