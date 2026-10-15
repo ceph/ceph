@@ -125,10 +125,9 @@ public:
         const auto start = output.length();
         std::invoke(std::forward<BodyT>(body));
         const frame_header value {version, 1, output.length() - start};
-        std::array<char, 6> bytes;
+        std::span bytes {header.c_str(), std::size_t {6}};
         zpp::bits::out archive {bytes, zpp::bits::endian::little {}};
         datum::serialize_schema(archive, value, header_fields {}).or_throw();
-        header.copy_in(bytes.size(), bytes.data());
     }
 
 };

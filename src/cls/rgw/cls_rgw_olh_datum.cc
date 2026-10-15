@@ -10,9 +10,9 @@ namespace cls::rgw::olh_datum
 {
 namespace
 {
-::rgw_bucket_olh_log_entry native_event(const std::uint64_t epoch, const std::uint8_t operation,
-                                      std::string&& tag, std::string&& name,
-                                      std::string&& instance, const bool deleted)
+constexpr auto native_event = [](const std::uint64_t epoch, const std::uint8_t operation,
+                                 std::string&& tag, std::string&& name,
+                                 std::string&& instance, const bool deleted)
 {
     ::rgw_bucket_olh_log_entry value;
     value.epoch = epoch;
@@ -23,15 +23,15 @@ namespace
     value.delete_marker = deleted;
 
     return value;
-}
+};
 
-::cls::rgw::olh::event client_event(const std::uint64_t epoch, const std::uint8_t operation,
-                                   std::string&& tag, std::string&& name,
-                                   std::string&& instance, const bool deleted)
+constexpr auto client_event = [](const std::uint64_t epoch, const std::uint8_t operation,
+                                 std::string&& tag, std::string&& name,
+                                 std::string&& instance, const bool deleted)
 {
     return ::cls::rgw::olh::event {{std::move(name), std::move(instance)}, std::move(tag),
                                   epoch, static_cast<::cls::rgw::olh::action>(operation), deleted};
-}
+};
 
 } // anonymous namespace
 
@@ -60,7 +60,7 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
     input = cursor;
 }
 
-void encode_reply(const log::const_iterator lower, const log::const_iterator upper, const bool stales,
+void encode_reply(const stored_log::const_iterator lower, const stored_log::const_iterator upper, const bool stales,
                   const bool truncated, ::ceph::buffer::list& output)
 {
     namespace datum = ::ceph::salad::datum;
@@ -76,8 +76,10 @@ void encode_reply(const log::const_iterator lower, const log::const_iterator upp
 
 void decode_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret& value)
 {
+    using groups_type = decltype(::rgw_cls_read_olh_log_ret::log);
+
     auto cursor = input.cbegin();
-    auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<log, log::mapped_type>(cursor, native_event,
+    auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<groups_type, groups_type::mapped_type>(cursor, native_event,
         [](auto& groups, const std::uint64_t epoch, auto&& entries) {
             groups.try_emplace(epoch, std::move(entries));
         });

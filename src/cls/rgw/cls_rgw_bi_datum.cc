@@ -11,7 +11,7 @@ namespace cls::rgw::bi_datum
 namespace
 {
 template <typename EntryT>
-auto make_entry(const std::uint8_t kind, std::string key, ::ceph::buffer::list data)
+auto make_entry(const std::uint8_t kind, std::string&& key, ::ceph::buffer::list&& data)
 {
     return EntryT {static_cast<::BIIndexType>(kind), std::move(key), std::move(data)};
 }
@@ -28,7 +28,7 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
     auto candidate = ::cls::rgw::bi_wire::decode_request(cursor,
-        [](const std::uint32_t maximum, std::string filter, std::string marker, const bool reshard) {
+        [](const std::uint32_t maximum, std::string&& filter, std::string&& marker, const bool reshard) {
             return request {maximum, std::move(filter), std::move(marker), reshard};
         });
     value = std::move(candidate);

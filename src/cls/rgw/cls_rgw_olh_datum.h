@@ -21,12 +21,12 @@ struct request final
     bool get_stales = false;
 };
 
-using log = decltype(::rgw_cls_read_olh_log_ret::log);
+using stored_log = decltype(::rgw_bucket_olh_entry::pending_log);
 
 ::ceph::buffer::list encode_request(const ::cls_rgw_obj_key& key, std::uint64_t marker,
                                     std::string_view tag, bool stales);
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);
-void encode_reply(log::const_iterator lower, log::const_iterator upper, bool stales,
+void encode_reply(stored_log::const_iterator lower, stored_log::const_iterator upper, bool stales,
                   bool truncated, ::ceph::buffer::list& output);
 void decode_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret& value);
 void decode_reply(const ::ceph::buffer::list& input, ::cls::rgw::olh::reply& value);
