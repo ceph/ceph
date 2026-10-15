@@ -1752,6 +1752,19 @@ public:
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
 
+  /**
+   * Name the authenticated identity this upload's operations are for.
+   *
+   * Distinct from the upload's owner:  for a member of an account the
+   * owner is the *account*, while this is the member.  A driver that
+   * maps an identity to filesystem credentials needs the latter, or
+   * every member of an account is served as one.
+   *
+   * Default does nothing, so a driver with no use for it is
+   * unaffected and none is obliged to implement it.
+   */
+  virtual void set_authenticated_user(const rgw_user& user) {}
+
   /** Get the name of the object representing this upload in the backing store */
   virtual const std::string& get_meta() const = 0;
   /** Get the name of the target object for this upload */

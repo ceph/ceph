@@ -7542,6 +7542,9 @@ void RGWInitMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
+  if (s->user) {
+    upload->set_authenticated_user(s->user->get_id());
+  }
 
   /* apparently, we are assured of upload */
   upload->obj_legal_hold = obj_legal_hold;
@@ -7752,6 +7755,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  if (s->user) {
+    upload->set_authenticated_user(s->user->get_id());
+  }
 
   rgw_placement_rule* dest_placement;
   op_ret = upload->get_info(this, s->yield, &dest_placement);
@@ -8109,6 +8115,9 @@ void RGWAbortMultipart::execute(optional_yield y)
     return;
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  if (s->user) {
+    upload->set_authenticated_user(s->user->get_id());
+  }
   meta_obj = upload->get_meta_obj();
   meta_obj->set_in_extra_data(true);
   meta_obj->get_obj_attrs(s->yield, this);
