@@ -11,6 +11,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace cls::rgw::olh_wire
 {
@@ -55,14 +56,25 @@ inline void encode_key(writer& archive, const std::string_view name, const std::
     });
 }
 
+template <typename KeyT, auto Name, auto Instance>
+KeyT& decode_key(reader& archive, KeyT& value, datum::binary_fields<Name, Instance>)
+{
+    return archive.frame(1, [&](auto& fields, std::uint8_t) -> KeyT& {
+        fields.text(value.*Name);
+        fields.text(value.*Instance);
+
+        return value;
+    });
+}
+
 inline auto decode_key(reader& archive)
 {
-    return archive.frame(1, [](auto& fields, std::uint8_t) {
-        auto name = fields.text();
-        auto instance = fields.text();
+    using key = std::pair<std::string, std::string>;
 
-        return std::pair {std::move(name), std::move(instance)};
-    });
+    key value;
+    decode_key(archive, value, datum::binary_fields<&key::first, &key::second> {});
+
+    return value;
 }
 
 template <typename EntryT, auto Epoch, auto Operation, auto Tag, auto Key, auto Deleted,
@@ -86,18 +98,21 @@ void encode_event(writer& archive, const EntryT& value,
     });
 }
 
-template <typename FactoryT>
-auto decode_event(reader& archive, FactoryT& factory)
+template <typename EntryT, auto Epoch, auto Operation, auto Tag, auto Key, auto Deleted,
+          auto ...KeyMember>
+EntryT& decode_event(reader& archive, EntryT& value,
+                     datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
+                     datum::binary_fields<KeyMember...> key_fields)
 {
-    return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        const auto epoch = fields.template scalar<std::uint64_t>();
-        const auto operation = fields.template scalar<std::uint8_t>();
-        auto tag = fields.text();
-        auto [name, instance] = decode_key(fields);
-        const bool deleted = 0 != fields.template scalar<std::uint8_t>();
+    return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
+        value.*Epoch = fields.template scalar<std::uint64_t>();
+        auto& operation = value.*Operation;
+        operation = static_cast<std::remove_cvref_t<decltype(operation)>>(fields.template scalar<std::uint8_t>());
+        fields.text(value.*Tag);
+        decode_key(fields, value.*Key, key_fields);
+        value.*Deleted = 0 != fields.template scalar<std::uint8_t>();
 
-        return std::invoke(factory, epoch, operation, std::move(tag),
-                           std::move(name), std::move(instance), deleted);
+        return value;
     });
 }
 
@@ -138,32 +153,32 @@ auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
 }
 
 // Filtering is applied to an already paginated range. Empty epoch groups are
-// retained only when requested by the native get_stales policy.
+// retained with all events when requested by the native get_stales policy.
 template <std::ranges::forward_range GroupsT, auto ...EventMember, auto ...KeyMember, typename IncludeT>
 byte_buffer encode_reply(const GroupsT& groups, const bool truncated,
                          datum::binary_fields<EventMember...> event_fields,
                          datum::binary_fields<KeyMember...> key_fields,
-                         IncludeT&& include, const bool retain_empty)
+                         IncludeT&& include, const bool include_all)
 {
     const auto included_count = [&](const auto& entries) {
-        return detail::checked_count(std::ranges::count_if(entries, include));
+        return detail::checked_count(include_all ? std::ranges::size(entries)
+                                                 : std::ranges::count_if(entries, include));
     };
-    const auto group_count = detail::checked_count(std::ranges::count_if(groups, [&](const auto& group) {
-        return retain_empty || 0 != included_count(group.second);
-    }));
+    const auto group_count = detail::checked_count(include_all ? std::ranges::distance(groups)
+        : std::ranges::count_if(groups, [&](const auto& group) { return 0 != included_count(group.second); }));
     byte_buffer output;
     detail::writer archive {output};
     archive.frame(1, [&] {
         archive.scalar(group_count);
         for (const auto& [epoch, entries] : groups) {
             const auto size = included_count(entries);
-            if (!retain_empty && 0 == size) {
+            if (!include_all && 0 == size) {
                 continue;
             }
             archive.scalar(epoch);
             archive.scalar(size);
             for (const auto& entry : entries) {
-                if (std::invoke(include, entry)) {
+                if (include_all || std::invoke(include, entry)) {
                     detail::encode_event(archive, entry, event_fields, key_fields);
                 }
             }
@@ -176,8 +191,10 @@ byte_buffer encode_reply(const GroupsT& groups, const bool truncated,
 
 // The insertion binding determines local associative semantics (such as
 // first-wins map insertion) without enrolling a native type in Datum.
-template <typename GroupsT, typename EntriesT, typename FactoryT, typename InsertT>
-auto decode_reply(byte_buffer::const_iterator& input, FactoryT&& factory, InsertT&& insert)
+template <typename GroupsT, typename EntriesT, auto ...EventMember, auto ...KeyMember, typename InsertT>
+auto decode_reply(byte_buffer::const_iterator& input,
+                  datum::binary_fields<EventMember...> event_fields,
+                  datum::binary_fields<KeyMember...> key_fields, InsertT&& insert)
 {
     detail::reader archive {input};
 
@@ -195,7 +212,7 @@ auto decode_reply(byte_buffer::const_iterator& input, FactoryT&& factory, Insert
                 entries.reserve(count);
             }
             for (std::uint32_t item = 0; item < count; ++item) {
-                entries.emplace_back(detail::decode_event(fields, factory));
+                detail::decode_event(fields, entries.emplace_back(), event_fields, key_fields);
             }
             std::invoke(insert, groups, epoch, std::move(entries));
         }

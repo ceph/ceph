@@ -2362,14 +2362,22 @@ try {
 
   constexpr unsigned max_epochs = 1000;
   const auto& log = olh_data_entry.pending_log;
-  const auto lower = log.upper_bound(op.ver_marker);
-  const auto upper = std::ranges::next(lower, max_epochs, log.end());
-  const bool truncated = upper != log.end();
+  const auto page = [&] {
+    if (log.empty() || (log.size() <= max_epochs && op.ver_marker < log.begin()->first)) {
+      return std::ranges::subrange {log.begin(), log.end(), log.size()};
+    }
+    const auto lower = log.upper_bound(op.ver_marker);
+    auto upper = lower;
+    const auto count = max_epochs - std::ranges::advance(upper, max_epochs, log.end());
+
+    return std::ranges::subrange {lower, upper, static_cast<std::size_t>(count)};
+  }();
+  const bool truncated = page.end() != log.end();
 #ifdef WITH_RGW_CLS_DATUM
-  ::cls::rgw::olh_datum::encode_reply(lower, upper, op.get_stales, truncated, *out);
+  ::cls::rgw::olh_datum::encode_reply(page, op.get_stales, truncated, *out);
 #else
   rgw_cls_read_olh_log_ret op_ret;
-  op_ret.log.insert(lower, upper);
+  op_ret.log.insert(page.begin(), page.end());
   op_ret.is_truncated = truncated;
 
   // this is for backward compatibility

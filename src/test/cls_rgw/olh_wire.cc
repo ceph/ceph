@@ -118,7 +118,7 @@ TEST_CASE("OLH event and nested map bindings preserve native encoding", "[rgw][c
         ::encode(native_result, native_bytes);
         CHECK(native_bytes.contents_equal(bytes));
         byte_buffer rebound;
-        native::encode_reply(native_result.log.begin(), native_result.log.end(), true,
+        native::encode_reply({native_result.log.begin(), native_result.log.end(), native_result.log.size()}, true,
                              native_result.is_truncated, rebound);
         CHECK(rebound.contents_equal(bytes));
     }

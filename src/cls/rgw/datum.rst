@@ -6,7 +6,7 @@ let the client and module use different owning records and containers. They
 share the existing Ceph encoding, including versions, lengths, scalar widths,
 element encodings and map semantics. A container category alone does not define
 that contract.
-Other RGW CLS methods continue to use their existing codecs.
+Other RGW CLS operations continue to use their existing codecs.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
@@ -122,15 +122,18 @@ event fields in wire order::
                          &entry::key, &entry::delete_marker> {}
 
 The independent client event has different field names and declaration order.
-Owning decode factories select the local record, while sequence storage and
-associative insertion are separate bindings. No native record or buffer type is
-globally enrolled in Datum and no Datum core customization is required.
+OLH replies use the selected writable members to decode directly into candidate
+event storage. Other owning records use decode factories; sequence storage and
+associative insertion remain separate bindings. No native record or buffer type
+is globally enrolled in Datum and no Datum core customization is required.
 
 zpp archives require contiguous storage. RGW's shared adapter writes metadata
 directly into Ceph append space, retains opaque BI payload fragments and gathers
 only fixed metadata when an input field crosses fragments. It does not flatten
 an entire native message. OLH encoding borrows the selected stored epoch range
 for the duration of the synchronous encode, avoiding a second map of strings.
+The selected range carries its epoch count; when get-stales is true, encoding
+uses that count and each event vector's size without extra counting passes.
 
 Every nested frame has its own read boundary. Counts are checked against minimum
 encoded element sizes before reserving storage. These checks prevent impossible

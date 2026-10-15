@@ -10,28 +10,18 @@ namespace cls::rgw::olh_datum
 {
 namespace
 {
-constexpr auto native_event = [](const std::uint64_t epoch, const std::uint8_t operation,
-                                 std::string&& tag, std::string&& name,
-                                 std::string&& instance, const bool deleted)
-{
-    ::rgw_bucket_olh_log_entry value;
-    value.epoch = epoch;
-    value.op = static_cast<::OLHLogOp>(operation);
-    value.op_tag = std::move(tag);
-    value.key.name = std::move(name);
-    value.key.instance = std::move(instance);
-    value.delete_marker = deleted;
+namespace datum = ::ceph::salad::datum;
+using native_entry = ::rgw_bucket_olh_log_entry;
+using native_key = ::cls_rgw_obj_key;
+using client_entry = ::cls::rgw::olh::event;
+using client_key = ::cls::rgw::olh::object_key;
 
-    return value;
-};
-
-constexpr auto client_event = [](const std::uint64_t epoch, const std::uint8_t operation,
-                                 std::string&& tag, std::string&& name,
-                                 std::string&& instance, const bool deleted)
-{
-    return ::cls::rgw::olh::event {{std::move(name), std::move(instance)}, std::move(tag),
-                                  epoch, static_cast<::cls::rgw::olh::action>(operation), deleted};
-};
+constexpr auto native_event_fields = datum::binary_fields<&native_entry::epoch, &native_entry::op,
+    &native_entry::op_tag, &native_entry::key, &native_entry::delete_marker> {};
+constexpr auto native_key_fields = datum::binary_fields<&native_key::name, &native_key::instance> {};
+constexpr auto client_event_fields = datum::binary_fields<&client_entry::epoch, &client_entry::operation,
+    &client_entry::tag, &client_entry::object, &client_entry::delete_marker> {};
+constexpr auto client_key_fields = datum::binary_fields<&client_key::name, &client_key::instance> {};
 
 } // anonymous namespace
 
@@ -60,17 +50,10 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
     input = cursor;
 }
 
-void encode_reply(const stored_log::const_iterator lower, const stored_log::const_iterator upper, const bool stales,
-                  const bool truncated, ::ceph::buffer::list& output)
+void encode_reply(const log_page groups, const bool stales, const bool truncated, ::ceph::buffer::list& output)
 {
-    namespace datum = ::ceph::salad::datum;
-    using entry = ::rgw_bucket_olh_log_entry;
-    using key = ::cls_rgw_obj_key;
-
-    auto candidate = ::cls::rgw::olh_wire::encode_reply(std::ranges::subrange {lower, upper}, truncated,
-        datum::binary_fields<&entry::epoch, &entry::op, &entry::op_tag, &entry::key, &entry::delete_marker> {},
-        datum::binary_fields<&key::name, &key::instance> {},
-        [stales](const entry& value) { return stales || ::CLS_RGW_OLH_OP_STALE != value.op; }, stales);
+    auto candidate = ::cls::rgw::olh_wire::encode_reply(groups, truncated, native_event_fields, native_key_fields,
+        [](const native_entry& value) { return ::CLS_RGW_OLH_OP_STALE != value.op; }, stales);
     output.claim_append(candidate);
 }
 
@@ -79,7 +62,8 @@ void decode_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret&
     using groups_type = decltype(::rgw_cls_read_olh_log_ret::log);
 
     auto cursor = input.cbegin();
-    auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<groups_type, groups_type::mapped_type>(cursor, native_event,
+    auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<groups_type, groups_type::mapped_type>(
+        cursor, native_event_fields, native_key_fields,
         [](auto& groups, const std::uint64_t epoch, auto&& entries) {
             groups.try_emplace(epoch, std::move(entries));
         });
@@ -93,7 +77,8 @@ void decode_reply(const ::ceph::buffer::list& input, ::cls::rgw::olh::reply& val
     using entries_type = ::cls::rgw::olh::epoch_group::second_type;
 
     auto cursor = input.cbegin();
-    auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<groups_type, entries_type>(cursor, client_event,
+    auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<groups_type, entries_type>(
+        cursor, client_event_fields, client_key_fields,
         [](auto& groups, const std::uint64_t epoch, auto&& entries) {
             groups.emplace_back(epoch, std::move(entries));
         });

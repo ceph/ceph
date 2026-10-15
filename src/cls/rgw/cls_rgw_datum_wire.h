@@ -198,12 +198,18 @@ public:
         return value.value;
     }
 
-    std::string text()
+    void text(std::string& value)
     {
         const auto size = scalar<std::uint32_t>();
         require(size);
-        std::string value;
+        value.clear();
         input.copy(size, value);
+    }
+
+    std::string text()
+    {
+        std::string value;
+        text(value);
 
         return value;
     }
@@ -229,7 +235,7 @@ public:
         require(header.length);
         const auto finish = input.get_off() + header.length;
         reader fields {input, finish};
-        auto result = std::invoke(std::forward<BodyT>(body), fields, header.version);
+        decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version);
         input += finish - input.get_off();
 
         return result;
