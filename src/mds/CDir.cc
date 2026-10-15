@@ -1072,6 +1072,10 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
     CDir *f = new CDir(inode, fg, mdcache, is_auth());
     f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->get_replicas() = get_replicas();
+    // a fragment of a dirfrag replicated for read load stays replicated,
+    // on the auth and on the replicas alike
+    f->dir_rep = dir_rep;
+    f->dir_rep_by = dir_rep_by;
     f->pop_me = pop_me;
     f->pop_me.scale(fac);
 
@@ -1184,6 +1188,12 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     while (!dir->items.empty()) 
       steal_dentry(dir->items.begin()->second);
     
+    // replicated for read load if any of them was
+    if (dir->is_rep() && !is_rep()) {
+      dir_rep = dir->dir_rep;
+      dir_rep_by = dir->dir_rep_by;
+    }
+
     // merge replica map
     for (const auto &p : dir->get_replicas()) {
       unsigned cur = get_replicas()[p.first];
