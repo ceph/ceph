@@ -1,16 +1,22 @@
 # Linux CLS plugin tests call actual handlers through an isolated storage host.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  add_executable(unittest_cls_rgw_olh_module olh_module.cc bi_wire_main.cc)
-  target_compile_definitions(unittest_cls_rgw_olh_module PRIVATE
+function(rgw_cls_add_module_test name source)
+  set(target "unittest_cls_rgw_${name}_module")
+  add_executable(${target} ${source} module_loader.cc bi_wire_main.cc)
+  target_compile_definitions(${target} PRIVATE
     TEST_CLS_RGW_MODULE="$<TARGET_FILE:cls_rgw>")
-  target_include_directories(unittest_cls_rgw_olh_module PRIVATE
+  target_include_directories(${target} PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/../../rgw")
-  target_link_libraries(unittest_cls_rgw_olh_module PRIVATE
+  target_link_libraries(${target} PRIVATE
     Catch2::Catch2 ceph-common ${FMT_LIB} ${CMAKE_DL_LIBS})
-  target_link_options(unittest_cls_rgw_olh_module PRIVATE -Wl,--export-dynamic)
-  set_target_properties(unittest_cls_rgw_olh_module PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
-  add_dependencies(unittest_cls_rgw_olh_module cls_rgw)
-  add_test(NAME cls_rgw_olh_module COMMAND unittest_cls_rgw_olh_module)
+  target_link_options(${target} PRIVATE -Wl,--export-dynamic)
+  set_target_properties(${target} PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+  add_dependencies(${target} cls_rgw)
+  add_test(NAME "cls_rgw_${name}_module" COMMAND ${target})
+endfunction()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  rgw_cls_add_module_test(olh olh_module.cc)
+  rgw_cls_add_module_test(bi_put bi_put_module.cc)
 endif()
 
 add_library(cls_rgw_olh_native_oracle OBJECT olh_native_oracle.cc)

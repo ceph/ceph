@@ -1,23 +1,19 @@
 // RGW CLS: Exercise the registered OLH handler through controlled OMAP reads.
 // This runs the real module; the host fixture supplies storage, not an OSD.
 #include "cls/rgw/cls_rgw_ops.h"
-#include "objclass/objclass.h"
+#include "module_loader.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
-#include <dlfcn.h>
 
 #include <fstream>
 #include <algorithm>
 #include <limits>
 #include <map>
-#include <memory>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -26,8 +22,6 @@
 namespace
 {
 using byte_buffer = ::ceph::buffer::list;
-::cls_method_cxx_call_t olh_handler = nullptr;
-int olh_flags = 0;
 
 struct storage final
 {
@@ -37,28 +31,9 @@ struct storage final
     int failure = 0;
 };
 
-void load_module()
-{
-    using handle = std::unique_ptr<void, decltype([](void *p) noexcept { dlclose(p); })>;
-    const char *path = std::getenv("CEPH_TEST_CLS_RGW_MODULE");
-    static const handle loaded {dlopen(path ? path : TEST_CLS_RGW_MODULE, RTLD_LAZY | RTLD_LOCAL)};
-    if (!loaded) {
-        throw std::runtime_error {dlerror()};
-    }
-    static const bool initialized = [] {
-        const auto init = reinterpret_cast<void (*)()>(dlsym(loaded.get(), "__cls_init"));
-        if (!init) {
-            throw std::runtime_error {dlerror()};
-        }
-        init();
-        return true;
-    }();
-    static_cast<void>(initialized);
-}
-
 auto invoke(storage& context, byte_buffer input)
 {
-    load_module();
+    const auto [olh_handler, olh_flags] = ::rgw_cls_test::get_method("bucket_read_olh_log");
     REQUIRE(olh_handler != nullptr);
     REQUIRE(olh_flags == CLS_METHOD_RD);
     byte_buffer output;
@@ -135,27 +110,6 @@ storage fixture(const ::rgw_bucket_olh_entry& value)
 }
 
 } // anonymous namespace
-
-int cls_register(const char *, cls_handle_t *handle) { *handle = nullptr; return 0; }
-int cls_log(int, const char *, ...) { return 0; }
-int cls_register_cxx_filter(cls_handle_t, const std::string&,
-                            cls_cxx_filter_factory_t, cls_filter_handle_t *) { return 0; }
-
-namespace detail
-{
-int cls_register_cxx_method_impl(cls_handle_t, const char *name, const int flags,
-                                 cls_method_cxx_call_t call, cls_method_handle_t *handle)
-{
-    if (std::string_view {name} == "bucket_read_olh_log") {
-        olh_handler = call;
-        olh_flags = flags;
-    }
-    *handle = nullptr;
-
-    return 0;
-}
-
-} // detail
 
 int cls_cxx_map_get_val(cls_method_context_t context, const std::string& key, byte_buffer *output)
 {

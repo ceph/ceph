@@ -3046,7 +3046,11 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
 static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bi_datum::put_request op;
+#else
   rgw_cls_bi_put_entries_op op;
+#endif
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -3099,7 +3103,13 @@ static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferl
       cls_rgw_obj_key key;
       RGWObjCategory category;
       rgw_bucket_category_stats stats;
-      const bool account = entry.get_info(&key, &category, &stats);
+      bool account;
+      try {
+        account = entry.get_info(&key, &category, &stats);
+      } catch (const ceph::buffer::error&) {
+        CLS_LOG(0, "ERROR: %s: failed to decode existing BI payload", __func__);
+        return -EIO;
+      }
       if (account) {
         auto& dest = header.stats[category];
         dest.total_size -= stats.total_size;
@@ -3125,7 +3135,13 @@ static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferl
     cls_rgw_obj_key key;
     RGWObjCategory category;
     rgw_bucket_category_stats stats;
-    const bool account = entry.get_info(&key, &category, &stats);
+    bool account;
+    try {
+      account = cls_rgw_get_bi_entry_info(entry.type, entry.data, &key, &category, &stats);
+    } catch (const ceph::buffer::error&) {
+      CLS_LOG(0, "ERROR: %s: failed to decode incoming BI payload", __func__);
+      return -EINVAL;
+    }
     if (account) {
       auto& dest = header.stats[category];
       dest.total_size += stats.total_size;

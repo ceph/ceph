@@ -1,4 +1,4 @@
-// RGW CLS: Native declarations for the Datum BI listing implementation.
+// RGW CLS: Native declarations for the Datum BI wire bindings.
 // The module owns its records; clients select independent reply containers.
 // Keep C++26 reflection and wire implementation out of ordinary native callers.
 #ifndef CEPH_CLS_RGW_BI_DATUM_H
@@ -41,11 +41,23 @@ struct reply final
     bool is_truncated = false;
 };
 
+struct put_request final
+{
+    std::vector<entry> entries;
+
+    bool check_existing = false;
+};
+
 ::ceph::buffer::list encode_request(std::uint32_t maximum, std::string_view filter,
                                     std::string_view marker, bool reshard);
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(put_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(entry& value, ::ceph::buffer::list::const_iterator& input);
 void encode(const reply& value, ::ceph::buffer::list& output);
+
+// Borrow records only during encoding; the returned message retains its bytes.
+::ceph::buffer::list encode_put_request(const std::vector<::rgw_cls_bi_entry>& entries,
+                                        bool check_existing);
 
 // Explicit vector/list instantiations return owned candidates. The client
 // publishes caller outputs only after transport and decoding have succeeded.

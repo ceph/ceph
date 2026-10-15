@@ -522,6 +522,11 @@ struct rgw_cls_bi_entry {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
+// Interpret an opaque BI payload without requiring an owning BI record.
+bool cls_rgw_get_bi_entry_info(BIIndexType type, const ::ceph::buffer::list& data,
+                               cls_rgw_obj_key *key, RGWObjCategory *category,
+                               rgw_bucket_category_stats *accounted_stats);
+
 // Preserve the native 32-bit layout and admit every uint8 wire action.
 enum OLHLogOp : uint32_t {
   CLS_RGW_OLH_OP_UNKNOWN         = 0,

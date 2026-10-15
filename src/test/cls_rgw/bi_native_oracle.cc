@@ -6,6 +6,28 @@
 
 namespace rgw_bi_oracle
 {
+namespace
+{
+void copy_rows(const std::vector<row>& rows, auto& destination)
+{
+    for (const auto& source : rows) {
+        destination.push_back({static_cast<::BIIndexType>(source.kind), source.key, source.payload});
+    }
+}
+
+std::vector<row> take_rows(auto& entries)
+{
+    std::vector<row> rows;
+    rows.reserve(entries.size());
+    for (auto& entry : entries) {
+        rows.emplace_back(static_cast<std::uint8_t>(entry.type), std::move(entry.idx), std::move(entry.data));
+    }
+
+    return rows;
+}
+
+} // anonymous namespace
+
 ::ceph::buffer::list encode_request(const request& value, const std::uint8_t version)
 {
     ::ceph::buffer::list bytes;
@@ -37,13 +59,7 @@ request decode_request(const ::ceph::buffer::list& bytes)
 {
     ::rgw_cls_bi_list_ret value;
     value.is_truncated = truncated;
-    for (const auto& source : rows) {
-        ::rgw_cls_bi_entry entry;
-        entry.type = static_cast<::BIIndexType>(source.kind);
-        entry.idx = source.key;
-        entry.data = source.payload;
-        value.entries.emplace_back(std::move(entry));
-    }
+    copy_rows(rows, value.entries);
     ::ceph::buffer::list bytes;
     ::encode(value, bytes);
 
@@ -55,12 +71,30 @@ std::vector<row> decode_reply(const ::ceph::buffer::list& bytes, bool& truncated
     ::rgw_cls_bi_list_ret value;
     auto cursor = bytes.cbegin();
     ::decode(value, cursor);
-    std::vector<row> rows;
-    rows.reserve(value.entries.size());
-    for (auto& entry : value.entries) {
-        rows.emplace_back(static_cast<std::uint8_t>(entry.type), std::move(entry.idx), std::move(entry.data));
-    }
+    auto rows = take_rows(value.entries);
     truncated = value.is_truncated;
+
+    return rows;
+}
+
+::ceph::buffer::list encode_put_request(const std::vector<row>& rows, const bool check_existing)
+{
+    ::rgw_cls_bi_put_entries_op value;
+    value.check_existing = check_existing;
+    copy_rows(rows, value.entries);
+    ::ceph::buffer::list bytes;
+    ::encode(value, bytes);
+
+    return bytes;
+}
+
+std::vector<row> decode_put_request(const ::ceph::buffer::list& bytes, bool& check_existing)
+{
+    ::rgw_cls_bi_put_entries_op value;
+    auto cursor = bytes.cbegin();
+    ::decode(value, cursor);
+    auto rows = take_rows(value.entries);
+    check_existing = value.check_existing;
 
     return rows;
 }

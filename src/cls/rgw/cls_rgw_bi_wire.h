@@ -1,4 +1,4 @@
-// RGW CLS: BI listing wire profiles, independent of client/module record types.
+// RGW CLS: BI wire profiles, independent of client/module record types.
 // Datum selects fields, zpp writes metadata, and Ceph retains opaque fragments.
 // Common native framing and buffer ownership stay in the RGW adapter.
 #ifndef CEPH_CLS_RGW_BI_WIRE_H
@@ -139,9 +139,11 @@ auto decode_entry(byte_buffer::const_iterator& input, FactoryT&& factory)
     return detail::decode_entry(archive, std::forward<FactoryT>(factory));
 }
 
+// List replies and batch requests share a counted entry sequence and flag.
+// The binding interprets the flag as truncation or an overwrite check.
 template <typename EntriesT, auto ...Member>
 requires std::ranges::input_range<const EntriesT> && std::ranges::sized_range<const EntriesT>
-byte_buffer encode_reply(const EntriesT& entries, const bool truncated, datum::binary_fields<Member...> selected)
+byte_buffer encode_entries(const EntriesT& entries, const bool flag, datum::binary_fields<Member...> selected)
 {
     const auto size = detail::checked_count(std::ranges::size(entries));
     byte_buffer output;
@@ -151,14 +153,14 @@ byte_buffer encode_reply(const EntriesT& entries, const bool truncated, datum::b
         for (const auto& entry : entries) {
             detail::encode_entry(archive, entry, selected);
         }
-        archive.scalar(static_cast<std::uint8_t>(truncated));
+        archive.scalar(static_cast<std::uint8_t>(flag));
     });
 
     return output;
 }
 
 template <typename EntriesT, typename FactoryT>
-auto decode_reply(byte_buffer::const_iterator& input, FactoryT&& factory)
+auto decode_entries(byte_buffer::const_iterator& input, FactoryT&& factory)
 {
     detail::reader archive {input};
 
@@ -172,9 +174,9 @@ auto decode_reply(byte_buffer::const_iterator& input, FactoryT&& factory)
         for (std::uint32_t index = 0; index < size; ++index) {
             entries.emplace_back(detail::decode_entry(fields, factory));
         }
-        const bool truncated = 0 != fields.template scalar<std::uint8_t>();
+        const bool flag = 0 != fields.template scalar<std::uint8_t>();
 
-        return std::pair {std::move(entries), truncated};
+        return std::pair {std::move(entries), flag};
     });
 }
 

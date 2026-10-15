@@ -1,10 +1,10 @@
 Datum wire bindings for RGW CLS
 ==============================
 
-The ``bi_list`` and ``bucket_read_olh_log`` bindings let the client and module
-use different owning records and containers. They share the existing Ceph
-encoding, including versions, lengths, scalar widths, element encodings and
-map semantics. A container category alone does not define that contract.
+The ``bi_list``, ``bi_put_entries`` and ``bucket_read_olh_log`` bindings let the
+client and module use different owning records and containers. They share the
+existing Ceph encoding, including versions, lengths, scalar widths, element
+encodings and map semantics. A container category alone does not define that contract.
 Other RGW CLS methods continue to use their existing codecs.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
@@ -41,6 +41,30 @@ Successful decoding produces complete candidates before publishing outputs;
 decode failures preserve the caller's previous result. Completion errors map
 allocation failures to ``-ENOMEM`` and malformed responses to ``-EIO``.
 
+Batch writes
+------------
+
+The existing ``cls_rgw_bi_put_entries`` API still consumes a vector by value.
+The Datum encoder borrows those records only while constructing the request;
+the operation retains its encoded bytes before the builder returns. Opaque
+native payloads retain their backing buffers. The module decodes its own
+``put_request`` and vector of independent entries, without a shared op class.
+
+Batch requests reuse the same counted-entry wire profile as list replies.
+The final flag means check-existing for a batch and truncated for a list.
+Application semantics remain in RGW: existing keys are accounted once, every
+incoming duplicate contributes statistics, and storage keeps the first incoming
+value for a duplicate key. Reshard deletions run before the accumulated values
+are written, and deletion errors remain nonfatal. Empty batches still perform
+the native header and storage operations. The configured batch limit is checked
+after structural decoding and before reading the header.
+
+Malformed incoming opaque payloads return ``-EINVAL``; corrupt existing payloads
+return ``-EIO``. RGW catches those decoding errors before they escape the method.
+OSD transaction handling rolls back staged changes on a failed operation.
+Native stored-payload interpretation is shared without constructing an owning
+native entry just to interpret an independent incoming record.
+
 Wire contracts
 --------------
 
@@ -53,6 +77,7 @@ extensions and retain native nonzero-byte boolean semantics.
   byte. A v1 request defaults reshard to false.
 * BI reply v1/compat1: counted entries, truncated byte. Each entry is a
   v1/compat1 frame containing kind byte, key string and counted opaque bytes.
+* BI batch request v1/compat1: the same counted entries, check-existing byte.
 * OLH request v2/compat1: key frame, epoch marker uint64, tag string, get-stales
   byte. A v1 request defaults get-stales to false.
 * OLH key v1/compat1: name string, instance string.
@@ -106,6 +131,8 @@ Validation
 Focused Catch2 targets cover native C++23 encoding compatibility, independently
 bound records, fragmented input, old/future frames, unknown bytes, truncation,
 map order/duplicates and candidate publication. Client tests execute actual
-client code with controlled transport/completion boundaries. The Linux OLH
-module target loads the real plugin and supplies controlled OMAP reads. Those
-tests complement live OSD validation; the controlled host is not an OSD.
+client code with controlled transport/completion boundaries. Linux OLH and BI
+batch module targets share a plugin loader and supply controlled OMAP effects.
+Batch cases cover duplicate accounting, overwrite checks, quota/error ordering,
+reshard guards, empty batches and malformed opaque payloads. The controlled host
+records staged effects; live OSD validation separately checks transaction rollback.

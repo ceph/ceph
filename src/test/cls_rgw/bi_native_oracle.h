@@ -31,6 +31,8 @@ struct request final
 request decode_request(const ::ceph::buffer::list& bytes);
 ::ceph::buffer::list encode_reply(const std::vector<row>& rows, bool truncated);
 std::vector<row> decode_reply(const ::ceph::buffer::list& bytes, bool& truncated);
+::ceph::buffer::list encode_put_request(const std::vector<row>& rows, bool check_existing);
+std::vector<row> decode_put_request(const ::ceph::buffer::list& bytes, bool& check_existing);
 ::ceph::buffer::list extended_reply(const std::vector<row>& rows);
 
 using epoch_groups = std::map<std::uint64_t, std::vector<std::uint32_t>>;

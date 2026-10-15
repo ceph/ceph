@@ -282,6 +282,9 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             std::vector<rgw_cls_bi_entry> entries,
                             bool check_existing)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::bi_datum::encode_put_request(entries, check_existing);
+#else
   const auto call = rgw_cls_bi_put_entries_op{
     .entries = std::move(entries),
     .check_existing = check_existing
@@ -289,6 +292,7 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
 
   bufferlist in;
   encode(call, in);
+#endif
 
   op.exec(method::bi_put_entries, in);
 }

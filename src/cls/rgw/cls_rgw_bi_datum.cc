@@ -43,11 +43,29 @@ void decode(entry& value, ::ceph::buffer::list::const_iterator& input)
     input = cursor;
 }
 
+void decode(put_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    auto [entries, check_existing] = ::cls::rgw::bi_wire::decode_entries<std::vector<entry>>(cursor, make_entry<entry>);
+    value = {std::move(entries), check_existing};
+    input = cursor;
+}
+
+::ceph::buffer::list encode_put_request(const std::vector<::rgw_cls_bi_entry>& entries,
+                                        const bool check_existing)
+{
+    namespace datum = ::ceph::salad::datum;
+    using entry_type = ::rgw_cls_bi_entry;
+
+    return ::cls::rgw::bi_wire::encode_entries(entries, check_existing,
+        datum::binary_fields<&entry_type::type, &entry_type::idx, &entry_type::data> {});
+}
+
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
     namespace datum = ::ceph::salad::datum;
 
-    auto candidate = ::cls::rgw::bi_wire::encode_reply(value.entries, value.is_truncated,
+    auto candidate = ::cls::rgw::bi_wire::encode_entries(value.entries, value.is_truncated,
         datum::binary_fields<&entry::type, &entry::idx, &entry::data> {});
     output.claim_append(candidate);
 }
@@ -57,7 +75,7 @@ std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
 
-    return ::cls::rgw::bi_wire::decode_reply<EntriesT>(cursor, make_entry<typename EntriesT::value_type>);
+    return ::cls::rgw::bi_wire::decode_entries<EntriesT>(cursor, make_entry<typename EntriesT::value_type>);
 }
 
 template std::pair<std::vector<::rgw_cls_bi_entry>, bool>

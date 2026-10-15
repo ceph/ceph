@@ -108,3 +108,34 @@ TEST_CASE("BI client failures preserve caller outputs and native status", "[rgw]
     CHECK(entries[0].idx == "preserve");
     CHECK_FALSE(truncated);
 }
+
+void librados::ObjectOperation::exec_impl(const char *cls, const char *method, byte_buffer& input)
+{
+    CHECK(std::string_view {cls} == "rgw");
+    CHECK(std::string_view {method} == "bi_put_entries");
+    request_bytes = input;
+}
+
+TEST_CASE("BI batch client retains encoded bytes after consuming its input", "[rgw][cls][bi-put]")
+{
+    byte_buffer expected;
+    {
+        ::rgw_cls_bi_put_entries_op reference;
+        reference.check_existing = true;
+        byte_buffer payload;
+        payload.append("opaque", 6);
+        reference.entries.push_back({::BIIndexType::Plain, std::string(80, 'k'), payload});
+        ::encode(reference, expected);
+        ::librados::ObjectWriteOperation operation;
+        ::cls_rgw_bi_put_entries(operation, std::move(reference.entries), true);
+    }
+    CHECK(request_bytes.contents_equal(expected));
+    ::rgw_cls_bi_put_entries_op decoded;
+    auto cursor = request_bytes.cbegin();
+    ::decode(decoded, cursor);
+    REQUIRE(decoded.entries.size() == 1);
+    CHECK(decoded.entries[0].idx == std::string(80, 'k'));
+    CHECK(decoded.entries[0].data.to_str() == "opaque");
+    CHECK(decoded.check_existing);
+    CHECK(cursor.end());
+}

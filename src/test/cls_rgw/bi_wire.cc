@@ -120,11 +120,11 @@ TEST_CASE("BI replies use independent vector row types and preserve native frame
     CHECK(old_rows[0].payload.contents_equal(rows[0].payload));
 
     auto cursor = bytes.cbegin();
-    auto result = wire::decode_reply<std::vector<client_row>>(cursor, make_row);
+    auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
     check_rows(result.first, rows);
     CHECK(result.second);
     CHECK(cursor.end());
-    CHECK(wire::encode_reply(result.first, result.second,
+    CHECK(wire::encode_entries(result.first, result.second,
         datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {})
         .contents_equal(bytes));
 
@@ -139,7 +139,7 @@ TEST_CASE("BI decoding handles fragmentation and compatible frame extensions", "
     const auto rows = fixtures();
     const auto input = fragmented(rgw_bi_oracle::extended_reply(rows));
     auto cursor = input.cbegin();
-    const auto result = wire::decode_reply<std::vector<client_row>>(cursor, make_row);
+    const auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
     check_rows(result.first, rows);
     CHECK(result.second);
     CHECK(cursor.end());
@@ -163,7 +163,7 @@ TEST_CASE("BI decoder rejects impossible counts before constructing rows", "[rgw
     position.copy_in(4, excessive);
     auto cursor = bytes.cbegin();
     unsigned constructions = 0;
-    CHECK_THROWS(wire::decode_reply<std::vector<client_row>>(cursor,
+    CHECK_THROWS(wire::decode_entries<std::vector<client_row>>(cursor,
         [&](const std::uint8_t kind, std::string key, byte_buffer data) {
             ++constructions;
             return make_row(kind, std::move(key), std::move(data));
@@ -179,7 +179,7 @@ TEST_CASE("BI native bool decoding accepts every byte value", "[rgw][cls][datum]
         auto position = bytes.begin(bytes.length() - 1);
         position.copy_in(1, &value);
         auto cursor = bytes.cbegin();
-        const auto result = wire::decode_reply<std::vector<client_row>>(cursor, make_row);
+        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
         CHECK(result.second == (0 != raw));
     }
 }
@@ -201,12 +201,14 @@ TEST_CASE("BI encoding accepts byte vectors and borrowed row ranges", "[rgw][cls
     }
     using selected = datum::binary_fields<&row::kind, &row::key, &row::data>;
 
-    CHECK(wire::encode_reply(std::span {rows}, true, selected {})
+    CHECK(wire::encode_entries(std::span {rows}, true, selected {})
         .contents_equal(rgw_bi_oracle::encode_reply(expected, true)));
+    CHECK(wire::encode_entries(std::span {rows}, true, selected {})
+        .contents_equal(rgw_bi_oracle::encode_put_request(expected, true)));
     rows[0].kind = -1;
-    CHECK_THROWS_AS(wire::encode_reply(rows, false, selected {}), std::length_error);
+    CHECK_THROWS_AS(wire::encode_entries(rows, false, selected {}), std::length_error);
     rows[0].kind = 256;
-    CHECK_THROWS_AS(wire::encode_reply(rows, false, selected {}), std::length_error);
+    CHECK_THROWS_AS(wire::encode_entries(rows, false, selected {}), std::length_error);
 }
 
 TEST_CASE("BI decoded payload owners outlive their input envelope", "[rgw][cls][datum]")
@@ -215,7 +217,7 @@ TEST_CASE("BI decoded payload owners outlive their input envelope", "[rgw][cls][
     {
         auto bytes = rgw_bi_oracle::encode_reply(fixtures(), false);
         auto cursor = bytes.cbegin();
-        rows = wire::decode_reply<std::vector<client_row>>(cursor, make_row).first;
+        rows = wire::decode_entries<std::vector<client_row>>(cursor, make_row).first;
     }
     check_rows(rows, fixtures());
 }
@@ -231,7 +233,7 @@ TEST_CASE("BI bounded frames reject invalid lengths and compatibility", "[rgw][c
         const char raw = static_cast<char>(value);
         bytes.begin(offset).copy_in(1, &raw);
         auto cursor = bytes.cbegin();
-        CHECK_THROWS(wire::decode_reply<std::vector<client_row>>(cursor, make_row));
+        CHECK_THROWS(wire::decode_entries<std::vector<client_row>>(cursor, make_row));
     }
 }
 
@@ -283,11 +285,11 @@ TEST_CASE("BI randomized native envelopes preserve every field", "[rgw][cls][dat
         const bool truncated = random() % 2;
         const auto bytes = rgw_bi_oracle::encode_reply(rows, truncated);
         auto cursor = bytes.cbegin();
-        const auto result = wire::decode_reply<std::vector<client_row>>(cursor, make_row);
+        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
         check_rows(result.first, rows);
         CHECK(result.second == truncated);
         CHECK(cursor.end());
-        CHECK(wire::encode_reply(result.first, result.second,
+        CHECK(wire::encode_entries(result.first, result.second,
             datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {})
             .contents_equal(bytes));
     }
@@ -352,4 +354,91 @@ TEST_CASE("RGW native nested association bytes need no new container codec", "[r
     datum::serialize_schema(duplicate_input, zpp_groups,
         datum::binary_fields<&module_groups::epochs> {}).or_throw();
     CHECK(zpp_groups.epochs.at(1) == std::vector<std::uint32_t> {2, 3});
+}
+
+TEST_CASE("BI batch bindings use the native request profile with independent module rows", "[rgw][cls][datum][bi-put]")
+{
+    const auto expected = fixtures();
+    std::vector<::rgw_cls_bi_entry> entries;
+    for (const auto& row : expected) {
+        entries.push_back({static_cast<::BIIndexType>(row.kind), row.key, row.payload});
+    }
+    for (const bool check_existing : {false, true}) {
+        const auto bytes = native::encode_put_request(entries, check_existing);
+        CHECK(bytes.contents_equal(rgw_bi_oracle::encode_put_request(expected, check_existing)));
+        bool old_check = !check_existing;
+        const auto old_rows = rgw_bi_oracle::decode_put_request(bytes, old_check);
+        CHECK(old_check == check_existing);
+        REQUIRE(old_rows.size() == expected.size());
+        CHECK(old_rows[0].payload.contents_equal(expected[0].payload));
+        const auto input = fragmented(bytes);
+        auto cursor = input.cbegin();
+        native::put_request value;
+        native::decode(value, cursor);
+        REQUIRE(value.entries.size() == expected.size());
+        CHECK(value.check_existing == check_existing);
+        CHECK(cursor.end());
+        for (std::size_t index = 0; index < expected.size(); ++index) {
+            CHECK(static_cast<std::uint8_t>(value.entries[index].type) == expected[index].kind);
+            CHECK(value.entries[index].idx == expected[index].key);
+            CHECK(value.entries[index].data.contents_equal(expected[index].payload));
+        }
+    }
+    const auto future = fragmented(rgw_bi_oracle::extended_reply(expected));
+    auto cursor = future.cbegin();
+    native::put_request value;
+    native::decode(value, cursor);
+    REQUIRE(value.entries.size() == expected.size());
+    CHECK(value.check_existing);
+    CHECK(cursor.end());
+    bool old_check = false;
+    CHECK(rgw_bi_oracle::decode_put_request(future, old_check).size() == expected.size());
+    CHECK(old_check);
+}
+
+TEST_CASE("BI batch request decoding publishes atomically on structural failure", "[rgw][cls][datum][bi-put]")
+{
+    const auto bytes = rgw_bi_oracle::encode_put_request(fixtures(), false);
+    for (unsigned size = 0; size < bytes.length(); ++size) {
+        byte_buffer input;
+        input.append("prefix", 6);
+        byte_buffer tail;
+        tail.substr_of(bytes, 0, size);
+        input.append(tail);
+        auto cursor = input.cbegin(6);
+        native::put_request value {{{::BIIndexType::Invalid, "preserve", payload()}}, true};
+        CHECK_THROWS(native::decode(value, cursor));
+        CHECK(cursor.get_off() == 6);
+        REQUIRE(value.entries.size() == 1);
+        CHECK(value.entries[0].idx == "preserve");
+        CHECK(value.entries[0].data.contents_equal(payload()));
+        CHECK(value.check_existing);
+    }
+    auto impossible = rgw_bi_oracle::encode_put_request({}, false);
+    const char excessive[] = {char(0xFF), char(0xFF), char(0xFF), char(0xFF)};
+    impossible.begin(6).copy_in(4, excessive);
+    auto cursor = impossible.cbegin();
+    native::put_request value;
+    CHECK_THROWS(native::decode(value, cursor));
+    CHECK(cursor.get_off() == 0);
+    CHECK(value.entries.empty());
+}
+
+TEST_CASE("BI batch messages and decoded payloads retain their owners", "[rgw][cls][datum][bi-put]")
+{
+    byte_buffer input;
+    const char *backing = nullptr;
+    {
+        std::vector<::rgw_cls_bi_entry> entries {{::BIIndexType::Plain, "key", payload()}};
+        backing = entries[0].data.cbegin().get_current_ptr().c_str();
+        input = native::encode_put_request(entries, false);
+    }
+    native::put_request value;
+    auto cursor = input.cbegin();
+    native::decode(value, cursor);
+    input.clear();
+    REQUIRE(value.entries.size() == 1);
+    CHECK(value.entries[0].data.cbegin().get_current_ptr().c_str() == backing);
+    CHECK(value.entries[0].data.contents_equal(payload()));
+    CHECK(value.entries[0].idx == "key");
 }
