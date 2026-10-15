@@ -6982,8 +6982,9 @@ void OSD::_get_purged_snaps()
   // it should be reliable.
   dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
 	   << ", newest_map " << superblock.current_epoch << dendl;
+  // the monitor returns the epochs after 'start' (exclusive)
   MMonGetPurgedSnaps *m = new MMonGetPurgedSnaps(
-    superblock.purged_snaps_last + 1,
+    superblock.purged_snaps_last,
     superblock.current_epoch + 1);
   monc->send_mon_message(m);
 }
