@@ -188,7 +188,7 @@ following:
 
    :Type: String
    :Required: No.
-   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist. A replicated pool with ``num_zones`` greater than 1 uses this rule only if it places the pool in its zones as described above, and otherwise the ``{pool-name}`` rule.  For ``erasure`` pools, it is the ``erasure-code`` rule if neither an :ref:`erasure code profile <erasure-code-profiles>` nor ``--k``, ``--m`` or a CRUSH option is given and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
+   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist. A replicated pool with ``num_zones`` greater than 1 gets the ``{pool-name}`` rule instead, unless :confval:`osd_pool_default_crush_rule` names a rule, for example one set with ``ceph osd pool default set --rule``, that places the pool in its zones as described above.  For ``erasure`` pools, it is the ``erasure-code`` rule if neither an :ref:`erasure code profile <erasure-code-profiles>` nor ``--k``, ``--m`` or a CRUSH option is given and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
