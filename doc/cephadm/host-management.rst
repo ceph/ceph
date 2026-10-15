@@ -16,8 +16,9 @@ Run a command of this form to list hosts associated with the cluster:
 In commands of this form, the arguments ``host-pattern``, ``label``, and
 ``host-status`` are optional and are used for filtering.
 
-- ``host-pattern`` is a regular expression that matches against hostnames and returns only
-  matching hosts.
+- ``host-pattern`` is a shell-style glob pattern, for example ``node-0*``. It
+  is not a regular expression. It is matched against the whole host name, and
+  only matching hosts are returned.
 - ``label`` returns only hosts with the specified label.
 - ``host-status`` returns only hosts with the specified status (currently
   ``offline`` or ``maintenance``).
@@ -34,8 +35,8 @@ clusters. For example:
 
 .. code-block:: console
 
-    HOSTNAME     ADDRESS         LABELS  STATUS  VENDOR/MODEL                           CPU    HDD      SSD  NIC
-    ceph-master  192.168.122.73  _admin          QEMU (Standard PC (Q35 + ICH9, 2009))  4C/4T  4/1.6TB  -    1
+    HOST         ADDR            LABELS  STATUS  VENDOR/MODEL                           CPU    RAM    HDD      SSD  NIC
+    ceph-master  192.168.122.73  _admin          QEMU (Standard PC (Q35 + ICH9, 2009))  4C/4T  8 GiB  4/1.6TB  -    1
     1 hosts in cluster
 
 
@@ -131,6 +132,9 @@ The ``orch host drain`` command also supports a ``--zap-osd-devices``
 flag. Setting this flag while draining a host will cause cephadm to zap
 the devices of the OSDs it is removing as part of the drain process.
 
+.. warning:: The ``--zap-osd-devices`` flag erases the devices of the OSDs
+   that are removed.
+
 .. prompt:: bash #
 
    ceph orch host drain <host> --zap-osd-devices
@@ -156,14 +160,14 @@ Offline Host Removal
 If a host is offline and cannot be recovered, it can be removed from the
 cluster by running a command of the following form:
 
-.. prompt:: bash #
-
-   ceph orch host rm <host> --offline --force
-
 .. warning:: This can potentially cause data loss. This command forcefully
    purges OSDs from the cluster by calling ``osd purge-actual`` for each OSD.
    Any service specs that still contain this host should be manually updated.
    For more information, see :ref:`orchestrator-cli-service-spec`.
+
+.. prompt:: bash #
+
+   ceph orch host rm <host> --offline --force
 
 
 .. _orchestrator-host-labels:
@@ -180,20 +184,20 @@ Labels can be added when adding a host with the ``--labels`` flag:
 
 .. prompt:: bash #
 
-   ceph orch host add my_hostname --labels=my_label1
-   ceph orch host add my_hostname --labels=my_label1,my_label2
+   ceph orch host add host1 --labels=my_label1
+   ceph orch host add host1 --labels=my_label1,my_label2
 
 To add a label to an existing host, run:
 
 .. prompt:: bash #
 
-   ceph orch host label add my_hostname my_label
+   ceph orch host label add host1 my_label
 
 To remove a label, run:
 
 .. prompt:: bash #
 
-   ceph orch host label rm my_hostname my_label
+   ceph orch host label rm host1 my_label
 
 
 .. _cephadm-special-host-labels:
@@ -217,9 +221,9 @@ The following host labels have a special meaning to cephadm.  All start with ``_
 
 * ``_no_autotune_memory``: *Do not autotune memory on this host*.
 
-  This label will prevent daemon memory from being tuned even when the
-  :confval:`osd_memory_target_autotune` or similar option is enabled for one or more daemons
-  on that host.
+  This label prevents daemon memory from being tuned even when the
+  ``osd_memory_target_autotune`` or a similar option is enabled for one or more
+  daemons on that host. See :ref:`osd_autotune`.
 
 * ``_admin``: *Distribute config files and keyrings to this host*.
 
@@ -227,9 +231,9 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   bootstrap was originally run), and the ``client.admin`` key is set to be distributed
   to that host via the ``ceph orch client-keyring ...`` function.  Adding this label
   to additional hosts will normally cause cephadm to deploy configuration and keyring files
-  in ``/etc/ceph``. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy), in
-  addition to the default location ``/etc/ceph/`` cephadm also stores config and keyring
-  files in the ``/var/lib/ceph/<fsid>/config`` directory.
+  in ``/etc/ceph``. In addition to the default location ``/etc/ceph/``,
+  cephadm also stores config and keyring files in the
+  ``/var/lib/ceph/<fsid>/config`` directory.
 
 
 Maintenance Mode
@@ -241,14 +245,14 @@ to take a host out of maintenance mode:
 
 .. prompt:: bash #
 
-   ceph orch host maintenance enter <hostname> [--force] [--yes-i-really-mean-it]
+   ceph orch host maintenance enter <hostname> [--force [--yes-i-really-mean-it]]
    ceph orch host maintenance exit <hostname> [--force] [--offline]
 
 * Adding the ``--force`` flag to the ``enter`` command allows the user to
   bypass warnings (but not alerts).
-* Adding the ``--yes-i-really-mean-it`` flag to the ``enter`` command
-  bypasses all safety checks and makes an attempt to force the host into
-  maintenance mode.
+* Adding the ``--yes-i-really-mean-it`` flag together with ``--force`` to the
+  ``enter`` command bypasses all safety checks and makes an attempt to force
+  the host into maintenance mode. Without ``--force``, the flag is rejected.
 * Adding the ``--force`` and ``--offline`` flags to the ``exit`` command
   causes cephadm to mark hosts that are in maintenance mode and offline as
   no longer in maintenance mode. Note that if the host comes online, the
@@ -349,6 +353,9 @@ added to is also added to the default bucket), for example:
   Subsequent changes to the ``location`` property will be ignored.
   Removing a host will not remove an associated CRUSH bucket unless the
   ``--rm-crush-entry`` flag is provided to the ``orch host rm`` command.
+  The exception is the removal of an offline host with ``--offline --force``:
+  cephadm then purges the host's OSDs and also tries to remove the host's
+  CRUSH bucket.
 
 See also :ref:`crush_map_default_types`.
 
@@ -411,7 +418,7 @@ run on the host.
   The exact filename that the profile is written to within ``/etc/sysctl.d/``
   is ``<profile-name>-cephadm-tuned-profile.conf``, where ``<profile-name>`` is
   the ``profile_name`` setting that you specify in the YAML spec. We suggest
-  naming these profiles following the usual ``sysctl.d`` `NN-xxxxx` convention. Because
+  naming these profiles following the usual ``sysctl.d`` ``NN-xxxxx`` convention. Because
   sysctl settings are applied in lexicographical order (sorted by the filename
   in which the setting is specified), you may want to carefully choose
   the ``profile_name`` in your spec so that it is applied before or after other
@@ -498,12 +505,16 @@ with those hosts in a secure way.
 Default Behavior
 ----------------
 
-Cephadm stores an SSH key in the :ref:`Monitor configuration database <ceph-conf-database>` that is used to
-connect to remote hosts.  When the cluster is bootstrapped, this SSH
+Cephadm stores an SSH key in the Monitors' ``config-key`` store, under
+``mgr/cephadm/ssh_identity_key`` and ``mgr/cephadm/ssh_identity_pub``, and
+uses it to connect to remote hosts.  When the cluster is bootstrapped, this SSH
 key is generated automatically and no additional configuration
 is necessary.
 
 The currently stored SSH key can be deleted with:
+
+.. warning:: ``ceph cephadm clear-key`` removes the stored SSH private key,
+   public key and certificate.
 
 .. prompt:: bash #
 
@@ -585,9 +596,12 @@ used for connecting to remote hosts.  The configuration looks
 something like this::
 
   Host *
-  User root
-  StrictHostKeyChecking no
-  UserKnownHostsFile /dev/null
+    User root
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    ConnectTimeout=30
+
+To print the configuration that is in use, run ``ceph cephadm get-ssh-config``.
 
 There are two ways to customize this configuration for your environment:
 
@@ -727,9 +741,10 @@ You can manually prepare a host for sudo hardening using:
 
   cephadm prepare-host-sudo-hardening --ssh-user <user> --ssh-pub-key <pub_key>
 
-.. note:: During initial host addition, the root user is used for setup. After
-   Sudo hardening is enabled, the specified non-root user with restricted sudo
-   access will be used for ongoing operations.
+.. note:: When sudo hardening is enabled, ``ceph orch host add`` connects to
+   the new host as the cluster SSH user (see :ref:`cephadm-ssh-user`) and runs
+   every command there through ``sudo /usr/libexec/cephadm_invoker.py``. It
+   does not make a separate root login to set up the new host.
 
 Sudo Hardening Workflow
 -----------------------
@@ -747,8 +762,9 @@ When sudo hardening is enabled, the following workflow is used:
 The ``cephadm_invoker.py`` script provides the following subcommands:
 
 - ``run``: Execute cephadm binary with hash verification
-- ``deploy_cephadm_binary``: Deploy cephadm binary to final location
-- ``check_existence``: Check if a file exists
+- ``deploy_binary``: Deploy cephadm binary from a temporary file to its final
+  location
+- ``check_binary``: Check if a cephadm binary exists
 
 Sudo Access Restrictions
 -------------------------
@@ -758,8 +774,8 @@ host is prepared for sudo hardening, the sudoers configuration is modified to li
 the commands that can be executed with sudo. This prevents unauthorized command
 execution while still allowing necessary cephadm operations.
 
-The sudoers configuration restricts access to only the ``cephadm_invoker.py`` script
-and essential system commands, providing a secure execution environment.
+The sudoers file that cephadm writes for the user allows only the
+``/usr/libexec/cephadm_invoker.py`` script to be run with ``sudo``.
 
 Security Benefits
 -----------------
