@@ -172,7 +172,7 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode', 'application')
 
-RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
+RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id', 'zone_id')
 
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
@@ -1466,6 +1466,25 @@ class Module(MgrModule, OrchestratorClientMixin):
                     'osd.{}'.format(id_),
                 ))
 
+    def get_rgw_zone_ids(self) -> Dict[str, str]:
+        """
+        Map RGW daemons to the zone id they registered in the service map.
+        Keyed both by service map id (gid) and by daemon name (metadata 'id'),
+        since the instance_id label is derived from either of them.
+        """
+        zone_ids: Dict[str, str] = {}
+        service_map = self.get('service_map')
+        daemons = service_map.get('services', {}).get('rgw', {}).get('daemons', {})
+        for gid, daemon in daemons.items():
+            if not isinstance(daemon, dict):
+                continue
+            metadata = daemon.get('metadata', {})
+            zone_id = metadata.get('zone_id', '')
+            zone_ids[str(gid)] = zone_id
+            if metadata.get('id'):
+                zone_ids[metadata['id']] = zone_id
+        return zone_ids
+
     def get_service_list(self) -> Dict[Tuple[str, str], Tuple[str, str, str]]:
         ret = {}
         for server in self.list_servers():
@@ -1661,6 +1680,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         # If orchestrator is available and ceph-exporter is running modify rgw instance id
         # to match the one from exporter
         modify_instance_id = self.orch_is_available() and self.get_module_option('exclude_perf_counters')
+        rgw_zone_ids = self.get_rgw_zone_ids()
         if modify_instance_id:
             daemons = raise_if_exception(self.list_daemons(daemon_type='rgw'))
             for daemon in daemons:
@@ -1672,7 +1692,8 @@ class Module(MgrModule, OrchestratorClientMixin):
                                                  (f"{daemon.daemon_type}.{daemon.daemon_id}",
                                                   str(daemon.hostname),
                                                   str(daemon.version),
-                                                  instance_id))
+                                                  instance_id,
+                                                  rgw_zone_ids.get(daemon.daemon_id or '', '')))
         for key, value in servers.items():
             service_id, service_type = key
             if service_type == 'rgw' and not modify_instance_id:
@@ -1680,7 +1701,8 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['rgw_metadata'].set(
                     1,
                     ('{}.{}'.format(service_type, name),
-                     hostname, version, service_id)
+                     hostname, version, service_id,
+                     rgw_zone_ids.get(service_id, ''))
                 )
             elif service_type == 'rbd-mirror':
                 mirror_metadata = self.get_metadata('rbd-mirror', service_id)

@@ -1,13 +1,113 @@
 local g = import 'grafonnet/grafana.libsonnet';
 
 (import 'utils.libsonnet') {
+  // Usage metrics have no instance_id/ceph_daemon label, but they carry the RGW zone id in the
+  // 'zone' label. ceph_rgw_metadata exposes the same id as 'zone_id', so the $rgw_servers filter
+  // is applied by restricting usage series to the zones of the selected daemons.
+  rgwS3SelectedZones:: 'label_replace(ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s}, "zone", "$1", "zone_id", "(.+)")' % $.matchers(),
+
+  // Per-bucket performance counter summed per bucket and owner, restricted to the selected
+  // $rgw_servers. The owner comes from the usage metrics (the only bucket->user mapping) and the
+  // counters are matched on bucket name, tenant and the zone of the serving RGW daemon
+  // (instance_id -> ceph_rgw_metadata.zone_id), so same-named buckets of different users or zones
+  // stay separate rows. Buckets without usage series are kept with owner "All".
+  rgwS3BucketPerfByOwner:: function(metric)
+    local withZone = '(%s * on (instance_id) group_left (zone) %s)' % [metric, $.rgwS3SelectedZones];
+    'sum by (bucket, owner) (%(w)s * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes)) or label_replace(sum by (bucket) (%(w)s unless on (bucket, tenant, zone) ceph_rgw_bucket_usage_bytes), "owner", "All", "bucket", ".*")' % { w: withZone },
+
+  // Top-5 table over a usage metric, restricted to the zones of the selected $rgw_servers.
+  //   entity: 'user' (grouped by owner) or 'bucket' (grouped by bucket, owner, zone)
+  //   metric: usage metric name; valueName: displayed value column; unit: grafana unit
+  rgwS3TopTable:: function(title, description, gridPosition, entity, metric, valueName, unit)
+    local isUser = entity == 'user';
+    local groupBy = if isUser then 'owner' else 'bucket, owner, zone';
+    local userLink = [{
+      title: 'Open ${__value.raw}',
+      url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}',
+      targetBlank: false,
+    }];
+    local bucketLink = [{
+      title: 'Open ${__value.raw}',
+      url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}',
+      targetBlank: false,
+    }];
+    local valueOverride(name) = {
+      matcher: { id: 'byName', options: name },
+      properties: [
+        { id: 'displayName', value: valueName },
+        { id: 'unit', value: unit },
+      ],
+    };
+    $.addTableExtended(
+      datasource='${datasource}',
+      title=title,
+      gridPosition=gridPosition,
+      description=description,
+      options={
+        footer: { fields: '', reducer: ['sum'], countRows: false, enablePagination: false, show: false },
+        frameIndex: 0,
+        showHeader: true,
+        sortBy: [{ desc: true, displayName: valueName }],
+      },
+      custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: false, inspect: false },
+      thresholds={ mode: 'absolute', steps: [{ color: 'green', value: null }] },
+      overrides=(
+        if isUser then [
+          {
+            matcher: { id: 'byName', options: 'owner' },
+            properties: [{ id: 'displayName', value: 'User' }, { id: 'links', value: userLink }],
+          },
+          { matcher: { id: 'byName', options: 'User' }, properties: [{ id: 'links', value: userLink }] },
+        ] else [
+          {
+            matcher: { id: 'byName', options: 'bucket' },
+            properties: [{ id: 'displayName', value: 'Bucket' }, { id: 'links', value: bucketLink }],
+          },
+          { matcher: { id: 'byName', options: 'Bucket' }, properties: [{ id: 'links', value: bucketLink }] },
+          {
+            matcher: { id: 'byName', options: 'owner' },
+            properties: [{ id: 'displayName', value: 'User' }, { id: 'links', value: userLink }],
+          },
+          { matcher: { id: 'byName', options: 'User' }, properties: [{ id: 'links', value: userLink }] },
+        ]
+      ) + [
+        valueOverride('Value'),
+        valueOverride('Value #A'),
+        { matcher: { id: 'byName', options: valueName }, properties: [{ id: 'unit', value: unit }] },
+      ],
+      pluginVersion='9.4.7'
+    ).addTransformations([
+      {
+        id: 'organize',
+        options: {
+          // zone is kept in the query's group-by so same-named buckets of different zones stay
+          // separate rows, but it is not displayed.
+          excludeByName: { Time: true, time: true, zone: true, __name__: true },
+          indexByName: if isUser then { owner: 0, User: 0, Value: 1 } else { bucket: 0, Bucket: 0, owner: 1, User: 1, Value: 2 },
+          renameByName: {},
+        },
+      },
+    ]).addTargets([
+      $.addTargetSchema(
+        expr='topk(5, sum by (%s) (%s and on (zone) %s))' % [groupBy, metric, $.rgwS3SelectedZones],
+        datasource={ type: 'prometheus', uid: '${datasource}' },
+        format='table',
+        hide=false,
+        exemplar=false,
+        instant=true,
+        interval='',
+        legendFormat='',
+        range=false,
+      ),
+    ]),
+
   'rgw-s3-analytics.json':
     $.dashboardSchema(
       'Ceph Object - S3 Analytics - Overview',
       '',
       'BnxelG7Sz',
       'now-1h',
-      '30s',
+      '1m',
       22,
       $._config.dashboardTags,
       ''
@@ -61,11 +161,12 @@ local g = import 'grafonnet/grafana.libsonnet';
       // ── Row: Overview ─────────────────────────────────────────────────────
       $.addRowSchema(false, true, 'Overview') + { gridPos: { x: 0, y: 0, w: 24, h: 1 } },
 
-      // Summary stats
+      // Summary stats (single row, in order): Total Used Bytes, Object Count, Avg Object Size,
+      // Total PUT Bytes, Total GET Bytes, Total PUT Ops, Total GET Ops, Compression Ratio
       $.addStatPanel(
-        title='Total PUT Bytes',
+        title='Total Used Bytes',
         datasource='${datasource}',
-        gridPosition={ x: 0, y: 1, w: 4, h: 3 },
+        gridPosition={ x: 0, y: 1, w: 3, h: 3 },
         graphMode='none',
         colorMode='none',
         unit='decbytes',
@@ -73,14 +174,14 @@ local g = import 'grafonnet/grafana.libsonnet';
         justifyMode='auto',
         thresholdsMode='absolute',
         pluginVersion='9.4.7',
-        description='Cumulative bytes uploaded via PUT operations across all RGW daemons.',
+        description='Total bytes currently stored across all buckets (usage metric).',
       ).addThresholds([
         { color: 'green', value: null },
         { color: 'red', value: 80 },
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(ceph_rgw_op_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          expr='sum(ceph_rgw_bucket_usage_bytes and on (zone) %s)' % $.rgwS3SelectedZones,
           datasource='${datasource}',
           legendFormat='__auto',
           range=true
@@ -88,109 +189,9 @@ local g = import 'grafonnet/grafana.libsonnet';
       ]),
 
       $.addStatPanel(
-        title='Total GET Bytes',
+        title='Object Count',
         datasource='${datasource}',
-        gridPosition={ x: 4, y: 1, w: 4, h: 3 },
-        graphMode='none',
-        colorMode='none',
-        unit='decbytes',
-        orientation='auto',
-        justifyMode='auto',
-        thresholdsMode='absolute',
-        pluginVersion='9.4.7',
-        description='Cumulative bytes downloaded via GET operations across all RGW daemons.',
-      ).addThresholds([
-        { color: 'green', value: null },
-        { color: 'red', value: 80 },
-      ])
-      .addTargets([
-        $.addTargetSchema(
-          expr='sum\n(ceph_rgw_op_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-          datasource='${datasource}',
-          legendFormat='__auto',
-          range=true
-        ),
-      ]),
-
-      $.addStatPanel(
-        title='Total PUT Ops',
-        datasource='${datasource}',
-        gridPosition={ x: 8, y: 1, w: 4, h: 3 },
-        graphMode='none',
-        colorMode='none',
-        unit='none',
-        orientation='auto',
-        justifyMode='auto',
-        thresholdsMode='absolute',
-        pluginVersion='9.4.7',
-        description='Cumulative PUT object operation count across all RGW daemons.',
-      ).addThresholds([
-        { color: 'green', value: null },
-        { color: 'red', value: 80 },
-      ])
-      .addTargets([
-        $.addTargetSchema(
-          expr='sum(ceph_rgw_op_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-          datasource='${datasource}',
-          legendFormat='__auto',
-          range=true
-        ),
-      ]),
-
-      $.addStatPanel(
-        title='Total GET Ops',
-        datasource='${datasource}',
-        gridPosition={ x: 12, y: 1, w: 4, h: 3 },
-        graphMode='none',
-        colorMode='none',
-        unit='none',
-        orientation='auto',
-        justifyMode='auto',
-        thresholdsMode='absolute',
-        pluginVersion='9.4.7',
-        description='Cumulative GET object operation count across all RGW daemons.',
-      ).addThresholds([
-        { color: 'green', value: null },
-        { color: 'red', value: 80 },
-      ])
-      .addTargets([
-        $.addTargetSchema(
-          expr='sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-          datasource='${datasource}',
-          legendFormat='__auto',
-          range=true
-        ),
-      ]),
-
-      $.addStatPanel(
-        title='Avg Object Size',
-        datasource='${datasource}',
-        gridPosition={ x: 16, y: 1, w: 4, h: 3 },
-        graphMode='none',
-        colorMode='none',
-        unit='decbytes',
-        orientation='auto',
-        justifyMode='auto',
-        thresholdsMode='absolute',
-        pluginVersion='9.4.7',
-        description='Average size per PUT object (total PUT bytes ÷ total PUT ops).',
-      ).addThresholds([
-        { color: 'green', value: null },
-        { color: 'red', value: 80 },
-      ])
-      .addTargets([
-        $.addTargetSchema(
-          expr='sum\n((sum by(instance_id)(ceph_rgw_op_put_obj_bytes) > 0) / (sum by(instance_id)(ceph_rgw_op_put_obj_ops) > 0) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-          datasource='${datasource}',
-          legendFormat='__auto',
-          range=true
-        ),
-      ]),
-
-      $.addStatPanel(
-        title='Stored Objects',
-        datasource='${datasource}',
-        gridPosition={ x: 20, y: 1, w: 4, h: 3 },
+        gridPosition={ x: 3, y: 1, w: 3, h: 3 },
         graphMode='none',
         colorMode='none',
         unit='none',
@@ -205,7 +206,157 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(ceph_rgw_bucket_usage_objects)',
+          expr='sum(ceph_rgw_bucket_usage_objects and on (zone) %s)' % $.rgwS3SelectedZones,
+          datasource='${datasource}',
+          legendFormat='__auto',
+          range=true
+        ),
+      ]),
+
+      $.addStatPanel(
+        title='Avg Object Size',
+        datasource='${datasource}',
+        gridPosition={ x: 6, y: 1, w: 3, h: 3 },
+        graphMode='none',
+        colorMode='none',
+        unit='decbytes',
+        orientation='auto',
+        justifyMode='auto',
+        thresholdsMode='absolute',
+        pluginVersion='9.4.7',
+        description='Average size per stored object (total used bytes / object count, usage metrics).',
+      ).addThresholds([
+        { color: 'green', value: null },
+        { color: 'red', value: 80 },
+      ])
+      .addTargets([
+        $.addTargetSchema(
+          expr='sum(ceph_rgw_bucket_usage_bytes and on (zone) %(z)s) / (sum(ceph_rgw_bucket_usage_objects and on (zone) %(z)s) > 0)' % { z: $.rgwS3SelectedZones },
+          datasource='${datasource}',
+          legendFormat='__auto',
+          range=true
+        ),
+      ]),
+
+      $.addStatPanel(
+        title='Total PUT Bytes',
+        datasource='${datasource}',
+        gridPosition={ x: 9, y: 1, w: 3, h: 3 },
+        graphMode='none',
+        colorMode='none',
+        unit='decbytes',
+        orientation='auto',
+        justifyMode='auto',
+        thresholdsMode='absolute',
+        pluginVersion='9.4.7',
+        description='Cumulative bytes uploaded via PUT operations across all buckets and RGW daemons (per-bucket performance counter).',
+      ).addThresholds([
+        { color: 'green', value: null },
+        { color: 'red', value: 80 },
+      ])
+      .addTargets([
+        $.addTargetSchema(
+          expr='sum(ceph_rgw_op_per_bucket_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          datasource='${datasource}',
+          legendFormat='__auto',
+          range=true
+        ),
+      ]),
+
+      $.addStatPanel(
+        title='Total GET Bytes',
+        datasource='${datasource}',
+        gridPosition={ x: 12, y: 1, w: 3, h: 3 },
+        graphMode='none',
+        colorMode='none',
+        unit='decbytes',
+        orientation='auto',
+        justifyMode='auto',
+        thresholdsMode='absolute',
+        pluginVersion='9.4.7',
+        description='Cumulative bytes downloaded via GET operations across all buckets and RGW daemons (per-bucket performance counter).',
+      ).addThresholds([
+        { color: 'green', value: null },
+        { color: 'red', value: 80 },
+      ])
+      .addTargets([
+        $.addTargetSchema(
+          expr='sum(ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          datasource='${datasource}',
+          legendFormat='__auto',
+          range=true
+        ),
+      ]),
+
+      $.addStatPanel(
+        title='Total PUT Ops',
+        datasource='${datasource}',
+        gridPosition={ x: 15, y: 1, w: 3, h: 3 },
+        graphMode='none',
+        colorMode='none',
+        unit='none',
+        orientation='auto',
+        justifyMode='auto',
+        thresholdsMode='absolute',
+        pluginVersion='9.4.7',
+        description='Cumulative PUT object operation count across all buckets and RGW daemons (per-bucket performance counter).',
+      ).addThresholds([
+        { color: 'green', value: null },
+        { color: 'red', value: 80 },
+      ])
+      .addTargets([
+        $.addTargetSchema(
+          expr='sum(ceph_rgw_op_per_bucket_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          datasource='${datasource}',
+          legendFormat='__auto',
+          range=true
+        ),
+      ]),
+
+      $.addStatPanel(
+        title='Total GET Ops',
+        datasource='${datasource}',
+        gridPosition={ x: 18, y: 1, w: 3, h: 3 },
+        graphMode='none',
+        colorMode='none',
+        unit='none',
+        orientation='auto',
+        justifyMode='auto',
+        thresholdsMode='absolute',
+        pluginVersion='9.4.7',
+        description='Cumulative GET object operation count across all buckets and RGW daemons (per-bucket performance counter).',
+      ).addThresholds([
+        { color: 'green', value: null },
+        { color: 'red', value: 80 },
+      ])
+      .addTargets([
+        $.addTargetSchema(
+          expr='sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          datasource='${datasource}',
+          legendFormat='__auto',
+          range=true
+        ),
+      ]),
+
+      $.addStatPanel(
+        title='Compression Ratio',
+        datasource='${datasource}',
+        gridPosition={ x: 21, y: 1, w: 3, h: 3 },
+        graphMode='none',
+        colorMode='none',
+        unit='suffix:x',
+        orientation='auto',
+        justifyMode='auto',
+        thresholdsMode='absolute',
+        pluginVersion='9.4.7',
+        decimals=2,
+        description='Total Used Bytes / Utilized Bytes (size after compression and encryption). Values above 1 mean data is compressed.',
+      ).addThresholds([
+        { color: 'green', value: null },
+      ])
+      .addTargets([
+        $.addTargetSchema(
+          expr='sum(ceph_rgw_bucket_usage_bytes and on (zone) %(z)s) / (sum(ceph_rgw_bucket_usage_bytes_utilized and on (zone) %(z)s) > 0)' % { z: $.rgwS3SelectedZones },
           datasource='${datasource}',
           legendFormat='__auto',
           range=true
@@ -372,197 +523,55 @@ local g = import 'grafonnet/grafana.libsonnet';
       // ── Row: Top Users & Top Buckets (Usage) ──────────────────────────────
       $.addRowSchema(false, true, 'Top Users & Top Buckets') + { gridPos: { x: 0, y: 13, w: 24, h: 1 } },
 
-      // Top Users by stored bytes — usage metric, owner label
-      $.addTableExtended(
-        datasource='${datasource}',
-        title='Top Users by Stored Bytes',
-        gridPosition={ h: 10, w: 12, x: 0, y: 14 },
-        description='Ranked by total bytes stored in all buckets owned by each user. Source: usage metrics (ceph_rgw_bucket_usage_bytes). Click a user to open S3 Analytics – Users.',
-        options={
-          footer: { fields: '', reducer: ['sum'], countRows: false, enablePagination: false, show: false },
-          frameIndex: 0,
-          showHeader: true,
-          sortBy: [{ desc: true, displayName: 'Stored Bytes' }],
-        },
-        custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: false, inspect: false },
-        thresholds={ mode: 'absolute', steps: [{ color: 'green', value: null }] },
-        overrides=[
-          {
-            matcher: { id: 'byName', options: 'owner' },
-            properties: [
-              { id: 'displayName', value: 'User' },
-              {
-                id: 'links',
-                value: [{
-                  title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
-                  targetBlank: false,
-                }],
-              },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'User' },
-            properties: [
-              {
-                id: 'links',
-                value: [{
-                  title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
-                  targetBlank: false,
-                }],
-              },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Value' },
-            properties: [
-              { id: 'displayName', value: 'Stored Bytes' },
-              { id: 'unit', value: 'decbytes' },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Value #A' },
-            properties: [
-              { id: 'displayName', value: 'Stored Bytes' },
-              { id: 'unit', value: 'decbytes' },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Stored Bytes' },
-            properties: [{ id: 'unit', value: 'decbytes' }],
-          },
-        ],
-        pluginVersion='9.4.7'
-      ).addTargets([
-        $.addTargetSchema(
-          expr='sum by (owner) (ceph_rgw_bucket_usage_bytes)',
-          datasource={ type: 'prometheus', uid: '${datasource}' },
-          format='table',
-          hide=false,
-          exemplar=false,
-          instant=true,
-          interval='',
-          legendFormat='',
-          range=false,
-        ),
-      ]),
+      // Top 5 tables from usage metrics, filtered by the zones of the selected $rgw_servers.
+      $.rgwS3TopTable(
+        title='Top Users by Usage',
+        description='Top 5 users by total bytes stored in all buckets they own. Source: usage metrics (ceph_rgw_bucket_usage_bytes), filtered by the zones of the selected RGW servers. Click a user to open S3 Analytics – Users & Buckets filtered to that user.',
+        gridPosition={ h: 8, w: 12, x: 0, y: 14 },
+        entity='user',
+        metric='ceph_rgw_bucket_usage_bytes',
+        valueName='Usage',
+        unit='decbytes'
+      ),
 
-      // Top Buckets by stored bytes — usage metric, bucket label
-      $.addTableExtended(
-        datasource='${datasource}',
-        title='Top Buckets by Stored Bytes',
-        gridPosition={ h: 10, w: 12, x: 12, y: 14 },
-        description='Ranked by total bytes stored in each bucket. Source: usage metrics (ceph_rgw_bucket_usage_bytes). Click a bucket to open S3 Analytics – Buckets.',
-        options={
-          footer: { fields: '', reducer: ['sum'], countRows: false, enablePagination: false, show: false },
-          frameIndex: 0,
-          showHeader: true,
-          sortBy: [{ desc: true, displayName: 'Stored Bytes' }],
-        },
-        custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: false, inspect: false },
-        thresholds={ mode: 'absolute', steps: [{ color: 'green', value: null }] },
-        overrides=[
-          {
-            matcher: { id: 'byName', options: 'bucket' },
-            properties: [
-              { id: 'displayName', value: 'Bucket' },
-              {
-                id: 'links',
-                value: [{
-                  title: 'Open ${__value.raw}',
-                  url: '/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}',
-                  targetBlank: false,
-                }],
-              },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Bucket' },
-            properties: [
-              {
-                id: 'links',
-                value: [{
-                  title: 'Open ${__value.raw}',
-                  url: '/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}',
-                  targetBlank: false,
-                }],
-              },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'owner' },
-            properties: [
-              { id: 'displayName', value: 'Owner' },
-              {
-                id: 'links',
-                value: [{
-                  title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
-                  targetBlank: false,
-                }],
-              },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Owner' },
-            properties: [
-              {
-                id: 'links',
-                value: [{
-                  title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
-                  targetBlank: false,
-                }],
-              },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'zone' },
-            properties: [{ id: 'displayName', value: 'Zone' }],
-          },
-          {
-            matcher: { id: 'byName', options: 'Value' },
-            properties: [
-              { id: 'displayName', value: 'Stored Bytes' },
-              { id: 'unit', value: 'decbytes' },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Value #A' },
-            properties: [
-              { id: 'displayName', value: 'Stored Bytes' },
-              { id: 'unit', value: 'decbytes' },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Stored Bytes' },
-            properties: [{ id: 'unit', value: 'decbytes' }],
-          },
-        ],
-        pluginVersion='9.4.7'
-      ).addTargets([
-        $.addTargetSchema(
-          expr='sum by (bucket, owner, zone) (ceph_rgw_bucket_usage_bytes)',
-          datasource={ type: 'prometheus', uid: '${datasource}' },
-          format='table',
-          hide=false,
-          exemplar=false,
-          instant=true,
-          interval='',
-          legendFormat='',
-          range=false,
-        ),
-      ]),
+      $.rgwS3TopTable(
+        title='Top Buckets by Usage',
+        description='Top 5 buckets by bytes stored. Source: usage metrics (ceph_rgw_bucket_usage_bytes), filtered by the zones of the selected RGW servers. Click a bucket to open S3 Analytics – Users & Buckets filtered to that bucket.',
+        gridPosition={ h: 8, w: 12, x: 12, y: 14 },
+        entity='bucket',
+        metric='ceph_rgw_bucket_usage_bytes',
+        valueName='Usage',
+        unit='decbytes'
+      ),
+
+      $.rgwS3TopTable(
+        title='Top Users by Object Count',
+        description='Top 5 users by number of objects stored in all buckets they own. Source: usage metrics (ceph_rgw_bucket_usage_objects), filtered by the zones of the selected RGW servers. Click a user to open S3 Analytics – Users & Buckets filtered to that user.',
+        gridPosition={ h: 8, w: 12, x: 0, y: 22 },
+        entity='user',
+        metric='ceph_rgw_bucket_usage_objects',
+        valueName='Object Count',
+        unit='none'
+      ),
+
+      $.rgwS3TopTable(
+        title='Top Buckets by Object Count',
+        description='Top 5 buckets by number of objects stored. Source: usage metrics (ceph_rgw_bucket_usage_objects), filtered by the zones of the selected RGW servers. Click a bucket to open S3 Analytics – Users & Buckets filtered to that bucket.',
+        gridPosition={ h: 8, w: 12, x: 12, y: 22 },
+        entity='bucket',
+        metric='ceph_rgw_bucket_usage_objects',
+        valueName='Object Count',
+        unit='none'
+      ),
 
       // ── Row: Bucket Performance ────────────────────────────────────────────
-      $.addRowSchema(false, true, 'Bucket Performance') + { gridPos: { x: 0, y: 24, w: 24, h: 1 } },
+      $.addRowSchema(false, true, 'Bucket Performance') + { gridPos: { x: 0, y: 30, w: 24, h: 1 } },
 
       $.addTableExtended(
         datasource='${datasource}',
-        title='Summary Per Bucket by Bandwidth',
-        gridPosition={ h: 8, w: 12, x: 0, y: 25 },
-        description='PUT bytes per bucket per daemon. Click a bucket name to open S3 Analytics – Buckets.',
+        title='Bandwidth per bucket',
+        gridPosition={ h: 8, w: 12, x: 0, y: 31 },
+        description='PUT bytes per bucket across the selected RGW daemons. Click a bucket name to open S3 Analytics – Users & Buckets filtered to that bucket.',
         options={
           footer: { fields: '', reducer: ['sum'], countRows: false, enablePagination: false, show: false },
           frameIndex: 0,
@@ -580,7 +589,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
@@ -593,15 +602,25 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
             ],
           },
           {
-            matcher: { id: 'byName', options: 'ceph_daemon' },
-            properties: [{ id: 'displayName', value: 'Daemon' }],
+            matcher: { id: 'byName', options: 'owner' },
+            properties: [
+              { id: 'displayName', value: 'User' },
+              {
+                id: 'links',
+                value: [{
+                  title: 'Open ${__value.raw}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}',
+                  targetBlank: false,
+                }],
+              },
+            ],
           },
           {
             matcher: { id: 'byName', options: 'Value' },
@@ -623,9 +642,11 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
         ],
         pluginVersion='9.4.7'
-      ).addTargets([
+      ).addTransformations([
+        { id: 'organize', options: { excludeByName: { Time: true, time: true, __name__: true }, indexByName: { bucket: 0, Bucket: 0, owner: 1, User: 1 }, renameByName: {} } },
+      ]).addTargets([
         $.addTargetSchema(
-          expr='sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          expr=$.rgwS3BucketPerfByOwner('ceph_rgw_op_per_bucket_put_obj_bytes'),
           datasource={ type: 'prometheus', uid: '${datasource}' },
           format='table',
           hide=false,
@@ -640,8 +661,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addTableExtended(
         datasource='${datasource}',
         title='Latency(ms) Per Bucket',
-        gridPosition={ h: 8, w: 12, x: 12, y: 25 },
-        description='PUT operation latency per bucket per daemon. Click a bucket name to open S3 Analytics – Buckets.',
+        gridPosition={ h: 8, w: 12, x: 12, y: 31 },
+        description='PUT operation latency per bucket across the selected RGW daemons. Click a bucket name to open S3 Analytics – Users & Buckets filtered to that bucket.',
         options={
           footer: { fields: '', reducer: ['sum'], countRows: false, enablePagination: false, show: false },
           frameIndex: 0,
@@ -659,7 +680,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
@@ -672,15 +693,25 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
             ],
           },
           {
-            matcher: { id: 'byName', options: 'ceph_daemon' },
-            properties: [{ id: 'displayName', value: 'Daemon' }],
+            matcher: { id: 'byName', options: 'owner' },
+            properties: [
+              { id: 'displayName', value: 'User' },
+              {
+                id: 'links',
+                value: [{
+                  title: 'Open ${__value.raw}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}',
+                  targetBlank: false,
+                }],
+              },
+            ],
           },
           {
             matcher: { id: 'byName', options: 'Value' },
@@ -702,9 +733,11 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
         ],
         pluginVersion='9.4.7'
-      ).addTargets([
+      ).addTransformations([
+        { id: 'organize', options: { excludeByName: { Time: true, time: true, __name__: true }, indexByName: { bucket: 0, Bucket: 0, owner: 1, User: 1 }, renameByName: {} } },
+      ]).addTargets([
         $.addTargetSchema(
-          expr='sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          expr=$.rgwS3BucketPerfByOwner('ceph_rgw_op_per_bucket_put_obj_lat_sum'),
           datasource={ type: 'prometheus', uid: '${datasource}' },
           format='table',
           hide=false,
@@ -717,13 +750,13 @@ local g = import 'grafonnet/grafana.libsonnet';
       ]),
 
       // ── Row: User Performance ──────────────────────────────────────────────
-      $.addRowSchema(false, true, 'User Performance') + { gridPos: { x: 0, y: 33, w: 24, h: 1 } },
+      $.addRowSchema(false, true, 'User Performance') + { gridPos: { x: 0, y: 39, w: 24, h: 1 } },
 
       $.addTableExtended(
         datasource='${datasource}',
-        title='Summary Per User By Bandwidth',
-        gridPosition={ h: 8, w: 12, x: 0, y: 34 },
-        description='PUT bytes per user per daemon. Click a user name to open S3 Analytics – Users.',
+        title='Bandwidth per user',
+        gridPosition={ h: 8, w: 12, x: 0, y: 40 },
+        description='PUT bytes per user across the selected RGW daemons. Click a user name to open S3 Analytics – Users & Buckets filtered to that user.',
         options={
           footer: { fields: '', reducer: ['sum'], countRows: false, enablePagination: false, show: false },
           frameIndex: 0,
@@ -741,7 +774,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
@@ -754,15 +787,11 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
             ],
-          },
-          {
-            matcher: { id: 'byName', options: 'ceph_daemon' },
-            properties: [{ id: 'displayName', value: 'Daemon' }],
           },
           {
             matcher: { id: 'byName', options: 'Value' },
@@ -784,9 +813,11 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
         ],
         pluginVersion='9.4.7'
-      ).addTargets([
+      ).addTransformations([
+        { id: 'organize', options: { excludeByName: { Time: true, time: true, __name__: true } } },
+      ]).addTargets([
         $.addTargetSchema(
-          expr='sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          expr='sum by (user) (ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
           datasource={ type: 'prometheus', uid: '${datasource}' },
           format='table',
           hide=false,
@@ -801,8 +832,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addTableExtended(
         datasource='${datasource}',
         title='Latency(ms) Per User',
-        gridPosition={ h: 8, w: 12, x: 12, y: 34 },
-        description='PUT operation latency per user per daemon. Click a user name to open S3 Analytics – Users.',
+        gridPosition={ h: 8, w: 12, x: 12, y: 40 },
+        description='PUT operation latency per user across the selected RGW daemons. Click a user name to open S3 Analytics – Users & Buckets filtered to that user.',
         options={
           footer: { fields: '', reducer: ['sum'], countRows: false, enablePagination: false, show: false },
           frameIndex: 0,
@@ -820,7 +851,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
@@ -833,15 +864,11 @@ local g = import 'grafonnet/grafana.libsonnet';
                 id: 'links',
                 value: [{
                   title: 'Open ${__value.raw}',
-                  url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
+                  url: '/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}',
                   targetBlank: false,
                 }],
               },
             ],
-          },
-          {
-            matcher: { id: 'byName', options: 'ceph_daemon' },
-            properties: [{ id: 'displayName', value: 'Daemon' }],
           },
           {
             matcher: { id: 'byName', options: 'Value' },
@@ -863,9 +890,11 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
         ],
         pluginVersion='9.4.7'
-      ).addTargets([
+      ).addTransformations([
+        { id: 'organize', options: { excludeByName: { Time: true, time: true, __name__: true } } },
+      ]).addTargets([
         $.addTargetSchema(
-          expr='sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
+          expr='sum by (user) (ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
           datasource={ type: 'prometheus', uid: '${datasource}' },
           format='table',
           hide=false,
@@ -876,1452 +905,5 @@ local g = import 'grafonnet/grafana.libsonnet';
           range=false,
         ),
       ]),
-
-      $.addRowSchema(false, true, 'Buckets', collapsed=true)
-      .addPanels([
-        $.addBarGaugePanel(
-          title='Top 5 Bucket PUTs by Operations',
-          datasource='${datasource}',
-          gridPosition={ x: 0, y: 29, w: 6, h: 8 },
-          unit='none',
-          thresholds={ color: 'green', value: null }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5, \n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{bucket}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } }, overrides: [{ matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] }] } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: ['lastNotNull'] }, displayMode: 'gradient' } },
-
-
-        $.addBarGaugePanel(
-          title='Top 5 Bucket GETs by Operations',
-          datasource='${datasource}',
-          gridPosition={ x: 6, y: 29, w: 6, h: 8 },
-          unit='none',
-          thresholds={ color: 'green', value: null }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5, \n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{bucket}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } }, overrides: [{ matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] }] } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: ['lastNotNull'] }, displayMode: 'gradient' } },
-
-
-        $.addBarGaugePanel(
-          title='Top 5 Buckets PUTs By Size',
-          datasource='${datasource}',
-          gridPosition={ x: 12, y: 29, w: 6, h: 8 },
-          unit='decbytes',
-          thresholds={ color: 'green', value: null }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5,\n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{bucket}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } } } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: [] }, displayMode: 'gradient' } },
-
-
-        $.addBarGaugePanel(
-          title='Top 5 Buckets GETs By Size',
-          datasource='${datasource}',
-          gridPosition={ x: 18, y: 29, w: 6, h: 8 },
-          unit='decbytes',
-          thresholds={ color: 'green', value: null }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5,\n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{bucket}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } } } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: [] }, displayMode: 'gradient' } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket PUTs by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 0, y: 37 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket GETs by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 6, y: 37 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket Copy by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 12, y: 37 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_copy_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket Delete by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 18, y: 37 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_del_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket GETs by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 0, y: 45 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket PUTs by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 6, y: 45 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket List by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 12, y: 45 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_list_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket Delete by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 18, y: 45 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_del_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='Bucket Copy by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 12, x: 0, y: 53 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_copy_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{bucket}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.addTableExtended(
-          datasource='${datasource}',
-          title='Summary Per Bucket by Operations',
-          gridPosition={ h: 8, w: 12, x: 12, y: 53 },
-          options={
-            footer: {
-              fields: '',
-              reducer: ['sum'],
-              countRows: false,
-              enablePagination: false,
-              show: false,
-            },
-            frameIndex: 1,
-            showHeader: true,
-            sortBy: [
-              {
-                desc: true,
-                displayName: 'PUTs',
-              },
-            ],
-          },
-          custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: false, inspect: false },
-          thresholds={
-            mode: 'absolute',
-            steps: [
-              { color: 'green' },
-            ],
-          },
-          overrides=[
-            {
-              matcher: { id: 'byType', options: 'number' },
-              properties: [
-                { id: 'unit', value: 'none' },
-              ],
-            },
-            {
-              matcher: { id: 'byName', options: 'Bucket' },
-              properties: [
-                {
-                  id: 'links',
-                  value: [{
-                    title: 'Open ${__value.raw}',
-                    url: '/d/s3bktsAnlt/ceph-object-s3-analytics-buckets?var-bucket=${__value.raw}&${__url_time_range}',
-                    targetBlank: false,
-                  }],
-                },
-              ],
-            },
-          ],
-          pluginVersion='9.4.7'
-        )
-        .addTransformations([
-          {
-            id: 'merge',
-            options: {},
-          },
-          {
-            id: 'joinByField',
-            options: {
-              byField: 'Bucket',
-              mode: 'outer',
-            },
-          },
-          {
-            id: 'groupBy',
-            options: {
-              fields: {
-                Bucket: {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #A': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #B': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #C': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #D': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #F': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                bucket: {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                ceph_daemon: {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-              },
-            },
-          },
-          {
-            id: 'organize',
-            options: {
-              excludeByName: {
-                Time: true,
-                time: true,
-                'Time 1': true,
-                'Time 2': true,
-                'Time 3': true,
-                'Time 4': true,
-                'Time 5': true,
-                'Time 6': true,
-                'Time 7': true,
-                __name__: true,
-                '__name__ 1': true,
-                '__name__ 2': true,
-                '__name__ 3': true,
-                '__name__ 4': true,
-                '__name__ 5': true,
-                '__name__ 6': true,
-                '__name__ 7': true,
-                'ceph_daemon 1': true,
-                'ceph_daemon 2': true,
-                'ceph_daemon 3': true,
-                'ceph_daemon 4': true,
-                'instance 1': true,
-                'instance 2': true,
-                'instance 3': true,
-                'instance 4': true,
-                'instance 5': true,
-                'instance 6': true,
-                'instance 7': true,
-                'instance_id 1': true,
-                'instance_id 2': true,
-                'instance_id 3': true,
-                'instance_id 4': true,
-                'instance_id 5': true,
-                'instance_id 6': true,
-                'instance_id 7': true,
-                'job 1': true,
-                'job 2': true,
-                'job 3': true,
-                'job 4': true,
-                'job 5': true,
-                'job 6': true,
-                'job 7': true,
-              },
-              indexByName: {
-                bucket: 0,
-                Bucket: 0,
-                ceph_daemon: 1,
-                Daemon: 1,
-                'Value #A': 2,
-                'Value #B': 3,
-                'Value #C': 4,
-                'Value #D': 5,
-                'Value #F': 6,
-              },
-              renameByName: {
-                Bucket: '',
-                'Value #A': 'PUTs',
-                'Value #B': 'GETs',
-                'Value #C': 'List',
-                'Value #D': 'Delete',
-                'Value #E': 'Copy',
-                'Value #F': 'Copy',
-                'Value #G': '',
-                bucket: 'Bucket',
-                ceph_daemon: 'Daemon',
-              },
-            },
-          },
-          {
-            id: 'filterFieldsByName',
-            options: {
-              include: {
-                names: ['Bucket', 'Daemon', 'PUTs', 'GETs', 'List', 'Delete', 'Copy'],
-              },
-            },
-          },
-        ]).addTargets([
-          $.addTargetSchema(
-            expr='sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-        ]),
-      ]) + { gridPos: { x: 0, y: 42, w: 24, h: 1 } },
-
-
-      $.addRowSchema(false, true, 'Users', collapsed=true)
-      .addPanels([
-        $.addBarGaugePanel(
-          title='Top 5 Users PUTs By Operations',
-          datasource='${datasource}',
-          gridPosition={ x: 0, y: 62, w: 6, h: 8 },
-          unit='none',
-          thresholds={ color: 'green' }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_ops ) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)\n' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{user}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } }, overrides: [{ matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] }] } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: ['lastNotNull'] }, displayMode: 'gradient' } },
-
-
-        $.addBarGaugePanel(
-          title='Top 5 Users GETs by Operations',
-          datasource='${datasource}',
-          gridPosition={ x: 6, y: 62, w: 6, h: 8 },
-          unit='none',
-          thresholds={ color: 'green', value: null }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_ops ) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)\n' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{user}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } }, overrides: [{ matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] }] } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: ['lastNotNull'] }, displayMode: 'gradient' } },
-
-
-        $.addBarGaugePanel(
-          title='Top 5 Users PUTs by Size',
-          datasource='${datasource}',
-          gridPosition={ x: 12, y: 62, w: 6, h: 8 },
-          unit='decbytes',
-          thresholds={ color: 'green', value: null }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{user}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } } } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: [] }, displayMode: 'gradient' } },
-
-
-        $.addBarGaugePanel(
-          title='Top 5 Users GETs By Size',
-          datasource='${datasource}',
-          gridPosition={ x: 18, y: 62, w: 6, h: 8 },
-          unit='decbytes',
-          thresholds={ color: 'green', value: null }
-        )
-        .addTargets([
-          $.addTargetSchema(
-            expr='topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})\n)' % $.matchers(),
-            datasource='${datasource}',
-            legendFormat='{{ceph_daemon}} - {{user}}',
-            range=false,
-            instant=true
-          ),
-        ]) + { fieldConfig: { defaults: { color: { mode: 'thresholds' }, thresholds: { mode: 'absolute', steps: [{ color: 'green' }] } } } }
-        + { options: { orientation: 'horizontal', reduceOptions: { calcs: [] }, displayMode: 'gradient' } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User PUTs by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 0, y: 70 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User GETs by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 6, y: 70 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User Delete by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 12, y: 70 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_del_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User COPY by Size',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 18, y: 70 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='decbytes',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_copy_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User GETs by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 0, y: 78 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User PUTs by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 6, y: 78 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User List by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 12, y: 78 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_list_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User Delete by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 6, x: 18, y: 78 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_del_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.timeSeriesPanel(
-          lineInterpolation='linear',
-          lineWidth=1,
-          drawStyle='line',
-          axisPlacement='auto',
-          title='User Copy by Operations',
-          datasource='${datasource}',
-          gridPosition={ h: 8, w: 12, x: 0, y: 86 },
-          fillOpacity=0,
-          pointSize=5,
-          showPoints='auto',
-          unit='none',
-          displayMode='table',
-          showLegend=true,
-          placement='bottom',
-          tooltip={ mode: 'single', sort: 'desc' },
-          stackingMode='none',
-          spanNulls=true,
-          decimals=2,
-          thresholdsMode='absolute',
-          sortBy='Last *',
-          sortDesc=true
-        )
-        .addThresholds([
-          { color: 'green' },
-        ])
-        .addOverrides([
-          { matcher: { id: 'byType', unit: 'number' }, properties: [{ id: 'color' }, { id: 'color', value: { mode: 'palette-classic' } }] },
-        ])
-        .addTargets(
-          [
-            $.addTargetSchema(
-              expr='sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_copy_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-              datasource='${datasource}',
-              format='time_series',
-              instant=false,
-              legendFormat='{{ceph_daemon}} - {{user}}',
-              step=300,
-              range=true,
-            ),
-          ]
-        ) + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'table', placement: 'bottom', showLegend: true, sortBy: 'Last *', sortDesc: true }, tooltip: { mode: 'single', sort: 'desc' } } },
-
-
-        $.addTableExtended(
-          datasource='${datasource}',
-          title='Summary Per User By Operations',
-          gridPosition={ h: 8, w: 12, x: 12, y: 86 },
-          options={
-            footer: {
-              fields: '',
-              reducer: ['sum'],
-              countRows: false,
-              enablePagination: false,
-              show: false,
-            },
-            frameIndex: 1,
-            showHeader: true,
-            sortBy: [
-              {
-                desc: true,
-                displayName: 'PUTs',
-              },
-            ],
-          },
-          custom={ align: 'auto', cellOptions: { type: 'auto' }, filterable: false, inspect: false },
-          thresholds={
-            mode: 'absolute',
-            steps: [
-              { color: 'green' },
-            ],
-          },
-          overrides=[
-            {
-              matcher: { id: 'byType', options: 'number' },
-              properties: [
-                { id: 'unit', value: 'none' },
-              ],
-            },
-            {
-              matcher: { id: 'byName', options: 'User' },
-              properties: [
-                {
-                  id: 'links',
-                  value: [{
-                    title: 'Open ${__value.raw}',
-                    url: '/d/s3usersAnlt/ceph-object-s3-analytics-users?var-owner=${__value.raw}&${__url_time_range}',
-                    targetBlank: false,
-                  }],
-                },
-              ],
-            },
-          ],
-          pluginVersion='9.4.7'
-        )
-        .addTransformations([
-          {
-            id: 'merge',
-            options: {},
-          },
-          {
-            id: 'joinByField',
-            options: {
-              byField: 'User',
-              mode: 'outer',
-            },
-          },
-          {
-            id: 'groupBy',
-            options: {
-              fields: {
-                User: {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #A': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #B': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #C': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #D': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                'Value #F': {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                ceph_daemon: {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-                user: {
-                  aggregations: [],
-                  operation: 'groupby',
-                },
-              },
-            },
-          },
-          {
-            id: 'organize',
-            options: {
-              excludeByName: {
-                Time: true,
-                'Time 1': true,
-                'Time 2': true,
-                'Time 3': true,
-                'Time 4': true,
-                'Time 5': true,
-                'Time 6': true,
-                'Time 7': true,
-                time: true,
-                __name__: true,
-                '__name__ 1': true,
-                '__name__ 2': true,
-                '__name__ 3': true,
-                '__name__ 4': true,
-                '__name__ 5': true,
-                '__name__ 6': true,
-                '__name__ 7': true,
-                cluster: true,
-                'cluster 1': true,
-                'cluster 2': true,
-                'cluster 3': true,
-                'cluster 4': true,
-                'cluster 5': true,
-                'cluster 6': true,
-                'cluster 7': true,
-                'ceph_daemon 1': true,
-                'ceph_daemon 2': true,
-                'ceph_daemon 3': true,
-                'ceph_daemon 4': true,
-                instance: true,
-                'instance 1': true,
-                'instance 2': true,
-                'instance 3': true,
-                'instance 4': true,
-                'instance 5': true,
-                'instance 6': true,
-                'instance 7': true,
-                instance_id: true,
-                'instance_id 1': true,
-                'instance_id 2': true,
-                'instance_id 3': true,
-                'instance_id 4': true,
-                'instance_id 5': true,
-                'instance_id 6': true,
-                'instance_id 7': true,
-                job: true,
-                'job 1': true,
-                'job 2': true,
-                'job 3': true,
-                'job 4': true,
-                'job 5': true,
-                'job 6': true,
-                'job 7': true,
-                tenant: true,
-                'tenant 1': true,
-                'tenant 2': true,
-                'tenant 3': true,
-                'tenant 4': true,
-                'tenant 5': true,
-                'tenant 6': true,
-                'tenant 7': true,
-              },
-              indexByName: {
-                user: 0,
-                User: 0,
-                ceph_daemon: 1,
-                Daemon: 1,
-                'Value #A': 2,
-                'Value #B': 3,
-                'Value #C': 4,
-                'Value #D': 5,
-                'Value #F': 6,
-              },
-              renameByName: {
-                'Value #A': 'PUTs',
-                'Value #B': 'GETs',
-                'Value #C': 'LIST',
-                'Value #D': 'DELETE',
-                'Value #F': 'COPY',
-                ceph_daemon: 'Daemon',
-                user: 'User',
-              },
-            },
-          },
-          {
-            id: 'filterFieldsByName',
-            options: {
-              include: {
-                names: ['User', 'Daemon', 'PUTs', 'GETs', 'LIST', 'DELETE', 'COPY'],
-              },
-            },
-          },
-        ]).addTargets([
-          $.addTargetSchema(
-            expr='sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (user, ceph_daemon) (ceph_rgw_op_per_user_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (user, ceph_daemon) (ceph_rgw_op_per_user_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (user, ceph_daemon) (ceph_rgw_op_per_user_copy_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-          $.addTargetSchema(
-            expr='sum by (user, ceph_daemon) (ceph_rgw_op_per_user_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers", %(matchers)s})' % $.matchers(),
-            datasource={ type: 'prometheus', uid: '${datasource}' },
-            format='table',
-            hide=false,
-            exemplar=false,
-            instant=true,
-            interval='',
-            legendFormat='__auto',
-            range=false,
-          ),
-        ]),
-      ]) + { gridPos: { x: 0, y: 43, w: 24, h: 1 } },
     ]),
 }
