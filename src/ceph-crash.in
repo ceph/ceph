@@ -21,6 +21,9 @@ log = logging.getLogger('ceph-crash')
 # ceph's own log lines on stderr start with a timestamp
 LOG_LINE = re.compile(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d')
 
+# seconds to reach the cluster, well under the 30 of timeout(1)
+CONNECT_TIMEOUT = 5
+
 auth_names = ['client.crash.%s' % socket.gethostname(),
               'client.crash',
               'client.admin']
@@ -57,7 +60,9 @@ def run_ceph(what, args, input=None):
     errors = []
     for n in auth_names:
         pr = subprocess.Popen(
-            args=['timeout', '30', 'ceph', '--log-stderr-prefix=',
+            args=['timeout', '30', 'ceph',
+                  '--connect-timeout', str(CONNECT_TIMEOUT),
+                  '--log-stderr-prefix=',
                   '-n', n] + args,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,

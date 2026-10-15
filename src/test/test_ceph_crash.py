@@ -126,6 +126,14 @@ class TestPostCrash(CephCrashTestCase):
         self.assertNotEqual(self.crash.post_crash(self.crashdir), 0)
         self.assertEqual(fake.names, self.crash.auth_names)
 
+    def test_bounds_the_time_spent_reaching_the_cluster(self):
+        fake = self.fake_ceph(self.OK, self.PERM, self.PERM)
+        self.crash.post_crash(self.crashdir)
+        args = fake.calls[0].args
+        self.assertIn('--connect-timeout', args)
+        seconds = int(args[args.index('--connect-timeout') + 1])
+        self.assertLess(seconds, 30)
+
     def test_does_not_retry_a_command_that_ran_and_failed(self):
         fake = self.fake_ceph(self.SILENT_FAILURE, self.OK, self.OK)
         self.assertNotEqual(self.crash.post_crash(self.crashdir), 0)
