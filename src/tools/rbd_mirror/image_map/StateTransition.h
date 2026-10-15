@@ -14,11 +14,29 @@ namespace image_map {
 
 class StateTransition {
 public:
+  /**
+   * Zero-weight image transitions:
+   *
+   * <new> -> ASSOCIATING_STANDBY -> STANDBY --> ACTIVATING -> ASSOCIATED
+   *                                    ^      0 -> 1             |
+   *                                    |                         | 1 -> 0
+   *                                    \----- DEACTIVATING <-----/
+   *                                    |
+   *                                    | mirror disable
+   *                                    v
+   *                             REMOVING_STANDBY -> UNASSOCIATED
+   */
   enum State {
     STATE_UNASSOCIATED,
     STATE_INITIALIZING,
     STATE_ASSOCIATING,
     STATE_ASSOCIATED,
+    STATE_ASSOCIATING_STANDBY,
+    STATE_STANDBY,
+    STATE_ACTIVATING,
+    STATE_DEACTIVATING,
+    STATE_REMOVING_STANDBY,
+    STATE_UPDATING,
     STATE_SHUFFLING,
     STATE_DISSOCIATING
   };
@@ -52,7 +70,8 @@ public:
   };
 
   static bool is_idle(State state) {
-    return (state == STATE_UNASSOCIATED || state == STATE_ASSOCIATED);
+    return (state == STATE_UNASSOCIATED || state == STATE_ASSOCIATED ||
+            state == STATE_STANDBY);
   }
 
   static void transit(State state, Transition* transition);

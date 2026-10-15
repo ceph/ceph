@@ -252,6 +252,43 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
 }
 
 template <typename I>
+bool InstanceReplayer<I>::prune_image_snapshot(int64_t local_pool_id,
+  const std::string &local_image_id, uint64_t snap_id) {
+  std::lock_guard locker{m_lock};
+
+  for (auto &[_, image_replayer] : m_image_replayers) {
+    if (image_replayer->get_local_pool_id() != local_pool_id ||
+        image_replayer->get_local_image_id() != local_image_id) {
+      continue;
+    }
+
+    image_replayer->prune_snapshot(snap_id);
+    return true;
+  }
+
+  return false;
+}
+
+template <typename I>
+bool InstanceReplayer<I>::set_image_replayer_limit(
+  const std::string &global_image_id, uint64_t snap_id,
+  const cls::rbd::GroupSpec &local_group_spec) {
+  std::lock_guard locker{m_lock};
+
+  auto it = m_image_replayers.find(global_image_id);
+  if (it == m_image_replayers.end()) {
+    return false;
+  }
+
+  // Always forward the limit, even when it has not advanced. The snapshot
+  // replayer's setter is also the wake-up for an idle replayer. This matters
+  // when an image moves from a group replayer to a standalone replayer while
+  // retaining the same group snapshot limit.
+  it->second->set_remote_snap_id_end_limit(snap_id, local_group_spec);
+  return true;
+}
+
+template <typename I>
 void InstanceReplayer<I>::acquire_group(InstanceWatcher<I> *instance_watcher,
                                         const std::string &global_group_id,
                                         Context *on_finish) {
@@ -285,6 +322,8 @@ void InstanceReplayer<I>::acquire_group(InstanceWatcher<I> *instance_watcher,
     // detect if the group has been deleted while the leader was offline
     auto& group_replayer = it->second;
     group_replayer->set_finished(false);
+    dout(10) << "duplicate notification received, restarting: "
+             << group_replayer << dendl;
     group_replayer->restart(new C_TrackedOp(m_async_op_tracker, nullptr));
   }
 
@@ -308,14 +347,16 @@ void InstanceReplayer<I>::release_group(const std::string &global_group_id,
   }
 
   auto group_replayer = it->second;
-  if (group_replayer->is_finished()) {
-    m_group_replayers.erase(it);
-  }
+
+  // Remove the replayer before stopping it so that a subsequent acquire
+  // creates a fresh instance. The ImageMap release action is acknowledged
+  // only after this replayer has stopped and been destroyed, so a subsequent
+  // acquire cannot race with the old instance.
+  m_group_replayers.erase(it);
+
   on_finish = new LambdaContext(
     [group_replayer, on_finish] (int r) {
-      if (group_replayer->is_finished()) {
-        group_replayer->destroy();
-      }
+      group_replayer->destroy();
       on_finish->complete(0);
     });
   stop_group_replayer(group_replayer, on_finish);

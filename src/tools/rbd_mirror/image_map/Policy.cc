@@ -78,8 +78,16 @@ void Policy::init(
                            it.second.mapped_time});
     ceph_assert(image_state_result.second);
 
-    // ensure we (re)send image acquire actions to the instance
     auto& image_state = image_state_result.first->second;
+    if (it.first.type == MIRROR_ENTITY_TYPE_IMAGE &&
+        policy_data.weight == 0) {
+      // Group members stay mapped on disk but do not have a standalone
+      // image replayer.
+      image_state.state = StateTransition::STATE_STANDBY;
+      continue;
+    }
+
+    // ensure we (re)send entity acquire actions to the instance
     auto start_action = set_state(&image_state,
                                   StateTransition::STATE_INITIALIZING, false);
     ceph_assert(start_action);
@@ -112,7 +120,16 @@ bool Policy::add_entity(const GlobalId &global_id, uint64_t weight) {
     return false;
   }
 
+  if (!image_state_result.second &&
+      image_state.state == StateTransition::STATE_STANDBY && weight == 0) {
+    return false;
+  }
+
   image_state.weight = weight;
+  if (global_id.type == MIRROR_ENTITY_TYPE_IMAGE && weight == 0) {
+    return set_state(&image_state,
+                     StateTransition::STATE_ASSOCIATING_STANDBY, false);
+  }
   return set_state(&image_state, StateTransition::STATE_ASSOCIATING, false);
 }
 
@@ -126,7 +143,58 @@ bool Policy::remove_entity(const GlobalId &global_id) {
   }
 
   auto& image_state = it->second;
+  if (global_id.type == MIRROR_ENTITY_TYPE_IMAGE && image_state.weight == 0) {
+    return set_state(&image_state,
+                     StateTransition::STATE_REMOVING_STANDBY, false);
+  }
   return set_state(&image_state, StateTransition::STATE_DISSOCIATING, false);
+}
+
+bool Policy::modify_entity(const GlobalId& global_id, uint64_t weight) {
+  dout(5) << "global_id=" << global_id << ", weight=" << weight << dendl;
+
+  std::unique_lock map_lock{m_map_lock};
+
+  auto it = m_image_states.find(global_id);
+  if (it == m_image_states.end()) {
+    dout(10) << "entity not found: " << global_id << dendl;
+    return false;
+  }
+
+  dout(15) << "old_weight=" << it->second.weight << " new_weight=" << weight
+           << dendl;
+
+  auto& image_state = it->second;
+
+  if (image_state.weight == weight) {
+    return false;
+  }
+
+  auto old_weight = image_state.weight;
+  image_state.weight = weight;
+
+  if (global_id.type == MIRROR_ENTITY_TYPE_IMAGE) {
+    if (old_weight > 0 && weight == 0) {
+      return set_state(&image_state,
+                       StateTransition::STATE_DEACTIVATING, true);
+    } else if (old_weight == 0 && weight > 0) {
+      return set_state(&image_state, StateTransition::STATE_ACTIVATING, true);
+    }
+  }
+
+  if (weight > old_weight) {
+    // An attached image stops being a standalone entity at the same time as
+    // the group weight increases. Restart the group so it claims the image
+    // before a subsequent detach can hand it back to a standalone replayer.
+    return set_state(&image_state, StateTransition::STATE_SHUFFLING, true);
+  }
+
+  // Retain the group's image replayers while its weight decreases. The
+  // GroupReplayer releases a detached image after it processes the last group
+  // snapshot that contains the image.
+  // Restarting here can race with the newly acquired standalone replayer and
+  // create two ImageReplayers competing for the same image lock.
+  return set_state(&image_state, StateTransition::STATE_UPDATING, true);
 }
 
 void Policy::add_instances(const InstanceIds &instance_ids,
@@ -139,7 +207,7 @@ void Policy::add_instances(const InstanceIds &instance_ids,
     m_map.emplace(instance, GlobalIds{});
   }
 
-  // post-failover, remove any dead instances and re-shuffle their images
+  // post-failover, remove dead instances and re-shuffle their entities
   if (m_initial_update) {
     dout(5) << "initial instance update" << dendl;
     m_initial_update = false;
@@ -159,14 +227,14 @@ void Policy::add_instances(const InstanceIds &instance_ids,
   }
 
   GlobalIds shuffle_global_ids;
-  size_t image_count =
+  size_t entity_weight =
     std::accumulate(m_image_states.begin(), m_image_states.end(), 0,
                     [](size_t count,
                        const std::pair<GlobalId, ImageState> &p) {
                       return count + p.second.weight;
                     });
 
-  do_shuffle_add_instances(m_map, image_count, &shuffle_global_ids);
+  do_shuffle_add_instances(m_map, entity_weight, &shuffle_global_ids);
   dout(5) << "shuffling global_ids=[" << shuffle_global_ids << "]" << dendl;
 
   for (auto &global_id : shuffle_global_ids) {
@@ -212,9 +280,13 @@ void Policy::remove_instances(const ceph::shared_mutex& lock,
       ceph_assert(it != m_image_states.end());
 
       auto& image_state = it->second;
+      if (global_id.type == MIRROR_ENTITY_TYPE_IMAGE &&
+          image_state.weight == 0) {
+        continue;
+      }
       if (is_state_scheduled(image_state,
                              StateTransition::STATE_DISSOCIATING)) {
-        // don't shuffle images that no longer exist
+        // don't shuffle entities that no longer exist
         continue;
       }
 
@@ -283,7 +355,7 @@ bool Policy::finish_action(const GlobalId &global_id, int r) {
     ceph_assert(start_action);
   }
 
-  // image state may get purged in execute_policy_action()
+  // entity state may get purged in execute_policy_action()
   bool pending_action = image_state.transition.action_type != ACTION_TYPE_NONE;
   if (finish_policy_action) {
     execute_policy_action(global_id, &image_state, *finish_policy_action);
@@ -389,7 +461,7 @@ bool Policy::can_shuffle_entity(const GlobalId &global_id) const {
 
   utime_t last_shuffled_time = image_state.mapped_time;
 
-  // idle images that haven't been recently remapped can shuffle
+  // idle entities that haven't been recently remapped can shuffle
   utime_t now = ceph_clock_now();
   auto result = (StateTransition::is_idle(image_state.state) &&
                  ((migration_throttle <= 0) ||

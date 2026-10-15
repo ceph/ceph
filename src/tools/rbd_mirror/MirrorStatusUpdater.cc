@@ -275,11 +275,28 @@ void MirrorStatusUpdater<I>::set_mirror_group_status(
 
   if (skip_image_statuses_update) {
     auto it = m_global_group_status.find(global_group_id);
-    ceph_assert(it != m_global_group_status.end());
-    // update only group status fields
-    it->second.description = mirror_group_site_status.description;
-    it->second.state = mirror_group_site_status.state;
-    it->second.up = mirror_group_site_status.up;
+    if (it == m_global_group_status.end()) {
+      m_global_group_status[global_group_id] = mirror_group_site_status;
+    } else {
+      // update only group-level fields while preserving currently
+      // valid image statuses
+      it->second.description = mirror_group_site_status.description;
+      it->second.state = mirror_group_site_status.state;
+      it->second.up = mirror_group_site_status.up;
+      // prune stale image statuses that are no longer present
+      auto image_it = it->second.mirror_images.begin();
+      while (image_it != it->second.mirror_images.end()) {
+        if (mirror_group_site_status.mirror_images.count(image_it->first) == 0) {
+          dout(15) << "removing stale group image status: pool_id="
+                   << image_it->first.pool_id
+                   << ", global_image_id=" << image_it->first.global_image_id
+                   << dendl;
+          image_it = it->second.mirror_images.erase(image_it);
+        } else {
+          ++image_it;
+        }
+      }
+    }
   } else {
     m_global_group_status[global_group_id] = mirror_group_site_status;
   }

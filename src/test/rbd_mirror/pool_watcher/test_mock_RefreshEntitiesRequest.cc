@@ -52,7 +52,8 @@ public:
       .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
                                           *out_bl = bl;
                                         })),
-                      Return(r)));
+                      Return(r)))
+      .RetiresOnSaturation();
   }
 
   void expect_mirror_group_list(
@@ -89,6 +90,7 @@ public:
 TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, Success) {
   InSequence seq;
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
+  expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
   cls::rbd::MirrorGroup mirror_group =
     {"global id", cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
      cls::rbd::MIRROR_GROUP_STATE_ENABLED};
@@ -109,6 +111,36 @@ TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, Success) {
   ASSERT_EQ(expected_entities, entities);
 }
 
+// 1. List one standalone image and one image that belongs to a group.
+// 2. Return both images from the complete mirror image list.
+// 3. Check that the standalone image has weight one.
+// 4. Check that the group member remains present with weight zero.
+TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, GroupImageHasZeroWeight) {
+  InSequence seq;
+  expect_mirror_image_list(
+    m_remote_io_ctx, {{"standalone id", "standalone global id"}}, 0);
+  expect_mirror_image_list(
+    m_remote_io_ctx,
+    {{"group image id", "group image global id"},
+     {"standalone id", "standalone global id"}}, 0);
+  expect_mirror_group_list(m_remote_io_ctx, {}, 0);
+
+  C_SaferCond ctx;
+  std::map<MirrorEntity, std::string> entities;
+  MockRefreshEntitiesRequest *req = new MockRefreshEntitiesRequest(
+    m_remote_io_ctx, &entities, &ctx);
+
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  std::map<MirrorEntity, std::string> expected_entities =
+    {{{MIRROR_ENTITY_TYPE_IMAGE, "standalone global id", 1},
+      "standalone id"},
+     {{MIRROR_ENTITY_TYPE_IMAGE, "group image global id", 0},
+      "group image id"}};
+  ASSERT_EQ(expected_entities, entities);
+}
+
 TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, LargeDirectory) {
   InSequence seq;
   std::map<std::string, std::string> mirror_image_list;
@@ -121,6 +153,8 @@ TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, LargeDirectory) {
        "local id " + stringify(idx)});
   }
 
+  expect_mirror_image_list(m_remote_io_ctx, mirror_image_list, 0);
+  expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
   expect_mirror_image_list(m_remote_io_ctx, mirror_image_list, 0);
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
 

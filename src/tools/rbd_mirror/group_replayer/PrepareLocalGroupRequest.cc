@@ -142,18 +142,34 @@ void PrepareLocalGroupRequest<I>::handle_get_mirror_info(int r) {
     return;
   }
 
-  // If the mirror group state is set to CREATING, it means that the group
-  // creation was interrupted.
+  // CREATING is also the normal state until the first non-primary group
+  // snapshot is committed. A re-bootstrap can race that work, so preserve a
+  // structurally complete group and resume it instead of deleting its images.
   if (m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_CREATING) {
-    dout(10) << "local group is still in creating state, issuing a removal"
-            << dendl;
-    remove_local_group();
-    return;
+    if (m_local_group_name->empty()) {
+      dout(10) << "local group creation stopped before the directory entry, "
+                  "issuing a removal"
+               << dendl;
+      remove_local_group();
+      return;
+    }
+    if (m_mirror_group.global_group_id != m_global_group_id) {
+      derr << "local creating group belongs to global group "
+           << m_mirror_group.global_group_id << ", expected "
+           << m_global_group_id << dendl;
+      finish(-ESTALE);
+      return;
+    }
+    dout(10) << "resuming local group in creating state" << dendl;
   } else if (m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
-    dout(10) << "local group mirroring is in disabling state" << dendl;
-
-    finish(-ERESTART);
-    return;
+    // A previous removal can be interrupted after the group was marked
+    // DISABLING (for example, while an ImageReplayer is releasing its
+    // exclusive lock). Load the remaining membership so BootstrapRequest can
+    // resume the idempotent teardown instead of leaving the group permanently
+    // stuck in this state.
+    dout(10) << "local group mirroring is in disabling state, "
+                "preparing to resume removal"
+             << dendl;
   }
 
   if (m_mirror_group.mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
@@ -200,7 +216,16 @@ void PrepareLocalGroupRequest<I>::handle_list_group_images(int r) {
     r = librbd::cls_client::group_image_list_finish(&iter, &images);
   }
 
-  if (r < 0) {
+  if (r == -ENOENT &&
+      m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_CREATING) {
+    // The directory entry was written but the group header was not. This is
+    // the genuinely interrupted CreateLocalGroupRequest case.
+    dout(10) << "local group creation stopped before the group header, "
+                "issuing a removal"
+             << dendl;
+    remove_local_group();
+    return;
+  } else if (r < 0) {
     dout(10) << "error listing local group: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -227,10 +252,15 @@ void PrepareLocalGroupRequest<I>::get_mirror_images() {
 	     << dendl;
 
     (*m_state_builder)->local_group_id = m_local_group_id;
+    (*m_state_builder)->local_mirror_group = m_mirror_group;
     (*m_state_builder)->local_promotion_state = m_promotion_state;
     (*m_state_builder)->group_name = *m_local_group_name; //FIXME
     (*m_state_builder)->local_images.insert(m_local_images.begin(),
                                              m_local_images.end());
+    (*m_state_builder)->local_images_without_mirror_metadata.insert(
+        (*m_state_builder)->local_images_without_mirror_metadata.end(),
+        m_local_images_without_mirror_metadata.begin(),
+        m_local_images_without_mirror_metadata.end());
     finish(0);
     return;
   }
@@ -266,7 +296,14 @@ void PrepareLocalGroupRequest<I>::handle_get_mirror_images(int r) {
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
   }
 
-  if (r < 0) {
+  if (r == -ENOENT) {
+    dout(5) << "local group member " << spec.image_id
+            << " has no mirror metadata" << dendl;
+    m_local_images_without_mirror_metadata.push_back(spec);
+    m_images.pop_front();
+    get_mirror_images();
+    return;
+  } else if (r < 0) {
     derr << "error getting local mirror image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -288,7 +325,8 @@ void PrepareLocalGroupRequest<I>::remove_local_group() {
     &PrepareLocalGroupRequest<I>::handle_remove_local_group>(this);
 
   auto req = RemoveLocalGroupRequest<I>::create(m_io_ctx, m_global_group_id,
-                                                false, m_work_queue, ctx);
+                                                m_local_group_id, m_mirror_group,
+                                                false, m_work_queue, {}, ctx);
   req->send();
 }
 
@@ -318,4 +356,3 @@ void PrepareLocalGroupRequest<I>::finish(int r) {
 } // namespace rbd
 
 template class rbd::mirror::group_replayer::PrepareLocalGroupRequest<librbd::ImageCtx>;
-

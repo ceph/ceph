@@ -602,7 +602,27 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     m_destroy_replayers = true;
     finish_start_fail(r, "remote group is not primary");
     return;
+  } else if (r == -ERESTART) {
+    // A group disable changes its mirror record through an intermediate
+    // state. Preserve the stopped image replayers across that transient
+    // bootstrap failure: the following bootstrap uses them to find every
+    // group-owned local image, including images no longer present in the
+    // current group header, and completes the old group's teardown.
+    m_destroy_replayers = false;
+    finish_start_fail(r, "remote group state is changing");
+    return;
+  } else if (r == -EROFS) {
+    // A standalone image replayer can briefly retain the exclusive lock
+    // while an image transitions from individual to group ownership. Keep
+    // the stopped group image replayers so a subsequent bootstrap still has
+    // the complete historical image inventory and can retry the teardown.
+    m_destroy_replayers = false;
+    finish_start_fail(r, "waiting for image locks to be released");
+    return;
   } else if (r == -EEXIST) {
+    // Bootstrap created stopped image replayers so split-brain status retains
+    // the group image list. Reuse them on the next bootstrap attempt.
+    m_destroy_replayers = false;
     finish_start_fail(r, "split-brain detected");
     return;
   } else if (r == -EREMCHG) {
@@ -635,7 +655,8 @@ void GroupReplayer<I>::create_group_replayer() {
   m_replayer = group_replayer::Replayer<I>::create(
     m_threads, m_local_io_ctx, m_remote_group_peer.io_ctx, m_global_group_id,
     m_local_mirror_uuid, m_pool_meta_cache, m_state_builder->local_group_id,
-    m_state_builder->remote_group_id, &m_local_group_ctx, &m_image_replayers);
+    m_state_builder->remote_group_id, &m_local_group_ctx, m_instance_watcher,
+    &m_image_replayers);
 
   m_replayer->init(ctx);
 }
@@ -714,7 +735,9 @@ void GroupReplayer<I>::handle_start_image_replayers(int r) {
 template <typename I>
 void GroupReplayer<I>::check_image_replayers_running() {
   dout(10) << dendl;
-  bool stopped = false;
+  int error_code = 0;
+  std::string error_description;
+  bool image_replayer_stopped = false;
   {
     std::lock_guard locker{m_lock};
     if (m_state == STATE_STOPPING || m_state == STATE_STOPPED) {
@@ -724,21 +747,34 @@ void GroupReplayer<I>::check_image_replayers_running() {
 
     for (auto &it : m_image_replayers) {
       if (it.second->is_stopped()) {
-	dout(10) << "image replayer stopped for global_id : "
-                 << it.second->get_global_image_id() <<  dendl;
-        stopped = true;
+        error_code = it.second->get_error_code();
+        error_description = it.second->get_state_description();
+        dout(10) << "image replayer stopped for global_id: "
+                 << it.second->get_global_image_id() << ", r=" << error_code
+                 << ", description=" << error_description << dendl;
+        image_replayer_stopped = true;
         break;
       }
     }
   }
 
-  if (stopped) {
-    // shut down
-    dout(10) << " stopping group replayer" << dendl;
-    //TODO: determine the error
-    on_stop_replay();
+  if (!image_replayer_stopped) {
     return;
   }
+
+  if (error_code == 0) {
+    // A cleanly stopped image replayer can be the result of a membership
+    // transition, an image resync, or deletion of an image after it was
+    // detached remotely. Rebootstrap the group so its image-replayer set is
+    // rebuilt from the next durable group snapshot.
+    dout(10) << "restarting group replayer to reconcile image membership"
+             << dendl;
+    restart();
+    return;
+  }
+
+  dout(10) << "stopping group replayer after image replayer failure" << dendl;
+  on_stop_replay(error_code, error_description);
 }
 
 template <typename I>
@@ -1197,10 +1233,10 @@ void GroupReplayer<I>::set_mirror_group_status_update(
       std::string desc;
       ceph_assert(m_replayer != nullptr);
       if (!m_replayer->get_replay_status(&desc)) {
-        dout(15) << "waiting for replay status" << dendl;
-        return;
+        dout(15) << "replayer status is not available yet" << dendl;
       }
-      local_status.description = "replaying, " + desc;
+      local_status.description = desc.empty() ? "replaying"
+                                              : "replaying, " + desc;
       mirror_group_status_state = boost::make_optional(
         false, cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
       skip_image_status_update = true; // FIXME
@@ -1293,12 +1329,6 @@ void GroupReplayer<I>::set_mirror_group_status_update(
       *mirror_group_status_state == cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR) {
     local_status.state = *mirror_group_status_state;
   }
-  // prevent the status from ping-ponging when failed replays are restarted
-  if (mirror_group_status_state &&
-      *mirror_group_status_state == cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR) {
-    local_status.state = *mirror_group_status_state;
-  }
-
   m_local_status_updater->set_mirror_group_status(m_global_group_id,
                                                   local_status, force,
                                                   skip_image_status_update);
