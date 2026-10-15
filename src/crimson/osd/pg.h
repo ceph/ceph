@@ -1022,6 +1022,9 @@ private:
   interruptible_future<seastar::stop_iteration> trim_snap(
     snapid_t to_trim,
     bool needs_pause);
+  /// record a trimmed snap in the PG's info.purged_snaps (persisted,
+  /// and shared with the replicas)
+  interruptible_future<> mark_snap_purged(snapid_t snap);
   /// Re-trigger snap trimming after scrub completion. Snap trimming is
   /// deferred while the PG is scrubbing; call this from notify_scrub_end()
   /// to resume. Spawns a SnapTrimInitiate operation to avoid nesting

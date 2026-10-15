@@ -616,11 +616,39 @@ PG::interruptible_future<seastar::stop_iteration> PG::trim_snap(
           seastar::stop_iteration::yes);
       })
     );
-  }).then_interruptible([this, trimmed=to_trim] {
+  }).then_interruptible([this, trimmed=to_trim]
+                        -> interruptible_future<seastar::stop_iteration> {
     logger().debug("{}: trimmed snap={}", *this, trimmed);
     snap_trimq.erase(trimmed);
-    return seastar::make_ready_future<seastar::stop_iteration>(
-      seastar::stop_iteration::no);
+    if (peering_state.state_test(PG_STATE_SNAPTRIM_ERROR)) {
+      return interruptor::make_ready_future<seastar::stop_iteration>(
+        seastar::stop_iteration::no);
+    }
+    return mark_snap_purged(trimmed).then_interruptible([] {
+      return seastar::stop_iteration::no;
+    });
+  });
+}
+
+PG::interruptible_future<> PG::mark_snap_purged(snapid_t snap)
+{
+  // as Classic: the monitor considers a snap purged once all PGs of the
+  // pool report it in their purged_snaps
+  peering_state.adjust_purged_snaps([snap](auto& purged_snaps) {
+    if (!purged_snaps.contains(snap)) {
+      purged_snaps.insert(snap);
+    }
+  });
+  logger().debug("{}: purged_snaps now {}, snap_trimq now {}",
+                 *this, peering_state.get_info().purged_snaps, snap_trimq);
+  ceph::os::Transaction t;
+  peering_state.write_if_dirty(t);
+  return interruptor::make_interruptible(
+    crimson::os::with_store_do_transaction(
+      shard_services.get_store(store_index),
+      coll_ref, std::move(t))
+  ).then_interruptible([this] {
+    peering_state.share_pg_info();
   });
 }
 
