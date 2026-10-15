@@ -928,16 +928,6 @@ Here are the breakdowns of the arguments:
    :Type: Integer
    :Required: Yes.
 
-.. describe:: {--yes-i-really-mean-it}
-   
-      This flag is required to confirm that you really want to bypass
-      safety checks and set the values for a pool, e.g,
-      when you are trying to set ``peering_crush_bucket_count`` or 
-      ``peering_crush_bucket_target`` to be more than the number of buckets in the crush map.
-   
-      :Type: Flag
-      :Required: No.
-
 Unsetting values for a stretch pool
 ===================================
 To move the pool back to non-stretch, run a command of the following form:

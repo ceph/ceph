@@ -10655,28 +10655,6 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
   }
-  // Check if the number of peering_crush_bucket_count and peering_crush_bucket_target
-  // exceeds the number of subtrees of the specified bucket_barrier in the cluster.
-  vector<int> subtrees;
-  bool sure = false;
-  crush.get_subtree_of_type(bucket_barrier, &subtrees);
-  cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
-  if (static_cast<uint32_t>(bucket_count) > subtrees.size()) {
-    if (!sure) {
-      ss << "peering_crush_bucket_count=" << bucket_count
-        << " > " << bucket_barrier_str << "=" <<  subtrees.size()
-        << " can lead to data unavailability, pass --yes-i-really-mean-it to proceed";
-      return -EPERM;
-    }
-  } else if (static_cast<uint32_t>(bucket_target) > subtrees.size()) {
-    if (!sure) {
-      ss << "peering_crush_bucket_target=" << bucket_target
-        << " > " << bucket_barrier_str << "=" <<  subtrees.size()
-        << " can lead to data unavailability, pass --yes-i-really-mean-it to proceed";
-      return -EPERM;
-    }
-  }
-
   string crush_rule_str;
   cmd_getval(cmdmap, "crush_rule", crush_rule_str);
   if (crush_rule_str.empty()) {
