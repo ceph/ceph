@@ -7737,7 +7737,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
                          params.device_class,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
-                         force_create, &ss);
+                         force_create, &ss, rule_from_defaults(params));
 
   if (ret < 0) {
     dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
@@ -8554,32 +8554,33 @@ int OSDMonitor::check_pg_num(int64_t pool,
 static int degraded_stretch_mandatory_member(const OSDMap& osdmap);
 
 int OSDMonitor::prepare_new_pool(string& name,
-				 int crush_rule,
-				 const string &crush_rule_name,
-         unsigned pg_num,
-         unsigned pgp_num,
-				 unsigned pg_num_min,
-				 unsigned pg_num_max,
-         const uint64_t repl_size,
-				 const uint64_t target_size_bytes,
-				 const float target_size_ratio,
-         int64_t requested_min_size,
-				 const string &erasure_code_profile,
+                                 int crush_rule,
+                                 const string &crush_rule_name,
+                                 unsigned pg_num,
+                                 unsigned pgp_num,
+                                 unsigned pg_num_min,
+                                 unsigned pg_num_max,
+                                 const uint64_t repl_size,
+                                 const uint64_t target_size_bytes,
+                                 const float target_size_ratio,
+                                 int64_t requested_min_size,
+                                 const string &erasure_code_profile,
                                  const string &root,
-         int64_t num_zones,
+                                 int64_t num_zones,
                                  int replica,
                                  int num_replica_per_zone,
                                  const string &zone_failure_domain,
                                  const string &osd_failure_domain,
                                  const string &device_class,
-         const unsigned pool_type,
-         const uint64_t expected_num_objects,
-         FastReadType fast_read,
-				 string pg_autoscale_mode,
-				 bool bulk,
-				 bool crimson,
-         bool force_create,
-				 ostream *ss)
+                                 const unsigned pool_type,
+                                 const uint64_t expected_num_objects,
+                                 FastReadType fast_read,
+                                 string pg_autoscale_mode,
+                                 bool bulk,
+                                 bool crimson,
+                                 bool force_create,
+                                 ostream *ss,
+                                 const string& rule_defaults)
 {
   if (crimson && pg_autoscale_mode.empty()) {
     // default pg_autoscale_mode to off for crimson, we'll error out below if
@@ -8614,6 +8615,9 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  crush_rule_name, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, &crush_rule, ss);
   if (r) {
     dout(10) << "prepare_pool_crush_rule returns " << r << dendl;
+    if (r != -EAGAIN) {
+      *ss << rule_defaults;
+    }
     return r;
   }
   // set zone_failure_domain to default value if it is not set for stretch
@@ -8628,6 +8632,7 @@ int OSDMonitor::prepare_new_pool(string& name,
       osdmap.pools, effective_zone_failure_domain, ss);
     if (r) {
       dout(10) << "validate_stretch_mode_pool returns " << r << dendl;
+      *ss << rule_defaults;
       return r;
     }
   }
@@ -8694,6 +8699,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     r = check_rule_places_pool(crush_rule, pool_type, num_zones,
                                effective_zone_failure_domain, size, ss);
     if (r) {
+      *ss << rule_defaults;
       return r;
     }
   }
@@ -15503,18 +15509,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     err = prepare_new_pool(poolstr,
-			   -1, // default crush rule
-			   rule_name,
+                           -1, // default crush rule
+                           rule_name,
                            params.pg_num, params.pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio, min_size,
                            erasure_code_profile, root, num_zones, replica, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
-			   pg_autoscale_mode,
-			   bulk,
+                           pg_autoscale_mode,
+                           bulk,
                            params.crimson,
-         force_create,
-			   &ss);
+                           force_create,
+                           &ss, rule_from_defaults(params));
     if (err < 0) {
       switch(err) {
       case -EEXIST:
