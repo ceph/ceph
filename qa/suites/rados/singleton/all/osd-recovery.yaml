@@ -25,6 +25,7 @@ tasks:
       - \(SLOW_OPS\)
       - slow request
       - \(POOL_APP_NOT_ENABLED\)
+      - marked LAGGY
     conf:
       osd:
         osd min pg log entries: 5
