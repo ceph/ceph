@@ -220,6 +220,109 @@ pub async fn driver_hint_results(
     Some(out)
 }
 
+/// Identity records as a test found them, to put back when it is done.
+///
+/// `rgw-vstart.sh --with-impersonation` binds the suite's main and alt
+/// users for the whole run, and tests across the suite read across
+/// identities on the strength of it.  A test that rewrites or removes one
+/// of those records takes this first and restores it after, rather than
+/// deleting, so the run's binding survives it.
+pub struct SavedIdentities(Vec<(String, Option<serde_json::Value>)>);
+
+impl SavedIdentities {
+    pub async fn take(keys: &[&str]) -> Self {
+        let mut found = Vec::new();
+        for key in keys {
+            let r = nsfs_get_identity(key).await;
+            let rec = if r.status == 200 {
+                serde_json::from_str::<serde_json::Value>(&r.body).ok()
+            } else {
+                None
+            };
+            found.push((key.to_string(), rec));
+        }
+        SavedIdentities(found)
+    }
+
+    /// Each record as it was:  absent stays absent;  present is
+    /// rewritten fresh with its uid, gid and groups, so a field a test
+    /// added does not survive.
+    pub async fn restore(&self) {
+        for (key, rec) in &self.0 {
+            let _ = nsfs_delete_identity(key).await;
+            let Some(rec) = rec else {
+                continue;
+            };
+            let (Some(uid), Some(gid)) = (rec["uid"].as_u64(), rec["gid"].as_u64())
+            else {
+                continue;
+            };
+            let (uid, gid) = (uid.to_string(), gid.to_string());
+            let groups = rec["groups"].as_array().map(|g| {
+                g.iter().filter_map(|v| v.as_u64()).map(|v| v.to_string())
+                    .collect::<Vec<_>>().join(",")
+            });
+            let mut params: Vec<(&str, &str)> =
+                vec![("identity", key.as_str()), ("uid", &uid), ("gid", &gid)];
+            if let Some(g) = groups.as_deref() {
+                params.push(("groups", g));
+            }
+            let r = nsfs_put_identity(&params).await;
+            assert_eq!(r.status, 200, "restoring {key}'s record failed: {}",
+                       r.body);
+        }
+    }
+}
+
+/// The filesystem's verdict on a request, where impersonation adds one.
+///
+/// With impersonation on, nsfs serves each request as its POSIX identity,
+/// so the filesystem decides an object's content as well as S3:  a read
+/// S3 permits is still refused to an identity the file's mode excludes,
+/// and a requester with no POSIX record is refused outright.  A test
+/// asserting S3's authorization asks for this first, and asserts the
+/// refusal where the filesystem refuses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FsVerdict {
+    /// Not impersonating, or nothing could be asked:  S3 alone decides.
+    NotImpersonating,
+    Permitted,
+    Refused,
+    /// The requester has no POSIX record, and is refused before any file.
+    NoIdentity,
+}
+
+impl FsVerdict {
+    /// Refused by the filesystem, whatever S3 permits.
+    pub fn refuses(self) -> bool {
+        matches!(self, FsVerdict::Refused | FsVerdict::NoIdentity)
+    }
+}
+
+/// Ask the gateway, through its `access` driver hint, whether `user`
+/// served as its POSIX identity may read (`mode` `r`) or write (`w`)
+/// `key` in `bucket`.  The gateway asks the kernel as that identity, so
+/// the suite does not re-implement the check.
+///
+/// Best effort, as the capability query is:  no answer -- not nsfs, no
+/// admin access, a driver without the hint -- is `NotImpersonating`, so a
+/// test keeps its S3 assertions where nothing says otherwise.  Ask after
+/// the object exists.  `user` is the request's user, `tenant$id` for a
+/// tenant's, empty for anonymous.
+pub async fn fs_access(bucket: &str, key: &str, user: &str, mode: &str)
+                       -> FsVerdict {
+    let (b, k, u) = (q(bucket), q(key), q(user));
+    let r = driver_hint_results("access", &[("bucket", &b), ("key", &k),
+                                            ("user", &u), ("mode", mode)])
+        .await;
+    match r.as_ref().and_then(|m| m.get("verdict")).map(String::as_str) {
+        Some("permitted") => FsVerdict::Permitted,
+        Some("refused") => FsVerdict::Refused,
+        Some("no-identity") => FsVerdict::NoIdentity,
+        _ => FsVerdict::NotImpersonating,
+    }
+}
+
 /// Percent-encode a query-string value.
 ///
 /// An owner key carries `$` between tenant and user.  SigV4 signs the

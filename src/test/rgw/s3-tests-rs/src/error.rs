@@ -58,3 +58,22 @@ macro_rules! assert_s3_err {
         err_info
     }};
 }
+
+/// The result of a request S3 permits, where the filesystem may still
+/// refuse it:  under impersonation nsfs serves each request as its POSIX
+/// identity, and the filesystem decides an object's content too
+/// (`admin::fs_access`).  AccessDenied where `verdict` refuses;  the
+/// output, unwrapped, otherwise -- `Some` in that case, so a test checks
+/// what it read only where it read.
+#[macro_export]
+macro_rules! unless_fs_refuses {
+    ($verdict:expr, $result:expr) => {{
+        let result = $result;
+        if $verdict.refuses() {
+            $crate::assert_s3_err!(result, 403, "AccessDenied");
+            None
+        } else {
+            Some(result.unwrap())
+        }
+    }};
+}

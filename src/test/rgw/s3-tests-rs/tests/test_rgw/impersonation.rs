@@ -8,7 +8,8 @@
 //! The fixture ids come from that same option:  group `rgwfix`
 //! (70010), `rgwalice` (70101) in it, `rgwbob` (70102) not.
 
-use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity};
+use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity,
+                         SavedIdentities};
 use s3_tests_rs::client::{get_alt_client, get_client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
@@ -32,6 +33,7 @@ async fn nsfs_only() -> bool {
 /// the difference the group test turns on, and is also the
 /// `Credentials::groups` empty-vector case from the resolver.
 async fn bind_identities(alice_groups: Option<&str>) {
+    remember_identities().await;
     let cfg = get_config();
     let mut a: Vec<(&str, &str)> = vec![
         ("identity", &cfg.main_user_id),
@@ -52,10 +54,24 @@ async fn bind_identities(alice_groups: Option<&str>) {
     assert_eq!(r.status, 200, "binding the alt user failed: {}", r.body);
 }
 
+/// What the two users were bound to before this test touched them,
+/// put back by `unbind_identities()`.  Each test is its own process, so
+/// once per test.
+static FOUND: tokio::sync::OnceCell<SavedIdentities> =
+    tokio::sync::OnceCell::const_new();
+
+async fn remember_identities() {
+    FOUND.get_or_init(|| async {
+        let cfg = get_config();
+        SavedIdentities::take(&[&cfg.main_user_id, &cfg.alt_user_id]).await
+    }).await;
+}
+
+/// Put both users back as `remember_identities()` found them.
 async fn unbind_identities() {
-    let cfg = get_config();
-    let _ = nsfs_delete_identity(&cfg.main_user_id).await;
-    let _ = nsfs_delete_identity(&cfg.alt_user_id).await;
+    if let Some(found) = FOUND.get() {
+        found.restore().await;
+    }
 }
 
 /// Is the gateway actually impersonating?
@@ -359,6 +375,7 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
     }
     let cfg = get_config();
     let alice = get_client();
+    remember_identities().await;
     let bind = |nbp: &'static str| {
         let me = cfg.main_user_id.clone();
         async move {

@@ -19,6 +19,7 @@ use s3_tests_rs::admin::{
     admin_request_as, as_json, nsfs_credentials, nsfs_credentials_as,
     nsfs_credentials_for, nsfs_delete_identity, nsfs_get_identity,
     grant_user_caps, nsfs_list_identities, nsfs_put_identity, q,
+    SavedIdentities,
 };
 use s3_tests_rs::client::get_iam_root_client;
 use s3_tests_rs::config::get_config;
@@ -316,6 +317,9 @@ async fn test_identity_reports_whether_the_key_resolves() {
     let cfg = get_config();
     let known = cfg.main_user_id.clone();
     let unknown = "identity-nobody-by-that-name";
+    /* the record as found, put back at the end:  the run may bind this
+     * user for impersonation */
+    let saved = SavedIdentities::take(&[&known]).await;
     scrub(&known).await;
     scrub(unknown).await;
 
@@ -340,7 +344,7 @@ async fn test_identity_reports_whether_the_key_resolves() {
         .expect("the row should exist regardless");
     assert_eq!(j["uid"], 13);
 
-    scrub(&known).await;
+    saved.restore().await;
     scrub(unknown).await;
 }
 

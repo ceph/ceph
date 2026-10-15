@@ -9,7 +9,8 @@
 //! decision through a real request:  refused with no allowlist, admitted
 //! with one, refused outside it.
 
-use s3_tests_rs::admin::{as_json, driver_hint, nsfs_delete_identity, nsfs_put_identity};
+use s3_tests_rs::admin::{as_json, driver_hint, nsfs_delete_identity, nsfs_put_identity,
+                         SavedIdentities};
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
@@ -72,6 +73,10 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     let bucket = get_new_bucket_name();
     let at = format!("{base}/custom-{bucket}");
 
+    /* the record as found, put back at the end:  the run may bind this
+     * user for impersonation */
+    let saved = SavedIdentities::take(&[&me]).await;
+
     /* no allowlist:  refused, which shows the header was read */
     nsfs_delete_identity(&me).await;
     assert_eq!(create_at(&bucket, &at).await, 403,
@@ -91,7 +96,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     if created == 200 {
         let _ = client.delete_bucket().bucket(&bucket).send().await;
     }
-    nsfs_delete_identity(&me).await;
+    saved.restore().await;
 
     assert_eq!(created, 200, "a custom path the allowlist admits was refused");
     assert_eq!(outside, 403, "a custom path outside the allowlist was admitted");
