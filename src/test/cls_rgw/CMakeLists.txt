@@ -20,6 +20,6 @@ target_link_libraries(ceph_test_cls_rgw_stats cls_rgw_client global
   librados ${UNITTEST_LIBS} radostest-cxx)
 install(TARGETS ceph_test_cls_rgw_stats DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(TARGET cls_rgw_bi_datum AND TARGET Catch2::Catch2)
+if(TARGET Catch2::Catch2)
   include("${CMAKE_CURRENT_SOURCE_DIR}/bi_wire.cmake")
 endif()
