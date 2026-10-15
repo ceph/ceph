@@ -156,6 +156,26 @@ class TestPostCrash(CephCrashTestCase):
         self.assertIn('--log-stderr-prefix=', fake.calls[0].args)
 
 
+class TestLastGoodName(CephCrashTestCase):
+    def test_remembers_the_name_that_worked(self):
+        fake = self.fake_ceph(self.PERM, self.PERM, self.OK)
+        self.assertEqual(self.crash.post_crash(self.crashdir), 0)
+        self.assertEqual(fake.names, self.crash.auth_names)
+        fake.calls.clear()
+        self.assertEqual(self.crash.post_crash(self.crashdir), 0)
+        self.assertEqual(fake.names, self.crash.auth_names[-1:])
+
+    def test_falls_back_when_the_remembered_name_stops_working(self):
+        names = self.crash.auth_names
+        fake = self.fake_ceph(self.PERM, self.PERM, self.OK)
+        self.assertEqual(self.crash.post_crash(self.crashdir), 0)
+        fake.results[names[2]] = self.PERM
+        fake.results[names[1]] = self.OK
+        fake.calls.clear()
+        self.assertEqual(self.crash.post_crash(self.crashdir), 0)
+        self.assertEqual(fake.names, [names[2], names[0], names[1]])
+
+
 class TestScrapePath(CephCrashTestCase):
     def test_moves_a_posted_dump_to_posted(self):
         self.fake_ceph(self.PERM, self.PERM, self.OK)

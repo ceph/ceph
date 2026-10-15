@@ -28,6 +28,9 @@ auth_names = ['client.crash.%s' % socket.gethostname(),
               'client.crash',
               'client.admin']
 
+# the name that worked last, tried first
+last_good_name = None
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -55,10 +58,17 @@ def command_error(stderr):
     return '\n'.join(lines).strip()
 
 
+def names_to_try():
+    if last_good_name is None:
+        return auth_names
+    return [last_good_name] + [n for n in auth_names if n != last_good_name]
+
+
 def run_ceph(what, args, input=None):
+    global last_good_name
     # a failure with one name says nothing about the next, so try them all
     errors = []
-    for n in auth_names:
+    for n in names_to_try():
         pr = subprocess.Popen(
             args=['timeout', '30', 'ceph',
                   '--connect-timeout', str(CONNECT_TIMEOUT),
@@ -72,6 +82,7 @@ def run_ceph(what, args, input=None):
         stderr = stderr.decode(errors='replace').strip()
         rc = pr.returncode
         if rc == 0 and command_error(stderr) == '':
+            last_good_name = n
             return 0
         log.debug('%s as %s failed: %s' % (what, n, stderr))
         errors.append('%s: %s' % (n, stderr or 'exit code %d' % rc))
