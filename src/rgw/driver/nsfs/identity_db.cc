@@ -1110,4 +1110,57 @@ int IdentityDB::list_bucket_placements(const DoutPrefixProvider* dpp,
     }, out);
 }
 
+namespace {
+/* One text column per row, in order, after `marker`, at most `max`.
+ * `sql` binds the marker as ?1 and the limit as ?2. */
+int list_keys(const DoutPrefixProvider* dpp, sqlite3* db,
+	      const std::string& sql, const char* what,
+	      const std::string& marker, uint64_t max,
+	      std::list<std::string>& out)
+{
+  out.clear();
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: listing " << what << ": "
+      << sqlite3_errmsg(db) << dendl;
+    return -EIO;
+  }
+  auto done = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, marker.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(st, 2, static_cast<sqlite3_int64>(max));
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    const unsigned char* key = sqlite3_column_text(st, 0);
+    if (key) {
+      out.emplace_back(reinterpret_cast<const char*>(key));
+    }
+  }
+  return (rc == SQLITE_DONE) ? 0 : -EIO;
+}
+} // namespace
+
+int IdentityDB::list_account_ids(const DoutPrefixProvider* dpp,
+				 const std::string& marker, uint64_t max,
+				 std::list<std::string>& out)
+{
+  return list_keys(dpp, handle(),
+		   "SELECT AccountID FROM '" + getAccountTable() + "'"
+		   " WHERE AccountID > ?1 ORDER BY AccountID LIMIT ?2;",
+		   "accounts", marker, max, out);
+}
+
+int IdentityDB::list_topic_keys(const DoutPrefixProvider* dpp,
+				const std::string& marker, uint64_t max,
+				std::list<std::string>& out)
+{
+  /* RGW's topic metadata key, `<tenant>:<name>`;  the table's Tenant is
+   * the owner's tenant, or its account id, which is the key's first
+   * half either way (`get_topic_metadata_key()`) */
+  return list_keys(dpp, handle(),
+		   "SELECT Tenant || ':' || TopicName AS MetaKey FROM '"
+		   + getTopicTable() + "'"
+		   " WHERE MetaKey > ?1 ORDER BY MetaKey LIMIT ?2;",
+		   "topics", marker, max, out);
+}
+
 }}} // namespace rgw::sal::nsfs

@@ -302,6 +302,19 @@ public:
 			     const std::string& marker, uint64_t max,
 			     std::vector<BucketPlacement>& out) const;
 
+  /* Account ids in order, after `marker`, at most `max`:  the metadata
+   * listing's `account` section.  The shared user database stores
+   * accounts and has no operation to enumerate them. */
+  int list_account_ids(const DoutPrefixProvider* dpp,
+		       const std::string& marker, uint64_t max,
+		       std::list<std::string>& out);
+  /* Topic metadata keys, `<tenant>:<name>`, likewise:  the `topic`
+   * section, which ListTopics reads for a tenant that is not an
+   * account. */
+  int list_topic_keys(const DoutPrefixProvider* dpp,
+		      const std::string& marker, uint64_t max,
+		      std::list<std::string>& out);
+
   /* Insert or replace.  `id.key` must be set;  everything else is
    * optional subject to the exclusivity rule. */
   int put_identity(const DoutPrefixProvider* dpp, const Identity& id);

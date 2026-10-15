@@ -42,6 +42,7 @@
 #include "driver/nsfs/adopt/noobaa_import.h"
 #include "driver/nsfs/adopt/noobaa_bucket_import.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_pubsub.h"
 #include "rgw_account.h"
 #include "driver/rados/rgw_user.h"
 #include "rgw_object_ownership.h"
@@ -14429,6 +14430,97 @@ TEST_F(NSFSPlaceBucketTest, RefusalsWriteNothing)
   EXPECT_TRUE(nsfs_xattrs(inside).empty());
 
   EXPECT_EQ(place("candidate", at), 0) << "the control:  it can be placed";
+}
+
+/* Every key a metadata section lists, paging `page` at a time;  each
+ * page's truncation is recorded, so a test sees the marker carry. */
+static std::list<std::string> meta_list_all(TestDriver& driver,
+					    const std::string& section,
+					    int page,
+					    std::vector<bool>* truncations)
+{
+  void* h = nullptr;
+  EXPECT_EQ(driver.meta_list_keys_init(env->dpp, section, "", &h), 0);
+  std::list<std::string> all;
+  bool truncated = true;
+  while (truncated) {
+    std::list<std::string> keys;
+    EXPECT_EQ(driver.meta_list_keys_next(env->dpp, h, page, keys,
+					 &truncated), 0);
+    if (truncations) {
+      truncations->push_back(truncated);
+    }
+    all.splice(all.end(), keys);
+    if (!truncated) {
+      break;
+    }
+  }
+  driver.meta_list_keys_complete(h);
+  return all;
+}
+
+/* The `account` section lists every account, in id order, across pages:
+ * `radosgw-admin account list` reads it, and it was answered empty. */
+TEST_F(NSFSDriverTest, MetadataListsAccounts)
+{
+  for (const char* id : {"RGW00000000000000003", "RGW00000000000000001",
+			 "RGW00000000000000002"}) {
+    RGWAccountInfo ai;
+    ai.id = id;
+    ai.name = std::string("acct-") + id;
+    RGWObjVersionTracker objv;
+    ASSERT_EQ(driver->store_account(env->dpp, null_yield, true, ai, nullptr,
+				    rgw::sal::Attrs{}, objv), 0);
+  }
+  std::vector<bool> truncations;
+  const auto keys = meta_list_all(*driver, "account", 2, &truncations);
+  EXPECT_EQ(keys, (std::list<std::string>{"RGW00000000000000001",
+					  "RGW00000000000000002",
+					  "RGW00000000000000003"}));
+  EXPECT_EQ(truncations, (std::vector<bool>{true, false}))
+      << "a full first page did not say another follows";
+}
+
+/* A section this driver does not list is refused at init with -ENOENT,
+ * as RADOS refuses one it has no handler for, and no handle is made;
+ * the sections it lists are accepted. */
+TEST_F(NSFSDriverTest, MetadataRefusesASectionItDoesNotList)
+{
+  for (const char* section : {"bucket.instance", "roles", "group", "otp",
+			      "no-such-section"}) {
+    void* h = nullptr;
+    EXPECT_EQ(driver->meta_list_keys_init(env->dpp, section, "", &h),
+	      -ENOENT) << section;
+    EXPECT_EQ(h, nullptr) << section;
+  }
+  for (const char* section : {"user", "bucket", "account", "topic"}) {
+    void* h = nullptr;
+    EXPECT_EQ(driver->meta_list_keys_init(env->dpp, section, "", &h), 0)
+	<< "the control:  " << section;
+    driver->meta_list_keys_complete(h);
+  }
+}
+
+/* The `topic` section lists RGW's topic metadata keys, `<tenant>:<name>`,
+ * the tenant being an account's id for an account's topic:  ListTopics
+ * reads it for a tenant that is not an account. */
+TEST_F(NSFSDriverTest, MetadataListsTopicsByTheirKeys)
+{
+  struct T { rgw_owner owner; const char* name; };
+  for (const auto& t : {T{rgw_user{"t1", "u1"}, "alpha"},
+			T{rgw_user{"", "u2"}, "beta"},
+			T{rgw_account_id{"RGW00000000000000007"}, "gamma"}}) {
+    rgw_pubsub_topic topic;
+    topic.owner = t.owner;
+    topic.name = t.name;
+    RGWObjVersionTracker objv;
+    ASSERT_EQ(driver->write_topic_v2(topic, true, objv, null_yield,
+				     env->dpp), 0);
+  }
+  const auto keys = meta_list_all(*driver, "topic", 2, nullptr);
+  EXPECT_EQ(keys, (std::list<std::string>{":beta",
+					  "RGW00000000000000007:gamma",
+					  "t1:alpha"}));
 }
 
 /* Deleting a bucket deletes its row. */

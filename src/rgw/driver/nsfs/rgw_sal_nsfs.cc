@@ -6057,6 +6057,14 @@ int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
                                      const std::string& section,
                                      const std::string& marker, void** phandle)
 {
+  /* A section this driver does not list is refused here, as RADOS's
+   * metadata manager refuses one it has no handler for;  an empty
+   * listing would read as "there are none". */
+  if ((section != "user") && (section != "bucket") &&
+      (section != "account") && (section != "topic")) {
+    ldpp_dout(dpp, 1) << "nsfs: no metadata section " << section << dendl;
+    return -ENOENT;
+  }
   meta_list_handle* stuff = new meta_list_handle(section, marker);
   *phandle = (void *)stuff;
   return 0;
@@ -6121,6 +6129,23 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
 	*truncated = (std::next(it) != all.end());
 	break;
       }
+    }
+  } else if ((h->section == "account") || (h->section == "topic")) {
+    /* one more than asked for, so a full page says whether another
+     * follows */
+    const uint64_t ask = static_cast<uint64_t>(max) + 1;
+    ret = (h->section == "account")
+      ? userDB->list_account_ids(dpp, h->marker, ask, keys)
+      : userDB->list_topic_keys(dpp, h->marker, ask, keys);
+    if (ret < 0) {
+      return ret;
+    }
+    if (std::cmp_greater(keys.size(), max)) {
+      keys.pop_back();
+      *truncated = true;
+    }
+    if (!keys.empty()) {
+      h->marker = keys.back();
     }
   }
   return 0;
