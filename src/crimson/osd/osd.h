@@ -314,6 +314,9 @@ public:
   /// find the clones still mapped to purged snaps (in all PGs), and
   /// requeue those snaps for trimming
   seastar::future<> scrub_purged_snaps();
+  /// forget which purged snaps were recorded: they are all fetched
+  /// from the monitor on the next boot
+  seastar::future<> reset_purged_snaps_last();
   seastar::future<double> run_bench(int64_t count,
     int64_t bsize,
     int64_t osize,

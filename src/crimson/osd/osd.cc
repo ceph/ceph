@@ -845,6 +845,8 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_admin_commands();
     asok->register_command(make_asok_hook<OsdStatusHook>(std::as_const(*this)));
     asok->register_command(make_asok_hook<SendBeaconHook>(*this));
+    asok->register_command(make_asok_hook<ScrubPurgedSnapsHook>(*this));
+    asok->register_command(make_asok_hook<ResetPurgedSnapsLastHook>(*this));
     asok->register_command(make_asok_hook<RunOSDBenchHook>(*this));
     asok->register_command(make_asok_hook<FlushPgStatsHook>(*this));
     asok->register_command(
@@ -1513,6 +1515,20 @@ seastar::future<> OSD::scrub_purged_snaps()
   // reported to the monitor by the next beacon
   superblock.last_purged_snaps_scrub = ceph_clock_now();
   ceph::os::Transaction t;
+  meta_coll.store_superblock(t, superblock);
+  co_await pg_shard_manager.set_superblock(superblock);
+  co_await store.get_sharded_store().do_transaction(
+    meta_coll.collection(), std::move(t));
+}
+
+seastar::future<> OSD::reset_purged_snaps_last()
+{
+  LOG_PREFIX(OSD::reset_purged_snaps_last);
+  const auto lock = co_await seastar::get_unique_lock(handle_osd_map_lock);
+  INFO("purged_snaps_last was {}", superblock.purged_snaps_last);
+  superblock.purged_snaps_last = 0;
+  ceph::os::Transaction t;
+  auto meta_coll = pg_shard_manager.get_meta_coll();
   meta_coll.store_superblock(t, superblock);
   co_await pg_shard_manager.set_superblock(superblock);
   co_await store.get_sharded_store().do_transaction(
