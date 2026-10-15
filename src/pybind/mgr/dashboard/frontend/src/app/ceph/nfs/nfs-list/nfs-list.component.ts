@@ -40,10 +40,6 @@ export enum RgwExportType {
   standalone: false
 })
 export class NfsListComponent extends ListWithDetails implements OnInit, OnDestroy {
-  @ViewChild('nfsState')
-  nfsState: TemplateRef<any>;
-  @ViewChild('nfsFsal', { static: true })
-  nfsFsal: TemplateRef<any>;
   @ViewChild('pathTmpl', { static: true })
   pathTmpl: TemplateRef<any>;
 
@@ -53,8 +49,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   @ViewChild('protocolTpl', { static: true })
   protocolTpl: TemplateRef<any>;
 
-  @ViewChild('transportTpl', { static: true })
-  transportTpl: TemplateRef<any>;
+  @ViewChild('clientsTpl', { static: true })
+  clientsTpl: TemplateRef<any>;
 
   @Input() clusterId: string;
   modalRef: NgbModalRef;
@@ -66,8 +62,11 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   viewCacheStatus: any;
   exports: any[];
   tableActions: CdTableAction[];
-  isDefaultCluster = false;
   fsal: SUPPORTED_FSAL;
+  sharesHeaderTitle = $localize`Shares`;
+  sharesHeaderDescription = $localize`Manage NFS shares and control client access to files and directories.`;
+  sharesEmptyTitle = $localize`No shares available.`;
+  sharesEmptyMessage = $localize`Create a share to provide file access to users and applications.`;
 
   builders = {
     'nfs/create': (metadata: any) => {
@@ -109,7 +108,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         return `/${prefix}/nfs/create`;
       },
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
-      name: this.actionLabels.CREATE
+      name: $localize`Create share`
     };
 
     const editAction: CdTableAction = {
@@ -148,8 +147,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   ngOnInit() {
     this.columns = [
       {
-        name: $localize`User`,
-        prop: 'fsal.user_id',
+        name: $localize`Name`,
+        prop: 'pseudo',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
@@ -161,37 +160,16 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         cellTransformation: CellTemplate.path
       },
       {
-        name: $localize`Pseudo`,
-        prop: 'pseudo',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Cluster`,
-        prop: 'cluster_id',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Storage Backend`,
-        prop: 'fsal',
-        flexGrow: 2,
-        cellTemplate: this.nfsFsal
-      },
-      {
-        name: $localize`Access Type`,
-        prop: 'access_type',
-        flexGrow: 2
-      },
-      {
-        name: $localize`NFS Protocol`,
+        name: $localize`Protocol`,
         prop: 'protocols',
-        flexGrow: 2,
+        flexGrow: 1,
         cellTemplate: this.protocolTpl
       },
       {
-        name: $localize`Transports`,
-        prop: 'transports',
-        flexGrow: 2,
-        cellTemplate: this.transportTpl
+        name: $localize`Clients`,
+        prop: 'clients',
+        flexGrow: 1,
+        cellTemplate: this.clientsTpl
       }
     ];
 

@@ -1610,6 +1610,7 @@ EXPORT {
             "virtual_ip": None,
             "backend": [],
             "placement": {},
+            "enable_nfsv3": False,
             "enable_rdma": False,
         }}
 
@@ -1638,6 +1639,7 @@ EXPORT {
             "virtual_ip": None,
             "backend": [],
             "placement": {},
+            "enable_nfsv3": False,
             "enable_rdma": True,
         }}
 
