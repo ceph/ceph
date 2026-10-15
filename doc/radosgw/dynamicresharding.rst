@@ -164,20 +164,6 @@ since the former is prime. A variety of web sites have lists of prime
 numbers; search for "list of prime numbers" with your favorite
 search engine to locate some web sites.
 
-Setting a Bucket's Minimum Number of Shards
--------------------------------------------
-
-.. prompt:: bash #
-
-   radosgw-admin bucket set-min-shards --bucket <bucket_name> --num-shards <min number of shards>
-
-Since dynamic resharding can now reduce the number of shards,
-administrators may want to prevent the number of shards from becoming
-too low, for example if the expect the number of objects to increase
-in the future. This command allows administrators to set a per-bucket
-minimum. This does not, however, prevent administrators from manually
-resharding to a lower number of shards.
-
 Troubleshooting
 ===============
 
