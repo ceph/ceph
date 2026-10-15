@@ -764,6 +764,7 @@ option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
+option(WITH_DATUM "Build Datum's independent C++26 data facilities" OFF)
 set(UNIT_TESTS_BUILT ${WITH_TESTS})
 set(CEPH_TEST_TIMEOUT 7200 CACHE STRING
   "Maximum time before a CTest gets killed" )
