@@ -7000,25 +7000,27 @@ void OSD::_get_purged_snaps()
 void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
 {
   dout(10) << __func__ << " " << *m << dendl;
-  ObjectStore::Transaction t;
-  epoch_t covered = 0;
+  auto put_msg = make_scope_guard([m] { m->put(); });
+
   if (!is_preboot() || !purged_snaps_request ||
       m->start != purged_snaps_request->start ||
       m->start != superblock.purged_snaps_last) {
     dout(10) << __func__ << " not matching the pending request" << dendl;
-    goto out;
+    return;
   }
   // The reply covers the epochs (start, last] - but its 'last' may be
   // beyond the requested range: the monitor may report the first epoch
   // it did not return, or (if it found nothing) the requested 'last'.
-  covered = std::min(m->last, purged_snaps_request->last);
+  const epoch_t covered = std::min(m->last, purged_snaps_request->last);
   if (covered < superblock.purged_snaps_last) {
-    goto out;
+    return;
   }
   purged_snaps_request.reset();
   // the rows of the epochs beyond 'covered' are fetched again later
   m->purged_snaps.erase(
     m->purged_snaps.upper_bound(covered), m->purged_snaps.end());
+
+  ObjectStore::Transaction t;
   {
     OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
     SnapMapper::record_purged_snaps(
@@ -7038,8 +7040,6 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
   } else {
     start_boot();
   }
-out:
-  m->put();
 }
 
 void OSD::send_full_update()
