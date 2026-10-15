@@ -57,4 +57,4 @@ tasks:
 - ceph.healthy:
 - exec:
     osd.0:
-      - egrep '(defer backfill|defer recovery)' /var/log/ceph/ceph-osd.*.log
+      - grep -E '(defer backfill|defer recovery)' /var/log/ceph/ceph-osd.*.log

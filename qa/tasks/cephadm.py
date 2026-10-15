@@ -450,10 +450,10 @@ def ceph_log(ctx, config):
                 log_path,
             ]
             if only_match:
-                args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
+                args.extend([run.Raw('|'), 'grep', '-E', '|'.join(only_match)])
             if excludes:
                 for exclude in excludes:
-                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+                    args.extend([run.Raw('|'), 'grep', '-E', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])

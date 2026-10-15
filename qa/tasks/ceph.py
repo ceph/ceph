@@ -1261,11 +1261,11 @@ def cluster(ctx, config):
             """
             args = [
                 'sudo',
-                'egrep', pattern,
+                'grep', '-E', pattern,
                 '/var/log/ceph/{cluster}.log'.format(cluster=cluster_name),
             ]
             for exclude in excludes:
-                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+                args.extend([run.Raw('|'), 'grep', '-E', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
@@ -1922,7 +1922,7 @@ def restart(ctx, config):
             cluster, type_, id_ = teuthology.split_role(role)
             remote.run(
                args = ['sudo',
-                       'egrep', expected_fail,
+                       'grep', '-E', expected_fail,
                        '/var/log/ceph/{cluster}-{type_}.{id_}.log'.format(cluster=cluster, type_=type_, id_=id_),
                 ])
     yield
@@ -2137,7 +2137,7 @@ def task(ctx, config):
 
     By default, the cluster log is checked for errors and warnings,
     and the run marked failed if any appear. You can ignore log
-    entries by giving a list of egrep compatible regexes, i.e.:
+    entries by giving a list of grep -E compatible regexes, i.e.:
 
         tasks:
         - ceph:
