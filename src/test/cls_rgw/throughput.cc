@@ -89,6 +89,7 @@ struct sample final
 {
     std::uint64_t operations = 0;
     std::array<std::uint64_t, 200001> latency_us {};
+    std::vector<std::uint64_t> slow_latency_us;
     std::exception_ptr failure;
 };
 
@@ -127,7 +128,11 @@ void measure(const std::string_view name, const unsigned entries, const unsigned
                         const auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
                             clock_type::now() - started).count();
                         ++samples[worker].operations;
-                        ++samples[worker].latency_us[std::min<std::uint64_t>(latency, 200000)];
+                        if (std::uint64_t(latency) < samples[worker].latency_us.size()) {
+                            ++samples[worker].latency_us[latency];
+                        } else {
+                            samples[worker].slow_latency_us.push_back(latency);
+                        }
                     }
                 } catch (...) {
                     samples[worker].failure = std::current_exception();
@@ -166,6 +171,7 @@ void measure(const std::string_view name, const unsigned entries, const unsigned
     const double osd_cpu = double(osd_ticks() - before_osd) * 1e9 / sysconf(_SC_CLK_TCK);
     std::uint64_t operations = 0;
     std::array<std::uint64_t, 200001> latencies {};
+    std::vector<std::uint64_t> slow_latencies;
     for (const auto& item : samples) {
         if (item.failure) {
             std::rethrow_exception(item.failure);
@@ -174,9 +180,12 @@ void measure(const std::string_view name, const unsigned entries, const unsigned
         for (std::size_t bin = 0; bin < latencies.size(); ++bin) {
             latencies[bin] += item.latency_us[bin];
         }
+        slow_latencies.insert(slow_latencies.end(), item.slow_latency_us.begin(),
+                              item.slow_latency_us.end());
     }
     require(operations > 0, "No completed measured requests");
-    auto percentile = [&](const double fraction) {
+    std::ranges::sort(slow_latencies);
+    auto percentile = [&](const double fraction) -> std::uint64_t {
         const auto target = std::uint64_t(std::ceil(fraction * operations));
         std::uint64_t count = 0;
         for (std::size_t bin = 0; bin < latencies.size(); ++bin) {
@@ -185,13 +194,13 @@ void measure(const std::string_view name, const unsigned entries, const unsigned
                 return bin;
             }
         }
-        return latencies.size() - 1;
+        return slow_latencies.at(target - count - 1);
     };
-    require(0 == latencies.back(), "Latency exceeded histogram range (200ms)");
     std::cout << name << ',' << depth << ',' << entries << ',' << operations << ','
               << std::fixed << std::setprecision(6) << elapsed << ',' << operations / elapsed << ','
               << entries * operations / elapsed << ',' << client_cpu / double(operations) << ','
-              << osd_cpu / operations << ',' << percentile(.50) << ',' << percentile(.99) << '\n';
+              << osd_cpu / operations << ',' << percentile(.50) << ',' << percentile(.99) << ','
+              << percentile(1.0) << ',' << slow_latencies.size() << '\n';
     std::cout.flush();
 }
 
@@ -284,7 +293,7 @@ int main(const int argc, char *argv[]) try
     require(io.nobjects_begin() == io.nobjects_end(), "Use an empty, uniquely owned namespace");
     objects owned {io, {}};
     std::cout << "case,depth,entries_per_operation,operations,seconds,ops_per_second,entries_per_second,"
-        "client_cpu_ns_per_op,osd_cpu_ns_per_op,p50_us,p99_us\n";
+        "client_cpu_ns_per_op,osd_cpu_ns_per_op,p50_us,p99_us,max_us,histogram_slow_count\n";
     owned.create("native-stat");
     measure("native-stat", 1, depth, seconds, io, [](auto& context, unsigned) {
         std::uint64_t size;

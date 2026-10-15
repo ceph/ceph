@@ -32,10 +32,12 @@ post-write verification and cleanup are outside each measured interval.
 Measured requests include client construction, native compatibility results,
 checks of status/cardinality, result destruction, network and server work.
 Output is CSV with requests/s, entries/s, process CPU per request for the
-client and the one explicitly identified local OSD, and p50/p99 latency.
-Latency uses one-microsecond bins; a sample reaching 200ms fails the run
-instead of silently reporting clipped percentiles. The control counts one
-object per operation. OLH entries/s counts epoch groups, not individual events.
+client and the one explicitly identified local OSD, and p50/p99/max latency.
+Latency uses one-microsecond bins through 200ms and retains longer samples
+in a separate vector, sorted after timing. Percentiles include those samples
+without clipping; ``histogram_slow_count`` reports their count. The control
+counts one object per operation. OLH entries/s counts epoch groups, not
+individual events.
 
 A short comparison can use A-B-B-A order with nine seconds per case: 252
 timed seconds across four runs, leaving roughly 48 seconds for sequential
