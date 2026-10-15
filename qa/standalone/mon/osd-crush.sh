@@ -55,6 +55,20 @@ function TEST_crush_rule_create_simple() {
     ceph osd crush rule rm $rule || return 1
 }
 
+function TEST_crush_rule_create_replicated_reports_id() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+
+    local out
+    out=$(ceph osd crush rule create-replicated rep0 default host 2>&1) || return 1
+    local id=$(ceph osd crush rule dump rep0 --format json | jq '.rule_id')
+    echo "$out" | grep "created rule rep0 at $id" || return 1
+    out=$(ceph osd crush rule create-stretch-replicated --rule-name srep0 --force 2>&1) || return 1
+    id=$(ceph osd crush rule dump srep0 --format json | jq '.rule_id')
+    echo "$out" | grep "created rule srep0 at $id" || return 1
+}
+
 function TEST_crush_rule_dump() {
     local dir=$1
 
@@ -135,6 +149,9 @@ function TEST_erasure_pool_crush_rule_rm() {
     ceph osd crush rule ls | grep $pool_name || return 1
     ceph osd pool delete $pool_name $pool_name --yes-i-really-really-mean-it || return 1
     ! ceph osd crush rule ls | grep $pool_name || return 1
+    # the profile goes with the last pool that uses it
+    ! ceph osd erasure-code-profile ls | grep -qx profile_name || return 1
+    ceph osd erasure-code-profile set profile_name plugin=jerasure technique=reed_sol_van k=2 m=2 crush-failure-domain=osd || return 1
 
     # create few pools that using the same rule
     # make sure the rule is not deleted when the pool is deleted

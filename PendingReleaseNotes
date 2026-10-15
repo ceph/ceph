@@ -32,6 +32,34 @@
   for reshard on or off while not affecting resharding itself until the
   next realm reload. Now changes to ``rgw_dynamic_resharding`` require a
   restart. Running RGWs will ignore the change.
+* RADOS: Replicated and erasure-coded (FastEC) pools can be stretched over two
+  zones, one pool at a time: ``ceph osd pool create <pool> --num_zones 2``
+  (with ``--replica <n>``, the replicas in each zone, for a replicated pool)
+  and ``ceph osd pool set <pool> num_zones <n>``. ``ceph osd pool default set``
+  and ``get`` set and show the defaults that ``ceph osd pool create`` uses,
+  kept in the new options ``osd_pool_default_num_zones``,
+  ``osd_pool_default_replica``, ``osd_pool_default_zone_failure_domain``,
+  ``osd_pool_default_osd_failure_domain``, ``osd_pool_default_root`` and
+  ``osd_pool_default_class``, and, for ``k`` and ``m``, in the ``default``
+  erasure code profile. ``osd_pool_default_size`` becomes the legacy name of
+  ``osd_pool_default_replica``. ``ceph mon enable_stretch_mode`` stretches every
+  pool, replicated and erasure-coded, as ``ceph osd pool set <pool> num_zones``
+  does, and sets the pool creation defaults; it can be run again, and fails if
+  a legacy erasure-coded pool exists. ``ceph mon disable_stretch_mode`` sets
+  every stretched pool to one zone. These changes take effect once
+  ``require_osd_release`` is raised to this release; until then
+  ``ceph osd pool create`` is refused, librados clients such as RGW can create
+  single-zone pools except in stretch mode, ``num_zones`` cannot be changed,
+  and ``mon_stretch_pool_size`` and ``mon_stretch_pool_min_size`` keep their
+  meaning. If the cluster is in stretch mode then, the pool creation defaults
+  become those of ``enable_stretch_mode``.
+* RADOS: In degraded stretch mode, the PGs of a stretch pool whose CRUSH rule
+  takes its zones with a device class (``step take <zone> class <class>``)
+  can now go active; before, they stayed peered until stretch mode recovered.
+  An OSD of an older release does not treat such an interval as one that may
+  have accepted writes, so complete the OSD upgrade while stretch mode is
+  healthy. A rule that takes one zone with two device classes now counts it
+  as one zone.
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed

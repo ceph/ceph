@@ -21,7 +21,7 @@
  *
  *  1. SplitOp::validate_flags()   — flag-combination acceptance/rejection
  *  2. ECStripeIterator / ECStripeView — stripe-traversal geometry
- *  3. ECSplitOp::local_zone_for_acting_set() — zone selection edge cases
+ *  3. SplitOp::local_zone_for_acting_set() — zone selection edge cases
  *
  * The tests use a minimal pg_pool_t built inline (no OSDMap, no peering).
  * For ECStripeIterator, a thin helper subclass exposes the protected types.
@@ -30,15 +30,26 @@
 #include <gtest/gtest.h>
 #include <numeric>
 
+#include <boost/asio/io_context.hpp>
+
+#include "common/ref.h"
+#include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "osdc/SplitOp.h"
 #include "include/rados.h"
+#include "global/global_context.h"
+#include "test/osd/OSDMapTestHelpers.h"
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 namespace {
+
+constexpr uint64_t CHUNK = 4096;
+constexpr int K = 4;
+constexpr int M = 2;
+constexpr uint64_t STRIPE_WIDTH = CHUNK * K;
 
 /**
  * Build a minimal erasure-coded pg_pool_t.
@@ -48,7 +59,7 @@ namespace {
  * @param stripe_unit   per-shard stripe unit in bytes (stripe_width = k * stripe_unit)
  * @param extra_flags   additional pool flags to OR in
  */
-pg_pool_t make_ec_pool(int k, int m, uint32_t stripe_unit,
+pg_pool_t make_ec_pool(int k = K, int m = M, uint64_t stripe_unit = CHUNK,
                        uint64_t extra_flags = 0)
 {
   pg_pool_t pi;
@@ -83,6 +94,62 @@ pg_pool_t make_replicated_pool(int size = 3, uint64_t extra_flags = 0)
   return pi;
 }
 
+OSDOp make_read(uint64_t offset, uint64_t length) {
+  OSDOp o;
+  o.op.op = CEPH_OSD_OP_READ;
+  o.op.extent.offset = offset;
+  o.op.extent.length = length;
+  return o;
+}
+
+/**
+ * Build the Objecter::Op that a client would hand to SplitOp::create().
+ *
+ * validate_operations() only reads op->ops, so nothing else has to be wired up.
+ */
+ceph::ref_t<Objecter::Op> make_op(osdc_opvec &&ops) {
+  return ceph::make_ref<Objecter::Op>(
+    object_t("test_object"), object_locator_t(1), std::move(ops),
+    CEPH_OSD_FLAG_READ | CEPH_OSD_FLAG_BALANCE_READS,
+    static_cast<Context*>(nullptr), static_cast<version_t*>(nullptr));
+}
+
+/**
+ * The raw shard prepare_single_op() picks for a read, verbatim from
+ * SplitOp::prepare_single_op().  It only ever applies this to the *first* read
+ * in the op, which is what makes disagreement between reads a bug.
+ */
+int raw_shard_of(uint64_t offset, uint64_t chunk_size = CHUNK, int k = K) {
+  return (offset / chunk_size) % k;
+}
+
+/**
+ * Run validate_operations() the way validate() does and report whether the op
+ * was classified as a single direct read.
+ *
+ * validate_operations() only ever clears single_direct_op, so the caller has to
+ * seed it; validate() seeds it with pi->is_erasure().
+ */
+bool is_single_direct_op(osdc_opvec &&ops,
+                         const pg_pool_t &pool,
+                         bool has_primary_ops = false) {
+  auto op = make_op(std::move(ops));
+  bool single_direct_op = pool.is_erasure();
+  bool suitable_read_found = test_validate_operations(
+    op.get(), &pool, pool.is_erasure(), /*replica_min_read_size=*/0,
+    g_ceph_context, has_primary_ops, single_direct_op);
+  EXPECT_TRUE(suitable_read_found);
+  return single_direct_op;
+}
+
+osdc_opvec reads(std::initializer_list<std::pair<uint64_t, uint64_t>> extents) {
+  osdc_opvec ops;
+  for (const auto &[offset, length] : extents) {
+    ops.push_back(make_read(offset, length));
+  }
+  return ops;
+}
+
 } // anonymous namespace
 
 // ===========================================================================
@@ -91,7 +158,7 @@ pg_pool_t make_replicated_pool(int size = 3, uint64_t extra_flags = 0)
 // SplitOp::validate_flags() is a public static method that checks whether a
 // combination of operation flags and pool properties permits a split read.
 // It rejects operations that:
-//   - lack BALANCE_READS or LOCALIZE_READS
+//   - lack BALANCE_READS, and LOCALIZE_READS on a multi-zone pool
 //   - are flagged as WRITE
 //   - target a Crimson pool
 // ===========================================================================
@@ -99,16 +166,93 @@ pg_pool_t make_replicated_pool(int size = 3, uint64_t extra_flags = 0)
 class TestValidateFlags : public ::testing::Test {
 protected:
   pg_pool_t ec_pool;
+  pg_pool_t ec_zones_pool;
   pg_pool_t ec_crimson_pool;
   pg_pool_t rep_pool;
   CephContext *cct = g_ceph_context;
 
   void SetUp() override {
     ec_pool        = make_ec_pool(4, 2, 4096);
+    ec_zones_pool  = make_ec_pool(4, 2, 4096);
+    ec_zones_pool.num_zones = 2;
     ec_crimson_pool = make_ec_pool(4, 2, 4096, pg_pool_t::FLAG_CRIMSON);
     rep_pool       = make_replicated_pool();
   }
 };
+
+// BALANCE_READS alone is sufficient for a non-Crimson pool.
+TEST_F(TestValidateFlags, BalanceReadsAccepted)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &ec_pool, CEPH_OSD_FLAG_BALANCE_READS, cct));
+}
+
+// LOCALIZE_READS alone is sufficient for a multi-zone pool.
+TEST_F(TestValidateFlags, LocalizeReadsAcceptedMultiZone)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &ec_zones_pool, CEPH_OSD_FLAG_LOCALIZE_READS, cct));
+}
+
+// On a single-zone pool LOCALIZE_READS alone must not split: the read goes
+// to the nearest replica instead.
+TEST_F(TestValidateFlags, LocalizeReadsRejectedSingleZone)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &ec_pool, CEPH_OSD_FLAG_LOCALIZE_READS, cct));
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &rep_pool, CEPH_OSD_FLAG_LOCALIZE_READS, cct));
+}
+
+// Both flags together must also pass.
+TEST_F(TestValidateFlags, BothReadFlagsAccepted)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &ec_pool,
+    CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS,
+    cct));
+}
+
+// Neither flag set — must be rejected.
+TEST_F(TestValidateFlags, NoReadFlagsRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(&ec_pool, 0, cct));
+}
+
+// WRITE flag alone (no read flag) — must be rejected.
+TEST_F(TestValidateFlags, WriteFlagAloneRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &ec_pool, CEPH_OSD_FLAG_WRITE, cct));
+}
+
+// WRITE flag combined with BALANCE_READS — write wins, must reject.
+TEST_F(TestValidateFlags, WritePlusBalanceReadsRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &ec_pool,
+    CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_WRITE,
+    cct));
+}
+
+// Crimson pool must always be rejected regardless of read flags.
+TEST_F(TestValidateFlags, CrimsonPoolRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &ec_crimson_pool, CEPH_OSD_FLAG_BALANCE_READS, cct));
+}
+
+// Replicated pool — same flag rules apply.
+TEST_F(TestValidateFlags, ReplicatedBalanceReadsAccepted)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &rep_pool, CEPH_OSD_FLAG_BALANCE_READS, cct));
+}
+
+TEST_F(TestValidateFlags, ReplicatedNoReadFlagsRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(&rep_pool, 0, cct));
+}
 
 // ===========================================================================
 // Section 2: ECStripeIterator / ECStripeView
@@ -145,7 +289,8 @@ public:
     assemble_buffer_sparse_read(int) const override { return {}; }
   void assemble_buffer_read(bufferlist &, int) const override {}
   void init_read(OSDOp &, bool, int, bool) override {}
-  bool version_mismatch() const override { return false; }
+  bool legacy_version_mismatch() const override { return false; }
+  bool version_mismatch_v2() const override { return false; }
   void init_reference_sub_read() override {}
 
 private:
@@ -311,7 +456,7 @@ TEST_F(TestECStripeIterator, K2FullStripe)
 }
 
 // ===========================================================================
-// Section 3: ECSplitOp::local_zone_for_acting_set() — parameter guard cases
+// Section 3: SplitOp::local_zone_for_acting_set() — parameter guard cases
 //
 // The edge-case guard paths (fewer than 2 zones, empty crush_location, too-
 // small acting set, null crush pointer) all return 0 and do not require a
@@ -338,145 +483,59 @@ protected:
   }
 };
 
-// ===========================================================================
-// Section 4: abs_shard computation for reference_sub_read (Bug 2 regression)
-//
-// When init_read() decides that primary_required is true it creates an extra
-// sub-read for the version-check "reference" shard.  Before the fix the code
-// always assigned:
-//
-//   sub_reads.emplace(reference_sub_read,  ..., shard_id_t(reference_sub_read));
-//                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-//                                               was: always a zone-0 acting index
-//
-// The fix uses:
-//   shard_id_t(reference_sub_read + local_zone_index * zone_size)
-//
-// so the version-check sub-read goes to the same zone as the data sub-reads.
-//
-// The helpers below model both the old (buggy) and new (correct) formula so
-// that the tests document what changed and act as regression guards.
-// ===========================================================================
-
-class TestReferenceSubReadAbsShard : public ::testing::Test {
-protected:
-  // Pool: k=2, m=1, 2 zones  →  pool.size=6, zone_size=3, data_chunk_count=2
-  // Acting set:  [osd.0, osd.1, osd.2(par), osd.3, osd.4, osd.5(par)]
-  //               zone-0 ────────────────── zone-1 ──────────────────
-  static constexpr int k          = 2;
-  static constexpr int m          = 1;
-  static constexpr int num_zones  = 2;
-  static constexpr int zone_size  = k + m;          // 3
-  static constexpr int pool_size  = zone_size * num_zones; // 6
-  // Primary shard lives at acting index 0 (zone-0).
-  static constexpr int reference_sub_read = 0;
-
-  // Compute the abs_shard that the current (buggy) code assigns to the
-  // reference sub-read.
-  static shard_id_t buggy_reference_abs_shard()
-  {
-    // Current code: shard_id_t(reference_sub_read) — ignores local_zone_index.
-    return shard_id_t(reference_sub_read);
-  }
-
-  // Compute the abs_shard that the correct code should assign.
-  static shard_id_t correct_reference_abs_shard(int local_zone_index)
-  {
-    return shard_id_t(reference_sub_read + local_zone_index * zone_size);
-  }
-};
-
-// For a zone-0 client the bug is latent: both formulae agree.
-TEST_F(TestReferenceSubReadAbsShard, Zone0ClientBugIsLatent)
+// num_zones < 2 → always zone 0.
+TEST_F(TestLocalZoneGuards, SingleZoneReturnsZero)
 {
-  constexpr int local_zone = 0;
-  EXPECT_EQ(buggy_reference_abs_shard(), correct_reference_abs_shard(local_zone))
-    << "Zone-0: buggy and correct formula agree — bug is not visible";
-  // Both map to acting[0], which is a zone-0 OSD — correct.
-  EXPECT_EQ(shard_id_t(0), buggy_reference_abs_shard());
+  auto acting = make_acting(6);
+  auto loc    = make_loc("dc0");
+  // crush pointer is null — but the guard fires on num_zones first.
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/1, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, loc));
 }
 
-// For a zone-1 client the bug is exposed: the buggy formula targets
-// acting[0] (zone-0 OSD) instead of acting[3] (zone-1 equivalent).
-TEST_F(TestReferenceSubReadAbsShard, Zone1ClientBugExposed)
+// zone_size <= 0 → always zone 0.
+TEST_F(TestLocalZoneGuards, ZeroZoneSizeReturnsZero)
 {
-  constexpr int local_zone = 1;
-
-  shard_id_t buggy   = buggy_reference_abs_shard();
-  shard_id_t correct = correct_reference_abs_shard(local_zone);
-
-  // Buggy code dispatches to acting[0] — a zone-0 OSD.
-  EXPECT_EQ(shard_id_t(0),         buggy);
-  // Correct code should dispatch to acting[3] — a zone-1 OSD.
-  EXPECT_EQ(shard_id_t(zone_size), correct);
-
-  // The two must differ — if they are equal this test is vacuous.
-  EXPECT_NE(buggy, correct)
-    << "Bug: reference sub-read abs_shard=" << (int)buggy
-    << " targets zone-0 acting index even though local_zone=" << local_zone
-    << "; correct abs_shard=" << (int)correct
-    << " would target zone-1 acting index (acting[" << (int)correct << "])";
+  auto acting = make_acting(6);
+  auto loc    = make_loc("dc0");
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/0,
+    /*crush=*/nullptr, cct, loc));
 }
 
-// Demonstrate that acting[buggy_abs] is always a zone-0 OSD regardless of
-// which zone the client wants to read from.
-TEST_F(TestReferenceSubReadAbsShard, BuggyShardAlwaysInZero)
+// crush == nullptr → always zone 0.
+TEST_F(TestLocalZoneGuards, NullCrushReturnsZero)
 {
-  // acting = [0, 1, 2, 3, 4, 5]  (osd ids == acting indices for simplicity)
-  std::vector<int> acting(pool_size);
-  std::iota(acting.begin(), acting.end(), 0);
-
-  for (int local_zone = 0; local_zone < num_zones; ++local_zone) {
-    shard_id_t buggy = buggy_reference_abs_shard();
-    int buggy_osd    = acting[(int)buggy];
-
-    // Zone-0 OSDs are at acting indices [0, zone_size).
-    bool is_zone0_osd = ((int)buggy < zone_size);
-    EXPECT_TRUE(is_zone0_osd)
-      << "local_zone=" << local_zone
-      << ": buggy abs_shard=" << (int)buggy
-      << " maps to acting[" << (int)buggy << "]=" << buggy_osd
-      << " which is in zone-0 regardless of client zone";
-
-    if (local_zone == 1) {
-      // The correct zone-1 OSD should be at a strictly higher acting index.
-      shard_id_t correct = correct_reference_abs_shard(local_zone);
-      int correct_osd    = acting[(int)correct];
-      bool is_zone1_osd  = ((int)correct >= zone_size && (int)correct < pool_size);
-      EXPECT_TRUE(is_zone1_osd)
-        << "correct abs_shard=" << (int)correct
-        << " maps to acting[" << (int)correct << "]=" << correct_osd
-        << " which should be in zone-1";
-    }
-  }
+  auto acting = make_acting(12);
+  auto loc    = make_loc("dc0");
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, loc));
 }
 
-// Generalise over (k, m) combinations to show the bug scales with zone_size.
-TEST(TestReferenceSubReadAbsShardParametric, BugScalesWithZoneSize)
+// Empty crush_location → always zone 0.
+TEST_F(TestLocalZoneGuards, EmptyCrushLocationReturnsZero)
 {
-  // { k, m }  →  zone_size = k+m
-  const std::vector<std::pair<int,int>> configs = {{2,1},{4,2},{3,2},{8,3}};
-  for (auto [k, m] : configs) {
-    int zs = k + m;  // zone_size
-    // reference_sub_read is the acting index of the primary shard (always 0
-    // for a standard single-PG test setup).
-    constexpr int ref = 0;
-    constexpr int local_zone = 1;
+  auto acting = make_acting(12);
+  std::multimap<std::string, std::string> empty_loc;
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, empty_loc));
+}
 
-    shard_id_t buggy   = shard_id_t(ref);
-    shard_id_t correct = shard_id_t(ref + local_zone * zs);
-
-    EXPECT_EQ(shard_id_t(0), buggy)
-      << "k=" << k << " m=" << m << ": buggy always 0";
-    EXPECT_EQ(shard_id_t(zs), correct)
-      << "k=" << k << " m=" << m << ": correct should be zone_size=" << zs;
-    EXPECT_NE(buggy, correct)
-      << "k=" << k << " m=" << m << ": bug is visible for local_zone=1";
-  }
+// Acting set too small (< num_zones * zone_size) → always zone 0.
+TEST_F(TestLocalZoneGuards, ActingTooSmallReturnsZero)
+{
+  auto acting = make_acting(3);  // needs 12 (2 zones × 6)
+  auto loc    = make_loc("dc0");
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, loc));
 }
 
 // ===========================================================================
-// Section 5: ReplicaSplitOp LOCALIZE_READS zone filtering
+// Section 4: ReplicaSplitOp LOCALIZE_READS zone filtering
 //
 // When localize=true on a stretch replica pool, ReplicaSplitOp::init_read()
 // must restrict the OSD set to replicas in the client's local zone only.
@@ -628,4 +687,510 @@ TEST_F(TestReplicaLocalizeZoneFiltering, FilteredSetSizeEqualsZoneSize)
       << "zone " << z << ": expected " << zone_size
       << " replicas, got " << count;
   }
+}
+
+// The config proxy calls its observers in no fixed order, so the Objecter can
+// see a crush_location change before the CephContext has parsed it.
+TEST(ObjecterCrushLocation, ChangeSeenBeforeTheCephContextObserver) {
+  boost::asio::io_context ioc;
+  Objecter objecter(g_ceph_context, nullptr, nullptr, ioc);
+  objecter.init();
+  auto &conf = g_ceph_context->_conf;
+  conf.set_val_or_die("crush_location", "datacenter=dc2");
+  objecter.handle_conf_change(conf, {"crush_location"});
+  const std::multimap<std::string, std::string> expected = {{"datacenter", "dc2"}};
+  EXPECT_EQ(expected, objecter.crush_location);
+  objecter.shutdown();
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Baseline: the cases the single-direct-read path exists to catch.
+ * ---------------------------------------------------------------------------
+ */
+
+TEST(SplitOpValidate, OneReadInsideOneChunkIsASingleDirectOp) {
+  const pg_pool_t pool = make_ec_pool();
+
+  EXPECT_TRUE(is_single_direct_op(reads({{0, CHUNK}}), pool));
+}
+
+TEST(SplitOpValidate, ReadCrossingAChunkBoundaryIsNotASingleDirectOp) {
+  const pg_pool_t pool = make_ec_pool();
+
+  EXPECT_FALSE(is_single_direct_op(reads({{CHUNK / 2, CHUNK}}), pool));
+}
+
+TEST(SplitOpValidate, TwoReadsInsideTheSameChunkAreASingleDirectOp) {
+  const pg_pool_t pool = make_ec_pool();
+
+  // Both halves of chunk 0.  One OSD can serve the whole op.
+  ASSERT_EQ(raw_shard_of(0), raw_shard_of(CHUNK / 2));
+
+  EXPECT_TRUE(is_single_direct_op(
+    reads({{0, CHUNK / 2}, {CHUNK / 2, CHUNK / 2}}), pool));
+}
+
+TEST(SplitOpValidate, TwoReadsOnTheSameShardInDifferentStripesAreASingleDirectOp) {
+  const pg_pool_t pool = make_ec_pool();
+
+  // Chunk 0 of stripe 0 and chunk 0 of stripe 1.  Different chunks of the
+  // object, but both live on raw shard 0, so one OSD can still serve the op.
+  // A fix that requires the reads to be in the same *chunk* rather than on the
+  // same *shard* would wrongly reject this.
+  ASSERT_EQ(raw_shard_of(0), raw_shard_of(STRIPE_WIDTH));
+
+  EXPECT_TRUE(is_single_direct_op(
+    reads({{0, CHUNK}, {STRIPE_WIDTH, CHUNK}}), pool));
+}
+
+TEST(SplitOpValidate, TwoReadsOnDifferentShardsAreNotASingleDirectOp) {
+  const pg_pool_t pool = make_ec_pool();
+
+  // Chunk 0 and chunk 1: each is chunk-aligned and exactly one chunk long
+  ASSERT_NE(raw_shard_of(0), raw_shard_of(CHUNK));
+
+  EXPECT_FALSE(is_single_direct_op(reads({{0, CHUNK}, {CHUNK, CHUNK}}), pool))
+    << "reads on raw shards " << raw_shard_of(0) << " and "
+    << raw_shard_of(CHUNK) << " were classified as a single direct read; ";
+}
+
+TEST(SplitOpValidate, TwoReadsOnDifferentNonZeroShardsAreNotASingleDirectOp) {
+  const pg_pool_t pool = make_ec_pool();
+
+  ASSERT_NE(raw_shard_of(CHUNK), raw_shard_of(2 * CHUNK));
+
+  EXPECT_FALSE(is_single_direct_op(
+    reads({{CHUNK, CHUNK}, {2 * CHUNK, CHUNK}}), pool))
+    << "reads on raw shards " << raw_shard_of(CHUNK) << " and "
+    << raw_shard_of(2 * CHUNK) << " were classified as a single direct read";
+}
+
+TEST(SplitOpValidate, TwoReadsOnDifferentShardsAcrossGeometries) {
+  struct {
+    int k;
+    int m;
+    uint64_t chunk_size;
+  } const geometries[] = {
+    {2, 1, 4096},
+    {4, 2, 4096},
+    {4, 2, 65536},
+    {8, 3, 16384},
+    {6, 2, 12288},
+  };
+
+  for (const auto &g : geometries) {
+    const pg_pool_t pool = make_ec_pool(g.k, g.m, g.chunk_size);
+
+    ASSERT_NE(raw_shard_of(0, g.chunk_size, g.k),
+              raw_shard_of(g.chunk_size, g.chunk_size, g.k));
+
+    EXPECT_FALSE(is_single_direct_op(
+      reads({{0, g.chunk_size}, {g.chunk_size, g.chunk_size}}), pool))
+      << "k=" << g.k << " m=" << g.m << " chunk_size=" << g.chunk_size;
+  }
+}
+
+// ===========================================================================
+// Section 5: init_reference_sub_read() / init_read() against a real Objecter
+//
+// Three datacenters "zone-0".."zone-2", OSDs 4z..4z+3 in zone-z.  The
+// Objecter is never started; only its OSDMap and crush_location are used.
+// ===========================================================================
+
+class ECSplitOpProbe : public ECSplitOp {
+public:
+  using ECSplitOp::ECSplitOp;
+  using SplitOp::sub_reads;
+  using SplitOp::reference_sub_read;
+  using SplitOp::reference_sub_read_key;
+  using SplitOp::strategy;
+  using SplitOp::InternalVersionStrategy;
+  using SplitOp::abort;
+  ~ECSplitOpProbe() { abort = true; }
+};
+
+class ReplicaSplitOpProbe : public ReplicaSplitOp {
+public:
+  using ReplicaSplitOp::ReplicaSplitOp;
+  using SplitOp::init;
+  using SplitOp::sub_reads;
+  using SplitOp::reference_sub_read;
+  using SplitOp::reference_sub_read_key;
+  using SplitOp::abort;
+  ~ReplicaSplitOpProbe() { abort = true; }
+};
+
+class TestSplitOpInit : public ::testing::Test {
+protected:
+  static constexpr int osds_per_zone = 4;
+  static constexpr int64_t ec_pool_id = 1;
+  static constexpr int64_t rep_pool_id = 2;
+  static constexpr int64_t degraded_ec_pool_id = 3;
+  boost::asio::io_context ioc;
+  std::unique_ptr<Objecter> objecter;
+
+  void SetUp() override
+  {
+    g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size", "4096");
+    objecter = std::make_unique<Objecter>(g_ceph_context, nullptr, nullptr, ioc);
+    objecter->init();
+
+    OSDMap map;
+    uuid_d fsid;
+    fsid.generate_random();
+    ceph_assert(map.build_simple(g_ceph_context, 1, fsid, 3 * osds_per_zone) == 0);
+    for (int i = 0; i < 3 * osds_per_zone; i++) {
+      map.set_state(i, CEPH_OSD_EXISTS | CEPH_OSD_UP);
+    }
+
+    CrushWrapper crush;
+    crush.create();
+    OSDMap::_build_crush_types(crush);
+    int rootid = 0;
+    ceph_assert(crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                                 crush.get_type_id("root"), 0, nullptr,
+                                 nullptr, &rootid) == 0);
+    crush.set_item_name(rootid, "default");
+    for (int z = 0; z < 3; z++) {
+      std::map<std::string, std::string> loc = {
+        {"root", "default"},
+        {"datacenter", "zone-" + std::to_string(z)},
+        {"host", "host-" + std::to_string(z)}};
+      for (int i = 0; i < osds_per_zone; i++) {
+        int osd = z * osds_per_zone + i;
+        crush.insert_item(g_ceph_context, osd, 1.0, "osd." + std::to_string(osd), loc);
+      }
+    }
+    crush.finalize();
+    OSDMap::Incremental inc(map.get_epoch() + 1);
+    inc.fsid = map.get_fsid();
+    crush.encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    map.apply_incremental(inc);
+
+    pg_pool_t ec = make_ec_pool(2, 1, 4096);
+    ec.size = 6;
+    ec.num_zones = 2;
+    ec.peering_crush_bucket_count = 2;
+    ec.set_pg_num(1);
+    ec.set_pgp_num(1);
+    OSDMapTestHelpers::add_pool(map, ec_pool_id, ec);
+
+    pg_pool_t rep = make_replicated_pool(4);
+    rep.num_zones = 2;
+    rep.peering_crush_bucket_count = 2;
+    rep.peering_crush_bucket_barrier = crush.get_type_id("datacenter");
+    rep.set_pg_num(1);
+    rep.set_pgp_num(1);
+    OSDMapTestHelpers::add_pool(map, rep_pool_id, rep);
+    OSDMapTestHelpers::set_pg_acting(map, pg_t(0, ec_pool_id), {0, 1, 2, 4, 5, 6});
+    OSDMapTestHelpers::add_pool(map, degraded_ec_pool_id, ec);
+    OSDMapTestHelpers::set_pg_acting(map, pg_t(0, degraded_ec_pool_id),
+                                     {0, 1, 2, 4, CRUSH_ITEM_NONE, 6});
+
+    objecter->start(&map);
+  }
+
+  void TearDown() override
+  {
+    objecter->shutdown();
+    objecter.reset();
+    g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size", "0");
+  }
+
+  void set_client_zone(int zone)
+  {
+    objecter->crush_location = {{"datacenter", "zone-" + std::to_string(zone)}};
+  }
+
+  int zone_of(int osd) const
+  {
+    return osd / osds_per_zone;
+  }
+
+  Objecter::Op *make_read_op(int64_t pool, const std::vector<int>& acting,
+                             int primary_shard, uint64_t len, int flags)
+  {
+    osdc_opvec ops(1);
+    ops[0].op.op = CEPH_OSD_OP_READ;
+    ops[0].op.extent.offset = 0;
+    ops[0].op.extent.length = len;
+    auto op = new Objecter::Op(object_t("obj"), object_locator_t(pool),
+                               std::move(ops), flags, (Context*)nullptr, nullptr);
+    op->target.acting = acting;
+    op->target.actual_pgid = spg_t(pg_t(0, pool), shard_id_t(primary_shard));
+    return op;
+  }
+};
+
+// LOCALIZE_READS from zone 1 with a zone-1 primary reads zone-1 data shards.
+TEST_F(TestSplitOpInit, ECLocalizeZone1PrimaryReadsLocalShards)
+{
+  set_client_zone(1);
+  std::vector<int> acting = {0, 1, 2, 4, 5, 6};
+  auto op = make_read_op(ec_pool_id, acting, 3, 8192, CEPH_OSD_FLAG_LOCALIZE_READS);
+  {
+    ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, true);
+    split.init_reference_sub_read();
+    ASSERT_FALSE(split.abort);
+    EXPECT_EQ(3, split.reference_sub_read_key);
+    split.init_read(op->ops[0], false, 0, false);
+    ASSERT_FALSE(split.abort);
+    EXPECT_EQ(2u, split.sub_reads.size());
+    EXPECT_EQ(shard_id_t(3), split.sub_reads.at(3).abs_shard);
+    EXPECT_EQ(shard_id_t(4), split.sub_reads.at(4).abs_shard);
+    for (auto& [key, sr] : split.sub_reads) {
+      EXPECT_EQ(1, zone_of(acting[(int)sr.abs_shard])) << "key " << key;
+    }
+  }
+  op->put();
+}
+
+// A missing shard in the chosen zone aborts the split read; no cross-zone fallback.
+TEST_F(TestSplitOpInit, ECLocalizeMissingLocalShardAborts)
+{
+  set_client_zone(1);
+  std::vector<int> acting = {0, 1, 2, 4, CRUSH_ITEM_NONE, 6};
+  auto op = make_read_op(ec_pool_id, acting, 0, 8192, CEPH_OSD_FLAG_LOCALIZE_READS);
+  {
+    ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, true);
+    split.init_reference_sub_read();
+    ASSERT_FALSE(split.abort);
+    split.init_read(op->ops[0], false, 0, false);
+    EXPECT_TRUE(split.abort);
+  }
+  op->put();
+}
+
+// Three zones: nearest zone wins, NONE representatives fall through or are skipped.
+TEST_F(TestSplitOpInit, LocalZoneForActingSetThreeZones)
+{
+  const int zone_size = 3;
+  std::vector<int> acting = {0, 1, 2, 4, 5, 6, 8, 9, 10};
+  auto zone_for = [&](int client_zone) {
+    std::multimap<std::string, std::string> loc =
+      {{"datacenter", "zone-" + std::to_string(client_zone)}};
+    return objecter->with_osdmap([&](const OSDMap& o) {
+      return SplitOp::local_zone_for_acting_set(acting, 3, zone_size,
+                                                o.crush.get(), g_ceph_context, loc);
+    });
+  };
+  EXPECT_EQ(0, zone_for(0));
+  EXPECT_EQ(1, zone_for(1));
+  EXPECT_EQ(2, zone_for(2));
+
+  acting[6] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(2, zone_for(2));
+
+  acting[7] = acting[8] = CRUSH_ITEM_NONE;
+  EXPECT_NE(2, zone_for(2));
+
+  acting[0] = acting[1] = acting[2] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(1, zone_for(1));
+}
+
+// LOCALIZE_READS on a stretch replica pool reads only from the client's zone.
+TEST_F(TestSplitOpInit, ReplicaLocalizeReadsOnlyLocalZone)
+{
+  set_client_zone(1);
+  std::vector<int> acting = {0, 1, 4, 5};
+  for (unsigned seed = 0; seed < 16; seed++) {
+    srand(seed);
+    auto op = make_read_op(rep_pool_id, acting, 0, 4 * 4096,
+                           CEPH_OSD_FLAG_LOCALIZE_READS);
+    {
+      ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, true);
+      split.init_reference_sub_read();
+      ASSERT_FALSE(split.abort);
+      split.init_read(op->ops[0], false, 0, false);
+      ASSERT_FALSE(split.abort);
+      for (auto& [key, sr] : split.sub_reads) {
+        EXPECT_LT((int)sr.abs_shard, (int)acting.size())
+          << "seed " << seed << " key " << key;
+        if ((int)sr.abs_shard < (int)acting.size()) {
+          EXPECT_EQ(1, zone_of(acting[(int)sr.abs_shard]))
+            << "seed " << seed << " key " << key;
+        }
+      }
+    }
+    op->put();
+  }
+}
+
+// LOCALIZE_READS from zone 1 with a zone-0 primary keeps data reads in zone 1.
+TEST_F(TestSplitOpInit, ECLocalizeZone0PrimaryKeepsLocalDataShard)
+{
+  set_client_zone(1);
+  std::vector<int> acting = {0, 1, 2, 4, 5, 6};
+  auto op = make_read_op(ec_pool_id, acting, 0, 8192, CEPH_OSD_FLAG_LOCALIZE_READS);
+  {
+    ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, true);
+    split.init_reference_sub_read();
+    ASSERT_FALSE(split.abort);
+    // Only the legacy strategy reads the primary as the version reference.
+    split.strategy = ECSplitOpProbe::InternalVersionStrategy::FromPrimaryShard;
+    split.init_read(op->ops[0], false, 0, false);
+    ASSERT_FALSE(split.abort);
+    std::set<int> abs_shards;
+    for (auto& [key, sr] : split.sub_reads) {
+      abs_shards.insert((int)sr.abs_shard);
+    }
+    EXPECT_TRUE(abs_shards.contains(3));
+    EXPECT_TRUE(abs_shards.contains(4));
+    EXPECT_TRUE(abs_shards.contains(0));
+  }
+  op->put();
+}
+
+// A localized sparse read from zone 1 reassembles chunks read from zone-1 shards.
+TEST_F(TestSplitOpInit, ECLocalizeZone1SparseReadAssembles)
+{
+  set_client_zone(1);
+  std::vector<int> acting = {0, 1, 2, 4, 5, 6};
+  auto op = make_read_op(ec_pool_id, acting, 0, 8192, CEPH_OSD_FLAG_LOCALIZE_READS);
+  op->ops[0].op.op = CEPH_OSD_OP_SPARSE_READ;
+  {
+    ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, true);
+    split.init_reference_sub_read();
+    ASSERT_FALSE(split.abort);
+    split.init_read(op->ops[0], true, 0, false);
+    ASSERT_FALSE(split.abort);
+    for (int rel_shard = 0; rel_shard < 2; rel_shard++) {
+      auto& d = split.sub_reads.at(rel_shard + 3).details[0];
+      d.e->emplace(rel_shard * 4096, 4096);
+      d.bl.append(std::string(4096, 'a' + rel_shard));
+    }
+    auto [extents, bl] = split.assemble_buffer_sparse_read(0);
+    EXPECT_EQ(1u, extents.num_intervals());
+    EXPECT_EQ(0u, extents.range_start());
+    EXPECT_EQ(8192u, extents.range_end());
+    std::string expected = std::string(4096, 'a') + std::string(4096, 'b');
+    EXPECT_TRUE(bl.contents_equal(expected.data(), expected.size()));
+  }
+  op->put();
+}
+
+// A single-chunk LOCALIZE_READS read goes directly to the client's zone.
+TEST_F(TestSplitOpInit, ECSingleChunkLocalizeReadsLocalZone)
+{
+  set_client_zone(1);
+  auto op = make_read_op(ec_pool_id, {}, 0, 4096, CEPH_OSD_FLAG_LOCALIZE_READS);
+  SplitOp::prepare_single_op(op, *objecter, g_ceph_context);
+  EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+  EXPECT_EQ(4, op->target.osd);
+  EXPECT_EQ(shard_id_t(3), op->target.actual_pgid.shard);
+  op->put();
+}
+
+// Single-chunk BALANCE_READS reads are spread over every zone.
+TEST_F(TestSplitOpInit, ECSingleChunkBalanceReadsUsesEveryZone)
+{
+  std::set<int> zones;
+  for (unsigned seed = 0; seed < 16; seed++) {
+    srand(seed);
+    auto op = make_read_op(ec_pool_id, {}, 0, 4096, CEPH_OSD_FLAG_BALANCE_READS);
+    SplitOp::prepare_single_op(op, *objecter, g_ceph_context);
+    EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+    zones.insert(zone_of(op->target.osd));
+    op->put();
+  }
+  EXPECT_EQ(2u, zones.size());
+}
+
+// BALANCE_READS single-chunk reads only pick zones that hold the shard.
+TEST_F(TestSplitOpInit, ECSingleChunkBalanceReadsSkipZoneMissingShard)
+{
+  for (unsigned seed = 0; seed < 16; seed++) {
+    srand(seed);
+    auto op = make_read_op(degraded_ec_pool_id, {}, 0, 4096, CEPH_OSD_FLAG_BALANCE_READS);
+    op->ops[0].op.extent.offset = 4096;
+    SplitOp::prepare_single_op(op, *objecter, g_ceph_context);
+    EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) << "seed " << seed;
+    EXPECT_EQ(1, op->target.osd) << "seed " << seed;
+    op->put();
+  }
+}
+
+// BALANCE_READS picks the zone of each data shard independently.
+TEST_F(TestSplitOpInit, ECBalanceReadsChooseZonePerShard)
+{
+  std::vector<int> acting = {0, 1, 2, 4, 5, 6};
+  pg_pool_t pool = objecter->with_osdmap([](const OSDMap& o) {
+    return *o.get_pg_pool(ec_pool_id);
+  });
+  bool mixed = false;
+  for (unsigned seed = 0; seed < 16; seed++) {
+    srand(seed);
+    auto op = make_read_op(ec_pool_id, acting, 0, 8192, CEPH_OSD_FLAG_BALANCE_READS);
+    {
+      ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, false);
+      split.init_reference_sub_read();
+      ASSERT_FALSE(split.abort);
+      split.init_read(op->ops[0], false, 0, false);
+      ASSERT_FALSE(split.abort);
+      std::set<int> zones;
+      for (auto& [key, sr] : split.sub_reads) {
+        if (sr.details.contains(0)) {
+          int rel_shard = (int)pool.get_relative_shard(sr.abs_shard);
+          zones.insert(zone_of(acting[(int)sr.abs_shard]));
+          sr.details[0].bl.append(std::string(4096, 'a' + rel_shard));
+        }
+      }
+      mixed = mixed || zones.size() > 1;
+      bufferlist out;
+      split.assemble_buffer_read(out, 0);
+      std::string expected = std::string(4096, 'a') + std::string(4096, 'b');
+      EXPECT_TRUE(out.contents_equal(expected.data(), expected.size()))
+        << "seed " << seed;
+    }
+    op->put();
+  }
+  EXPECT_TRUE(mixed);
+}
+
+// BALANCE_READS split reads only pick zones that hold each shard.
+TEST_F(TestSplitOpInit, ECBalanceReadsSkipZoneMissingShard)
+{
+  std::vector<int> acting = {0, 1, 2, 4, CRUSH_ITEM_NONE, 6};
+  for (unsigned seed = 0; seed < 16; seed++) {
+    srand(seed);
+    auto op = make_read_op(degraded_ec_pool_id, acting, 0, 8192,
+                           CEPH_OSD_FLAG_BALANCE_READS);
+    {
+      ECSplitOpProbe split(op, *objecter, g_ceph_context, 6, false);
+      split.init_reference_sub_read();
+      ASSERT_FALSE(split.abort);
+      split.init_read(op->ops[0], false, 0, false);
+      ASSERT_FALSE(split.abort) << "seed " << seed;
+      EXPECT_TRUE(split.sub_reads.contains(1)) << "seed " << seed;
+      EXPECT_FALSE(split.sub_reads.contains(4)) << "seed " << seed;
+    }
+    op->put();
+  }
+}
+
+// A stat ahead of the read still sends the reference sub-read to the reference replica.
+TEST_F(TestSplitOpInit, ReplicaStatBeforeReadTargetsReference)
+{
+  std::vector<int> acting = {0, 1, 2, 3};
+  osdc_opvec ops(2);
+  ops[0].op.op = CEPH_OSD_OP_STAT;
+  ops[1].op.op = CEPH_OSD_OP_READ;
+  ops[1].op.extent.length = 4 * 65536;
+  auto op = new Objecter::Op(object_t("obj"), object_locator_t(rep_pool_id),
+                             std::move(ops), CEPH_OSD_FLAG_BALANCE_READS,
+                             (Context*)nullptr, nullptr);
+  op->target.acting = acting;
+  {
+    ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, false);
+    split.init_reference_sub_read();
+    ASSERT_FALSE(split.abort);
+    split.init(op->ops[0], 0, false);
+    split.init(op->ops[1], 1, false);
+    ASSERT_FALSE(split.abort);
+    auto& ref = split.sub_reads.at(split.reference_sub_read_key);
+    ASSERT_GE((int)ref.abs_shard, 0);
+    EXPECT_EQ(split.reference_sub_read.osd, acting[(int)ref.abs_shard]);
+  }
+  op->put();
 }

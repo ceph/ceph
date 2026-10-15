@@ -329,7 +329,7 @@ class Seq15 : public IoSequence {
     READ_PRIMARY,
     DONE
   };
-  Stage stage;
+  Stage stage = Stage::WRITE_PRIMARY;
 
  public:
   Seq15(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
