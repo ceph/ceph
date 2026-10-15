@@ -606,6 +606,19 @@ public:
     return store;
   }
 
+  /// the OSD is shutting down
+  bool is_stopping() const {
+    return local_state.osd_state.is_stopping();
+  }
+
+  /**
+   * scan the snap-mappers of the local active primary PGs for clones
+   * still mapped to purged snaps, and requeue those snaps for trimming.
+   * \returns the number of (PG, snap) pairs requeued
+   */
+  seastar::future<std::size_t> scrub_purged_snaps(
+    const ceph::osd::purged_snaps::index_t& purged);
+
   seastar::future<bool> is_local_storage_full(store_index_t store_index) const {
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::is_storage_full>(
         get_store(store_index));
