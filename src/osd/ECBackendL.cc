@@ -1157,6 +1157,7 @@ error:
     // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
     // the state of our chunk in case other chunks could substitute.
     reply->buffers_read.erase(i->first);
+    reply->sparse_extents_read.erase(i->first);
     reply->errors[i->first] = r;
   }
   for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
