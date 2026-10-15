@@ -195,6 +195,16 @@ protected:
   std::string nspace;
 };
 
+// The CRUSH zones that a pool over zones created from the defaults uses: the
+// bucket type that osd_pool_default_zone_failure_domain names, the buckets of
+// that type, and the one that holds each OSD
+struct ZoneTopology {
+  std::string type;
+  std::vector<std::string> zones;
+  std::map<int, std::string> osd_zone;
+};
+ZoneTopology get_zone_topology(librados::Rados &cluster);
+
 class RadosTestECPP : public RadosTestPPBase,
                       public ::testing::TestWithParam<std::tuple<bool, bool>> {
   bool ec_overwrites_set = false;
@@ -224,7 +234,7 @@ protected:
   void clear_ec_write_error_all_osds(const std::string &objname, int error_type);
   void wait_for_stable_acting_set(const std::string &objname);
 
-  // Returns true if the cluster has at least two CRUSH datacenter buckets.
+  // Whether the CRUSH map has two zones (get_zone_topology()).
   // Checked once in SetUpTestCase() to decide whether to create the stretch pool.
   static bool has_two_zone_topology();
 

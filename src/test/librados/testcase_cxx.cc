@@ -749,42 +749,66 @@ void RadosTestECPP::clear_ec_read_error_on_shard(const std::string &objname,
   ASSERT_EQ(0, rc);
 }
 
+ZoneTopology get_zone_topology(librados::Rados &cluster)
+{
+  ZoneTopology topo;
+  bufferlist out;
+  if (cluster.mon_command(
+        "{\"prefix\": \"config get\", \"who\": \"mon\", "
+        "\"key\": \"osd_pool_default_zone_failure_domain\"}",
+        {}, &out, nullptr) != 0) {
+    return topo;
+  }
+  topo.type = out.to_str();
+  topo.type.erase(topo.type.find_last_not_of(" \n") + 1);
+
+  out.clear();
+  JSONParser p;
+  if (cluster.mon_command("{\"prefix\": \"osd crush dump\", \"format\": \"json\"}",
+                          {}, &out, nullptr) != 0 ||
+      !p.parse(out.c_str(), out.length()) || !p.find_obj("buckets")) {
+    return topo;
+  }
+  std::map<int, int> parent;
+  std::map<int, std::string> zone_buckets;
+  for (auto b = p.find_obj("buckets")->find_first(); !b.end(); ++b) {
+    int id;
+    std::string name, type_name;
+    JSONDecoder::decode_json("id", id, *b);
+    JSONDecoder::decode_json("name", name, *b);
+    JSONDecoder::decode_json("type_name", type_name, *b);
+    if (name.find('~') != std::string::npos) {
+      continue;   // the shadow tree of a device class
+    }
+    if (type_name == topo.type) {
+      topo.zones.push_back(name);
+      zone_buckets[id] = name;
+    }
+    for (auto i = (*b)->find("items"); !i.end(); ++i) {
+      for (auto item = (*i)->find_first(); !item.end(); ++item) {
+        int item_id;
+        JSONDecoder::decode_json("id", item_id, *item);
+        parent[item_id] = id;
+      }
+    }
+  }
+  for (const auto &[item, bucket] : parent) {
+    if (item < 0) {
+      continue;
+    }
+    for (auto b = parent.find(item); b != parent.end(); b = parent.find(b->second)) {
+      if (zone_buckets.contains(b->second)) {
+        topo.osd_zone[item] = zone_buckets[b->second];
+        break;
+      }
+    }
+  }
+  return topo;
+}
+
 bool RadosTestECPP::has_two_zone_topology()
 {
-  // Ask the monitor for the CRUSH map and count datacenter-type buckets.
-  // Returns true only when there are at least two, which is the minimum
-  // required for zone-aware split-read tests.
-  bufferlist outbl;
-  std::string outs;
-  int rc = s_cluster.mon_command(
-    "{\"prefix\": \"osd crush dump\", \"format\": \"json\"}",
-    {}, &outbl, &outs);
-  if (rc != 0) {
-    return false;
-  }
-
-  JSONParser p;
-  if (!p.parse(outbl.c_str(), outbl.length())) {
-    return false;
-  }
-
-  // Count buckets whose type_name is "datacenter"
-  int dc_count = 0;
-  JSONObj *buckets = p.find_obj("buckets");
-  if (!buckets) {
-    return false;
-  }
-  auto it = buckets->find_first();
-  while (!it.end()) {
-    JSONObj *bucket = *it;
-    std::string type_name;
-    JSONDecoder::decode_json("type_name", type_name, bucket);
-    if (type_name == "datacenter") {
-      ++dc_count;
-    }
-    ++it;
-  }
-  return dc_count >= 2;
+  return get_zone_topology(s_cluster).zones.size() == 2;
 }
 
 uint64_t RadosTestPPBase::get_perf_counter_by_path(std::string_view path) {
