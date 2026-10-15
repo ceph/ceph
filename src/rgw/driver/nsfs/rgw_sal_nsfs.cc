@@ -826,9 +826,18 @@ static void promote_version(int parent_fd, const std::string& leaf,
   }
 }
 
+/* Under impersonation as every directory nsfs makes, sticky and
+ * writable (NSFS_IMPERSONATION.md 8a):  an identity reading a version
+ * entry needs search permission here, as on a key's directories. */
+static mode_t hidden_dir_mode()
+{
+  return nsfs::impersonation_enabled() ? (S_ISVTX | 0777)
+				       : nsfs::dir_create_mode();
+}
+
 static int ensure_versions_dir(int parent_fd)
 {
-  const mode_t mode = nsfs::dir_create_mode();
+  const mode_t mode = hidden_dir_mode();
   int ret = ::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), mode);
   if (ret < 0) {
     return (errno == EEXIST) ? 0 : -errno;
@@ -1392,7 +1401,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 
 static int ensure_shadow_dir(int parent_fd)
 {
-  const mode_t mode = nsfs::dir_create_mode();
+  const mode_t mode = hidden_dir_mode();
   int ret = ::mkdirat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), mode);
   if (ret < 0) {
     return (errno == EEXIST) ? 0 : -errno;
@@ -11902,6 +11911,16 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			  AttrWriteMode::MERGE, rmattrs);
 }
 
+/* An upload's staging -- its meta object -- is the gateway's, and is
+ * read as the gateway whoever asks:  S3 authorizes ListParts and its
+ * permission check, and the requester has no access to scaffolding
+ * (DECISIONS.md 2026-10-15). */
+static bool reads_staging(rgw::sal::Object* obj)
+{
+  auto* b = static_cast<NSFSBucket*>(obj->get_bucket());
+  return b && b->is_internal();
+}
+
 int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
   /* Pin here if an identity was specified, but do not refuse here
@@ -11916,7 +11935,7 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
    * The refusal therefore sits on the data entry points, iterate()
    * and read(), which is where serving an object as the gateway
    * would actually be the escalation. */
-  {
+  if (!reads_staging(source)) {
     const int pret = pin_personality(dpp, true);
     if ((pret < 0) && (pret != -ENODATA) && (pret != -EACCES)) {
       return pret;
@@ -12068,7 +12087,8 @@ int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 {
   /* see iterate():  the refusal deferred in prepare() lands on the
    * data entry points */
-  if (nsfs::impersonation_enabled() && !identity.active()) {
+  if (nsfs::impersonation_enabled() && !identity.active() &&
+      !reads_staging(source)) {
     ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
       << " as the gateway;  no POSIX identity resolved for this request"
       << dendl;
@@ -12253,7 +12273,8 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
   /* Serving object data as the gateway is the escalation this
    * exists to prevent, so the refusal deferred in prepare() lands
    * here.  A metadata-only read op never reaches this. */
-  if (nsfs::impersonation_enabled() && !identity.active()) {
+  if (nsfs::impersonation_enabled() && !identity.active() &&
+      !reads_staging(source)) {
     ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
       << " as the gateway;  no POSIX identity resolved for this request"
       << dendl;
