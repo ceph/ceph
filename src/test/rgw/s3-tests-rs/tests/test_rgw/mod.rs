@@ -18,6 +18,7 @@ mod impersonation;
 mod key_limit;
 mod key_separators;
 mod nsfs_abandon;
+mod nsfs_place_bucket;
 mod quota;
 mod reserved_names;
 mod root_object;

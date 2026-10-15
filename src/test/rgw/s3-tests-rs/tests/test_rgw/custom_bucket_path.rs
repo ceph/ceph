@@ -67,10 +67,10 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     let cfg = get_config();
     let me = cfg.main_user_id.clone();
     let base = base_path().await;
-    /* a sibling of the base path, which the base path admits as a
-     * string prefix, as NooBaa matches */
+    /* under the base path, which the allowlist names;  the raw-prefix
+     * match NooBaa makes is the unit suite's to pin */
     let bucket = get_new_bucket_name();
-    let at = format!("{base}-custom-{bucket}");
+    let at = format!("{base}/custom-{bucket}");
 
     /* no allowlist:  refused, which shows the header was read */
     nsfs_delete_identity(&me).await;
