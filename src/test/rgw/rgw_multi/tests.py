@@ -1490,6 +1490,70 @@ def test_multi_period_incremental_sync():
             mdlog = mdlog_list(zone, period)
             assert len(mdlog) == 0
 
+def sync_status_text(zone):
+    """ run 'sync status' on the given zone and return its output """
+    cmd = ['sync', 'status'] + zone.zone_args()
+    output, _ = zone.cluster.admin(cmd, read_only=True)
+    return output
+
+def test_sync_status_metadata_period_behind():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 3:
+        raise SkipTest("test_sync_status_metadata_period_behind skipped. Requires 3 or more zones in master zonegroup.")
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    z1, z2, z3 = zonegroup.zones[0:3]
+    assert(z1 == zonegroup.master_zone)
+
+    # get admin credentials out of existing zone
+    system_key = z1.data['system_key']
+    admin_creds = Credentials(system_key['access_key'], system_key['secret_key'])
+
+    old_period = realm.current_period.id
+    old_epoch = realm.current_period.data['realm_epoch']
+
+    # kill zone 3 gateways so that it misses the period change and its
+    # metadata sync stays on the current period
+    z3.stop()
+    try:
+        # change master to zone 2 -> new period
+        set_master_zone(z2)
+        new_period = realm.current_period.id
+        new_epoch = realm.current_period.data['realm_epoch']
+        assert new_epoch == old_epoch + 1
+
+        # zone 3 still has the old period too, so the period it syncs is the
+        # one its own configuration calls current
+        status = sync_status_text(z3)
+        log.info('sync status on zone %s with a stale period:\n%s', z3.name, status)
+        assert 'metadata is caught up with master' not in status
+        assert 'metadata sync is on period %s (realm epoch %d)' % (old_period, old_epoch) in status
+        assert 'local period %s (realm epoch %d) is not the master' % (old_period, old_epoch) in status
+        assert 'master is on period %s (realm epoch %d)' % (new_period, new_epoch) in status
+        assert 'metadata is 1 period behind the master' in status
+
+        # pull the current period into zone 3; its gateways are still down,
+        # so its metadata sync remains on the old period
+        realm.pull(z3.cluster, z2.gateways[0], admin_creds, [])
+        status = sync_status_text(z3)
+        log.info('sync status on zone %s with a current period:\n%s', z3.name, status)
+        assert 'metadata is caught up with master' not in status
+        assert 'metadata sync is on period %s (realm epoch %d)' % (old_period, old_epoch) in status
+        assert 'local period' not in status
+        assert 'master is on period %s (realm epoch %d)' % (new_period, new_epoch) in status
+        assert 'metadata is 1 period behind the master' in status
+    finally:
+        # restart zone 3 gateways and change master back to zone 1
+        z3.start()
+        set_master_zone(z1)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    status = sync_status_text(z3)
+    log.info('sync status on zone %s after catching up:\n%s', z3.name, status)
+    assert 'metadata is caught up with master' in status
+    assert 'metadata is behind' not in status
+
 def test_failover_failback():
     zonegroup = realm.master_zonegroup()
     if len(zonegroup.zones) < 2:
