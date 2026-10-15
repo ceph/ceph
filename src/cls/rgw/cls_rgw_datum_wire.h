@@ -214,14 +214,12 @@ public:
         return value;
     }
 
-    byte_buffer payload()
+    void payload(byte_buffer& value)
     {
         const auto size = scalar<std::uint32_t>();
         require(size);
-        byte_buffer value;
+        value.clear();
         input.copy(size, value);
-
-        return value;
     }
 
     template <typename BodyT>

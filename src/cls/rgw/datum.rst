@@ -121,11 +121,12 @@ event fields in wire order::
     datum::binary_fields<&entry::epoch, &entry::op, &entry::op_tag,
                          &entry::key, &entry::delete_marker> {}
 
-The independent client event has different field names and declaration order.
-OLH replies use the selected writable members to decode directly into candidate
-event storage. Other owning records use decode factories; sequence storage and
-associative insertion remain separate bindings. No native record or buffer type
-is globally enrolled in Datum and no Datum core customization is required.
+The independent client records have different field names and declaration order.
+BI entries and OLH events use selected writable members to decode directly into
+unpublished candidate storage. Request factories construct the remaining owning
+request records; sequence storage and associative insertion remain separate
+bindings. No native record or buffer type is globally enrolled in Datum and no
+Datum core customization is required.
 
 zpp archives require contiguous storage. RGW's shared adapter writes metadata
 directly into Ceph append space, retains opaque BI payload fragments and gathers

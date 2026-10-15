@@ -115,28 +115,31 @@ void encode_entry(writer& archive, const EntryT& value,
     });
 }
 
-template <typename FactoryT>
-auto decode_entry(reader& archive, FactoryT&& factory)
+template <typename EntryT, auto Kind, auto Key, auto Payload>
+EntryT& decode_entry(reader& archive, EntryT& value,
+                     datum::binary_fields<Kind, Key, Payload>)
 {
-    return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        const auto kind = fields.template scalar<std::uint8_t>();
-        auto key = fields.text();
-        auto data = fields.payload();
+    return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
+        auto& kind = value.*Kind;
+        kind = static_cast<std::remove_cvref_t<decltype(kind)>>(fields.template scalar<std::uint8_t>());
+        fields.text(value.*Key);
+        fields.payload(value.*Payload);
 
-        return std::invoke(std::forward<FactoryT>(factory), kind, std::move(key), std::move(data));
+        return value;
     });
 }
 
 } // detail
 
-// Factories take ownership of the key and native payload references. A factory
-// must retain those owners rather than return views into its temporary arguments.
-template <typename FactoryT>
-auto decode_entry(byte_buffer::const_iterator& input, FactoryT&& factory)
+// Fill unpublished candidates; the binding commits them after decoding succeeds.
+// Selected payload fields retain native owners beyond the input envelope.
+template <typename EntryT, auto ...Member>
+EntryT& decode_entry(byte_buffer::const_iterator& input, EntryT& value,
+                     datum::binary_fields<Member...> selected)
 {
     detail::reader archive {input};
 
-    return detail::decode_entry(archive, std::forward<FactoryT>(factory));
+    return detail::decode_entry(archive, value, selected);
 }
 
 // A single-entry message wraps the same entry profile in its own native frame.
@@ -152,13 +155,14 @@ byte_buffer encode_entry_message(const EntryT& value, datum::binary_fields<Membe
     return output;
 }
 
-template <typename FactoryT>
-auto decode_entry_message(byte_buffer::const_iterator& input, FactoryT&& factory)
+template <typename EntryT, auto ...Member>
+EntryT& decode_entry_message(byte_buffer::const_iterator& input, EntryT& value,
+                             datum::binary_fields<Member...> selected)
 {
     detail::reader archive {input};
 
-    return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        return detail::decode_entry(fields, std::forward<FactoryT>(factory));
+    return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
+        return detail::decode_entry(fields, value, selected);
     });
 }
 
@@ -182,8 +186,8 @@ byte_buffer encode_entries(const EntriesT& entries, const bool flag, datum::bina
     return output;
 }
 
-template <typename EntriesT, typename FactoryT>
-auto decode_entries(byte_buffer::const_iterator& input, FactoryT&& factory)
+template <typename EntriesT, auto ...Member>
+auto decode_entries(byte_buffer::const_iterator& input, datum::binary_fields<Member...> selected)
 {
     detail::reader archive {input};
 
@@ -195,7 +199,7 @@ auto decode_entries(byte_buffer::const_iterator& input, FactoryT&& factory)
             entries.reserve(size);
         }
         for (std::uint32_t index = 0; index < size; ++index) {
-            entries.emplace_back(detail::decode_entry(fields, factory));
+            detail::decode_entry(fields, entries.emplace_back(), selected);
         }
         const bool flag = 0 != fields.template scalar<std::uint8_t>();
 

@@ -54,17 +54,22 @@ auto fixtures()
     };
 }
 
-struct client_row final
+struct client_row
 {
     byte_buffer contents;
     std::uint8_t tag;
     std::string name;
 };
 
-auto make_row(const std::uint8_t kind, std::string key, byte_buffer data)
+constexpr auto client_row_fields = datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {};
+
+struct counted_row final : client_row
 {
-    return client_row {std::move(data), kind, std::move(key)};
-}
+    inline static unsigned constructions = 0;
+
+    counted_row() { ++constructions; }
+
+};
 
 void check_rows(const auto& actual, const std::vector<rgw_bi_oracle::row>& expected)
 {
@@ -120,13 +125,11 @@ TEST_CASE("BI replies use independent vector row types and preserve native frame
     CHECK(old_rows[0].payload.contents_equal(rows[0].payload));
 
     auto cursor = bytes.cbegin();
-    auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
+    auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
     check_rows(result.first, rows);
     CHECK(result.second);
     CHECK(cursor.end());
-    CHECK(wire::encode_entries(result.first, result.second,
-        datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {})
-        .contents_equal(bytes));
+    CHECK(wire::encode_entries(result.first, result.second, client_row_fields).contents_equal(bytes));
 
     // Decode retains the original opaque buffers rather than flattening the reply.
     const auto source = rows[0].payload.cbegin().get_current_ptr();
@@ -139,7 +142,7 @@ TEST_CASE("BI decoding handles fragmentation and compatible frame extensions", "
     const auto rows = fixtures();
     const auto input = fragmented(rgw_bi_oracle::extended_reply(rows));
     auto cursor = input.cbegin();
-    const auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
+    const auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
     check_rows(result.first, rows);
     CHECK(result.second);
     CHECK(cursor.end());
@@ -162,13 +165,9 @@ TEST_CASE("BI decoder rejects impossible counts before constructing rows", "[rgw
     auto position = bytes.begin(6);
     position.copy_in(4, excessive);
     auto cursor = bytes.cbegin();
-    unsigned constructions = 0;
-    CHECK_THROWS(wire::decode_entries<std::vector<client_row>>(cursor,
-        [&](const std::uint8_t kind, std::string key, byte_buffer data) {
-            ++constructions;
-            return make_row(kind, std::move(key), std::move(data));
-        }));
-    CHECK(constructions == 0);
+    counted_row::constructions = 0;
+    CHECK_THROWS(wire::decode_entries<std::vector<counted_row>>(cursor, client_row_fields));
+    CHECK(counted_row::constructions == 0);
 }
 
 TEST_CASE("BI native bool decoding accepts every byte value", "[rgw][cls][datum]")
@@ -179,7 +178,7 @@ TEST_CASE("BI native bool decoding accepts every byte value", "[rgw][cls][datum]
         auto position = bytes.begin(bytes.length() - 1);
         position.copy_in(1, &value);
         auto cursor = bytes.cbegin();
-        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
+        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
         CHECK(result.second == (0 != raw));
     }
 }
@@ -217,7 +216,7 @@ TEST_CASE("BI decoded payload owners outlive their input envelope", "[rgw][cls][
     {
         auto bytes = rgw_bi_oracle::encode_reply(fixtures(), false);
         auto cursor = bytes.cbegin();
-        rows = wire::decode_entries<std::vector<client_row>>(cursor, make_row).first;
+        rows = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields).first;
     }
     check_rows(rows, fixtures());
 }
@@ -233,7 +232,7 @@ TEST_CASE("BI bounded frames reject invalid lengths and compatibility", "[rgw][c
         const char raw = static_cast<char>(value);
         bytes.begin(offset).copy_in(1, &raw);
         auto cursor = bytes.cbegin();
-        CHECK_THROWS(wire::decode_entries<std::vector<client_row>>(cursor, make_row));
+        CHECK_THROWS(wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields));
     }
 }
 
@@ -285,13 +284,11 @@ TEST_CASE("BI randomized native envelopes preserve every field", "[rgw][cls][dat
         const bool truncated = random() % 2;
         const auto bytes = rgw_bi_oracle::encode_reply(rows, truncated);
         auto cursor = bytes.cbegin();
-        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, make_row);
+        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
         check_rows(result.first, rows);
         CHECK(result.second == truncated);
         CHECK(cursor.end());
-        CHECK(wire::encode_entries(result.first, result.second,
-            datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {})
-            .contents_equal(bytes));
+        CHECK(wire::encode_entries(result.first, result.second, client_row_fields).contents_equal(bytes));
     }
 }
 
@@ -454,9 +451,7 @@ TEST_CASE("BI single puts share entry framing across independent records", "[rgw
         CHECK(old.key == row.key);
         CHECK(old.payload.contents_equal(row.payload));
         const client_row independent {row.payload, row.kind, row.key};
-        CHECK(wire::encode_entry_message(independent,
-            datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {})
-            .contents_equal(bytes));
+        CHECK(wire::encode_entry_message(independent, client_row_fields).contents_equal(bytes));
         const auto future = fragmented(rgw_bi_oracle::extended_put_entry(row));
         auto cursor = future.cbegin();
         native::entry_put_request value;

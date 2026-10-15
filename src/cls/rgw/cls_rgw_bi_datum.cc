@@ -14,12 +14,7 @@ namespace
 {
 using native_entry = ::rgw_cls_bi_entry;
 constexpr auto native_entry_fields = datum::binary_fields<&native_entry::type, &native_entry::idx, &native_entry::data> {};
-
-template <typename EntryT>
-auto make_entry(const std::uint8_t kind, std::string&& key, ::ceph::buffer::list&& data)
-{
-    return EntryT {static_cast<::BIIndexType>(kind), std::move(key), std::move(data)};
-}
+constexpr auto module_entry_fields = datum::binary_fields<&entry::type, &entry::idx, &entry::data> {};
 
 } // anonymous namespace
 
@@ -43,7 +38,8 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(entry& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
-    auto candidate = ::cls::rgw::bi_wire::decode_entry(cursor, make_entry<entry>);
+    entry candidate;
+    ::cls::rgw::bi_wire::decode_entry(cursor, candidate, module_entry_fields);
     value = std::move(candidate);
     input = cursor;
 }
@@ -51,7 +47,7 @@ void decode(entry& value, ::ceph::buffer::list::const_iterator& input)
 void decode(put_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
-    auto [entries, check_existing] = ::cls::rgw::bi_wire::decode_entries<std::vector<entry>>(cursor, make_entry<entry>);
+    auto [entries, check_existing] = ::cls::rgw::bi_wire::decode_entries<std::vector<entry>>(cursor, module_entry_fields);
     value = {std::move(entries), check_existing};
     input = cursor;
 }
@@ -59,8 +55,9 @@ void decode(put_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
-    auto candidate = ::cls::rgw::bi_wire::decode_entry_message(cursor, make_entry<entry>);
-    value.item = std::move(candidate);
+    entry_put_request candidate;
+    ::cls::rgw::bi_wire::decode_entry_message(cursor, candidate.item, module_entry_fields);
+    value = std::move(candidate);
     input = cursor;
 }
 
@@ -77,8 +74,7 @@ void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& inpu
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    auto candidate = ::cls::rgw::bi_wire::encode_entries(value.entries, value.is_truncated,
-        datum::binary_fields<&entry::type, &entry::idx, &entry::data> {});
+    auto candidate = ::cls::rgw::bi_wire::encode_entries(value.entries, value.is_truncated, module_entry_fields);
     output.claim_append(candidate);
 }
 
@@ -87,7 +83,7 @@ std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
 
-    return ::cls::rgw::bi_wire::decode_entries<EntriesT>(cursor, make_entry<typename EntriesT::value_type>);
+    return ::cls::rgw::bi_wire::decode_entries<EntriesT>(cursor, native_entry_fields);
 }
 
 template std::pair<std::vector<::rgw_cls_bi_entry>, bool>
