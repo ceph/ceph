@@ -254,14 +254,26 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
+namespace
 {
-  bufferlist in, out;
+void bi_put(ObjectWriteOperation& op, const rgw_cls_bi_entry& entry)
+{
+#ifdef WITH_RGW_CLS_DATUM
+  auto input = ::cls::rgw::bi_datum::encode_put_entry(entry);
+#else
+  ::ceph::buffer::list input;
   rgw_cls_bi_put_op call;
   call.entry = entry;
-  encode(call, in);
+  encode(call, input);
+#endif
+  op.exec(method::bi_put, input);
+}
+} // anonymous namespace
+
+int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
+{
   librados::ObjectWriteOperation op;
-  op.exec(method::bi_put, in);
+  bi_put(op, entry);
   int r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
@@ -271,11 +283,7 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_e
 
 void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi_entry& entry)
 {
-  bufferlist in, out;
-  rgw_cls_bi_put_op call;
-  call.entry = entry;
-  encode(call, in);
-  op.exec(method::bi_put, in);
+  bi_put(op, entry);
 }
 
 void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,

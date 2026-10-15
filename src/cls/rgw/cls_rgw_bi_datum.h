@@ -41,6 +41,11 @@ struct reply final
     bool is_truncated = false;
 };
 
+struct entry_put_request final
+{
+    entry item;
+};
+
 struct put_request final
 {
     std::vector<entry> entries;
@@ -52,12 +57,14 @@ struct put_request final
                                     std::string_view marker, bool reshard);
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(put_request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(entry& value, ::ceph::buffer::list::const_iterator& input);
 void encode(const reply& value, ::ceph::buffer::list& output);
 
 // Borrow records only during encoding; the returned message retains its bytes.
 ::ceph::buffer::list encode_put_request(const std::vector<::rgw_cls_bi_entry>& entries,
                                         bool check_existing);
+::ceph::buffer::list encode_put_entry(const ::rgw_cls_bi_entry& value);
 
 // Explicit vector/list instantiations return owned candidates. The client
 // publishes caller outputs only after transport and decoding have succeeded.

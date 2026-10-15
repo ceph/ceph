@@ -8,8 +8,13 @@
 
 namespace cls::rgw::bi_datum
 {
+namespace datum = ::ceph::salad::datum;
+
 namespace
 {
+using native_entry = ::rgw_cls_bi_entry;
+constexpr auto native_entry_fields = datum::binary_fields<&native_entry::type, &native_entry::idx, &native_entry::data> {};
+
 template <typename EntryT>
 auto make_entry(const std::uint8_t kind, std::string&& key, ::ceph::buffer::list&& data)
 {
@@ -51,20 +56,27 @@ void decode(put_request& value, ::ceph::buffer::list::const_iterator& input)
     input = cursor;
 }
 
+void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    auto candidate = ::cls::rgw::bi_wire::decode_entry_message(cursor, make_entry<entry>);
+    value.item = std::move(candidate);
+    input = cursor;
+}
+
+::ceph::buffer::list encode_put_entry(const ::rgw_cls_bi_entry& value)
+{
+    return ::cls::rgw::bi_wire::encode_entry_message(value, native_entry_fields);
+}
+
 ::ceph::buffer::list encode_put_request(const std::vector<::rgw_cls_bi_entry>& entries,
                                         const bool check_existing)
 {
-    namespace datum = ::ceph::salad::datum;
-    using entry_type = ::rgw_cls_bi_entry;
-
-    return ::cls::rgw::bi_wire::encode_entries(entries, check_existing,
-        datum::binary_fields<&entry_type::type, &entry_type::idx, &entry_type::data> {});
+    return ::cls::rgw::bi_wire::encode_entries(entries, check_existing, native_entry_fields);
 }
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    namespace datum = ::ceph::salad::datum;
-
     auto candidate = ::cls::rgw::bi_wire::encode_entries(value.entries, value.is_truncated,
         datum::binary_fields<&entry::type, &entry::idx, &entry::data> {});
     output.claim_append(candidate);

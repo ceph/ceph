@@ -99,6 +99,43 @@ std::vector<row> decode_put_request(const ::ceph::buffer::list& bytes, bool& che
     return rows;
 }
 
+::ceph::buffer::list encode_put_entry(const row& value)
+{
+    ::rgw_cls_bi_put_op request;
+    request.entry = {static_cast<::BIIndexType>(value.kind), value.key, value.payload};
+    ::ceph::buffer::list bytes;
+    ::encode(request, bytes);
+
+    return bytes;
+}
+
+row decode_put_entry(const ::ceph::buffer::list& bytes)
+{
+    ::rgw_cls_bi_put_op value;
+    auto cursor = bytes.cbegin();
+    ::decode(value, cursor);
+
+    return {static_cast<std::uint8_t>(value.entry.type), std::move(value.entry.idx), std::move(value.entry.data)};
+}
+
+::ceph::buffer::list extended_put_entry(const row& value)
+{
+    ::ceph::buffer::list bytes;
+    ENCODE_START(2, 1, bytes);
+    {
+        ENCODE_START(3, 1, bytes);
+        ::ceph::encode(value.kind, bytes);
+        ::ceph::encode(value.key, bytes);
+        ::ceph::encode(value.payload, bytes);
+        ::ceph::encode(std::uint64_t {0xFFEEDDCC}, bytes);
+        ENCODE_FINISH(bytes);
+    }
+    ::ceph::encode(std::uint64_t {0xAABBCCDD}, bytes);
+    ENCODE_FINISH(bytes);
+
+    return bytes;
+}
+
 ::ceph::buffer::list extended_reply(const std::vector<row>& rows)
 {
     ::ceph::buffer::list bytes;

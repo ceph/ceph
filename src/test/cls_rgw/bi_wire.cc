@@ -442,3 +442,55 @@ TEST_CASE("BI batch messages and decoded payloads retain their owners", "[rgw][c
     CHECK(value.entries[0].data.contents_equal(payload()));
     CHECK(value.entries[0].idx == "key");
 }
+
+TEST_CASE("BI single puts share entry framing across independent records", "[rgw][cls][datum][single-put]")
+{
+    for (const auto& row : fixtures()) {
+        const ::rgw_cls_bi_entry source {static_cast<::BIIndexType>(row.kind), row.key, row.payload};
+        const auto bytes = native::encode_put_entry(source);
+        CHECK(bytes.contents_equal(rgw_bi_oracle::encode_put_entry(row)));
+        const auto old = rgw_bi_oracle::decode_put_entry(bytes);
+        CHECK(old.kind == row.kind);
+        CHECK(old.key == row.key);
+        CHECK(old.payload.contents_equal(row.payload));
+        const client_row independent {row.payload, row.kind, row.key};
+        CHECK(wire::encode_entry_message(independent,
+            datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {})
+            .contents_equal(bytes));
+        const auto future = fragmented(rgw_bi_oracle::extended_put_entry(row));
+        auto cursor = future.cbegin();
+        native::entry_put_request value;
+        native::decode(value, cursor);
+        CHECK(cursor.end());
+        CHECK(static_cast<std::uint8_t>(value.item.type) == row.kind);
+        CHECK(value.item.idx == row.key);
+        CHECK(value.item.data.contents_equal(row.payload));
+        CHECK(rgw_bi_oracle::decode_put_entry(future).payload.contents_equal(row.payload));
+    }
+}
+
+TEST_CASE("BI single put decoding is bounded and retains owned results", "[rgw][cls][datum][single-put]")
+{
+    const auto bytes = rgw_bi_oracle::encode_put_entry(fixtures().front());
+    for (unsigned size = 0; size < bytes.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(bytes, 0, size);
+        auto cursor = prefix.cbegin();
+        native::entry_put_request value {{::BIIndexType::Invalid, "preserve", payload()}};
+        CHECK_THROWS(native::decode(value, cursor));
+        CHECK(cursor.get_off() == 0);
+        CHECK(value.item.idx == "preserve");
+        CHECK(value.item.data.contents_equal(payload()));
+    }
+    native::entry_put_request owned;
+    const char *backing = nullptr;
+    {
+        ::rgw_cls_bi_entry row {::BIIndexType::Plain, "key", payload()};
+        backing = row.data.cbegin().get_current_ptr().c_str();
+        auto input = native::encode_put_entry(row);
+        auto cursor = input.cbegin();
+        native::decode(owned, cursor);
+    }
+    CHECK(owned.item.data.cbegin().get_current_ptr().c_str() == backing);
+    CHECK(owned.item.data.contents_equal(payload()));
+}

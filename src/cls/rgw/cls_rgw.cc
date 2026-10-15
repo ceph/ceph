@@ -3019,7 +3019,11 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bi_datum::entry_put_request op;
+#else
   rgw_cls_bi_put_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3028,7 +3032,11 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
     return -EINVAL;
   }
 
-  rgw_cls_bi_entry& entry = op.entry;
+#ifdef WITH_RGW_CLS_DATUM
+  auto& entry = op.item;
+#else
+  auto& entry = op.entry;
+#endif
   if (entry.type == BIIndexType::ReshardDeleted) {
     int r = cls_cxx_map_remove_key(hctx, entry.idx);
     if (r < 0) {

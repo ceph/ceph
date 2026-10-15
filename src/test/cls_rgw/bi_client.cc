@@ -6,7 +6,9 @@
 
 #include <cerrno>
 #include <new>
+#include <string>
 #include <string_view>
+#include <utility>
 
 namespace
 {
@@ -15,6 +17,8 @@ byte_buffer request_bytes;
 byte_buffer reply_bytes;
 int transport_status = 0;
 bool allocation_failure = false;
+std::string request_method;
+int put_transport_status = 0;
 
 byte_buffer response()
 {
@@ -112,7 +116,7 @@ TEST_CASE("BI client failures preserve caller outputs and native status", "[rgw]
 void librados::ObjectOperation::exec_impl(const char *cls, const char *method, byte_buffer& input)
 {
     CHECK(std::string_view {cls} == "rgw");
-    CHECK(std::string_view {method} == "bi_put_entries");
+    request_method = method;
     request_bytes = input;
 }
 
@@ -129,6 +133,7 @@ TEST_CASE("BI batch client retains encoded bytes after consuming its input", "[r
         ::librados::ObjectWriteOperation operation;
         ::cls_rgw_bi_put_entries(operation, std::move(reference.entries), true);
     }
+    CHECK(request_method == "bi_put_entries");
     CHECK(request_bytes.contents_equal(expected));
     ::rgw_cls_bi_put_entries_op decoded;
     auto cursor = request_bytes.cbegin();
@@ -138,4 +143,37 @@ TEST_CASE("BI batch client retains encoded bytes after consuming its input", "[r
     CHECK(decoded.entries[0].data.to_str() == "opaque");
     CHECK(decoded.check_existing);
     CHECK(cursor.end());
+}
+
+int librados::IoCtx::operate(const std::string& oid, ObjectWriteOperation *)
+{
+    CHECK(oid == "object");
+
+    return put_transport_status;
+}
+
+TEST_CASE("BI single put clients share request bytes and own borrowed inputs", "[rgw][cls][single-put]")
+{
+    byte_buffer expected;
+    ::rgw_cls_bi_entry row {::BIIndexType::Plain, std::string(80, 'k'), {}};
+    row.data.append("opaque", 6);
+    ::rgw_cls_bi_put_op reference;
+    reference.entry = row;
+    ::encode(reference, expected);
+    ::librados::IoCtx context;
+    for (const int status : {-EACCES, 0, 7}) {
+        put_transport_status = status;
+        CHECK(::cls_rgw_bi_put(context, "object", row) == (status < 0 ? status : 0));
+        CHECK(request_method == "bi_put");
+        CHECK(request_bytes.contents_equal(expected));
+    }
+    put_transport_status = 0;
+    {
+        ::librados::ObjectWriteOperation operation;
+        ::cls_rgw_bi_put(operation, "ignored", row);
+        row.idx.clear();
+        row.data.clear();
+    }
+    CHECK(request_method == "bi_put");
+    CHECK(request_bytes.contents_equal(expected));
 }

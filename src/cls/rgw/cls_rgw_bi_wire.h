@@ -139,6 +139,29 @@ auto decode_entry(byte_buffer::const_iterator& input, FactoryT&& factory)
     return detail::decode_entry(archive, std::forward<FactoryT>(factory));
 }
 
+// A single-entry message wraps the same entry profile in its own native frame.
+template <typename EntryT, auto ...Member>
+byte_buffer encode_entry_message(const EntryT& value, datum::binary_fields<Member...> selected)
+{
+    byte_buffer output;
+    detail::writer archive {output};
+    archive.frame(1, [&] {
+        detail::encode_entry(archive, value, selected);
+    });
+
+    return output;
+}
+
+template <typename FactoryT>
+auto decode_entry_message(byte_buffer::const_iterator& input, FactoryT&& factory)
+{
+    detail::reader archive {input};
+
+    return archive.frame(1, [&](auto& fields, std::uint8_t) {
+        return detail::decode_entry(fields, std::forward<FactoryT>(factory));
+    });
+}
+
 // List replies and batch requests share a counted entry sequence and flag.
 // The binding interprets the flag as truncation or an overwrite check.
 template <typename EntriesT, auto ...Member>

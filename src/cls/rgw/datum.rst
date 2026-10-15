@@ -1,10 +1,11 @@
 Datum wire bindings for RGW CLS
 ==============================
 
-The ``bi_list``, ``bi_put_entries`` and ``bucket_read_olh_log`` bindings let the
-client and module use different owning records and containers. They share the
-existing Ceph encoding, including versions, lengths, scalar widths, element
-encodings and map semantics. A container category alone does not define that contract.
+The ``bi_list``, ``bi_put``, ``bi_put_entries`` and ``bucket_read_olh_log`` bindings
+let the client and module use different owning records and containers. They
+share the existing Ceph encoding, including versions, lengths, scalar widths,
+element encodings and map semantics. A container category alone does not define
+that contract.
 Other RGW CLS methods continue to use their existing codecs.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
@@ -40,6 +41,17 @@ status reference. Keep those outputs alive until the operation completes.
 Successful decoding produces complete candidates before publishing outputs;
 decode failures preserve the caller's previous result. Completion errors map
 allocation failures to ``-ENOMEM`` and malformed responses to ``-EIO``.
+
+Single-entry writes
+-------------------
+
+Both ``cls_rgw_bi_put`` overloads share one builder. The Datum binding borrows
+the native entry during encoding and the module receives an independent owning
+record. A single-entry message wraps the existing entry frame in an outer frame.
+It performs no opaque payload interpretation or accounting. Native behavior is
+preserved: reshard deletions ignore their payload, and set/remove errors are
+logged while the method returns success. Structural request errors still return
+``-EINVAL`` before storage effects.
 
 Batch writes
 ------------
@@ -78,6 +90,7 @@ extensions and retain native nonzero-byte boolean semantics.
 * BI reply v1/compat1: counted entries, truncated byte. Each entry is a
   v1/compat1 frame containing kind byte, key string and counted opaque bytes.
 * BI batch request v1/compat1: the same counted entries, check-existing byte.
+* BI single put request v1/compat1: one entry frame, without a count or flag.
 * OLH request v2/compat1: key frame, epoch marker uint64, tag string, get-stales
   byte. A v1 request defaults get-stales to false.
 * OLH key v1/compat1: name string, instance string.
@@ -132,7 +145,7 @@ Focused Catch2 targets cover native C++23 encoding compatibility, independently
 bound records, fragmented input, old/future frames, unknown bytes, truncation,
 map order/duplicates and candidate publication. Client tests execute actual
 client code with controlled transport/completion boundaries. Linux OLH and BI
-batch module targets share a plugin loader and supply controlled OMAP effects.
+put module targets share a plugin loader and supply controlled OMAP effects.
 Batch cases cover duplicate accounting, overwrite checks, quota/error ordering,
 reshard guards, empty batches and malformed opaque payloads. The controlled host
 records staged effects; live OSD validation separately checks transaction rollback.

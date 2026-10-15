@@ -15,6 +15,7 @@
 #include <ranges>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -42,15 +43,16 @@ int effect(storage& state, std::string operation, byte_buffer arguments = {})
     return static_cast<int>(state.effects.size()) == state.failure_call ? state.failure : 0;
 }
 
-auto invoke(storage& state, byte_buffer input)
+auto invoke(storage& state, byte_buffer input, const std::string_view method = "bi_put_entries")
 {
-    const auto [call, flags] = ::rgw_cls_test::get_method("bi_put_entries");
+    const auto [call, flags] = ::rgw_cls_test::get_method(method);
     REQUIRE(flags == (CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
     if (const char *path = std::getenv("CEPH_TEST_CLS_RGW_TRANSCRIPT")) {
         static std::ofstream transcript {path, std::ios::binary};
         byte_buffer record;
+        ::ceph::encode(std::string {method}, record);
         ::ceph::encode(input, record);
         ::ceph::encode(status, record);
         ::ceph::encode(output, record);
@@ -70,6 +72,14 @@ auto invoke(storage& state, const ::rgw_cls_bi_put_entries_op& request)
     ::encode(request, input);
 
     return invoke(state, std::move(input));
+}
+
+auto invoke(storage& state, const ::rgw_cls_bi_put_op& request)
+{
+    byte_buffer input;
+    ::encode(request, input);
+
+    return invoke(state, std::move(input), "bi_put");
 }
 
 auto entry(const std::string& key, const std::uint64_t size)
@@ -164,6 +174,19 @@ int cls_cxx_map_remove_key(cls_method_context_t context, const std::string& key)
     }
 
     return state.values.erase(key) ? 0 : -ENOENT;
+}
+
+int cls_cxx_map_set_val(cls_method_context_t context, const std::string& key, byte_buffer *value)
+{
+    auto& state = *static_cast<storage *>(context);
+    byte_buffer arguments;
+    ::ceph::encode(std::pair {key, *value}, arguments);
+    if (const int result = effect(state, "set-value", arguments); result < 0) {
+        return result;
+    }
+    state.values.insert_or_assign(key, *value);
+
+    return 0;
 }
 
 int cls_cxx_map_set_vals(cls_method_context_t context, const std::map<std::string, byte_buffer> *values)
@@ -393,4 +416,59 @@ TEST_CASE("BI batch malformed stored payload returns an I/O error", "[rgw][cls][
     CHECK(effect_names(state) == std::vector<std::string> {"read-header", "get-by-keys"});
     CHECK(state.header.length() == 0);
     CHECK(state.values.at("key").length() == 0);
+}
+
+TEST_CASE("Single BI puts preserve opaque payloads and arbitrary keys", "[rgw][cls][single-put]")
+{
+    for (const auto kind : {0u, 1u, 2u, 3u, 4u, 255u}) {
+        for (const auto& key : {std::string {}, std::string {"a\0b", 3}, std::string(80, 'k')}) {
+            storage state;
+            state.values[key].append("before", 6);
+            ::rgw_cls_bi_put_op request;
+            request.entry = {static_cast<::BIIndexType>(kind), key, {}};
+            request.entry.data.append("opaque\0\xFF", 8);
+            REQUIRE(invoke(state, request) == 0);
+            CHECK(state.header.length() == 0);
+            if (kind == 4) {
+                CHECK(state.values.empty());
+                CHECK(effect_names(state) == std::vector<std::string> {"remove"});
+            } else {
+                REQUIRE(state.values.size() == 1);
+                CHECK(state.values.at(key).contents_equal(request.entry.data));
+                CHECK(effect_names(state) == std::vector<std::string> {"set-value"});
+            }
+        }
+    }
+}
+
+TEST_CASE("Single BI put storage errors retain native nonfatal status", "[rgw][cls][single-put]")
+{
+    for (const auto kind : {::BIIndexType::Plain, ::BIIndexType::ReshardDeleted}) {
+        storage state;
+        state.values["key"].append("before", 6);
+        state.failure_call = 1;
+        ::rgw_cls_bi_put_op request;
+        request.entry = {kind, "key", {}};
+        CHECK(invoke(state, request) == 0);
+        CHECK(state.effects.size() == 1);
+        CHECK(state.values.at("key").to_str() == "before");
+        CHECK(state.header.length() == 0);
+    }
+}
+
+TEST_CASE("Single BI put structural errors precede storage effects", "[rgw][cls][single-put]")
+{
+    ::rgw_cls_bi_put_op request;
+    request.entry = entry("key", 3);
+    byte_buffer full;
+    ::encode(request, full);
+    for (unsigned size = 0; size < full.length(); ++size) {
+        storage state;
+        byte_buffer input;
+        input.substr_of(full, 0, size);
+        CHECK(invoke(state, std::move(input), "bi_put") == -EINVAL);
+        CHECK(state.effects.empty());
+        CHECK(state.values.empty());
+        CHECK(state.header.length() == 0);
+    }
 }
