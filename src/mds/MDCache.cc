@@ -8850,6 +8850,23 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	discover = true;
       }
 
+      /* The auth replicated this dirfrag for read load, and the client
+       * sent a read here, as the replies told it to.  A replica only
+       * holds the dentries this rank discovered for itself, such as those
+       * on the way to its own subtrees, so forwarding every other lookup
+       * to the auth would only add a hop to the reads the replication was
+       * meant to take off it.  Get the dentry from the auth instead, and
+       * answer this read and the next ones of it here.  Only on the first
+       * try: a dentry the auth does not have either is forwarded as
+       * before.
+       */
+      if (forward && !want_auth && curdir->is_rep() &&
+	  mdr && mdr->client_request && mdr->retry == 0) {
+	dout(7) << "traverse: replicated " << *curdir
+		<< ", discovering instead of forwarding" << dendl;
+	discover = true;
+      }
+
       if (discover) {
         if (forimport && cur->is_quiesced()) {
           /* block discover for import */
