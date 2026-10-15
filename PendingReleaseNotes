@@ -272,6 +272,9 @@
   ``rgw_default_bucket_bilog_type`` configuration option (default:
   ``fifo``). Existing InIndex buckets are unaffected until their next
   reshard, at which point they are automatically migrated to FIFO.
+* RADOS: The default value for ``rados_replica_read_policy`` is changed to
+  ``balance`` for new clusters. Existing clusters retain the previous default,
+  which is the value ``default``.
 
 >=21.0.0
 
