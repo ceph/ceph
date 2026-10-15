@@ -33,7 +33,7 @@ Limits read_limits(const Config& conf, uint64_t stripe_width)
 }
 
 // Admission in do_op, before the op is given a version: a single plain
-// WRITE of whole 1 KiB blocks inside one stripe (or across one stripe
+// WRITE of whole 4 KiB blocks inside one stripe (or across one stripe
 // boundary, see max_cross) of an existing head object
 // with no snapshot state and no data digest, leaving its size unchanged. It
 // is the journal's only test of a write: an admitted op becomes a record

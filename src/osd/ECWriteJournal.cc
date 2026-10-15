@@ -391,8 +391,8 @@ void Overlay::apply(uint64_t offset, uint64_t length,
 {
   const uint64_t end = offset + length;
   ceph::bufferlist out;
-  // Adjacent pieces of one buffer become one again: a 4 KiB record is four
-  // blocks of the same buffer.
+  // Adjacent pieces of one buffer become one again: a record of several
+  // blocks is that many slices of the same buffer.
   const auto take = [&out](const ceph::bufferlist& from, uint64_t off,
                            uint64_t len) {
     ceph::bufferlist piece;

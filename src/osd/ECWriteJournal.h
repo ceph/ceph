@@ -25,7 +25,7 @@ namespace ECWriteJournal {
 // requests, or implement replay. See doc/dev/ec-write-journal-poc.rst.
 //
 // Two structures share the record data: append-only segments (the durable
-// log) and an in-memory index of live 1 KiB blocks folded per stripe (latest
+// log) and an in-memory index of live 4 KiB blocks folded per stripe (latest
 // append wins; a superseded block is dead immediately). Flushing is decided
 // per stripe, not per segment: a complete stripe can be materialized without
 // reads at any time, an incomplete one when the log must reclaim its oldest
@@ -42,7 +42,12 @@ namespace ECWriteJournal {
 // append of the next segment removes the old contents in the same
 // transaction, so trimming needs no transaction of its own and happens on
 // every holder at once.
-inline constexpr uint64_t block_size = 1024;
+// The index's unit and the journal's write granularity: a journaled write
+// covers whole blocks, so a 4 KiB write is one block, with one version, one
+// sequence and one buffer reference. The production writes sampled were all
+// 4 KiB aligned, and smaller ones are 512-byte sector writes that 1 KiB
+// blocks did not take either; they run as direct writes.
+inline constexpr uint64_t block_size = 4096;
 // Every payload starts at a multiple of this offset in its segment object and
 // is zero padded to a multiple of it, so each append is a whole-block write
 // into never-written space. BlueStore turns an append that shares a device
@@ -207,7 +212,7 @@ struct Stripe {
   uint64_t offset = 0;
   uint64_t width = 0;
   uint64_t valid_bytes = 0; // logical bytes before EOF, at most width
-  // Relative, 1 KiB aligned offsets. Bufferlists share immutable record data.
+  // Relative, 4 KiB aligned offsets. Bufferlists share immutable record data.
   std::map<uint64_t, ceph::bufferlist> blocks;
   // Newest append sequence in the snapshot. A record admitted to the stripe
   // while it flushes has a higher sequence and stays journaled.
@@ -317,7 +322,7 @@ class Journal {
   // can address, the same on every shard (only its shard id differs).
   Journal(ghobject_t prefix, Limits limits);
 
-  // Place an append. Writes of whole 1 KiB blocks, aligned to 1 KiB, within
+  // Place an append. Writes of whole 4 KiB blocks, aligned to 4 KiB, within
   // a prefilled object and one stripe are supported (librbd merges adjacent
   // 4 KiB writes to one object); the caller appends a write that crosses a
   // stripe boundary piece by piece (stripe_fragments). On success the caller MUST emit the
@@ -572,7 +577,7 @@ class Journal {
   struct Entry {
     uint64_t object_size = 0;
     uint64_t valid_bytes = 0;
-    std::map<uint64_t, Block> blocks; // relative 1 KiB offsets
+    std::map<uint64_t, Block> blocks; // relative 4 KiB offsets
     uint32_t undurable = 0;
     bool flushing = false;
     // While flushing: the newest sequence of the snapshot the flush or the

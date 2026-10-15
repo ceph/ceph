@@ -109,16 +109,19 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
     return ops;
   };
   using ECWriteJournal::candidate_write;
+  using ECWriteJournal::block_size;
   EXPECT_TRUE(candidate_write(head, write(4096, 4096), obs, snapset, 0, width));
-  EXPECT_TRUE(candidate_write(head, write(1024, 1024), obs, snapset, 0, width));
+  EXPECT_TRUE(candidate_write(head, write(0, block_size), obs, snapset, 0, width));
   EXPECT_TRUE(candidate_write(head, write(width, width), obs, snapset, 0, width));
   // What librbd's scheduler makes of adjacent writes, while it stays inside
   // one stripe: no limit applies there.
   EXPECT_TRUE(candidate_write(head, write(4096, 8192), obs, snapset, 0, width));
   EXPECT_TRUE(candidate_write(head, write(width - 8192, 8192), obs, snapset, 0, width));
-  EXPECT_TRUE(candidate_write(head, write(1024, 3072), obs, snapset, 0, width));
+  EXPECT_TRUE(candidate_write(head, write(block_size, 3 * block_size), obs,
+                              snapset, 0, width));
   // Up to the object's last block.
-  EXPECT_TRUE(candidate_write(head, write(4 * width - 1024, 1024), obs, snapset, 0, width));
+  EXPECT_TRUE(candidate_write(head, write(4 * width - block_size, block_size),
+                              obs, snapset, 0, width));
   // A write of a whole (one-stripe) object sets a data digest.
   ObjectState small = obs;
   small.oi.size = 8192;
@@ -127,8 +130,13 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   // Partial blocks, a stripe boundary, past EOF, empty.
   EXPECT_FALSE(candidate_write(head, write(512, 1024), obs, snapset, 0, width));
   EXPECT_FALSE(candidate_write(head, write(1024, 1536), obs, snapset, 0, width));
-  EXPECT_FALSE(candidate_write(head, write(width - 1024, 2048), obs, snapset, 0, width));
-  EXPECT_FALSE(candidate_write(head, write(4 * width - 1024, 2048), obs, snapset, 0, width));
+  EXPECT_FALSE(candidate_write(head, write(0, block_size + 1024), obs, snapset,
+                               0, width));
+  EXPECT_FALSE(candidate_write(head, write(width - block_size, 2 * block_size),
+                               obs, snapset, 0, width));
+  EXPECT_FALSE(candidate_write(head, write(4 * width - block_size,
+                                           2 * block_size),
+                               obs, snapset, 0, width));
   EXPECT_FALSE(candidate_write(head, write(4 * width, 4096), obs, snapset, 0, width));
   EXPECT_FALSE(candidate_write(head, write(0, 0), obs, snapset, 0, width));
   // More than a stripe, with no limit for writes across a boundary.
@@ -165,24 +173,28 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   EXPECT_FALSE(candidate_write(clone, write(0, 4096), obs, snapset, 0, width));
   // Across one stripe boundary, up to max_cross and never more than a
   // stripe (osd_ec_journal_max_write_bytes): one record per stripe.
-  EXPECT_TRUE(candidate_write(head, write(width - 1024, 2048), obs, snapset, 0,
-                              width, 8192));
   EXPECT_TRUE(candidate_write(head, write(width - 4096, 8192), obs, snapset, 0,
                               width, 8192));
+  EXPECT_TRUE(candidate_write(head, write(width - 8192, 12288), obs, snapset, 0,
+                              width, 12288));
   EXPECT_FALSE(candidate_write(head, write(width - 4096, 12288), obs, snapset,
                                0, width, 8192));
   EXPECT_FALSE(candidate_write(head, write(width - 4096, 8192), obs, snapset,
                                0, width, 4096));
   EXPECT_TRUE(candidate_write(head, write(width - 4096, width), obs, snapset, 0,
                               width, 16 * width));
-  EXPECT_TRUE(candidate_write(head, write(width - 1024, width), obs, snapset, 0,
+  EXPECT_TRUE(candidate_write(head, write(width - 8192, width), obs, snapset, 0,
                               width, 4 * width));
-  EXPECT_FALSE(candidate_write(head, write(width - 1024, width + 1024), obs,
+  EXPECT_FALSE(candidate_write(head, write(width - 8192, width + 4096), obs,
                                snapset, 0, width, 4 * width));
   EXPECT_FALSE(candidate_write(head, write(width - 4096, width + 4096), obs,
                                snapset, 0, width, 16 * width));
   // The other rules hold for it as well: block alignment, inside the object.
   EXPECT_FALSE(candidate_write(head, write(width - 512, 1024), obs, snapset, 0,
+                               width, 8192));
+  EXPECT_FALSE(candidate_write(head, write(width - 1024, 2048), obs, snapset, 0,
+                               width, 8192));
+  EXPECT_FALSE(candidate_write(head, write(width - 1024, 8192), obs, snapset, 0,
                                width, 8192));
   EXPECT_FALSE(candidate_write(head, write(4 * width - 4096, 8192), obs,
                                snapset, 0, width, 8192));
@@ -202,6 +214,68 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   EXPECT_FALSE(candidate_write(head, write(0, 4096), digested, snapset, 0, width));
   digested.oi.clear_data_digest();
   EXPECT_TRUE(candidate_write(head, write(0, 4096), digested, snapset, 0, width));
+}
+
+// A journaled write is whole 4 KiB blocks at 4 KiB offsets: admission and
+// the journal refuse a smaller or misaligned write alike, on every
+// geometry, and take a 4 KiB write at a 4 KiB offset.
+TEST(JournalAdmission, SubBlockWritesAreRefusedByAdmissionAndTheJournal)
+{
+  using ECWriteJournal::block_size;
+  ASSERT_EQ(4096u, block_size);
+  const hobject_t head(object_t("rbd_data.7f1cb2a3d4e5.0000000000000004"), "",
+                       CEPH_NOSNAP, 0, 1, "");
+  struct Case {
+    uint64_t off, len;
+    bool taken;
+  };
+  const Case cases[] = {
+    {0, 1024, false},    // 1 KiB
+    {1024, 1024, false}, // 1 KiB at a 1 KiB offset
+    {0, 2048, false},    // 2 KiB
+    {1024, 4096, false}, // 4 KiB at a 1 KiB offset
+    {4096, 4096, true},  // 4 KiB at a 4 KiB offset
+  };
+  for (unsigned k : {4u, 8u, 12u}) {
+    const uint64_t width = k * 4096;
+    ObjectState obs(object_info_t(head), true);
+    obs.oi.size = 4 * width;
+    const SnapSet snapset{};
+    ECWriteJournal::Limits limits;
+    limits.stripe_width = width;
+    ECWriteJournal::Journal journal(
+      ghobject_t(head, ghobject_t::NO_GEN, shard_id_t(0)), limits);
+    for (const auto& [off, len, taken] : cases) {
+      SCOPED_TRACE(testing::Message() << k << "+3: " << len << " bytes at "
+                                      << off);
+      std::vector<OSDOp> ops(1);
+      ops[0].op.op = CEPH_OSD_OP_WRITE;
+      ops[0].op.extent.offset = off;
+      ops[0].op.extent.length = len;
+      ops[0].indata.append(std::string(len, 'x'));
+      EXPECT_EQ(taken, ECWriteJournal::candidate_write(head, ops, obs, snapset,
+                                                       0, width));
+      // A limit for writes across a stripe boundary relaxes nothing here.
+      EXPECT_EQ(taken, ECWriteJournal::candidate_write(head, ops, obs, snapset,
+                                                       0, width, width));
+      // check_append is given lengths only: the offset is for admission and
+      // append to judge.
+      const int length_result = len % block_size ? -EINVAL : 0;
+      EXPECT_EQ(length_result, journal.check_append(head, len));
+      EXPECT_EQ(length_result,
+                journal.check_append(head, std::vector<uint64_t>{len}));
+      ECWriteJournal::Placement placement;
+      ECWriteJournal::Ticket ticket;
+      const uint64_t records = journal.records();
+      EXPECT_EQ(taken ? 0 : -EINVAL,
+                journal.append(head, eversion_t(1, journal.next_append_sequence()),
+                               obs.oi.size, off, ops[0].indata, &placement,
+                               &ticket));
+      EXPECT_EQ(records + taken, journal.records());
+    }
+    EXPECT_EQ(1u, journal.records());
+    EXPECT_EQ(1u, journal.live_blocks());
+  }
 }
 
 // A write the journal does not take still runs at once, beside the object's
@@ -320,8 +394,10 @@ struct FlushTestDpp : public DoutPrefixProvider {
 
 class JournalFlushTest : public testing::TestWithParam<unsigned> {
  protected:
+  static constexpr uint64_t block_size = ECWriteJournal::block_size;
   uint64_t width() const { return GetParam() * 4096; }
-  PGTransaction::ObjectOperation head_write(uint64_t size, uint64_t len = 1024) {
+  PGTransaction::ObjectOperation head_write(uint64_t size,
+                                            uint64_t len = block_size) {
     PGTransaction::ObjectOperation update;
     object_info_t oi;
     oi.size = size;
@@ -339,17 +415,22 @@ class JournalFlushTest : public testing::TestWithParam<unsigned> {
   }
   ECWriteJournal::Stripe stripe(uint64_t offset = 0, uint64_t tail = 0) {
     ECWriteJournal::Stripe s;
-    s.object = hobject_t(object_t("data"), "", CEPH_NOSNAP, 0, 1, "");
+    s.object = hobject_t(object_t("rbd_data.7f1cb2a3d4e5.0000000000000000"), "",
+                         CEPH_NOSNAP, 0, 1, "");
     s.offset = offset;
     s.width = width();
     s.object_size = tail ? offset + tail : width() * 4;
     s.valid_bytes = tail ? tail : width();
     return s;
   }
+  // Journaled blocks, as the journal hands a flush its snapshot: whole
+  // blocks at block offsets relative to the stripe.
   void write(ECWriteJournal::Stripe& stripe, uint64_t offset, uint64_t length) {
-    for (uint64_t off = offset; off < offset + length; off += 1024) {
+    ASSERT_EQ(0u, offset % block_size);
+    ASSERT_EQ(0u, length % block_size);
+    for (uint64_t off = offset; off < offset + length; off += block_size) {
       ceph::bufferlist b;
-      b.append(std::string(1024, 'x'));
+      b.append(std::string(block_size, 'x'));
       stripe.blocks[off] = b;
     }
   }
@@ -411,23 +492,26 @@ class JournalFlushTest : public testing::TestWithParam<unsigned> {
   }
 };
 
-TEST_P(JournalFlushTest, OneKNeedsPartialPageAndOtherDataChunks)
+TEST_P(JournalFlushTest, TwoBlocksNeedOnlyTheOtherDataChunks)
 {
+  // A block is a whole data chunk: a flush never writes part of a page, and
+  // reads only the chunks its blocks leave out (a merged 8 KiB record).
   auto s = stripe(width());
-  write(s, 1024, 1024);
-  verify(std::move(s), width());
+  write(s, block_size, 2 * block_size);
+  verify(std::move(s), width() - 2 * block_size);
 }
 
 TEST_P(JournalFlushTest, FourKNeedsOnlyOtherDataChunks)
 {
   auto s = stripe(width());
-  write(s, 4096, 4096);
-  verify(std::move(s), width() - 4096);
+  write(s, block_size, block_size);
+  verify(std::move(s), width() - block_size);
 }
 
 TEST_P(JournalFlushTest, FullyCoveredStripeNeedsNoReads)
 {
-  for (unsigned size : {1024u, 4096u}) {
+  // One-block and two-block records (k is even on every geometry).
+  for (uint64_t size : {block_size, 2 * block_size}) {
     auto s = stripe(width() * 2);
     for (uint64_t off = 0; off < width(); off += size) {
       write(s, off, size);
@@ -436,14 +520,15 @@ TEST_P(JournalFlushTest, FullyCoveredStripeNeedsNoReads)
   }
 }
 
-TEST_P(JournalFlushTest, UnalignedFourKPreservesBothPartialPages)
+TEST_P(JournalFlushTest, EveryBlockPositionNeedsOnlyTheOtherDataChunks)
 {
-  // Admission permits 1 KiB alignment, not just page-aligned 4 KiB writes.
-  // Exercise both ends of a data chunk and nonzero logical stripe offsets.
-  for (uint64_t off = 1024; off + 4096 <= width(); off += 4096) {
+  // Admission takes 4 KiB writes at 4 KiB offsets only, so a block is
+  // always one whole data chunk. Exercise every chunk of the stripe, its
+  // first and last included, at a nonzero logical stripe offset.
+  for (uint64_t off = 0; off < width(); off += block_size) {
     auto s = stripe(width());
-    write(s, off, 4096);
-    verify(std::move(s), width());
+    write(s, off, block_size);
+    verify(std::move(s), width() - block_size);
   }
 }
 
@@ -480,7 +565,7 @@ TEST_P(JournalFlushTest, LoneBlockFlushIsAParityDeltaWriteOnWideStripes)
   shard_id_set shards;
   shards.insert_range(shard_id_t(0), GetParam() + 3);
   auto s = stripe(width());
-  write(s, 4096, 4096);
+  write(s, block_size, block_size);
   auto plan = ECWriteJournal::plan_flush(s, sinfo, shards);
   EXPECT_EQ(GetParam() > 4, plan.do_parity_delta_write);
   ASSERT_TRUE(plan.to_read);
@@ -1096,21 +1181,24 @@ TEST_P(JournalFlushTest, JournalGenerationsUseProductionShardAssembly)
   std::string physical(width(), 'z');
   std::string expected = physical;
   std::mt19937 rng(71);
+  uint64_t version = 0;
   for (unsigned generation = 0; generation < 3; ++generation) {
-    for (unsigned n = 0; n < 65; ++n) {
-      uint64_t off = (rng() % (width() / 1024)) * 1024;
-      char value = 'a' + n % 26;
+    // As many random one- or two-block writes as the stripe has blocks.
+    for (unsigned n = 0; n < GetParam(); ++n) {
+      const uint64_t len = rng() % 2 ? block_size : 2 * block_size;
+      const uint64_t off = (rng() % ((width() - len) / block_size + 1)) * block_size;
+      char value = 'a' + (generation * 7 + n) % 26;
       ceph::bufferlist bytes;
-      bytes.append(std::string(1024, value));
+      bytes.append(std::string(len, value));
       ECWriteJournal::Placement placement;
       ECWriteJournal::Ticket ticket;
-      ASSERT_EQ(0, journal.append(object, eversion_t(1, generation * 65 + n + 1),
+      ASSERT_EQ(0, journal.append(object, eversion_t(1, ++version),
         width(), off, bytes, &placement, &ticket));
       ASSERT_EQ(0, journal.committed(ticket, 0));
-      expected.replace(off, 1024, bytes.to_str());
+      expected.replace(off, len, bytes.to_str());
     }
-    // Incomplete after 65 random 1 KiB writes at 8+3/12+3, sometimes complete
-    // at 4+3: either way a reclaim/drain flush takes the oldest stripe.
+    // Mostly incomplete, at times complete on 4+3: either way a
+    // reclaim/drain flush takes the oldest stripe.
     auto stripe = journal.begin_flush(true);
     ASSERT_TRUE(stripe);
     EXPECT_FALSE(journal.partial_ready()); // the only stripe is flushing
@@ -1145,26 +1233,29 @@ TEST_P(JournalFlushTest, JournalGenerationsUseProductionShardAssembly)
 
 TEST_P(JournalFlushTest, TailReadsOnlyExistingPages)
 {
-  auto s = stripe(width(), 4609);
-  write(s, 1024, 1024);
-  verify(std::move(s), 8192);
+  // EOF 513 bytes into the third data chunk: the flush of the second reads
+  // the first and that partial page, nothing past them.
+  auto s = stripe(width(), 2 * block_size + 513);
+  write(s, block_size, block_size);
+  verify(std::move(s), 2 * 4096);
 }
 
 TEST_P(JournalFlushTest, FullyCoveredTailNeedsNoReads)
 {
-  auto s = stripe(width(), 4096);
-  write(s, 0, 4096);
+  auto s = stripe(width(), block_size);
+  write(s, 0, block_size);
   verify(std::move(s), 0);
 }
 
 TEST_P(JournalFlushTest, SparseFragmentsPreserveUntouchedBytes)
 {
+  // The first, third and last blocks: the chunks between them are read and
+  // kept as they were.
   auto s = stripe();
-  write(s, 0, 1024);
-  write(s, 2048, 1024);
-  write(s, 8192, 4096);
-  write(s, width() - 1024, 1024);
-  verify(std::move(s), width() - 4096);
+  write(s, 0, block_size);
+  write(s, 2 * block_size, block_size);
+  write(s, width() - block_size, block_size);
+  verify(std::move(s), width() - 3 * block_size);
 }
 
 TEST_P(JournalFlushTest, AbsentBaseRangesAreZeroLikeTheCacheContract)
@@ -1173,14 +1264,14 @@ TEST_P(JournalFlushTest, AbsentBaseRangesAreZeroLikeTheCacheContract)
   // extension (do_not_read); ECTransaction::Generate zero-pads them and so
   // must the flush, instead of aborting on a legitimately empty read map.
   auto s = stripe();
-  write(s, 0, 1024);
+  write(s, 0, block_size);
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
   ECUtil::stripe_info_t sinfo(GetParam(), 3, width(), &pool);
   ECUtil::shard_extent_map_t missing(&sinfo);
   auto data = ECWriteJournal::assemble_flush(s, sinfo, missing);
   std::string expected(width(), '\0');
-  expected.replace(0, 1024, std::string(1024, 'x'));
+  expected.replace(0, block_size, std::string(block_size, 'x'));
   std::string got;
   for (unsigned raw = 0; raw < GetParam(); ++raw) {
     ceph::bufferlist chunk;
