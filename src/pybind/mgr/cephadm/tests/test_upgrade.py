@@ -1396,6 +1396,43 @@ def test_staggered_upgrade_completes_with_daemons_out_of_scope(
     assert _run_do_upgrade_for_completion(cephadm_module, daemons, **scope) is None
 
 
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+def test_staggered_upgrade_does_not_complete_with_mgr_pending(
+    _to_upgrade: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    # Both mgrs are selected, but only one has the target image. Old-image
+    # daemons outside the mgr scope must not affect the completion decision.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', False),
+        _completion_dd('mon', 'host1', 'host1', False),
+        _completion_dd('osd', '0', 'host1', False),
+    ]
+    assert _run_do_upgrade_for_completion(
+        cephadm_module, daemons, daemon_types=['mgr'],
+    ) is not None
+
+
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+def test_staggered_upgrade_multiple_types_waits_for_all_selected_daemons(
+    _to_upgrade: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    # Mgrs are done, but a selected mon still has the old image. An OSD
+    # outside the scope is also old and must not influence completion.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', True),
+        _completion_dd('mon', 'host1', 'host1', True),
+        _completion_dd('mon', 'host2', 'host2', False),
+        _completion_dd('osd', '0', 'host1', False),
+    ]
+    assert _run_do_upgrade_for_completion(
+        cephadm_module, daemons, daemon_types=['mgr', 'mon'],
+    ) is not None
+
+
 def test_staggered_upgrade_by_host_completes_with_other_hosts_pending(
     cephadm_module: CephadmOrchestrator,
 ):
