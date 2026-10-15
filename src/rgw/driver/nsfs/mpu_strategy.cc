@@ -267,26 +267,38 @@ const ReservedNames& PerPartMPUStrategy::reserved_names() const
   return names;
 }
 
+/* An assembly's output, created as `id`:  it becomes the object, so its
+ * owner is the object's.  A descriptor, or -errno. */
+static int create_output(const DoutPrefixProvider* dpp, const FSIdentity& id,
+			 int dir_fd, const std::string& name)
+{
+  const int flags = O_WRONLY | O_CREAT | O_TRUNC;
+  if (id.active()) {
+    return open_as(dpp, id, dir_fd, name.c_str(), flags, file_create_mode());
+  }
+  const int fd = ::openat(dir_fd, name.c_str(), flags, file_create_mode());
+  return (fd < 0) ? -errno : fd;
+}
+
 int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 			     int dir_fd,
 			     const std::vector<PartPlacement>& parts,
 			     const std::string& output_name,
-			     std::optional<uint64_t> stride) const
+			     std::optional<uint64_t> stride,
+			     const FSIdentity& id) const
 {
   if (! fs) {
     return -EINVAL;
   }
 
-  int out_fd = openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
+  int out_fd = create_output(dpp, id, dir_fd, output_name);
   if (out_fd < 0) {
-    int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
-		      << output_name << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
+		      << output_name << ": " << cpp_strerror(-out_fd) << dendl;
+    return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
-  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode());
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), id);
       mret < 0) {
     return mret;
   }
@@ -384,7 +396,8 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				 int dir_fd,
 				 const std::vector<PartPlacement>& parts,
 				 const std::string& output_name,
-				 std::optional<uint64_t> stride) const
+				 std::optional<uint64_t> stride,
+				 const FSIdentity& id) const
 {
   if (!fs) {
     return -EINVAL;
@@ -398,7 +411,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   const std::string sname = stride ? *shared_name(*stride) : std::string();
   if (sname.empty()) {
     return PerPartMPUStrategy::assemble(dpp, fs, dir_fd, parts, output_name,
-					stride);
+					stride, id);
   }
 
   /* Can the shared file be the object as it stands?
@@ -431,52 +444,55 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
      * Link it under the output name -- no copy at any size -- and trim,
      * because it may be longer than the object:  a short final part may
      * have been padded to a block, and a diverted part may have left a
-     * tail behind. */
-    if (linkat(dir_fd, sname.c_str(),
-	       dir_fd, output_name.c_str(), 0) < 0) {
-      int ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not link " << sname
-			<< " to " << output_name << ": " << cpp_strerror(ret)
-			<< dendl;
-      return -ret;
-    }
+     * tail behind.
+     *
+     * As `id`, who wrote the shared file and so owns it:  linking a file
+     * one does not own, and opening it to trim, are its owner's. */
+    return with_identity(dpp, id, [&]() -> int {
+      if (linkat(dir_fd, sname.c_str(),
+		 dir_fd, output_name.c_str(), 0) < 0) {
+	int ret = errno;
+	ldpp_dout(dpp, 0) << "ERROR: could not link " << sname
+			  << " to " << output_name << ": " << cpp_strerror(ret)
+			  << dendl;
+	return -ret;
+      }
 
-    int out_fd = openat(dir_fd, output_name.c_str(), O_WRONLY);
-    if (out_fd < 0) {
-      int ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open " << output_name
-			<< " to trim: " << cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-    auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+      int out_fd = openat(dir_fd, output_name.c_str(), O_WRONLY);
+      if (out_fd < 0) {
+	int ret = errno;
+	ldpp_dout(dpp, 0) << "ERROR: could not open " << output_name
+			  << " to trim: " << cpp_strerror(ret) << dendl;
+	return -ret;
+      }
+      auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
 
-    if (ftruncate(out_fd, total) < 0) {
-      int ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not trim " << output_name << " to "
-			<< total << ": " << cpp_strerror(ret) << dendl;
-      return -ret;
-    }
+      if (ftruncate(out_fd, total) < 0) {
+	int ret = errno;
+	ldpp_dout(dpp, 0) << "ERROR: could not trim " << output_name << " to "
+			  << total << ": " << cpp_strerror(ret) << dendl;
+	return -ret;
+      }
 
-    ldpp_dout(dpp, 15) << "StridedMPUStrategy::assemble: linked "
-		       << parts.size() << " parts, " << total
-		       << " bytes, no copy" << dendl;
-    return 0;
+      ldpp_dout(dpp, 15) << "StridedMPUStrategy::assemble: linked "
+			 << parts.size() << " parts, " << total
+			 << " bytes, no copy" << dendl;
+      return 0;
+    });
   }
 
   /* Some part is not where the object wants it.  Copy each one from
    * wherever its record says it is;  a part in the shared file is read
    * from its offset there, a part in its own file from the start of
    * that file. */
-  int out_fd = openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
+  int out_fd = create_output(dpp, id, dir_fd, output_name);
   if (out_fd < 0) {
-    int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
-		      << output_name << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
+		      << output_name << ": " << cpp_strerror(-out_fd) << dendl;
+    return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
-  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode());
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), id);
       mret < 0) {
     return mret;
   }
@@ -1287,7 +1303,8 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				int dir_fd,
 				const std::vector<PartPlacement>& parts,
 				const std::string& output_name,
-				std::optional<uint64_t> stride) const
+				std::optional<uint64_t> stride,
+				const FSIdentity& id) const
 {
   if (!fs || parts.empty()) {
     return -EINVAL;
@@ -1318,15 +1335,20 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     }
   }
 
+  /* as `id`, who wrote the size file and so owns it:  linking a file
+   * one does not own is its owner's */
   auto link_size_file = [&](uint64_t size) -> int {
     const std::string sname = RGW_MP_SHARED_PREFIX + std::to_string(size);
-    if (::linkat(dir_fd, sname.c_str(), dir_fd, output_name.c_str(), 0) < 0) {
-      int ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not link " << sname << " to "
-			<< output_name << ": " << cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-    return 0;
+    return with_identity(dpp, id, [&]() -> int {
+      if (::linkat(dir_fd, sname.c_str(), dir_fd, output_name.c_str(),
+		   0) < 0) {
+	int ret = errno;
+	ldpp_dout(dpp, 0) << "ERROR: could not link " << sname << " to "
+			  << output_name << ": " << cpp_strerror(ret) << dendl;
+	return -ret;
+      }
+      return 0;
+    });
   };
 
   /* every part the same size, in order:  the size file is the object */
@@ -1347,18 +1369,20 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     }
     first_to_copy = parts.size() - 1;
     total = body_size * first_to_copy;
-    out_fd = ::openat(dir_fd, output_name.c_str(), O_WRONLY);
+    /* the linked body is `id`'s, so is opened to append as `id` */
+    out_fd = with_identity(dpp, id, [&]() -> int {
+      const int fd = ::openat(dir_fd, output_name.c_str(), O_WRONLY);
+      return (fd < 0) ? -errno : fd;
+    });
   } else {
-    out_fd = ::openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
+    out_fd = create_output(dpp, id, dir_fd, output_name);
   }
   if (out_fd < 0) {
-    int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open " << output_name << ": "
-		      << cpp_strerror(ret) << dendl;
-    return -ret;
+		      << cpp_strerror(-out_fd) << dendl;
+    return out_fd;
   }
-  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode());
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), id);
       mret < 0) {
     ::close(out_fd);
     return mret;

@@ -2396,21 +2396,6 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
-/* openat2 through the ring as `id`.  The personality is looked up on
- * this thread, because an id names a credential only on the ring it was
- * registered on, and is held only until the submission returns. */
-static int open_as(const DoutPrefixProvider* dpp, const nsfs::FSIdentity& id,
-		   int dirfd, const char* path, uint64_t flags, uint64_t mode)
-{
-  nsfs::PersonalityRef ref;
-  const int ret = nsfs::acquire_personality(dpp, id.key, id.cred, &ref);
-  if (ret < 0) {
-    return ret;
-  }
-  return rgw::sal::posix_uring_openat2(dpp, dirfd, path, flags, mode,
-				       ref.id());
-}
-
 int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
 {
   int flags, ret;
@@ -4160,50 +4145,78 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 
 	  for (auto& [num, pi] : parts) {
 	    auto fname = mpu->part_name(num);
-	    int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
-	    if (pfd < 0) continue;
-	    auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
-
-	    NSFSUploadPartInfo upi;
-	    upi.num = pi.num;
-	    upi.size = pi.size;
-	    upi.etag = pi.etag;
-	    upi.mtime = pi.mtime;
-	    upi.cksum = pi.cksum;
-	    /* Where the bytes are, which the record is the only source
-	     * for once part 1 has been linked to the shared file.
-	     * Dropping these defaulted them to "its own file, offset
-	     * zero, nothing stored", so assembly read a shared part
-	     * out of the empty record file and the completed object
-	     * lost its bytes -- with the length right, because `size`
-	     * was copied and only the placement was not. */
-	    upi.shared = pi.shared;
-	    upi.offset = pi.offset;
-	    upi.stored = pi.stored;
-
-	    bufferlist bl;
-	    encode(upi, bl);
-	    std::string xn = xs->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
-	    std::string xv = attr_on_disk(xs, RGW_NSFS_ATTR_MPUPLOAD, bl);
-	    if (::fsetxattr(pfd, xn.c_str(), xv.data(), xv.size(), 0) < 0) {
-	      ldpp_dout(&dp, 0) << "ERROR: could not write the record for "
-		<< "part " << num << " of " << key.upload_meta << ": "
-		<< cpp_strerror(errno) << ";  it is lost" << dendl;
-	      continue;
+	    /* As the part file's owner.  Under impersonation a part is
+	     * written as its uploader, and this runs with no request in
+	     * hand -- for parts filled from disk as well as added -- so
+	     * the file itself says who wrote it.  Its owner may always
+	     * open it for writing and set its attributes;  acting as
+	     * that owner on that one file grants nothing it does not
+	     * already have. */
+	    nsfs::Credentials owner;
+	    {
+	      struct stat st;
+	      if (::fstatat(dir_fd, fname.c_str(), &st,
+			    AT_SYMLINK_NOFOLLOW) < 0) {
+		continue;
+	      }
+	      owner.uid = st.st_uid;
+	      owner.gid = st.st_gid;
 	    }
+	    auto write_record = [&]() -> int {
+	      int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
+	      if (pfd < 0) {
+		return -errno;
+	      }
+	      auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
 
-	    /* and whatever the layout records for itself.  The nsfs
-	     * layout's is the attribute just written;  NooBaa's is its
-	     * three. */
-	    nsfs::MPUStrategy::PartRecord rec;
-	    rec.size = upi.size;
-	    rec.stored = upi.stored;
-	    rec.offset = upi.offset;
-	    rec.shared = upi.shared;
-	    rec.etag = upi.etag;
-	    rec.mtime = upi.mtime;
-	    rec.cksum = upi.cksum;
-	    (void) mpu->write_part_record(&dp, dir_fd, fname, rec);
+	      NSFSUploadPartInfo upi;
+	      upi.num = pi.num;
+	      upi.size = pi.size;
+	      upi.etag = pi.etag;
+	      upi.mtime = pi.mtime;
+	      upi.cksum = pi.cksum;
+	      /* Where the bytes are, which the record is the only source
+	       * for once part 1 has been linked to the shared file.
+	       * Dropping these defaulted them to "its own file, offset
+	       * zero, nothing stored", so assembly read a shared part
+	       * out of the empty record file and the completed object
+	       * lost its bytes -- with the length right, because `size`
+	       * was copied and only the placement was not. */
+	      upi.shared = pi.shared;
+	      upi.offset = pi.offset;
+	      upi.stored = pi.stored;
+
+	      bufferlist bl;
+	      encode(upi, bl);
+	      std::string xn = xs->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
+	      std::string xv = attr_on_disk(xs, RGW_NSFS_ATTR_MPUPLOAD, bl);
+	      if (::fsetxattr(pfd, xn.c_str(), xv.data(), xv.size(), 0) < 0) {
+		const int err = errno;
+		ldpp_dout(&dp, 0) << "ERROR: could not write the record for "
+		  << "part " << num << " of " << key.upload_meta << ": "
+		  << cpp_strerror(err) << ";  it is lost" << dendl;
+		return -err;
+	      }
+
+	      /* and whatever the layout records for itself.  The nsfs
+	       * layout's is the attribute just written;  NooBaa's is its
+	       * three. */
+	      nsfs::MPUStrategy::PartRecord rec;
+	      rec.size = upi.size;
+	      rec.stored = upi.stored;
+	      rec.offset = upi.offset;
+	      rec.shared = upi.shared;
+	      rec.etag = upi.etag;
+	      rec.mtime = upi.mtime;
+	      rec.cksum = upi.cksum;
+	      (void) mpu->write_part_record(&dp, dir_fd, fname, rec);
+	      return 0;
+	    };
+	    if ((owner.uid == ::geteuid()) || !nsfs::impersonation_enabled()) {
+	      (void) write_record();
+	    } else {
+	      (void) nsfs::run_as(&dp, owner, write_record);
+	    }
 	  }
 	  return;
 	}
@@ -13551,6 +13564,14 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       return cret;
     }
   }
+  /* who the object will belong to.  Refused where it cannot be applied,
+   * as the writers refuse, rather than made as the gateway. */
+  {
+    const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -13693,30 +13714,38 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   ret = mpu_strategy()->assemble(dpp, driver->get_fs_strategy(),
 					    staging_fd, placements,
 					    assembled_name,
-					    established_stride(dpp, y));
+					    established_stride(dpp, y),
+					    identity);
   if (ret < 0) {
     return ret;
   }
 
-  // write xattrs on assembled file
-  int afd = openat(staging_fd, assembled_name.c_str(), O_RDWR);
-  if (afd < 0) {
-    return -errno;
-  }
-
-  /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
-
-  for (auto& [k, v] : attrs) {
-    std::string xattr_name = xattr_strategy()->disk_name(k);
-    std::string xattr_val = attr_on_disk(xattr_strategy(), k, v);
-    ret = fsetxattr(afd, xattr_name.c_str(),
-                    xattr_val.data(), xattr_val.size(), 0);
-    if (ret < 0) {
-      ::close(afd);
+  /* write xattrs on assembled file, as its owner:  the assembled file is
+   * the identity's, and fsetxattr(2) asks the caller's credentials */
+  ret = nsfs::with_identity(dpp, identity, [&]() -> int {
+    int afd = openat(staging_fd, assembled_name.c_str(), O_RDWR);
+    if (afd < 0) {
       return -errno;
     }
+
+    /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
+
+    for (auto& [k, v] : attrs) {
+      std::string xattr_name = xattr_strategy()->disk_name(k);
+      std::string xattr_val = attr_on_disk(xattr_strategy(), k, v);
+      if (fsetxattr(afd, xattr_name.c_str(),
+		    xattr_val.data(), xattr_val.size(), 0) < 0) {
+	const int err = errno;
+	::close(afd);
+	return -err;
+      }
+    }
+    ::close(afd);
+    return 0;
+  });
+  if (ret < 0) {
+    return ret;
   }
-  ::close(afd);
 
   // resolve hierarchical target path
   std::string target_key = target_obj->get_name();
@@ -13817,13 +13846,18 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       std::string new_ver_id = ver_enabled
         ? nsfs_version_id_from_statx(new_stx) : NULL_VERSION_ID;
       target_obj->set_instance(new_ver_id);
-      int obj_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
-      if (obj_fd >= 0) {
-        std::string vid_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-        ::fsetxattr(obj_fd, vid_xattr.c_str(),
-                    new_ver_id.c_str(), new_ver_id.size(), 0);
-        ::close(obj_fd);
-      }
+      /* as the object's owner, for the same reason as the attributes
+       * above */
+      nsfs::with_identity(dpp, identity, [&]() -> int {
+        int obj_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
+        if (obj_fd >= 0) {
+          std::string vid_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
+          ::fsetxattr(obj_fd, vid_xattr.c_str(),
+                      new_ver_id.c_str(), new_ver_id.size(), 0);
+          ::close(obj_fd);
+        }
+        return 0;
+      });
 
       auto* bcache = driver->get_bucket_cache();
       std::string obj_name = target_obj->get_key().get_index_key_name();
@@ -14217,7 +14251,15 @@ int NSFSMultipartWriter::prepare(optional_yield y)
     }
   }
 
-  /* the record, always;  it stays empty when the bytes go elsewhere */
+  /* the record, always;  it stays empty when the bytes go elsewhere.
+   *
+   * As the identity, as NooBaa writes a part as its uploader:  part 1's
+   * file may become the shared file and so the object, which then
+   * belongs to whoever made it.  The multipart cache rewrites a record
+   * at eviction as the file's owner. */
+  if (identity.active()) {
+    part_file->set_identity(identity);
+  }
   int ret = part_file->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
   if (ret < 0) {
     return ret;
@@ -14233,7 +14275,13 @@ int NSFSMultipartWriter::prepare(optional_yield y)
 
   /* File::create opens O_CREAT|O_RDWR and does NOT truncate, which is
    * what a shared file needs:  other parts have already written into
-   * it, and this one only fills its own extent. */
+   * it, and this one only fills its own extent.
+   *
+   * As the identity, as the record above is:  assembly may link this
+   * file in as the object. */
+  if (identity.active()) {
+    shared_file->set_identity(identity);
+  }
   ret = shared_file->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
   if (ret < 0) {
     return ret;
@@ -14315,6 +14363,10 @@ int NSFSMultipartWriter::relocate()
 
   auto dst = std::make_unique<nsfs::File>(tgt->name, upload_dir.get(),
 					  driver->ctx());
+  /* as the identity, as prepare() makes the shared file */
+  if (identity.active()) {
+    dst->set_identity(identity);
+  }
   /* create() opens O_CREAT|O_RDWR without truncating, which is what a
    * shared file needs:  another part of this size may already be in
    * it */
@@ -14515,10 +14567,14 @@ int NSFSMultipartWriter::complete(
        * means a concurrent completion of this same part got there
        * first with the same stride -- same name, same bytes -- so the
        * upload is established either way. */
+      /* as the identity, which owns part 1's file:  linking a file one
+       * does not own is its owner's */
       const int dfd = upload_dir->get_fd();
-      const int lret = linkat(dfd, part_file->get_name().c_str(), dfd,
-			      tgt->name.c_str(), 0);
-      if (lret == 0 || errno == EEXIST) {
+      const int lret = nsfs::with_identity(dpp, identity, [&]() -> int {
+	return (linkat(dfd, part_file->get_name().c_str(), dfd,
+		       tgt->name.c_str(), 0) < 0) ? -errno : 0;
+      });
+      if (lret == 0 || lret == -EEXIST) {
 	promoted = true;
 	ldpp_dout(dpp, 15) << "NSFSMultipartWriter::complete: established"
 			   << " stride " << high_water << " for "
@@ -14527,7 +14583,7 @@ int NSFSMultipartWriter::complete(
 	/* nothing is broken by failing to establish:  every part takes
 	 * its own file and assembly copies, which is the layout we had */
 	ldpp_dout(dpp, 5) << "NSFSMultipartWriter::complete: could not"
-			  << " promote part 1: " << cpp_strerror(errno)
+			  << " promote part 1: " << cpp_strerror(-lret)
 			  << dendl;
       }
     }
@@ -14574,8 +14630,11 @@ int NSFSMultipartWriter::complete(
     rec.etag = info.etag;
     rec.mtime = info.mtime;
     rec.cksum = info.cksum;
-    ret = mpu_strat->write_part_record(rctx.dpp, upload_dir->get_fd(),
-				       part_file->get_name(), rec);
+    /* as the identity, which owns the part file */
+    ret = nsfs::with_identity(rctx.dpp, identity, [&]() -> int {
+      return mpu_strat->write_part_record(rctx.dpp, upload_dir->get_fd(),
+					  part_file->get_name(), rec);
+    });
     if (ret < 0) {
       return ret;
     }

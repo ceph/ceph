@@ -405,12 +405,18 @@ public:
    *
    * parts must be in ascending part order:  the output is their
    * concatenation in that order, and a layout which places parts by
-   * offset can only check its placement against a sorted run. */
+   * offset can only check its placement against a sorted run.
+   *
+   * `id` is who the output belongs to, since it becomes the object:  it
+   * is created as `id`, and a data file linked in as the output was
+   * written as `id` and is linked and trimmed as it.  Parts are read as
+   * the caller. */
   virtual int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
                        int dir_fd,
                        const std::vector<PartPlacement>& parts,
                        const std::string& output_name,
-                       std::optional<uint64_t> stride) const = 0;
+                       std::optional<uint64_t> stride,
+                       const FSIdentity& id = {}) const = 0;
 
   /* The shared data file for an upload running at this stride, if the
    * layout has one.  THE NAME CARRIES THE VALUE, which is what makes
@@ -479,7 +485,8 @@ public:
   int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
                int dir_fd, const std::vector<PartPlacement>& parts,
                const std::string& output_name,
-               std::optional<uint64_t> stride) const override;
+               std::optional<uint64_t> stride,
+               const FSIdentity& id = {}) const override;
 
   const char* name() const override { return "rgw"; }
 };
@@ -520,7 +527,8 @@ public:
   int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 	       int dir_fd, const std::vector<PartPlacement>& parts,
 	       const std::string& output_name,
-	       std::optional<uint64_t> stride) const override;
+	       std::optional<uint64_t> stride,
+	       const FSIdentity& id = {}) const override;
 
   std::optional<std::string> shared_name(uint64_t stride) const override;
 
@@ -593,7 +601,8 @@ public:
   int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 	       int dir_fd, const std::vector<PartPlacement>& parts,
 	       const std::string& output_name,
-	       std::optional<uint64_t> stride) const override;
+	       std::optional<uint64_t> stride,
+	       const FSIdentity& id = {}) const override;
 
   std::optional<std::string> shared_name(uint64_t stride) const override;
 

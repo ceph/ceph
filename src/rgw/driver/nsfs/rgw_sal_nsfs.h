@@ -2439,6 +2439,9 @@ protected:
   NSFSMPObj mp_obj;
   ceph::real_time mtime;
   std::unique_ptr<rgw::sal::NSFSBucket> shadow;
+  /* who complete() makes the object as;  see set_authenticated_user() */
+  rgw_user auth_user;
+  nsfs::FSIdentity identity;
 
 public:
   NSFSMultipartUpload(NSFSDriver* _driver, Bucket* _bucket, const std::string& _oid,
@@ -2447,6 +2450,16 @@ public:
     StoreMultipartUpload(_bucket), driver(_driver),
     mp_obj(driver, _oid, _upload_id, _owner), mtime(_mtime) {}
   virtual ~NSFSMultipartUpload() = default;
+
+  /* complete() resolves the requester and makes the object as it:  the
+   * assembled file is created, or a data file linked in, and its
+   * attributes written, as the identity.  Parts are written as their
+   * uploader by the part writer, as NooBaa writes them;  staging and the
+   * meta object stay the gateway's, as do ListParts and abort
+   * (DECISIONS.md 2026-10-15). */
+  void set_authenticated_user(const rgw_user& user) override {
+    auth_user = user;
+  }
 
   virtual const std::string& get_meta() const override { return mp_obj.meta; }
   virtual const std::string& get_key() const override { return mp_obj.oid; }

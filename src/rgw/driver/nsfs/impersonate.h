@@ -186,6 +186,13 @@ struct FSIdentity {
   bool active() const { return !key.empty(); }
 };
 
+/* openat2 through the ring as `id`.  The personality is looked up on
+ * this thread, because an id names a credential only on the ring it was
+ * registered on, and is held only until the submission returns.  A
+ * descriptor, or -errno. */
+int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
+	    int dirfd, const char* path, uint64_t flags, uint64_t mode);
+
 /* An FSIdentity as an io_uring window's transfers need it.
  *
  * acquire() looks the identity up in the calling thread's table, so

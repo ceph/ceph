@@ -465,6 +465,18 @@ int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,
   return table.insert(dpp, key, cred, out);
 }
 
+int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
+	    int dirfd, const char* path, uint64_t flags, uint64_t mode)
+{
+  PersonalityRef ref;
+  const int ret = acquire_personality(dpp, id.key, id.cred, &ref);
+  if (ret < 0) {
+    return ret;
+  }
+  return rgw::sal::posix_uring_openat2(dpp, dirfd, path, flags, mode,
+				       ref.id());
+}
+
 int IdentityPersonality::acquire(const DoutPrefixProvider* dpp, uint16_t* out)
 {
   const int ret = acquire_personality(dpp, id.key, id.cred, &ref);
