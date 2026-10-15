@@ -74,6 +74,9 @@ service Gateway {
 	// Refresh auto-listeners for all network masks configured on the given subsystem on this gateway
 	rpc gw_refresh_network(gw_refresh_network_req) returns(gw_refresh_network_status) {}
 
+	// Enable or disable the group config network mask for the subsystem
+	rpc set_subsystem_use_group_config_network_masks(set_subsystem_use_group_config_network_masks_req) returns(set_subsystem_use_group_config_network_masks_status) {}
+
 	// Add KMIP server endpoints
 	rpc add_kmip_server_endpoints(add_kmip_server_endpoints_req) returns(req_status) {}
 
@@ -321,6 +324,7 @@ message create_subsystem_req {
 	optional bool secure_listeners = 9;
 	optional uint32 port = 10;
 	optional string model_name = 11;
+	optional bool use_group_config_network_masks = 12;
 }
 
 message delete_subsystem_req {
@@ -353,6 +357,18 @@ message gw_refresh_network_status {
 	string error_message = 2;
 	repeated string added = 3;
 	repeated string removed = 4;
+}
+
+message set_subsystem_use_group_config_network_masks_status {
+	int32 status = 1;
+	string error_message = 2;
+	repeated string added = 3;
+	repeated string removed = 4;
+}
+
+message set_subsystem_use_group_config_network_masks_req {
+	string subsystem_nqn = 1;
+	bool use_group_config_network_masks = 2;
 }
 
 message kmip_server_endpoint {
@@ -590,6 +606,7 @@ message subsystem {
 	repeated namespace namespaces = 11;
 	optional bool has_dhchap_key = 12;
 	repeated string network_mask = 13;
+	optional bool use_group_config_network_masks = 14;
 }
 
 message listen_address {
@@ -634,6 +651,7 @@ message subsystem_cli {
 	optional bool allow_any_host = 11;
 	optional bool created_without_key = 12;
 	repeated string network_mask = 13;
+	optional bool use_group_config_network_masks = 14;
 }
 
 message gateway_info {
