@@ -1,7 +1,9 @@
+import json
 import pytest
 from ceph_volume.devices import raw
 from unittest.mock import patch, MagicMock
 from ceph_volume.objectstore.raw import Raw
+from ceph_volume.util import disk
 
 class TestRaw(object):
 
@@ -47,6 +49,7 @@ class TestPrepare(object):
         assert 'Path to bluestore block.wal block device' in stdout
         assert 'Enable device encryption via dm-crypt' in stdout
         assert 'Reuse an existing OSD fsid' in stdout
+        assert 'Only report on the OSD that would be created and exit' in stdout
 
     @patch('ceph_volume.util.arg_validators.set_dmcrypt_no_workqueue', return_value=MagicMock())
     @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
@@ -116,3 +119,76 @@ class TestPrepare(object):
         with pytest.raises(Exception):
             raw.prepare.Prepare(argv=['--bluestore', '--data', '/dev/foo']).main()
         m_rollback_osd.assert_called()
+
+    def _fake_device(self, path):
+        sizes = {
+            '/dev/data': 100 * 1024 ** 3,
+            '/dev/db': 10 * 1024 ** 3,
+            '/dev/wal': 1024 ** 3,
+            '/dev/foo': 50 * 1024 ** 3,
+        }
+        dev = MagicMock()
+        dev.size = sizes[path]
+        return dev
+
+    @patch('ceph_volume.objectstore.raw.Raw.safe_prepare')
+    @patch('ceph_volume.devices.raw.prepare.Device')
+    @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
+    def test_report_json_does_not_prepare(self, m_valid_device, m_device, m_prepare, m_create_key, capsys):
+        m_valid_device.side_effect = lambda dev: dev
+        m_device.side_effect = self._fake_device
+        raw.prepare.Prepare(argv=[
+            '--bluestore', '--data', '/dev/foo', '--report', '--format', 'json',
+        ]).main()
+        m_prepare.assert_not_called()
+        stdout, _ = capsys.readouterr()
+        assert json.loads(stdout) == [{
+            'data': '/dev/foo',
+            'data_size': str(disk.Size(b=50 * 1024 ** 3)),
+            'encryption': 'None',
+        }]
+
+    @patch('ceph_volume.objectstore.raw.Raw.safe_prepare')
+    @patch('ceph_volume.devices.raw.prepare.Device')
+    @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
+    def test_report_json_includes_db_wal_and_osd_id(self, m_valid_device, m_device, m_prepare, m_create_key, capsys):
+        m_valid_device.side_effect = lambda dev: dev
+        m_device.side_effect = self._fake_device
+        raw.prepare.Prepare(argv=[
+            '--bluestore', '--data', '/dev/data',
+            '--block.db', '/dev/db', '--block.wal', '/dev/wal',
+            '--osd-id', '7', '--report', '--format', 'json',
+        ]).main()
+        m_prepare.assert_not_called()
+        stdout, _ = capsys.readouterr()
+        assert json.loads(stdout) == [{
+            'data': '/dev/data',
+            'data_size': str(disk.Size(b=100 * 1024 ** 3)),
+            'encryption': 'None',
+            'block_db': '/dev/db',
+            'block_db_size': str(disk.Size(b=10 * 1024 ** 3)),
+            'block_wal': '/dev/wal',
+            'block_wal_size': str(disk.Size(b=1024 ** 3)),
+            'osd_id': '7',
+        }]
+
+    @patch('ceph_volume.util.arg_validators.set_dmcrypt_no_workqueue', return_value=MagicMock())
+    @patch('ceph_volume.objectstore.raw.Raw.safe_prepare')
+    @patch('ceph_volume.devices.raw.prepare.Device')
+    @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
+    def test_report_dmcrypt_does_not_require_secret(self,
+                                                    m_valid_device,
+                                                    m_device,
+                                                    m_prepare,
+                                                    m_set_dmcrypt_no_workqueue,
+                                                    m_create_key,
+                                                    capsys):
+        m_valid_device.side_effect = lambda dev: dev
+        m_device.side_effect = self._fake_device
+        raw.prepare.Prepare(argv=[
+            '--bluestore', '--data', '/dev/foo', '--dmcrypt',
+            '--report', '--format', 'json',
+        ]).main()
+        m_prepare.assert_not_called()
+        stdout, _ = capsys.readouterr()
+        assert json.loads(stdout)[0]['encryption'] == 'dmcrypt'
