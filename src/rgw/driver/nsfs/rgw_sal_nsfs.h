@@ -1155,6 +1155,12 @@ public:
    * name, a directory carrying nsfs state, or a path nested with another
    * bucket's -- a row's, or until adoption is complete a NooBaa
    * record's. */
+  /* -EEXIST when `path` is the directory of a NooBaa bucket not yet
+   * imported, or nested with it, until adoption is complete */
+  int check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
+				  const std::string& name,
+				  const std::string& path);
+
   int place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 		   const std::string& name, const std::string& path,
 		   const rgw_owner& owner, const RGWZoneGroup& zonegroup,

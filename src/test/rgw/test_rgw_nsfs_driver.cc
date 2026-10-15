@@ -12723,6 +12723,42 @@ TEST_F(NSFSPlaceOverNooBaaTest, ANooBaaBucketsDirectoryIsRefused)
   EXPECT_EQ(place("another-name", theirs), 0);
 }
 
+/* Creation is held to the same rule:  an owner whose new_buckets_path
+ * lies inside an unimported NooBaa bucket's directory cannot create a
+ * bucket there, and nothing is made.  Before this, mkdir succeeded and
+ * the row insert saw no row to nest with. */
+TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRefused)
+{
+  const sf::path theirs = bp / "noobaa-data" / "theirs";
+  sf::create_directories(theirs);
+  write_their_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
+		     theirs.string() + "/");
+  nsfs::Identity id;
+  id.key = to_string(owner);
+  id.new_buckets_path = theirs.string();
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
+
+  auto create = [this](const std::string& name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = owner;
+    auto b = driver->get_bucket(info);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    return b->create(env->dpp, cp, null_yield);
+  };
+  EXPECT_EQ(create("inner"), -EEXIST);
+  EXPECT_FALSE(sf::exists(theirs / "inner")) << "the directory was made";
+  nsfs::BucketPlacement row;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+	      env->dpp, "inner", "", row), -ENOENT);
+
+  /* the control:  without the record the same creation succeeds */
+  ASSERT_TRUE(sf::remove(conf_root() / "buckets" / (testname + ".json")));
+  EXPECT_EQ(create("inner"), 0);
+  EXPECT_TRUE(sf::is_directory(theirs / "inner"));
+}
+
 /* ------------------------------------------------------------------ *
  * I6 -- the mode, and what it does.
  *

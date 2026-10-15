@@ -4864,6 +4864,48 @@ static int carries_nsfs_state(const std::string& path)
   return 0;
 }
 
+/* Until adoption is complete a NooBaa bucket not yet imported has no
+ * row, so the rows cannot refuse a bucket at its directory or nested
+ * with it;  its record's path is checked here instead, for creation
+ * and placement alike.  Only the bucket records are read. */
+int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
+					    const std::string& name,
+					    const std::string& path)
+{
+  if (!nb_bucket_state_strategy || adoption_complete()) {
+    return 0;
+  }
+  auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    nb_bucket_state_strategy.get());
+  std::vector<std::string> records;
+  int ret = theirs->list_records(dpp, records);
+  if (ret < 0) {
+    return ret;
+  }
+  auto nested = [](std::string_view a, std::string_view b) {
+    return (a == b) ||
+      (a.starts_with(b) && (a[b.size()] == '/')) ||
+      (b.starts_with(a) && (b[a.size()] == '/'));
+  };
+  for (const auto& rec : records) {
+    std::string theirs_at;
+    if (theirs->recorded_path(dpp, rec, theirs_at) < 0) {
+      continue;
+    }
+    /* NooBaa writes its paths with a trailing slash as often as not */
+    while ((theirs_at.size() > 1) && (theirs_at.back() == '/')) {
+      theirs_at.pop_back();
+    }
+    if (nested(path, theirs_at)) {
+      ldpp_dout(dpp, 1) << "nsfs: bucket " << name << ":  " << path
+	<< " is NooBaa bucket " << rec << "'s directory " << theirs_at
+	<< ", or nested with it" << dendl;
+      return -EEXIST;
+    }
+  }
+  return 0;
+}
+
 int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 			     const std::string& name, const std::string& path,
 			     const rgw_owner& owner,
@@ -4959,37 +5001,9 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
       << path << " carries nsfs state, so it is or was a bucket's" << dendl;
     return -EEXIST;
   }
-  if (nb_bucket_state_strategy && !adoption_complete()) {
-    auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
-      nb_bucket_state_strategy.get());
-    nsfs::NooBaaConfigStore store(
-      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root"));
-    nsfs::NooBaaStoreContents contents;
-    ret = store.read(dpp, contents);
-    if (ret < 0) {
-      return ret;
-    }
-    auto nested = [](std::string_view a, std::string_view b) {
-      return (a == b) ||
-	(a.starts_with(b) && (a[b.size()] == '/')) ||
-	(b.starts_with(a) && (b[a.size()] == '/'));
-    };
-    for (const auto& rec : contents.buckets) {
-      std::string theirs_at;
-      if (theirs->recorded_path(dpp, rec.name, theirs_at) < 0) {
-	continue;
-      }
-      /* NooBaa writes its paths with a trailing slash as often as not */
-      while ((theirs_at.size() > 1) && (theirs_at.back() == '/')) {
-	theirs_at.pop_back();
-      }
-      if (nested(path, theirs_at)) {
-	ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << ":  "
-	  << path << " is NooBaa bucket " << rec.name << "'s directory "
-	  << theirs_at << ", or nested with it" << dendl;
-	return -EEXIST;
-      }
-    }
+  ret = check_clear_of_noobaa_paths(dpp, name, path);
+  if (ret < 0) {
+    return ret;
   }
 
   nsfs::BucketPlacement bp;
@@ -5368,6 +5382,10 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
       if (ret < 0) {
 	return ret;
       }
+    }
+    ret = driver->check_clear_of_noobaa_paths(dpp, get_name(), bp.path);
+    if (ret < 0) {
+      return ret;
     }
     ret = driver->get_identity_db()->insert_bucket_placement(dpp, bp);
     if (ret == -EADDRINUSE) {
