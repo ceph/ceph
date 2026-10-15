@@ -1828,10 +1828,55 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
                          int fd, const std::string &key,
                          const std::string &display,
                          const nsfs::XattrStrategy* xs,
+                         const nsfs::XattrStrategy* alt = nullptr,
                          nsfs::FSStrategy* fs = nullptr,
                          const nsfs::FSIdentity& id = {})
 {
   int ret;
+
+  /* Through the fallback as well, as a write is.  Mid-upgrade an
+   * object the conversion has not reached carries the key in NooBaa's
+   * spelling, which the fallback reads, so removing the key removes
+   * every spelling either format gives it.  A spelling the file lacks
+   * is not a failure:  it carries one or the other. */
+  if (alt) {
+    std::vector<std::string> current;
+    if (fs) {
+      nsfs::xattr_map_t raw;
+      ret = fs->get_xattrs(dpp, fd, raw, id);
+      if (ret < 0) {
+	return ret;
+      }
+      current.reserve(raw.size());
+      for (auto& [n, _] : raw) {
+	current.emplace_back(n);
+      }
+    }
+    std::vector<std::string> names;
+    for (const auto* s : {xs, alt}) {
+      nsfs::xattr_map_t none_to_write;
+      bufferlist none;
+      if (fs && s->disk_attrs(key, none, current, none_to_write, names)) {
+	continue;
+      }
+      std::string n{s->disk_name(key)};
+      if (!n.empty()) {
+	names.push_back(std::move(n));
+      }
+    }
+    if (fs) {
+      return fs->remove_xattrs(dpp, fd, names, id);
+    }
+    for (const auto& n : names) {
+      if ((fremovexattr(fd, n.c_str()) < 0) && (errno != ENODATA)) {
+	ret = errno;
+	ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << n
+	  << " for " << display << ": " << cpp_strerror(ret) << dendl;
+	return -ret;
+      }
+    }
+    return 0;
+  }
 
   /* A key one format spreads over several names cannot be removed by
    * naming one.  Object tags are one attribute per tag in NooBaa's format,
@@ -2148,13 +2193,21 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * it.  DeleteObjectTagging arrives here, and without this it
          * removed the one nsfs name and left NooBaa's tags. */
         bufferlist none;
-        if (xs->disk_attrs(key, none, disk_names(), to_write,
-                                       to_remove)) {
-          continue;
-        }
-        std::string disk_name{xs->disk_name(key)};
-        if (to_write.find(disk_name) == to_write.end()) {
-          to_remove.push_back(std::move(disk_name));
+        /* and through the fallback, for the spelling an object the
+         * conversion has not reached still carries */
+        for (const auto* s : {xs, xf}) {
+          if (!s) {
+            continue;
+          }
+          if (s->disk_attrs(key, none, disk_names(), to_write,
+                            to_remove)) {
+            continue;
+          }
+          std::string disk_name{s->disk_name(key)};
+          if (!disk_name.empty() &&
+              (to_write.find(disk_name) == to_write.end())) {
+            to_remove.push_back(std::move(disk_name));
+          }
         }
       }
     }
@@ -2207,7 +2260,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       for (auto& it : old_attrs) {
         if (attrs.find(it.first) == attrs.end() &&
             (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-          remove_x_attr(dpp, y, fd, it.first, get_name(), xs);
+          remove_x_attr(dpp, y, fd, it.first, get_name(), xs, xf);
         }
       }
     }
@@ -2215,7 +2268,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     for (auto& key : *rmattrs) {
       if (attrs.find(key) == attrs.end() &&
           (!extra_attrs || extra_attrs->find(key) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, fd, key, get_name(), xs);
+        remove_x_attr(dpp, y, fd, key, get_name(), xs, xf);
       }
     }
   }
@@ -11119,11 +11172,11 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   }
 
   ret = remove_x_attr(dpp, y, ent->get_fd(), attr_name, get_name(),
-		      xattr_strategy(), driver->get_fs_strategy());
+		      xattr_strategy(), xattr_fallback(),
+		      driver->get_fs_strategy());
   if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
+    ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
   }
 
   return 0;

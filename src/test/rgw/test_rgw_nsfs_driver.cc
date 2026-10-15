@@ -7614,6 +7614,93 @@ TEST_F(NSFSConvertingBucketTest, WritingPrunesTheForeignSpelling)
       << "the object carries both spellings of its content type";
 }
 
+/* A removal on an object the sweep has not reached is the effect after
+ * adoption, as a write is.
+ *
+ * The bucket is converting with its gate open, which is the state of
+ * every conversion that stopped partway.  DeleteObjectTagging removes
+ * the key under the bucket's spelling;  the object carries NooBaa's,
+ * one attribute per tag, which the fallback reads.  Read once the
+ * removal is done and again once the sweep has run, and the tags must
+ * be gone both times. */
+TEST_F(NSFSConvertingBucketTest, TagsDeletedBeforeTheSweepStayDeleted)
+{
+  const sf::path p{bucket_path() / "tagged.bin"};
+  write_file(p, "bytes");
+  for (const auto& [k, v] : {std::pair{"a", "1"}, std::pair{"b", "2"}}) {
+    const std::string n = std::string("user.noobaa.tag.") + k;
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v, strlen(v), 0), 0) << n;
+  }
+
+  auto tags_of = [this](const char* when) {
+    auto rd = bucket->get_object(rgw_obj_key("tagged.bin"));
+    EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0) << when;
+    EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0) << when;
+    RGWObjTags t;
+    auto i = rd->get_attrs().find(RGW_ATTR_TAGS);
+    if (i != rd->get_attrs().end()) {
+      auto bufit = i->second.cbegin();
+      t.decode(bufit);
+    }
+    return t.get_tags().size();
+  };
+
+  /* the precondition:  the fallback reads their tags */
+  ASSERT_EQ(tags_of("before the removal"), 2u);
+
+  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  EXPECT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield), 0);
+  EXPECT_EQ(tags_of("after the removal"), 0u)
+      << "the removed tags read back through the fallback";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  EXPECT_EQ(tags_of("after the sweep"), 0u)
+      << "the sweep brought the removed tags back";
+}
+
+/* And the same removal arriving as an attribute write's delete set,
+ * which takes write_attrs()'s other path. */
+TEST_F(NSFSConvertingBucketTest, TagsRemovedByAnAttributeWriteStayRemoved)
+{
+  const sf::path p{bucket_path() / "tagged.bin"};
+  write_file(p, "bytes");
+  for (const auto& [k, v] : {std::pair{"a", "1"}, std::pair{"b", "2"}}) {
+    const std::string n = std::string("user.noobaa.tag.") + k;
+    ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v, strlen(v), 0), 0) << n;
+  }
+
+  auto tags_of = [this](const char* when) {
+    auto rd = bucket->get_object(rgw_obj_key("tagged.bin"));
+    EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0) << when;
+    EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0) << when;
+    RGWObjTags t;
+    auto i = rd->get_attrs().find(RGW_ATTR_TAGS);
+    if (i != rd->get_attrs().end()) {
+      auto bufit = i->second.cbegin();
+      t.decode(bufit);
+    }
+    return t.get_tags().size();
+  };
+
+  ASSERT_EQ(tags_of("before the removal"), 2u);
+
+  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  Attrs del;
+  del[RGW_ATTR_TAGS] = bufferlist{};
+  EXPECT_EQ(obj->set_obj_attrs(env->dpp, nullptr, &del, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+  EXPECT_EQ(tags_of("after the removal"), 0u)
+      << "the removed tags read back through the fallback";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  EXPECT_EQ(tags_of("after the sweep"), 0u)
+      << "the sweep brought the removed tags back";
+}
+
 /* And the same, on a bucket in NooBaa's format.
  *
  * The callback computed the staging directory with the driver's own
