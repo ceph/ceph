@@ -1,4 +1,4 @@
-if(TARGET cls_rgw_bi_datum)
+if(TARGET cls_rgw_datum)
   # Focused RGW wire checks use an independently compiled C++23 native oracle.
   get_filename_component(rgw_cls_source_dir "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
   add_library(cls_rgw_bi_native_oracle OBJECT "${CMAKE_CURRENT_LIST_DIR}/bi_native_oracle.cc")
@@ -11,7 +11,7 @@ if(TARGET cls_rgw_bi_datum)
     "${CMAKE_CURRENT_LIST_DIR}/bi_wire.cc"
     "${CMAKE_CURRENT_LIST_DIR}/bi_wire_main.cc"
     $<TARGET_OBJECTS:cls_rgw_bi_native_oracle>
-    $<TARGET_OBJECTS:cls_rgw_bi_datum>)
+    $<TARGET_OBJECTS:cls_rgw_datum>)
   target_link_libraries(unittest_cls_rgw_bi_wire PRIVATE
     datum::zpp Catch2::Catch2 ceph-common ${FMT_LIB})
   target_include_directories(unittest_cls_rgw_bi_wire PRIVATE

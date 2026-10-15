@@ -7,8 +7,11 @@
 
 #include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <dlfcn.h>
 
+#include <fstream>
+#include <algorithm>
 #include <limits>
 #include <map>
 #include <memory>
@@ -37,7 +40,8 @@ struct storage final
 void load_module()
 {
     using handle = std::unique_ptr<void, decltype([](void *p) noexcept { dlclose(p); })>;
-    static const handle loaded {dlopen(TEST_CLS_RGW_MODULE, RTLD_LAZY | RTLD_LOCAL)};
+    const char *path = std::getenv("CEPH_TEST_CLS_RGW_MODULE");
+    static const handle loaded {dlopen(path ? path : TEST_CLS_RGW_MODULE, RTLD_LAZY | RTLD_LOCAL)};
     if (!loaded) {
         throw std::runtime_error {dlerror()};
     }
@@ -58,7 +62,19 @@ auto invoke(storage& context, byte_buffer input)
     REQUIRE(olh_handler != nullptr);
     REQUIRE(olh_flags == CLS_METHOD_RD);
     byte_buffer output;
+    const auto previous_reads = context.reads.size();
     const int status = olh_handler(&context, &input, &output);
+    if (const char *path = std::getenv("CEPH_TEST_CLS_RGW_TRANSCRIPT")) {
+        static std::ofstream transcript {path, std::ios::binary};
+        byte_buffer record;
+        ::ceph::encode(input, record);
+        ::ceph::encode(status, record);
+        ::ceph::encode(output, record);
+        const std::vector<std::string> reads {context.reads.begin() + previous_reads, context.reads.end()};
+        ::ceph::encode(reads, record);
+        record.write_stream(transcript);
+        REQUIRE(transcript.good());
+    }
 
     return std::pair {status, std::move(output)};
 }
@@ -251,5 +267,53 @@ TEST_CASE("OLH native action type preserves every wire byte", "[rgw][cls][olh]")
         const auto reply = decode_reply(bytes);
         REQUIRE(reply.log.size() == 1);
         CHECK(static_cast<unsigned>(reply.log.begin()->second.front().op) == raw);
+    }
+}
+
+TEST_CASE("OLH page boundaries preserve exact native replies across log shapes", "[rgw][cls][olh]")
+{
+    for (const unsigned count : {0, 1, 2, 17, 999, 1000, 1001, 1002}) {
+        for (const unsigned shape : {0, 1, 2, 3}) {
+            auto value = log_fixture(count, shape == 1);
+            for (auto& [epoch, entries] : value.pending_log) {
+                if (shape == 2 && 0 == epoch % 2) {
+                    entries.front().op = ::CLS_RGW_OLH_OP_STALE;
+                }
+                if (shape == 3 && 0 == epoch % 3) {
+                    entries.clear();
+                }
+            }
+            auto context = fixture(value);
+            for (const std::uint64_t marker : {0ULL, 1ULL, 2ULL, 16ULL, 998ULL, 999ULL,
+                                               1000ULL, 1001ULL, 1002ULL, 0xFFFFFFFFFFFFFFFFULL}) {
+                for (const bool stales : {false, true}) {
+                    auto op = request();
+                    op.ver_marker = marker;
+                    op.get_stales = stales;
+                    ::rgw_cls_read_olh_log_ret expected;
+                    auto cursor = value.pending_log.upper_bound(marker);
+                    for (unsigned selected = 0; selected < 1000 && cursor != value.pending_log.end();
+                         ++selected, ++cursor) {
+                        auto entries = cursor->second;
+                        if (!stales) {
+                            std::erase_if(entries, [](const auto& entry) {
+                                return ::CLS_RGW_OLH_OP_STALE == entry.op;
+                            });
+                        }
+                        if (stales || !entries.empty()) {
+                            expected.log.emplace(cursor->first, std::move(entries));
+                        }
+                    }
+                    expected.is_truncated = cursor != value.pending_log.end();
+                    byte_buffer wanted;
+                    ::encode(expected, wanted);
+                    context.reads.clear();
+                    const auto [status, bytes] = query(context, op);
+                    REQUIRE(status == 0);
+                    CHECK(bytes.contents_equal(wanted));
+                    CHECK(context.reads == std::vector<std::string> {"\x80" "1001_object"});
+                }
+            }
+        }
     }
 }

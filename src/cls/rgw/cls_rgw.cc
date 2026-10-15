@@ -21,6 +21,7 @@
 #include "cls/rgw/cls_rgw_const.h"
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
+ #include "cls/rgw/cls_rgw_olh_datum.h"
 #endif
 #include "common/strtol.h"
 #include "common/escape.h"
@@ -2323,10 +2324,14 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 }
 
 static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
+try {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::olh_datum::request op;
+#else
   rgw_cls_read_olh_log_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2354,22 +2359,17 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
     return -ECANCELED;
   }
 
+  constexpr unsigned max_epochs = 1000;
+  const auto& log = olh_data_entry.pending_log;
+  const auto lower = log.upper_bound(op.ver_marker);
+  const auto upper = std::ranges::next(lower, max_epochs, log.end());
+  const bool truncated = upper != log.end();
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::olh_datum::encode_reply(lower, upper, op.get_stales, truncated, *out);
+#else
   rgw_cls_read_olh_log_ret op_ret;
-
-#define MAX_OLH_LOG_ENTRIES 1000
-  map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log = olh_data_entry.pending_log;
-
-  if (!log.empty() && log.begin()->first > op.ver_marker && log.size() <= MAX_OLH_LOG_ENTRIES) {
-    op_ret.log = log;
-    op_ret.is_truncated = false;
-  } else {
-    auto iter = log.upper_bound(op.ver_marker);
-
-    for (int i = 0; i < MAX_OLH_LOG_ENTRIES && iter != log.end(); ++i, ++iter) {
-      op_ret.log[iter->first] = iter->second;
-    }
-    op_ret.is_truncated = (iter != log.end());
-  }
+  op_ret.log.insert(lower, upper);
+  op_ret.is_truncated = truncated;
 
   // this is for backward compatibility
   if (!op.get_stales) {
@@ -2385,8 +2385,14 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
   }
 
   encode(op_ret, *out);
+#endif
 
   return 0;
+} catch (const std::bad_alloc&) {
+  return -ENOMEM;
+} catch (const std::exception& err) {
+  CLS_LOG(0, "ERROR: %s: %s", __func__, err.what());
+  return -EIO;
 }
 
 static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)

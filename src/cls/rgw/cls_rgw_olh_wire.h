@@ -1,0 +1,210 @@
+// RGW CLS: OLH framing with independent record and container bindings.
+#ifndef CEPH_CLS_RGW_OLH_WIRE_H
+ #define CEPH_CLS_RGW_OLH_WIRE_H
+
+#include "cls_rgw_datum_wire.h"
+
+#include <cstdint>
+#include <utility>
+
+#include <functional>
+#include <ranges>
+#include <string>
+#include <string_view>
+
+namespace cls::rgw::olh_wire
+{
+namespace datum = ::ceph::salad::datum;
+using byte_buffer = ::ceph::buffer::list;
+
+namespace detail
+{
+using ::cls::rgw::wire::checked_count;
+using ::cls::rgw::wire::reader;
+using ::cls::rgw::wire::writer;
+
+struct key_fields final
+{
+    std::string_view name;
+    std::string_view instance;
+};
+
+struct request_tail final
+{
+    std::uint64_t marker;
+    std::string_view tag;
+
+    std::uint8_t stales;
+};
+
+struct event_prefix final
+{
+    std::uint64_t epoch;
+    std::uint8_t operation;
+
+    std::string_view tag;
+};
+
+inline void encode_key(writer& archive, const std::string_view name, const std::string_view instance)
+{
+    checked_count(name.size());
+    checked_count(instance.size());
+    archive.frame(1, [&] {
+        archive.fields(checked_count(8ull + name.size() + instance.size()), key_fields {name, instance},
+            datum::binary_fields<&key_fields::name, &key_fields::instance> {});
+    });
+}
+
+inline auto decode_key(reader& archive)
+{
+    return archive.frame(1, [](auto& fields, std::uint8_t) {
+        auto name = fields.text();
+        auto instance = fields.text();
+
+        return std::pair {std::move(name), std::move(instance)};
+    });
+}
+
+template <typename EntryT, auto Epoch, auto Operation, auto Tag, auto Key, auto Deleted,
+          auto Name, auto Instance>
+void encode_event(writer& archive, const EntryT& value,
+                  datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
+                  datum::binary_fields<Name, Instance>)
+{
+    const std::string_view tag = datum::member_lens<Tag> {}(value);
+    checked_count(tag.size());
+    archive.frame(1, [&] {
+        using prefix = event_prefix;
+
+        archive.fields(checked_count(13ull + tag.size()),
+            prefix {datum::member_lens<Epoch> {}(value),
+                    ::cls::rgw::wire::checked_byte(datum::member_lens<Operation> {}(value)), tag},
+            datum::binary_fields<&prefix::epoch, &prefix::operation, &prefix::tag> {});
+        const auto& key = datum::member_lens<Key> {}(value);
+        encode_key(archive, datum::member_lens<Name> {}(key), datum::member_lens<Instance> {}(key));
+        archive.scalar(static_cast<std::uint8_t>(datum::member_lens<Deleted> {}(value)));
+    });
+}
+
+template <typename FactoryT>
+auto decode_event(reader& archive, FactoryT& factory)
+{
+    return archive.frame(1, [&](auto& fields, std::uint8_t) {
+        const auto epoch = fields.template scalar<std::uint64_t>();
+        const auto operation = fields.template scalar<std::uint8_t>();
+        auto tag = fields.text();
+        auto [name, instance] = decode_key(fields);
+        const bool deleted = 0 != fields.template scalar<std::uint8_t>();
+
+        return std::invoke(factory, epoch, operation, std::move(tag),
+                           std::move(name), std::move(instance), deleted);
+    });
+}
+
+} // detail
+
+inline byte_buffer encode_request(const std::string_view name, const std::string_view instance,
+                                  const std::uint64_t marker, const std::string_view tag, const bool stales)
+{
+    detail::checked_count(tag.size());
+    byte_buffer output;
+    detail::writer archive {output};
+    archive.frame(2, [&] {
+        detail::encode_key(archive, name, instance);
+        using tail = detail::request_tail;
+
+        archive.fields(detail::checked_count(13ull + tag.size()),
+            tail {marker, tag, static_cast<std::uint8_t>(stales)},
+            datum::binary_fields<&tail::marker, &tail::tag, &tail::stales> {});
+    });
+
+    return output;
+}
+
+template <typename FactoryT>
+auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
+{
+    detail::reader archive {input};
+
+    return archive.frame(2, [&](auto& fields, const std::uint8_t version) {
+        auto [name, instance] = detail::decode_key(fields);
+        const auto marker = fields.template scalar<std::uint64_t>();
+        auto tag = fields.text();
+        const bool stales = version >= 2 && 0 != fields.template scalar<std::uint8_t>();
+
+        return std::invoke(std::forward<FactoryT>(factory), std::move(name),
+                           std::move(instance), marker, std::move(tag), stales);
+    });
+}
+
+// Filtering is applied to an already paginated range. Empty epoch groups are
+// retained only when requested by the native get_stales policy.
+template <std::ranges::forward_range GroupsT, auto ...EventMember, auto ...KeyMember, typename IncludeT>
+byte_buffer encode_reply(const GroupsT& groups, const bool truncated,
+                         datum::binary_fields<EventMember...> event_fields,
+                         datum::binary_fields<KeyMember...> key_fields,
+                         IncludeT&& include, const bool retain_empty)
+{
+    const auto included_count = [&](const auto& entries) {
+        return detail::checked_count(std::ranges::count_if(entries, include));
+    };
+    const auto group_count = detail::checked_count(std::ranges::count_if(groups, [&](const auto& group) {
+        return retain_empty || 0 != included_count(group.second);
+    }));
+    byte_buffer output;
+    detail::writer archive {output};
+    archive.frame(1, [&] {
+        archive.scalar(group_count);
+        for (const auto& [epoch, entries] : groups) {
+            const auto size = included_count(entries);
+            if (!retain_empty && 0 == size) {
+                continue;
+            }
+            archive.scalar(epoch);
+            archive.scalar(size);
+            for (const auto& entry : entries) {
+                if (std::invoke(include, entry)) {
+                    detail::encode_event(archive, entry, event_fields, key_fields);
+                }
+            }
+        }
+        archive.scalar(static_cast<std::uint8_t>(truncated));
+    });
+
+    return output;
+}
+
+// The insertion binding determines local associative semantics (such as
+// first-wins map insertion) without enrolling a native type in Datum.
+template <typename GroupsT, typename EntriesT, typename FactoryT, typename InsertT>
+auto decode_reply(byte_buffer::const_iterator& input, FactoryT&& factory, InsertT&& insert)
+{
+    detail::reader archive {input};
+
+    return archive.frame(1, [&](auto& fields, std::uint8_t) {
+        const auto size = fields.template sequence_size<12>(1);
+        GroupsT groups;
+        if constexpr (requires { groups.reserve(size); }) {
+            groups.reserve(size);
+        }
+        for (std::uint32_t index = 0; index < size; ++index) {
+            const auto epoch = fields.template scalar<std::uint64_t>();
+            const auto count = fields.template sequence_size<34>();
+            EntriesT entries;
+            if constexpr (requires { entries.reserve(count); }) {
+                entries.reserve(count);
+            }
+            for (std::uint32_t item = 0; item < count; ++item) {
+                entries.emplace_back(detail::decode_event(fields, factory));
+            }
+            std::invoke(insert, groups, epoch, std::move(entries));
+        }
+        const bool truncated = 0 != fields.template scalar<std::uint8_t>();
+
+        return std::pair {std::move(groups), truncated};
+    });
+}
+
+} // cls::rgw::olh_wire
+
+#endif // CEPH_CLS_RGW_OLH_WIRE_H

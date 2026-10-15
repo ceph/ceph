@@ -11,6 +11,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
+ #include "cls/rgw/cls_rgw_olh_datum.h"
 #endif
 
 #include "common/debug.h"
@@ -444,34 +445,120 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
   }
 }
 
-void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const string& olh_tag, rgw_cls_read_olh_log_ret& log_ret, int& op_ret)
+namespace
 {
-  bufferlist in;
+#ifndef WITH_RGW_CLS_DATUM
+void decode_olh_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret& value)
+{
+  ::rgw_cls_read_olh_log_ret candidate;
+  auto cursor = input.cbegin();
+  ::decode(candidate, cursor);
+  value = std::move(candidate);
+}
+
+void decode_olh_reply(const ::ceph::buffer::list& input, ::cls::rgw::olh::reply& value)
+{
+  ::rgw_cls_read_olh_log_ret native;
+  decode_olh_reply(input, native);
+  ::cls::rgw::olh::reply candidate;
+  candidate.epochs.reserve(native.log.size());
+  for (auto& [epoch, entries] : native.log) {
+    auto& rows = candidate.epochs.emplace_back(epoch, std::vector<::cls::rgw::olh::event> {}).second;
+    rows.reserve(entries.size());
+    for (auto& entry : entries) {
+      rows.push_back({{std::move(entry.key.name), std::move(entry.key.instance)}, std::move(entry.op_tag),
+                     entry.epoch, static_cast<::cls::rgw::olh::action>(entry.op), entry.delete_marker});
+    }
+  }
+  candidate.truncated = native.is_truncated;
+  value = std::move(candidate);
+}
+#endif
+
+template <typename ReplyT>
+class olh_completion final : public ObjectOperationCompletion
+{
+  ReplyT& output;
+  int& status;
+
+public:
+  olh_completion(ReplyT& output, int& status) : output(output), status(status)
+  {}
+
+public:
+  void handle_completion(int result, ::ceph::buffer::list& bytes) override
+  try {
+    if (0 <= result || RGWBIAdvanceAndRetryError == result) {
+#ifdef WITH_RGW_CLS_DATUM
+      ::cls::rgw::olh_datum::decode_reply(bytes, output);
+#else
+      decode_olh_reply(bytes, output);
+#endif
+    }
+    status = result;
+  } catch (const std::bad_alloc&) {
+    status = -ENOMEM;
+  } catch (const std::exception&) {
+    status = -EIO;
+  }
+
+};
+
+template <typename ReplyT>
+void get_olh_log(ObjectReadOperation& op, const cls_rgw_obj_key& olh,
+                 const uint64_t marker, const std::string& tag, ReplyT& output, int& status)
+{
+#ifdef WITH_RGW_CLS_DATUM
+  auto input = ::cls::rgw::olh_datum::encode_request(olh, marker, tag, true);
+#else
+  ::ceph::buffer::list input;
   rgw_cls_read_olh_log_op call;
   call.olh = olh;
-  call.ver_marker = ver_marker;
-  call.olh_tag = olh_tag;
+  call.ver_marker = marker;
+  call.olh_tag = tag;
   call.get_stales = true;
-  encode(call, in);
-  op.exec(method::bucket_read_olh_log, in, new ClsBucketIndexOpCtx<rgw_cls_read_olh_log_ret>(&log_ret, &op_ret));
+  ::encode(call, input);
+#endif
+  op.exec(method::bucket_read_olh_log, input, new olh_completion<ReplyT> {output, status});
+}
+
+template <typename ReplyT>
+int get_olh_log(IoCtx& io_ctx, const std::string& oid, const cls_rgw_obj_key& olh,
+                const uint64_t marker, const std::string& tag, ReplyT& output)
+{
+  int status = 0;
+  ObjectReadOperation op;
+  get_olh_log(op, olh, marker, tag, output, status);
+  const int result = io_ctx.operate(oid, &op, nullptr);
+
+  return 0 > result ? result : (0 > status ? status : result);
+}
+
+} // anonymous namespace
+
+void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const string& olh_tag, rgw_cls_read_olh_log_ret& log_ret, int& op_ret)
+{
+  get_olh_log(op, olh, ver_marker, olh_tag, log_ret, op_ret);
+}
+
+void cls_rgw_get_olh_log(ObjectReadOperation& op, const cls_rgw_obj_key& olh,
+                        const uint64_t marker, const std::string& tag,
+                        ::cls::rgw::olh::reply& output, int& status)
+{
+  get_olh_log(op, olh, marker, tag, output, status);
 }
 
 int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const string& olh_tag,
                         rgw_cls_read_olh_log_ret& log_ret)
 {
-  int op_ret = 0;
-  librados::ObjectReadOperation op;
-  cls_rgw_get_olh_log(op, olh, ver_marker, olh_tag, log_ret, op_ret);
-  int r = io_ctx.operate(oid, &op, NULL);
-  if (r < 0) {
-    return r;
-  }
-  if (op_ret < 0) {
-    return op_ret;
-  }
+  return get_olh_log(io_ctx, oid, olh, ver_marker, olh_tag, log_ret);
+}
 
- return r;
+int cls_rgw_get_olh_log(IoCtx& io_ctx, const std::string& oid, const cls_rgw_obj_key& olh,
+                       const uint64_t marker, const std::string& tag, ::cls::rgw::olh::reply& output)
+{
+  return get_olh_log(io_ctx, oid, olh, marker, tag, output);
 }
 
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag)
