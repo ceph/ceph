@@ -272,6 +272,21 @@ PyObject *ActivePyModules::get_python(std::string_view what, const bool get_muta
         osd_map.print_tree(&f, nullptr);
       } else if (what == "osd_map_crush") {
         osd_map.crush->dump(&f);
+      } else if (what == "osd_map_pools") {
+        // the pools section of osd_map, without the read balance scores,
+        // which copy the map and map every PG of each replicated pool
+        const auto &names = osd_map.get_pool_names();
+        f.open_array_section("pools");
+        for (const auto &[pid, pdata] : osd_map.get_pools()) {
+          auto pni = names.find(pid);
+          f.open_object_section("pool");
+          f.dump_int("pool", pid);
+          f.dump_string("pool_name",
+                        pni != names.end() ? pni->second : "<unknown>");
+          pdata.dump(&f);
+          f.close_section();
+        }
+        f.close_section();
       }
     });
   } else if (what == "modified_config_options") {
