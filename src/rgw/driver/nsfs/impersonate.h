@@ -19,6 +19,7 @@
 
 #include "include/function2.hpp"
 #include "common/dout.h"
+#include "driver/posix/posix_io_uring.h"
 
 #include "personality.h"
 
@@ -171,15 +172,34 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
 
 /* What an operation needs to be performed as somebody.
  *
- * Both halves, because the two mechanisms want different things:
- * a submission entry names the `personality`, while a call that
- * io_uring cannot express is run by a helper thread that has to
- * assume `cred` itself. */
+ * Who, not a personality id.  An id names a credential on one
+ * thread's ring, and a request coroutine may resume on another thread
+ * after any yield, so an id is looked up where it is used --
+ * acquire_personality() on `key`, registering from `cred` on a miss --
+ * and held only until that submission returns.  A call io_uring
+ * cannot express is run by a helper thread that assumes `cred`
+ * itself. */
 struct FSIdentity {
-  uint16_t personality{0};
+  rgw_user key;
   Credentials cred;
 
-  bool active() const { return personality != 0; }
+  bool active() const { return !key.empty(); }
+};
+
+/* An FSIdentity as an io_uring window's transfers need it.
+ *
+ * acquire() looks the identity up in the calling thread's table, so
+ * the id is valid on the ring the window is about to submit to;
+ * release() unpins it.  `id` must outlive this. */
+class IdentityPersonality : public rgw::sal::UringPersonality {
+  const FSIdentity& id;
+  PersonalityRef ref;
+public:
+  explicit IdentityPersonality(const FSIdentity& id) : id(id) {}
+  int acquire(const DoutPrefixProvider* dpp, uint16_t* out) override;
+  void release() override { ref.reset(); }
+  int run_as(const DoutPrefixProvider* dpp,
+	     fu2::unique_function<int() const> fn) override;
 };
 
 /* Perform `fn` as this identity.

@@ -469,6 +469,57 @@ void run_sync(IoSlot& slot, int fd, bool write)
   slot.done = true;
 }
 
+/* run_sync() as the window's identity, where it has one. */
+void run_sync_as(const DoutPrefixProvider* dpp, UringPersonality* who,
+		 IoSlot& slot, int fd, bool write)
+{
+  if (!who) {
+    run_sync(slot, fd, write);
+    return;
+  }
+  const int r = who->run_as(dpp, [&slot, fd, write]() -> int {
+    run_sync(slot, fd, write);
+    return 0;
+  });
+  if (r < 0) {
+    /* the identity could not be assumed, so nothing ran:  the slot
+     * completes with the error rather than being waited on for ever */
+    std::lock_guard lock(slot.mutex);
+    if (!slot.done) {
+      slot.result = r;
+      slot.done = true;
+    }
+  }
+}
+
+/* An id acquired for submissions from this thread, released when the
+ * scope that submitted them ends -- after the submit, before any
+ * yield. */
+class HeldPersonality {
+  UringPersonality* who;
+  uint16_t pid{POSIX_URING_NO_PERSONALITY};
+  bool held{false};
+public:
+  explicit HeldPersonality(UringPersonality* who) : who(who) {}
+  ~HeldPersonality() {
+    if (held) {
+      who->release();
+    }
+  }
+  HeldPersonality(const HeldPersonality&) = delete;
+  HeldPersonality& operator=(const HeldPersonality&) = delete;
+
+  int acquire(const DoutPrefixProvider* dpp) {
+    if (!who) {
+      return 0;
+    }
+    const int r = who->acquire(dpp, &pid);
+    held = (r == 0);
+    return r;
+  }
+  uint16_t id() const { return pid; }
+};
+
 } // anonymous namespace
 
 int posix_uring_register_personality(const DoutPrefixProvider* dpp)
@@ -684,10 +735,11 @@ struct UringReadWindow::Impl {
   unsigned pending_sqes = 0;
 
   bool nsfs;
-  uint16_t personality{POSIX_URING_NO_PERSONALITY};
+  UringPersonality* personality;
 
   Impl(const DoutPrefixProvider* dpp, optional_yield y, int fd, unsigned qd,
-       int64_t chunk_size, bool direct_io, bool nsfs, uint16_t personality)
+       int64_t chunk_size, bool direct_io, bool nsfs,
+       UringPersonality* personality)
     : dpp(dpp), y(y), fd(fd),
       qd(std::clamp(qd, 1u, POSIX_URING_MAX_IODEPTH)),
       chunk_size(chunk_size > 0 ? chunk_size : 128 * 1024),
@@ -702,7 +754,9 @@ struct UringReadWindow::Impl {
     return r;
   }
 
-  int submit_one(int64_t ofs, int64_t len) {
+  /* `ring`:  this thread has one;  `pid`:  held by the caller until
+   * it has flushed what this prepares */
+  int submit_one(int64_t ofs, int64_t len, bool ring, uint16_t pid) {
     auto slot = std::make_unique<IoSlot>();
     slot->user_ofs = ofs;
     slot->user_len = len;
@@ -716,9 +770,10 @@ struct UringReadWindow::Impl {
     }
     slot->buf = bufferptr(
         buffer::create_small_page_aligned(slot->aligned_len));
-    int r = prep_rw(dpp, *slot, fd, /*write=*/false, nsfs, personality);
+    int r = ring ? prep_rw(dpp, *slot, fd, /*write=*/false, nsfs, pid)
+		 : -ENXIO;
     if (r == -ENXIO) {
-      run_sync(*slot, fd, /*write=*/false);
+      run_sync_as(dpp, personality, *slot, fd, /*write=*/false);
       inflight.push_back(std::move(slot));
       return 0;
     }
@@ -770,7 +825,7 @@ struct UringReadWindow::Impl {
 UringReadWindow::UringReadWindow(const DoutPrefixProvider* dpp,
                                  optional_yield y, int fd, unsigned qd,
                                  int64_t chunk_size, bool direct_io,
-                                 bool nsfs, uint16_t personality)
+                                 bool nsfs, UringPersonality* personality)
   : impl(std::make_unique<Impl>(dpp, y, fd, qd, chunk_size, direct_io, nsfs,
                                 personality))
 {}
@@ -790,10 +845,17 @@ int UringReadWindow::iterate(int64_t ofs, int64_t left,
   int64_t submit_ofs = ofs;
   int64_t submit_left = left;
 
+  /* One run of submissions, on whichever thread this is:  its ring,
+   * and the personality acquired on it, held until the flush. */
   auto fill = [&]() -> int {
+    const bool ring = posix_uring_ensure_ring(impl->dpp, impl->nsfs);
+    HeldPersonality who(ring ? impl->personality : nullptr);
+    if (int r = who.acquire(impl->dpp); r < 0) {
+      return r;
+    }
     while (submit_left > 0 && impl->inflight.size() < impl->qd) {
       int64_t n = std::min(submit_left, impl->chunk_size);
-      int r = impl->submit_one(submit_ofs, n);
+      int r = impl->submit_one(submit_ofs, n, ring, who.id());
       if (r < 0) {
         impl->flush_submit();
         return r;
@@ -844,10 +906,10 @@ struct UringWriteWindow::Impl {
   std::deque<std::unique_ptr<IoSlot>> inflight;
 
   bool nsfs;
-  uint16_t personality{POSIX_URING_NO_PERSONALITY};
+  UringPersonality* personality;
 
   Impl(const DoutPrefixProvider* dpp, optional_yield y, int fd, unsigned qd,
-       bool direct_io, bool nsfs, uint16_t personality)
+       bool direct_io, bool nsfs, UringPersonality* personality)
     : dpp(dpp), y(y), fd(fd),
       qd(std::clamp(qd, 1u, POSIX_URING_MAX_IODEPTH)),
       direct_io(direct_io), nsfs(nsfs), personality(personality) {}
@@ -938,9 +1000,18 @@ struct UringWriteWindow::Impl {
 
     logical_end = std::max(logical_end, ofs + len);
 
-    int r = prep_rw(dpp, *slot, fd, /*write=*/true, nsfs, personality);
+    /* this thread's ring, and the personality acquired on it, held
+     * until the submit returns */
+    const bool ring = posix_uring_ensure_ring(dpp, nsfs);
+    HeldPersonality who(ring ? personality : nullptr);
+    int r = who.acquire(dpp);
+    if (r < 0) {
+      return r;
+    }
+    r = ring ? prep_rw(dpp, *slot, fd, /*write=*/true, nsfs, who.id())
+	     : -ENXIO;
     if (r == -ENXIO) {
-      run_sync(*slot, fd, /*write=*/true);
+      run_sync_as(dpp, personality, *slot, fd, /*write=*/true);
       inflight.push_back(std::move(slot));
       return 0;
     }
@@ -955,7 +1026,7 @@ struct UringWriteWindow::Impl {
 UringWriteWindow::UringWriteWindow(const DoutPrefixProvider* dpp,
                                    optional_yield y, int fd, unsigned qd,
                                    bool direct_io, bool nsfs,
-                                   uint16_t personality)
+                                   UringPersonality* personality)
   : impl(std::make_unique<Impl>(dpp, y, fd, qd, direct_io, nsfs,
                                 personality))
 {}
@@ -1051,7 +1122,7 @@ void posix_uring_unregister_personality(const DoutPrefixProvider* dpp,
 UringReadWindow::UringReadWindow(const DoutPrefixProvider* dpp,
                                  optional_yield y, int fd, unsigned qd,
                                  int64_t chunk_size, bool direct_io,
-                                 bool nsfs, uint16_t personality)
+                                 bool nsfs, UringPersonality* personality)
   : impl(std::make_unique<Impl>())
 {
   (void)dpp; (void)y; (void)fd; (void)qd; (void)chunk_size; (void)direct_io;
@@ -1070,7 +1141,7 @@ int UringReadWindow::iterate(int64_t ofs, int64_t left,
 UringWriteWindow::UringWriteWindow(const DoutPrefixProvider* dpp,
                                    optional_yield y, int fd, unsigned qd,
                                    bool direct_io, bool nsfs,
-                                   uint16_t personality)
+                                   UringPersonality* personality)
   : impl(std::make_unique<Impl>())
 {
   (void)dpp; (void)y; (void)fd; (void)qd; (void)direct_io;

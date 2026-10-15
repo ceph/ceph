@@ -2396,6 +2396,21 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
+/* openat2 through the ring as `id`.  The personality is looked up on
+ * this thread, because an id names a credential only on the ring it was
+ * registered on, and is held only until the submission returns. */
+static int open_as(const DoutPrefixProvider* dpp, const nsfs::FSIdentity& id,
+		   int dirfd, const char* path, uint64_t flags, uint64_t mode)
+{
+  nsfs::PersonalityRef ref;
+  const int ret = nsfs::acquire_personality(dpp, id.key, id.cred, &ref);
+  if (ret < 0) {
+    return ret;
+  }
+  return rgw::sal::posix_uring_openat2(dpp, dirfd, path, flags, mode,
+				       ref.id());
+}
+
 int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
 {
   int flags, ret;
@@ -2424,9 +2439,9 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
    * impersonation it is also what gives the new file the right
    * owner.  With none, the plain syscall, unchanged. */
   const mode_t mode = nsfs::file_create_mode();
-  if (personality != 0) {
-    ret = rgw::sal::posix_uring_openat2(dpp, parent->get_fd(), path.c_str(),
-					flags | O_NOFOLLOW, mode, personality);
+  if (identity.active()) {
+    ret = open_as(dpp, identity, parent->get_fd(), path.c_str(),
+		  flags | O_NOFOLLOW, mode);
   } else {
     ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, mode);
     if (ret < 0) {
@@ -2440,7 +2455,7 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     }
     ldpp_dout(dpp, 0) << "ERROR: could not create object " << get_name()
 		      << " (flags 0x" << std::hex << flags << std::dec
-		      << ", personality " << personality << "): "
+		      << ", as uid " << identity.cred.uid << "): "
                       << cpp_strerror(ret) << dendl;
     return -ret;
     }
@@ -2465,7 +2480,7 @@ int File::open(const DoutPrefixProvider* dpp)
 
   direct_io = ctx->_conf.get_val<bool>("rgw_nsfs_direct_io");
   bool ro = read_only;
-  if (nsfs::impersonation_enabled() && (personality == 0)) {
+  if (nsfs::impersonation_enabled() && !identity.active()) {
     /* No identity, so this is the gateway opening an object it does
      * not own -- reading an ACL to authorise a request, or an xattr
      * to compose a listing row.  It holds CAP_DAC_READ_SEARCH and
@@ -2477,9 +2492,9 @@ int File::open(const DoutPrefixProvider* dpp)
   int flags = (ro ? O_RDONLY : O_RDWR) | (direct_io ? O_DIRECT : 0);
 
   int ret;
-  if (personality != 0) {
-    ret = rgw::sal::posix_uring_openat2(dpp, parent->get_fd(), fname.c_str(),
-					flags, S_IRWXU, personality);
+  if (identity.active()) {
+    ret = open_as(dpp, identity, parent->get_fd(), fname.c_str(), flags,
+		  S_IRWXU);
   } else {
     ret = openat(parent->get_fd(), fname.c_str(), flags, S_IRWXU);
     if (ret < 0) {
@@ -2487,16 +2502,17 @@ int File::open(const DoutPrefixProvider* dpp)
     }
   }
   /* POSIX decides access here and nowhere later, so this line is
-   * what explains a permission outcome:  a personality of 0 under
+   * what explains a permission outcome:  no identity under
    * impersonation means the open ran as the gateway. */
   ldpp_dout(dpp, 20) << "nsfs: open " << get_name()
     << (ro ? " O_RDONLY" : " O_RDWR")
-    << " personality " << personality << " -> " << ret << dendl;
+    << " as " << (identity.active() ? identity.key.to_str() : "the gateway")
+    << " -> " << ret << dendl;
   if (ret < 0) {
     ret = -ret;
     ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name()
 		      << " (flags 0x" << std::hex << flags << std::dec
-		      << ", personality " << personality
+		      << ", as uid " << identity.cred.uid
 		      << ", read_only " << read_only << "): "
                       << cpp_strerror(ret) << dendl;
     return -ret;
@@ -3241,7 +3257,7 @@ int NooBaaDirectoryObject::open(const DoutPrefixProvider* dpp)
   }
   /* the access this entry was given, which the caller set on it and not
    * on the sentinel */
-  content->set_identity(personality, identity.cred);
+  content->set_identity(identity);
   content->set_read_only(read_only);
   ret = content->open(dpp);
   if (ret < 0) {
@@ -5357,7 +5373,6 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
 /* Defined below, beside the operations that use it most. */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
 			       NSFSDriver* driver, const rgw_user& who,
-			       nsfs::PersonalityRef* out,
 			       nsfs::FSIdentity* ident,
 			       bool tolerate_absent = false);
 
@@ -11857,16 +11872,14 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
     }
     /* The identity this read will run as, and whether one was
      * obtained.  An empty user is the authorisation pass or an
-     * unauthenticated caller;  pinned=0 with a non-empty user means
+     * unauthenticated caller;  resolved=0 with a non-empty user means
      * the request will be refused at iterate(). */
     ldpp_dout(dpp, 20) << "nsfs: read " << source->get_name()
-      << " as '" << auth_user << "' pinned=" << personality.valid()
-      << " personality=" << (personality.valid() ? personality.id() : 0)
+      << " as '" << auth_user << "' resolved=" << identity.active()
       << dendl;
     /* Before stat(), which is what creates the entry and opens it.
      * A read op never writes the object. */
-    source->set_access(personality.valid() ? personality.id() : 0,
-		       identity.cred, /*read_only=*/true);
+    source->set_access(identity, /*read_only=*/true);
   }
 
   int ret = source->stat(dpp);
@@ -12004,7 +12017,7 @@ int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 {
   /* see iterate():  the refusal deferred in prepare() lands on the
    * data entry points */
-  if (nsfs::impersonation_enabled() && !personality.valid()) {
+  if (nsfs::impersonation_enabled() && !identity.active()) {
     ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
       << " as the gateway;  no POSIX identity resolved for this request"
       << dendl;
@@ -12070,7 +12083,14 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
 }
 
 
-/* Resolve this operation's identity and hold a personality for it.
+/* Resolve this operation's identity into `ident`:  the key and the
+ * credentials, and a personality registered for it on this thread.
+ *
+ * The personality is not kept.  An id names a credential only on the
+ * ring it was registered on, and the operation may resume on another
+ * thread after any yield, so each submission looks it up where it runs
+ * (IdentityPersonality, open_as()).  Registering here still checks the
+ * credentials can be applied, before anything is served.
  *
  * Returns -ENODATA when impersonation is off, which is not a
  * failure:  the caller submits with no personality and the request
@@ -12083,15 +12103,14 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
  */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
 			       NSFSDriver* driver, const rgw_user& who,
-			       nsfs::PersonalityRef* out,
 			       nsfs::FSIdentity* ident,
 			       bool tolerate_absent)
 {
   if (! nsfs::impersonation_enabled()) {
     return -ENODATA;
   }
-  if (out->valid()) {
-    return 0;				/* already held */
+  if (ident->active()) {
+    return 0;				/* already resolved */
   }
   if (who.empty()) {
     /* This request specified no identity.  Under the switch that
@@ -12114,11 +12133,10 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
    * pin, and skips the identity-row read below.  That read is
    * otherwise paid on every impersonated request, because nothing
    * caches it. */
-  if (nsfs::find_personality(who, out, dpp) == 0) {
-    if (ident) {
-      ident->personality = out->id();
-      ident->cred = out->credentials();
-    }
+  nsfs::PersonalityRef ref;
+  if (nsfs::find_personality(who, &ref, dpp) == 0) {
+    ident->key = who;
+    ident->cred = ref.credentials();
     return 0;
   }
 
@@ -12153,11 +12171,9 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 20) << "nsfs: resolved " << who << " to uid " << cred.uid
     << " gid " << cred.gid << " and " << cred.groups.size()
     << " supplementary groups" << dendl;
-  const int ret2 = nsfs::acquire_personality(dpp, who, cred, out);
-  if ((ret2 == 0) && ident) {
-    /* both halves:  the id for submission entries, the credentials
-     * for the calls io_uring cannot express */
-    ident->personality = out->id();
+  const int ret2 = nsfs::acquire_personality(dpp, who, cred, &ref);
+  if (ret2 == 0) {
+    ident->key = who;
     ident->cred = cred;
   }
   return ret2;
@@ -12167,17 +12183,17 @@ int NSFSObject::NSFSReadOp::pin_personality(const DoutPrefixProvider* dpp,
 					    bool tolerate_absent)
 {
   return pin_personality_for(dpp, source->driver, auth_user,
-			     &personality, &identity, tolerate_absent);
+			     &identity, tolerate_absent);
 }
 
 int NSFSAtomicWriter::pin_personality(const DoutPrefixProvider* dpp)
 {
-  return pin_personality_for(dpp, driver, auth_user, &personality, &identity);
+  return pin_personality_for(dpp, driver, auth_user, &identity);
 }
 
 int NSFSMultipartWriter::pin_personality(const DoutPrefixProvider* dpp)
 {
-  return pin_personality_for(dpp, driver, auth_user, &personality, &identity);
+  return pin_personality_for(dpp, driver, auth_user, &identity);
 }
 
 int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
@@ -12186,7 +12202,7 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
   /* Serving object data as the gateway is the escalation this
    * exists to prevent, so the refusal deferred in prepare() lands
    * here.  A metadata-only read op never reaches this. */
-  if (nsfs::impersonation_enabled() && !personality.valid()) {
+  if (nsfs::impersonation_enabled() && !identity.active()) {
     ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
       << " as the gateway;  no POSIX identity resolved for this request"
       << dendl;
@@ -12212,11 +12228,10 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
       if (chunk <= 0) {
         chunk = READ_SIZE;
       }
-      /* pinned in prepare();  invalid means impersonation is off */
-      const uint16_t pid = personality.valid()
-	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
-
-      UringReadWindow win(dpp, y, fd, qd, chunk, dio, /*nsfs=*/true, pid);
+      /* resolved in prepare();  inactive means impersonation is off */
+      nsfs::IdentityPersonality who(identity);
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio, /*nsfs=*/true,
+			  identity.active() ? &who : nullptr);
       return win.iterate(cur_ofs, left,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
@@ -14352,10 +14367,9 @@ int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
-      const uint16_t pid = personality.valid()
-	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
       uring_write = std::make_unique<UringWriteWindow>(
-          dpp, yield, df->get_fd(), qd, dio, /*nsfs=*/true, pid);
+          dpp, yield, df->get_fd(), qd, dio, /*nsfs=*/true,
+          identity.active() ? &uring_identity : nullptr);
       df->set_sync_on_close(true);
     }
     return uring_write->process(std::move(data), offset);
@@ -14644,8 +14658,8 @@ int NSFSAtomicWriter::prepare(optional_yield y)
     return ret;
   }
   /* after make_ent, so there is an entry to set it on */
-  if (personality.valid() && obj->get_fsent()) {
-    obj->get_fsent()->set_identity(personality.id(), identity.cred);
+  if (identity.active() && obj->get_fsent()) {
+    obj->get_fsent()->set_identity(identity);
   }
   obj->get_obj_attrs(y, dpp);
   obj->close();
@@ -14659,10 +14673,9 @@ int NSFSAtomicWriter::process(bufferlist&& data, uint64_t offset)
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
-      const uint16_t pid = personality.valid()
-	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
-      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd,
-						       dio, /*nsfs=*/true, pid);
+      uring_write = std::make_unique<UringWriteWindow>(
+          dpp, yield, fd, qd, dio, /*nsfs=*/true,
+          identity.active() ? &uring_identity : nullptr);
       if (obj->get_fsent()) {
         obj->get_fsent()->set_sync_on_close(true);
       }

@@ -218,7 +218,6 @@ protected:
   std::string fname;
   Directory* parent;
   int fd{-1};
-  uint16_t personality{0};
   nsfs::FSIdentity identity;
   bool read_only{false};
   bool need_fsync{false};
@@ -308,20 +307,16 @@ public:
   /* The identity this entry's descriptors are obtained under.
    *
    * Set rather than passed, so open() and create() keep their
-   * signatures and their call sites.  Zero means the gateway's own
-   * credentials, which is every caller that has not been told
-   * otherwise.
+   * signatures and their call sites.  An inactive identity means the
+   * gateway's own credentials, which is every caller that has not
+   * been told otherwise.  Who, not a personality id:  open() and
+   * create() look the id up on the thread they run on.
    *
    * It applies to the *final component* only:  the parent
    * descriptor was resolved by the gateway, so ancestor directories
    * are not rechecked.  Per-directory enforcement is separate work
    * and collides with the directory descriptor cache. */
-  void set_identity(uint16_t p, const nsfs::Credentials& c) {
-    personality = p;
-    identity.personality = p;
-    identity.cred = c;
-  }
-  uint16_t get_personality() const { return personality; }
+  void set_identity(const nsfs::FSIdentity& id) { identity = id; }
   const nsfs::FSIdentity& get_identity() const { return identity; }
 
   /* Ask for no more access than the caller needs.
@@ -2096,8 +2091,7 @@ private:
    * the problem by calling make_ent() itself and setting it in
    * between, which a read cannot do:  make_ent() resolves with
    * create_dirs. */
-  uint16_t pending_personality{0};
-  nsfs::Credentials pending_cred;
+  nsfs::FSIdentity pending_identity;
   bool pending_read_only{false};
 
   void apply_pending_access() {
@@ -2105,21 +2099,20 @@ private:
       return;
     }
     ent->set_read_only(pending_read_only);
-    if (pending_personality != 0) {
-      ent->set_identity(pending_personality, pending_cred);
+    if (pending_identity.active()) {
+      ent->set_identity(pending_identity);
     }
   }
 
 public:
   /* Say how the entry is to be opened before anything opens it.
    *
-   * personality 0 means the gateway's own credentials.  read_only
-   * is what a read op always wants:  asking for write access it
-   * does not need is the difference between serving an object
-   * readable through a supplementary group and refusing it. */
-  void set_access(uint16_t p, const nsfs::Credentials& c, bool ro) {
-    pending_personality = p;
-    pending_cred = c;
+   * An inactive identity means the gateway's own credentials.
+   * read_only is what a read op always wants:  asking for write
+   * access it does not need is the difference between serving an
+   * object readable through a supplementary group and refusing it. */
+  void set_access(const nsfs::FSIdentity& id, bool ro) {
+    pending_identity = id;
     pending_read_only = ro;
     apply_pending_access();
   }
@@ -2152,19 +2145,18 @@ public:
 			 bufferlist& dest, optional_yield y) override;
 
     /* Set by rgw_op.cc after this op is created, when impersonation
-     * is on.  The pin is taken at first I/O rather than here, so an
-     * operation that never reads a byte costs no registration, and
-     * it is held for this object's whole lifetime -- between two
-     * iterate() calls there is nothing in flight, and a count that
-     * only tracked in-flight SQEs would let the slot be reused. */
+     * is on.  The identity is resolved at first I/O rather than here,
+     * so an operation that never reads a byte costs no registration.
+     * No personality is held across the operation:  each submission
+     * looks one up on the thread it runs on. */
     void set_authenticated_user(const rgw_user& user) override {
       auth_user = user;
     }
     rgw_user auth_user;
-    nsfs::PersonalityRef personality;
     nsfs::FSIdentity identity;
-    /* resolve, register if needed, pin.  0 or -errno;  -ENODATA
-     * means impersonation is off and the caller proceeds as before.
+    /* resolve who this op runs as, into `identity`.  0 or -errno;
+     * -ENODATA means impersonation is off and the caller proceeds as
+     * before.
      *
      * tolerate_absent:  the caller is a site that legitimately has
      * no identity -- the authorisation pass -- so an absent one is
@@ -2540,10 +2532,12 @@ private:
   NSFSObject* obj;
   QD2PendingWrite pending_write;
   optional_yield yield;
-  std::unique_ptr<UringWriteWindow> uring_write;
   rgw_user auth_user;
-  nsfs::PersonalityRef personality;
   nsfs::FSIdentity identity;
+  /* who uring_write's transfers run as;  declared before it, so it
+   * outlives it */
+  nsfs::IdentityPersonality uring_identity{identity};
+  std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
   /* see NSFSReadOp::set_authenticated_user */
@@ -2587,8 +2581,10 @@ public:
 class NSFSMultipartWriter : public StoreWriter {
 private:
   rgw_user auth_user;
-  nsfs::PersonalityRef personality;
   nsfs::FSIdentity identity;
+  /* who uring_write's transfers run as;  declared before it, so it
+   * outlives it */
+  nsfs::IdentityPersonality uring_identity{identity};
   NSFSDriver* driver;
   /* the upload's staging layout, resolved once by get_writer();  this
    * writer has no bucket of its own to ask */

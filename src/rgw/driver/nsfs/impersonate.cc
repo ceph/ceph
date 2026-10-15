@@ -465,4 +465,20 @@ int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,
   return table.insert(dpp, key, cred, out);
 }
 
+int IdentityPersonality::acquire(const DoutPrefixProvider* dpp, uint16_t* out)
+{
+  const int ret = acquire_personality(dpp, id.key, id.cred, &ref);
+  if (ret < 0) {
+    return ret;
+  }
+  *out = ref.id();
+  return 0;
+}
+
+int IdentityPersonality::run_as(const DoutPrefixProvider* dpp,
+				fu2::unique_function<int() const> fn)
+{
+  return nsfs::run_as(dpp, id.cred, fn);
+}
+
 } } } // namespace rgw::sal::nsfs

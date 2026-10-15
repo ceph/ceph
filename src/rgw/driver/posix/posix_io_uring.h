@@ -122,22 +122,46 @@ int posix_uring_fgetxattr(const DoutPrefixProvider* dpp, int fd,
                           const char* name, void* value, size_t len,
                           uint16_t personality);
 
+/* Who a window's transfers run as.
+ *
+ * A personality id names a credential on the ring it was registered
+ * on, and a window's coroutine may resume on another thread between
+ * submissions.  So a window holds this rather than an id, and asks
+ * it for the id on the thread it is submitting from.  The kernel
+ * takes its own reference to the credentials when the SQE is
+ * submitted (probes/persprobe.c), so an id need be held only from
+ * acquire() until the submission returns, with no yield between --
+ * which keeps it on the thread that acquired it.
+ *
+ * A window given none runs its transfers as the submitting task, which
+ * is what posix does. */
+struct UringPersonality {
+  virtual ~UringPersonality() = default;
+  /* The id for an SQE submitted from this thread, held until release(). */
+  virtual int acquire(const DoutPrefixProvider* dpp, uint16_t* id) = 0;
+  virtual void release() = 0;
+  /* Run `fn` as this identity:  the transfer a thread with no ring
+   * does synchronously.  Returns what `fn` returned, or -errno if the
+   * identity could not be assumed and `fn` did not run. */
+  virtual int run_as(const DoutPrefixProvider* dpp,
+                     fu2::unique_function<int() const> fn) = 0;
+};
+
 class UringReadWindow {
   struct Impl;
   std::unique_ptr<Impl> impl;
 
 public:
-  /* `personality` names a credential registered on this thread's
-   * ring;  POSIX_URING_NO_PERSONALITY means the submitting task's
-   * own, which is the default and what posix passes.
+  /* `personality` is who the reads run as;  nullptr means the
+   * submitting task, which is what posix passes.  It must outlive the
+   * window.
    *
    * `nsfs` says which driver's options size a ring this window makes:
    * it submits on whichever thread it is running on, and a coroutine
    * may resume on a thread that has not made one yet. */
   UringReadWindow(const DoutPrefixProvider* dpp, optional_yield y,
                   int fd, unsigned qd, int64_t chunk_size, bool direct_io,
-                  bool nsfs,
-                  uint16_t personality = POSIX_URING_NO_PERSONALITY);
+                  bool nsfs, UringPersonality* personality = nullptr);
   ~UringReadWindow();
   UringReadWindow(const UringReadWindow&) = delete;
   UringReadWindow& operator=(const UringReadWindow&) = delete;
@@ -156,7 +180,7 @@ class UringWriteWindow {
 public:
   UringWriteWindow(const DoutPrefixProvider* dpp, optional_yield y,
                    int fd, unsigned qd, bool direct_io, bool nsfs,
-                   uint16_t personality = POSIX_URING_NO_PERSONALITY);
+                   UringPersonality* personality = nullptr);
   ~UringWriteWindow();
   UringWriteWindow(const UringWriteWindow&) = delete;
   UringWriteWindow& operator=(const UringWriteWindow&) = delete;
