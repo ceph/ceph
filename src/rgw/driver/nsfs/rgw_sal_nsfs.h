@@ -1143,6 +1143,23 @@ public:
 			 const rgw_owner& owner, const std::string& path,
 			 int mode);
 
+  /* Place a directory nobody created through S3 or NooBaa as a bucket,
+   * as NooBaa's `manage_nsfs bucket add --path` does (DECISIONS.md
+   * 2026-10-14).  Writes the row and the bucket's state;  the
+   * directory's contents are not touched, and deleting the bucket
+   * leaves the directory.  -EINVAL for a path that is not an absolute
+   * canonical directory, -ENOENT for one that does not exist,
+   * -ERR_NO_SUCH_USER for an unknown owner, -EINVAL for an owner that is
+   * a user rather than an account, -EACCES when the owner
+   * cannot read and write it under impersonation, -EEXIST for a taken
+   * name, a directory carrying nsfs state, or a path nested with another
+   * bucket's -- a row's, or until adoption is complete a NooBaa
+   * record's. */
+  int place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+		   const std::string& name, const std::string& path,
+		   const rgw_owner& owner, const RGWZoneGroup& zonegroup,
+		   std::string* profile);
+
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;
