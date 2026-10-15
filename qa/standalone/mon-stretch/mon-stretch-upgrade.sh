@@ -215,6 +215,33 @@ function TEST_commit_copies_default_profile() {
         "$(ceph osd erasure-code-profile get default -f json)" || return 1
 }
 
+# Test the commit's copies of the default profile follow the pools of its
+# OSDMap update: a pool created before the commit in that update gets one, a
+# pool deleted in it none, and a pool created after it waits for the commit
+function TEST_commit_copies_default_profile_in_its_update() {
+    local dir=$1
+    run_mons $dir --mon-debug-allow-pool-create-before-commit=true || return 1
+
+    ceph osd pool create gone 8 8 erasure || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd pool rm gone gone --yes-i-really-really-mean-it &
+    local pid_rm=$!
+    ceph osd pool create fresh 8 8 erasure &
+    local pid_fresh=$!
+    sleep 1
+    ceph osd require-osd-release umbrella --yes-i-really-mean-it &
+    local pid_commit=$!
+    sleep 1
+    ceph osd pool create late 8 8 erasure || return 1
+    wait $pid_rm || return 1
+    wait $pid_fresh || return 1
+    wait $pid_commit || return 1
+
+    test "$(pool_field fresh erasure_code_profile)" = '"fresh-k2-m2"' || return 1
+    test "$(pool_field late erasure_code_profile)" = '"late-k2-m2"' || return 1
+    ! ceph osd erasure-code-profile ls | grep -q '^gone-' || return 1
+}
+
 # Test a legacy stretch mode min_size that the zones do not divide rounds up
 # per zone, so the pool never takes writes with fewer copies than asked for
 function TEST_legacy_stretch_mode_min_size_rounds_up() {
