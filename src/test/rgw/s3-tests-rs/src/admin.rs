@@ -305,8 +305,19 @@ pub async fn nsfs_credentials_for(key: &str) -> RawResponse {
 /// Admin Ops endpoints always require a non-default capability, so a
 /// test identity that needs to call one has to be given it.  The
 /// alternative would be opening the endpoint, which is not on offer.
+///
+/// Tests running at once grant to the same user, and the user record is
+/// written under optimistic concurrency:  the loser of a race gets
+/// `-ECANCELED`, a 500.  Granting is idempotent, so it is retried.
 pub async fn grant_user_caps(uid: &str, caps: &str) -> RawResponse {
-    admin_request(reqwest::Method::PUT, "/admin/user",
-                  &format!("caps&uid={}&user-caps={}", q(uid), q(caps)),
-                  None).await
+    let query = format!("caps&uid={}&user-caps={}", q(uid), q(caps));
+    let mut r = admin_request(reqwest::Method::PUT, "/admin/user", &query, None).await;
+    for _ in 0..10 {
+        if r.status != 500 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        r = admin_request(reqwest::Method::PUT, "/admin/user", &query, None).await;
+    }
+    r
 }

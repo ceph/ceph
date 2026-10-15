@@ -5,7 +5,10 @@
 #   S3 data-path tests use unique per-process bucket names and run in
 #   parallel by default.  IAM tests share a fixed entity namespace and
 #   must be serialized (test-group serial-iam).  Quota tests mutate a
-#   shared user and are also serialized (test-group serial-quota).
+#   shared user and are also serialized (test-group serial-quota).  The
+#   nsfs identity tests write the main and alt users' POSIX identity
+#   rows, which every request from those users resolves, so they are
+#   serialized too (test-group serial-nsfs-identity).
 #
 # To force serial execution: add --test-threads=1
 #
@@ -21,6 +24,9 @@ max-threads = 1
 max-threads = 1
 
 [test-groups.serial-bench]
+max-threads = 1
+
+[test-groups.serial-nsfs-identity]
 max-threads = 1
 
 # --- Per-module profiles ---
@@ -112,6 +118,10 @@ test-group = 'serial-iam'
 filter = 'test(quota::)'
 test-group = 'serial-quota'
 
+[[profile.baseline.overrides]]
+filter = 'test(identity::) | test(impersonation::) | test(custom_bucket_path::) | test(nsfs_place_bucket::)'
+test-group = 'serial-nsfs-identity'
+
 [profile.basic]
 default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test(conditional::) | test(cors::) | test(acl::)'
 
@@ -126,6 +136,10 @@ test-group = 'serial-iam'
 [[profile.all.overrides]]
 filter = 'test(quota::)'
 test-group = 'serial-quota'
+
+[[profile.all.overrides]]
+filter = 'test(identity::) | test(impersonation::) | test(custom_bucket_path::) | test(nsfs_place_bucket::)'
+test-group = 'serial-nsfs-identity'
 
 # Bench profiles — elbencho workloads, run with --run-ignored=all
 # Smoke: quick sanity check under moderate load
