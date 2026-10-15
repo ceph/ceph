@@ -87,4 +87,39 @@ function TEST_delete_last_stretch_pool_while_creating_one() {
     test "$(stretch_flags)" = "true true" || return 1
 }
 
+# Two pools over different zone types entering stretch mode in one OSDMap
+# update: the second is checked against the stretch mode the first enters
+function TEST_pools_entering_stretch_mode_in_one_epoch() {
+    local dir=$1
+    two_zone_cluster $dir 2 || return 1
+    for r in 1 2; do
+        ceph osd crush add-bucket r$r region || return 1
+        ceph osd crush move r$r root=default || return 1
+        ceph osd crush move dc$r region=r$r || return 1
+    done
+    ceph mon set_location a region=r1 datacenter=dc1 || return 1
+    ceph mon set_location b region=r2 datacenter=dc2 || return 1
+    ceph mon set_location c region=arbiter datacenter=arbiter || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+
+    ceph osd pool create a --num_zones 2 --replica 2 \
+        --zone_failure_domain datacenter > $dir/a.out 2>&1 &
+    local pid_a=$!
+    ceph osd pool create b --num_zones 2 --replica 2 \
+        --zone_failure_domain region > $dir/b.out 2>&1 &
+    local pid_b=$!
+    wait $pid_a
+    wait $pid_b
+    cat $dir/a.out $dir/b.out
+    ceph osd pool ls | grep -qx -e a -e b || return 1
+    test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
+    # every stretched pool divides the cluster as stretch mode does
+    local bucket=$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_bucket)
+    local pool
+    for pool in a b; do
+        ceph osd pool ls | grep -qx $pool || continue
+        test "$(pool_field $pool peering_crush_bucket_barrier)" = "$bucket" || return 1
+    done
+}
+
 main mon-stretch-pending-pools "$@"
