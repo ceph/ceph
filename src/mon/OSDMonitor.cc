@@ -7730,10 +7730,10 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
     // the default rule, when it suits the pool, instead of a generated one
     CrushWrapper crush = _get_pending_crush();
     if (crush_rule < 0 &&
-        default_rule_suits_pool(crush, params.default_rule,
-                                pg_pool_t::TYPE_REPLICATED, num_zones,
-                                zone_failure_domain, osdmap.pools,
-                                params.replica)) {
+        crush_rule_suits_pool(crush, params.default_rule,
+                              pg_pool_t::TYPE_REPLICATED, num_zones,
+                              zone_failure_domain, osdmap.pools,
+                              params.replica)) {
       crush_rule = params.default_rule;
     }
   }
@@ -9172,8 +9172,8 @@ int OSDMonitor::check_rule_places_pool(int rule, unsigned pool_type,
   CrushWrapper newcrush = _get_pending_crush();
   const char *name = newcrush.get_rule_name(rule);
   const string rule_name = name ? name : stringify(rule);
-  if (!default_rule_suits_pool(newcrush, rule, pool_type, num_zones,
-                               zone_failure_domain, osdmap.pools)) {
+  if (!crush_rule_suits_pool(newcrush, rule, pool_type, num_zones,
+                             zone_failure_domain, osdmap.pools)) {
     *ss << "crush rule " << rule_name
         << " does not place the pool in " << num_zones << " buckets of type "
         << zone_failure_domain;
@@ -15550,9 +15550,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                      &tmp) == 0
           ? erasure_code->get_chunk_count() : 0;
       }
-      if (default_rule_suits_pool(crush, params.default_rule, pool_type,
-                                  num_zones, zone_failure_domain,
-                                  osdmap.pools, zone_size)) {
+      if (crush_rule_suits_pool(crush, params.default_rule, pool_type,
+                                num_zones, zone_failure_domain,
+                                osdmap.pools, zone_size)) {
         rule_name = crush.get_rule_name(params.default_rule);
       }
     }
@@ -17832,7 +17832,7 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(CrushWrapper& crush)
   return cluster;
 }
 
-bool OSDMonitor::default_rule_suits_pool(
+bool OSDMonitor::crush_rule_suits_pool(
     CrushWrapper& crush,
     int64_t rule,
     int pool_type,

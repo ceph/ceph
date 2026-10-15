@@ -1062,7 +1062,7 @@ TEST(OSDMonitorUpgradeHintTest, NamesCommandAndRelease) {
             "umbrella'", OSDMonitor::num_zones_upgrade_hint());
 }
 
-class OSDMonitorDefaultRuleTest
+class OSDMonitorCrushRuleSuitsPoolTest
   : public OSDMonitorValidateStretchModeNewPoolTest {
 protected:
   int local_rule = -1;
@@ -1084,45 +1084,45 @@ protected:
 
   bool suits(int64_t rule, int pool_type, int64_t num_zones,
              const string& zone = "zone", unsigned zone_size = 0) {
-    return OSDMonitor::default_rule_suits_pool(crush, rule, pool_type,
-                                               num_zones, zone, pools,
-                                               zone_size);
+    return OSDMonitor::crush_rule_suits_pool(crush, rule, pool_type,
+                                             num_zones, zone, pools,
+                                             zone_size);
   }
 };
 
-// Test no default rule suits no pool
-TEST_F(OSDMonitorDefaultRuleTest, NoRule) {
+// Test no rule (-1) suits no pool
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, NoRule) {
   EXPECT_FALSE(suits(-1, pg_pool_t::TYPE_REPLICATED, 1));
   EXPECT_FALSE(suits(-1, pg_pool_t::TYPE_ERASURE, 2));
 }
 
 // Test a rule that does not exist suits no pool
-TEST_F(OSDMonitorDefaultRuleTest, MissingRule) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, MissingRule) {
   EXPECT_FALSE(suits(99, pg_pool_t::TYPE_REPLICATED, 1));
 }
 
 // Test a single-zone pool takes a rule of its type
-TEST_F(OSDMonitorDefaultRuleTest, SingleZoneOfPoolType) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, SingleZoneOfPoolType) {
   EXPECT_TRUE(suits(local_rule, pg_pool_t::TYPE_REPLICATED, 1));
   EXPECT_TRUE(suits(local_ec_rule, pg_pool_t::TYPE_ERASURE, 1));
 }
 
 // Test a rule of the other type suits no pool
-TEST_F(OSDMonitorDefaultRuleTest, OtherType) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, OtherType) {
   EXPECT_FALSE(suits(local_ec_rule, pg_pool_t::TYPE_REPLICATED, 1));
   EXPECT_FALSE(suits(local_rule, pg_pool_t::TYPE_ERASURE, 1));
   EXPECT_FALSE(suits(stretch_ec_rule, pg_pool_t::TYPE_REPLICATED, 2));
 }
 
 // Test a two-zone pool takes a stretch rule across its zone type
-TEST_F(OSDMonitorDefaultRuleTest, TwoZonesStretchRule) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, TwoZonesStretchRule) {
   EXPECT_TRUE(suits(stretch_replica_rule, pg_pool_t::TYPE_REPLICATED, 2));
   EXPECT_TRUE(suits(stretch_ec_rule, pg_pool_t::TYPE_ERASURE, 2));
 }
 
 // Test a two-zone pool takes a rule only if it places the pool's share of
 // items in each zone
-TEST_F(OSDMonitorDefaultRuleTest, TwoZonesZoneSize) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, TwoZonesZoneSize) {
   const int zone = crush.get_type_id("zone");
   EXPECT_EQ(2, OSDMonitor::rule_items_per_zone(crush, stretch_replica_rule,
                                                zone, 4));
@@ -1151,12 +1151,12 @@ TEST_F(OSDMonitorDefaultRuleTest, TwoZonesZoneSize) {
 }
 
 // Test a two-zone pool does not take a rule that keeps to one zone
-TEST_F(OSDMonitorDefaultRuleTest, TwoZonesLocalRule) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, TwoZonesLocalRule) {
   EXPECT_FALSE(suits(local_rule, pg_pool_t::TYPE_REPLICATED, 2));
 }
 
 // Test a two-zone pool does not take a rule across another zone type
-TEST_F(OSDMonitorDefaultRuleTest, TwoZonesOtherZoneType) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, TwoZonesOtherZoneType) {
   EXPECT_FALSE(suits(stretch_replica_rule, pg_pool_t::TYPE_REPLICATED, 2,
                      "datacenter"));
   EXPECT_FALSE(suits(stretch_replica_rule, pg_pool_t::TYPE_REPLICATED, 2,
@@ -1164,7 +1164,7 @@ TEST_F(OSDMonitorDefaultRuleTest, TwoZonesOtherZoneType) {
 }
 
 // Test a two-zone pool takes a rule that takes each zone itself
-TEST_F(OSDMonitorDefaultRuleTest, TwoZonesTakeEachZone) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, TwoZonesTakeEachZone) {
   const int zone1 = crush.get_item_id("zone1");
   const int zone2 = crush.get_item_id("zone2");
   const int host = crush.get_type_id("host");
@@ -1181,7 +1181,7 @@ TEST_F(OSDMonitorDefaultRuleTest, TwoZonesTakeEachZone) {
 }
 
 // Test a two-zone pool does not take a rule that takes only one zone
-TEST_F(OSDMonitorDefaultRuleTest, TwoZonesTakeOneZone) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, TwoZonesTakeOneZone) {
   const int zone1 = crush.get_item_id("zone1");
   const int host = crush.get_type_id("host");
   int rule = crush.add_rule(-1, 3, pg_pool_t::TYPE_REPLICATED);
@@ -1195,7 +1195,7 @@ TEST_F(OSDMonitorDefaultRuleTest, TwoZonesTakeOneZone) {
 
 // Test a two-zone pool takes a rule that chooses as many zones as it needs,
 // but not one that chooses hosts anywhere under the root
-TEST_F(OSDMonitorDefaultRuleTest, TwoZonesChooseZones) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, TwoZonesChooseZones) {
   const int root = crush.get_item_id("default");
   const int zone = crush.get_type_id("zone");
   const int host = crush.get_type_id("host");
@@ -1218,7 +1218,7 @@ TEST_F(OSDMonitorDefaultRuleTest, TwoZonesChooseZones) {
 }
 
 // Test a three-zone pool does not take a rule across two zones
-TEST_F(OSDMonitorDefaultRuleTest, ThreeZonesTwoZoneRule) {
+TEST_F(OSDMonitorCrushRuleSuitsPoolTest, ThreeZonesTwoZoneRule) {
   EXPECT_FALSE(suits(stretch_replica_rule, pg_pool_t::TYPE_REPLICATED, 3));
 }
 

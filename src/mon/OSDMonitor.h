@@ -1020,7 +1020,7 @@ public:
   // Whether a rule can serve a new pool: a rule of the pool's type that, for
   // more than one zone, divides the cluster as the pool's zones would.
   // A zone_size other than 0 is the number of items each zone must get.
-  static bool default_rule_suits_pool(
+  static bool crush_rule_suits_pool(
       CrushWrapper& crush,
       int64_t rule,
       int pool_type,
