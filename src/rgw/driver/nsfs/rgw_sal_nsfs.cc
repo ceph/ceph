@@ -16303,6 +16303,110 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  if (hint == "access") {
+    /* The filesystem's verdict on a request, for the tests that check
+     * the gateway against it:  whether `user`, served as its POSIX
+     * identity, may read (`mode=r`) or write (`mode=w`) the current
+     * object at `key` in `bucket`.  Asked of the kernel as that
+     * identity -- faccessat(AT_EACCESS) on the helper pool -- so the
+     * suite never re-implements the check.
+     *
+     *   verdict=not-impersonating   the switch is off;  S3 alone decides
+     *   verdict=no-identity         the user has no POSIX record
+     *   verdict=permitted | refused
+     *
+     * `user` is an rgw_user string, `tenant$id` for a tenant's;  empty
+     * is anonymous, which has no identity.  `tenant` names the bucket's
+     * tenant, if it has one. */
+    auto put = [out](const char* v) {
+      if (out) {
+	(*out)["verdict"] = v;
+      }
+    };
+    if (!nsfs::impersonation_enabled()) {
+      put("not-impersonating");
+      return 0;
+    }
+    auto b_it = params.find("bucket");
+    auto k_it = params.find("key");
+    auto u_it = params.find("user");
+    auto m_it = params.find("mode");
+    if ((b_it == params.end()) || (k_it == params.end()) ||
+	(u_it == params.end()) || (m_it == params.end()) ||
+	((m_it->second != "r") && (m_it->second != "w"))) {
+      return -EINVAL;
+    }
+
+    rgw_user who;
+    who.from_str(u_it->second);
+    if (who.empty()) {
+      put("no-identity");
+      return 0;
+    }
+    /* resolved as a request resolves it:  the user's row, else its
+     * account's */
+    rgw_account_id account;
+    {
+      std::unique_ptr<User> u = get_user(who);
+      if (u->load_user(dpp, null_yield) == 0) {
+	account = u->get_info().account_id;
+      }
+    }
+    nsfs::Credentials cred;
+    int ret = nsfs::resolve_credentials(dpp, *get_identity_db(), who,
+					account, cred);
+    if ((ret == -ENOENT) || (ret == -EPERM)) {
+      put("no-identity");
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    rgw_bucket rb;
+    if (auto t_it = params.find("tenant"); t_it != params.end()) {
+      rb.tenant = t_it->second;
+    }
+    rb.name = b_it->second;
+    ret = load_bucket(dpp, rb, &bucket, null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+    auto obj = bucket->get_object(rgw_obj_key(k_it->second));
+    auto* nobj = static_cast<NSFSObject*>(obj.get());
+    ret = nobj->stat(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    nsfs::FSEnt* ent = nobj->get_fsent();
+    if (!ent || !ent->get_parent()) {
+      return -ENOENT;
+    }
+    nsfs::Directory* parent = ent->get_parent();
+    if ((parent->get_fd() < 0) && ((ret = parent->open(dpp)) < 0)) {
+      return ret;
+    }
+    const int pfd = parent->get_fd();
+    const std::string name = ent->get_name();
+    const int amode = (m_it->second == "r") ? R_OK : W_OK;
+    ret = nsfs::run_as(dpp, cred, [pfd, &name, amode]() -> int {
+      return (::faccessat(pfd, name.c_str(), amode, AT_EACCESS) < 0)
+	  ? -errno : 0;
+    });
+    if (ret == 0) {
+      put("permitted");
+    } else if (ret == -EACCES) {
+      put("refused");
+    } else {
+      return ret;
+    }
+    if (out) {
+      (*out)["uid"] = std::to_string(cred.uid);
+    }
+    return 0;
+  }
+
   if (hint == "invalidate-cache") {
     /* drop a bucket's listing cache, so the next listing rebuilds it by
      * enumerating the store.  The incremental and rebuild paths compose
