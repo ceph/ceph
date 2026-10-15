@@ -15545,10 +15545,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       unsigned zone_size = num_replica_per_zone;
       if (pool_type == pg_pool_t::TYPE_ERASURE) {
         ErasureCodeInterfaceRef erasure_code;
-        stringstream tmp;
-        zone_size = get_erasure_code(erasure_code_profile, &erasure_code,
-                                     &tmp) == 0
-          ? erasure_code->get_chunk_count() : 0;
+        err = get_erasure_code(erasure_code_profile, &erasure_code, &ss);
+        if (err == -EAGAIN) {
+          goto wait;
+        }
+        if (err) {
+          goto reply_no_propose;
+        }
+        zone_size = erasure_code->get_chunk_count();
       }
       if (crush_rule_suits_pool(crush, params.default_rule, pool_type,
                                 num_zones, zone_failure_domain,
