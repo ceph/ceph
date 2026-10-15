@@ -18,12 +18,38 @@
 <ng-template
   #confValTpl
   let-value="data.value"
+  let-row="data.row"
 >
   @if (value) {
+    @let expanded = isValueListExpanded(row);
     <span>
-      @for (conf of value; track conf; let isLast = $last) {
+      @for (
+        conf of expanded ? value : value.slice(0, collapsedValueLimit);
+        track conf;
+        let isLast = $last
+      ) {
         <span> {{ conf.section }}: {{ conf.value }}{{ !isLast ? ',' : '' }}<br /> </span>
       }
     </span>
+    @if (value.length > collapsedValueLimit) {
+      <button
+        cdsButton="ghost"
+        size="sm"
+        type="button"
+        class="cd-config-value-toggle"
+        [attr.aria-expanded]="expanded"
+        (click)="toggleValueList(row, $event)"
+        (keydown.enter)="$event.stopPropagation()"
+        (keydown.space)="$event.stopPropagation()"
+      >
+        @if (expanded) {
+          <ng-container i18n>Show less</ng-container>
+        } @else {
+          <ng-container i18n
+            >Show more ({{ value.length - collapsedValueLimit }} more)</ng-container
+          >
+        }
+      </button>
+    }
   }
 </ng-template>
