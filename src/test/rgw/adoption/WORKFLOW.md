@@ -17,14 +17,15 @@ one that already holds a tree.
   1. stand NooBaa up        standup.rs up && standup.rs serve && standup.rs iam-user
                             && standup.rs store-tests
   2. generate and ingest    standup.rs capture noobaa
-  3. hand off to RGW        standup.rs stop, then import and adopt, capturing after each (§3)
+  3. hand off to RGW        standup.rs stop && standup.rs damage, then import and
+                            adopt, capturing after each, through to completion (§3)
   4. verify                 standup.rs compare
 ```
 
 Everything is driven from `src/test/rgw/adoption/standup.rs`.
 `standup.rs list` prints the steps and the settings;  `ADOPTION_WORK`
 is required and has no default, because it holds the worktree, their
-config store, the data root and the captures.
+config store, the tree their gateway writes, and the captures.
 
 ---
 
@@ -41,8 +42,8 @@ cd src/test/rgw/adoption
 `up` is the slow one — their dependency tree and their native addon,
 tens of minutes on a first run.  Everything after it is seconds.
 
-**What this produces.**  A pinned NooBaa NSFS gateway serving a data
-root, with an account, an anonymous account and a bucket their own CLI
+**What this produces.**  A pinned NooBaa NSFS gateway serving a tree,
+with an account, an anonymous account and a bucket their own CLI
 created, and an IAM user in that account their IAM API created — records *they* wrote,
 rather than records composed from our reading of their schema.  Their
 CLI cannot address an IAM user, which is why `iam-user` goes through
@@ -83,12 +84,11 @@ Three things about reading the output:
   so a failed axis still leaves a complete pair.
 * **No artifacts at all is a real failure**, and the step fails on it:
   it means no axis reached a write, so read `noobaa.log` from the top.
-* `capture` sets `CORPUS_OBJECT_MODE=any` and
-  `--features fails_on_noobaa`.  The first because the corpus
-  otherwise requires every object to be `0600`, which is a statement
-  about our driver;  the second because three things their
-  implementation does not do would otherwise be indistinguishable from
-  real disagreements.
+* `capture` sets `--features fails_on_noobaa`, because three things
+  their implementation does not do would otherwise be indistinguishable
+  from real disagreements.  The corpus's mode check needs nothing:  it
+  expects NooBaa's modes, `0660` for objects and `0770` for directories,
+  which both gateways create.
 
 The corpus itself is owned by
 `../s3-tests-rs/tests/test_corpus/README.md` (the interface) and
@@ -99,9 +99,10 @@ the two capture formats in §7).
 
 ```sh
 ./standup.rs stop                      # leaves the tree
+./standup.rs damage                    # one bucket record adoption cannot carry
 ./standup.rs import                    # RGW over the tree;  identities and bucket records imported
 ./standup.rs capture rgw-unconverted   # the corpus in observe mode
-./standup.rs adopt                     # the same gateway;  every bucket adopted
+./standup.rs adopt                     # the same gateway;  every bucket adopted, then completion
 ./standup.rs capture rgw-converted     # the corpus in observe mode again
 ```
 
@@ -114,7 +115,7 @@ warning about it.
 
 | | |
 |---|---|
-| `--data-root` | the tree NooBaa wrote.  Mandatory:  without it RGW serves its own build directory and the run measures nothing |
+| `--data-root` | the tree NooBaa wrote, as RGW's base path.  NooBaa's buckets are served from the paths their records give;  the base path is where a bucket created afterwards goes |
 | `--noobaa-config-root` | their config store, so RGW can read what they wrote |
 | `--adoption-mode command` | the driver's default, said explicitly:  nothing is adopted until asked |
 
@@ -124,12 +125,35 @@ Then `adopt` asks, through Admin Ops as an operator would
 each bucket NooBaa holds a record of is adopted into the shared
 profile, by the hint with `bucket=<name>`, except
 `corpus-coverage-copy`, which goes through `PUT /admin/nsfs/profile`.
-Adopting a bucket imports its NooBaa record and rewrites its tree.
-`ACCOUNT_IMPORT.md` §6.1 owns what the import does, in order.
+Adopting a bucket imports its NooBaa record, writing its placement row
+from the record's `path`, and rewrites its tree.  Last, the full pass,
+`run=true`, has to report adoption complete, which writes the
+completion record.  `ACCOUNT_IMPORT.md` §6.1 owns what the import does,
+in order.
 
 **What this produces.**  An RGW gateway serving the tree NooBaa wrote,
 with that deployment's accounts, users, identity rows and bucket state
-imported.
+imported, every bucket placed by a row, and adoption complete:  NooBaa's
+store is never read again.
+
+**`damage`** sets one bucket's `owner_account`, `corpus-damaged`, to an
+id no identity has, and records it in `$ADOPTION_WORK/damaged.json`.
+`import` and `adopt` skip that bucket, which leaves the escape hatch
+something real to do.  After adopting every other bucket, `adopt`
+exercises it end to end (`NSFS_ADOPTION.md` §7):
+
+1. the full pass, the `adoption` hint with `run=true`, must fail to
+   complete, and the hint must report `complete:  false` — the control;
+2. `adopt` grants itself the `nsfs-adoption` cap, abandons the damaged
+   record through `PUT /admin/nsfs/abandoned`, with a reason, and
+   checks the stage is "not imported" and the record is listed;
+3. the full pass must now complete;
+4. afterwards the damaged bucket is not served, its directory is still
+   there, and taking the abandonment back is refused, because adoption
+   is complete.
+
+`import` on a tree whose adoption is already complete has nothing left
+to do, and says so.
 
 `adopt` also grants the imported IAM user the `nsfs=read` cap, through
 Admin Ops as vstart's `[iam]` user unless `rgw_admin_key` says
