@@ -905,6 +905,57 @@ timeout = 1.0
 
         assert expected_error in str(e.value)
 
+    @pytest.mark.parametrize(
+        'listener_network_masks, expected_error',
+        [
+            (
+                ['123'],
+                'Invalid listener_network_masks: "123"',
+            ),
+            (
+                ['10.0.0.0/99'],
+                'Invalid listener_network_masks: "10.0.0.0/99"',
+            ),
+            (
+                ['10.0.0.0/24', '1234'],
+                'Invalid listener_network_masks: "1234"',
+            ),
+        ],
+    )
+    def test_nvmeof_listener_network_masks_invalid(self, listener_network_masks, expected_error):
+        spec = NvmeofServiceSpec(
+            service_id='nvmeof_pool01.group1',
+            pool='nvmeof_pool01',
+            group='group1',
+            listener_network_masks=listener_network_masks,
+        )
+
+        with pytest.raises(Exception) as e:
+            spec.validate()
+
+        assert expected_error in str(e.value)
+
+    @pytest.mark.parametrize(
+        'listener_network_masks',
+        [
+            None,
+            [],
+            ['10.0.0.0/24'],
+            ['10.0.0.0/24', '172.16.0.0/24'],
+            ['10.0.0.5/24'],
+        ],
+    )
+    def test_nvmeof_listener_network_masks_valid(self, listener_network_masks):
+        spec = NvmeofServiceSpec(
+            service_id='nvmeof_pool01.group1',
+            pool='nvmeof_pool01',
+            group='group1',
+            listener_network_masks=listener_network_masks,
+        )
+
+        spec.validate()
+        assert spec.listener_network_masks == listener_network_masks
+
     def test_nvmeof_encryption_key_change_requires_redeploy(self):
         step = self.nvmeof_service.choose_next_action(
             utils.Action.RECONFIG,
