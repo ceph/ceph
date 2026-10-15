@@ -1079,18 +1079,15 @@ async fn test_block_public_restrict_public_buckets() {
         .unwrap();
 
     let unauth_client = get_unauthenticated_client();
-    /* S3 grants it;  under impersonation an anonymous requester has no
-     * POSIX identity and is refused (empty user) */
-    let verdict = fs_access(&bucket_name, "foo", "", "r").await;
-    if let Some(resp) = s3_tests_rs::unless_fs_refuses!(verdict, unauth_client
+    let resp = unauth_client
         .get_object()
         .bucket(&bucket_name)
         .key("foo")
         .send()
-        .await) {
-        let body = resp.body.collect().await.unwrap().into_bytes();
-        assert_eq!(&body[..], b"bar");
-    }
+        .await
+        .unwrap();
+    let body = resp.body.collect().await.unwrap().into_bytes();
+    assert_eq!(&body[..], b"bar");
 
     let access_conf = aws_sdk_s3::types::PublicAccessBlockConfiguration::builder()
         .block_public_acls(false)
@@ -1689,16 +1686,14 @@ async fn test_bucket_policy_put_obj_tagging_existing_tag() {
         .tag_set(aws_sdk_s3::types::Tag::builder().key("foo").value("bar").build().unwrap())
         .build()
         .unwrap();
-    /* S3 grants it;  under impersonation the filesystem decides too */
-    let verdict = fs_access(&bucket_name, "publictag",
-                            &get_config().alt_user_id, "w").await;
-    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
+    alt_client
         .put_object_tagging()
         .bucket(&bucket_name)
         .key("publictag")
         .tagging(new_public_tags.clone())
         .send()
-        .await);
+        .await
+        .unwrap();
 
     let result = alt_client
         .put_object_tagging()
@@ -1713,14 +1708,14 @@ async fn test_bucket_policy_put_obj_tagging_existing_tag() {
         .tag_set(aws_sdk_s3::types::Tag::builder().key("security").value("private").build().unwrap())
         .build()
         .unwrap();
-    /* granted again, and refused again under impersonation */
-    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
+    alt_client
         .put_object_tagging()
         .bucket(&bucket_name)
         .key("publictag")
         .tagging(override_tags)
         .send()
-        .await);
+        .await
+        .unwrap();
 
     let retry_tags = aws_sdk_s3::types::Tagging::builder()
         .tag_set(aws_sdk_s3::types::Tag::builder().key("security").value("public").build().unwrap())

@@ -10,7 +10,6 @@ use s3_tests_rs::http::{
     raw_request, raw_request_body,
 };
 use s3_tests_rs::expect_s3_err;
-use s3_tests_rs::admin::fs_access;
 
 #[tokio::test]
 async fn test_set_cors() {
@@ -311,20 +310,8 @@ async fn test_cors_origin_response() {
     cors_request_and_check(&r, 200, Some("foo.put"), Some("PUT"));
 }
 
-/// The request's user as the gateway names it:  `tenant$id` for a
-/// tenant's, which is what `fs_access` asks about.
-fn main_user() -> String {
-    get_config().main_user_id.clone()
-}
-
-fn tenant_user() -> String {
-    let cfg = get_config();
-    format!("{}${}", cfg.tenant_name, cfg.tenant_user_id)
-}
-
 async fn test_cors_presigned_method(
     client: &aws_sdk_s3::Client,
-    user: &str,
     method: &str,
     acl: Option<ObjectCannedAcl>,
 ) {
@@ -336,18 +323,14 @@ async fn test_cors_presigned_method(
         .send()
         .await
         .unwrap();
-    /* Under impersonation a requester with no POSIX identity is refused
-     * its first object;  then there is nothing for the rest to test. */
-    let verdict = fs_access(&bucket, "foo", user, "w").await;
-    if s3_tests_rs::unless_fs_refuses!(verdict, client
+    client
         .put_object()
         .bucket(&bucket)
         .key("foo")
         .acl(ObjectCannedAcl::PublicRead)
         .send()
-        .await).is_none() {
-        return;
-    }
+        .await
+        .unwrap();
 
     let http_method = match method {
         "get_object" => "GET",
@@ -393,42 +376,42 @@ async fn test_cors_presigned_method(
 #[tokio::test]
 async fn test_cors_presigned_get_object() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_cors_presigned_method(&get_client(), &main_user(), "get_object", None).await;
+    test_cors_presigned_method(&get_client(), "get_object", None).await;
 }
 
 #[tokio::test]
 async fn test_cors_presigned_get_object_tenant() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_cors_presigned_method(&get_tenant_client(), &tenant_user(), "get_object", None).await;
+    test_cors_presigned_method(&get_tenant_client(), "get_object", None).await;
 }
 
 #[tokio::test]
 async fn test_cors_presigned_put_object() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_cors_presigned_method(&get_client(), &main_user(), "put_object", None).await;
+    test_cors_presigned_method(&get_client(), "put_object", None).await;
 }
 
 #[tokio::test]
 async fn test_cors_presigned_put_object_with_acl() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_cors_presigned_method(&get_client(), &main_user(), "put_object", Some(ObjectCannedAcl::Private)).await;
+    test_cors_presigned_method(&get_client(), "put_object", Some(ObjectCannedAcl::Private)).await;
 }
 
 #[tokio::test]
 async fn test_cors_presigned_put_object_tenant() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_cors_presigned_method(&get_tenant_client(), &tenant_user(), "put_object", None).await;
+    test_cors_presigned_method(&get_tenant_client(), "put_object", None).await;
 }
 
 #[tokio::test]
 async fn test_cors_presigned_put_object_tenant_with_acl() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_cors_presigned_method(&get_tenant_client(), &tenant_user(), "put_object", Some(ObjectCannedAcl::Private)).await;
+    test_cors_presigned_method(&get_tenant_client(), "put_object", Some(ObjectCannedAcl::Private)).await;
 }
 
 // --- Presigned URL tests ---
 
-async fn test_presigned_get_not_expired(client: &aws_sdk_s3::Client, user: &str) {
+async fn test_presigned_get_not_expired(client: &aws_sdk_s3::Client) {
     let bucket = get_new_bucket_name();
     client
         .create_bucket()
@@ -437,18 +420,14 @@ async fn test_presigned_get_not_expired(client: &aws_sdk_s3::Client, user: &str)
         .send()
         .await
         .unwrap();
-    /* Under impersonation a requester with no POSIX identity is refused
-     * its first object;  then there is nothing for the rest to test. */
-    let verdict = fs_access(&bucket, "foo", user, "w").await;
-    if s3_tests_rs::unless_fs_refuses!(verdict, client
+    client
         .put_object()
         .bucket(&bucket)
         .key("foo")
         .acl(ObjectCannedAcl::PublicRead)
         .send()
-        .await).is_none() {
-        return;
-    }
+        .await
+        .unwrap();
 
     let url = presign_get(client, &bucket, "foo", Duration::from_secs(100000)).await;
 
@@ -464,13 +443,13 @@ async fn test_presigned_get_not_expired(client: &aws_sdk_s3::Client, user: &str)
 #[tokio::test]
 async fn test_object_raw_get_x_amz_expires_not_expired() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_presigned_get_not_expired(&get_client(), &main_user()).await;
+    test_presigned_get_not_expired(&get_client()).await;
 }
 
 #[tokio::test]
 async fn test_object_raw_get_x_amz_expires_not_expired_tenant() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_presigned_get_not_expired(&get_tenant_client(), &tenant_user()).await;
+    test_presigned_get_not_expired(&get_tenant_client()).await;
 }
 
 fn mangle_expires(url: &str, new_expires: &str) -> String {
@@ -523,7 +502,7 @@ async fn test_object_raw_get_x_amz_expires_out_positive_range() {
     assert_eq!(r.status, 403);
 }
 
-async fn test_presigned_put_with_acl(client: &aws_sdk_s3::Client, user: &str) {
+async fn test_presigned_put_with_acl(client: &aws_sdk_s3::Client) {
     let bucket = get_new_bucket(Some(client)).await;
     let key = "foo";
 
@@ -532,11 +511,6 @@ async fn test_presigned_put_with_acl(client: &aws_sdk_s3::Client, user: &str) {
     let mut headers = HashMap::new();
     headers.insert("x-amz-acl".into(), "private".into());
     let r = raw_request_body(reqwest::Method::PUT, &put_url, Some(&headers), Some(b"hello world".to_vec())).await;
-    /* under impersonation a requester with no POSIX identity is refused */
-    if fs_access(&bucket, key, user, "w").await.refuses() {
-        assert_eq!(r.status, 403);
-        return;
-    }
     assert_eq!(r.status, 200);
 
     let get_url = presign_get(client, &bucket, key, Duration::from_secs(100000)).await;
@@ -547,13 +521,13 @@ async fn test_presigned_put_with_acl(client: &aws_sdk_s3::Client, user: &str) {
 #[tokio::test]
 async fn test_object_presigned_put_object_with_acl() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_presigned_put_with_acl(&get_client(), &main_user()).await;
+    test_presigned_put_with_acl(&get_client()).await;
 }
 
 #[tokio::test]
 async fn test_object_presigned_put_object_with_acl_tenant() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
-    test_presigned_put_with_acl(&get_tenant_client(), &tenant_user()).await;
+    test_presigned_put_with_acl(&get_tenant_client()).await;
 }
 
 #[tokio::test]
@@ -578,7 +552,6 @@ async fn test_object_raw_put_authenticated_expired() {
 
 async fn test_cors_presigned_method_v2(
     client: &aws_sdk_s3::Client,
-    user: &str,
     method: &str,
     access_key: &str,
     secret_key: &str,
@@ -591,18 +564,14 @@ async fn test_cors_presigned_method_v2(
         .send()
         .await
         .unwrap();
-    /* Under impersonation a requester with no POSIX identity is refused
-     * its first object;  then there is nothing for the rest to test. */
-    let verdict = fs_access(&bucket, "foo", user, "w").await;
-    if s3_tests_rs::unless_fs_refuses!(verdict, client
+    client
         .put_object()
         .bucket(&bucket)
         .key("foo")
         .acl(ObjectCannedAcl::PublicRead)
         .send()
-        .await).is_none() {
-        return;
-    }
+        .await
+        .unwrap();
 
     let http_method = match method {
         "get_object" => "GET",
@@ -649,7 +618,7 @@ async fn test_cors_presigned_get_object_v2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cfg = get_config();
     test_cors_presigned_method_v2(
-        &get_client(), &main_user(), "get_object",
+        &get_client(), "get_object",
         &cfg.main_access_key, &cfg.main_secret_key,
     ).await;
 }
@@ -659,7 +628,7 @@ async fn test_cors_presigned_get_object_tenant_v2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cfg = get_config();
     test_cors_presigned_method_v2(
-        &get_tenant_client(), &tenant_user(), "get_object",
+        &get_tenant_client(), "get_object",
         &cfg.tenant_access_key, &cfg.tenant_secret_key,
     ).await;
 }
@@ -669,7 +638,7 @@ async fn test_cors_presigned_put_object_v2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cfg = get_config();
     test_cors_presigned_method_v2(
-        &get_client(), &main_user(), "put_object",
+        &get_client(), "put_object",
         &cfg.main_access_key, &cfg.main_secret_key,
     ).await;
 }
@@ -679,7 +648,7 @@ async fn test_cors_presigned_put_object_tenant_v2() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let cfg = get_config();
     test_cors_presigned_method_v2(
-        &get_tenant_client(), &tenant_user(), "put_object",
+        &get_tenant_client(), "put_object",
         &cfg.tenant_access_key, &cfg.tenant_secret_key,
     ).await;
 }
