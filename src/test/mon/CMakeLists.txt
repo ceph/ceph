@@ -96,3 +96,10 @@ add_executable(unittest_monmap_monitor
   )
 add_ceph_unittest(unittest_monmap_monitor)
 target_link_libraries(unittest_monmap_monitor mon global)
+
+# unittest_mon_health_monitor
+add_executable(unittest_mon_health_monitor
+  test_health_monitor.cc
+  )
+add_ceph_unittest(unittest_mon_health_monitor)
+target_link_libraries(unittest_mon_health_monitor mon global)
