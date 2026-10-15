@@ -2522,7 +2522,7 @@ void PGScrubber::emit_scrub_result(
       DEBUGDPP("Repair complete with no recovery needed, clearing PG_STATE_REPAIR", pg);
     }
     // Resume snap trimming that was deferred while the PG was scrubbing
-    pg.kick_snap_trim();
+    pg.kick_snap_trim("scrub results emitted");
 }
 
 void PGScrubber::scan_snaps(const ScrubMap &map)
@@ -2612,7 +2612,7 @@ void PGScrubber::notify_scrub_end(bool deep)
   pg.state_clear(PG_STATE_SCRUBBING);
   pg.state_clear(PG_STATE_DEEP_SCRUB);
   pg.publish_stats_to_osd();
-  pg.kick_snap_trim();
+  pg.kick_snap_trim("scrub ended");
 }
 
 void PGScrubber::clear_pgscrub_state()
