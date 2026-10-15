@@ -6982,10 +6982,18 @@ void OSD::_get_purged_snaps()
   // it should be reliable.
   dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
 	   << ", newest_map " << superblock.current_epoch << dendl;
-  // the monitor returns the epochs after 'start' (exclusive)
-  MMonGetPurgedSnaps *m = new MMonGetPurgedSnaps(
-    superblock.purged_snaps_last,
-    superblock.current_epoch + 1);
+  // The monitor returns the epochs (start, last]. Only ask for the epochs
+  // we have maps for: the maps that follow are recorded as they arrive
+  // (see handle_osd_map()).
+  const epoch_t start = superblock.purged_snaps_last;
+  const epoch_t last = superblock.current_epoch;
+  if (purged_snaps_request && purged_snaps_request->start == start) {
+    // a reply may match either request: assume the narrower range
+    purged_snaps_request->last = std::min(purged_snaps_request->last, last);
+  } else {
+    purged_snaps_request = purged_snaps_request_t{start, last};
+  }
+  MMonGetPurgedSnaps *m = new MMonGetPurgedSnaps(start, last);
   monc->send_mon_message(m);
 }
 
@@ -6993,10 +7001,25 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
 {
   dout(10) << __func__ << " " << *m << dendl;
   ObjectStore::Transaction t;
-  if (!is_preboot() ||
-      m->last < superblock.purged_snaps_last) {
+  epoch_t covered = 0;
+  if (!is_preboot() || !purged_snaps_request ||
+      m->start != purged_snaps_request->start ||
+      m->start != superblock.purged_snaps_last) {
+    dout(10) << __func__ << " not matching the pending request" << dendl;
     goto out;
-  } else {
+  }
+  // The reply covers the epochs (start, last] - but its 'last' may be
+  // beyond the requested range: the monitor may report the first epoch
+  // it did not return, or (if it found nothing) the requested 'last'.
+  covered = std::min(m->last, purged_snaps_request->last);
+  if (covered < superblock.purged_snaps_last) {
+    goto out;
+  }
+  purged_snaps_request.reset();
+  // the rows of the epochs beyond 'covered' are fetched again later
+  m->purged_snaps.erase(
+    m->purged_snaps.upper_bound(covered), m->purged_snaps.end());
+  {
     OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
     SnapMapper::record_purged_snaps(
       cct,
@@ -7004,13 +7027,13 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
       osdriver.get_transaction(&t),
       m->purged_snaps);
   }
-  superblock.purged_snaps_last = m->last;
+  superblock.purged_snaps_last = covered;
   write_superblock(cct, superblock, t);
   store->queue_transaction(
     service.meta_ch,
     std::move(t));
   service.publish_superblock(superblock);
-  if (m->last < superblock.current_epoch) {
+  if (covered < superblock.current_epoch) {
     _get_purged_snaps();
   } else {
     start_boot();
