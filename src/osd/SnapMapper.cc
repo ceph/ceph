@@ -22,6 +22,7 @@
 #include "global/global_context.h"
 #include "osd/osd_types_fmt.h"
 #include "SnapMapReaderI.h"
+#include "osd/purged_snaps.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -40,10 +41,11 @@ using ceph::encode;
 using ceph::timespan_str;
 using result_t = Scrub::SnapMapReaderI::result_t;
 using code_t = Scrub::SnapMapReaderI::result_t::code_t;
+namespace purged_snaps = ceph::osd::purged_snaps;
 
-static const std::string MAPPING_PREFIX = "SNA_";
+static const std::string MAPPING_PREFIX{purged_snaps::mapping_prefix};
 static const std::string OBJECT_PREFIX = "OBJ_";
-static const char *PURGED_SNAP_PREFIX = "PSN_";
+static const std::string PURGED_SNAP_PREFIX{purged_snaps::row_prefix};
 
 /*
 
@@ -274,14 +276,7 @@ int OSDriver::get_next_or_current(
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
   static_assert(sizeof(pool) == 8, "assumed by the formatting code");
-
-  // note: the snap_id is to be formatted as a 64-bit hex number,
-  // and not according to the text representation of snapid_t
-  ceph_assert(snap != CEPH_NOSNAP && snap != CEPH_SNAPDIR);
-  return fmt::format("{}{}_{:016X}_",
-		      MAPPING_PREFIX,
-		      pool,
-		      static_cast<uint64_t>(snap));
+  return purged_snaps::make_mapping_prefix(pool, snap);
 }
 
 string SnapMapper::to_raw_key(
@@ -871,21 +866,14 @@ void SnapMapper::update_snap_map(
 
 string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 {
-  ceph_assert(last != CEPH_NOSNAP && last != CEPH_SNAPDIR);
-  return fmt::format("{}_{}_{:016x}",
-		      PURGED_SNAP_PREFIX,
-		      pool,
-		      static_cast<uint64_t>(last));
+  return purged_snaps::make_key(pool, last);
 }
 
 void SnapMapper::make_purged_snap_key_value(
   int64_t pool, snapid_t begin, snapid_t end, map<string,ceph::buffer::list> *m)
 {
-  string k = make_purged_snap_key(pool, end - 1);
-  auto& v = (*m)[k];
-  ceph::encode(pool, v);
-  ceph::encode(begin, v);
-  ceph::encode(end, v);
+  const purged_snaps::interval_t iv{pool, begin, end};
+  (*m)[purged_snaps::make_key(iv)] = purged_snaps::encode_value(iv);
 }
 
 int SnapMapper::_lookup_purged_snap(
