@@ -606,9 +606,14 @@ if $IMPERSONATE; then
 	# owned by a real identity rather than by the gateway -- and so
 	# that the writes are not refused, since with impersonation on
 	# an identity with no record cannot be served.
+	# The suite's alt user is bound to the other fixture uid for the
+	# whole run, so a test that reads testid's object as the alt user
+	# meets a different identity rather than none.  Its id is the one
+	# vstart.sh gives it.
+	IMP_ALT_USER=56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234
 	if ! python3 "$SRC_DIR/src/script/rgw/nsfs-impersonate-fixture.py" \
 			localhost 8000 "$IMP_AK" "$IMP_SK" "$IMP_BUCKET" \
-			testid "$IMP_UID_A"; then
+			testid "$IMP_UID_A" "$IMP_ALT_USER" "$IMP_UID_B"; then
 		echo "error: could not create the impersonation fixture" >&2
 		exit 1
 	fi

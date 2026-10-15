@@ -98,12 +98,15 @@ def request(method, path, body, ak, sk, host, port, query=None):
 
 
 def main():
-    if len(sys.argv) != 8:
+    if (len(sys.argv) < 8) or ((len(sys.argv) - 8) % 2):
         print("usage: nsfs-impersonate-fixture.py <host> <port> "
-              "<access-key> <secret-key> <bucket> <s3-user> <posix-uid>",
+              "<access-key> <secret-key> <bucket> <s3-user> <posix-uid> "
+              "[<s3-user> <posix-uid>]...",
               file=sys.stderr)
         return 2
     host, port, ak, sk, bucket, uid, posix_uid = sys.argv[1:8]
+    # further users bound for the whole run, writing nothing
+    others = list(zip(sys.argv[8::2], sys.argv[9::2]))
 
     def call(method, path, body=b""):
         status, out = request(method, path, body, ak, sk, host, port)
@@ -135,13 +138,19 @@ def main():
     # itself.  Bound to the uid the fixture user owns, so the seeded
     # objects come out owned by a real identity rather than by the
     # gateway.
-    s, o = request("PUT", "/admin/nsfs/identity", b"", ak, sk, host, port,
-                   query={"identity": uid, "uid": posix_uid,
-                          "gid": posix_uid})
-    if s != 200:
-        print(f"binding {uid} to uid {posix_uid} -> {s}: {o[:200]!r}",
-              file=sys.stderr)
-        return 1
+    #
+    # The others are the suite's further users, bound so that a test
+    # reading another user's object is a cross-identity read the
+    # filesystem decides, rather than a request from nobody.  Each gid
+    # is its uid, so two users share no group.
+    for who, puid in [(uid, posix_uid)] + others:
+        s, o = request("PUT", "/admin/nsfs/identity", b"", ak, sk, host,
+                       port, query={"identity": who, "uid": puid,
+                                    "gid": puid})
+        if s != 200:
+            print(f"binding {who} to uid {puid} -> {s}: {o[:200]!r}",
+                  file=sys.stderr)
+            return 1
 
     # A second run gets BucketAlreadyOwnedByYou, which is a 409 and
     # not a failure:  the option has to be idempotent.
