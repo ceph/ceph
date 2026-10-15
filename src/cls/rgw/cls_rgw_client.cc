@@ -2,9 +2,16 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <errno.h>
+#include <exception>
+#include <iterator>
+#include <new>
+#include <type_traits>
 
 #include "cls/rgw/cls_rgw_const.h"
 #include "cls/rgw/cls_rgw_client.h"
+#ifdef WITH_RGW_CLS_DATUM
+ #include "cls/rgw/cls_rgw_bi_datum.h"
+#endif
 
 #include "common/debug.h"
 
@@ -288,33 +295,65 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
 /* nb: any entries passed in are replaced with the results of the cls
  * call, so caller does not need to clear entries between calls
  */
-int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
-		    const std::string& name_filter, const std::string& marker, uint32_t max,
-		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog)
-{
+template <typename EntriesT>
+static int bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+                   const std::string& name_filter, const std::string& marker, uint32_t max,
+                   EntriesT *destination, bool *truncated, bool reshardlog)
+try {
   bufferlist in, out;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::bi_datum::encode_request(max, name_filter, marker, reshardlog);
+#else
   rgw_cls_bi_list_op call;
   call.name_filter = name_filter;
   call.marker = marker;
   call.max = max;
   call.reshardlog = reshardlog;
   encode(call, in);
+#endif
   int r = io_ctx.exec(oid, method::bi_list, in, out);
   if (r < 0)
     return r;
 
+#ifdef WITH_RGW_CLS_DATUM
+  auto [candidate, is_truncated] = ::cls::rgw::bi_datum::decode_reply<EntriesT>(out);
+#else
   rgw_cls_bi_list_ret op_ret;
   auto iter = out.cbegin();
-  try {
-    decode(op_ret, iter);
-  } catch (ceph::buffer::error& err) {
-    return -EIO;
-  }
-
-  entries->swap(op_ret.entries);
-  *is_truncated = op_ret.is_truncated;
+  decode(op_ret, iter);
+  auto candidate = [&] {
+    if constexpr (std::is_same_v<EntriesT, std::list<rgw_cls_bi_entry>>) {
+      return std::move(op_ret.entries);
+    }
+    if constexpr (!std::is_same_v<EntriesT, std::list<rgw_cls_bi_entry>>) {
+      return EntriesT(std::make_move_iterator(op_ret.entries.begin()),
+                      std::make_move_iterator(op_ret.entries.end()));
+    }
+  }();
+  const bool is_truncated = op_ret.is_truncated;
+#endif
+  destination->swap(candidate);
+  *truncated = is_truncated;
 
   return 0;
+} catch (const std::bad_alloc&) {
+  return -ENOMEM;
+} catch (const std::exception&) {
+  return -EIO;
+}
+
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+		    const std::string& name_filter, const std::string& marker, uint32_t max,
+		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog)
+{
+  return bi_list(io_ctx, oid, name_filter, marker, max, entries, is_truncated, reshardlog);
+}
+
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+                    const std::string& name_filter, const std::string& marker, uint32_t max,
+                    std::vector<rgw_cls_bi_entry>& entries, bool& is_truncated, bool reshardlog)
+{
+  return bi_list(io_ctx, oid, name_filter, marker, max, &entries, &is_truncated, reshardlog);
 }
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,

@@ -166,6 +166,9 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             bool check_existing);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
+                   std::vector<rgw_cls_bi_entry>& entries, bool& is_truncated, bool reshardlog = false);
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+                   const std::string& name, const std::string& marker, uint32_t max,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,

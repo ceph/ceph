@@ -233,6 +233,18 @@ if (WITH_RADOSGW)
       $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
   endif()
 
+  option(WITH_RGW_CLS_DATUM "Use Datum for RGW CLS BI listing" ${WITH_DATUM})
+  if(WITH_RGW_CLS_DATUM)
+    if(NOT TARGET datum::zpp)
+      message(FATAL_ERROR "RGW CLS Datum requires WITH_DATUM and DATUM_ENABLE_ZPP")
+    endif()
+    add_subdirectory(rgw)
+    foreach(target cls_rgw cls_rgw_client)
+      target_sources(${target} PRIVATE $<TARGET_OBJECTS:cls_rgw_bi_datum>)
+      target_compile_definitions(${target} PRIVATE WITH_RGW_CLS_DATUM)
+    endforeach()
+  endif()
+
 endif (WITH_RADOSGW)
 
 # cls_cephfs

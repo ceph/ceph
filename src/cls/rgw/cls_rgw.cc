@@ -4,6 +4,9 @@
 #include "include/types.h"
 
 #include <cerrno>
+#include <exception>
+#include <new>
+#include <type_traits>
 #include <map>
 #include <string>
 #include <vector>
@@ -16,6 +19,9 @@
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_const.h"
+#ifdef WITH_RGW_CLS_DATUM
+ #include "cls/rgw/cls_rgw_bi_datum.h"
+#endif
 #include "common/strtol.h"
 #include "common/escape.h"
 #include "osd/osd_types.h"
@@ -3151,12 +3157,13 @@ enum class PlainEntriesRegion {
  *
  * Negative return values indicate errors. Non-negative return values
  * indicate number of entries retrieved. */
+template <typename EntriesT>
 static int list_plain_entries_help(cls_method_context_t hctx,
 				   const std::string& name_filter,
 				   const std::string& start_after_key, // exclusive
 				   const std::string& end_key, // exclusive
 				   uint32_t max,
-				   std::list<rgw_cls_bi_entry>* entries,
+				   EntriesT *entries,
 				   bool& end_key_reached,
 				   bool& more)
 {
@@ -3174,7 +3181,7 @@ static int list_plain_entries_help(cls_method_context_t hctx,
   }
 
   end_key_reached = false;
-  for (auto iter : raw_entries) {
+  for (auto& iter : raw_entries) {
     if (!end_key.empty() && iter.first >= end_key) {
       CLS_LOG(20, "%s: end key reached at \"%s\"",
 	      __func__, escape_str(iter.first).c_str());
@@ -3205,18 +3212,18 @@ static int list_plain_entries_help(cls_method_context_t hctx,
       return count;
     }
 
-    rgw_cls_bi_entry entry;
+    typename EntriesT::value_type entry;
     entry.type = BIIndexType::Plain;
     entry.idx = iter.first;
-    entry.data = iter.second;
+    entry.data = std::move(iter.second);
 
-    entries->push_back(entry);
+    entries->push_back(std::move(entry));
     count++;
 
     CLS_LOG(20, "%s: adding entry %d entry.idx=\"%s\" e.key.name=\"%s\"",
 	    __func__,
 	    count,
-            escape_str(entry.idx).c_str(),
+            escape_str(iter.first).c_str(),
 	    escape_str(e.key.name).c_str());
 
     if (count >= int(max)) {
@@ -3237,11 +3244,12 @@ static int list_plain_entries_help(cls_method_context_t hctx,
  * The entries parameter is not cleared and additional entries are
  * appended to it.
  */
+template <typename EntriesT>
 static int list_plain_entries(cls_method_context_t hctx,
                               const std::string& name_filter,
                               const std::string& marker,
                               uint32_t max,
-                              std::list<rgw_cls_bi_entry>* entries,
+                              EntriesT *entries,
                               bool* pmore,
 			      const PlainEntriesRegion region = PlainEntriesRegion::Both)
 {
@@ -3297,32 +3305,39 @@ static int list_plain_entries(cls_method_context_t hctx,
   return int(entries->size() - start_size);
 }
 
-static int list_instance_entries(cls_method_context_t hctx,
+template <BIIndexType Kind, typename EntriesT>
+static int list_special_entries(cls_method_context_t hctx,
 				 const std::string& name, // filters entries for this obj
 				 const std::string& marker,
 				 uint32_t max,
-                                 std::list<rgw_cls_bi_entry>* entries,
+                                 EntriesT *entries,
 				 bool* pmore)
 {
   CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
 	  __func__, escape_str(name).c_str(),
 	  escape_str(marker).c_str(), (int)max);
 
-  // make first_instance_idx of the form \801000_[name]\00[instance]
   cls_rgw_obj_key key(name); // includes name, instance, and namespace, latter two empty
   string first_instance_idx;
-  encode_obj_versioned_data_key(key, &first_instance_idx);
+  static_assert(Kind == BIIndexType::Instance || Kind == BIIndexType::OLH);
+  constexpr bool instance = Kind == BIIndexType::Instance;
+  if constexpr (instance) {
+    encode_obj_versioned_data_key(key, &first_instance_idx);
+  } else {
+    encode_olh_data_key(key, &first_instance_idx);
+  }
 
   std::string start_after_key; // where we start after
   if (!name.empty()) {
     start_after_key = first_instance_idx;
   } else {
     start_after_key = BI_PREFIX_CHAR;
-    start_after_key.append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
+    start_after_key.append(bucket_index_prefixes[
+        instance ? BI_BUCKET_OBJ_INSTANCE_INDEX : BI_BUCKET_OLH_DATA_INDEX]);
   }
 
   // if a name was provided then it will be used to filter index
-  // entries; otherwise will filter my the instance prefix
+  // entries; otherwise filter by the selected index prefix
   std::string filter = start_after_key;
 
   // advance to marker if it's after our current start_after_key
@@ -3336,8 +3351,8 @@ static int list_instance_entries(cls_method_context_t hctx,
     return ret;
   }
 
-  // we need to include the exact match if a filter (name) is
-  // specified and the marker has not yet advanced (i.e., been set)
+  // Preserve native exact-key inclusion and its capacity arithmetic.
+  // The prefix filter is intentionally captured before advancing to the marker.
   bool found_first = (ret == 0) && (start_after_key != marker);
   if (found_first) {
     --max;
@@ -3358,10 +3373,10 @@ static int list_instance_entries(cls_method_context_t hctx,
   }
 
   for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
-    rgw_cls_bi_entry entry;
-    entry.type = BIIndexType::Instance;
+    typename EntriesT::value_type entry;
+    entry.type = Kind;
     entry.idx = iter->first;
-    entry.data = iter->second;
+    entry.data = std::move(iter->second);
 
     // check if we're past the range of the prefix filter and if so,
     // we're done
@@ -3378,7 +3393,7 @@ static int list_instance_entries(cls_method_context_t hctx,
 
     auto biter = entry.data.cbegin();
 
-    rgw_bucket_dir_entry e;
+    std::conditional_t<instance, rgw_bucket_dir_entry, rgw_bucket_olh_entry> e;
     try {
       decode(e, biter);
     } catch (ceph::buffer::error& err) {
@@ -3395,120 +3410,16 @@ static int list_instance_entries(cls_method_context_t hctx,
       return count;
     }
 
-    entries->push_back(entry);
+    entries->push_back(std::move(entry));
     count++;
-    start_after_key = entry.idx;
   }
 
   return count;
-} // list_instance_entries
+} // list_special_entries
 
-static int list_olh_entries(cls_method_context_t hctx,
-			    const std::string& name, // filters entries for this obj
-			    const std::string& marker,
-			    uint32_t max,
-                            std::list<rgw_cls_bi_entry>* entries,
-			    bool* pmore)
-{
-  CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
-	  __func__, escape_str(name).c_str(),
-	  escape_str(marker).c_str(), (int)max);
-
-  // make first_instance_idx of the form \801000_[name]\00[instance]
-  cls_rgw_obj_key key(name); // includes name, instance, and namespace, latter two empty
-  std::string first_instance_idx;
-  encode_olh_data_key(key, &first_instance_idx);
-
-  std::string start_after_key;
-  if (!name.empty()) {
-    start_after_key = first_instance_idx;
-  } else {
-    start_after_key = BI_PREFIX_CHAR;
-    start_after_key.append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
-  }
-
-  // if a name was provided then it will be used to filter index
-  // entries; otherwise will filter my the olh prefix
-  std::string filter = start_after_key;
-
-  start_after_key = std::max(start_after_key, marker);
-
-  int count = 0;
-  std::map<std::string, bufferlist> keys;
-  int ret;
-  bufferlist k;
-  ret = cls_cxx_map_get_val(hctx, start_after_key, &k);
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
-  }
-    // we need to include the exact match if a filter (name) is
-   // specified and the marker has not yet advanced (i.e., been set)
-  bool found_first = (ret == 0) && (start_after_key != marker);
-  if (found_first) {
-    --max;
-  }
-  if (max > 0) {
-    ret = cls_cxx_map_get_vals(hctx, start_after_key, string(), max,
-			       &keys, pmore);
-    CLS_LOG(20, "%s: start_after_key=\"%s\", first_instance_idx=\"%s\", "
-	    "keys.size()=%d",
-	    __func__, escape_str(start_after_key).c_str(),
-	    escape_str(first_instance_idx).c_str(), (int)keys.size());
-    if (ret < 0) {
-      return ret;
-    }
-  }
-  if (found_first) {
-    keys[start_after_key] = std::move(k);
-  }
-
-  for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
-    rgw_cls_bi_entry entry;
-    entry.type = BIIndexType::OLH;
-    entry.idx = iter->first;
-    entry.data = iter->second;
-
-    // check if we're past the range of the prefix filter and if so,
-    // we're done
-    if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
-      if (pmore) {
-	*pmore = false;
-      }
-      return count;
-    }
-
-    CLS_LOG(20, "%s: entry.idx=\"%s\"",
-	    __func__, escape_str(entry.idx).c_str());
-
-    auto biter = entry.data.cbegin();
-
-    rgw_bucket_olh_entry e;
-    try {
-      decode(e, biter);
-    } catch (ceph::buffer::error& err) {
-      CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)",
-	      __func__, entry.data.length());
-      return -EIO;
-    }
-
-    if (!name.empty() && e.key.name != name) {
-      /* we are skipping the rest of the entries */
-      if (pmore) {
-	*pmore = false;
-      }
-      return count;
-    }
-
-    entries->push_back(entry);
-    count++;
-    start_after_key = entry.idx;
-  }
-
-  return count;
-} // list_olh_entries
-
+template <typename EntriesT>
 static int reshard_log_list_entries(cls_method_context_t hctx, const string& marker,
-                                    uint32_t max, list<rgw_cls_bi_entry>& entries, bool *truncated)
+                                    uint32_t max, EntriesT& entries, bool *truncated)
 {
   string start_key, end_key;
   start_key = BI_PREFIX_CHAR;
@@ -3539,7 +3450,7 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
       return 0;
     }
 
-    rgw_cls_bi_entry entry;
+    typename EntriesT::value_type entry;
     auto biter = iter->second.cbegin();
     try {
       decode(entry, biter);
@@ -3553,7 +3464,7 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
 
     CLS_LOG(20, "reshard_log_list_entries key=%s bl.length=%d\n", entry.idx.c_str(), (int)iter->second.length());
 
-    entries.push_back(entry);
+    entries.push_back(std::move(entry));
   }
   return 0;
 }
@@ -3603,7 +3514,8 @@ static int check_index(cls_method_context_t hctx,
 
   start_obj = "";
   do {
-    int rc = list_instance_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    int rc = list_special_entries<BIIndexType::Instance>(hctx, filter_prefix, start_obj,
+                                                        CHECK_CHUNK_SIZE, &entries, &more);
     if (rc < 0) {
       return rc;
     }
@@ -3682,8 +3594,8 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
  * or list all the entries in reshardlog namespace.
  *
  * It may not be obvious why this function calls three other "segment"
- * functions (list_plain_entries (twice), list_instance_entries,
- * list_olh_entries) that each list segments of the index space rather
+ * functions (list_plain_entries (twice), list_special_entries for
+ * instance and OLH records) that each list segments of the index space rather
  * than just move a marker through the space from start to end. The
  * reason is that a name filter may be provided in the op, and in that
  * case most entries will be skipped over, and small segments within
@@ -3703,10 +3615,14 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
 static int rgw_bi_list_op(cls_method_context_t hctx,
 			  bufferlist* in,
 			  bufferlist* out)
-{
+try {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bi_datum::request op;
+#else
   rgw_cls_bi_list_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3725,7 +3641,12 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 	  op.max, max, op.reshardlog);
 
   int ret;
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bi_datum::reply op_ret;
+  op_ret.entries.reserve(max);
+#else
   rgw_cls_bi_list_ret op_ret;
+#endif
 
   if (op.reshardlog) {
     ret = reshard_log_list_entries(hctx, op.marker, max,
@@ -3758,7 +3679,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 	  __func__, ret, count);
 
   if (!more) {
-    ret = list_instance_entries(hctx, op.name_filter, op.marker,
+    ret = list_special_entries<BIIndexType::Instance>(hctx, op.name_filter, op.marker,
 				max - count, &op_ret.entries, &more);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_instance_entries returned ret=%d",
@@ -3772,7 +3693,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   }
 
   if (!more) {
-    ret = list_olh_entries(hctx, op.name_filter, op.marker, max - count,
+    ret = list_special_entries<BIIndexType::OLH>(hctx, op.name_filter, op.marker, max - count,
 			   &op_ret.entries, &more);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_olh_entries returned ret=%d",
@@ -3812,6 +3733,10 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   encode(op_ret, *out);
 
   return 0;
+} catch (const std::bad_alloc&) {
+  return -ENOMEM;
+} catch (const std::exception&) {
+  return -EIO;
 } // rgw_bi_list_op
 
 
