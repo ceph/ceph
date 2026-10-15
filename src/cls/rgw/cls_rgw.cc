@@ -2359,7 +2359,7 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 #define MAX_OLH_LOG_ENTRIES 1000
   map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log = olh_data_entry.pending_log;
 
-  if (log.begin()->first > op.ver_marker && log.size() <= MAX_OLH_LOG_ENTRIES) {
+  if (!log.empty() && log.begin()->first > op.ver_marker && log.size() <= MAX_OLH_LOG_ENTRIES) {
     op_ret.log = log;
     op_ret.is_truncated = false;
   } else {

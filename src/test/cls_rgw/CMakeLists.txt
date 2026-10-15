@@ -22,4 +22,5 @@ install(TARGETS ceph_test_cls_rgw_stats DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(TARGET Catch2::Catch2)
   include("${CMAKE_CURRENT_SOURCE_DIR}/bi_wire.cmake")
+  include("${CMAKE_CURRENT_SOURCE_DIR}/olh.cmake")
 endif()
