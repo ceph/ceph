@@ -9,15 +9,14 @@ v21.2.0 Umbrella
 
 .. warning::
 
-   Umbrella container images are based on CentOS Stream 10 (el10), which
+   Umbrella container images are based on Rocky Linux 10 (el10), which
    requires a CPU supporting the ``x86-64-v3`` microarchitecture level.
    Deployments on hosts with older CPUs will not be able to run the
    containerized daemons.
 
 .. warning::
 
-   Python 3.9 or newer is required on all host operating systems for
-   ``cephadm`` support.
+   Python 3.9 or newer is required on all hosts for ``cephadm`` support.
 
 Release Date
 ------------
@@ -52,7 +51,7 @@ RADOS / OSD / Erasure Coding
 - Monitor: new optional RocksDB backup/restore mechanism
   (``mon_backup_interval``, ``ceph tell mon.* backup``, offline restore
   via ``ceph-mon --restore-backup``).
-- New availability score feature for mon/OSD (tracking + health warnings
+- New availability score feature for Monitor/OSD (tracking + health warnings
   + config toggle), off by default.
 - Stretch clusters: tiebreaker mon can now be optional, added a max
   bucket-weight-diff threshold, a health warning for colocated monitors,
