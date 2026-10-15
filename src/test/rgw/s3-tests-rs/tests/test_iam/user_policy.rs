@@ -3,6 +3,7 @@ use s3_tests_rs::client::{get_alt_client, get_iam_client, get_policy_only_client
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::get_new_bucket;
 use s3_tests_rs::{assert_s3_err, expect_s3_err};
+use s3_tests_rs::admin::fs_access;
 
 fn allow_all_policy() -> String {
     serde_json::to_string(&serde_json::json!({
@@ -387,14 +388,18 @@ async fn test_allow_bucket_actions_in_user_policy() {
     let cfg = get_config();
 
     let bucket = get_new_bucket(Some(&s3_client_iam)).await;
-    s3_client_iam
+    /* Under impersonation a requester with no POSIX identity is refused
+     * its first object;  then there is nothing for the rest to test. */
+    let verdict = fs_access(&bucket, "foo", &cfg.iam_user_id, "w").await;
+    if s3_tests_rs::unless_fs_refuses!(verdict, s3_client_iam
         .put_object()
         .bucket(&bucket)
         .key("foo")
         .body(ByteStream::from_static(b"bar"))
         .send()
-        .await
-        .unwrap();
+        .await).is_none() {
+        return;
+    }
 
     let policy = serde_json::to_string(&serde_json::json!({
         "Version": "2012-10-17",
@@ -996,14 +1001,26 @@ async fn test_allow_tagging_actions_in_user_policy() {
     assert_eq!(response.tag_set()[0].value(), "World");
 
     let obj_key = "obj";
-    s3_client_iam
+    /* Under impersonation a requester with no POSIX identity is refused
+     * its first object;  then there is nothing for the rest to test, and
+     * alt's policy comes off before leaving, as it does at the end. */
+    let verdict = fs_access(&bucket, obj_key, &cfg.iam_user_id, "w").await;
+    if s3_tests_rs::unless_fs_refuses!(verdict, s3_client_iam
         .put_object()
         .bucket(&bucket)
         .key(obj_key)
         .body(ByteStream::from_static(b"obj_body"))
         .send()
-        .await
-        .unwrap();
+        .await).is_none() {
+        iam_client
+            .delete_user_policy()
+            .policy_name("AllowAccessPolicy")
+            .user_name(&cfg.alt_user_id)
+            .send()
+            .await
+            .unwrap();
+        return;
+    }
 
     s3_client_alt
         .put_object_tagging()

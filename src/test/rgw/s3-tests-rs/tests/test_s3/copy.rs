@@ -3,6 +3,7 @@ use s3_tests_rs::client::{get_alt_client, get_client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::{check_configure_versioning_retry, get_new_bucket, get_new_bucket_name};
 use s3_tests_rs::assert_s3_err;
+use s3_tests_rs::admin::fs_access;
 
 async fn get_body(response: aws_sdk_s3::operation::get_object::GetObjectOutput) -> String {
     let bytes = response.body.collect().await.unwrap().into_bytes();
@@ -416,13 +417,15 @@ async fn test_object_copy_canned_acl() {
         .await
         .unwrap();
 
-    alt_client
+    /* S3 grants it;  under impersonation the filesystem decides too */
+    let verdict = fs_access(&bucket_name, "bar321foo",
+                            &get_config().alt_user_id, "r").await;
+    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
         .get_object()
         .bucket(&bucket_name)
         .key("bar321foo")
         .send()
-        .await
-        .unwrap();
+        .await);
 
     client
         .copy_object()
@@ -436,13 +439,15 @@ async fn test_object_copy_canned_acl() {
         .await
         .unwrap();
 
-    alt_client
+    /* S3 grants it;  under impersonation the filesystem decides too */
+    let verdict = fs_access(&bucket_name, "foo123bar",
+                            &get_config().alt_user_id, "r").await;
+    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
         .get_object()
         .bucket(&bucket_name)
         .key("foo123bar")
         .send()
-        .await
-        .unwrap();
+        .await);
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
@@ -832,20 +837,22 @@ async fn test_object_copy_not_owned_object_bucket() {
         .await
         .unwrap();
 
-    alt_client
+    /* S3 grants it;  under impersonation the filesystem decides too */
+    let verdict = fs_access(&bucket_name, "foo123bar",
+                            &get_config().alt_user_id, "r").await;
+    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
         .get_object()
         .bucket(&bucket_name)
         .key("foo123bar")
         .send()
-        .await
-        .unwrap();
+        .await);
 
-    alt_client
+    /* the copy reads the source as alt, so the same verdict */
+    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
         .copy_object()
         .bucket(&bucket_name)
         .key("bar321foo")
         .copy_source(format!("{bucket_name}/foo123bar"))
         .send()
-        .await
-        .unwrap();
+        .await);
 }

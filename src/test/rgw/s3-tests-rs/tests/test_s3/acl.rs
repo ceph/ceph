@@ -7,6 +7,7 @@ use s3_tests_rs::client::{get_alt_client, get_client, get_unauthenticated_client
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::{get_new_bucket, get_new_bucket_name};
 use s3_tests_rs::assert_s3_err;
+use s3_tests_rs::admin::fs_access;
 
 fn check_grant(grant: &Grant, perm: &str, grantee_type: &str, id: Option<&str>, uri: Option<&str>) {
     assert_eq!(grant.permission().unwrap().as_str(), perm);
@@ -478,15 +479,7 @@ async fn test_access_bucket_private_object_publicread() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key("foo")
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, "foo", b"foocontent").await;
 }
 
 #[tokio::test]
@@ -966,6 +959,23 @@ async fn setup_access(
     (bucket_name, key1, key2, newkey)
 }
 
+/// alt's read of `key`, which S3 grants it.
+///
+/// Under impersonation the filesystem decides an object's content as
+/// well, and alt is a different identity from the main user who wrote
+/// the object;  where the filesystem refuses alt, the read must be
+/// refused too (`fs_access`).  Otherwise the body is the one written.
+async fn check_alt_read(alt_client: &aws_sdk_s3::Client, bucket: &str,
+                        key: &str, expected: &[u8]) {
+    let read = alt_client.get_object().bucket(bucket).key(key).send().await;
+    if fs_access(bucket, key, &get_config().alt_user_id, "r").await.refuses() {
+        assert_s3_err!(read, 403, "AccessDenied");
+        return;
+    }
+    let body = read.unwrap().body.collect().await.unwrap().into_bytes();
+    assert_eq!(&body[..], expected);
+}
+
 fn check_access_denied<E: std::fmt::Debug>(result: Result<impl std::fmt::Debug, aws_sdk_s3::error::SdkError<E>>) {
     match result {
         Ok(v) => panic!("Expected AccessDenied, got success: {v:?}"),
@@ -1095,15 +1105,7 @@ async fn test_access_bucket_private_object_publicreadwrite() {
         setup_access("private", "public-read-write").await;
     let alt_client = get_alt_client();
 
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
     check_access_denied(
         alt_client
@@ -1197,15 +1199,7 @@ async fn test_access_bucket_publicread_object_publicread() {
         setup_access("public-read", "public-read").await;
     let alt_client = get_alt_client();
 
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
     check_access_denied(
         alt_client
@@ -1252,15 +1246,7 @@ async fn test_access_bucket_publicread_object_publicreadwrite() {
         setup_access("public-read", "public-read-write").await;
     let alt_client = get_alt_client();
 
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
     check_access_denied(
         alt_client
@@ -1350,15 +1336,7 @@ async fn test_access_bucket_publicreadwrite_object_publicread() {
         setup_access("public-read-write", "public-read").await;
     let alt_client = get_alt_client();
 
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
     alt_client
         .put_object()
@@ -1400,15 +1378,7 @@ async fn test_access_bucket_publicreadwrite_object_publicreadwrite() {
         setup_access("public-read-write", "public-read-write").await;
     let alt_client = get_alt_client();
 
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
     alt_client
         .put_object()
@@ -1669,15 +1639,7 @@ async fn test_access_bucket_private_objectv2_publicread() {
         setup_access("private", "public-read").await;
     let alt_client = get_alt_client();
 
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
     check_access_denied(
         alt_client
@@ -1723,15 +1685,7 @@ async fn test_access_bucket_private_objectv2_publicreadwrite() {
         setup_access("private", "public-read-write").await;
     let alt_client = get_alt_client();
 
-    let resp = alt_client
-        .get_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"foocontent");
+    check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
     check_access_denied(
         alt_client

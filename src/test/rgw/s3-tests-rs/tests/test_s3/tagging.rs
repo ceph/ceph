@@ -3,6 +3,8 @@ use s3_tests_rs::client::{get_alt_client, get_client};
 use s3_tests_rs::fixtures::{create_key_with_random_content, get_new_bucket};
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
 use s3_tests_rs::assert_s3_err;
+use s3_tests_rs::admin::fs_access;
+use s3_tests_rs::config::get_config;
 
 fn create_simple_tagset(count: usize) -> Vec<aws_sdk_s3::types::Tag> {
     (0..count)
@@ -636,14 +638,19 @@ async fn test_put_tags_acl_public() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    alt_client
+    /* S3 grants it;  under impersonation the filesystem decides too,
+     * and a refused write leaves no tags to read back */
+    let verdict = fs_access(&bucket_name, key,
+                            &get_config().alt_user_id, "w").await;
+    if s3_tests_rs::unless_fs_refuses!(verdict, alt_client
         .put_object_tagging()
         .bucket(&bucket_name)
         .key(key)
         .tagging(tagging)
         .send()
-        .await
-        .unwrap();
+        .await).is_none() {
+        return;
+    }
 
     let response = client
         .get_object_tagging()
