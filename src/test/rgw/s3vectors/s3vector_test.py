@@ -79,6 +79,25 @@ def admin(args, cluster=None, **kwargs):
     return bash(cmd, **kwargs)
 
 
+def admin_json(args, cluster=None, **kwargs):
+    """ radosgw-admin command, with its output parsed as JSON. the output of
+    the command is merged with its logs and warnings, which may contain braces
+    of their own (e.g. the "{id=all,s={b=*,z=},d={b=*,z=}}" of the caps).
+    the JSON object is the first one that can be decoded, so the output is
+    scanned from each brace until an object is found """
+    out, result = admin(args, cluster=cluster, **kwargs)
+    if result != 0:
+        return None, out, result
+    decoder = json.JSONDecoder()
+    start = out.find('{')
+    while start >= 0:
+        try:
+            return decoder.raw_decode(out, start)[0], out, result
+        except json.JSONDecodeError:
+            start = out.find('{', start + 1)
+    raise ValueError(f'no JSON object in the output of radosgw-admin: {out}')
+
+
 def ceph_admin(args, cluster=None, **kwargs):
     """ ceph command.
     the connect timeout prevents the command from blocking for the default 300
@@ -290,16 +309,47 @@ def _wait_for_user(uid, tenant=None, cluster=None, retries=12, delay=5):
 _vector_bucket_caps_granted = False
 
 
-def _ensure_vector_bucket_caps():
-    # Admin REST requests are S3-authenticated, but these operations also
-    # require the buckets capability.
+def _has_vector_bucket_caps(uid, cluster=None):
+    """ whether the user has the buckets capability on a cluster: the tested
+    one, unless another cluster is given """
+    info, _, result = admin_json(['user', 'info', '--uid', uid], cluster=cluster)
+    if result != 0:
+        return False
+    return any(cap['type'] == 'buckets' and cap['perm'] == '*'
+               for cap in info.get('caps', []))
+
+
+def _ensure_vector_bucket_caps(retries=12, delay=5):
+    """ Admin REST requests are S3-authenticated, but these operations also
+    require the buckets capability. the capabilities are user metadata, which
+    may be changed only on the master zone, and is synced from there """
     global _vector_bucket_caps_granted
     if _vector_bucket_caps_granted:
         return
     uid = get_test_user_id()
-    _, result = admin(['caps', 'add', '--uid', uid, '--caps', 'buckets=*'])
-    assert result == 0, 'failed to add buckets=* capability'
-    _vector_bucket_caps_granted = True
+    if _has_vector_bucket_caps(uid):
+        _vector_bucket_caps_granted = True
+        return
+    master_cluster = get_config_master_cluster()
+    args = ['caps', 'add', '--uid', uid, '--caps', 'buckets=*']
+    if not master_cluster or master_cluster == get_config_cluster():
+        out, result = admin(args)
+        assert result == 0, f'failed to add the buckets capability: {out}'
+        _vector_bucket_caps_granted = True
+        return
+    # the tested zone is not the master zone: add the capability on the master
+    # zone, and wait for the user to be synced
+    out, result = admin(args, cluster=master_cluster)
+    if result != 0:
+        pytest.skip(f"cannot add the buckets capability on the master zone, "
+                    f"in cluster '{master_cluster}': {out}")
+    for _ in range(retries):
+        if _has_vector_bucket_caps(uid):
+            _vector_bucket_caps_granted = True
+            return
+        time.sleep(delay)
+    pytest.fail(f"the buckets capability of user '{uid}' was not synced from "
+                f"cluster '{master_cluster}' to cluster '{get_config_cluster()}'")
 
 
 def _vector_bucket_admin_url():
@@ -421,10 +471,9 @@ def another_account_user(account_id=None, tenant=None):
         args = ['account', 'create', '--account-name', name, '--email', name + '@ceph.com']
         if tenant:
             args += ['--tenant', tenant]
-        out, result = admin(args, cluster=master_cluster)
+        account, out, result = admin_json(args, cluster=master_cluster)
         assert result == 0, f"failed to create account '{name}': {out}"
-        # the output of the command may be prefixed with warnings of the cluster
-        account_id = json.loads(out[out.index('{'):])['id']
+        account_id = account['id']
 
     access_key = str(time.time())
     secret_key = str(time.time())
