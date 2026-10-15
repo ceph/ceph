@@ -28,6 +28,7 @@
 #include "osd/ECCommon.h"
 #include "osd/osd_types.h"
 #include "osd/osd_types_fmt.h"
+#include "osd/purged_snaps.h"
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
 #include "osd/SnapMapper.h"
@@ -1023,6 +1024,10 @@ public:
   /// mapped to them (as found by the OSD's purged-snaps scrub).
   /// Ignored unless the PG is an active primary.
   void queue_snap_retrim(std::span<const snapid_t> snaps);
+  /// the snaps that were purged (according to 'purged'), but still have
+  /// clones mapped to them in this PG's snap-mapper. Sorted and unique.
+  seastar::future<std::vector<snapid_t>> find_purged_strays(
+    const ceph::osd::purged_snaps::index_t& purged);
 
 private:
   interruptible_future<> repair_object(

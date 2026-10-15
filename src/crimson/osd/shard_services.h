@@ -544,6 +544,19 @@ public:
     return store;
   }
 
+  /// the OSD is shutting down
+  bool is_stopping() const {
+    return local_state.osd_state.is_stopping();
+  }
+
+  /**
+   * scan the snap-mappers of the local active primary PGs for clones
+   * still mapped to purged snaps, and requeue those snaps for trimming.
+   * \returns the number of (PG, snap) pairs requeued
+   */
+  seastar::future<std::size_t> scrub_purged_snaps(
+    const ceph::osd::purged_snaps::index_t& purged);
+
   bool is_local_storage_full(store_index_t store_index) const {
     const auto &shard_store =
         local_state.b_store.f_store.get_sharded_store(store_index);

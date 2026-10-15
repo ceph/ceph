@@ -753,6 +753,89 @@ void PG::queue_snap_retrim(std::span<const snapid_t> snaps)
   kick_snap_trim("purged snaps requeued");
 }
 
+seastar::future<std::vector<snapid_t>> PG::find_purged_strays(
+  const ceph::osd::purged_snaps::index_t& purged)
+{
+  namespace purged_snaps = ceph::osd::purged_snaps;
+  using omap_iter_ret_t = ObjectStore::omap_iter_ret_t;
+  LOG_PREFIX(PG::find_purged_strays);
+
+  std::vector<snapid_t> strays;
+  if (purged.pool_view(pgid.pool()).empty()) {
+    DEBUGDPP("no purged snaps in pool {}", *this, pgid.pool());
+    co_return strays;
+  }
+
+  // The mapping keys are sorted by snap, and each snap is looked up
+  // once. The keys are read in chunks, to keep each of the store's read
+  // transactions short (and less likely to conflict with snap trimming
+  // or with clones being created).
+  constexpr std::size_t keys_per_chunk = 1024;
+  std::optional<snapid_t> prev_snap;
+  std::string last_key{purged_snaps::mapping_prefix};
+  std::size_t total_keys = 0;
+  // the OSD stops the store before stopping the PGs: also check the
+  // OSD's state between chunks
+  for (bool more = true; more && !stopping && !shard_services.is_stopping();) {
+    // the state at the start of the chunk, for restarting it on a conflict
+    const auto strays_at_start = strays.size();
+    const auto prev_snap_at_start = prev_snap;
+    std::string chunk_last_key = last_key;
+    std::size_t keys = 0;
+
+    auto check = [&](std::string_view key, std::string_view) {
+      if (!key.starts_with(purged_snaps::mapping_prefix)) {
+        more = false;
+        return omap_iter_ret_t::STOP;
+      }
+      chunk_last_key = key;
+      if (const auto mapping = purged_snaps::parse_mapping_key(key); !mapping) {
+        WARNDPP("ignoring malformed mapping key '{}'", *this, key);
+      } else if (mapping->snap != prev_snap) {
+        prev_snap = mapping->snap;
+        if (purged.find(mapping->pool, mapping->snap)) {
+          strays.push_back(mapping->snap);
+        }
+      }
+      return ++keys < keys_per_chunk ? omap_iter_ret_t::NEXT
+                                     : omap_iter_ret_t::STOP;
+    };
+    auto restart = [&] {
+      strays.resize(strays_at_start);
+      prev_snap = prev_snap_at_start;
+      chunk_last_key = last_key;
+      keys = 0;
+      more = true;
+      return omap_iter_ret_t::NEXT;
+    };
+
+    const auto ret = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::omap_iterate>(
+        shard_services.get_store(get_store_index()),
+        coll_ref,
+        pgid.make_snapmapper_oid(),
+        ObjectStore::omap_iter_seek_t{
+          last_key,
+          ObjectStore::omap_iter_seek_t::UPPER_BOUND},
+        std::move(check), 0, std::move(restart)
+    ).handle_error(
+      crimson::ct_error::enoent::handle([] {
+        // no snap-mapper object (yet, or anymore)
+        return omap_iter_ret_t::NEXT;
+      }),
+      crimson::ct_error::assert_all("snap-mapper omap_iterate error"));
+    if (ret == omap_iter_ret_t::NEXT) {
+      more = false;  // reached the end of the omap
+    }
+    total_keys += keys;
+    last_key = std::move(chunk_last_key);
+  }
+
+  DEBUGDPP("{} mapping keys checked, {} purged snaps with clones: {}",
+           *this, total_keys, strays.size(), strays);
+  co_return strays;
+}
+
 void PG::on_active_advmap(const OSDMapRef &osdmap)
 {
   const auto new_removed_snaps = osdmap->get_new_removed_snaps();
