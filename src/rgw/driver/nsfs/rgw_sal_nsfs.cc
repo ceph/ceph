@@ -4262,6 +4262,18 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 	" AmbientCapabilities=CAP_SETUID CAP_SETGID -- or unset"
 	" rgw_nsfs_impersonate." << dendl;
       return -EPERM;
+    } else if (g_conf().get_val<bool>("rgw_nsfs_io_uring_sqpoll")) {
+      /* An SQPOLL ring's kernel thread reads an SQE after it is
+       * submitted, personality included, and a submission holds its
+       * personality only until io_uring_submit() returns -- after
+       * that the slot may be unregistered or reused, and the
+       * operation fails or runs as whoever holds it now
+       * (probes/persprobe.c, arm S1). */
+      ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_io_uring_sqpoll cannot be"
+	" used with rgw_nsfs_impersonate:  the polling thread reads each"
+	" submission's personality after it is released.  Unset one of"
+	" them." << dendl;
+      return -EINVAL;
     } else {
       /* Every thread that serves an impersonated request creates an
        * io_uring ring, because the open carries the personality on a
