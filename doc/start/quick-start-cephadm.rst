@@ -18,7 +18,7 @@ Prerequisites
 
 - One Linux host, physical or virtual, on which you have root access.
 - The software listed in the :ref:`cephadm host requirements
-  <cephadm-host-requirements>`: Python 3, systemd,
+  <cephadm-host-requirements>`: Python 3.9 or later, systemd,
   Podman or Docker, time synchronization, and LVM2.
 - ``ssh`` installed and running on the host.
 - At least two unused storage devices on the host, each 6 GiB or larger (Ceph
@@ -52,8 +52,8 @@ Procedure
 
    ``--single-host-defaults`` lets the cluster keep its copies on one host.
    The command takes a few minutes. It prints the address and the initial
-   password of the Ceph Dashboard, then a few hints, and ends with this
-   line::
+   password of the Ceph Dashboard, then a few hints, and then this line,
+   followed by one line about log rotation::
 
       Bootstrap complete.
 
