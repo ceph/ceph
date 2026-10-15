@@ -139,6 +139,86 @@ async fn test_impersonation_isolates_identities() {
     unbind_identities().await;
 }
 
+/// A nested key:  its directories are the gateway's, its object the
+/// identity's.
+///
+/// The directories a key needs are made by the gateway, `1777` under
+/// impersonation (NSFS_IMPERSONATION.md 8a), so any identity can create
+/// in them.  Only the object belongs to whoever wrote it.  alice's PUT
+/// makes `a/b/`;  bob then writes beside her in a directory made during
+/// her request, which only the gateway's mode permits.  Each is then
+/// refused the other's object by the filesystem, S3 having granted both
+/// reads -- the isolation test's argument, one level down.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_impersonation_owns_a_nested_key() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let cfg = get_config();
+    bind_identities(None).await;
+
+    let alice = get_client();
+    let bob = get_alt_client();
+    let bucket = get_new_bucket(Some(&alice)).await;
+    let hers = "a/b/alices-object";
+    let his = "a/b/bobs-object";
+
+    let put = alice.put_object()
+        .bucket(&bucket).key(hers)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"alice wrote this"))
+        .send().await;
+    assert!(put.is_ok(), "alice could not write a nested key: {put:?}");
+
+    /* let bob through at the S3 layer, so only the filesystem can
+     * still say no */
+    let resource = make_arn_resource(&format!("{bucket}/*"));
+    let doc = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": [format!("arn:aws:iam:::user/{}",
+                                          cfg.alt_user_id)]},
+            "Action": ["s3:GetObject", "s3:PutObject"],
+            "Resource": resource,
+        }],
+    }).to_string();
+    let pol = alice.put_bucket_policy()
+        .bucket(&bucket).policy(&doc).send().await;
+    assert!(pol.is_ok(), "could not grant bob read and write: {pol:?}");
+
+    let put = bob.put_object()
+        .bucket(&bucket).key(his)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"bob wrote this"))
+        .send().await;
+    assert!(put.is_ok(),
+        "bob could not write in a directory made during alice's request;  \
+         the key's directories are not the gateway's: {put:?}");
+
+    /* the controls:  each reads back what they wrote */
+    let mine = alice.get_object().bucket(&bucket).key(hers).send().await;
+    assert!(mine.is_ok(), "alice could not read her own nested object: {mine:?}");
+    let mine = bob.get_object().bucket(&bucket).key(his).send().await;
+    assert!(mine.is_ok(), "bob could not read his own nested object: {mine:?}");
+
+    let theirs = bob.get_object().bucket(&bucket).key(hers).send().await;
+    assert!(theirs.is_err(),
+        "bob read alice's nested object although S3 was the only thing \
+         permitting it;  it is not owned by her");
+    let theirs = alice.get_object().bucket(&bucket).key(his).send().await;
+    assert!(theirs.is_err(),
+        "alice read bob's nested object;  it is not owned by him");
+
+    unbind_identities().await;
+}
+
 /// The group vector, which is the case worth the fixture.
 ///
 /// `grouped.txt` is `0040 root:rgwfix` — owner and other bits empty
