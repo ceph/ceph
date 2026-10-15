@@ -2081,6 +2081,7 @@ class Module(MgrModule, OrchestratorClientMixin):
             self.metrics[path].set(pool['stat_sum']['num_objects_repaired'],
                                    labelvalues=(pool['poolid'],))
 
+    @profile_method()
     def get_all_daemon_health_metrics(self) -> None:
         daemon_metrics = self.get_daemon_health_metrics()
         for daemon_name, health_metrics in daemon_metrics.items():
@@ -2089,6 +2090,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics[path].set(health_metric['value'], labelvalues=(
                     health_metric['type'], daemon_name,))
 
+    @profile_method()
     def get_perf_counters(self) -> None:
         """
         Get the perf counters for all daemons
