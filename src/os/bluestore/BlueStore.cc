@@ -5777,6 +5777,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_warn_on_legacy_statfs",
     "bluestore_warn_on_no_per_pool_omap",
     "bluestore_warn_on_no_per_pg_omap",
+    "bluestore_warn_on_no_db_sharding",
     "bluestore_max_defer_interval",
     "bluestore_allocator_lookup_policy",
     NULL
@@ -5793,6 +5794,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_warn_on_no_per_pool_omap") ||
       changed.count("bluestore_warn_on_no_per_pg_omap")) {
     _check_no_per_pg_or_pool_omap_alert();
+  }
+  if (changed.count("bluestore_warn_on_no_db_sharding")) {
+    _check_no_db_sharding_alert();
   }
 
   if (changed.count("bluestore_csum_type")) {
@@ -9087,6 +9091,16 @@ int BlueStore::expand_devices(ostream& out)
   return r;
 }
 
+bool BlueStore::get_db_sharding(std::string& res_sharding)
+{
+  bool ret = false;
+  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
+  if (rdb) {
+    ret = rdb->get_sharding(res_sharding);
+  }
+  return ret;
+}
+
 int BlueStore::dump_bluefs_sizes(ostream& out)
 {
   int r = _open_db_and_around(true);
@@ -11910,6 +11924,10 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   (*pm)["bluestore_min_alloc_size"] = stringify(min_alloc_size);
   (*pm)["bluestore_allocation_from_file"] = stringify(fm && fm->is_null_manager());
   (*pm)["bluestore_allocator"] = alloc ? alloc->get_type() : "null";
+  std::string sharding;
+  if (get_db_sharding(sharding)) {
+    (*pm)["bluestore_db_sharding"] = sharding;
+  }
 }
 
 int BlueStore::get_numa_node(
@@ -12126,6 +12144,21 @@ void BlueStore::_check_no_per_pg_or_pool_omap_alert()
   std::lock_guard l(qlock);
   no_per_pg_omap_alert = per_pg;
   no_per_pool_omap_alert = per_pool;
+}
+
+void BlueStore::_check_no_db_sharding_alert()
+{
+  string s;
+  if (db && cct->_conf->bluestore_warn_on_no_db_sharding) {
+    std::string sharding;
+    if (!get_db_sharding(sharding)) {
+      s = "no RocksDB column family sharding detected, "
+	"suggest to run 'ceph-bluestore-tool reshard' to benefit from "
+	"a sharded RocksDB layout";
+    }
+  }
+  std::lock_guard l(qlock);
+  no_db_sharding_alert = s;
 }
 
 // ---------------
@@ -14016,6 +14049,8 @@ int BlueStore::_open_super_meta()
 	     << std::dec << dendl;
     logger->set(l_bluestore_alloc_unit, min_alloc_size);
   }
+
+  _check_no_db_sharding_alert();
 
   _set_per_pool_omap();
 
@@ -18985,6 +19020,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUESTORE_NO_PER_POOL_OMAP",
       no_per_pool_omap_alert);
+  }
+  if (!no_db_sharding_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_NO_DB_SHARDING",
+      no_db_sharding_alert);
   }
   string s0(failed_cmode);
 
