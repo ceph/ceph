@@ -2919,6 +2919,7 @@ private:
     // bluestore_debug_claim_range_stress_*, read by init() at every mount
     uint64_t max_claims = 0, claim_len = 0, free_p = 0, min_free = 0;
     uint64_t sentinel_samples = 0;
+    bool write_sentinel = false;
     double interval = 0;
 
     explicit ClaimRangeStressThread(BlueStore *s) : store(s) {}

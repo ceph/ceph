@@ -324,6 +324,8 @@ void BlueStore::ClaimRangeStressThread::init()
     "bluestore_debug_claim_range_stress_interval");
   sentinel_samples = conf.get_val<uint64_t>(
     "bluestore_debug_claim_range_stress_sentinel_samples");
+  write_sentinel = conf.get_val<bool>(
+    "bluestore_debug_claim_range_stress_write_sentinel");
   // claim_range() asserts on a misaligned length;
   ceph_assert(claim_len % store->alloc->get_block_size() == 0);
   ceph_assert(claim_len <= uint64_t(store->alloc->get_capacity()));
@@ -384,23 +386,25 @@ void *BlueStore::ClaimRangeStressThread::entry()
         ++claims_zero;
       }
       if (n > 0) {
-        // write sentinel to the first and the last block of the extent,
-        // and to sentinel_samples random blocks in between
-        for (auto& e : exts) {
-          int r = store->bdev->write(e.offset, sentinel, false);
-          ceph_assert(r == 0);
-          r = store->bdev->write(e.offset + e.length - bs, sentinel, false);
-          ceph_assert(r == 0);
-          uint64_t blocks = e.length / bs;
-          // a one-block extent got the same block twice
-          sentinels_edge += blocks > 1 ? 2 : 1;
-          if (blocks > 2) {
-            for (uint64_t i = 0; i < sentinel_samples; ++i) {
-              uint64_t b =
-                ceph::util::generate_random_number<uint64_t>(1, blocks - 2);
-              r = store->bdev->write(e.offset + b * bs, sentinel, false);
-              ceph_assert(r == 0);
-              ++sentinels_middle;
+        if (write_sentinel) {
+          // write sentinel to the first and the last block of the extent,
+          // and to sentinel_samples random blocks in between
+          for (auto& e : exts) {
+            int r = store->bdev->write(e.offset, sentinel, false);
+            ceph_assert(r == 0);
+            r = store->bdev->write(e.offset + e.length - bs, sentinel, false);
+            ceph_assert(r == 0);
+            uint64_t blocks = e.length / bs;
+            // a one-block extent got the same block twice
+            sentinels_edge += blocks > 1 ? 2 : 1;
+            if (blocks > 2) {
+              for (uint64_t i = 0; i < sentinel_samples; ++i) {
+                uint64_t b =
+                  ceph::util::generate_random_number<uint64_t>(1, blocks - 2);
+                r = store->bdev->write(e.offset + b * bs, sentinel, false);
+                ceph_assert(r == 0);
+                ++sentinels_middle;
+              }
             }
           }
         }

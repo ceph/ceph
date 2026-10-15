@@ -5638,10 +5638,10 @@ options:
   level: dev
   desc: For testing only. Run a background thread that claims random ranges of
     the main device with Allocator::claim_range() while BlueStore is mounted.
-  long_desc: The thread writes a sentinel into every extent it claims, bypassing
-    checksums, so a claim_range() that returns space which was already allocated
-    corrupts live data and is caught by reads and deep fsck. Everything claimed
-    is released at umount. Read at mount.
+  long_desc: By default the thread only changes the allocator's in-memory state,
+    which keeps claims fast. Set bluestore_debug_claim_range_stress_write_sentinel
+    to also write to the claimed space. Everything claimed is released at
+    umount. Read at mount.
   default: false
   with_legacy: false
   see_also:
@@ -5650,6 +5650,7 @@ options:
   - bluestore_debug_claim_range_stress_max_free_percent
   - bluestore_debug_claim_range_stress_min_free
   - bluestore_debug_claim_range_stress_interval
+  - bluestore_debug_claim_range_stress_write_sentinel
   - bluestore_debug_claim_range_stress_sentinel_samples
 - name: bluestore_debug_claim_range_stress_max_claims
   type: uint
@@ -5701,6 +5702,21 @@ options:
   with_legacy: false
   see_also:
   - bluestore_debug_claim_range_stress
+- name: bluestore_debug_claim_range_stress_write_sentinel
+  type: bool
+  level: dev
+  desc: Make the claim_range stress thread write a sentinel into every extent
+    it claims, bypassing checksums.
+  long_desc: A claim_range() that returns space which was already allocated then
+    corrupts live data, and reads and deep fsck catch it. Without the sentinel,
+    such a bug is caught only after the wrongly released space is allocated
+    and written again, or by a backend's own consistency checks. The writes
+    are synchronous, so claims are much slower.
+  default: false
+  with_legacy: false
+  see_also:
+  - bluestore_debug_claim_range_stress
+  - bluestore_debug_claim_range_stress_sentinel_samples
 - name: bluestore_debug_claim_range_stress_sentinel_samples
   type: uint
   level: dev
@@ -5708,11 +5724,13 @@ options:
     claimed extent that the claim_range stress thread writes a sentinel to.
   long_desc: The first and last block of every extent always get a sentinel.
     These extra samples catch an already-allocated block returned in the middle
-    of an extent.
+    of an extent. Used only when
+    bluestore_debug_claim_range_stress_write_sentinel is set.
   default: 4
   with_legacy: false
   see_also:
   - bluestore_debug_claim_range_stress
+  - bluestore_debug_claim_range_stress_write_sentinel
 - name: bluestore_fsck_on_umount_deep
   type: bool
   level: dev
