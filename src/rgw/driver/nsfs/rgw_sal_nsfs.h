@@ -2356,6 +2356,22 @@ public:
    * called under the bucket's mutation guard. */
   int convert_before_write(const DoutPrefixProvider* dpp, optional_yield y);
 
+  /* Put the authenticated user on the entry, so the open and the
+   * attribute write that follow are the requester's rather than the
+   * gateway's.
+   *
+   * An attribute write opens the object O_RDWR and sets a `user.*`
+   * name on it, and both are tested against the calling thread:  as
+   * the gateway, on an identity's 0660 object, both are refused.
+   * That used to pass silently and now returns (`09bf3d2b9ea`), so
+   * PutObjectTagging and friends answered 403.
+   *
+   * An empty `who` is not a failure.  It is what
+   * `rgw::sal::no_authenticated_user` means -- lifecycle, restore, a
+   * chown -- and those run as the gateway by design. */
+  int pin_identity_for_attrs(const DoutPrefixProvider* dpp,
+			     const rgw_user& who);
+
  class NSFSFSIOObject : public FSIOObject {
   private:
    NSFSObject* src_obj;

@@ -2117,11 +2117,17 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
       return fs->remove_xattrs(dpp, fd, names, id);
     }
     for (const auto& n : names) {
-      if ((fremovexattr(fd, n.c_str()) < 0) && (errno != ENODATA)) {
-	ret = errno;
+      /* no strategy here, so the identity is applied directly */
+      const int rret = nsfs::with_identity(dpp, id, [&]() -> int {
+	if ((fremovexattr(fd, n.c_str()) < 0) && (errno != ENODATA)) {
+	  return -errno;
+	}
+	return 0;
+      });
+      if (rret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << n
-	  << " for " << display << ": " << cpp_strerror(ret) << dendl;
-	return -ret;
+	  << " for " << display << ": " << cpp_strerror(-rret) << dendl;
+	return rret;
       }
     }
     return 0;
@@ -2161,11 +2167,27 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
     return 0;
   }
 
-  ret = fremovexattr(fd, attrname.c_str());
+  /* Through the strategy where there is one, so this carries the
+   * identity like every other arm.  This is the arm a format that
+   * keeps the key under a single name takes -- which is the nsfs
+   * format for object tags -- and it removed the attribute as the
+   * gateway, so DeleteObjectTagging answered 403 against an
+   * identity's own object. */
+  if (fs) {
+    std::vector<std::string> one{attrname};
+    return fs->remove_xattrs(dpp, fd, one, id);
+  }
+
+  ret = nsfs::with_identity(dpp, id, [&]() -> int {
+    if (fremovexattr(fd, attrname.c_str()) < 0) {
+      return -errno;
+    }
+    return 0;
+  });
   if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << attrname << " for " << display << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
+    ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << attrname
+      << " for " << display << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
   }
 
   return 0;
@@ -11463,6 +11485,10 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     }
   }
 
+  ret = pin_identity_for_attrs(dpp, authenticated_user);
+  if (ret < 0) {
+    return ret;
+  }
   return write_attrs(dpp, y, &rmattrs);
 }
 
@@ -11517,7 +11543,30 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
     return ret;
   }
   state.attrset[attr_name] = attr_val;
+  {
+    const int pret = pin_identity_for_attrs(dpp, authenticated_user);
+    if (pret < 0) {
+      return pret;
+    }
+  }
   return write_attrs(dpp, y);
+}
+
+int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
+				       const rgw_user& who)
+{
+  if (who.empty()) {
+    return 0;				/* nobody asked;  see the header */
+  }
+  nsfs::FSIdentity id;
+  const int pret = pin_personality_for(dpp, driver, who, &id);
+  if ((pret < 0) && (pret != -ENODATA)) {
+    return pret;
+  }
+  if (id.active() && ent) {
+    ent->set_identity(id);
+  }
+  return 0;
 }
 
 int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
@@ -11539,10 +11588,21 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   if (ret < 0) {
     return ret;
   }
+  /* after the open, so the entry exists to carry it */
+  ret = pin_identity_for_attrs(dpp, authenticated_user);
+  if (ret < 0) {
+    return ret;
+  }
 
+  /* with the identity:  fremovexattr of a `user.*` name needs write
+   * permission on the file, tested against the calling thread, so as
+   * the gateway this is refused on an identity's 0660 object --
+   * "could not remove attribute user.nsfs.rgw.x-amz-tagging ...
+   * Permission denied", a 403 from DeleteObjectTagging.  The
+   * parameter has been here all along and no caller passed one. */
   ret = remove_x_attr(dpp, y, ent->get_fd(), attr_name, get_name(),
 		      xattr_strategy(), xattr_fallback(),
-		      driver->get_fs_strategy());
+		      driver->get_fs_strategy(), ent->get_identity());
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -13813,12 +13873,19 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_NSFS_ATTR_MPUPLOAD] = bl;
 
-  /* who the upload is for.  Whether the meta object is written *as*
-   * them is the driver's question and is settled the other way
-   * (DECISIONS.md 2026-10-15:  staging and the meta object stay the
-   * gateway's);  this says who asked. */
+  /* The gateway's, deliberately.  Staging and the meta object stay
+   * the gateway's (DECISIONS.md 2026-10-15), so naming the uploader
+   * here makes the attribute write run as them -- and the meta
+   * object is a file they do not own, so the kernel refuses it:
+   * CreateMultipartUpload with a tagging header answered 403.
+   *
+   * The parameter says who a write is *for*, and for this file the
+   * answer is nobody:  it is the gateway's own bookkeeping, not the
+   * uploader's object.  The uploader's object is written as them at
+   * complete(). */
   ret = meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y,
-				rgw::sal::FLAG_LOG_OP, auth_user);
+				rgw::sal::FLAG_LOG_OP,
+				rgw::sal::no_authenticated_user);
   if (ret < 0) {
     return ret;
   }
