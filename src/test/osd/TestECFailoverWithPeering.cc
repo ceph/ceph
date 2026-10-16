@@ -1071,6 +1071,36 @@ TEST_P(TestECFailoverWithPeering, ScrubClean) {
   std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
 }
 
+// An object missing from one shard is reported missing on that shard and
+// nowhere else, whichever shard lost it.
+TEST_P(TestECFailoverWithPeering, ScrubObjectMissingFromOneShard) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+  pg_t pgid = get_primary_test_pg()->get_peering_state()->get_info().pgid.pgid;
+  std::vector<int> acting;
+  int acting_primary = -1;
+  osdmap->pg_to_acting_osds(pgid, &acting, &acting_primary);
+  const int primary = get_primary_shard_from_osdmap();
+
+  for (int shard = 0; shard < (int)acting.size(); ++shard) {
+    if (shard == primary) {
+      continue;
+    }
+    const std::string obj_name = "missing_on_" + std::to_string(shard);
+    bufferlist bl = create_random_buffer(k * stripe_unit);
+    create_and_write_verify(obj_name, std::string(bl.c_str(), bl.length()));
+    const hobject_t hoid = make_test_object(obj_name);
+    const pg_shard_t lost(acting[shard], shard_id_t(shard));
+
+    hide_shard_object(hoid, lost);
+    EXPECT_TRUE(scrub_object(obj_name, /*skip_verify=*/true)) << "shard " << shard;
+    for (const auto& [s, errors] : last_scrub_shard_errors) {
+      EXPECT_EQ(s == shard ? librados::err_t::SHARD_MISSING : 0, errors)
+        << "shard " << s << " with the object missing from shard " << shard;
+    }
+    restore_shard_object(hoid, lost);
+  }
+}
+
 TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
   ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
 

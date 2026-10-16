@@ -1741,6 +1741,14 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name, bool skip_v
   auto result = scrub_backend.scrub_compare_maps(false, *snap_reader);
 
   bool scrub_found_corruption = !result.inconsistent_objs.empty();
+  last_scrub_shard_errors.clear();
+  for (const auto& err : result.inconsistent_objs) {
+    if (const auto* obj = std::get_if<inconsistent_obj_wrapper>(&err)) {
+      for (const auto& [osd_shard, info] : obj->shards) {
+        last_scrub_shard_errors[osd_shard.shard] |= info.errors;
+      }
+    }
+  }
 
   // Verify attributes are consistent across all shards
   if (!scrub_found_corruption && !skip_verify) {
@@ -1908,4 +1916,33 @@ void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t s
 
   std::cout << "Corrupted shard " << shard.osd << " data for object " << obj
             << " (wrote " << size << " bytes of zeros)" << std::endl;
+}
+
+static hobject_t hidden_object(const hobject_t& obj)
+{
+  hobject_t hidden = obj;
+  hidden.oid.name += ".hidden";
+  return hidden;
+}
+
+static void move_shard_object(OsdTestFixture* fixture, TestPG* shard_pg,
+                              shard_id_t shard, const hobject_t& from,
+                              const hobject_t& to)
+{
+  ObjectStore::Transaction t;
+  t.collection_move_rename(shard_pg->ch->cid, ghobject_t(from, ghobject_t::NO_GEN, shard),
+                           shard_pg->ch->cid, ghobject_t(to, ghobject_t::NO_GEN, shard));
+  ceph_assert(fixture->store->queue_transaction(shard_pg->ch, std::move(t)) == 0);
+}
+
+void PGBackendTestFixture::hide_shard_object(const hobject_t& obj, pg_shard_t shard)
+{
+  move_shard_object(get_osd_fixture(shard.osd), get_test_pg(shard), shard.shard,
+                    obj, hidden_object(obj));
+}
+
+void PGBackendTestFixture::restore_shard_object(const hobject_t& obj, pg_shard_t shard)
+{
+  move_shard_object(get_osd_fixture(shard.osd), get_test_pg(shard), shard.shard,
+                    hidden_object(obj), obj);
 }
