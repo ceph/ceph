@@ -33,6 +33,7 @@
 #include "common/code_environment.h"
 #include "common/errno.h"
 #include "global/global_context.h"
+#include "include/ceph_assert.h"
 
 #include "driver/posix/posix_io_uring.h"
 
@@ -170,15 +171,19 @@ class ScopedCredentials {
     return 0;
   }
 
-  void restore_effective() {
+  /* Returns 0, or -errno from the call that failed. */
+  int restore_effective() {
     if (!caps_cleared) {
-      return;
+      return 0;
     }
     struct __user_cap_header_struct hdr = {};
     hdr.version = _LINUX_CAPABILITY_VERSION_3;
     hdr.pid = 0;
-    ::syscall(SYS_capset, &hdr, saved_caps);
+    if (::syscall(SYS_capset, &hdr, saved_caps) < 0) {
+      return -errno;
+    }
     caps_cleared = false;
+    return 0;
   }
 
 public:
@@ -221,13 +226,34 @@ public:
     }
     /* capabilities first:  restoring the group vector needs
      * CAP_SETGID, which was just cleared. */
-    restore_effective();
+    int ret = restore_effective();
     /* then uid:  dropping it last would leave no privilege to
      * restore the others with. */
-    ::syscall(SYS_setresuid, -1, saved_uid, -1);
-    ::syscall(SYS_setresgid, -1, saved_gid, -1);
-    ::syscall(SYS_setgroups, saved_groups.size(),
-	      saved_groups.empty() ? nullptr : saved_groups.data());
+    if (ret == 0 && ::syscall(SYS_setresuid, -1, saved_uid, -1) < 0) {
+      ret = -errno;
+    }
+    if (ret == 0 && ::syscall(SYS_setresgid, -1, saved_gid, -1) < 0) {
+      ret = -errno;
+    }
+    if (ret == 0 &&
+	::syscall(SYS_setgroups, saved_groups.size(),
+		  saved_groups.empty() ? nullptr : saved_groups.data()) < 0) {
+      ret = -errno;
+    }
+    if (ret < 0) {
+      /* The thread is still running as the identity, and whatever
+       * runs on it next runs as that identity too:  another request
+       * on this frontend worker, another job on this pool thread.
+       * That is one identity served as another, which is what the
+       * switch exists to prevent, and it would be silent.
+       *
+       * There is nothing to fall back to.  The calls that would put
+       * the credentials back are the ones that just failed, and they
+       * cannot normally fail here -- the capabilities they need were
+       * restored first. */
+      ceph_abort_msg(std::string("nsfs: could not restore this thread's "
+				 "credentials: ") + cpp_strerror(-ret));
+    }
   }
 };
 
