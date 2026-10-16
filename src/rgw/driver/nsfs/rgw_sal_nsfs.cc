@@ -2883,8 +2883,13 @@ int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_fi
   /* mkdir(2) masks the mode with the process umask, which on a
    * typical host strips exactly the write bits an identity needs.
    * The gateway owns this directory, so it sets the mode outright
-   * rather than asking for it. */
-  if (nsfs::impersonation_enabled() &&
+   * rather than asking for it.
+   *
+   * Only a directory this call made.  On EEXIST the directory is
+   * already somebody else's -- an adopted NooBaa bucket at 0770, or
+   * one an operator placed -- and a create that found it there does
+   * not widen it. */
+  if (nsfs::impersonation_enabled() && made &&
       (::fchmodat(at, fname.c_str(), S_ISVTX | 0777, 0) < 0)) {
     ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
       << ": " << cpp_strerror(errno) << dendl;
@@ -3669,11 +3674,9 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     }
   }
 
-  /* mkdir(2) masks the mode with the process umask, which on a
-   * typical host strips exactly the write bits an identity needs.
-   * The gateway owns this directory, so it sets the mode outright
-   * rather than asking for it. */
-  if (nsfs::impersonation_enabled() &&
+  /* see Directory::create:  the mode is set outright, and only on a
+   * directory this call made */
+  if (nsfs::impersonation_enabled() && made &&
       (::fchmodat(parent->get_fd(), path.c_str(), S_ISVTX | 0777, 0) < 0)) {
     ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
       << ": " << cpp_strerror(errno) << dendl;
