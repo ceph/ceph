@@ -26,6 +26,7 @@
  #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
+ #include "cls/rgw/cls_rgw_reshard_datum.h"
  #include "cls/rgw/cls_rgw_usage_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -5240,7 +5241,11 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::add_request op;
+#else
   cls_rgw_reshard_add_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5282,7 +5287,11 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::list_request op;
+#else
   cls_rgw_reshard_list_op op;
+#endif
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
@@ -5290,7 +5299,11 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
     CLS_LOG(1, "ERROR: rgw_cls_reshard_list(): failed to decode entry\n");
     return -EINVAL;
   }
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::reply op_ret;
+#else
   cls_rgw_reshard_list_ret op_ret;
+#endif
   map<string, bufferlist> vals;
   string filter_prefix;
 #define MAX_RESHARD_LIST_ENTRIES 1000
@@ -5299,9 +5312,14 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, max, &vals, &op_ret.is_truncated);
   if (ret < 0)
     return ret;
-  cls_rgw_reshard_entry entry;
+#ifdef WITH_RGW_CLS_DATUM
+  if (0 < static_cast<int>(op.max)) {
+    op_ret.entries.reserve(vals.size());
+  }
+#endif
   int i = 0;
   for (auto it = vals.begin(); i < (int)op.max && it != vals.end(); ++it, ++i) {
+    auto& entry = op_ret.entries.emplace_back();
     auto iter = it->second.cbegin();
     try {
       decode(entry, iter);
@@ -5309,7 +5327,6 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
       CLS_LOG(1, "ERROR: rgw_cls_reshard_list(): failed to decode entry\n");
       return -EIO;
    }
-    op_ret.entries.push_back(entry);
   }
   encode(op_ret, *out);
   return 0;
@@ -5320,7 +5337,11 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::entry_message op;
+#else
   cls_rgw_reshard_get_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5336,8 +5357,12 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
     return ret;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::entry_message op_ret;
+#else
   cls_rgw_reshard_get_ret op_ret;
-  op_ret.entry = entry;
+#endif
+  op_ret.entry = std::move(entry);
   encode(op_ret, *out);
   return 0;
 }
@@ -5347,7 +5372,11 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::remove_request op;
+#else
   cls_rgw_reshard_remove_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5379,7 +5408,11 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
 static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::instance_message op;
+#else
   cls_rgw_set_bucket_resharding_op op;
+#endif
 
   auto in_iter = in->cbegin();
   try {
@@ -5404,7 +5437,11 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::empty_request op;
+#else
   cls_rgw_clear_bucket_resharding_op op;
+#endif
 
   auto in_iter = in->cbegin();
   try {
@@ -5429,7 +5466,11 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
 {
   CLS_LOG(10, "entered %s", __func__);
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::guard_request op;
+#else
   cls_rgw_guard_bucket_resharding_op op;
+#endif
   try {
     auto in_iter = in->cbegin();
     decode(op, in_iter);
@@ -5452,7 +5493,11 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
 				     bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::empty_request op;
+#else
   cls_rgw_get_bucket_resharding_op op;
+#endif
 
   auto in_iter = in->cbegin();
   try {
@@ -5469,8 +5514,16 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
     return rc;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::reshard_datum::instance_message op_ret;
+#else
   cls_rgw_get_bucket_resharding_ret op_ret;
+#endif
+#ifdef WITH_RGW_CLS_DATUM
+  op_ret.entry = header.new_instance;
+#else
   op_ret.new_instance = header.new_instance;
+#endif
 
   encode(op_ret, *out);
 

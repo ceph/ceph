@@ -40,6 +40,12 @@ the public client moves its tree map and continuation string into caller outputs
 in both Datum and native-only builds.
 Nested usage-entry codecs, aggregation, key transition and scan policy stay native.
 
+Reshard queue and bucket-control operations also use independent records.
+List replies encode a module vector into the public list profile. Queue listing
+decodes stored entries directly into final reply slots; get results move to their
+caller. Borrowed builders retain full leaf encodings and the public set operation's
+assert-exists ordering. Native limits, key checks and guard statuses stay unchanged.
+
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
 provides the C++26 implementation. Its language requirements and Datum headers

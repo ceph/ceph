@@ -24,6 +24,8 @@ std::string request_method;
 int put_transport_status = 0;
 std::vector<int> write_statuses;
 std::size_t write_next = 0;
+bool assert_pending = false;
+bool captured_assert = false;
 byte_buffer *request_output = nullptr;
 
 byte_buffer response()
@@ -124,6 +126,7 @@ TEST_CASE("BI client failures preserve caller outputs and native status", "[rgw]
 
 void librados::ObjectOperation::exec_impl(const char *cls, const char *method, byte_buffer& input)
 {
+    captured_assert = std::exchange(assert_pending, false);
     CHECK(std::string_view {cls} == "rgw");
     request_method = method;
     request_bytes = input;
@@ -577,4 +580,155 @@ TEST_CASE("Usage trim builders retain bytes and synchronous ENODATA completion",
     ::cls_rgw_usage_log_clear(operation);
     CHECK(request_method == "usage_log_clear");
     CHECK(request_bytes.length() == 0);
+}
+
+void librados::ObjectOperation::assert_exists() { assert_pending = true; }
+
+TEST_CASE("Reshard builders borrow native leaves and retain assert-exists ordering", "[rgw][cls][reshard]")
+{
+    ::librados::ObjectWriteOperation operation;
+    ::cls_rgw_reshard_add_op add;
+    add.entry.time = ::ceph::real_time {std::chrono::seconds {123}};
+    add.entry.tenant = std::string {"t\0t", 3};
+    add.entry.bucket_name = std::string(80, 'b');
+    add.entry.bucket_id = "id";
+    add.entry.old_num_shards = 3;
+    add.entry.new_num_shards = 7;
+    add.entry.initiator = ::cls_rgw_reshard_initiator::Dynamic;
+    add.create_only = true;
+    byte_buffer expected;
+    ::encode(add, expected);
+    ::cls_rgw_reshard_add(operation, add.entry, true);
+    CHECK(request_method == "reshard_add");
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_reshard_remove_op remove;
+    remove.tenant = add.entry.tenant;
+    remove.bucket_name = add.entry.bucket_name;
+    remove.bucket_id = add.entry.bucket_id;
+    expected.clear();
+    ::encode(remove, expected);
+    ::cls_rgw_reshard_remove(operation, add.entry);
+    add.entry = {};
+    CHECK(request_method == "reshard_remove");
+    CHECK(request_bytes.contents_equal(expected));
+    for (const unsigned status : {0, 1, 2, 3, 255}) {
+        ::cls_rgw_set_bucket_resharding_op set;
+        set.entry.reshard_status = static_cast<::cls_rgw_reshard_status>(status);
+        expected.clear();
+        ::encode(set, expected);
+        ::cls_rgw_set_bucket_resharding(operation, set.entry.reshard_status);
+        CHECK(captured_assert);
+        CHECK_FALSE(assert_pending);
+        CHECK(request_method == "set_bucket_resharding");
+        CHECK(request_bytes.contents_equal(expected));
+    }
+    ::cls_rgw_clear_bucket_resharding(operation);
+    CHECK_FALSE(captured_assert);
+    expected.clear();
+    ::encode(::cls_rgw_clear_bucket_resharding_op {}, expected);
+    CHECK(request_method == "clear_bucket_resharding");
+    CHECK(request_bytes.contents_equal(expected));
+    for (const int error : {std::numeric_limits<int>::min(), -2300, -1, 0, 7, std::numeric_limits<int>::max()}) {
+        expected.clear();
+        ::encode(::cls_rgw_guard_bucket_resharding_op {error}, expected);
+        ::cls_rgw_guard_bucket_resharding(operation, error);
+        CHECK(request_method == "guard_bucket_resharding");
+        CHECK(request_bytes.contents_equal(expected));
+    }
+    ::librados::ObjectReadOperation read;
+    byte_buffer reply;
+    ::cls_rgw_get_bucket_resharding(read, reply);
+    expected.clear();
+    ::encode(::cls_rgw_get_bucket_resharding_op {}, expected);
+    CHECK(request_method == "get_bucket_resharding");
+    CHECK(request_output == &reply);
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_get_bucket_resharding_ret returned;
+    returned.new_instance.reshard_status = ::cls_rgw_reshard_status::IN_PROGRESS;
+    reply.clear();
+    ::encode(returned, reply);
+    ::cls_rgw_bucket_instance_entry output;
+    ::cls_rgw_get_bucket_resharding_decode(reply, output);
+    CHECK(output.reshard_status == ::cls_rgw_reshard_status::IN_PROGRESS);
+    for (unsigned size = 0; size < reply.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(reply, 0, size);
+        CHECK_THROWS_AS(::cls_rgw_get_bucket_resharding_decode(prefix, output), ::ceph::buffer::error);
+        CHECK(output.reshard_status == ::cls_rgw_reshard_status::IN_PROGRESS);
+    }
+}
+
+TEST_CASE("Reshard clients retain list interfaces, markers and transport/error contracts", "[rgw][cls][reshard]")
+{
+    ::librados::IoCtx context;
+    ::cls_rgw_reshard_entry row;
+    row.tenant = "tenant";
+    row.bucket_name = std::string(80, 'b');
+    row.bucket_id = "id";
+    row.initiator = ::cls_rgw_reshard_initiator::Dynamic;
+    ::cls_rgw_reshard_list_ret listed;
+    listed.entries.push_back(row);
+    listed.is_truncated = true;
+    reply_bytes.clear();
+    ::encode(listed, reply_bytes);
+    const auto full_list = reply_bytes;
+    std::string marker = "marker";
+    std::list<::cls_rgw_reshard_entry> entries;
+    bool truncated = false;
+    allocation_failure = false;
+    for (const int status : {0, 7}) {
+        transport_status = status;
+        CHECK(::cls_rgw_reshard_list(context, "object", marker, 17, entries, &truncated) == 0);
+        CHECK(request_method == "reshard_list");
+        CHECK(marker == "marker");
+        CHECK(truncated);
+        REQUIRE(entries.size() == 1);
+        CHECK(entries.front().bucket_name == row.bucket_name);
+        ::cls_rgw_reshard_list_op request;
+        request.marker = marker;
+        request.max = 17;
+        byte_buffer expected;
+        ::encode(request, expected);
+        CHECK(request_bytes.contents_equal(expected));
+    }
+    transport_status = 0;
+    for (unsigned size = 0; size < full_list.length(); ++size) {
+        reply_bytes.clear();
+        reply_bytes.substr_of(full_list, 0, size);
+        CHECK(::cls_rgw_reshard_list(context, "object", marker, 17, entries, &truncated) == -EIO);
+        CHECK(marker == "marker");
+        CHECK(truncated);
+        REQUIRE(entries.size() == 1);
+        CHECK(entries.front().bucket_name == row.bucket_name);
+    }
+    ::cls_rgw_reshard_get_ret got;
+    got.entry = row;
+    reply_bytes.clear();
+    ::encode(got, reply_bytes);
+    const auto full_get = reply_bytes;
+    ::cls_rgw_reshard_entry output;
+    output.tenant = "request";
+    output.bucket_name = "bucket";
+    ::cls_rgw_reshard_get_op expected_get;
+    expected_get.entry = output;
+    byte_buffer expected;
+    ::encode(expected_get, expected);
+    CHECK(::cls_rgw_reshard_get(context, "object", output) == 0);
+    CHECK(request_method == "reshard_get");
+    CHECK(request_bytes.contents_equal(expected));
+    CHECK(output.bucket_name == row.bucket_name);
+    for (unsigned size = 0; size < full_get.length(); ++size) {
+        reply_bytes.clear();
+        reply_bytes.substr_of(full_get, 0, size);
+        CHECK(::cls_rgw_reshard_get(context, "object", output) == -EIO);
+        CHECK(output.bucket_name == row.bucket_name);
+    }
+    transport_status = -EAGAIN;
+    CHECK(::cls_rgw_reshard_get(context, "object", output) == -EAGAIN);
+    CHECK(::cls_rgw_reshard_list(context, "object", marker, 17, entries, &truncated) == -EAGAIN);
+    allocation_failure = true;
+    CHECK_THROWS_AS(::cls_rgw_reshard_get(context, "object", output), std::bad_alloc);
+    CHECK_THROWS_AS(::cls_rgw_reshard_list(context, "object", marker, 17, entries, &truncated), std::bad_alloc);
+    allocation_failure = false;
+    transport_status = 0;
 }

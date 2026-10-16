@@ -15,6 +15,7 @@
  #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
+ #include "cls/rgw/cls_rgw_reshard_datum.h"
  #include "cls/rgw/cls_rgw_usage_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -1152,10 +1153,14 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
 			 const bool create_only)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_add(entry, create_only);
+#else
   cls_rgw_reshard_add_op call;
   call.entry = entry;
   call.create_only = create_only;
   encode(call, in);
+#endif
   op.exec(method::reshard_add, in);
 }
 
@@ -1163,24 +1168,32 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
                          list<cls_rgw_reshard_entry>& entries, bool* is_truncated)
 {
   bufferlist in, out;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_list(max, marker);
+#else
   cls_rgw_reshard_list_op call;
   call.marker = marker;
   call.max = max;
   encode(call, in);
+#endif
   int r = io_ctx.exec(oid, method::reshard_list, in, out);
   if (r < 0)
     return r;
 
-  cls_rgw_reshard_list_ret op_ret;
-  auto iter = out.cbegin();
   try {
+#ifdef WITH_RGW_CLS_DATUM
+    auto candidate = ::cls::rgw::reshard_datum::decode_reply<std::list<::cls_rgw_reshard_entry>>(out);
+#else
+    cls_rgw_reshard_list_ret op_ret;
+    auto iter = out.cbegin();
     decode(op_ret, iter);
+    auto candidate = std::pair {std::move(op_ret.entries), op_ret.is_truncated};
+#endif
+    entries.swap(candidate.first);
+    *is_truncated = candidate.second;
   } catch (ceph::buffer::error& err) {
     return -EIO;
   }
-
-  entries.swap(op_ret.entries);
-  *is_truncated = op_ret.is_truncated;
 
   return 0;
 }
@@ -1188,22 +1201,31 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry)
 {
   bufferlist in, out;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_entry(entry);
+#else
   cls_rgw_reshard_get_op call;
   call.entry = entry;
   encode(call, in);
+#endif
   int r = io_ctx.exec(oid, method::reshard_get, in, out);
   if (r < 0)
     return r;
 
-  cls_rgw_reshard_get_ret op_ret;
-  auto iter = out.cbegin();
   try {
+#ifdef WITH_RGW_CLS_DATUM
+    auto candidate = ::cls::rgw::reshard_datum::decode_entry(out);
+#else
+    cls_rgw_reshard_get_ret op_ret;
+    auto iter = out.cbegin();
     decode(op_ret, iter);
+    auto candidate = std::move(op_ret.entry);
+#endif
+    static_assert(std::is_nothrow_move_assignable_v<decltype(candidate)>);
+    entry = std::move(candidate);
   } catch (ceph::buffer::error& err) {
     return -EIO;
   }
-
-  entry = op_ret.entry;
 
   return 0;
 }
@@ -1211,19 +1233,27 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_remove(entry);
+#else
   cls_rgw_reshard_remove_op call;
   call.tenant = entry.tenant;
   call.bucket_name = entry.bucket_name;
   call.bucket_id = entry.bucket_id;
   encode(call, in);
+#endif
   op.exec(method::reshard_remove, in);
 }
 
 void cls_rgw_clear_bucket_resharding(librados::ObjectWriteOperation& op)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_empty();
+#else
   cls_rgw_clear_bucket_resharding_op call;
   encode(call, in);
+#endif
   op.exec(method::clear_bucket_resharding, in);
 }
 
@@ -1231,27 +1261,39 @@ void cls_rgw_get_bucket_resharding(librados::ObjectReadOperation& op,
                                    bufferlist& out)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_empty();
+#else
   cls_rgw_get_bucket_resharding_op call;
   encode(call, in);
+#endif
   op.exec(method::get_bucket_resharding, in, &out, nullptr);
 }
 
 void cls_rgw_get_bucket_resharding_decode(const bufferlist& out,
                                           cls_rgw_bucket_instance_entry& entry)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  entry = ::cls::rgw::reshard_datum::decode_instance(out);
+#else
   cls_rgw_get_bucket_resharding_ret op_ret;
   auto iter = out.cbegin();
   decode(op_ret, iter);
 
   entry = std::move(op_ret.new_instance);
+#endif
 }
 
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
 {
   bufferlist in, out;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_guard(ret_err);
+#else
   cls_rgw_guard_bucket_resharding_op call;
   call.ret_err = ret_err;
   encode(call, in);
+#endif
   op.exec(method::guard_bucket_resharding, in);
 }
 
@@ -1259,9 +1301,13 @@ void cls_rgw_set_bucket_resharding(librados::ObjectWriteOperation& op,
                                    cls_rgw_reshard_status status)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::reshard_datum::encode_instance(::cls_rgw_bucket_instance_entry {status});
+#else
   cls_rgw_set_bucket_resharding_op call;
   call.entry.reshard_status = status;
   encode(call, in);
+#endif
 
   op.assert_exists(); // the shard must exist; if not fail rather than recreate
   op.exec(method::set_bucket_resharding, in);

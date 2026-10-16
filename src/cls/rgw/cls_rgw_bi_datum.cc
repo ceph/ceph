@@ -6,9 +6,11 @@
 #include "cls_rgw_bilog_datum.h"
 #include "cls_rgw_bucket_datum.h"
 #include "cls_rgw_object_datum.h"
+#include "cls_rgw_reshard_datum.h"
 #include "cls_rgw_usage_datum.h"
 #include "cls_rgw_write_datum.h"
 
+#include <bit>
 #include <utility>
 
 namespace cls::rgw::bi_datum
@@ -963,3 +965,205 @@ template read_reply<::boost::container::flat_map<::rgw_user_bucket, ::rgw_usage_
 decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::usage_datum
+
+namespace cls::rgw::reshard_datum {
+
+using ::cls::rgw::wire::decode_record;
+using ::cls::rgw::wire::reader;
+using ::cls::rgw::wire::writer;
+
+::ceph::buffer::list encode_add(const ::cls_rgw_reshard_entry& entry, const bool create_only)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(2, [&] {
+        archive.native(entry);
+        archive.scalar(static_cast<std::uint8_t>(create_only));
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_entry(const ::cls_rgw_reshard_entry& entry)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] { archive.native(entry); });
+
+    return output;
+}
+
+::ceph::buffer::list encode_list(const std::uint32_t maximum, const std::string_view marker)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        archive.scalar(maximum);
+        archive.text(marker);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_remove(const ::cls_rgw_reshard_entry& entry)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        archive.text(entry.tenant);
+        archive.text(entry.bucket_name);
+        archive.text(entry.bucket_id);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_instance(const ::cls_rgw_bucket_instance_entry& entry)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] { archive.native(entry); });
+
+    return output;
+}
+
+::ceph::buffer::list encode_empty()
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [] {});
+
+    return output;
+}
+
+::ceph::buffer::list encode_guard(const int error)
+{
+    static_assert(sizeof(int) == sizeof(std::int32_t));
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] { archive.scalar(std::bit_cast<std::uint32_t>(error)); });
+
+    return output;
+}
+
+void decode(add_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        fields.native(candidate.entry);
+        if (version >= 2) {
+            candidate.create_only = 0 != fields.template scalar<std::uint8_t>();
+        }
+    });
+}
+
+void decode(entry_message& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        fields.native(candidate.entry);
+    });
+}
+
+void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        candidate.max = fields.template scalar<std::uint32_t>();
+        fields.text(candidate.marker);
+    });
+}
+
+void decode(remove_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        fields.text(candidate.tenant);
+        fields.text(candidate.bucket_name);
+        fields.text(candidate.bucket_id);
+    });
+}
+
+void decode(instance_message& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        fields.native(candidate.entry);
+    });
+}
+
+void decode(empty_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto&, auto&, std::uint8_t) {});
+}
+
+void decode(guard_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        candidate.ret_err = std::bit_cast<std::int32_t>(fields.template scalar<std::uint32_t>());
+    });
+}
+
+void encode(const entry_message& value, ::ceph::buffer::list& output)
+{
+    auto candidate = encode_entry(value.entry);
+    output.claim_append(candidate);
+}
+
+void encode(const instance_message& value, ::ceph::buffer::list& output)
+{
+    auto candidate = encode_instance(value.entry);
+    output.claim_append(candidate);
+}
+
+void encode(const reply& value, ::ceph::buffer::list& output)
+{
+    ::ceph::buffer::list candidate;
+    writer archive {candidate};
+    archive.frame(1, [&] {
+        archive.native(value.entries);
+        archive.scalar(static_cast<std::uint8_t>(value.is_truncated));
+    });
+    output.claim_append(candidate);
+}
+
+::cls_rgw_reshard_entry decode_entry(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    entry_message candidate;
+    decode(candidate, cursor);
+
+    return std::move(candidate.entry);
+}
+
+::cls_rgw_bucket_instance_entry decode_instance(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    instance_message candidate;
+    decode(candidate, cursor);
+
+    return candidate.entry;
+}
+
+template <typename EntriesT>
+requires ::ceph::concepts::has_emplace_back<EntriesT>
+std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    reader archive {cursor};
+    return archive.frame(1, [&](auto& fields, std::uint8_t) {
+        const auto count = fields.template sequence_size<34>(1);
+        EntriesT entries;
+        if constexpr (::ceph::concepts::reservable_container<EntriesT>) {
+            entries.reserve(count);
+        }
+        for (std::uint32_t index = 0; index < count; ++index) {
+            fields.native(entries.emplace_back());
+        }
+        const bool truncated = 0 != fields.template scalar<std::uint8_t>();
+
+        return std::pair {std::move(entries), truncated};
+    });
+}
+
+template std::pair<std::vector<::cls_rgw_reshard_entry>, bool>
+decode_reply(const ::ceph::buffer::list& input);
+template std::pair<std::list<::cls_rgw_reshard_entry>, bool>
+decode_reply(const ::ceph::buffer::list& input);
+
+} // cls::rgw::reshard_datum

@@ -58,7 +58,8 @@ int effect(storage& state, std::string operation, byte_buffer arguments = {})
 auto invoke(storage& state, byte_buffer input, const std::string_view method = "bi_put_entries")
 {
     const auto [call, flags] = ::rgw_cls_test::get_method(method);
-    const bool read_only = method == "bi_log_list" || method == "bucket_list" || method == "bucket_check_index" || method == "user_usage_log_read";
+    const bool read_only = method == "bi_log_list" || method == "bucket_list" || method == "bucket_check_index" || method == "user_usage_log_read" || method == "reshard_list" ||
+                           method == "reshard_get" || method == "guard_bucket_resharding" || method == "get_bucket_resharding";
     REQUIRE(flags == (read_only ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
@@ -1761,5 +1762,240 @@ TEST_CASE("Usage request rejection preserves trim's stat-before-decode ordering"
         state.stat_status = error;
         CHECK(invoke(state, byte_buffer {}, "user_usage_log_trim") == error);
         CHECK(effect_names(state) == std::vector<std::string> {"stat"});
+    }
+}
+
+namespace {
+
+::cls_rgw_reshard_entry reshard_entry(const std::string& name = "bucket")
+{
+    ::cls_rgw_reshard_entry entry;
+    entry.time = ::ceph::real_time {std::chrono::seconds {123}};
+    entry.tenant = "tenant";
+    entry.bucket_name = name;
+    entry.bucket_id = "id";
+    entry.old_num_shards = 3;
+    entry.new_num_shards = 7;
+    entry.initiator = ::cls_rgw_reshard_initiator::Dynamic;
+
+    return entry;
+}
+
+byte_buffer old_reshard_entry(const ::cls_rgw_reshard_entry& entry, const std::uint8_t version)
+{
+    byte_buffer output;
+    ENCODE_START(version, 1, output);
+    ::ceph::encode(entry.time, output);
+    ::ceph::encode(entry.tenant, output);
+    ::ceph::encode(entry.bucket_name, output);
+    ::ceph::encode(entry.bucket_id, output);
+    if (version < 2) { ::ceph::encode(std::string {"removed"}, output); }
+    ::ceph::encode(entry.old_num_shards, output);
+    ::ceph::encode(entry.new_num_shards, output);
+    if (version >= 3) { ::ceph::encode(entry.initiator, output); }
+    ENCODE_FINISH(output);
+
+    return output;
+}
+
+byte_buffer reshard_list_request(const std::uint32_t maximum, const std::string& marker = {})
+{
+    ::cls_rgw_reshard_list_op request;
+    request.max = maximum;
+    request.marker = marker;
+
+    return usage_bytes(request);
+}
+
+} // anonymous namespace
+
+TEST_CASE("Reshard queue retains create-only checks, get ownership and bucket-id removal", "[rgw][cls][reshard]")
+{
+    storage state;
+    ::cls_rgw_reshard_add_op add;
+    add.entry = reshard_entry();
+    add.create_only = true;
+    REQUIRE(invoke(state, usage_bytes(add), "reshard_add") == 0);
+    CHECK(effect_names(state) == std::vector<std::string> {"get-value", "set-value"});
+    CHECK(state.values.at("tenant:bucket").contents_equal(usage_bytes(add.entry)));
+    CHECK(invoke(state, usage_bytes(add), "reshard_add") == -EEXIST);
+    add.create_only = false;
+    add.entry.new_num_shards = 11;
+    CHECK(invoke(state, usage_bytes(add), "reshard_add") == 0);
+    ::cls_rgw_reshard_get_op get;
+    get.entry = reshard_entry();
+    CHECK(invoke(state, usage_bytes(get), "reshard_get") == 0);
+    ::cls_rgw_reshard_get_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    CHECK(result.entry.new_num_shards == 11);
+    ::cls_rgw_reshard_remove_op remove;
+    remove.tenant = "tenant";
+    remove.bucket_name = "bucket";
+    remove.bucket_id = "different";
+    CHECK(invoke(state, usage_bytes(remove), "reshard_remove") == 0);
+    CHECK(state.values.size() == 1);
+    remove.bucket_id.clear();
+    CHECK(invoke(state, usage_bytes(remove), "reshard_remove") == 0);
+    CHECK(state.values.empty());
+    CHECK(invoke(state, usage_bytes(remove), "reshard_remove") == -ENOENT);
+}
+
+TEST_CASE("Reshard listing preserves zero and large limits, pagination and mixed old leaves", "[rgw][cls][reshard]")
+{
+    storage state;
+    for (unsigned index = 0; index < 1003; ++index) {
+        const auto key = std::to_string(index);
+        state.values[key] = usage_bytes(reshard_entry(key));
+    }
+    for (const std::uint32_t maximum : {0u, 1u, 2u, 1000u, 1001u, 2147483647u, 2147483648u, 4294967295u}) {
+        state.effects.clear();
+        REQUIRE(invoke(state, reshard_list_request(maximum), "reshard_list") == 0);
+        ::cls_rgw_reshard_list_ret result;
+        auto cursor = state.reply.cbegin();
+        ::decode(result, cursor);
+        const auto fetched = maximum && maximum < 1000 ? maximum : 1000;
+        CHECK(result.entries.size() == (maximum && maximum <= 2147483647u ? fetched : 0));
+        CHECK(result.is_truncated);
+        CHECK(state.effects.size() == 1);
+    }
+    REQUIRE(invoke(state, reshard_list_request(2, "999"), "reshard_list") == 0);
+    ::cls_rgw_reshard_list_ret empty;
+    auto cursor = state.reply.cbegin();
+    ::decode(empty, cursor);
+    CHECK(empty.entries.empty());
+    CHECK_FALSE(empty.is_truncated);
+
+    state.values.clear();
+    for (const std::uint8_t version : {3, 1, 2, 0}) {
+        const auto key = std::to_string(state.values.size());
+        state.values[key] = old_reshard_entry(reshard_entry(key), version);
+    }
+    REQUIRE(invoke(state, reshard_list_request(4), "reshard_list") == 0);
+    ::cls_rgw_reshard_list_ret result;
+    cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    REQUIRE(result.entries.size() == 4);
+    CHECK(result.entries.front().initiator == ::cls_rgw_reshard_initiator::Dynamic);
+    for (const auto& entry : result.entries | std::views::drop(1)) {
+        CHECK(entry.initiator == ::cls_rgw_reshard_initiator::Unknown);
+        CHECK(entry.tenant == "tenant");
+        CHECK(entry.bucket_id == "id");
+        CHECK(entry.new_num_shards == 7);
+    }
+}
+
+TEST_CASE("Reshard queue preserves stage-specific failures and corrupt data", "[rgw][cls][reshard]")
+{
+    ::cls_rgw_reshard_add_op add;
+    add.entry = reshard_entry();
+    add.create_only = true;
+    for (int stage = 1; stage <= 2; ++stage) {
+        storage state;
+        state.failure_call = stage;
+        CHECK(invoke(state, usage_bytes(add), "reshard_add") == -EAGAIN);
+        CHECK(state.effects.size() == static_cast<unsigned>(stage));
+    }
+    for (const bool malformed : {false, true}) {
+        storage state;
+        state.values["tenant:bucket"] = malformed ? usage_bytes(std::string {"corrupt"}) : usage_bytes(add.entry);
+        CHECK(invoke(state, usage_bytes(add), "reshard_add") == -EEXIST);
+        ::cls_rgw_reshard_get_op get;
+        get.entry = add.entry;
+        CHECK(invoke(state, usage_bytes(get), "reshard_get") == (malformed ? -EIO : 0));
+        ::cls_rgw_reshard_remove_op remove;
+        remove.tenant = "tenant";
+        remove.bucket_name = "bucket";
+        if (malformed) {
+            CHECK(invoke(state, usage_bytes(remove), "reshard_remove") == -EIO);
+            CHECK(invoke(state, reshard_list_request(1), "reshard_list") == -EIO);
+        }
+        if (!malformed) {
+            state.effects.clear();
+            state.failure_call = 2;
+            CHECK(invoke(state, usage_bytes(remove), "reshard_remove") == 0);
+            CHECK(state.values.size() == 1);
+        }
+    }
+    storage state;
+    state.failure_call = 1;
+    CHECK(invoke(state, reshard_list_request(1), "reshard_list") == -EAGAIN);
+}
+
+TEST_CASE("Bucket reshard controls preserve header metadata and exact guard return values", "[rgw][cls][reshard]")
+{
+    for (const unsigned status : {0, 1, 2, 3, 255}) {
+        storage state;
+        ::rgw_bucket_dir_header initial;
+        initial.ver = 9;
+        initial.master_ver = 13;
+        initial.tag_timeout = 17;
+        state.header = usage_bytes(initial);
+        ::cls_rgw_set_bucket_resharding_op set;
+        set.entry.reshard_status = static_cast<::cls_rgw_reshard_status>(status);
+        CHECK(invoke(state, usage_bytes(set), "set_bucket_resharding") == 0);
+        auto changed = header(state);
+        CHECK(changed.new_instance.reshard_status == set.entry.reshard_status);
+        CHECK(changed.ver == 10);
+        CHECK(changed.master_ver == 13);
+        CHECK(changed.tag_timeout == 17);
+        CHECK(invoke(state, usage_bytes(::cls_rgw_get_bucket_resharding_op {}), "get_bucket_resharding") == 0);
+        ::cls_rgw_get_bucket_resharding_ret result;
+        auto cursor = state.reply.cbegin();
+        ::decode(result, cursor);
+        CHECK(result.new_instance.reshard_status == set.entry.reshard_status);
+        for (const std::uint32_t count : {0, 3, 4, 7}) {
+            for (const int error : {std::numeric_limits<int>::min(), -2300, -1, 0, 7, std::numeric_limits<int>::max()}) {
+                changed.reshardlog_entries = count;
+                state.header = usage_bytes(changed);
+                ::cls_rgw_guard_bucket_resharding_op guard {error};
+                const bool blocked = status == 1 || (status == 3 && count >= state.reshard_threshold);
+                CHECK(invoke(state, usage_bytes(guard), "guard_bucket_resharding") == (blocked ? error : 0));
+            }
+        }
+        CHECK(invoke(state, usage_bytes(::cls_rgw_clear_bucket_resharding_op {}), "clear_bucket_resharding") == 0);
+        CHECK(header(state).new_instance.reshard_status == ::cls_rgw_reshard_status::NOT_RESHARDING);
+        CHECK(header(state).ver == 11);
+    }
+}
+
+TEST_CASE("Reshard controls retain header failure stages and request admission", "[rgw][cls][reshard]")
+{
+    ::cls_rgw_reshard_add_op add;
+    add.entry = reshard_entry();
+    ::cls_rgw_reshard_get_op get;
+    get.entry = add.entry;
+    ::cls_rgw_reshard_remove_op remove;
+    remove.tenant = "tenant";
+    remove.bucket_name = "bucket";
+    ::cls_rgw_set_bucket_resharding_op set;
+    set.entry.reshard_status = ::cls_rgw_reshard_status::IN_PROGRESS;
+    const std::map<std::string, byte_buffer> requests {
+        {"reshard_add", usage_bytes(add)}, {"reshard_get", usage_bytes(get)},
+        {"reshard_list", reshard_list_request(1)}, {"reshard_remove", usage_bytes(remove)},
+        {"set_bucket_resharding", usage_bytes(set)},
+        {"clear_bucket_resharding", usage_bytes(::cls_rgw_clear_bucket_resharding_op {})},
+        {"get_bucket_resharding", usage_bytes(::cls_rgw_get_bucket_resharding_op {})},
+        {"guard_bucket_resharding", usage_bytes(::cls_rgw_guard_bucket_resharding_op {-2300})}
+    };
+    for (const auto& [method, full] : requests) {
+        for (unsigned size = 0; size < full.length(); ++size) {
+            byte_buffer input;
+            input.substr_of(full, 0, size);
+            storage state;
+            CHECK(invoke(state, input, method) == -EINVAL);
+            CHECK(state.effects.empty());
+        }
+        if (method.find("bucket_resharding") == std::string::npos) { continue; }
+        const bool writes = method == "set_bucket_resharding" || method == "clear_bucket_resharding";
+        for (int stage = 1; stage <= (writes ? 2 : 1); ++stage) {
+            storage state;
+            state.failure_call = stage;
+            CHECK(invoke(state, full, method) == -EAGAIN);
+            CHECK(state.effects.size() == static_cast<unsigned>(stage));
+        }
+        storage corrupt;
+        corrupt.header = usage_bytes(std::string {"corrupt"});
+        CHECK(invoke(corrupt, full, method) == -EIO);
     }
 }
