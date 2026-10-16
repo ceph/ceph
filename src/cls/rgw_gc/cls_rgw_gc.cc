@@ -14,6 +14,10 @@
 #include "cls/rgw_gc/cls_rgw_gc_const.h"
 #include "cls/queue/cls_queue_src.h"
 
+#ifdef WITH_RGW_CLS_DATUM
+ #include "cls_rgw_gc_datum.h"
+#endif
+
 #define GC_LIST_DEFAULT_MAX 128
 
 using std::string;
@@ -31,7 +35,11 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
 {
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::queued_gc_datum::init_request op;
+#else
   cls_rgw_gc_queue_init_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -56,7 +64,11 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
 static int cls_rgw_gc_queue_enqueue(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::set_request op;
+#else
   cls_rgw_gc_set_entry_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -93,7 +105,11 @@ static int cls_rgw_gc_queue_enqueue(cls_method_context_t hctx, bufferlist *in, b
 static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::list_request op;
+#else
   cls_rgw_gc_list_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -126,7 +142,11 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   list_op.max = op.max;
   list_op.start_marker = op.marker;
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::reply list_ret;
+#else
   cls_rgw_gc_list_ret list_ret;
+#endif
   uint32_t num_entries = 0; //Entries excluding the deferred ones
   bool is_truncated = true;
   string next_marker;
@@ -141,7 +161,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
     next_marker = op_ret.next_marker;
   
     if (op_ret.entries.size()) {
-      for (auto it : op_ret.entries) {
+      for (const auto& it : op_ret.entries) {
         cls_rgw_gc_obj_info info;
         try {
           decode(info, it.data);
@@ -188,11 +208,11 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
         if (op.expired_only) {
           real_time now = ceph::real_clock::now();
           if (info.time <= now) {
-            list_ret.entries.emplace_back(info);
+            list_ret.entries.emplace_back(std::move(info));
           }
           //Can break out here if info.time > now, since all subsequent entries won't have expired
         } else {
-          list_ret.entries.emplace_back(info);
+          list_ret.entries.emplace_back(std::move(info));
         }
         num_entries++;
       }
@@ -224,7 +244,11 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
 {
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::queued_gc_datum::remove_request op;
+#else
   cls_rgw_gc_queue_remove_entries_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -270,7 +294,7 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     unsigned int index = 0;
     // If data is not empty
     if (op_ret.entries.size()) {
-      for (auto it : op_ret.entries) {
+      for (const auto& it : op_ret.entries) {
         cls_rgw_gc_obj_info info;
         try {
           decode(info, it.data);
@@ -375,7 +399,11 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
   int ret = 0;
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::set_request op;
+#else
   cls_rgw_gc_queue_defer_entry_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {

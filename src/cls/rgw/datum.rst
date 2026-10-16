@@ -279,3 +279,9 @@ uses an independent local request and decodes the native upload leaf in place:
 copying or moving a decoded candidate would drop a received placement rule. The
 cursor commits on success; a failed request may be partially decoded, is local,
 and never reaches storage. No shared manifest implementation changes are needed.
+
+The dedicated RGW GC queue wrapper reuses the legacy GC set/list/reply profiles
+for enqueue, full-info defer, and listing. Only queue initialization and the
+64-bit remove count need new scalar profiles. It borrows fetched queue records
+and moves accepted object chains into vector replies. Shared queue operations,
+storage helpers, urgent-data codecs, and public list outputs remain native.

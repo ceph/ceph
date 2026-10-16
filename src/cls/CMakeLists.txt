@@ -240,7 +240,8 @@ if (WITH_RADOSGW)
     endif()
     add_subdirectory(rgw)
     foreach(target cls_rgw cls_rgw_client)
-      target_sources(${target} PRIVATE $<TARGET_OBJECTS:cls_rgw_datum>)
+      target_sources(${target} PRIVATE
+        $<TARGET_OBJECTS:cls_rgw_datum> $<TARGET_OBJECTS:cls_rgw_datum_gc>)
       target_compile_definitions(${target} PRIVATE WITH_RGW_CLS_DATUM)
     endforeach()
   endif()
@@ -351,6 +352,13 @@ if (WITH_RADOSGW)
     rgw_gc/cls_rgw_gc_client.cc
     rgw/cls_rgw_types.cc)
   add_library(cls_rgw_gc_client STATIC ${cls_rgw_gc_client_srcs})
+  if(WITH_RGW_CLS_DATUM)
+    target_link_libraries(cls_rgw_gc PRIVATE ${FMT_LIB})
+    foreach(target cls_rgw_gc cls_rgw_gc_client)
+      target_sources(${target} PRIVATE $<TARGET_OBJECTS:cls_rgw_datum_gc>)
+      target_compile_definitions(${target} PRIVATE WITH_RGW_CLS_DATUM)
+    endforeach()
+  endif()
   target_include_directories(cls_rgw_gc_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
