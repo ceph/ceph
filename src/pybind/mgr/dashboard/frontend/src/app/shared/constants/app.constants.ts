@@ -104,6 +104,7 @@ export class ActionLabelsI18n {
   ADD: string;
   REMOVE: string;
   EDIT: string;
+  SAVE_CHANGES: string;
   CANCEL: string;
   PREVIEW: string;
   MOVE: string;
@@ -165,6 +166,7 @@ export class ActionLabelsI18n {
   SETUP_MULTISITE_REPLICATION: string;
   NFS_EXPORT: string;
   VIEW: string;
+  EDIT_GATEWAYS_GROUP: string;
   constructor() {
     /* Create a new item */
     this.CREATE = $localize`Create`;
@@ -191,6 +193,7 @@ export class ActionLabelsI18n {
 
     /* Make changes to an existing item */
     this.EDIT = $localize`Edit`;
+    this.SAVE_CHANGES = $localize`Save changes`;
     this.UPDATE = $localize`Update`;
     this.CANCEL = $localize`Cancel`;
     this.PREVIEW = $localize`Preview`;
@@ -257,6 +260,7 @@ export class ActionLabelsI18n {
 
     this.NFS_EXPORT = $localize`Create NFS Export`;
     this.VIEW = $localize`View`;
+    this.EDIT_GATEWAYS_GROUP = $localize`Edit gateways group`;
   }
 }
 

@@ -1,0 +1,34 @@
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [description]="description"
+  size="md"
+  [isSubmitLoading]="isSubmitLoading"
+  [submitButtonLabel]="'Save changes'"
+  [submitButtonLoadingLabel]="'Saving'"
+  (submitRequested)="onSubmit()"
+  (closeRequested)="closeModal()"
+>
+  <cd-tearsheet-step>
+    @if (showAuthAlert) {
+      <cd-alert-panel
+        type="warning"
+        title="Subsystem DHCHAP Key will be deleted permanently"
+        i18n-title
+        class="cd-nvmeof-edit-auth-downgrade-alert"
+      >
+        <span i18n>
+          Switching from bidirectional authentication to unidirectional method will remove the
+          subsystem authentication key, exposing the subsystem to unauthorised access.
+        </span>
+      </cd-alert-panel>
+    }
+    <cd-nvmeof-subsystem-step-three
+      #tearsheetStep
+      [group]="groupName"
+      [initialAuthType]="initialAuthType"
+      [stepTwoValue]="stepTwoValue"
+    >
+    </cd-nvmeof-subsystem-step-three>
+  </cd-tearsheet-step>
+</cd-tearsheet>

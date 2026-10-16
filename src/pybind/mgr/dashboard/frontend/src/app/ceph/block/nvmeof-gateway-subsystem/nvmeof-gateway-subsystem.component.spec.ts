@@ -28,7 +28,7 @@ describe('NvmeofGatewaySubsystemComponent', () => {
       namespace_count: 0,
       subtype: 'NVMe',
       namespaces: [],
-      has_dhchap_key: true
+      has_dhchap_key: false
     } as NvmeofSubsystem,
     {
       nqn: 'nqn.2014-08.org.nvmexpress:uuid:2222',
@@ -43,7 +43,7 @@ describe('NvmeofGatewaySubsystemComponent', () => {
       namespace_count: 0,
       subtype: 'NVMe',
       namespaces: [],
-      has_dhchap_key: true
+      has_dhchap_key: false
     } as NvmeofSubsystem
   ];
 
