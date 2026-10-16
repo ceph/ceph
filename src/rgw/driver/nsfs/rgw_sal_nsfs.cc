@@ -16190,10 +16190,18 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      *
      *   op=create name= [mode=] [file= content=]   refused if it exists
      *   op=mode name= mode=
-     *   op=remove name=   its regular files, then it
+     *   op=remove name=   its regular files and empty directories, then it
      *
      * `mode` and `remove` refuse a directory carrying nsfs state, so
-     * neither touches a bucket's. */
+     * neither touches a bucket's.
+     *
+     * as=<user>:  the directory is that user's, as a NooBaa bucket's is
+     * its account's, made and changed and removed as the user on the
+     * helper pool.  The base path is the gateway's, where no identity
+     * may create, so the gateway makes `<name>` sticky and writable,
+     * as it makes every directory under impersonation, and the user's
+     * directory is `<name>/d`;  that is the path reported, and remove
+     * takes both. */
     auto op = params.find("op");
     auto nm = params.find("name");
     if ((op == params.end()) || (nm == params.end())) {
@@ -16204,7 +16212,17 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	(name.find('/') != std::string::npos)) {
       return -EINVAL;
     }
-    const std::string path = default_bucket_location() + "/" + name;
+    std::optional<nsfs::Credentials> as;
+    if (auto a = params.find("as"); a != params.end()) {
+      nsfs::Credentials cred;
+      const int r = hint_credentials(dpp, this, a->second, cred);
+      if (r < 0) {
+	return r;
+      }
+      as = cred;
+    }
+    const std::string parent = default_bucket_location() + "/" + name;
+    const std::string path = as ? (parent + "/d") : parent;
     auto mode_of = [&params](mode_t& m) -> int {
       auto it = params.find("mode");
       if (it == params.end()) {
@@ -16217,6 +16235,10 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
       return 0;
     };
+    /* `fn` as the `as` user, or as the gateway */
+    auto acting = [&](const nsfs::ImpersonatedFn& fn) -> int {
+      return as ? nsfs::run_as(dpp, *as, fn) : fn();
+    };
 
     if (op->second == "create") {
       mode_t m = 0755;
@@ -16224,23 +16246,52 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       if ((r < 0) && (r != -ENOENT)) {
 	return r;
       }
-      if (::mkdir(path.c_str(), m) < 0) {
-	return -errno;
-      }
-      /* not subject to the umask */
-      if (::chmod(path.c_str(), m) < 0) {
-	return -errno;
+      if (as) {
+	if (::mkdir(parent.c_str(), 01777) < 0) {
+	  return -errno;
+	}
+	if (::chmod(parent.c_str(), 01777) < 0) {
+	  return -errno;
+	}
       }
       auto f = params.find("file");
-      if (f != params.end()) {
-	if (f->second.empty() || (f->second.find('/') != std::string::npos)) {
-	  return -EINVAL;
+      if ((f != params.end()) &&
+	  (f->second.empty() || (f->second.find('/') != std::string::npos))) {
+	return -EINVAL;
+      }
+    }
+
+    /* The user acts relative to a descriptor the gateway opens, as the
+     * driver does:  the user need not be able to search the path down
+     * to the base path. */
+    const std::string dir = as ? parent : default_bucket_location();
+    const char* leaf = as ? "d" : name.c_str();
+    const int pfd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (pfd < 0) {
+      return -errno;
+    }
+    auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
+
+    if (op->second == "create") {
+      mode_t m = 0755;
+      (void) mode_of(m);
+      auto f = params.find("file");
+      auto c = params.find("content");
+      int r = acting([&]() -> int {
+	if (::mkdirat(pfd, leaf, m) < 0) {
+	  return -errno;
 	}
-	auto c = params.find("content");
+	/* not subject to the umask */
+	if (::fchmodat(pfd, leaf, m, 0) < 0) {
+	  return -errno;
+	}
+	if (f == params.end()) {
+	  return 0;
+	}
 	const std::string content = (c == params.end()) ? "" : c->second;
-	const std::string fpath = path + "/" + f->second;
-	int fd = ::open(fpath.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
-			0644);
+	const std::string fname = std::string(leaf) + "/" + f->second;
+	int fd = ::openat(pfd, fname.c_str(),
+			  O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (fd < 0) {
 	  return -errno;
 	}
@@ -16250,6 +16301,10 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	if (werr || (static_cast<size_t>(n) != content.size())) {
 	  return werr ? -werr : -EIO;
 	}
+	return 0;
+      });
+      if (r < 0) {
+	return r;
       }
     } else if (op->second == "mode") {
       mode_t m = 0;
@@ -16261,25 +16316,43 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       if (r != 0) {
 	return (r > 0) ? -EEXIST : r;
       }
-      if (::chmod(path.c_str(), m) < 0) {
-	return -errno;
+      r = acting([&]() -> int {
+	return (::fchmodat(pfd, leaf, m, 0) < 0) ? -errno : 0;
+      });
+      if (r < 0) {
+	return r;
       }
     } else if (op->second == "remove") {
       int r = carries_nsfs_state(path);
       if (r != 0) {
 	return (r > 0) ? -EEXIST : r;
       }
-      DIR* d = ::opendir(path.c_str());
-      if (!d) {
-	return -errno;
-      }
-      while (struct dirent* e = ::readdir(d)) {
-	if (e->d_type == DT_REG) {
-	  ::unlinkat(::dirfd(d), e->d_name, 0);
+      r = acting([&]() -> int {
+	const int fd = ::openat(pfd, leaf, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (fd < 0) {
+	  return -errno;
 	}
+	DIR* d = ::fdopendir(fd);
+	if (!d) {
+	  const int err = errno;
+	  ::close(fd);
+	  return -err;
+	}
+	while (struct dirent* e = ::readdir(d)) {
+	  if (e->d_type == DT_REG) {
+	    ::unlinkat(::dirfd(d), e->d_name, 0);
+	  } else if ((e->d_type == DT_DIR) && std::strcmp(e->d_name, ".") &&
+		     std::strcmp(e->d_name, "..")) {
+	    ::unlinkat(::dirfd(d), e->d_name, AT_REMOVEDIR);
+	  }
+	}
+	::closedir(d);
+	return (::unlinkat(pfd, leaf, AT_REMOVEDIR) < 0) ? -errno : 0;
+      });
+      if (r < 0) {
+	return r;
       }
-      ::closedir(d);
-      if (::rmdir(path.c_str()) < 0) {
+      if (as && (::rmdir(parent.c_str()) < 0)) {
 	return -errno;
       }
     } else {
