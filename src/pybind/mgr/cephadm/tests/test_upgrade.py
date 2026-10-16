@@ -8,6 +8,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import (
     CephadmUpgrade,
+    MID_UPGRADE_MUTED_WARNINGS,
     OkToUpgradeMonReport,
     UpgradeState,
     parse_ok_to_upgrade_mon_json,
@@ -18,6 +19,7 @@ from cephadm.utils import (
     ContainerInspectInfo,
     allowed_ciphers_are_aes256k_only,
     auth_allowed_cipher_names_from_mon_map,
+    auth_service_cipher_name_from_mon_map,
 )
 from orchestrator import OrchestratorError, DaemonDescription, HostSpec, daemon_type_to_service
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
@@ -1754,23 +1756,19 @@ def test_to_upgrade_rgw_listener_batching(
         pytest.param({'auth_allowed_ciphers': [{'name': 'aes', 'value': 1},
                                                {'name': 'aes256k', 'value': 2}]},
                      ['aes', 'aes256k'], False, id='dump-aes-and-aes256k'),
-        # mons predating the cephx cipher settings don't report the field at all
-        pytest.param({'fsid': 'foobar'}, [], False, id='field-absent'),
-        pytest.param({'auth_allowed_ciphers': []}, [], False, id='field-empty'),
         # cephx disabled
         pytest.param({'auth_allowed_ciphers': [{'name': 'none', 'value': 0}]},
                      ['none'], False, id='cephx-none'),
-        # tolerated alternative encodings
-        pytest.param({'auth_allowed_ciphers': 'aes, aes256k'},
-                     ['aes', 'aes256k'], False, id='comma-separated-string'),
-        pytest.param({'auth_allowed_ciphers': ' aes256k '}, ['aes256k'], True,
-                     id='comma-separated-string-single'),
-        pytest.param({'auth_allowed_ciphers': ['aes256k']}, ['aes256k'], True,
-                     id='plain-string-list'),
-        # malformed input must not raise, or the upgrade dies here
+        # unreadable input must not raise, or the upgrade dies here. MonMap::dump()
+        # always emits the field, so these only mean 'could not read the setting'
+        # and must never come out as aes256k-only
         pytest.param(None, [], False, id='mon-map-not-a-dict'),
-        pytest.param({'auth_allowed_ciphers': 7}, [], False, id='ciphers-not-a-list'),
-        pytest.param({'auth_allowed_ciphers': [{'value': 2}, {'name': ''}, '', 'aes256k']},
+        pytest.param({'fsid': 'foobar'}, [], False, id='field-absent'),
+        pytest.param({'auth_allowed_ciphers': []}, [], False, id='field-empty'),
+        pytest.param({'auth_allowed_ciphers': 'aes256k'}, [], False,
+                     id='ciphers-not-a-list'),
+        pytest.param({'auth_allowed_ciphers': [{'value': 2}, {'name': ''},
+                                               {'name': 'aes256k', 'value': 2}]},
                      ['aes256k'], True, id='skips-nameless-entries'),
     ],
 )
@@ -1778,6 +1776,25 @@ def test_auth_allowed_cipher_names_from_mon_map(mon_map, expected_names, expecte
     names = auth_allowed_cipher_names_from_mon_map(mon_map)
     assert names == expected_names
     assert allowed_ciphers_are_aes256k_only(names) is expected_aes256k_only
+
+
+@pytest.mark.parametrize(
+    "mon_map,expected",
+    [
+        # the shape mgr actually gets back from MonMap::dump()
+        pytest.param({'auth_service_cipher': {'name': 'aes256k', 'value': 2}},
+                     'aes256k', id='dump-aes256k'),
+        pytest.param({'auth_service_cipher': {'name': 'aes', 'value': 1}},
+                     'aes', id='dump-aes'),
+        # unreadable input reads as 'cannot tell', never as the service cipher
+        pytest.param(None, None, id='mon-map-not-a-dict'),
+        pytest.param({'fsid': 'foobar'}, None, id='field-absent'),
+        pytest.param({'auth_service_cipher': 'aes256k'}, None, id='cipher-not-an-object'),
+        pytest.param({'auth_service_cipher': {'value': 2}}, None, id='nameless-entry'),
+    ],
+)
+def test_auth_service_cipher_name_from_mon_map(mon_map, expected):
+    assert auth_service_cipher_name_from_mon_map(mon_map) == expected
 
 
 def _set_mon_map_allowed_ciphers(
@@ -1817,9 +1834,10 @@ def test_maybe_set_cephx_allowed_ciphers_skips_aes256k_only(
     "current_ciphers",
     [
         pytest.param(['aes'], id='aes-only'),
+        # what a monmap predating the cipher settings decodes to
         pytest.param(['aes', 'aes256k'], id='aes-and-aes256k'),
         pytest.param(['none'], id='cephx-none'),
-        # mons too old to report the setting
+        # setting unreadable: fall back to the pre-existing behaviour
         pytest.param(None, id='field-absent'),
     ],
 )
@@ -1869,3 +1887,120 @@ def test_rotate_mgr_mon_auth_keys_goes_through_cipher_check(
     cephadm_module.upgrade._rotate_mgr_mon_auth_keys('target_image', ['digest1'])
 
     _maybe_set_cephx_allowed_ciphers.assert_called_once_with()
+
+
+def _set_cephx_health_state(
+    cephadm_module: CephadmOrchestrator,
+    allowed_ciphers: Optional[List[str]] = None,
+    service_cipher: Optional[str] = None,
+    raised_checks: Optional[List[str]] = None,
+) -> None:
+    """Set up mon_map ciphers and raised health checks the way the mons report them."""
+    _set_mon_map_allowed_ciphers(cephadm_module, allowed_ciphers)
+    if service_cipher is not None:
+        mon_map = dict(cephadm_module.get('mon_map'))
+        mon_map['auth_service_cipher'] = {'name': service_cipher, 'value': 0}
+        cephadm_module.mock_store_set('_ceph_get', 'mon_map', mon_map)
+    cephadm_module.mock_store_set('_ceph_get', 'health', {
+        'json': json.dumps({'checks': {c: {'detail': []} for c in (raised_checks or [])}})
+    })
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_mute_upgrade_health_warnings_skipped_when_cephx_secure(
+    check_mon_command, cephadm_module: CephadmOrchestrator
+):
+    # the reported cluster: all keys already aes256k, ciphers already narrowed.
+    # Muting here only produces a misleading '(muted: AUTH_INSECURE_*)' line.
+    _set_cephx_health_state(cephadm_module, allowed_ciphers=['aes256k'],
+                            service_cipher='aes256k', raised_checks=[])
+
+    assert cephadm_module.upgrade._mute_upgrade_related_health_warnings() is False
+    check_mon_command.assert_not_called()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+@pytest.mark.parametrize(
+    "allowed_ciphers,service_cipher,raised_checks",
+    [
+        # insecure cipher still allowed
+        pytest.param(['aes', 'aes256k'], 'aes256k', [], id='insecure-cipher-allowed'),
+        # mons still issue insecure service tickets
+        pytest.param(['aes256k'], 'aes', [], id='insecure-service-cipher'),
+        # ciphers fine, but an entity still holds a key the upgrade will rotate
+        pytest.param(['aes256k'], 'aes256k', ['AUTH_INSECURE_SERVICE_KEY_TYPE'],
+                     id='insecure-key-still-present'),
+        # mons not upgraded yet: their monmap predates the cipher settings and
+        # so decodes to these defaults. Must still mute, since the checks only
+        # start existing once the mons are upgraded
+        pytest.param(['aes', 'aes256k'], 'aes', [], id='mons-not-yet-upgraded'),
+        # setting unreadable: must mute rather than assume a secure cluster
+        pytest.param(None, None, [], id='ciphers-unreadable'),
+    ],
+)
+def test_mute_upgrade_health_warnings_applied_when_cephx_insecure(
+    check_mon_command, allowed_ciphers, service_cipher, raised_checks,
+    cephadm_module: CephadmOrchestrator
+):
+    check_mon_command.return_value = (0, '', '')
+    _set_cephx_health_state(cephadm_module, allowed_ciphers=allowed_ciphers,
+                            service_cipher=service_cipher, raised_checks=raised_checks)
+
+    assert cephadm_module.upgrade._mute_upgrade_related_health_warnings() is True
+    assert check_mon_command.call_count == len(MID_UPGRADE_MUTED_WARNINGS)
+    check_mon_command.assert_has_calls(
+        [mock.call({'prefix': 'health mute', 'code': w, 'sticky': True})
+         for w in MID_UPGRADE_MUTED_WARNINGS],
+        any_order=True,
+    )
+
+
+@mock.patch.object(CephadmUpgrade, '_mark_upgrade_complete')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests", return_value=[])
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch.object(CephadmUpgrade, '_mute_upgrade_related_health_warnings', return_value=False)
+def test_do_upgrade_persists_skipped_health_warning_mutes(
+    _mute_upgrade_related_health_warnings: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    _get_active_mgr_digests: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _mark_upgrade_complete: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # the skip re-reads the mon_map and the health report, so it must be
+    # decided (and logged) once, not on every pass through _do_upgrade
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=['new_image@repo_digest'],
+        target_version='19.3.0-0',
+        remaining_count=0,
+    )
+
+    cephadm_module.upgrade._do_upgrade()
+
+    assert cephadm_module.upgrade.upgrade_state.health_warnings_mute_skipped is True
+    assert not cephadm_module.upgrade.upgrade_state.health_warnings_muted
+    saved = json.loads(cephadm_module.get_store('upgrade_state'))
+    assert saved['health_warnings_mute_skipped'] is True
+    assert saved['health_warnings_muted'] is False
+
+    cephadm_module.upgrade._do_upgrade()
+
+    _mute_upgrade_related_health_warnings.assert_called_once_with()
