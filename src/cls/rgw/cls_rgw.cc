@@ -24,6 +24,7 @@
  #include "cls/rgw/cls_rgw_bi_datum.h"
  #include "cls/rgw/cls_rgw_bilog_datum.h"
  #include "cls/rgw/cls_rgw_bucket_datum.h"
+ #include "cls/rgw/cls_rgw_gc_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_reshard_datum.h"
@@ -4659,7 +4660,7 @@ int rgw_usage_log_clear(cls_method_context_t hctx, bufferlist *in, bufferlist *o
  *
  * Since key-value data is listed in lexical order by keys, generally
  * the name entries are retrieved first and then the time entries.
- * When listing the entries via `gc_iterate_entries` one parameter is
+ * When listing the entries via `gc_list_entries` one parameter is
  * a marker, and if we were to pass "1_" (i.e.,
  * gc_index_prefixes[GC_OBJ_TIME_INDEX]), the listing would skip over
  * the 'name' entries and begin with the 'time' entries.
@@ -4802,7 +4803,11 @@ static int rgw_cls_gc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::set_request op;
+#else
   cls_rgw_gc_set_entry_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4818,7 +4823,11 @@ static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, buf
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::defer_request op;
+#else
   cls_rgw_gc_defer_entry_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4829,18 +4838,12 @@ static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, buf
   return gc_defer_entry(hctx, op.tag, op.expiration_secs);
 }
 
-static int gc_iterate_entries(cls_method_context_t hctx,
-			      const string& marker,
-			      bool expired_only,
-                              string& out_marker,
-			      uint32_t max_entries,
-			      bool *truncated,
-                              int (*cb)(cls_method_context_t,
-					const string&,
-					cls_rgw_gc_obj_info&,
-					void *),
-                              void *param)
+template <typename EntriesT>
+static int gc_list_entries(cls_method_context_t hctx, const string& marker,
+                            uint32_t max_entries, bool expired_only,
+                            EntriesT& entries, bool *truncated, string& out_marker)
 {
+  static_assert(std::is_nothrow_move_constructible_v<cls_rgw_gc_obj_info>);
   CLS_LOG(10, "gc_iterate_entries");
 
   map<string, bufferlist> keys;
@@ -4903,9 +4906,7 @@ static int gc_iterate_entries(cls_method_context_t hctx,
     if (ret < 0)
       return ret;
 
-    ret = cb(hctx, key, e, param);
-    if (ret < 0)
-      return ret;
+    entries.push_back(std::move(e));
     last_key = &(iter->first); // update when callback successful
   }
 
@@ -4919,29 +4920,16 @@ static int gc_iterate_entries(cls_method_context_t hctx,
   return 0;
 }
 
-static int gc_list_cb(cls_method_context_t hctx, const string& key, cls_rgw_gc_obj_info& info, void *param)
-{
-  list<cls_rgw_gc_obj_info> *l = (list<cls_rgw_gc_obj_info> *)param;
-  l->push_back(info);
-  return 0;
-}
-
-static int gc_list_entries(cls_method_context_t hctx, const string& marker,
-			   uint32_t max, bool expired_only,
-                           list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
-{
-  int ret = gc_iterate_entries(hctx, marker, expired_only,
-                              next_marker, max, truncated,
-                              gc_list_cb, &entries);
-  return ret;
-}
-
 static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::list_request op;
+#else
   cls_rgw_gc_list_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4949,7 +4937,11 @@ static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::reply op_ret;
+#else
   cls_rgw_gc_list_ret op_ret;
+#endif
 #define GC_LIST_ENTRIES_DEFAULT 128
   int ret = gc_list_entries(hctx, op.marker, (op.max ? op.max : GC_LIST_ENTRIES_DEFAULT), op.expired_only,
    op_ret.entries, &op_ret.truncated, op_ret.next_marker);
@@ -4997,7 +4989,11 @@ static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferli
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::gc_datum::remove_request op;
+#else
   cls_rgw_gc_remove_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {

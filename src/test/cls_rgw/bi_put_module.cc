@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <limits>
 
@@ -46,11 +47,17 @@ struct storage final
 
     int failure_call = -1;
     int failure = -EAGAIN;
+    int secondary_failure_call = -1;
+    int secondary_failure = -EIO;
 };
 
 int effect(storage& state, std::string operation, byte_buffer arguments = {})
 {
     state.effects.emplace_back(std::move(operation), std::move(arguments));
+
+    if (static_cast<int>(state.effects.size()) == state.secondary_failure_call) {
+        return state.secondary_failure;
+    }
 
     return static_cast<int>(state.effects.size()) == state.failure_call ? state.failure : 0;
 }
@@ -59,7 +66,7 @@ auto invoke(storage& state, byte_buffer input, const std::string_view method = "
 {
     const auto [call, flags] = ::rgw_cls_test::get_method(method);
     const bool read_only = method == "bi_log_list" || method == "bucket_list" || method == "bucket_check_index" || method == "user_usage_log_read" || method == "reshard_list" ||
-                           method == "reshard_get" || method == "guard_bucket_resharding" || method == "get_bucket_resharding";
+                           method == "reshard_get" || method == "guard_bucket_resharding" || method == "get_bucket_resharding" || method == "gc_list";
     REQUIRE(flags == (read_only ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
@@ -1997,5 +2004,226 @@ TEST_CASE("Reshard controls retain header failure stages and request admission",
         storage corrupt;
         corrupt.header = usage_bytes(std::string {"corrupt"});
         CHECK(invoke(corrupt, full, method) == -EIO);
+    }
+}
+
+namespace {
+
+::cls_rgw_gc_obj_info gc_info(const std::string& tag = "tag", const std::uint64_t seconds = 1234567889)
+{
+    ::cls_rgw_gc_obj_info info;
+    info.tag = tag;
+    info.time = ::ceph::real_time {std::chrono::seconds {seconds} + std::chrono::nanoseconds {123}};
+    for (unsigned index = 0; index < 3; ++index) {
+        info.chain.push_obj(std::string(80, 'p'), {std::string(80, 'o'), std::to_string(index)}, std::string(80, 'l'));
+    }
+
+    return info;
+}
+
+std::string gc_time_key(const ::cls_rgw_gc_obj_info& info)
+{
+    char result[32];
+    const auto time = ::ceph::real_clock::to_ceph_timespec(info.time);
+    std::snprintf(result, sizeof(result), "%011llu.%09u",
+                  static_cast<unsigned long long>(time.tv_sec), static_cast<unsigned>(time.tv_nsec));
+
+    return "1_" + std::string {result};
+}
+
+int set_gc(storage& state, const ::cls_rgw_gc_obj_info& info, const std::uint32_t expiration = 1)
+{
+    ::cls_rgw_gc_set_entry_op request;
+    request.info = info;
+    request.expiration_secs = expiration;
+
+    return invoke(state, usage_bytes(request), "gc_set_entry");
+}
+
+byte_buffer gc_list_request(const bool expired, const std::uint32_t maximum = 0, const std::string& marker = {})
+{
+    ::cls_rgw_gc_list_op request;
+    request.expired_only = expired;
+    request.max = maximum;
+    request.marker = marker;
+
+    return usage_bytes(request);
+}
+
+void seed_gc(storage& state, const ::cls_rgw_gc_obj_info& info)
+{
+    state.values["0_" + info.tag] = usage_bytes(info);
+    state.values[gc_time_key(info)] = usage_bytes(info);
+}
+
+::cls_rgw_gc_list_ret gc_result(const storage& state)
+{
+    ::cls_rgw_gc_list_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    REQUIRE(cursor.end());
+
+    return result;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Legacy GC set/defer retain native time indexes and complete object chains", "[rgw][cls][gc]")
+{
+    storage state;
+    const auto info = gc_info();
+    REQUIRE(set_gc(state, info) == 0);
+    CHECK(effect_names(state) == std::vector<std::string> {"get-value", "set-value", "set-value"});
+    REQUIRE(state.values.size() == 2);
+    CHECK(state.values.at("0_tag").contents_equal(state.values.at("1_01234567891.000000123")));
+    REQUIRE(invoke(state, gc_list_request(false), "gc_list") == 0);
+    const auto result = gc_result(state);
+    REQUIRE(result.entries.size() == 1);
+    CHECK(result.entries.front().tag == "tag");
+    REQUIRE(result.entries.front().chain.objs.size() == 3);
+    CHECK(result.entries.front().chain.objs.back().key.instance == "2");
+    CHECK_FALSE(result.truncated);
+    CHECK(result.next_marker.empty());
+    ::cls_rgw_gc_defer_entry_op defer;
+    defer.tag = "tag";
+    defer.expiration_secs = 2;
+    state.effects.clear();
+    CHECK(invoke(state, usage_bytes(defer), "gc_defer_entry") == 0);
+    CHECK(effect_names(state) == std::vector<std::string> {"get-value", "get-value", "remove", "set-value", "set-value"});
+    CHECK_FALSE(state.values.contains("1_01234567891.000000123"));
+    CHECK(state.values.at("0_tag").contents_equal(state.values.at("1_01234567892.000000123")));
+    CHECK(invoke(state, gc_list_request(true), "gc_list") == 0);
+    CHECK(gc_result(state).entries.empty());
+    CHECK(set_gc(state, gc_info(""), 0) == 0);
+}
+
+TEST_CASE("Legacy GC list retains strict expiry, namespace cutoff, markers and default page size", "[rgw][cls][gc]")
+{
+    storage state;
+    seed_gc(state, gc_info("past", 1234567889));
+    seed_gc(state, gc_info("equal", 1234567890));
+    seed_gc(state, gc_info("future", 1234567891));
+    REQUIRE(invoke(state, gc_list_request(true), "gc_list") == 0);
+    auto result = gc_result(state);
+    REQUIRE(result.entries.size() == 1);
+    CHECK(result.entries.front().tag == "past");
+    CHECK_FALSE(result.truncated);
+    CHECK(result.next_marker.empty());
+    state.values["2_invalid"] = usage_bytes(std::string {"corrupt"});
+    REQUIRE(invoke(state, gc_list_request(false, 1), "gc_list") == 0);
+    result = gc_result(state);
+    REQUIRE(result.entries.size() == 1);
+    CHECK(result.truncated);
+    CHECK(result.next_marker == "1_01234567889.000000123");
+    REQUIRE(invoke(state, gc_list_request(false, 2, result.next_marker), "gc_list") == 0);
+    result = gc_result(state);
+    CHECK(result.entries.size() == 2);
+    CHECK(result.truncated);
+    REQUIRE(invoke(state, gc_list_request(false, 2, result.next_marker), "gc_list") == 0);
+    result = gc_result(state);
+    CHECK(result.entries.empty());
+    CHECK_FALSE(result.truncated);
+    CHECK(result.next_marker.empty());
+    state.values.clear();
+    for (unsigned index = 0; index < 130; ++index) { seed_gc(state, gc_info(std::to_string(index), 1000 + index)); }
+    REQUIRE(invoke(state, gc_list_request(false), "gc_list") == 0);
+    result = gc_result(state);
+    CHECK(result.entries.size() == 128);
+    CHECK(result.truncated);
+    REQUIRE(invoke(state, gc_list_request(false, 0, result.next_marker), "gc_list") == 0);
+    CHECK(gc_result(state).entries.size() == 2);
+    CHECK_FALSE(gc_result(state).truncated);
+    CHECK(gc_result(state).next_marker.empty());
+}
+
+TEST_CASE("Legacy GC removal retains duplicate and missing-index behavior", "[rgw][cls][gc]")
+{
+    for (const bool missing_time : {false, true}) {
+        storage state;
+        const auto info = gc_info(std::string {"t\0g", 3});
+        seed_gc(state, info);
+        if (missing_time) { state.values.erase(gc_time_key(info)); }
+        ::cls_rgw_gc_remove_op request;
+        request.tags = {"missing", info.tag, info.tag};
+        CHECK(invoke(state, usage_bytes(request), "gc_remove") == 0);
+        CHECK(state.values.empty());
+    }
+    storage state;
+    CHECK(invoke(state, usage_bytes(::cls_rgw_gc_remove_op {}), "gc_remove") == 0);
+    CHECK(state.effects.empty());
+}
+
+TEST_CASE("Legacy GC set keeps ignored initial reads and original cleanup errors", "[rgw][cls][gc]")
+{
+    for (const int error : {-EAGAIN, -EIO, -ENOMEM}) {
+        storage state;
+        state.failure_call = 1;
+        state.failure = error;
+        CHECK(set_gc(state, gc_info()) == 0);
+        CHECK(state.values.size() == 2);
+    }
+    for (const bool fail_cleanup : {false, true}) {
+        storage state;
+        state.failure_call = 3;
+        if (fail_cleanup) { state.secondary_failure_call = 4; }
+        CHECK(set_gc(state, gc_info()) == -EAGAIN);
+        CHECK(effect_names(state) == std::vector<std::string> {"get-value", "set-value", "set-value", "remove"});
+        CHECK(state.values.contains("0_tag") == fail_cleanup);
+    }
+    storage state;
+    state.values["0_tag"] = usage_bytes(std::string {"corrupt"});
+    CHECK(set_gc(state, gc_info()) == 0);
+}
+
+TEST_CASE("Legacy GC defer remove and list retain failure stages and corruption errors", "[rgw][cls][gc]")
+{
+    storage initial;
+    seed_gc(initial, gc_info());
+    ::cls_rgw_gc_defer_entry_op defer;
+    defer.tag = "tag";
+    defer.expiration_secs = 2;
+    for (int stage = 1; stage <= 5; ++stage) {
+        storage state = initial;
+        state.failure_call = stage;
+        CHECK(invoke(state, usage_bytes(defer), "gc_defer_entry") == (stage == 2 ? 0 : -EAGAIN));
+    }
+    ::cls_rgw_gc_remove_op remove;
+    remove.tags = {"tag"};
+    for (int stage = 1; stage <= 3; ++stage) {
+        storage state = initial;
+        state.failure_call = stage;
+        CHECK(invoke(state, usage_bytes(remove), "gc_remove") == -EAGAIN);
+        CHECK(state.effects.size() == static_cast<unsigned>(stage));
+    }
+    storage failed = initial;
+    failed.failure_call = 1;
+    CHECK(invoke(failed, gc_list_request(false), "gc_list") == -EAGAIN);
+    initial.values[gc_time_key(gc_info())] = usage_bytes(std::string {"corrupt"});
+    CHECK(invoke(initial, gc_list_request(false), "gc_list") == -EIO);
+    initial.values["0_tag"] = usage_bytes(std::string {"corrupt"});
+    CHECK(invoke(initial, usage_bytes(defer), "gc_defer_entry") == -EIO);
+    CHECK(invoke(initial, usage_bytes(remove), "gc_remove") == -EIO);
+}
+
+TEST_CASE("Legacy GC structural request errors precede storage", "[rgw][cls][gc]")
+{
+    ::cls_rgw_gc_set_entry_op set;
+    set.info = gc_info();
+    ::cls_rgw_gc_defer_entry_op defer;
+    defer.tag = "tag";
+    ::cls_rgw_gc_remove_op remove;
+    remove.tags = {"tag", "other"};
+    const std::map<std::string, byte_buffer> requests {
+        {"gc_set_entry", usage_bytes(set)}, {"gc_defer_entry", usage_bytes(defer)},
+        {"gc_list", gc_list_request(true)}, {"gc_remove", usage_bytes(remove)}
+    };
+    for (const auto& [method, full] : requests) {
+        for (unsigned size = 0; size < full.length(); ++size) {
+            byte_buffer prefix;
+            prefix.substr_of(full, 0, size);
+            storage state;
+            CHECK(invoke(state, prefix, method) == -EINVAL);
+            CHECK(state.effects.empty());
+        }
     }
 }

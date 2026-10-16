@@ -46,6 +46,13 @@ decodes stored entries directly into final reply slots; get results move to thei
 caller. Borrowed builders retain full leaf encodings and the public set operation's
 assert-exists ordering. Native limits, key checks and guard statuses stay unchanged.
 
+Legacy GC operations in ``cls_rgw`` use borrowed builders and independent request
+records. Listing moves decoded object chains directly into the module vector,
+without the former append-only callback or chain copy. Public list replies retain
+the native info/chain codecs, expired-only default, cutoff and continuation rules.
+The same direct move also benefits native-only builds; fetched future rows do not
+cause eager reply allocation. Name/time-index storage and cleanup remain native.
+
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
 provides the C++26 implementation. Its language requirements and Datum headers

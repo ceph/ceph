@@ -732,3 +732,77 @@ TEST_CASE("Reshard clients retain list interfaces, markers and transport/error c
     allocation_failure = false;
     transport_status = 0;
 }
+
+TEST_CASE("GC clients borrow chains and tags while retaining native reply publication", "[rgw][cls][gc]")
+{
+    ::librados::ObjectWriteOperation write;
+    ::cls_rgw_gc_set_entry_op set;
+    set.expiration_secs = std::numeric_limits<std::uint32_t>::max();
+    set.info.tag = std::string(80, 't');
+    set.info.time = ::ceph::real_time {std::chrono::seconds {123}};
+    set.info.chain.push_obj(std::string(80, 'p'), {std::string(80, 'o'), "instance"}, std::string(80, 'l'));
+    byte_buffer expected;
+    ::encode(set, expected);
+    ::cls_rgw_gc_set_entry(write, set.expiration_secs, set.info);
+    CHECK(request_method == "gc_set_entry");
+    set.info.tag.clear();
+    set.info.chain.objs.clear();
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_gc_defer_entry_op defer;
+    defer.expiration_secs = 17;
+    defer.tag = std::string {"t\0g", 3};
+    expected.clear();
+    ::encode(defer, expected);
+    ::cls_rgw_gc_defer_entry(write, 17, defer.tag);
+    defer.tag.clear();
+    CHECK(request_method == "gc_defer_entry");
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_gc_remove_op remove;
+    remove.tags = {"", "a", std::string {"t\0g", 3}, "a"};
+    expected.clear();
+    ::encode(remove, expected);
+    ::cls_rgw_gc_remove(write, remove.tags);
+    remove.tags.clear();
+    CHECK(request_method == "gc_remove");
+    CHECK(request_bytes.contents_equal(expected));
+    ::librados::ObjectReadOperation read;
+    byte_buffer output;
+    ::cls_rgw_gc_list_op list;
+    list.marker = std::string {"m\0r", 3};
+    list.max = 19;
+    list.expired_only = false;
+    expected.clear();
+    ::encode(list, expected);
+    ::cls_rgw_gc_list(read, list.marker, 19, false, output);
+    list.marker.clear();
+    CHECK(request_method == "gc_list");
+    CHECK(request_output == &output);
+    CHECK(request_bytes.contents_equal(expected));
+    set.info.chain.push_obj("pool", {"object", "instance"}, "location");
+    ::cls_rgw_gc_list_ret reply;
+    reply.entries.push_back(set.info);
+    reply.entries.back().tag = "result";
+    reply.truncated = true;
+    reply.next_marker = std::string(80, 'm');
+    output.clear();
+    ::encode(reply, output);
+    std::list<::cls_rgw_gc_obj_info> entries;
+    bool truncated = false;
+    std::string marker = "saved";
+    REQUIRE(::cls_rgw_gc_list_decode(output, entries, truncated, marker) == 0);
+    REQUIRE(entries.size() == 1);
+    CHECK(entries.front().tag == "result");
+    REQUIRE(entries.front().chain.objs.size() == 1);
+    CHECK(entries.front().chain.objs.front().key.name == "object");
+    CHECK(truncated);
+    CHECK(marker == reply.next_marker);
+    for (unsigned size = 0; size < output.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(output, 0, size);
+        CHECK(::cls_rgw_gc_list_decode(prefix, entries, truncated, marker) == -EIO);
+        REQUIRE(entries.size() == 1);
+        CHECK(entries.front().tag == "result");
+        CHECK(truncated);
+        CHECK(marker == reply.next_marker);
+    }
+}

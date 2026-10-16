@@ -5,6 +5,7 @@
 #include "cls_rgw_bi_wire.h"
 #include "cls_rgw_bilog_datum.h"
 #include "cls_rgw_bucket_datum.h"
+#include "cls_rgw_gc_datum.h"
 #include "cls_rgw_object_datum.h"
 #include "cls_rgw_reshard_datum.h"
 #include "cls_rgw_usage_datum.h"
@@ -1167,3 +1168,137 @@ template std::pair<std::list<::cls_rgw_reshard_entry>, bool>
 decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::reshard_datum
+
+namespace cls::rgw::gc_datum {
+
+using ::cls::rgw::wire::decode_record;
+using ::cls::rgw::wire::reader;
+using ::cls::rgw::wire::writer;
+
+::ceph::buffer::list encode_set(const std::uint32_t expiration, const ::cls_rgw_gc_obj_info& info)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        archive.scalar(expiration);
+        archive.native(info);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_defer(const std::uint32_t expiration, const std::string_view tag)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        archive.scalar(expiration);
+        archive.text(tag);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum,
+                                  const bool expired)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(2, [&] {
+        archive.text(marker);
+        archive.scalar(maximum);
+        archive.scalar(static_cast<std::uint8_t>(expired));
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_remove(const std::vector<std::string>& tags)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] { archive.native(tags); });
+
+    return output;
+}
+
+void decode(set_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        candidate.expiration_secs = fields.template scalar<std::uint32_t>();
+        fields.native(candidate.info);
+    });
+}
+
+void decode(defer_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        candidate.expiration_secs = fields.template scalar<std::uint32_t>();
+        fields.text(candidate.tag);
+    });
+}
+
+void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        fields.text(candidate.marker);
+        candidate.max = fields.template scalar<std::uint32_t>();
+        if (version >= 2) {
+            candidate.expired_only = 0 != fields.template scalar<std::uint8_t>();
+        }
+    });
+}
+
+void decode(remove_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        const auto count = fields.template sequence_size<4>();
+        candidate.tags.reserve(count);
+        for (std::uint32_t index = 0; index < count; ++index) {
+            fields.text(candidate.tags.emplace_back());
+        }
+    });
+}
+
+void encode(const reply& value, ::ceph::buffer::list& output)
+{
+    ::ceph::buffer::list candidate;
+    writer archive {candidate};
+    archive.frame(2, [&] {
+        archive.native(value.entries);
+        archive.text(value.next_marker);
+        archive.scalar(static_cast<std::uint8_t>(value.truncated));
+    });
+    output.claim_append(candidate);
+}
+
+template <typename EntriesT>
+requires ::ceph::concepts::has_emplace_back<EntriesT>
+list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    list_reply<EntriesT> candidate;
+    reader archive {cursor};
+    archive.frame(2, [&](auto& fields, const std::uint8_t version) {
+        const auto count = fields.template sequence_size<28>(version >= 2 ? 5 : 1);
+        if constexpr (::ceph::concepts::reservable_container<EntriesT>) {
+            candidate.entries.reserve(count);
+        }
+        for (std::uint32_t index = 0; index < count; ++index) {
+            fields.native(candidate.entries.emplace_back());
+        }
+        if (version >= 2) {
+            fields.text(candidate.next_marker);
+        }
+        candidate.truncated = 0 != fields.template scalar<std::uint8_t>();
+
+        return 0;
+    });
+
+    return candidate;
+}
+
+template list_reply<std::vector<::cls_rgw_gc_obj_info>> decode_reply(const ::ceph::buffer::list& input);
+template list_reply<std::list<::cls_rgw_gc_obj_info>> decode_reply(const ::ceph::buffer::list& input);
+
+} // cls::rgw::gc_datum
