@@ -10780,12 +10780,6 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
        << " zones (" << num_zones << ") spanned by crush rule " << crush_rule_str;
     return -EINVAL;
   }
-  if (bucket_target != num_zones && !num_zones_supported()) {
-    ss << "peering_crush_bucket_target (" << bucket_target << ") must equal "
-       << "the number of zones (" << num_zones << ") until "
-       << num_zones_upgrade_hint();
-    return -EPERM;
-  }
   
   int64_t replica = cmd_getval_or<int64_t>(cmdmap, "replica", 0);
   int64_t pool_size = cmd_getval_or<int64_t>(cmdmap, "size", 0);
@@ -10799,23 +10793,10 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     return -EINVAL;
   }
 
-  // Calculate pool_size and replica based on what the user provided
+  // --replica gives the copies in each zone the rule spans
   if (replica_provided) {
-    // User provided --replica: calculate size = num_zones * replica
     pool_size = num_zones * replica;
-  } else if (size_provided) {
-    // User provided --size: validate and calculate replica = size / num_zones
-    // Validate that size is evenly divisible by num_zones
-    if (pool_size % num_zones != 0) {
-      ss << "pool size " << pool_size << " is not evenly divisible by "
-         << "the number of " << bucket_barrier_str << " zones (" << num_zones 
-         << ") spanned by crush rule " << crush_rule_str 
-         << "; use --replica instead of --size for stretch pools";
-      return -EINVAL;
-    }
-    replica = pool_size / num_zones;
-  } else {
-    // Neither provided - error
+  } else if (!size_provided) {
     ss << "must specify either --size or --replica";
     return -EINVAL;
   }
@@ -10832,10 +10813,8 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     pool_min_size = bucket_count;
   }
 
-  const int zone_min_size =
-    stretch_set_zone_min_size(pool_min_size, pool_size, num_zones, &ss);
-  if (zone_min_size < 0) {
-    return zone_min_size;
+  if (int r = stretch_set_min_size(pool_min_size, pool_size, &ss); r < 0) {
+    return r;
   }
 
   p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
@@ -10845,12 +10824,12 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     maybe_remove_unused_crush_rule(pool, p.crush_rule);
   }
   p.crush_rule = static_cast<__u8>(crush_rule);
+  // an individual stretch pool is one zone, with min_size over all its
+  // copies, as in earlier releases
   p.size = static_cast<__u8>(pool_size);
-  // Store num_zones (extracted from CRUSH rule topology)
-  p.num_zones = static_cast<__u8>(num_zones);
-  p.min_size = static_cast<__u8>(zone_min_size);
-  // Store replica (calculated or provided)
-  p.replica = static_cast<__u8>(replica);
+  p.num_zones = 1;
+  p.min_size = static_cast<__u8>(pool_min_size);
+  p.replica = p.size;
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   ss << "pool " << pool_name << " stretch values are set successfully";
@@ -17150,8 +17129,7 @@ int OSDMonitor::check_no_legacy_individual_stretch_pools(int64_t skip_pool,
   }
   *ss << "pool '" << name << "' is a legacy individual stretch pool; legacy "
       << "individual stretch pools and stretch mode cannot be combined, so "
-      << "unstretch it first with 'ceph osd pool stretch unset' or "
-      << "'ceph osd pool set " << name << " num_zones 1'";
+      << "unstretch it first with 'ceph osd pool stretch unset'";
   return -EINVAL;
 }
 
@@ -18157,15 +18135,14 @@ int OSDMonitor::validate_disable_stretch_mode(
   return 0;
 }
 
-int OSDMonitor::stretch_set_zone_min_size(int64_t min_size, int64_t size,
-                                          int64_t num_zones, ostream *ss)
+int OSDMonitor::stretch_set_min_size(int64_t min_size, int64_t size,
+                                     ostream *ss)
 {
   if (min_size < 1 || min_size > size) {
     *ss << "pool min_size must be from 1 to the pool size " << size;
     return -EINVAL;
   }
-  // a total over all zones, kept per zone and rounded up
-  return (min_size + num_zones - 1) / num_zones;
+  return 0;
 }
 
 int OSDMonitor::check_stretch_unset_ec(const string& pool_name,

@@ -134,6 +134,10 @@ centers, use ``num_zones`` instead. In this release ``num_zones`` is 1 or 2, so
 a pool over three or more data centers still needs ``ceph osd pool stretch
 set``. A later release will support three zones with ``num_zones``.
 
+An individual stretch pool behaves as in earlier releases, including after an
+upgrade: its ``num_zones`` stays 1, and its ``min_size`` counts the replicas in
+all data centers together.
+
 Use stretch mode when you have exactly two data centers and require a uniform
 configuration across the entire cluster. Conversely, opt for a stretch pool
 when you need only a particular pool to be replicated across more than two data centers,
