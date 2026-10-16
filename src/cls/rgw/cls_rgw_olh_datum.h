@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -30,6 +31,10 @@ using log_page = std::ranges::subrange<stored_log::const_iterator, stored_log::c
                                     std::string_view tag, bool stales);
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);
 void encode_reply(log_page groups, bool stales, bool truncated, ::ceph::buffer::list& output);
+// True-stales reads can retain canonical encoded events. An empty optional
+// requests native decoding; otherwise the status is success or tag mismatch.
+std::optional<int> encode_stored_reply(const ::ceph::buffer::list& input, std::uint64_t marker,
+                                       std::string_view tag, ::ceph::buffer::list& output);
 void decode_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret& value);
 void decode_reply(const ::ceph::buffer::list& input, ::cls::rgw::olh::reply& value);
 

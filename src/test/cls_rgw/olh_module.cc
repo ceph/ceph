@@ -271,3 +271,149 @@ TEST_CASE("OLH page boundaries preserve exact native replies across log shapes",
         }
     }
 }
+
+TEST_CASE("Stored OLH forwarding validates all rows and retains fragmented storage", "[rgw][cls][olh][stored]")
+{
+    auto value = log_fixture(1002, false);
+    value.tag = std::string {"t\0g", 3};
+    auto context = fixture(value);
+    auto& stored = context.values.begin()->second;
+    byte_buffer fragments;
+    auto cursor = stored.cbegin();
+    while (!cursor.end()) {
+        char byte;
+        cursor.copy(1, &byte);
+        fragments.append(::ceph::buffer::copy(&byte, 1));
+    }
+    stored = std::move(fragments);
+    auto op = request();
+    op.get_stales = true;
+    op.olh_tag = value.tag;
+    op.ver_marker = 1000;
+    const auto [status, output] = query(context, op);
+    REQUIRE(status == 0);
+    REQUIRE(context.reads.size() == 1);
+    context.values.clear();
+    const auto reply = decode_reply(output);
+    REQUIRE(reply.log.size() == 2);
+    CHECK(reply.log.begin()->first == 1001);
+    CHECK_FALSE(reply.is_truncated);
+
+    context = fixture(log_fixture(1, false));
+    op = request();
+    op.get_stales = true;
+    const auto full = context.values.begin()->second;
+    for (unsigned size = 0; size < full.length(); ++size) {
+        auto& encoded = context.values.begin()->second;
+        encoded.clear();
+        encoded.substr_of(full, 0, size);
+        context.reads.clear();
+        const auto [failure, bytes] = query(context, op);
+        CHECK(failure == -EIO);
+        CHECK(bytes.length() == 0);
+        CHECK(context.reads.size() == 1);
+    }
+}
+
+TEST_CASE("Stored OLH noncanonical representations preserve native normalization", "[rgw][cls][olh][stored]")
+{
+    const auto value = log_fixture(1, false);
+    const auto events = value.pending_log.begin()->second;
+    for (const unsigned shape : {0, 1, 2, 3, 4}) {
+        byte_buffer stored;
+        ENCODE_START(1, 1, stored);
+        ::encode(value.key, stored);
+        ::ceph::encode(value.delete_marker, stored);
+        ::ceph::encode(value.epoch, stored);
+        ::ceph::encode(std::uint32_t {2}, stored);
+        for (const std::uint64_t epoch : {1ULL, 2ULL}) {
+            ::ceph::encode(0 == shape ? std::uint64_t {1} : (4 == shape ? 3 - epoch : epoch), stored);
+            ::ceph::encode(std::uint32_t {1}, stored);
+            byte_buffer row;
+            auto event = events.front();
+            event.op_tag = 1 == epoch ? "first" : "second";
+            ::encode(event, row);
+            auto bytes = row.to_str();
+            if (shape == 1) {
+                bytes.back() = 7; // Native bool decoding normalizes nonzero bytes.
+            }
+            if (shape == 2) {
+                bytes[0] = 2; // Compatible future event frame.
+            }
+            if (shape == 3) {
+                bytes[1] = 0; // Native output restores compatibility byte1.
+            }
+            stored.append(bytes);
+        }
+        ::ceph::encode(value.tag, stored);
+        ::ceph::encode(value.exists, stored);
+        ::ceph::encode(value.pending_removal, stored);
+        ENCODE_FINISH(stored);
+
+        ::rgw_bucket_olh_entry native;
+        auto cursor = stored.cbegin();
+        ::decode(native, cursor);
+        ::rgw_cls_read_olh_log_ret expected;
+        expected.log = native.pending_log;
+        byte_buffer wanted;
+        ::encode(expected, wanted);
+        auto context = fixture(value);
+        context.values.begin()->second = stored;
+        auto op = request();
+        op.get_stales = true;
+        const auto [status, output] = query(context, op);
+        REQUIRE(status == 0);
+        CHECK(output.contents_equal(wanted));
+        CHECK(context.reads.size() == 1);
+
+        auto broken = stored.to_str();
+        broken.pop_back();
+        context.values.begin()->second.clear();
+        context.values.begin()->second.append(broken);
+        op.ver_marker = std::numeric_limits<std::uint64_t>::max();
+        CHECK(query(context, op).first == -EIO);
+    }
+}
+
+TEST_CASE("Stored OLH projection validates malformed events beyond its returned page", "[rgw][cls][olh][stored]")
+{
+    const auto value = log_fixture(1002, false);
+    auto context = fixture(value);
+    auto& stored = context.values.begin()->second;
+    auto cursor = stored.cbegin();
+    cursor += 6;
+    ::cls_rgw_obj_key key;
+    bool deleted;
+    std::uint64_t head_epoch;
+    std::uint32_t groups;
+    ::decode(key, cursor);
+    ::ceph::decode(deleted, cursor);
+    ::ceph::decode(head_epoch, cursor);
+    ::ceph::decode(groups, cursor);
+    unsigned last = 0;
+    for (std::uint32_t group = 0; group < groups; ++group) {
+        std::uint64_t epoch;
+        std::uint32_t count;
+        ::ceph::decode(epoch, cursor);
+        ::ceph::decode(count, cursor);
+        for (std::uint32_t item = 0; item < count; ++item) {
+            last = cursor.get_off();
+            ::rgw_bucket_olh_log_entry event;
+            ::decode(event, cursor);
+        }
+    }
+    auto broken = stored.to_str();
+    broken[last + 1] = 2; // Unsupported compatibility byte on the last event.
+    stored.clear();
+    stored.append(broken);
+    auto op = request();
+    op.get_stales = true;
+    for (const std::uint64_t marker : {0ULL, 1000ULL, 0xFFFFFFFFFFFFFFFFULL}) {
+        op.ver_marker = marker;
+        context.reads.clear();
+        const auto [status, bytes] = query(context, op);
+        CHECK(status == -EIO);
+        CHECK(bytes.length() == 0);
+        CHECK(context.reads.size() == 1);
+    }
+}

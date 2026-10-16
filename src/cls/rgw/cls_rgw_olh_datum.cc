@@ -3,6 +3,7 @@
 #include "cls_rgw_olh_wire.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <ranges>
 #include <utility>
 
@@ -22,6 +23,31 @@ constexpr auto native_key_fields = datum::binary_fields<&native_key::name, &nati
 constexpr auto client_event_fields = datum::binary_fields<&client_entry::epoch, &client_entry::operation,
     &client_entry::tag, &client_entry::object, &client_entry::delete_marker> {};
 constexpr auto client_key_fields = datum::binary_fields<&client_key::name, &client_key::instance> {};
+
+using ::cls::rgw::wire::reader;
+
+bool canonical_key(reader& archive)
+{
+    return archive.canonical_frame(1, [](auto& fields) {
+        fields.skip_text();
+        fields.skip_text();
+
+        return true;
+    });
+}
+
+bool canonical_event(reader& archive)
+{
+    return archive.canonical_frame(1, [](auto& fields) {
+        fields.skip(9); // Epoch and action are preserved byte for byte.
+        fields.skip_text();
+        if (!canonical_key(fields)) {
+            return false;
+        }
+
+        return fields.template scalar<std::uint8_t>() <= 1;
+    });
+}
 
 } // anonymous namespace
 
@@ -55,6 +81,76 @@ void encode_reply(const log_page groups, const bool stales, const bool truncated
     auto candidate = ::cls::rgw::olh_wire::encode_reply(groups, truncated, native_event_fields, native_key_fields,
         [](const native_entry& value) { return ::CLS_RGW_OLH_OP_STALE != value.op; }, stales);
     output.claim_append(candidate);
+}
+
+std::optional<int> encode_stored_reply(const ::ceph::buffer::list& input, const std::uint64_t marker,
+                                       const std::string_view tag, ::ceph::buffer::list& output)
+try {
+    auto cursor = input.cbegin();
+    reader archive {cursor};
+    unsigned lower = 0;
+    unsigned upper = 0;
+    std::uint32_t selected = 0;
+    bool truncated = false;
+    bool matches = false;
+    const bool canonical = archive.canonical_frame(1, [&](auto& fields) {
+        if (!canonical_key(fields)) {
+            return false;
+        }
+        fields.skip(9); // Stored head delete-marker and epoch are not reply fields.
+        const auto count = fields.template sequence_size<12>(6);
+        std::uint64_t previous = 0;
+        for (std::uint32_t index = 0; index < count; ++index) {
+            const auto start = cursor.get_off();
+            const auto epoch = fields.template scalar<std::uint64_t>();
+            if (0 != index && epoch <= previous) {
+                return false; // Native map decoding orders and deduplicates groups.
+            }
+            previous = epoch;
+            const auto events = fields.template sequence_size<34>();
+            for (std::uint32_t item = 0; item < events; ++item) {
+                if (!canonical_event(fields)) {
+                    return false;
+                }
+            }
+            if (marker < epoch) {
+                if (1000 == selected) {
+                    truncated = true;
+                    continue;
+                }
+                if (0 == selected) {
+                    lower = start;
+                }
+                upper = cursor.get_off();
+                ++selected;
+            }
+        }
+        matches = fields.text_equals(tag);
+        fields.skip(2); // Stored exists/pending-removal booleans are not reply fields.
+
+        return true;
+    });
+    if (!canonical) {
+        return std::nullopt;
+    }
+    if (!matches) {
+        return -ECANCELED;
+    }
+
+    ::ceph::buffer::list candidate;
+    ::cls::rgw::wire::writer writer {candidate};
+    writer.frame(1, [&] {
+        writer.scalar(selected);
+        auto first = input.cbegin(lower);
+        first.copy(upper - lower, candidate);
+        writer.scalar(static_cast<std::uint8_t>(truncated));
+    });
+    output.claim_append(candidate);
+
+    return 0;
+} catch (const ::ceph::buffer::error&) {
+    // Let the established stored-record decoder retain native error behavior.
+    return std::nullopt;
 }
 
 void decode_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret& value)

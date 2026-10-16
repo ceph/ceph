@@ -248,6 +248,34 @@ public:
         return value;
     }
 
+    void skip(const unsigned size)
+    {
+        require(size);
+        input += size;
+    }
+
+    void skip_text() { skip(scalar<std::uint32_t>()); }
+
+    bool text_equals(const std::string_view value)
+    {
+        const auto size = scalar<std::uint32_t>();
+        require(size);
+        if (size != value.size()) {
+            input += size;
+
+            return false;
+        }
+        bool equal = true;
+        for (unsigned offset = 0; offset < size;) {
+            const char *bytes = nullptr;
+            const auto count = input.get_ptr_and_advance(size - offset, &bytes);
+            equal = equal && std::ranges::equal(std::span {bytes, count}, value.substr(offset, count));
+            offset += count;
+        }
+
+        return equal;
+    }
+
     void payload(byte_buffer& value)
     {
         const auto size = scalar<std::uint32_t>();
@@ -271,6 +299,22 @@ public:
         input += finish - input.get_off();
 
         return result;
+    }
+
+    // Encoded forwarding requires exactly the representation an owning
+    // decoder would emit. Compatible extensions use the ordinary decode path:
+    template <typename BodyT>
+    bool canonical_frame(const std::uint8_t version, BodyT&& body)
+    {
+        frame_header header;
+        fields<6>(header, header_fields {});
+        require(header.length);
+        if (version != header.version || 1 != header.compatible) {
+            return false;
+        }
+        reader fields {input, input.get_off() + header.length};
+
+        return std::invoke(std::forward<BodyT>(body), fields) && 0 == fields.remaining();
     }
 
 };

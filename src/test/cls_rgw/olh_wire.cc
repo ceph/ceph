@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cerrno>
 #include <cstdint>
 #include <limits>
 #include <utility>
@@ -236,4 +237,74 @@ TEST_CASE("OLH randomized nested pages agree with the native codec", "[rgw][cls]
         native::decode_reply(bytes, result);
         check(result, rgw_olh_oracle::decode_reply(bytes));
     }
+}
+
+TEST_CASE("Stored OLH projection retains canonical bytes and their owners", "[rgw][cls][olh][stored]")
+{
+    ::rgw_bucket_olh_entry stored;
+    stored.key = {"object", ""};
+    stored.tag = std::string {"t\0g", 3};
+    for (const std::uint64_t epoch : {7ULL, 42ULL, 0xFFFFFFFFFFFFFFFFULL}) {
+        ::rgw_bucket_olh_log_entry event;
+        event.epoch = epoch - 1;
+        event.op = static_cast<::OLHLogOp>(255);
+        event.op_tag = std::string(80, 't');
+        event.key = {std::string {"n\0m", 3}, std::string(32, 'i')};
+        event.delete_marker = true;
+        stored.pending_log[epoch].push_back(std::move(event));
+    }
+    byte_buffer original;
+    ::encode(stored, original);
+    for (const bool fragments : {false, true}) {
+        for (const std::uint64_t marker : {0ULL, 7ULL, 42ULL, 0xFFFFFFFFFFFFFFFFULL}) {
+            byte_buffer input = fragments ? fragmented(original) : original;
+            std::vector<std::pair<std::uintptr_t, std::uintptr_t>> owners;
+            for (const auto& fragment : input.buffers()) {
+                const auto start = reinterpret_cast<std::uintptr_t>(fragment.c_str());
+                owners.emplace_back(start, start + fragment.length());
+            }
+            ::rgw_cls_read_olh_log_ret expected;
+            expected.log.insert(stored.pending_log.upper_bound(marker), stored.pending_log.end());
+            byte_buffer wanted;
+            ::encode(expected, wanted);
+            byte_buffer output;
+            const auto status = native::encode_stored_reply(input, marker, stored.tag, output);
+            REQUIRE(status.has_value());
+            CHECK(*status == 0);
+            input.clear();
+            CHECK(output.contents_equal(wanted));
+            if (!expected.log.empty()) {
+                CHECK(std::ranges::any_of(output.buffers(), [&owners](const auto& fragment) {
+                    const auto start = reinterpret_cast<std::uintptr_t>(fragment.c_str());
+                    return std::ranges::any_of(owners, [start, size = fragment.length()](const auto& owner) {
+                        return owner.first <= start && start + size <= owner.second && 0 != size;
+                    });
+                }));
+            }
+        }
+    }
+    byte_buffer preserved;
+    preserved.append("preserve", 8);
+    auto output = preserved;
+    const auto mismatch = native::encode_stored_reply(original, 0, "wrong", output);
+    REQUIRE(mismatch.has_value());
+    CHECK(*mismatch == -ECANCELED);
+    CHECK(output.contents_equal(preserved));
+    for (unsigned size = 0; size < original.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(original, 0, size);
+        CHECK_FALSE(native::encode_stored_reply(prefix, 0, stored.tag, output).has_value());
+        CHECK(output.contents_equal(preserved));
+    }
+    auto compatible = original.to_str();
+    compatible[0] = 2;
+    byte_buffer future;
+    future.append(compatible);
+    CHECK_FALSE(native::encode_stored_reply(future, 0, stored.tag, output).has_value());
+    compatible[0] = 1;
+    compatible[1] = 0;
+    future.clear();
+    future.append(compatible);
+    CHECK_FALSE(native::encode_stored_reply(future, 0, stored.tag, output).has_value());
+    CHECK(output.contents_equal(preserved));
 }

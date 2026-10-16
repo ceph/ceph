@@ -1061,6 +1061,19 @@ static void log_entry(const char *func, const char *str, rgw_bucket_olh_entry *e
 }
 
 template <class T>
+static int decode_omap_entry(const ::ceph::buffer::list& encoded, T& entry)
+{
+  auto cur_iter = encoded.cbegin();
+  try {
+    decode(entry, cur_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode entry", __func__);
+    return -EIO;
+  }
+  return 0;
+}
+
+template <class T>
 static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
                            T* entry)
 {
@@ -1070,14 +1083,7 @@ static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
     return rc;
   }
 
-  auto cur_iter = current_entry.cbegin();
-  try {
-    decode(*entry, cur_iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(1, "ERROR: %s: failed to decode entry", __func__);
-    return -EIO;
-  }
-  return 0;
+  return decode_omap_entry(current_entry, *entry);
 }
 
 template <class T>
@@ -2349,7 +2355,24 @@ try {
   rgw_bucket_olh_entry olh_data_entry;
   string olh_data_key;
   encode_olh_data_key(op.olh, &olh_data_key);
+#ifdef WITH_RGW_CLS_DATUM
+  ::ceph::buffer::list encoded;
+  int ret = cls_cxx_map_get_val(hctx, olh_data_key, &encoded);
+  if (0 == ret) {
+    if (op.get_stales) {
+      if (const auto result = ::cls::rgw::olh_datum::encode_stored_reply(
+            encoded, op.ver_marker, op.olh_tag, *out)) {
+        return *result;
+      }
+    }
+    ret = decode_omap_entry(encoded, olh_data_entry);
+    if (0 == ret) {
+      log_entry("read_index_entry", "existing entry", &olh_data_entry);
+    }
+  }
+#else
   int ret = read_index_entry(hctx, olh_data_key, &olh_data_entry);
+#endif
   if (ret < 0 && ret != -ENOENT) {
     CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
     return ret;

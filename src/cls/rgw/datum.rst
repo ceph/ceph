@@ -175,6 +175,24 @@ for the duration of the synchronous encode, avoiding a second map of strings.
 The selected range carries its epoch count; when get-stales is true, encoding
 uses that count and each event vector's size without extra counting passes.
 
+For true-stales reads, the module can project a canonical stored OLH log directly
+from its encoded field. A bounded scan validates the complete record, including
+events outside the selected page, and checks the tag before producing output.
+It retains the selected encoded fragments and rebuilds only the reply framing,
+count and truncation flag. It does not construct a stored map or owning events.
+
+This path requires canonical version/compatibility bytes, strictly ordered unique
+epochs and normalized event booleans. Compatible extensions, noncanonical
+booleans, duplicate or unsorted groups use the existing owning decoder and reply
+encoder. False-stales reads retain that filtering path. The fallback decodes the
+already-fetched value, so there is still one exact OMAP lookup. Native buffers
+and this encoded-field projection remain RGW adapter concerns; no Datum-core
+facility or native type enrollment is added.
+
+Retained fragments keep their underlying allocations alive until the reply is
+released. A small page can therefore retain an allocation containing additional
+stored events; avoiding materialization does not imply minimum retained memory.
+
 Every nested frame has its own read boundary. Counts are checked against minimum
 encoded element sizes before reserving storage. These checks prevent impossible
 allocations; they are not a total work or memory quota for an arbitrarily large
