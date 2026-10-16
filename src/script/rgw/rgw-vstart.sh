@@ -31,7 +31,10 @@
 #                       bucket whose objects are gated on group
 #                       membership, and applies CAP_SETUID/CAP_SETGID
 #                       to the built radosgw.  Needs sudo;  each step
-#                       is skipped if already done.
+#                       is skipped if already done.  Also makes two
+#                       unplaced, account-owned directories for
+#                       placement tests, afresh on every start.
+#                       Refuses to run as root.
 #   --with-inotify      Enable inotify watcher on bucket directories
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
@@ -126,6 +129,18 @@ fi
 
 if $GPFS && [[ "$STORE" != "nsfs" ]]; then
 	echo "error: --gpfs only applies to --store nsfs" >&2
+	exit 1
+fi
+
+# Root holds every capability, and they override the file modes that
+# impersonation exists to enforce:  every result in this area comes
+# out the same whoever the request runs as.  The gateway must run as
+# an ordinary user holding only its file capabilities.  The script
+# raises sudo itself for the steps that need it.
+if $IMPERSONATE && [[ $EUID -eq 0 ]]; then
+	echo "error: --with-impersonation must not run as root:  root's" \
+		"capabilities override the permissions it enforces.  Run" \
+		"as yourself;  the script uses sudo where it must." >&2
 	exit 1
 fi
 
@@ -332,6 +347,9 @@ IMP_UID_A=70101
 IMP_USER_B=rgwbob
 IMP_UID_B=70102
 IMP_BUCKET=impersonate-fixture
+IMP_OWNED=impersonate-owned
+IMP_MULTI=impersonate-multiproto
+IMP_UID_NFS=70103
 
 if $IMPERSONATE; then
 	if [[ "$STORE" != "nsfs" ]]; then
@@ -544,6 +562,10 @@ if $FOREGROUND; then
 	done
 	echo " ${local_cmd# }"
 	echo ""
+	if $IMPERSONATE; then
+		echo "    (with --with-impersonation, run it as yourself, not" \
+			"as root)"
+	fi
 	echo "data root: $GPFS_ROOT/root"
 	exit 0
 fi
@@ -658,6 +680,45 @@ if $IMPERSONATE; then
 
 	echo "==> --with-impersonation: $IMP_BUCKET seeded;" \
 		"grouped.txt is 0040 root:$IMP_GRP_NAME"
+
+	# Two unplaced directories under the base path, for tests that
+	# place them as buckets through /admin/nsfs/bucket.  Neither is a
+	# bucket until placed, and a placed one carries nsfs state, which
+	# placement then refuses, so both are made afresh on every start.
+	#
+	# $IMP_OWNED is what an account's bucket looks like after NooBaa
+	# made it, or after adoption:  the account's uid throughout, and
+	# NooBaa's modes, 0777 and 0666 masked by NSFS_UMASK 007
+	# (bucketspace_fs.js create_bucket;  config.js).
+	#
+	# $IMP_MULTI is the same, shared with NFS through the group
+	# $IMP_GRP_NAME, which the account's uid is in:  the directories
+	# are setgid, so what anyone writes there takes the group.  An NFS
+	# client writes as its own uid ($IMP_UID_NFS, with $IMP_GRP_NAME
+	# in the group list it sends) under umask 022.  The uid has no
+	# passwd entry here, as NFS client uids often have none:  the
+	# server sees only the ids on the files.
+	mk_tree() {	# <dir> <group> <dir mode>
+		sudo rm -rf "${DATA_DIR:?}/$1"
+		sudo install -d -o "$IMP_UID_A" -g "$2" -m "$3" "$DATA_DIR/$1"
+		sudo install -o "$IMP_UID_A" -g "$2" -m 0660 /dev/null \
+			"$DATA_DIR/$1/obj"
+		sudo install -d -o "$IMP_UID_A" -g "$2" -m "$3" \
+			"$DATA_DIR/$1/sub"
+		sudo install -o "$IMP_UID_A" -g "$2" -m 0660 /dev/null \
+			"$DATA_DIR/$1/sub/nested"
+	}
+	mk_tree "$IMP_OWNED" "$IMP_UID_A" 0770
+	mk_tree "$IMP_MULTI" "$IMP_GRP_GID" 2770
+	sudo install -o "$IMP_UID_NFS" -g "$IMP_GRP_GID" -m 0644 /dev/null \
+		"$DATA_DIR/$IMP_MULTI/nfs-written"
+	sudo install -d -o "$IMP_UID_NFS" -g "$IMP_GRP_GID" -m 2755 \
+		"$DATA_DIR/$IMP_MULTI/nfs-dir"
+	sudo install -o "$IMP_UID_NFS" -g "$IMP_GRP_GID" -m 0644 /dev/null \
+		"$DATA_DIR/$IMP_MULTI/nfs-dir/inner"
+
+	echo "==> --with-impersonation: $IMP_OWNED and $IMP_MULTI made," \
+		"unplaced;  $IMP_MULTI shared through $IMP_GRP_NAME"
 fi
 
 # --- optional sidecars ---
@@ -713,6 +774,10 @@ if $IMPERSONATE; then
 		"and grouped.txt (0040 root:$IMP_GRP_NAME, gid $IMP_GRP_GID)"
 	echo "    Fixture ids: $IMP_USER_A=$IMP_UID_A in $IMP_GRP_NAME," \
 		"$IMP_USER_B=$IMP_UID_B not"
+	echo "    Unplaced: $DATA_DIR/$IMP_OWNED ($IMP_UID_A:$IMP_UID_A," \
+		"0770/0660);  $DATA_DIR/$IMP_MULTI ($IMP_UID_A:$IMP_GRP_NAME," \
+		"2770/0660, plus nfs-written and nfs-dir/ owned by" \
+		"$IMP_UID_NFS:$IMP_GRP_NAME, 0644/2755)"
 fi
 if $KEYCLOAK; then
 	echo "    Keycloak: http://localhost:8080/realms/demorealm (user: testuser / testuser)"
