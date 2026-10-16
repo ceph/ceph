@@ -218,8 +218,11 @@ class DidNotExecute(Exception):
     pass
 
 
+# Everything Dockerfile.build copies into the image.  A directory entry
+# covers every file under it.
 _CONTAINER_SOURCES = [
     "Dockerfile.build",
+    "debian",
     "src/script/lib-build.sh",
     "src/script/run-make.sh",
     "ceph.spec.in",
@@ -426,11 +429,23 @@ def _sanitize_for_oci_tag(branch_name):
     return result
 
 
+def _source_files():
+    for path in sorted(_CONTAINER_SOURCES):
+        path = pathlib.Path(path)
+        if path.is_dir():
+            yield from sorted(p for p in path.rglob("*") if p.is_file())
+        else:
+            yield path
+
+
 @ftcache
 def _hash_sources(bsize=4096):
     hh = hashlib.sha256()
     buf = bytearray(bsize)
-    for path in sorted(_CONTAINER_SOURCES):
+    for path in _source_files():
+        # The name as well as the contents: a file added to, removed from
+        # or renamed within a directory must change the hash too.
+        hh.update(f"{path}\0".encode("utf8"))
         with open(path, "rb") as fh:
             while True:
                 rlen = fh.readinto(buf)
