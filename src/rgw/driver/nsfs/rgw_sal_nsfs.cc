@@ -1317,6 +1317,15 @@ struct DemoteResult {
  *
  * Returns 0 on success (including "nothing to demote"), negative on error.
  */
+/* `id` is who the demote links as, and it is not defaulted:  the link
+ * moves the current object, which belongs to whoever wrote it, and
+ * fs.protected_hardlinks(5) refuses a link to a file the linker
+ * neither owns nor can write.  As the gateway that is every object an
+ * identity wrote -- a 500 on an account overwriting its own object
+ * (PUNCHLIST, run 2026-10-16).  As the requester it succeeds exactly
+ * where the requester may write the object, which is the rule the
+ * rest of the tree follows.  A caller with no requester says so by
+ * passing {}. */
 static int demote_current_version(const DoutPrefixProvider* dpp,
 				  FSStrategy* fs_strategy,
 				  const nsfs::XattrStrategy* xs,
@@ -1324,6 +1333,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 				  const std::string& leaf,
 				  bool ver_enabled,
 				  DemoteResult& result,
+				  const nsfs::FSIdentity& id,
 				  const nsfs::XattrStrategy* alt = nullptr)
 {
   int vfd = open_versions_dir(parent_fd);
@@ -1366,7 +1376,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
   SafeResult sr = fs_strategy->safe_link(
     dpp, parent_fd, leaf,
     vfd, ver_name,
-    statx_mtime_ns(cur_stx), cur_stx.stx_ino);
+    statx_mtime_ns(cur_stx), cur_stx.stx_ino, id);
 
   if (sr == SafeResult::OK) {
     int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
@@ -9851,7 +9861,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       int dret2 = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 					 dest_parent_fd, dest_leaf,
-					 dest_ver_enabled, demote,
+					 dest_ver_enabled, demote, identity,
 					 static_cast<NSFSBucket*>(dest_bucket)
 					   ->xattr_fallback());
       if (dret2 < 0) {
@@ -10779,10 +10789,15 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 					src_obj->xattr_strategy(),
 					bucket->get_name(), parent_fd);
 
+    /* No requester:  FSIO is the gateway's throughout, because
+     * impersonation_enabled() is false under rgw::sal::embedded()
+     * (deferred, not exempt -- inflight/n-plan.md §9.5).  So this
+     * demote links as the gateway, and it links objects the gateway
+     * wrote. */
     demote_current_version(dpp, driver->get_fs_strategy(),
 			   src_obj->xattr_strategy(),
 			   parent_fd, leaf_name,
-			   binfo.versioning_enabled(), demote,
+			   binfo.versioning_enabled(), demote, {},
 			   src_obj->xattr_fallback());
   }
   {
@@ -13032,6 +13047,12 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
 
+      /* Still the gateway's, and it fails the same way the writer's
+       * demote did, against an object an identity wrote.  A delete
+       * has no requester to pass yet:  rgw::sal::Object::DeleteOp
+       * carries no authenticated user, which is the SAL change
+       * (inflight/n-plan.md, phase C).  The identity threads through
+       * here once it does, along with promote_version() below. */
       SafeResult sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
                                 vfd, ver_name,
@@ -13883,7 +13904,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     int dret = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 				      leaf_fd, leaf_name,
-				      ver_enabled, demote, xattr_fallback());
+				      ver_enabled, demote, identity,
+				      xattr_fallback());
     if (dret < 0) {
       return dret;
     }
@@ -15012,7 +15034,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 					obj->xattr_strategy(),
 					parent_fd,
 					obj->get_fsent()->get_name(),
-					ver_enabled, demote,
+					ver_enabled, demote, identity,
 					obj->xattr_fallback());
       if (dret < 0) {
         return dret;
