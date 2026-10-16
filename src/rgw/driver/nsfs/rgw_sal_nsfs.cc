@@ -11184,8 +11184,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     }
   }
 
-  write_attrs(dpp, y, &rmattrs);
-  return 0;
+  return write_attrs(dpp, y, &rmattrs);
 }
 
 int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
