@@ -17,6 +17,7 @@ endfunction()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   rgw_cls_add_module_test(olh olh_module.cc)
   rgw_cls_add_module_test(bi_put bi_put_module.cc)
+  target_link_libraries(unittest_cls_rgw_bi_put_module PRIVATE cls_rgw_client)
   rgw_cls_add_module_test(bi_get bi_get_module.cc)
 endif()
 

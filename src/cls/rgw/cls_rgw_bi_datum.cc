@@ -131,7 +131,10 @@ namespace cls::rgw::write_datum {
 namespace {
 
 namespace datum = ::ceph::salad::datum;
+using ::cls::rgw::wire::reader;
 using ::cls::rgw::wire::writer;
+using key = ::cls_rgw_obj_key;
+constexpr auto key_fields = datum::binary_fields<&key::name, &key::instance> {};
 
 struct prepare_prefix final
 {
@@ -149,6 +152,145 @@ struct complete_prefix final
 };
 
 } // anonymous namespace
+
+void decode(prepare_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    prepare_request candidate;
+    reader archive {cursor};
+    archive.frame(7, 3, [&](auto& fields, const std::uint8_t version) {
+        candidate.op = static_cast<::RGWModifyOp>(fields.template scalar<std::uint8_t>());
+        if (version < 5) {
+            fields.text(candidate.key.name);
+        }
+        fields.text(candidate.tag);
+        if (version >= 2) {
+            fields.text(candidate.locator);
+        }
+        if (version >= 4) {
+            candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
+        }
+        if (version >= 5) {
+            ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        }
+        if (version >= 6) {
+            candidate.bilog_flags = fields.template scalar<std::uint16_t>();
+        }
+        if (version >= 7) {
+            fields.native(candidate.zones_trace);
+        }
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    complete_request candidate;
+    reader archive {cursor};
+    archive.frame(9, 3, [&](auto& fields, const std::uint8_t version) {
+        candidate.op = static_cast<::RGWModifyOp>(fields.template scalar<std::uint8_t>());
+        if (version < 7) {
+            fields.text(candidate.key.name);
+        }
+        candidate.ver.epoch = fields.template scalar<std::uint64_t>();
+        fields.native(candidate.meta);
+        fields.text(candidate.op_tag);
+        if (version >= 2) {
+            fields.text(candidate.locator);
+        }
+        const bool names_only = version >= 4 && version < 7;
+        const auto count = names_only ? fields.template sequence_size<4>()
+                                      : fields.template sequence_size<14>();
+        candidate.remove_objs.reserve(count);
+        for (std::uint32_t i = 0; i < count; ++i) {
+            auto& removed = candidate.remove_objs.emplace_back();
+            if (names_only) {
+                fields.text(removed.name);
+            }
+            if (!names_only) {
+                ::cls::rgw::wire::decode_key(fields, removed, key_fields);
+            }
+        }
+        if (version >= 5) {
+            fields.native(candidate.ver);
+        }
+        if (version < 5) {
+            candidate.ver.pool = -1;
+        }
+        if (version >= 6) {
+            candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
+        }
+        if (version >= 7) {
+            ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        }
+        if (version >= 8) {
+            candidate.bilog_flags = fields.template scalar<std::uint16_t>();
+        }
+        if (version >= 9) {
+            fields.native(candidate.zones_trace);
+        }
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void decode(link_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    link_request candidate;
+    reader archive {cursor};
+    archive.frame(5, [&](auto& fields, const std::uint8_t version) {
+        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        fields.text(candidate.olh_tag);
+        candidate.delete_marker = 0 != fields.template scalar<std::uint8_t>();
+        fields.text(candidate.op_tag);
+        fields.native(candidate.meta);
+        candidate.olh_epoch = fields.template scalar<std::uint64_t>();
+        candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
+        candidate.bilog_flags = fields.template scalar<std::uint16_t>();
+        if (version >= 2) {
+            const auto seconds = fields.template scalar<std::uint64_t>();
+            if (version == 2) {
+                candidate.unmod_since = ::ceph::real_clock::from_time_t(static_cast<time_t>(seconds));
+            }
+        }
+        if (version >= 3) {
+            fields.native(candidate.unmod_since);
+        }
+        if (version >= 4) {
+            candidate.high_precision_time = 0 != fields.template scalar<std::uint8_t>();
+        }
+        if (version >= 5) {
+            fields.native(candidate.zones_trace);
+        }
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    trim_request candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        ::cls::rgw::wire::decode_key(fields, candidate.olh, key_fields);
+        candidate.ver = fields.template scalar<std::uint64_t>();
+        fields.text(candidate.olh_tag);
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
 
 ::ceph::buffer::list encode_prepare(const ::RGWModifyOp operation, const std::string_view tag,
                                     const ::cls_rgw_obj_key& key, const std::string_view locator)

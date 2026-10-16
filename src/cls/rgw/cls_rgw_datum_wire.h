@@ -318,6 +318,19 @@ public:
         input.copy(size, value);
     }
 
+    // Nested native codecs retain their wire rules; validate their consumed
+    // bytes against this envelope before advancing its cursor:
+    template <typename T>
+    void native(T& value)
+    {
+        using ::ceph::decode;
+
+        auto cursor = input;
+        decode(value, cursor);
+        require(cursor.get_off() - input.get_off());
+        input = cursor;
+    }
+
     template <typename BodyT>
     decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
     {
@@ -333,6 +346,24 @@ public:
         input += finish - input.get_off();
 
         return result;
+    }
+
+    // Prepare/complete versions before the framed format have only a version
+    // byte. Their field profiles determine where the old message ends:
+    template <typename BodyT>
+    decltype(auto) frame(const std::uint8_t supported, const std::uint8_t first_framed,
+                         BodyT&& body)
+    {
+        require(1);
+        auto cursor = input;
+        std::uint8_t version;
+        ::ceph::decode(version, cursor);
+        if (version >= first_framed) {
+            return frame(supported, std::forward<BodyT>(body));
+        }
+        input = cursor;
+
+        return std::invoke(std::forward<BodyT>(body), *this, version);
     }
 
     // Encoded forwarding requires exactly the representation an owning

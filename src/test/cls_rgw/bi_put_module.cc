@@ -1,7 +1,8 @@
-// RGW CLS: Actual batch-write handler with controlled OMAP effects.
+// RGW CLS: Actual index-write handlers with controlled OMAP effects and time.
 #include "module_loader.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "common/config_proxy.h"
+#include "osd/osd_types.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -10,14 +11,20 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include <chrono>
+#include <ctime>
 #include <fstream>
 #include <map>
 #include <ranges>
 #include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
+
+#include <sys/syscall.h>
+#include <unistd.h>
 
 namespace
 {
@@ -114,6 +121,28 @@ auto header(const storage& state)
 
 } // anonymous namespace
 
+// Keep timestamped pending/log records deterministic across actual plugins.
+extern "C" int clock_gettime(clockid_t clock, timespec *value) noexcept
+{
+    if (clock == CLOCK_REALTIME || clock == CLOCK_REALTIME_COARSE) {
+        *value = {1234567890, 123};
+
+        return 0;
+    }
+
+    return static_cast<int>(::syscall(SYS_clock_gettime, clock, value));
+}
+
+const ::object_info_t& cls_get_object_info(cls_method_context_t)
+{
+    static const ::object_info_t info;
+
+    return info;
+}
+
+std::uint64_t cls_current_version(cls_method_context_t) { return 123; }
+int cls_current_subop_num(cls_method_context_t) { return 2; }
+
 const ::ConfigProxy& cls_get_config(cls_method_context_t context)
 {
     static ::ConfigProxy configuration {false};
@@ -159,6 +188,48 @@ int cls_cxx_map_get_vals_by_keys(cls_method_context_t context, const std::set<st
         if (const auto found = state.values.find(key); found != state.values.end()) {
             output->insert(*found);
         }
+    }
+
+    return 0;
+}
+
+int cls_cxx_map_get_val(cls_method_context_t context, const std::string& key, byte_buffer *output)
+{
+    auto& state = *static_cast<storage *>(context);
+    byte_buffer arguments;
+    ::ceph::encode(key, arguments);
+    if (const int result = effect(state, "get-value", arguments); result < 0) {
+        return result;
+    }
+    const auto found = state.values.find(key);
+    if (found == state.values.end()) {
+        return -ENOENT;
+    }
+    *output = found->second;
+
+    return 0;
+}
+
+int cls_cxx_map_get_vals(cls_method_context_t context, const std::string& after,
+                         const std::string& prefix, const std::uint64_t maximum,
+                         std::map<std::string, byte_buffer> *output, bool *more)
+{
+    auto& state = *static_cast<storage *>(context);
+    byte_buffer arguments;
+    ::ceph::encode(std::tuple {after, prefix, maximum}, arguments);
+    if (const int result = effect(state, "get-values", arguments); result < 0) {
+        return result;
+    }
+    *more = false;
+    for (auto it = state.values.upper_bound(after); it != state.values.end(); ++it) {
+        if (!it->first.starts_with(prefix)) {
+            continue;
+        }
+        if (output->size() == maximum) {
+            *more = true;
+            break;
+        }
+        output->insert(*it);
     }
 
     return 0;
@@ -471,4 +542,202 @@ TEST_CASE("Single BI put structural errors precede storage effects", "[rgw][cls]
         CHECK(state.values.empty());
         CHECK(state.header.length() == 0);
     }
+}
+
+namespace
+{
+int invoke_write(storage& state, const auto& request, const std::string_view operation)
+{
+    byte_buffer input;
+    ::encode(request, input);
+
+    return invoke(state, std::move(input), operation);
+}
+
+::rgw_bucket_dir_entry object_entry(const storage& state)
+{
+    ::rgw_bucket_dir_entry result;
+    auto cursor = state.values.at("object").cbegin();
+    ::decode(result, cursor);
+
+    return result;
+}
+
+auto complete_request()
+{
+    ::rgw_cls_obj_complete_op request;
+    request.key.name = "object";
+    request.ver.pool = 7;
+    request.ver.epoch = 5;
+    request.meta.category = ::RGWObjCategory::Main;
+    request.meta.size = 17;
+    request.meta.accounted_size = 23;
+
+    return request;
+}
+
+auto olh_key() { return std::string {"\x80" "1001_object"}; }
+
+auto olh_entry(const storage& state)
+{
+    ::rgw_bucket_olh_entry result;
+    auto cursor = state.values.at(olh_key()).cbegin();
+    ::decode(result, cursor);
+
+    return result;
+}
+
+auto link_request()
+{
+    ::rgw_cls_link_olh_op request;
+    request.key = {"object", "v1"};
+    request.olh_tag = "olh-tag";
+    request.op_tag = "operation";
+    request.delete_marker = true;
+    request.olh_epoch = 5;
+    request.meta.category = ::RGWObjCategory::Main;
+    request.meta.mtime = ::ceph::real_clock::from_time_t(100);
+
+    return request;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Index prepare and complete preserve pending state and accounting", "[rgw][cls][write]")
+{
+    storage state;
+    ::rgw_cls_obj_prepare_op prepare;
+    prepare.key.name = "object";
+    prepare.tag = "transaction";
+    REQUIRE(invoke_write(state, prepare, "bucket_prepare_op") == 0);
+    const auto pending = object_entry(state);
+    REQUIRE(pending.pending_map.contains(prepare.tag));
+    CHECK(pending.pending_map.find(prepare.tag)->second.timestamp ==
+          ::ceph::real_clock::from_time_t(1234567890) + std::chrono::nanoseconds {123});
+    CHECK_FALSE(pending.exists);
+    auto complete = complete_request();
+    complete.op_tag = prepare.tag;
+    complete.remove_objs = {{"missing", ""}, {"missing", ""}};
+    REQUIRE(invoke_write(state, complete, "bucket_complete_op") == 0);
+    const auto result = object_entry(state);
+    CHECK(result.pending_map.empty());
+    CHECK(result.exists);
+    CHECK(result.meta.size == 17);
+    CHECK(header(state).stats.at(::RGWObjCategory::Main).total_size == 23);
+    CHECK(header(state).stats.at(::RGWObjCategory::Main).num_entries == 1);
+}
+
+TEST_CASE("Index complete cancellation and deletion preserve native effects", "[rgw][cls][write]")
+{
+    storage state;
+    ::rgw_cls_obj_prepare_op prepare;
+    prepare.key.name = "object";
+    prepare.tag = "transaction";
+    REQUIRE(invoke_write(state, prepare, "bucket_prepare_op") == 0);
+    auto complete = complete_request();
+    complete.op_tag = prepare.tag;
+    complete.op = ::CLS_RGW_OP_CANCEL;
+    REQUIRE(invoke_write(state, complete, "bucket_complete_op") == 0);
+    CHECK(state.values.empty());
+    REQUIRE(invoke_write(state, prepare, "bucket_prepare_op") == 0);
+    complete.op = ::CLS_RGW_OP_ADD;
+    REQUIRE(invoke_write(state, complete, "bucket_complete_op") == 0);
+    complete.op_tag.clear();
+    complete.op = ::CLS_RGW_OP_DEL;
+    ++complete.ver.epoch;
+    REQUIRE(invoke_write(state, complete, "bucket_complete_op") == 0);
+    CHECK(state.values.empty());
+    CHECK(header(state).stats.at(::RGWObjCategory::Main).num_entries == 0);
+}
+
+TEST_CASE("Index write decode and semantic rejection precede storage", "[rgw][cls][write]")
+{
+    const auto check = [](const auto& request, const std::string_view operation) {
+        byte_buffer full;
+        ::encode(request, full);
+        for (unsigned size = 0; size < full.length(); ++size) {
+            storage state;
+            byte_buffer input;
+            input.substr_of(full, 0, size);
+            CHECK(invoke(state, std::move(input), operation) == -EINVAL);
+            CHECK(state.effects.empty());
+        }
+    };
+    check(complete_request(), "bucket_complete_op");
+    check(link_request(), "bucket_link_olh");
+    ::rgw_cls_obj_prepare_op prepare;
+    check(prepare, "bucket_prepare_op");
+    storage state;
+    CHECK(invoke_write(state, prepare, "bucket_prepare_op") == -EINVAL);
+    CHECK(state.effects.empty());
+    ::rgw_cls_trim_olh_log_op trim;
+    trim.olh = {"object", "bad-instance"};
+    check(trim, "bucket_trim_olh_log");
+    CHECK(invoke_write(state, trim, "bucket_trim_olh_log") == -EINVAL);
+    CHECK(state.effects.empty());
+}
+
+TEST_CASE("Index complete preserves storage error stages and reshard rejection", "[rgw][cls][write]")
+{
+    for (const int call : {1, 2, 3, 4}) {
+        storage state;
+        ::rgw_cls_obj_prepare_op prepare;
+        prepare.key.name = "object";
+        prepare.tag = "transaction";
+        REQUIRE(invoke_write(state, prepare, "bucket_prepare_op") == 0);
+        state.effects.clear();
+        state.failure_call = call;
+        auto complete = complete_request();
+        complete.op_tag = prepare.tag;
+        CHECK(invoke_write(state, complete, "bucket_complete_op") == (call == 1 ? -EINVAL : -EAGAIN));
+        CHECK(state.effects.size() == static_cast<unsigned>(call));
+    }
+    storage state;
+    ::rgw_bucket_dir_header blocked;
+    blocked.new_instance.reshard_status = ::cls_rgw_reshard_status::IN_PROGRESS;
+    ::encode(blocked, state.header);
+    CHECK(invoke_write(state, complete_request(), "bucket_complete_op") == -CLS_RGW_ERR_BUSY_RESHARDING);
+    CHECK(effect_names(state) == std::vector<std::string> {"read-header"});
+}
+
+TEST_CASE("OLH trim retains its inclusive epoch and tag guards", "[rgw][cls][write]")
+{
+    storage state;
+    ::rgw_bucket_olh_entry original;
+    original.key.name = "object";
+    original.tag = "olh-tag";
+    original.pending_log = {{1, {}}, {2, {}}, {3, {}}};
+    ::encode(original, state.values[olh_key()]);
+    ::rgw_cls_trim_olh_log_op trim;
+    trim.olh.name = "object";
+    trim.olh_tag = original.tag;
+    trim.ver = 2;
+    REQUIRE(invoke_write(state, trim, "bucket_trim_olh_log") == 0);
+    CHECK(olh_entry(state).pending_log.size() == 1);
+    CHECK(olh_entry(state).pending_log.contains(3));
+    state.effects.clear();
+    trim.olh_tag = "wrong";
+    CHECK(invoke_write(state, trim, "bucket_trim_olh_log") == -ECANCELED);
+    CHECK(effect_names(state) == std::vector<std::string> {"get-value"});
+}
+
+TEST_CASE("OLH link preserves version, time and tag behavior", "[rgw][cls][write]")
+{
+    storage state;
+    auto request = link_request();
+    REQUIRE(invoke_write(state, request, "bucket_link_olh") == 0);
+    CHECK(olh_entry(state).tag == request.olh_tag);
+    CHECK(olh_entry(state).key.instance == "v1");
+    CHECK(olh_entry(state).delete_marker);
+    request.olh_tag = "wrong";
+    CHECK(invoke_write(state, request, "bucket_link_olh") == -ECANCELED);
+    request.olh_tag = "olh-tag";
+    request.unmod_since = ::ceph::real_clock::from_time_t(99);
+    REQUIRE(invoke_write(state, request, "bucket_link_olh") == 0);
+    CHECK(olh_entry(state).pending_log.rbegin()->second.back().op == ::CLS_RGW_OLH_OP_STALE);
+    request.unmod_since = {};
+    request.log_op = true;
+    request.zones_trace.insert("zone", "location");
+    ++request.olh_epoch;
+    REQUIRE(invoke_write(state, request, "bucket_link_olh") == 0);
 }

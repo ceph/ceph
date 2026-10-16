@@ -23,6 +23,7 @@
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
+ #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
 #include "common/strtol.h"
 #include "common/escape.h"
@@ -952,7 +953,11 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::write_datum::prepare_request op;
+#else
   rgw_cls_obj_prepare_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -1171,7 +1176,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::write_datum::complete_request op;
+#else
   rgw_cls_obj_complete_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -1827,7 +1836,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   string instance_idx;
 
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::write_datum::link_request op;
+#else
   rgw_cls_link_olh_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2433,7 +2446,11 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::write_datum::trim_request op;
+#else
   rgw_cls_trim_olh_log_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);

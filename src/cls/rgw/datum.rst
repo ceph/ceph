@@ -6,10 +6,11 @@ let the client and module use different owning records and containers. They
 share the existing Ceph encoding, including versions, lengths, scalar widths,
 element encodings and map semantics. A container category alone does not define
 that contract.
+The prepare, complete, OLH link and OLH trim builders borrow their arguments
+during encoding, and their modules decode independent request records. Complete
+decodes the client's removal-list encoding directly into a vector. Storage
+algorithms and nested metadata, packed-version and zone codecs remain native.
 Other RGW CLS operations continue to use their existing codecs.
-The prepare, complete, OLH link and OLH trim request builders also borrow their
-arguments during encoding. Their module decoders and storage effects retain the
-existing native implementations.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
@@ -90,6 +91,14 @@ change packed-integer boundary behavior. Optional arguments preserve their nativ
 defaults, and link retains its existing zero bilog flags and epoch-output path.
 The public interfaces remain C++23 and the private implementation still has two
 C++26 translation units.
+
+The module profiles preserve the older single-version-byte prepare/complete
+envelopes and every subsequent field-version gate. Complete reads old name-only
+removal sequences directly into key candidates as well as current key frames.
+Link retains the version-2 seconds-only timestamp and the later precise timestamp
+rules. Compatible future tails and nonzero booleans keep their native meaning.
+Each decoder publishes its candidate and cursor only after the envelope succeeds.
+No temporary native operation record or removal-list nodes are required.
 
 Batch writes
 ------------
