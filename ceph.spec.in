@@ -221,6 +221,7 @@ ExclusiveArch:  x86_64 aarch64 ppc64le s390x riscv64
 Requires:       ceph-osd = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mds = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-mgr-modules-standard = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mon = %{_epoch_prefix}%{version}-%{release}
 Requires(post):	binutils
 %if 0%{with cephfs_java}
