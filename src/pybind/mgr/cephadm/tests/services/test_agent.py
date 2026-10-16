@@ -22,7 +22,7 @@ class TestAgent:
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch(
-        "cephadm.services.cephadmservice.CephadmAgent._get_ceph_volume_image",
+        "cephadm.services.agent.CephadmAgent._get_ceph_volume_image",
         return_value="quay.io/ceph/ceph:test"
     )
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -80,7 +80,7 @@ class TestAgent:
 
 def test_agent_get_dependencies():
     from unittest.mock import MagicMock
-    from cephadm.services.cephadmservice import CephadmAgent
+    from cephadm.services.agent import CephadmAgent
 
     mgr = MagicMock()
     mgr.http_server.agent.server_port = 7150
