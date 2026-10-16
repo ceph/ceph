@@ -449,7 +449,10 @@ bool notify_session_create(const DoutPrefixProvider* dpp, const bucket_namespace
 
 bool notify_session_delete(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name) {
   if (!s_manager) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session deletion: manager is not initialized" << dendl;
+    // radosgw-admin can delete vector buckets without starting the manager.
+    // There is no cached session to invalidate in that process.
+    ldpp_dout(dpp, 20) << "skipping s3vectors session deletion notification: "
+                        "manager is not initialized" << dendl;
     return false;
   }
   return s_manager->notify_session(dpp, ns, bucket_name, Manager::message_t::Op::SESSION_DELETE);
