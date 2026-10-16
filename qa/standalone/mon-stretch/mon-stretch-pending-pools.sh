@@ -131,9 +131,12 @@ function TEST_pools_entering_stretch_mode_in_one_epoch() {
     ceph osd pool create b --num_zones 2 --replica 2 \
         --zone_failure_domain region > $dir/b.out 2>&1 &
     local pid_b=$!
-    wait $pid_a
-    wait $pid_b
+    # whichever create is checked second is refused
+    local created=0
+    wait $pid_a && created=$((created + 1))
+    wait $pid_b && created=$((created + 1))
     cat $dir/a.out $dir/b.out
+    test $created = 1 || return 1
     ceph osd pool ls | grep -qx -e a -e b || return 1
     test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = true || return 1
     # every stretched pool divides the cluster as stretch mode does
