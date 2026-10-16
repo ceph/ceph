@@ -29,8 +29,9 @@
 #                       Serve each request as its own POSIX identity.
 #                       Creates the fixture users and groups, seeds a
 #                       bucket whose objects are gated on group
-#                       membership, and applies CAP_SETUID/CAP_SETGID
-#                       to the built radosgw.  Needs sudo;  each step
+#                       membership, and applies the six capabilities
+#                       (n) needs to the built radosgw -- three held,
+#                       three raised around named sites.  Needs sudo;  each step
 #                       is skipped if already done.  Also makes two
 #                       unplaced, account-owned directories for
 #                       placement tests, afresh on every start.
@@ -400,7 +401,20 @@ if $IMPERSONATE; then
 	# registering task's credentials whole, so without that clear
 	# every impersonated read would inherit this and silently
 	# bypass DAC.  Measured in probes/results-capprobe-2026-10-01.txt.
-	sudo setcap cap_dac_read_search,cap_setuid,cap_setgid+ep \
+	#
+	# Six, and permitted-only:  +p, not +ep.
+	#
+	# A file capability set carries one effective flag for all of it,
+	# so +ep would make every one of the six effective on every
+	# thread -- including CAP_DAC_OVERRIDE on the 31 io_context_pool
+	# threads, which are created before the driver initialises, so a
+	# lowering at startup cannot reach them (measured 2026-10-16:
+	# main 0xc4, every pool thread 0xcf).  With +p nothing starts
+	# effective and each capability is put in the effective set at
+	# its own site:  CAP_DAC_READ_SEARCH by the thread that reads
+	# with no identity, and CAP_DAC_OVERRIDE, CAP_CHOWN, CAP_FOWNER
+	# by with_capabilities() around a named call.
+	sudo setcap cap_dac_read_search,cap_setuid,cap_setgid,cap_dac_override,cap_chown,cap_fowner+p \
 		"$BUILD_DIR/bin/radosgw"
 
 	# Every thread that serves an impersonated request creates an

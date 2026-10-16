@@ -41,6 +41,13 @@ namespace rgw { namespace sal { namespace nsfs {
  * thread's sets, so holding them here -- before the frontend workers
  * exist -- is what makes them available to the workers that will
  * register.  `missing` names what is absent, for the operator.
+ *
+ * The *permitted* set is what this asks about.  Nothing starts
+ * effective -- see hold_thread_capabilities() -- and permitted is
+ * what a thread raises from, so permitted is the question that
+ * matters:  can this process assume an identity when it comes to it?
+ * Asking about effective refused to start a correctly configured
+ * gateway (run 2026-10-16).
  */
 bool have_credential_capabilities(std::string* missing);
 
@@ -224,6 +231,93 @@ public:
  * impersonated.  Callers say what they want done. */
 int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
 		  const ImpersonatedFn& fn);
+
+/* Put `CAP_DAC_READ_SEARCH` in this thread's effective set, once.
+ *
+ * **Nothing starts effective.**  The gateway's capabilities are
+ * granted permitted-only -- `setcap ...+p`, no `e` -- because a
+ * capability set carries one effective flag for the whole of it, so
+ * `+ep` would make all six effective on every thread and (n)'s
+ * *"the capabilities sit in the permitted set"* would be false.
+ * **Measured 2026-10-16:**  with `+ep` and a lowering at startup,
+ * the main thread's `CapEff` was `0xc4` and all 31 `io_context_pool`
+ * threads' was `0xcf` -- they are created before the driver
+ * initialises, and capabilities are per-thread, so every request
+ * thread held `CAP_DAC_OVERRIDE` for its whole life.  Granting
+ * permitted-only removes the ordering question rather than winning
+ * it.
+ *
+ * `CAP_DAC_READ_SEARCH` is the one capability the gateway *holds*
+ * rather than raises:  the authorisation pass reads an ACL off an
+ * object it does not own, and a listing row reads that object's
+ * attributes, both with no identity (`File::open()`'s read-only
+ * branch).  Holding it per thread is the design, not a concession;
+ * what is new is that the thread takes it on first use instead of
+ * inheriting it from exec.  A thread that never calls this simply
+ * does not have it, and a read fails -- which is the direction a
+ * mistake should fail in.
+ *
+ * Idempotent and cheap:  a thread_local flag after the first call.
+ * Returns 0, or -errno.  `ScopedCredentials` clears it for the
+ * length of an impersonated call, and the flag is not consulted
+ * there -- the restore puts back whatever was found. */
+int hold_thread_capabilities(const DoutPrefixProvider* dpp);
+
+/* Whether `cap` is in this thread's effective set, for tests and for
+ * the `raise` driver hint. */
+bool capability_is_effective(int cap);
+
+/* Perform `fn` with `caps` raised in the effective set.
+ *
+ * The raise primitive.  A capability in the permitted set does
+ * nothing until it is in the effective set, and the gateway keeps its
+ * effective set empty of the five it may raise so that an ordinary
+ * call cannot use one by accident.  This is the only way one becomes
+ * effective, and it is effective for the length of `fn` on this
+ * thread alone -- capabilities are per-task, as credentials are.
+ *
+ * `caps` is a mask of `1ull << CAP_*` bits.  An empty mask runs `fn`
+ * and touches nothing.
+ *
+ * Three refusals, all of them before `fn` runs:
+ *
+ *   -EPERM    a requested capability is not in the permitted set.
+ *             Fails closed:  a gateway started without the file
+ *             capabilities would otherwise run the raised path as an
+ *             ordinary unprivileged call and report whatever the
+ *             kernel said, which reads as a permission bug rather
+ *             than a deployment one.
+ *   -EPERM    the calling thread is impersonating.  Raising there
+ *             would hand the capability to the *identity*, which is
+ *             the escalation this design exists to prevent;  (n)
+ *             raises as the gateway and never while impersonating.
+ *             NooBaa does the opposite -- CAP_DAC_READ_SEARCH raised
+ *             after its setresuid -- and the asymmetry is deliberate.
+ *   -EIO      capget() or capset() failed, which cannot be ignored:
+ *             running `fn` after a failed raise would report a
+ *             permission error for a capability we never installed.
+ *
+ * Synchronous work only.  The raise is per-thread and `fn` must not
+ * yield:  beast multiplexes coroutines on one thread, so a suspended
+ * raise would be another request's privilege.  That cannot be
+ * enforced here, so it is a rule about what may be passed.
+ *
+ * Never on the ring, either.  An SQE with no personality takes the
+ * submitter's credentials at issue (probe 2), so a raise held on a
+ * ring-driving thread reaches other requests' submissions;  the ring
+ * route is a registered personality, not this.
+ *
+ * Failing to *drop* the capability again aborts the process, as
+ * failing to restore credentials does:  a thread that returns to its
+ * pool holding CAP_DAC_OVERRIDE serves every later request with it,
+ * and there is nothing this function could return that would stop
+ * that.
+ */
+int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
+		      const ImpersonatedFn& fn);
+
+/* The mask for one capability, for callers assembling one. */
+constexpr uint64_t cap_bit(int cap) { return 1ull << cap; }
 
 /* The same, for operations that return something other than an
  * errno -- the compare-and-swap link and unlink return a verdict

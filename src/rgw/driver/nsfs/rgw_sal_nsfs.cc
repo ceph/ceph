@@ -2593,6 +2593,10 @@ int File::open(const DoutPrefixProvider* dpp)
      * and stop there.  The data paths refuse rather than arrive
      * here without an identity;  see NSFSReadOp::iterate(). */
     ro = true;
+    /* and holding it is this thread's own business now:  no thread
+     * starts with a capability effective, so the one that reads
+     * without an identity takes it here, once */
+    (void) nsfs::hold_thread_capabilities(dpp);
   }
   int flags = (ro ? O_RDONLY : O_RDWR) | (direct_io ? O_DIRECT : 0);
 
@@ -3027,6 +3031,14 @@ int Directory::open(const DoutPrefixProvider* dpp)
   int pfd{AT_FDCWD};
   if (parent)
     pfd = parent->get_fd();
+
+  /* A directory walk carries no identity, so under impersonation it
+   * is the gateway searching a tree it does not own -- the same
+   * CAP_DAC_READ_SEARCH the no-identity object open takes, and taken
+   * the same way, by the thread, once. */
+  if (nsfs::impersonation_enabled()) {
+    (void) nsfs::hold_thread_capabilities(dpp);
+  }
 
   int ret = openat(pfd, fname.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (ret < 0) {
@@ -4417,10 +4429,11 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 	" not the gateway;  operating as the invoking user" << dendl;
     } else if (! have) {
       ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_impersonate is set but this"
-	" process lacks " << missing << ".  Grant them -- setcap"
-	" cap_setuid,cap_setgid+ep on the binary, or a systemd unit with"
-	" AmbientCapabilities=CAP_SETUID CAP_SETGID -- or unset"
-	" rgw_nsfs_impersonate." << dendl;
+	" process lacks " << missing << " in its permitted set.  Grant"
+	" them -- setcap cap_setuid,cap_setgid+p on the binary, or a"
+	" systemd unit with AmbientCapabilities=CAP_SETUID CAP_SETGID --"
+	" or unset rgw_nsfs_impersonate.  Note +p and not +ep:  nothing"
+	" here starts effective." << dendl;
       return -EPERM;
     } else if (g_conf().get_val<bool>("rgw_nsfs_io_uring_sqpoll")) {
       /* An SQPOLL ring's kernel thread reads an SQE after it is
@@ -4451,6 +4464,15 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       } else {
 	ldpp_dout(dpp, 1) << "nsfs: impersonation enabled" << dendl;
       }
+
+      /* Nothing is lowered here, because nothing starts effective:
+       * the capabilities are granted permitted-only and each is put
+       * in the effective set at its own site -- CAP_DAC_READ_SEARCH
+       * by the thread that reads with no identity, the other three
+       * by with_capabilities() around a named call.  Lowering at
+       * startup was tried and does not work:  the frontend's
+       * io_context_pool threads are created before this runs, and
+       * capabilities are per-thread, so they kept theirs. */
     }
   }
 

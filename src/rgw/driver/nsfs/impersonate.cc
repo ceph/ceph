@@ -98,9 +98,15 @@ bool have_credential_capabilities(std::string* missing)
     return false;
   }
 
-  const uint32_t effective = data[0].effective;
-  const bool setuid = effective & (1u << CAP_SETUID);
-  const bool setgid = effective & (1u << CAP_SETGID);
+  /* Permitted, not effective.  Nothing starts effective here -- the
+   * capabilities are granted `+p` so that no thread begins able to
+   * bypass DAC -- and permitted is what makes a raise possible, so
+   * it is the right question:  can this process assume an identity
+   * when it comes to it?  Asking about effective refused to start a
+   * correctly configured gateway (run 2026-10-16). */
+  const uint32_t permitted = data[0].permitted;
+  const bool setuid = permitted & (1u << CAP_SETUID);
+  const bool setgid = permitted & (1u << CAP_SETGID);
 
   if (setuid && setgid) {
     return true;
@@ -156,7 +162,12 @@ class ScopedCredentials {
     hdr.version = _LINUX_CAPABILITY_VERSION_3;
     hdr.pid = 0;
 
-    if (::syscall(SYS_capget, &hdr, saved_caps) < 0) {
+    /* Only if nothing has saved the set yet.  raise_switch_caps()
+     * runs first and holds the thread's own set;  re-reading here
+     * would save the *raised* one, and the restore would then leave
+     * CAP_SETUID and CAP_SETGID effective on a thread that started
+     * with neither. */
+    if (!caps_cleared && ::syscall(SYS_capget, &hdr, saved_caps) < 0) {
       return -errno;
     }
     __user_cap_data_struct cleared[2];
@@ -168,6 +179,33 @@ class ScopedCredentials {
       return -errno;
     }
     caps_cleared = true;
+    return 0;
+  }
+
+  /* Put CAP_SETUID and CAP_SETGID in the effective set, from
+   * permitted, saving what was there first.
+   *
+   * Permitted survives a change between two non-root uids -- measured
+   * in probes/results-capprobe-2026-10-01.txt -- so the restore can
+   * raise them again after the identity has been assumed. */
+  int raise_switch_caps() {
+    struct __user_cap_header_struct hdr = {};
+    hdr.version = _LINUX_CAPABILITY_VERSION_3;
+    hdr.pid = 0;
+
+    if (!caps_cleared && ::syscall(SYS_capget, &hdr, saved_caps) < 0) {
+      return -errno;
+    }
+    __user_cap_data_struct raised[2];
+    raised[0] = saved_caps[0];
+    raised[1] = saved_caps[1];
+    raised[0].effective |= (1u << CAP_SETUID) | (1u << CAP_SETGID);
+    raised[0].effective &= raised[0].permitted;
+    raised[1].effective &= raised[1].permitted;
+    if (::syscall(SYS_capset, &hdr, raised) < 0) {
+      return -errno;
+    }
+    caps_cleared = true;		/* saved_caps is authoritative */
     return 0;
   }
 
@@ -199,6 +237,16 @@ public:
     saved_uid = ::geteuid();
     saved_gid = ::getegid();
 
+    /* The switch needs CAP_SETUID and CAP_SETGID *effective*, and
+     * nothing is effective here:  the gateway's capabilities are
+     * granted permitted-only, so that no thread starts able to
+     * bypass DAC.  Raise the two for the three calls below, and
+     * clear them again at the end -- which is the same clear that
+     * has always had to happen before a personality is registered. */
+    if (int ret = raise_switch_caps(); ret < 0) {
+      return ret;
+    }
+
     /* Groups first, then gid, then uid:  each step gives up
      * privilege, so the order is the only one where every call is
      * still permitted when it runs. */
@@ -224,9 +272,10 @@ public:
     if (!armed) {
       return;
     }
-    /* capabilities first:  restoring the group vector needs
-     * CAP_SETGID, which was just cleared. */
-    int ret = restore_effective();
+    /* capabilities first:  putting the credentials back needs
+     * CAP_SETUID and CAP_SETGID effective, and the call that assumed
+     * the identity cleared them. */
+    int ret = raise_switch_caps();
     /* then uid:  dropping it last would leave no privilege to
      * restore the others with. */
     if (ret == 0 && ::syscall(SYS_setresuid, -1, saved_uid, -1) < 0) {
@@ -239,6 +288,11 @@ public:
 	::syscall(SYS_setgroups, saved_groups.size(),
 		  saved_groups.empty() ? nullptr : saved_groups.data()) < 0) {
       ret = -errno;
+    }
+    /* and the effective set back to what this thread had, which is
+     * empty but for whatever it holds */
+    if (ret == 0) {
+      ret = restore_effective();
     }
     if (ret < 0) {
       /* The thread is still running as the identity, and whatever
@@ -253,6 +307,68 @@ public:
        * restored first. */
       ceph_abort_msg(std::string("nsfs: could not restore this thread's "
 				 "credentials: ") + cpp_strerror(-ret));
+    }
+  }
+};
+
+/* Raise and drop, around one call.
+ *
+ * The same shape as ScopedCredentials and for the same reason:  the
+ * change is per-task, it lasts exactly as long as the object, and it
+ * is put back by a destructor rather than by every return path. */
+class ScopedCapabilities {
+  __user_cap_data_struct saved[2] = {};
+  bool armed{false};
+
+public:
+  /* 0, -EPERM when a requested capability is not permitted, or
+   * -errno from capget/capset. */
+  int push(uint64_t caps, uint64_t* missing) {
+    struct __user_cap_header_struct hdr = {};
+    hdr.version = _LINUX_CAPABILITY_VERSION_3;
+    hdr.pid = 0;
+    if (::syscall(SYS_capget, &hdr, saved) < 0) {
+      return -errno;
+    }
+
+    const uint32_t lo = static_cast<uint32_t>(caps & 0xffffffffull);
+    const uint32_t hi = static_cast<uint32_t>(caps >> 32);
+    const uint32_t absent_lo = lo & ~saved[0].permitted;
+    const uint32_t absent_hi = hi & ~saved[1].permitted;
+    if (absent_lo || absent_hi) {
+      if (missing) {
+	*missing = (static_cast<uint64_t>(absent_hi) << 32) | absent_lo;
+      }
+      return -EPERM;
+    }
+
+    __user_cap_data_struct raised[2];
+    raised[0] = saved[0];
+    raised[1] = saved[1];
+    raised[0].effective |= lo;
+    raised[1].effective |= hi;
+    if (::syscall(SYS_capset, &hdr, raised) < 0) {
+      return -errno;
+    }
+    armed = true;
+    return 0;
+  }
+
+  ~ScopedCapabilities() {
+    if (!armed) {
+      return;
+    }
+    struct __user_cap_header_struct hdr = {};
+    hdr.version = _LINUX_CAPABILITY_VERSION_3;
+    hdr.pid = 0;
+    if (::syscall(SYS_capset, &hdr, saved) < 0) {
+      /* The thread keeps the capability, and so does everything that
+       * runs on it next:  another request on this frontend worker.
+       * That is the gateway's whole authority handed to an ordinary
+       * call, silently.  There is nothing to fall back to -- the call
+       * that would put the set back is the one that just failed. */
+      ceph_abort_msg(std::string("nsfs: could not drop raised "
+				 "capabilities: ") + cpp_strerror(errno));
     }
   }
 };
@@ -506,6 +622,95 @@ int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
     return fn();
   }
   return run_as(dpp, id.cred, fn);
+}
+
+bool capability_is_effective(int cap)
+{
+  struct __user_cap_header_struct hdr = {};
+  struct __user_cap_data_struct data[2] = {};
+  hdr.version = _LINUX_CAPABILITY_VERSION_3;
+  hdr.pid = 0;
+  if (::syscall(SYS_capget, &hdr, data) < 0) {
+    return false;
+  }
+  const int word = cap >> 5;
+  return (data[word].effective & (1u << (cap & 31))) != 0;
+}
+
+/* Set once this thread holds CAP_DAC_READ_SEARCH, so the common path
+ * is a branch rather than two syscalls. */
+static thread_local bool tl_holds_read_search;
+
+int hold_thread_capabilities(const DoutPrefixProvider* dpp)
+{
+  if (tl_holds_read_search) {
+    return 0;
+  }
+
+  struct __user_cap_header_struct hdr = {};
+  struct __user_cap_data_struct data[2] = {};
+  hdr.version = _LINUX_CAPABILITY_VERSION_3;
+  hdr.pid = 0;
+  if (::syscall(SYS_capget, &hdr, data) < 0) {
+    return -errno;
+  }
+
+  const uint32_t want = 1u << CAP_DAC_READ_SEARCH;
+  if (!(data[0].permitted & want)) {
+    /* not granted at all.  Not an error here:  a gateway may run
+     * without it and refuse the reads that need it, which is what
+     * the open's own error says. */
+    tl_holds_read_search = true;
+    return 0;
+  }
+  if (data[0].effective & want) {
+    tl_holds_read_search = true;
+    return 0;
+  }
+
+  data[0].effective |= want;
+  if (::syscall(SYS_capset, &hdr, data) < 0) {
+    return -errno;
+  }
+  tl_holds_read_search = true;
+  ldpp_dout(dpp, 20) << "nsfs: this thread now holds CAP_DAC_READ_SEARCH"
+    << dendl;
+  return 0;
+}
+
+int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
+		      const ImpersonatedFn& fn)
+{
+  if (caps == 0) {
+    return fn();
+  }
+
+  if (tl_impersonating) {
+    ldpp_dout(dpp, 0) << "ERROR: refusing to raise capabilities 0x"
+      << std::hex << caps << std::dec << " on a thread running as uid "
+      << (tl_current_cred ? tl_current_cred->uid : (uid_t)-1)
+      << ";  the capability would be the identity's" << dendl;
+    return -EPERM;
+  }
+
+  ScopedCapabilities raised;
+  uint64_t missing = 0;
+  const int ret = raised.push(caps, &missing);
+  if (ret == -EPERM) {
+    ldpp_dout(dpp, 0) << "ERROR: capabilities 0x" << std::hex << missing
+      << std::dec << " are not in this gateway's permitted set, so they "
+      "cannot be raised;  the gateway was started without them (see "
+      "have_credential_capabilities() and the setcap step)" << dendl;
+    return -EPERM;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not raise capabilities 0x"
+      << std::hex << caps << std::dec << ": " << cpp_strerror(-ret)
+      << dendl;
+    return -EIO;
+  }
+
+  return fn();
 }
 
 int find_personality(const rgw_user& key, PersonalityRef* out,

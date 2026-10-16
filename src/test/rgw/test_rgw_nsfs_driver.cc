@@ -36,6 +36,9 @@
 #include "rgw_website.h"
 #include "rgw_bucket_encryption.h"
 #include "driver/nsfs/identity_db.h"
+#include "driver/nsfs/impersonate.h"
+#include <linux/capability.h>
+#include <sys/syscall.h>
 #include "driver/nsfs/adopt/noobaa_config_store.h"
 #include "driver/nsfs/adopt/noobaa_master_keys.h"
 #include "driver/nsfs/adopt/noobaa_import_plan.h"
@@ -1752,6 +1755,81 @@ TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsIgnoresRowsWithoutIds)
   nsfs::Credentials cred;
   cred.uid = 0;
   EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
+}
+
+/* The raise primitive, on a process that holds no capabilities --
+ * which is what the unit test is, and what makes the refusals
+ * testable here.  The other polarity, a raise that works and is
+ * dropped again, needs the file capabilities and is the `raise`
+ * driver hint's job on a real gateway.
+ *
+ * The effective set is read around every case:  a primitive that
+ * leaves a capability behind is the failure that matters, and it
+ * would not show up in a return value. */
+class NSFSRaiseTest : public ::testing::Test {
+protected:
+  static uint64_t effective_set() {
+    struct __user_cap_header_struct hdr = {};
+    struct __user_cap_data_struct data[2] = {};
+    hdr.version = _LINUX_CAPABILITY_VERSION_3;
+    hdr.pid = 0;
+    if (::syscall(SYS_capget, &hdr, data) < 0) {
+      return ~0ull;			/* unreadable, not empty */
+    }
+    return (static_cast<uint64_t>(data[1].effective) << 32) |
+	   data[0].effective;
+  }
+};
+
+/* An empty mask is not a raise:  it runs the call and touches
+ * nothing. */
+TEST_F(NSFSRaiseTest, AnEmptyMaskRunsTheCall)
+{
+  const uint64_t before = effective_set();
+  bool ran = false;
+  EXPECT_EQ(nsfs::with_capabilities(env->dpp, 0,
+				    [&ran]() -> int { ran = true; return 7; }),
+	    7);
+  EXPECT_TRUE(ran);
+  EXPECT_EQ(effective_set(), before);
+}
+
+/* A capability that is not permitted cannot be raised, and the call
+ * does not run.  Fails closed:  running it unprivileged would report
+ * whatever the kernel said about an ordinary call, which reads as a
+ * permission bug rather than as a gateway started without its
+ * capabilities. */
+TEST_F(NSFSRaiseTest, AnUnpermittedCapabilityIsRefusedAndTheCallDoesNotRun)
+{
+  const uint64_t before = effective_set();
+  ASSERT_NE(before, ~0ull) << "the effective set could not be read";
+  ASSERT_EQ(before & nsfs::cap_bit(CAP_DAC_OVERRIDE), 0u)
+      << "this test process holds CAP_DAC_OVERRIDE, so the refusal it "
+	 "asserts cannot happen";
+
+  bool ran = false;
+  EXPECT_EQ(nsfs::with_capabilities(env->dpp,
+				    nsfs::cap_bit(CAP_DAC_OVERRIDE),
+				    [&ran]() -> int { ran = true; return 0; }),
+	    -EPERM);
+  EXPECT_FALSE(ran) << "the call ran without the capability it asked for";
+  EXPECT_EQ(effective_set(), before) << "a refused raise changed the set";
+}
+
+/* Several at once are refused on the first that is absent, and the
+ * mask the operator is shown names what was missing rather than what
+ * was asked for. */
+TEST_F(NSFSRaiseTest, SeveralUnpermittedCapabilitiesAreRefusedTogether)
+{
+  const uint64_t before = effective_set();
+  bool ran = false;
+  EXPECT_EQ(nsfs::with_capabilities(
+	      env->dpp,
+	      nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER),
+	      [&ran]() -> int { ran = true; return 0; }),
+	    -EPERM);
+  EXPECT_FALSE(ran);
+  EXPECT_EQ(effective_set(), before);
 }
 
 /* The upstream behaviour this design keys on, pinned.
