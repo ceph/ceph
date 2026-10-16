@@ -21,6 +21,7 @@ import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper'
 import { ServiceFormComponent } from './service-form.component';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
+import { TextInputListComponent } from '~/app/shared/components/text-input-list/text-input-list.component';
 import { USER } from '~/app/shared/constants/app.constants';
 import {
   CheckboxModule,
@@ -65,7 +66,8 @@ describe('ServiceFormComponent', () => {
       ModalModule,
       CheckboxModule,
       RadioModule,
-      TextLabelListComponent
+      TextLabelListComponent,
+      TextInputListComponent
     ]
   });
 
@@ -590,6 +592,20 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         });
       });
 
+      it('should submit nvmeof with listener_network_masks', () => {
+        formHelper.setValue('listener_network_masks', ['10.0.0.0/24']);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'default',
+          placement: {},
+          unmanaged: false,
+          group: 'default',
+          enable_auth: false,
+          listener_network_masks: ['10.0.0.0/24']
+        });
+      });
+
       it('should submit nvmeof with mTLS', () => {
         formHelper.setValue('enable_mtls', true);
         formHelper.setValue('certificateType', 'external');
@@ -906,7 +922,25 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           placement: {},
           unmanaged: false,
           group: 'default',
-          enable_auth: false
+          enable_auth: false,
+          listener_network_masks: null
+        });
+      });
+
+      it('should clear listener_network_masks when editing nvmeof with empty masks', () => {
+        spyOn(cephServiceService, 'update').and.stub();
+        component.serviceType = 'nvmeof';
+        formHelper.setValue('service_type', 'nvmeof');
+        formHelper.setValue('group', 'default');
+        formHelper.setValue('listener_network_masks', []);
+        component.onSubmit();
+        expect(cephServiceService.update).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          placement: {},
+          unmanaged: false,
+          group: 'default',
+          enable_auth: false,
+          listener_network_masks: null
         });
       });
     });

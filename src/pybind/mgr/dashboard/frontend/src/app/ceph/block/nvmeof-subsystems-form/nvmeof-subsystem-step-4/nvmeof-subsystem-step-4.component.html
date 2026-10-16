@@ -68,21 +68,7 @@
     >
       Listeners
     </p>
-    @if (listenerCount > 0) {
-      <p
-        class="cds--type-label-02 cds-mt-2"
-        i18n
-      >
-        {{ listenerCount }} listener(s) added
-      </p>
-    } @else {
-      <p
-        class="cds--type-label-02 cds-mt-2"
-        i18n
-      >
-        None selected
-      </p>
-    }
+    <p class="cds--type-label-02 cds-mt-2">{{ listenersSummary }}</p>
   </div>
 
   <!-- Host access control (Initiators) -->

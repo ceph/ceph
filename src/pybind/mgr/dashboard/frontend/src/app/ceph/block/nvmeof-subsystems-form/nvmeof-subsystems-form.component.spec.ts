@@ -131,6 +131,34 @@ describe('NvmeofSubsystemsFormComponent', () => {
       });
     });
 
+    it('should set use_group_config_network_masks when useGroupNetworkMask is true', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'auto-fetch',
+        useGroupNetworkMask: true,
+        // UI may still carry the group's masks for display; create must not
+        // snapshot them into network_mask.
+        groupNetworkMasks: ['192.168.100.0/24']
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        dhchap_key: '',
+        use_group_config_network_masks: true
+      });
+    });
+
     it('should not include network_mask in createSubsystem request when listenerMode is manual', () => {
       const payload: SubsystemPayload = {
         nqn: 'test-nqn',

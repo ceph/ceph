@@ -76,6 +76,23 @@ describe('NvmeofSubsystemsStepFourComponent', () => {
     expect(component.listenerCount).toBe(1);
   });
 
+  it('should summarize auto-fetched group discovery networks on review', () => {
+    component.listeners = [];
+    component.listenerMode = 'auto-fetch';
+    component.useGroupNetworkMask = true;
+    component.groupNetworkMasks = ['10.0.0.0/24'];
+    expect(component.listenersSummary).toContain('gateway group discovery networks');
+    expect(component.listenersSummary).toContain('10.0.0.0/24');
+  });
+
+  it('should summarize auto-fetched custom network mask on review', () => {
+    component.listeners = [];
+    component.listenerMode = 'auto-fetch';
+    component.useGroupNetworkMask = false;
+    component.subnetMask = '192.168.1.0/24';
+    expect(component.listenersSummary).toContain('192.168.1.0/24');
+  });
+
   it('should detect subsystem key presence', () => {
     component.subsystemDchapKey = '';
     expect(component.hasSubsystemKey).toBe(false);

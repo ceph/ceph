@@ -276,6 +276,34 @@ export class CdValidators {
   }
 
   /**
+   * Validate a single CIDR network (e.g. 192.168.1.0/24).
+   * Empty values are allowed so this can be paired with Validators.required.
+   */
+  static cidrNetwork(): ValidatorFn {
+    return CdValidators.custom('cidrNetwork', (value: string | null | undefined) => {
+      const trimmed = (value || '').trim();
+      return trimmed !== '' && !validator.isIPRange(trimmed);
+    });
+  }
+
+  /**
+   * Validate a list of CIDR networks (e.g. listener_network_masks).
+   * Empty lists and empty strings are allowed; every non-empty entry must be a
+   * valid IPv4/IPv6 CIDR range such as 192.168.1.0/24.
+   */
+  static cidrNetworkList(): ValidatorFn {
+    return CdValidators.custom('cidrNetworkList', (masks: string[] | null | undefined) => {
+      if (!masks?.length) {
+        return false;
+      }
+      return masks.some((mask) => {
+        const value = (mask || '').trim();
+        return value !== '' && !validator.isIPRange(value);
+      });
+    });
+  }
+
+  /**
    * Fails when an existing CephX user lacks MDS caps for CephFS mirroring.
    * Missing users are valid (they will be created). Empty values are skipped.
    * Revalidates when the filesystem control changes, same as {@link requiredIf}.

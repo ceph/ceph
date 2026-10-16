@@ -1,0 +1,54 @@
+@if (label) {
+  <cds-text-label
+    [labelInputID]="inputId(0)"
+    [helperText]="helperText"
+  >
+    {{ label }}
+  </cds-text-label>
+} @else if (helperText) {
+  <div class="cds--form__helper-text">{{ helperText }}</div>
+}
+@for (value of values; track $index) {
+  <div class="cds-input-group cds-mt-3">
+    <input
+      cdsText
+      type="text"
+      [id]="inputId($index)"
+      [placeholder]="placeholder"
+      [value]="value"
+      [disabled]="disabled"
+      [invalid]="invalid"
+      (input)="onInputChange($index, $any($event.target).value)"
+      (blur)="markAsTouched()"
+    />
+    @if (values.length > 1) {
+      <cds-icon-button
+        kind="ghost"
+        size="md"
+        (click)="deleteInput($index)"
+        [disabled]="disabled"
+      >
+        <cd-icon type="trash"></cd-icon>
+      </cds-icon-button>
+    }
+  </div>
+}
+@if (showInvalid) {
+  <div class="cds--form-requirement">{{ invalidText }}</div>
+}
+<div class="cds-mt-3">
+  <button
+    cdsButton="tertiary"
+    type="button"
+    (click)="addInput()"
+    [disabled]="disabled"
+  >
+    {{ addButtonLabel }}
+    <svg
+      cdsIcon="add"
+      size="16"
+      class="cds--btn__icon"
+      icon
+    ></svg>
+  </button>
+</div>
