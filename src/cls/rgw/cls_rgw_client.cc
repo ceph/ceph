@@ -12,6 +12,7 @@
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
  #include "cls/rgw/cls_rgw_bilog_datum.h"
+ #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -59,6 +60,38 @@ public:
     }
   }
 };
+
+namespace {
+
+template <typename ReplyT, typename DecodeT>
+class reply_completion final : public ObjectOperationCompletion {
+  ReplyT& output;
+  int *status;
+  [[no_unique_address]] DecodeT decode_reply;
+
+public:
+  reply_completion(ReplyT& output, int *status, DecodeT decode_reply)
+    : output(output), status(status), decode_reply(std::move(decode_reply))
+  {}
+
+public:
+  void handle_completion(int result, ::ceph::buffer::list& bytes) override {
+    try {
+      if (0 <= result || RGWBIAdvanceAndRetryError == result) {
+        decode_reply(bytes, output);
+      }
+    } catch (const std::bad_alloc&) {
+      result = -ENOMEM;
+    } catch (const std::exception&) {
+      result = -EIO;
+    }
+    if (status) {
+      *status = result;
+    }
+  }
+};
+
+} // anonymous namespace
 
 void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
 {
@@ -187,6 +220,21 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             bool list_versions,
                             rgw_cls_list_ret* result)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ceph_assert(result);
+  auto in = ::cls::rgw::bucket_datum::encode_request(start_obj, filter_prefix, delimiter,
+                                                   num_entries, list_versions);
+  op.exec(method::bucket_list, in, new reply_completion {*result, nullptr,
+    [](const ::ceph::buffer::list& bytes, rgw_cls_list_ret& output) {
+      static_assert(std::is_nothrow_move_assignable_v<rgw_cls_list_ret>);
+      auto candidate = ::cls::rgw::bucket_datum::decode_reply<::cls::rgw::bucket_datum::flat_entries>(bytes);
+      output.dir.header = std::move(candidate.dir.header);
+      output.dir.m = std::move(candidate.dir.m);
+      output.marker = std::move(candidate.marker);
+      output.is_truncated = candidate.is_truncated;
+      output.cls_filtered = candidate.cls_filtered;
+    }});
+#else
   bufferlist in;
   rgw_cls_list_op call;
   call.start_obj = start_obj;
@@ -198,6 +246,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 
   op.exec(method::bucket_list, in,
 	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
+#endif
 }
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
@@ -522,35 +571,6 @@ void decode_olh_reply(const ::ceph::buffer::list& input, ::cls::rgw::olh::reply&
 #endif
 
 template <typename ReplyT>
-class olh_completion final : public ObjectOperationCompletion
-{
-  ReplyT& output;
-  int& status;
-
-public:
-  olh_completion(ReplyT& output, int& status) : output(output), status(status)
-  {}
-
-public:
-  void handle_completion(int result, ::ceph::buffer::list& bytes) override
-  try {
-    if (0 <= result || RGWBIAdvanceAndRetryError == result) {
-#ifdef WITH_RGW_CLS_DATUM
-      ::cls::rgw::olh_datum::decode_reply(bytes, output);
-#else
-      decode_olh_reply(bytes, output);
-#endif
-    }
-    status = result;
-  } catch (const std::bad_alloc&) {
-    status = -ENOMEM;
-  } catch (const std::exception&) {
-    status = -EIO;
-  }
-
-};
-
-template <typename ReplyT>
 void get_olh_log(ObjectReadOperation& op, const cls_rgw_obj_key& olh,
                  const uint64_t marker, const std::string& tag, ReplyT& output, int& status)
 {
@@ -565,7 +585,14 @@ void get_olh_log(ObjectReadOperation& op, const cls_rgw_obj_key& olh,
   call.get_stales = true;
   ::encode(call, input);
 #endif
-  op.exec(method::bucket_read_olh_log, input, new olh_completion<ReplyT> {output, status});
+  op.exec(method::bucket_read_olh_log, input, new reply_completion {output, &status,
+    [](const ::ceph::buffer::list& bytes, ReplyT& output) {
+#ifdef WITH_RGW_CLS_DATUM
+      ::cls::rgw::olh_datum::decode_reply(bytes, output);
+#else
+      decode_olh_reply(bytes, output);
+#endif
+    }});
 }
 
 template <typename ReplyT>
@@ -644,46 +671,20 @@ void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key
   op.exec(method::bucket_clear_olh, in);
 }
 
-#ifdef WITH_RGW_CLS_DATUM
-namespace {
-
-class bilog_completion final : public ObjectOperationCompletion {
-  cls_rgw_bi_log_list_ret *output;
-  int *status;
-
-public:
-  bilog_completion(cls_rgw_bi_log_list_ret *output, int *status)
-    : output(output), status(status) { ceph_assert(output); }
-
-  void handle_completion(int result, ::ceph::buffer::list& bytes) override {
-    if (0 <= result || RGWBIAdvanceAndRetryError == result) {
-      try {
-        auto [entries, truncated] =
-          ::cls::rgw::bilog_datum::decode_reply<std::list<::rgw_bi_log_entry>>(bytes);
-        output->entries = std::move(entries);
-        output->truncated = truncated;
-      } catch (const std::bad_alloc&) {
-        result = -ENOMEM;
-      } catch (const std::exception&) {
-        result = -EIO;
-      }
-    }
-    if (status) {
-      *status = result;
-    }
-  }
-};
-
-} // anonymous namespace
-#endif
-
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         const std::string& marker, uint32_t max,
                         cls_rgw_bi_log_list_ret *pdata, int *ret)
 {
 #ifdef WITH_RGW_CLS_DATUM
+  ceph_assert(pdata);
   auto in = ::cls::rgw::bilog_datum::encode_list(marker, max);
-  op.exec(method::bi_log_list, in, new bilog_completion {pdata, ret});
+  op.exec(method::bi_log_list, in, new reply_completion {*pdata, ret,
+    [](const ::ceph::buffer::list& bytes, cls_rgw_bi_log_list_ret& output) {
+      auto [entries, truncated] =
+        ::cls::rgw::bilog_datum::decode_reply<std::list<::rgw_bi_log_entry>>(bytes);
+      output.entries = std::move(entries);
+      output.truncated = truncated;
+    }});
 #else
   cls_rgw_bi_log_list_op call;
   call.marker = marker;

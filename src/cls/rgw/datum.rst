@@ -16,6 +16,9 @@ unlink retains its tag and zone field-version gates and epoch receipt path.
 Bucket-index log list and trim use independent requests. Log list encodes the
 module's vector directly and decodes the same sequence into the public client
 list, retaining native log-entry codecs and storage pagination semantics.
+Bucket directory listing also uses independent records. Its associative profile
+preserves sorted keys, last-wins duplicate decoding and the existing flat-map
+storage. Header and directory-entry codecs, filtering and retry markers stay native.
 Other RGW CLS operations continue to use their existing codecs.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and

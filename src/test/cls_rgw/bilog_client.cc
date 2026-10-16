@@ -1,4 +1,4 @@
-// RGW CLS: Actual bilog client builders and deferred completion contracts.
+// RGW CLS: Actual index-read builders and deferred completion contracts.
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/rgw/cls_rgw_const.h"
 
@@ -169,3 +169,83 @@ TEST_CASE("Bilog Datum completion preserves output on allocation failure", "[rgw
     CHECK(canonical(output).contents_equal(preserved));
 }
 #endif
+
+namespace {
+
+auto bucket_response()
+{
+    ::rgw_cls_list_ret value;
+    value.dir.header.ver = 17;
+    value.dir.header.max_marker = "max-marker";
+    ::rgw_bucket_dir_entry entry;
+    entry.key = {std::string {"n\0m", 3}, "instance"};
+    entry.exists = true;
+    entry.meta.etag = std::string(80, 'e');
+    value.dir.m.emplace(std::string {"map\0key", 7}, std::move(entry));
+    value.marker = {"marker", "version"};
+    value.is_truncated = true;
+
+    return value;
+}
+
+void schedule_bucket(::rgw_cls_list_ret& output)
+{
+    ::librados::ObjectReadOperation operation;
+    ::cls_rgw_obj_key start {std::string {"n\0m", 3}, "instance"};
+    std::string prefix(80, 'p');
+    std::string delimiter {"/"};
+    ::cls_rgw_bucket_list_op(operation, start, prefix, delimiter, 17, true, &output);
+    start.name.clear();
+    prefix.clear();
+    delimiter.clear();
+}
+
+} // anonymous namespace
+
+TEST_CASE("Bucket list client owns borrowed requests and publishes native API results", "[rgw][cls][bucket-list]")
+{
+    for (const int result : {0, 7, ::RGWBIAdvanceAndRetryError}) {
+        ::rgw_cls_list_ret output;
+        schedule_bucket(output);
+        CHECK(request_method == "bucket_list");
+        ::rgw_cls_list_op expected;
+        expected.start_obj = {std::string {"n\0m", 3}, "instance"};
+        expected.filter_prefix = std::string(80, 'p');
+        expected.delimiter = "/";
+        expected.num_entries = 17;
+        expected.list_versions = true;
+        CHECK(request_bytes.contents_equal(canonical(expected)));
+        const auto reply = bucket_response();
+        complete(result, canonical(reply));
+        CHECK(canonical(output).contents_equal(canonical(reply)));
+        CHECK(output.cls_filtered);
+    }
+    auto output = bucket_response();
+    const auto preserved = canonical(output);
+    schedule_bucket(output);
+    complete(-EAGAIN, {});
+    CHECK(canonical(output).contents_equal(preserved));
+}
+
+TEST_CASE("Bucket list completion contains malformed replies", "[rgw][cls][bucket-list]")
+{
+    auto output = bucket_response();
+    const auto preserved = canonical(output);
+    const auto full = canonical(output);
+    for (unsigned size = 0; size < full.length(); ++size) {
+        output = bucket_response();
+        bytes prefix;
+        prefix.substr_of(full, 0, size);
+        schedule_bucket(output);
+        complete(0, prefix);
+#ifdef TEST_RGW_CLS_DATUM
+        CHECK(canonical(output).contents_equal(preserved));
+#endif
+    }
+#ifdef TEST_RGW_CLS_DATUM
+    output = bucket_response();
+    schedule_bucket(output);
+    complete(0, full, true);
+    CHECK(canonical(output).contents_equal(preserved));
+#endif
+}

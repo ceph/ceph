@@ -55,7 +55,8 @@ int effect(storage& state, std::string operation, byte_buffer arguments = {})
 auto invoke(storage& state, byte_buffer input, const std::string_view method = "bi_put_entries")
 {
     const auto [call, flags] = ::rgw_cls_test::get_method(method);
-    REQUIRE(flags == (method == "bi_log_list" ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
+    const bool read_only = method == "bi_log_list" || method == "bucket_list";
+    REQUIRE(flags == (read_only ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
     state.reply = output;
@@ -1104,4 +1105,178 @@ TEST_CASE("Bilog module rejects every incomplete request before storage access",
     trim.start_marker = "start";
     trim.end_marker = "end";
     check(trim, "bi_log_trim");
+}
+
+namespace {
+
+storage directory_storage()
+{
+    storage state;
+    for (const std::string name : {"a", "dir/x", "dir/y", "z"}) {
+        state.values[name] = entry(name, 11).data;
+    }
+    state.values[log_prefix + "unrelated"] = {};
+    ::rgw_bucket_dir_header header;
+    header.ver = 17;
+    header.max_marker = "max-marker";
+    header.stats[::RGWObjCategory::Main].num_entries = 4;
+    ::encode(header, state.header);
+
+    return state;
+}
+
+auto directory_reply(const storage& state)
+{
+    ::rgw_cls_list_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    CHECK(cursor.end());
+
+    return result;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Bucket directory module preserves header-only reads and ordinary page markers", "[rgw][cls][bucket-list]")
+{
+    storage state = directory_storage();
+    const auto original = state.values;
+    ::rgw_cls_list_op request;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    CHECK(directory_reply(state).dir.header.ver == 17);
+    CHECK(directory_reply(state).dir.m.empty());
+    CHECK_FALSE(directory_reply(state).is_truncated);
+    CHECK((effect_names(state) == std::vector<std::string> {"read-header"}));
+    request.num_entries = 2;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    auto result = directory_reply(state);
+    REQUIRE(result.dir.m.size() == 2);
+    CHECK(result.dir.m.contains("a"));
+    CHECK(result.dir.m.contains("dir/x"));
+    CHECK(result.is_truncated);
+    CHECK(result.marker.name == "dir/x");
+    request.start_obj = result.marker;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    result = directory_reply(state);
+    REQUIRE(result.dir.m.size() == 2);
+    CHECK(result.dir.m.contains("dir/y"));
+    CHECK(result.dir.m.contains("z"));
+    request.start_obj = result.marker;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    CHECK(directory_reply(state).dir.m.empty());
+    CHECK_FALSE(directory_reply(state).is_truncated);
+    CHECK(state.values == original);
+}
+
+TEST_CASE("Bucket directory module retains delimiter proxies prefix and namespace skipping", "[rgw][cls][bucket-list]")
+{
+    storage state = directory_storage();
+    ::rgw_cls_list_op request;
+    request.num_entries = 10;
+    request.delimiter = "/";
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    auto result = directory_reply(state);
+    REQUIRE(result.dir.m.size() == 3);
+    CHECK(result.dir.m.contains("a"));
+    CHECK(result.dir.m.contains("z"));
+    REQUIRE(result.dir.m.contains("dir/"));
+    CHECK(result.dir.m.at("dir/").is_common_prefix());
+    CHECK_FALSE(result.is_truncated);
+    request.filter_prefix = "dir/";
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    result = directory_reply(state);
+    REQUIRE(result.dir.m.size() == 2);
+    CHECK(result.dir.m.contains("dir/x"));
+    CHECK(result.dir.m.contains("dir/y"));
+    request.filter_prefix = "missing";
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    CHECK(directory_reply(state).dir.m.empty());
+
+    request = {};
+    request.num_entries = 10;
+    const std::string unicode {"\xC3\xA9"};
+    state.values[unicode] = entry(unicode, 11).data;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    result = directory_reply(state);
+    CHECK(result.dir.m.size() == 5);
+    CHECK(result.dir.m.contains(unicode));
+    CHECK_FALSE(result.dir.m.contains(log_prefix + "unrelated"));
+}
+
+TEST_CASE("Bucket directory module retains version filtering and missing instance markers", "[rgw][cls][bucket-list]")
+{
+    storage state;
+    auto link = link_request();
+    REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+    link.key.instance = "v2";
+    ++link.olh_epoch;
+    REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+    ::rgw_cls_list_op request;
+    request.num_entries = 10;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    CHECK(directory_reply(state).dir.m.empty());
+    request.list_versions = true;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    const auto result = directory_reply(state);
+    REQUIRE(result.dir.m.size() == 2);
+    CHECK(std::ranges::all_of(result.dir.m, [](const auto& row) {
+        return row.second.is_delete_marker() && row.second.key.name == "object";
+    }));
+    request.start_obj = {"object", "missing"};
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    CHECK(directory_reply(state).dir.m.empty());
+}
+
+TEST_CASE("Bucket directory module preserves bounded empty-page advance and retry", "[rgw][cls][bucket-list]")
+{
+    storage state;
+    for (unsigned index = 0; index < 9; ++index) {
+        const auto name = "a" + std::to_string(index);
+        ::rgw_bucket_dir_entry row;
+        row.key.name = name;
+        row.flags = ::rgw_bucket_dir_entry::FLAG_VER_MARKER;
+        ::encode(row, state.values[name]);
+    }
+    ::rgw_cls_list_op request;
+    request.num_entries = 1;
+    REQUIRE(invoke_write(state, request, "bucket_list") == ::RGWBIAdvanceAndRetryError);
+    const auto result = directory_reply(state);
+    CHECK(result.dir.m.empty());
+    CHECK(result.is_truncated);
+    CHECK(result.marker.name == "a7");
+    CHECK(state.effects.size() == 9);
+    CHECK(std::ranges::count(effect_names(state), "get-values") == 8);
+    request.start_obj = result.marker;
+    REQUIRE(invoke_write(state, request, "bucket_list") == 0);
+    CHECK(directory_reply(state).dir.m.empty());
+    CHECK_FALSE(directory_reply(state).is_truncated);
+}
+
+TEST_CASE("Bucket directory module retains corruption storage errors and request rejection", "[rgw][cls][bucket-list]")
+{
+    ::rgw_cls_list_op request;
+    request.num_entries = 10;
+    storage state = directory_storage();
+    state.values.at("a").clear();
+    CHECK(invoke_write(state, request, "bucket_list") == -EINVAL);
+    CHECK(state.reply.length() == 0);
+    state = directory_storage();
+    state.header.clear();
+    state.header.append("x", 1);
+    CHECK(invoke_write(state, request, "bucket_list") == -EIO);
+    for (const unsigned failure : {1, 2}) {
+        state = directory_storage();
+        state.failure_call = failure;
+        CHECK(invoke_write(state, request, "bucket_list") == -EAGAIN);
+        CHECK(state.effects.size() == failure);
+    }
+    byte_buffer full;
+    ::encode(request, full);
+    for (unsigned size = 0; size < full.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(full, 0, size);
+        state = directory_storage();
+        CHECK(invoke(state, prefix, "bucket_list") == -EINVAL);
+        CHECK(state.effects.empty());
+    }
 }

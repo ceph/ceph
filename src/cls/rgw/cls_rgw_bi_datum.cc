@@ -4,6 +4,7 @@
 #include "cls_rgw_bi_datum.h"
 #include "cls_rgw_bi_wire.h"
 #include "cls_rgw_bilog_datum.h"
+#include "cls_rgw_bucket_datum.h"
 #include "cls_rgw_write_datum.h"
 
 #include <utility>
@@ -228,6 +229,127 @@ template std::pair<std::list<::rgw_bi_log_entry>, bool>
 decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::bilog_datum
+
+namespace cls::rgw::bucket_datum {
+
+using ::cls::rgw::wire::reader;
+using ::cls::rgw::wire::writer;
+
+::ceph::buffer::list encode_request(const ::cls_rgw_obj_key& start, const std::string_view prefix,
+                                    const std::string_view delimiter, const std::uint32_t maximum,
+                                    const bool versions)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(6, 4, [&] {
+        archive.scalar(maximum);
+        archive.text(prefix);
+        ::cls::rgw::wire::encode_key(archive, start.name, start.instance);
+        archive.scalar(static_cast<std::uint8_t>(versions));
+        archive.text(delimiter);
+    });
+
+    return output;
+}
+
+void decode(request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    using key = ::cls_rgw_obj_key;
+    namespace datum = ::ceph::salad::datum;
+
+    auto cursor = input;
+    request candidate;
+    reader archive {cursor};
+    archive.frame(6, 2, [&](auto& fields, const std::uint8_t version) {
+        if (version < 4) {
+            fields.text(candidate.start_obj.name);
+        }
+        candidate.num_entries = fields.template scalar<std::uint32_t>();
+        if (version >= 3) {
+            fields.text(candidate.filter_prefix);
+        }
+        if (version >= 4) {
+            ::cls::rgw::wire::decode_key(fields, candidate.start_obj,
+                datum::binary_fields<&key::name, &key::instance> {});
+        }
+        if (version >= 5) {
+            candidate.list_versions = 0 != fields.template scalar<std::uint8_t>();
+        }
+        if (version >= 6) {
+            fields.text(candidate.delimiter);
+        }
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void encode(const reply& value, ::ceph::buffer::list& output)
+{
+    ::ceph::buffer::list candidate;
+    writer archive {candidate};
+    archive.frame(4, 2, [&] {
+        archive.frame(2, 2, [&] {
+            archive.native(value.dir.header);
+            archive.scalar(::cls::rgw::wire::checked_count(value.dir.m.size()));
+            for (const auto& [key, entry] : value.dir.m) {
+                archive.text(key);
+                archive.native(entry);
+            }
+        });
+        archive.scalar(static_cast<std::uint8_t>(value.is_truncated));
+        ::cls::rgw::wire::encode_key(archive, value.marker.name, value.marker.instance);
+    });
+    output.claim_append(candidate);
+}
+
+template <typename EntriesT>
+requires ::ceph::concepts::has_subscript_operator<EntriesT>
+list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
+{
+    using key = ::cls_rgw_obj_key;
+    namespace datum = ::ceph::salad::datum;
+
+    auto cursor = input.cbegin();
+    list_reply<EntriesT> candidate;
+    reader archive {cursor};
+    archive.frame(4, 2, [&](auto& fields, const std::uint8_t version) {
+        fields.frame(2, 2, [&](auto& directory_fields, std::uint8_t) {
+            directory_fields.native(candidate.dir.header);
+            // A string count plus even an unframed entry needs five bytes.
+            const auto count = directory_fields.template sequence_size<5>();
+            auto& entries = candidate.dir.m;
+            if constexpr (requires { entries.reserve(count); }) {
+                entries.reserve(count);
+            }
+            for (std::uint32_t index = 0; index < count; ++index) {
+                auto name = directory_fields.text();
+                // Decode into an existing value on duplicates. Old leaf versions
+                // can leave previously decoded fields unchanged, just as native.
+                directory_fields.native(entries[std::move(name)]);
+            }
+
+            return 0;
+        });
+        candidate.is_truncated = 0 != fields.template scalar<std::uint8_t>();
+        candidate.cls_filtered = version >= 3;
+        if (version >= 4) {
+            ::cls::rgw::wire::decode_key(fields, candidate.marker,
+                datum::binary_fields<&key::name, &key::instance> {});
+        }
+
+        return 0;
+    });
+
+    return candidate;
+}
+
+template list_reply<flat_entries> decode_reply(const ::ceph::buffer::list& input);
+template list_reply<std::map<std::string, ::rgw_bucket_dir_entry>>
+decode_reply(const ::ceph::buffer::list& input);
+
+} // cls::rgw::bucket_datum
 
 namespace cls::rgw::write_datum {
 

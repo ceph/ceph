@@ -23,6 +23,7 @@
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
  #include "cls/rgw/cls_rgw_bilog_datum.h"
+ #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -564,7 +565,11 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   auto iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bucket_datum::request op;
+#else
   rgw_cls_list_op op;
+#endif
   try {
     decode(op, iter);
   } catch (ceph::buffer::error& err) {
@@ -576,8 +581,12 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
           __func__, op.start_obj.to_string().c_str(), op.num_entries,
           op.filter_prefix.c_str(), op.delimiter.c_str(), (int)op.list_versions);
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bucket_datum::reply ret;
+#else
   rgw_cls_list_ret ret;
-  rgw_bucket_dir& new_dir = ret.dir;
+#endif
+  auto& new_dir = ret.dir;
   auto& name_entry_map = new_dir.m; // map of keys to entries
 
   int rc = read_bucket_header(hctx, &new_dir.header);
