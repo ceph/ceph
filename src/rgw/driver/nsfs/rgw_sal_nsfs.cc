@@ -4203,11 +4203,8 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	      std::string xn = xs->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
 	      std::string xv = attr_on_disk(xs, RGW_NSFS_ATTR_MPUPLOAD, bl);
 	      if (::fsetxattr(pfd, xn.c_str(), xv.data(), xv.size(), 0) < 0) {
-		const int err = errno;
-		ldpp_dout(&dp, 0) << "ERROR: could not write the record for "
-		  << "part " << num << " of " << key.upload_meta << ": "
-		  << cpp_strerror(err) << ";  it is lost" << dendl;
-		return -err;
+		/* reported by the caller, which also knows the uid */
+		return -errno;
 	      }
 
 	      /* and whatever the layout records for itself.  The nsfs
@@ -4224,10 +4221,28 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	      (void) mpu->write_part_record(&dp, dir_fd, fname, rec);
 	      return 0;
 	    };
-	    if ((owner.uid == ::geteuid()) || !nsfs::impersonation_enabled()) {
-	      (void) write_record();
+	    /* run_as() decides whether a switch is needed, because it is
+	     * the only thing that knows who this thread already is.  An
+	     * earlier `owner.uid == ::geteuid()` test here asked the
+	     * wrong question:  eviction is reached from cache insert, so
+	     * this can run on a thread already acting as somebody, and
+	     * geteuid() then returns *that* identity rather than the
+	     * gateway's -- matching by accident and skipping the switch.
+	     *
+	     * The result is not discarded.  A record that cannot be
+	     * written is a part the upload will not see, so say so here:
+	     * the inner failures report themselves, but a refusal to
+	     * assume the owner never reaches them. */
+	    int wret;
+	    if (!nsfs::impersonation_enabled()) {
+	      wret = write_record();
 	    } else {
-	      (void) nsfs::run_as(&dp, owner, write_record);
+	      wret = nsfs::run_as(&dp, owner, write_record);
+	    }
+	    if (wret < 0) {
+	      ldpp_dout(&dp, 0) << "ERROR: could not write the record for part "
+		<< num << " of " << key.upload_meta << " as uid " << owner.uid
+		<< ": " << cpp_strerror(-wret) << ";  it is lost" << dendl;
 	    }
 	  }
 	  return;
