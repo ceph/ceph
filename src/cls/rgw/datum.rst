@@ -33,6 +33,13 @@ encoding into a vector; its client borrows the list. String arguments are borrow
 during encoding, and timestamps retain the native clock codec. Attribute storage,
 missing-object behavior, precision and comparison rules remain native.
 
+Usage add, read and trim use independent requests and read replies. Add borrows
+its entry vector and skips the unused user string after validating its bounds.
+Read replies decode first-wins associations into either a tree or flat map;
+the public client moves its tree map and continuation string into caller outputs
+in both Datum and native-only builds.
+Nested usage-entry codecs, aggregation, key transition and scan policy stay native.
+
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
 provides the C++26 implementation. Its language requirements and Datum headers

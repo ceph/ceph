@@ -22,6 +22,8 @@ int transport_status = 0;
 bool allocation_failure = false;
 std::string request_method;
 int put_transport_status = 0;
+std::vector<int> write_statuses;
+std::size_t write_next = 0;
 byte_buffer *request_output = nullptr;
 
 byte_buffer response()
@@ -164,6 +166,10 @@ TEST_CASE("BI batch client retains encoded bytes after consuming its input", "[r
 int librados::IoCtx::operate(const std::string& oid, ObjectWriteOperation *)
 {
     CHECK(oid == "object");
+
+    if (!write_statuses.empty()) {
+        return write_statuses.at(write_next++);
+    }
 
     return put_transport_status;
 }
@@ -454,4 +460,121 @@ TEST_CASE("OLH unlink clear and refresh builders preserve native bytes and recei
         CHECK(::cls_rgw_clear_olh(context, oid, clear.key, clear.olh_tag) == status);
     }
     put_transport_status = 0;
+}
+
+TEST_CASE("Usage client borrows input entries and publishes owned native map results", "[rgw][cls][usage]")
+{
+    allocation_failure = false;
+    transport_status = 0;
+    ::librados::ObjectWriteOperation operation;
+    ::rgw_cls_usage_log_add_op add;
+    auto& entry = add.info.entries.emplace_back();
+    entry.owner.from_str("tenant$ns$id");
+    entry.bucket = std::string(80, 'b');
+    entry.epoch = std::numeric_limits<std::uint64_t>::max();
+    entry.add_usage("category", {});
+    byte_buffer expected;
+    ::encode(add, expected);
+    ::cls_rgw_usage_log_add(operation, add.info);
+    add.info.entries.clear();
+    CHECK(request_method == "user_usage_log_add");
+    CHECK(request_bytes.contents_equal(expected));
+
+    ::rgw_cls_usage_log_read_ret response;
+    response.usage.emplace(::rgw_user_bucket {"user", "bucket"}, ::rgw_usage_log_entry {});
+    response.usage.begin()->second.bucket = "result";
+    response.truncated = true;
+    response.next_iter = std::string(80, 'm');
+    reply_bytes.clear();
+    ::encode(response, reply_bytes);
+    ::librados::IoCtx context;
+    for (const int result : {0, 7}) {
+        transport_status = result;
+        ::rgw_cls_usage_log_read_op call;
+        call.start_epoch = 17;
+        call.end_epoch = 19;
+        call.owner = "user";
+        call.bucket = std::string {"b\0t", 3};
+        call.max_entries = 23;
+        call.iter = std::string {"m\0r", 3};
+        expected.clear();
+        ::encode(call, expected);
+        std::map<::rgw_user_bucket, ::rgw_usage_log_entry> usage;
+        auto marker = call.iter;
+        bool truncated = false;
+        CHECK(::cls_rgw_usage_log_read(context, "object", call.owner, call.bucket, 17, 19, 23, marker, usage, &truncated) == 0);
+        CHECK(request_method == "user_usage_log_read");
+        CHECK(request_bytes.contents_equal(expected));
+        CHECK(marker == response.next_iter);
+        CHECK(truncated);
+        REQUIRE(usage.size() == 1);
+        CHECK(usage.begin()->second.bucket == "result");
+        CHECK(::cls_rgw_usage_log_read(context, "object", marker, marker, 17, 19, 23, marker, usage, nullptr) == 0);
+    }
+    transport_status = 0;
+}
+
+TEST_CASE("Usage client preserves its malformed, transport and allocation error contracts", "[rgw][cls][usage]")
+{
+    ::librados::IoCtx context;
+    ::rgw_cls_usage_log_read_ret response;
+    response.truncated = true;
+    response.next_iter = "next";
+    response.usage[::rgw_user_bucket {"user", "bucket"}].bucket = "result";
+    byte_buffer full;
+    ::encode(response, full);
+    std::map<::rgw_user_bucket, ::rgw_usage_log_entry> usage;
+    usage[::rgw_user_bucket {"saved", "bucket"}].bucket = "preserved";
+    std::string marker = "saved";
+    bool truncated = true;
+    allocation_failure = false;
+    transport_status = 0;
+    for (unsigned size = 0; size < full.length(); ++size) {
+        reply_bytes.clear();
+        reply_bytes.substr_of(full, 0, size);
+        CHECK(::cls_rgw_usage_log_read(context, "object", "user", "", 0, 19, 23, marker, usage, &truncated) == -EINVAL);
+        CHECK(marker == "saved");
+        CHECK_FALSE(truncated);
+        REQUIRE(usage.size() == 1);
+        CHECK(usage.begin()->second.bucket == "preserved");
+    }
+    for (const int error : {-EAGAIN, -ENOMEM, -ENOENT}) {
+        transport_status = error;
+        truncated = true;
+        CHECK(::cls_rgw_usage_log_read(context, "object", "user", "", 0, 19, 23, marker, usage, &truncated) == error);
+        CHECK_FALSE(truncated);
+        CHECK(marker == "saved");
+    }
+    allocation_failure = true;
+    CHECK_THROWS_AS(::cls_rgw_usage_log_read(context, "object", "user", "", 0, 19, 23, marker, usage, &truncated), std::bad_alloc);
+    allocation_failure = false;
+    transport_status = 0;
+}
+
+TEST_CASE("Usage trim builders retain bytes and synchronous ENODATA completion", "[rgw][cls][usage]")
+{
+    ::rgw_cls_usage_log_trim_op call;
+    call.start_epoch = 17;
+    call.end_epoch = std::numeric_limits<std::uint64_t>::max();
+    call.user = std::string {"u\0r", 3};
+    call.bucket = std::string(80, 'b');
+    byte_buffer expected;
+    ::encode(call, expected);
+    ::librados::ObjectWriteOperation operation;
+    ::cls_rgw_usage_log_trim(operation, call.user, call.bucket, call.start_epoch, call.end_epoch);
+    CHECK(request_method == "user_usage_log_trim");
+    CHECK(request_bytes.contents_equal(expected));
+    for (const auto& statuses : std::vector<std::vector<int>> {{-ENODATA}, {0, 0, -ENODATA}, {-EIO}, {0, -EAGAIN}}) {
+        write_statuses = statuses;
+        write_next = 0;
+        ::librados::IoCtx context;
+        CHECK(::cls_rgw_usage_log_trim(context, "object", call.user, call.bucket, call.start_epoch, call.end_epoch) == (statuses.back() == -ENODATA ? 0 : statuses.back()));
+        CHECK(write_next == statuses.size());
+        CHECK(request_method == "user_usage_log_trim");
+        CHECK(request_bytes.contents_equal(expected));
+        write_statuses.clear();
+    }
+    ::cls_rgw_usage_log_clear(operation);
+    CHECK(request_method == "usage_log_clear");
+    CHECK(request_bytes.length() == 0);
 }

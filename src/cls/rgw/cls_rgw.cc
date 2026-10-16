@@ -26,6 +26,7 @@
  #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
+ #include "cls/rgw/cls_rgw_usage_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
 #include "common/strtol.h"
@@ -4270,7 +4271,7 @@ static void usage_record_name_by_user(const string& user, uint64_t epoch, const 
   }
 }
 
-static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
+static int usage_record_decode(const bufferlist& record_bl, rgw_usage_log_entry& e)
 {
   auto kiter = record_bl.cbegin();
   try {
@@ -4288,7 +4289,11 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
   CLS_LOG(10, "entered %s", __func__);
 
   auto in_iter = in->cbegin();
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::usage_datum::add_request op;
+#else
   rgw_cls_usage_log_add_op op;
+#endif
 
   try {
     decode(op, in_iter);
@@ -4300,7 +4305,7 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
   const ConfigProxy& conf = cls_get_config(hctx);
   const bool key_transition = conf->rgw_usage_log_key_transition;
 
-  rgw_usage_log_info& info = op.info;
+  auto& info = op.info;
 
   for (auto iter = info.entries.begin(); iter != info.entries.end(); ++iter) {
     rgw_usage_log_entry& entry = *iter;
@@ -4368,7 +4373,7 @@ static int usage_handle_range(cls_method_context_t hctx, uint64_t start_epoch, u
 
   truncated = truncated_status;
 
-  for (auto log : usage_logs) {
+  for (const auto& log : usage_logs) {
     const string& key = log.first;
     rgw_usage_log_entry e;
 
@@ -4524,7 +4529,11 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   CLS_LOG(10, "entered %s", __func__);
 
   auto in_iter = in->cbegin();
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::usage_datum::read_request op;
+#else
   rgw_cls_usage_log_read_op op;
+#endif
 
   try {
     decode(op, in_iter);
@@ -4533,7 +4542,11 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
     return -EINVAL;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::usage_datum::reply ret_info;
+#else
   rgw_cls_usage_log_read_ret ret_info;
+#endif
   map<rgw_user_bucket, rgw_usage_log_entry> *usage = &ret_info.usage;
   string iter = op.iter;
 #define MAX_ENTRIES 1000
@@ -4594,7 +4607,11 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
     return ret;
 
   auto in_iter = in->cbegin();
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::usage_datum::trim_request op;
+#else
   rgw_cls_usage_log_trim_op op;
+#endif
 
   try {
     decode(op, in_iter);

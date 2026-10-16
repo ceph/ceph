@@ -59,6 +59,15 @@ if(TARGET cls_rgw_datum)
   set_target_properties(unittest_cls_rgw_object_wire PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
   add_test(NAME cls_rgw_object_wire COMMAND unittest_cls_rgw_object_wire)
 
+
+  add_executable(unittest_cls_rgw_usage_wire
+    "${CMAKE_CURRENT_LIST_DIR}/usage_wire.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/bi_wire_main.cc")
+  target_link_libraries(unittest_cls_rgw_usage_wire PRIVATE
+    cls_rgw_client Catch2::Catch2 ceph-common ${FMT_LIB})
+  set_target_properties(unittest_cls_rgw_usage_wire PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+  add_test(NAME cls_rgw_usage_wire COMMAND unittest_cls_rgw_usage_wire)
+
 endif()
 
 add_executable(unittest_cls_rgw_bi_client

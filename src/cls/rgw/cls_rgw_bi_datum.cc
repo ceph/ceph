@@ -6,6 +6,7 @@
 #include "cls_rgw_bilog_datum.h"
 #include "cls_rgw_bucket_datum.h"
 #include "cls_rgw_object_datum.h"
+#include "cls_rgw_usage_datum.h"
 #include "cls_rgw_write_datum.h"
 
 #include <utility>
@@ -820,3 +821,145 @@ void decode(mtime_request& value, ::ceph::buffer::list::const_iterator& input)
 }
 
 } // cls::rgw::object_datum
+
+namespace cls::rgw::usage_datum {
+
+using ::cls::rgw::wire::decode_record;
+using ::cls::rgw::wire::reader;
+using ::cls::rgw::wire::writer;
+
+::ceph::buffer::list encode_add(const std::vector<::rgw_usage_log_entry>& entries)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(2, [&] {
+        archive.frame(1, [&] { archive.native(entries); });
+        archive.scalar(std::uint32_t {0}); // The public builder leaves the unused user empty.
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_read(const std::string_view owner, const std::string_view bucket,
+                                  const std::uint64_t start, const std::uint64_t finish,
+                                  const std::uint32_t maximum, const std::string_view marker)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(2, [&] {
+        archive.scalar(start);
+        archive.scalar(finish);
+        archive.text(owner);
+        archive.text(marker);
+        archive.scalar(maximum);
+        archive.text(bucket);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_trim(const std::string_view user, const std::string_view bucket,
+                                  const std::uint64_t start, const std::uint64_t finish)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(3, 2, [&] {
+        archive.scalar(start);
+        archive.scalar(finish);
+        archive.text(user);
+        archive.text(bucket);
+    });
+
+    return output;
+}
+
+void decode(add_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        fields.frame(1, [&](auto& sequence, std::uint8_t) {
+            const auto count = sequence.template sequence_size<54>();
+            auto& entries = candidate.info.entries;
+            entries.reserve(count);
+            for (std::uint32_t index = 0; index < count; ++index) {
+                sequence.native(entries.emplace_back());
+            }
+
+            return 0;
+        });
+        if (version >= 2) {
+            fields.skip_text(); // The native handler never observes this user field.
+        }
+    });
+}
+
+void decode(read_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        candidate.start_epoch = fields.template scalar<std::uint64_t>();
+        candidate.end_epoch = fields.template scalar<std::uint64_t>();
+        fields.text(candidate.owner);
+        fields.text(candidate.iter);
+        candidate.max_entries = fields.template scalar<std::uint32_t>();
+        if (version >= 2) {
+            fields.text(candidate.bucket);
+        }
+    });
+}
+
+void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<3>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        candidate.start_epoch = fields.template scalar<std::uint64_t>();
+        candidate.end_epoch = fields.template scalar<std::uint64_t>();
+        fields.text(candidate.user);
+        if (version >= 3) {
+            fields.text(candidate.bucket);
+        }
+    });
+}
+
+void encode(const reply& value, ::ceph::buffer::list& output)
+{
+    ::ceph::buffer::list candidate;
+    writer archive {candidate};
+    archive.frame(1, [&] {
+        archive.native(value.usage);
+        archive.scalar(static_cast<std::uint8_t>(value.truncated));
+        archive.text(value.next_iter);
+    });
+    output.claim_append(candidate);
+}
+
+template <::ceph::concepts::has_try_emplace_key EntriesT>
+read_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    read_reply<EntriesT> candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        const auto count = fields.template sequence_size<68>(5);
+        auto& entries = candidate.usage;
+        if constexpr (::ceph::concepts::reservable_container<EntriesT>) {
+            entries.reserve(count);
+        }
+        for (std::uint32_t index = 0; index < count; ++index) {
+            ::rgw_user_bucket key;
+            ::rgw_usage_log_entry entry;
+            fields.native(key);
+            fields.native(entry);
+            entries.try_emplace(std::move(key), std::move(entry));
+        }
+        candidate.truncated = 0 != fields.template scalar<std::uint8_t>();
+        fields.text(candidate.next_iter);
+
+        return 0;
+    });
+
+    return candidate;
+}
+
+template read_reply<native_entries> decode_reply(const ::ceph::buffer::list& input);
+template read_reply<::boost::container::flat_map<::rgw_user_bucket, ::rgw_usage_log_entry>>
+decode_reply(const ::ceph::buffer::list& input);
+
+} // cls::rgw::usage_datum

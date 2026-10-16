@@ -15,6 +15,7 @@
  #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
+ #include "cls/rgw/cls_rgw_usage_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
 
@@ -840,6 +841,9 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
     *is_truncated = false;
 
   bufferlist in, out;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::usage_datum::encode_read(user, bucket, start_epoch, end_epoch, max_entries, read_iter);
+#else
   rgw_cls_usage_log_read_op call;
   call.start_epoch = start_epoch;
   call.end_epoch = end_epoch;
@@ -848,19 +852,27 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
   call.bucket = bucket;
   call.iter = read_iter;
   encode(call, in);
+#endif
   int r = io_ctx.exec(oid, method::user_usage_log_read, in, out);
   if (r < 0)
     return r;
 
   try {
+#ifdef WITH_RGW_CLS_DATUM
+    using entries = ::cls::rgw::usage_datum::native_entries;
+    auto result = ::cls::rgw::usage_datum::decode_reply<entries>(out);
+#else
     rgw_cls_usage_log_read_ret result;
     auto iter = out.cbegin();
     decode(result, iter);
-    read_iter = result.next_iter;
+#endif
+    static_assert(std::is_nothrow_move_assignable_v<decltype(result.usage)> &&
+                  std::is_nothrow_move_assignable_v<decltype(result.next_iter)>);
+    read_iter = std::move(result.next_iter);
     if (is_truncated)
       *is_truncated = result.truncated;
 
-    usage = result.usage;
+    usage = std::move(result.usage);
   } catch (ceph::buffer::error& e) {
     return -EINVAL;
   }
@@ -872,12 +884,16 @@ int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user,
 			   uint64_t start_epoch, uint64_t end_epoch)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::usage_datum::encode_trim(user, bucket, start_epoch, end_epoch);
+#else
   rgw_cls_usage_log_trim_op call;
   call.start_epoch = start_epoch;
   call.end_epoch = end_epoch;
   call.user = user;
   call.bucket = bucket;
   encode(call, in);
+#endif
 
   bool done = false;
   do {
@@ -896,12 +912,16 @@ int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user,
 void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::usage_datum::encode_trim(user, bucket, start_epoch, end_epoch);
+#else
   rgw_cls_usage_log_trim_op call;
   call.start_epoch = start_epoch;
   call.end_epoch = end_epoch;
   call.user = user;
   call.bucket = bucket;
   encode(call, in);
+#endif
 
   op.exec(method::user_usage_log_trim, in);
 }
@@ -915,9 +935,13 @@ void cls_rgw_usage_log_clear(ObjectWriteOperation& op)
 void cls_rgw_usage_log_add(ObjectWriteOperation& op, rgw_usage_log_info& info)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::usage_datum::encode_add(info.entries);
+#else
   rgw_cls_usage_log_add_op call;
   call.info = info;
   encode(call, in);
+#endif
   op.exec(method::user_usage_log_add, in);
 }
 

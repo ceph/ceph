@@ -41,6 +41,8 @@ struct storage final
 
     std::uint64_t maximum = 4;
     std::uint32_t reshard_threshold = 4;
+    bool usage_key_transition = false;
+    int stat_status = 0;
 
     int failure_call = -1;
     int failure = -EAGAIN;
@@ -56,7 +58,7 @@ int effect(storage& state, std::string operation, byte_buffer arguments = {})
 auto invoke(storage& state, byte_buffer input, const std::string_view method = "bi_put_entries")
 {
     const auto [call, flags] = ::rgw_cls_test::get_method(method);
-    const bool read_only = method == "bi_log_list" || method == "bucket_list" || method == "bucket_check_index";
+    const bool read_only = method == "bi_log_list" || method == "bucket_list" || method == "bucket_check_index" || method == "user_usage_log_read";
     REQUIRE(flags == (read_only ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
@@ -154,6 +156,7 @@ const ::ConfigProxy& cls_get_config(cls_method_context_t context)
     const auto& state = *static_cast<storage *>(context);
     configuration->osd_max_omap_entries_per_request = state.maximum;
     configuration->rgw_reshardlog_threshold = state.reshard_threshold;
+    configuration->rgw_usage_log_key_transition = state.usage_key_transition;
 
     return configuration;
 }
@@ -1503,4 +1506,260 @@ TEST_CASE("Index check and rebuild retain corruption reshard guards and failure 
     CHECK(invoke(state, {}, "bucket_rebuild_index") == -CLS_RGW_ERR_BUSY_RESHARDING);
     CHECK((effect_names(state) == std::vector<std::string> {"read-header"}));
     CHECK(invoke(state, {}, "bucket_check_index") == 0);
+}
+
+int cls_cxx_stat(cls_method_context_t context, std::uint64_t *size, time_t *mtime)
+{
+    auto& state = *static_cast<storage *>(context);
+    CHECK(size == nullptr);
+    CHECK(mtime == nullptr);
+    if (const int result = effect(state, "stat"); result < 0) { return result; }
+
+    return state.stat_status;
+}
+
+namespace {
+
+::rgw_usage_log_entry usage_entry(const std::string& user, const std::string& bucket,
+                                  const std::uint64_t epoch, const std::uint64_t sent,
+                                  const std::string& payer = {})
+{
+    ::rgw_usage_log_entry entry;
+    entry.owner.from_str(user);
+    entry.payer.from_str(payer);
+    entry.bucket = bucket;
+    entry.epoch = epoch;
+    ::rgw_usage_data data;
+    data.bytes_sent = sent;
+    data.bytes_received = 2 * sent;
+    data.ops = 1;
+    data.successful_ops = 1;
+    entry.add_usage("get_obj", data);
+
+    return entry;
+}
+
+byte_buffer usage_bytes(const auto& value)
+{
+    using ::ceph::encode;
+
+    byte_buffer output;
+    encode(value, output);
+
+    return output;
+}
+
+int add_usage(storage& state, const std::vector<::rgw_usage_log_entry>& entries)
+{
+    ::rgw_cls_usage_log_add_op request;
+    request.info.entries = entries;
+    request.user.from_str("$ns$unused");
+
+    return invoke(state, usage_bytes(request), "user_usage_log_add");
+}
+
+::rgw_cls_usage_log_read_op read_usage(const std::string& owner = {}, const std::uint32_t maximum = 0)
+{
+    ::rgw_cls_usage_log_read_op request;
+    request.start_epoch = 10;
+    request.end_epoch = 20;
+    request.owner = owner;
+    request.max_entries = maximum;
+
+    return request;
+}
+
+::rgw_cls_usage_log_read_ret usage_result(const storage& state)
+{
+    ::rgw_cls_usage_log_read_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    REQUIRE(cursor.end());
+
+    return result;
+}
+
+::rgw_cls_usage_log_trim_op trim_usage(const std::string& user = {})
+{
+    ::rgw_cls_usage_log_trim_op request;
+    request.start_epoch = 10;
+    request.end_epoch = 20;
+    request.user = user;
+
+    return request;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Usage add retains aggregation, payer keys and ignored user semantics", "[rgw][cls][usage]")
+{
+    storage state;
+    CHECK(add_usage(state, {usage_entry("owner", "bucket", 11, 3, "payer"),
+                            usage_entry("owner", "bucket", 11, 5, "payer")}) == 0);
+    REQUIRE(state.values.size() == 2);
+    CHECK(state.values.at("00000000011_payer_bucket").contents_equal(state.values.at("payer_00000000011_bucket")));
+    ::rgw_usage_log_entry result;
+    auto cursor = state.values.at("00000000011_payer_bucket").cbegin();
+    ::decode(result, cursor);
+    CHECK(result.owner.to_str() == "owner");
+    CHECK(result.payer.to_str() == "payer");
+    CHECK(result.total_usage.bytes_sent == 8);
+    CHECK(result.total_usage.ops == 2);
+    state.effects.clear();
+    CHECK(add_usage(state, {}) == 0);
+    CHECK(state.effects.empty());
+    CHECK(state.values.size() == 2);
+}
+
+TEST_CASE("Usage read retains exclusive end, bucket filtering, scanned markers and aggregation", "[rgw][cls][usage]")
+{
+    storage state;
+    REQUIRE(add_usage(state, {usage_entry("user", "bucket", 9, 99),
+                             usage_entry("user", "bucket", 10, 3),
+                             usage_entry("user", "bucket", 11, 5),
+                             usage_entry("user", "other", 12, 7),
+                             usage_entry("user", "bucket", 20, 99)}) == 0);
+    for (const std::string& owner : {std::string {}, std::string {"user"}}) {
+        auto request = read_usage(owner);
+        request.bucket = "bucket";
+        state.effects.clear();
+        REQUIRE(invoke(state, usage_bytes(request), "user_usage_log_read") == 0);
+        const auto result = usage_result(state);
+        REQUIRE(result.usage.size() == 1);
+        CHECK(result.usage.begin()->second.total_usage.bytes_sent == 8);
+        CHECK_FALSE(result.truncated);
+        CHECK(result.next_iter.empty());
+        request.max_entries = 1;
+        std::uint64_t total = 0;
+        unsigned pages = 0;
+        do {
+            REQUIRE(invoke(state, usage_bytes(request), "user_usage_log_read") == 0);
+            const auto page = usage_result(state);
+            for (const auto& [key, value] : page.usage) { total += value.total_usage.bytes_sent; }
+            ++pages;
+            REQUIRE(pages < 10);
+            if (!page.truncated) { break; }
+            REQUIRE(!page.next_iter.empty());
+            request.iter = page.next_iter;
+        } while (true);
+        CHECK(total == 8);
+        CHECK(pages >= 3);
+    }
+}
+
+TEST_CASE("Usage key transition preserves two-pass reads and old-key cleanup", "[rgw][cls][usage]")
+{
+    for (const bool transition : {false, true}) {
+        storage state;
+        state.usage_key_transition = transition;
+        REQUIRE(add_usage(state, {usage_entry("0user", "bucket", 11, 3)}) == 0);
+        state.values["0user_00000000012_bucket"] = usage_bytes(usage_entry("0user", "bucket", 12, 5));
+        auto request = read_usage("0user", 1);
+        std::uint64_t total = 0;
+        unsigned pages = 0;
+        do {
+            REQUIRE(invoke(state, usage_bytes(request), "user_usage_log_read") == 0);
+            const auto result = usage_result(state);
+            for (const auto& [key, value] : result.usage) { total += value.total_usage.bytes_sent; }
+            REQUIRE(++pages < 10);
+            if (!result.truncated) { break; }
+            request.iter = result.next_iter;
+        } while (true);
+        CHECK(total == (transition ? 8 : 3));
+    }
+    for (const bool fail_cleanup : {false, true}) {
+        storage state;
+        state.usage_key_transition = true;
+        state.values["0user_00000000011_bucket"] = usage_bytes(usage_entry("0user", "bucket", 11, 1));
+        state.failure_call = fail_cleanup ? 4 : -1;
+        CHECK(add_usage(state, {usage_entry("0user", "bucket", 11, 3)}) == 0);
+        CHECK(state.values.contains("0user_00000000011_bucket") == fail_cleanup);
+        CHECK(state.values.contains("~0user_00000000011_bucket"));
+        CHECK(effect_names(state) == std::vector<std::string> {"get-value", "set-value", "set-value", "remove"});
+    }
+}
+
+TEST_CASE("Usage trim retains native pagination, paired removals and ENODATA", "[rgw][cls][usage]")
+{
+    for (const bool transition : {false, true}) {
+        storage state;
+        state.usage_key_transition = transition;
+        REQUIRE(add_usage(state, {usage_entry("0user", "bucket", 11, 3), usage_entry("other", "bucket", 12, 5)}) == 0);
+        if (transition) {
+            state.values["0user_00000000011_bucket"] = state.values.at("~0user_00000000011_bucket");
+        }
+        state.effects.clear();
+        auto request = trim_usage("0user");
+        CHECK(invoke(state, usage_bytes(request), "user_usage_log_trim") == 0);
+        CHECK(state.values.size() == 2);
+        CHECK(invoke(state, usage_bytes(request), "user_usage_log_trim") == -ENODATA);
+        CHECK(invoke(state, usage_bytes(trim_usage()), "user_usage_log_trim") == 0);
+        CHECK(state.values.empty());
+        CHECK(invoke(state, usage_bytes(trim_usage()), "user_usage_log_trim") == -ENODATA);
+    }
+    storage state;
+    std::vector<::rgw_usage_log_entry> entries;
+    for (unsigned index = 0; index < 1003; ++index) {
+        entries.push_back(usage_entry("user", std::to_string(index), 11, 1));
+    }
+    REQUIRE(add_usage(state, entries) == 0);
+    state.effects.clear();
+    CHECK(invoke(state, usage_bytes(trim_usage("user")), "user_usage_log_trim") == 0);
+    CHECK(state.values.size() == 6);
+    CHECK(invoke(state, usage_bytes(trim_usage("user")), "user_usage_log_trim") == 0);
+    CHECK(state.values.empty());
+    CHECK(invoke(state, usage_bytes(trim_usage("user")), "user_usage_log_trim") == -ENODATA);
+}
+
+TEST_CASE("Usage failures retain native stage-specific statuses and corrupt-record handling", "[rgw][cls][usage]")
+{
+    for (int stage = 1; stage <= 3; ++stage) {
+        storage state;
+        state.failure_call = stage;
+        state.failure = -EAGAIN;
+        CHECK(add_usage(state, {usage_entry("user", "bucket", 11, 3)}) == (stage == 1 ? -EINVAL : -EAGAIN));
+        CHECK(state.effects.size() == static_cast<unsigned>(stage));
+    }
+    storage initial;
+    REQUIRE(add_usage(initial, {usage_entry("user", "bucket", 11, 3)}) == 0);
+    initial.effects.clear();
+    for (int stage = 1; stage <= 4; ++stage) {
+        storage state = initial;
+        state.failure_call = stage;
+        CHECK(invoke(state, usage_bytes(trim_usage("user")), "user_usage_log_trim") == -EAGAIN);
+        CHECK(state.effects.size() == static_cast<unsigned>(stage));
+    }
+    storage failed_read = initial;
+    failed_read.failure_call = 1;
+    CHECK(invoke(failed_read, usage_bytes(read_usage()), "user_usage_log_read") == -EAGAIN);
+    initial.values.at("00000000011_user_bucket") = usage_bytes(std::string {"corrupt"});
+    CHECK(add_usage(initial, {usage_entry("user", "bucket", 11, 3)}) == -EINVAL);
+    CHECK(invoke(initial, usage_bytes(read_usage()), "user_usage_log_read") == -EINVAL);
+    CHECK(invoke(initial, usage_bytes(trim_usage()), "user_usage_log_trim") == -EINVAL);
+}
+
+TEST_CASE("Usage request rejection preserves trim's stat-before-decode ordering", "[rgw][cls][usage]")
+{
+    ::rgw_cls_usage_log_add_op add;
+    add.info.entries = {usage_entry("user", "bucket", 11, 3)};
+    const std::map<std::string, byte_buffer> requests {
+        {"user_usage_log_add", usage_bytes(add)},
+        {"user_usage_log_read", usage_bytes(read_usage())},
+        {"user_usage_log_trim", usage_bytes(trim_usage())}
+    };
+    for (const auto& [method, full] : requests) {
+        for (unsigned size = 0; size < full.length(); ++size) {
+            byte_buffer input;
+            input.substr_of(full, 0, size);
+            storage state;
+            CHECK(invoke(state, input, method) == -EINVAL);
+            CHECK(effect_names(state) == (method == "user_usage_log_trim" ? std::vector<std::string> {"stat"} : std::vector<std::string> {}));
+        }
+    }
+    for (const int error : {-ENOENT, -EIO, -EAGAIN}) {
+        storage state;
+        state.stat_status = error;
+        CHECK(invoke(state, byte_buffer {}, "user_usage_log_trim") == error);
+        CHECK(effect_names(state) == std::vector<std::string> {"stat"});
+    }
 }
