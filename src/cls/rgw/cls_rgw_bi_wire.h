@@ -94,6 +94,33 @@ auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
     });
 }
 
+// BI get and OLH use the same object-key frame, followed by operation fields.
+inline byte_buffer encode_get_request(const std::string_view name, const std::string_view instance,
+                                      const std::uint8_t kind)
+{
+    byte_buffer output;
+    detail::writer archive {output};
+    archive.frame(1, [&] {
+        ::cls::rgw::wire::encode_key(archive, name, instance);
+        archive.scalar(kind);
+    });
+
+    return output;
+}
+
+template <typename KeyT, auto ...Member>
+std::uint8_t decode_get_request(byte_buffer::const_iterator& input, KeyT& key,
+                                datum::binary_fields<Member...> selected)
+{
+    detail::reader archive {input};
+
+    return archive.frame(1, [&](auto& fields, std::uint8_t) {
+        ::cls::rgw::wire::decode_key(fields, key, selected);
+
+        return fields.template scalar<std::uint8_t>();
+    });
+}
+
 namespace detail
 {
 template <typename EntryT, auto Kind, auto Key, auto Payload>

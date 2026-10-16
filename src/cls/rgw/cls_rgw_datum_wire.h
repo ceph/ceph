@@ -20,6 +20,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace cls::rgw::wire
 {
@@ -240,6 +241,43 @@ public:
     }
 
 };
+
+struct key_fields final
+{
+    std::string_view name;
+    std::string_view instance;
+};
+
+inline void encode_key(writer& archive, const std::string_view name, const std::string_view instance)
+{
+    checked_count(name.size());
+    checked_count(instance.size());
+    archive.frame(1, [&] {
+        archive.fields(checked_count(8ull + name.size() + instance.size()), key_fields {name, instance},
+            datum::binary_fields<&key_fields::name, &key_fields::instance> {});
+    });
+}
+
+template <typename KeyT, auto Name, auto Instance>
+KeyT& decode_key(reader& archive, KeyT& value, datum::binary_fields<Name, Instance>)
+{
+    return archive.frame(1, [&](auto& fields, std::uint8_t) -> KeyT& {
+        fields.text(value.*Name);
+        fields.text(value.*Instance);
+
+        return value;
+    });
+}
+
+inline auto decode_key(reader& archive)
+{
+    using key = std::pair<std::string, std::string>;
+
+    key value;
+    decode_key(archive, value, datum::binary_fields<&key::first, &key::second> {});
+
+    return value;
+}
 
 } // cls::rgw::wire
 

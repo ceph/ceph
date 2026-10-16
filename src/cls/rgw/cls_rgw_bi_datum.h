@@ -41,6 +41,12 @@ struct reply final
     bool is_truncated = false;
 };
 
+struct get_request final
+{
+    ::BIIndexType type = ::BIIndexType::Plain;
+    ::cls_rgw_obj_key key;
+};
+
 struct entry_put_request final
 {
     entry item;
@@ -55,6 +61,11 @@ struct put_request final
 
 ::ceph::buffer::list encode_request(std::uint32_t maximum, std::string_view filter,
                                     std::string_view marker, bool reshard);
+::ceph::buffer::list encode_get_request(const ::cls_rgw_obj_key& key, ::BIIndexType type);
+void decode(get_request& value, ::ceph::buffer::list::const_iterator& input);
+void encode_get_reply(const entry& value, ::ceph::buffer::list& output);
+::rgw_cls_bi_entry decode_get_reply(const ::ceph::buffer::list& input);
+
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(put_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& input);

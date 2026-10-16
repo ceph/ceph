@@ -27,6 +27,18 @@ struct request final
     bool reshard;
 };
 
+struct get_request final
+{
+    std::string name;
+    std::string instance;
+    std::uint8_t kind;
+};
+
+::ceph::buffer::list encode_get_request(const get_request& value, std::uint8_t version = 1);
+get_request decode_get_request(const ::ceph::buffer::list& bytes);
+::ceph::buffer::list encode_get_reply(const row& value);
+row decode_get_reply(const ::ceph::buffer::list& bytes);
+
 ::ceph::buffer::list encode_request(const request& value, std::uint8_t version = 2);
 request decode_request(const ::ceph::buffer::list& bytes);
 ::ceph::buffer::list encode_reply(const std::vector<row>& rows, bool truncated);

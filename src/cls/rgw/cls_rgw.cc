@@ -2978,7 +2978,11 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bi_datum::get_request op;
+#else
   rgw_cls_bi_get_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3005,9 +3009,12 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       return -EINVAL;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bi_datum::entry entry;
+#else
   rgw_cls_bi_get_ret op_ret;
-
-  rgw_cls_bi_entry& entry = op_ret.entry;
+  auto& entry = op_ret.entry;
+#endif
 
   entry.type = op.type;
   entry.idx = idx;
@@ -3018,7 +3025,11 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       return r;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bi_datum::encode_get_reply(entry, *out);
+#else
   encode(op_ret, *out);
+#endif
 
   return 0;
 }

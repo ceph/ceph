@@ -17,6 +17,7 @@ endfunction()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   rgw_cls_add_module_test(olh olh_module.cc)
   rgw_cls_add_module_test(bi_put bi_put_module.cc)
+  rgw_cls_add_module_test(bi_get bi_get_module.cc)
 endif()
 
 add_library(cls_rgw_olh_native_oracle OBJECT olh_native_oracle.cc)

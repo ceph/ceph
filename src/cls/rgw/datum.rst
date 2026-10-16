@@ -1,7 +1,7 @@
 Datum wire bindings for RGW CLS
 ==============================
 
-The ``bi_list``, ``bi_put``, ``bi_put_entries`` and ``bucket_read_olh_log`` bindings
+The ``bi_get``, ``bi_list``, ``bi_put``, ``bi_put_entries`` and ``bucket_read_olh_log`` bindings
 let the client and module use different owning records and containers. They
 share the existing Ceph encoding, including versions, lengths, scalar widths,
 element encodings and map semantics. A container category alone does not define
@@ -42,6 +42,24 @@ Successful decoding produces complete candidates before publishing outputs;
 decode failures preserve the caller's previous result. Completion errors map
 allocation failures to ``-ENOMEM`` and malformed responses to ``-EIO``.
 
+Single-entry reads
+------------------
+
+``cls_rgw_bi_get`` keeps its established native result interface. The Datum
+request borrows the object's name and instance during encoding, and the module
+decodes an independent operation record. BI get and OLH share the object-key
+profile; BI get replies and single puts share the entry-message profile.
+Successful client decoding moves the owned result to the caller, preserving
+opaque payload owners without copying their chain. Transport errors pass
+through, malformed replies return ``-EIO``, and allocation failures retain the
+synchronous API's existing exception behavior.
+
+The module performs one exact lookup after selecting the plain, instance or
+OLH namespace. In the instance namespace, an empty instance selects the plain
+name; the string ``null`` remains an instance. Invalid kinds return ``-EINVAL`` before storage access.
+Storage errors pass through and payload bytes remain uninterpreted here; their
+consumers decide which native stored record to decode.
+
 Single-entry writes
 -------------------
 
@@ -50,7 +68,7 @@ the native entry during encoding and the module receives an independent owning
 record. A single-entry message wraps the existing entry frame in an outer frame.
 It performs no opaque payload interpretation or accounting. Native behavior is
 preserved: reshard deletions ignore their payload, and set/remove errors are
-logged while the method returns success. Structural request errors still return
+logged while the operation returns success. Structural request errors still return
 ``-EINVAL`` before storage effects.
 
 Batch writes
@@ -72,7 +90,7 @@ the native header and storage operations. The configured batch limit is checked
 after structural decoding and before reading the header.
 
 Malformed incoming opaque payloads return ``-EINVAL``; corrupt existing payloads
-return ``-EIO``. RGW catches those decoding errors before they escape the method.
+return ``-EIO``. RGW catches those decoding errors before they escape the operation.
 OSD transaction handling rolls back staged changes on a failed operation.
 Native stored-payload interpretation is shared without constructing an owning
 native entry just to interpret an independent incoming record.
@@ -85,15 +103,16 @@ uint32 body length. Counted strings and containers use little-endian uint32
 lengths. Strings preserve arbitrary bytes. Decoders skip compatible frame
 extensions and retain native nonzero-byte boolean semantics.
 
-* BI request v2/compat1: maximum uint32, filter string, marker string, reshard
+* BI list request v2/compat1: maximum uint32, filter string, marker string, reshard
   byte. A v1 request defaults reshard to false.
-* BI reply v1/compat1: counted entries, truncated byte. Each entry is a
+* BI list reply v1/compat1: counted entries, truncated byte. Each entry is a
   v1/compat1 frame containing kind byte, key string and counted opaque bytes.
 * BI batch request v1/compat1: the same counted entries, check-existing byte.
-* BI single put request v1/compat1: one entry frame, without a count or flag.
+* BI get request v1/compat1: object-key frame, kind byte.
+* BI get reply and single put request v1/compat1: one entry frame, without a count or flag.
 * OLH request v2/compat1: key frame, epoch marker uint64, tag string, get-stales
   byte. A v1 request defaults get-stales to false.
-* OLH key v1/compat1: name string, instance string.
+* Shared object key v1/compat1: name string, instance string.
 * OLH reply v1/compat1: counted epoch groups, truncated byte. Each group has an
   epoch uint64 and counted events.
 * OLH event v1/compat1: epoch uint64, action byte, tag string, key frame and
@@ -148,7 +167,7 @@ Validation
 Focused Catch2 targets cover native C++23 encoding compatibility, independently
 bound records, fragmented input, old/future frames, unknown bytes, truncation,
 map order/duplicates and candidate publication. Client tests execute actual
-client code with controlled transport/completion boundaries. Linux OLH and BI
+client code with controlled transport/completion boundaries. Linux OLH, BI get and BI
 put module targets share a plugin loader and supply controlled OMAP effects.
 Batch cases cover duplicate accounting, overwrite checks, quota/error ordering,
 reshard guards, empty batches and malformed opaque payloads. The controlled host

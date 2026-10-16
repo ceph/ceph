@@ -233,23 +233,31 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    rgw_cls_bi_entry *entry)
 {
   bufferlist in, out;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::bi_datum::encode_get_request(key, index_type);
+#else
   rgw_cls_bi_get_op call;
   call.key = key;
   call.type = index_type;
   encode(call, in);
+#endif
   int r = io_ctx.exec(oid, method::bi_get, in, out);
   if (r < 0)
     return r;
 
-  rgw_cls_bi_get_ret op_ret;
-  auto iter = out.cbegin();
   try {
+#ifdef WITH_RGW_CLS_DATUM
+    auto candidate = ::cls::rgw::bi_datum::decode_get_reply(out);
+#else
+    rgw_cls_bi_get_ret op_ret;
+    auto iter = out.cbegin();
     decode(op_ret, iter);
+    auto candidate = std::move(op_ret.entry);
+#endif
+    *entry = std::move(candidate);
   } catch (ceph::buffer::error& err) {
     return -EIO;
   }
-
-  *entry = op_ret.entry;
 
   return 0;
 }

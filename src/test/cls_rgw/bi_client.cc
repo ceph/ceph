@@ -38,7 +38,7 @@ int librados::IoCtx::exec_impl(const std::string& oid, const char *cls, const ch
 {
     CHECK(oid == "object");
     CHECK(std::string_view {cls} == "rgw");
-    CHECK(std::string_view {method} == "bi_list");
+    request_method = method;
     if (allocation_failure) {
         throw std::bad_alloc {};
     }
@@ -66,6 +66,7 @@ TEST_CASE("BI client preserves native requests and both output interfaces", "[rg
 
     CHECK(0 == ::cls_rgw_bi_list(context, "object", request.name_filter, request.marker,
                                request.max, entries, truncated, true));
+    CHECK(request_method == "bi_list");
     CHECK(request_bytes.contents_equal(expected));
     REQUIRE(entries.size() == 1);
     CHECK(entries[0].idx == "row");
@@ -74,6 +75,7 @@ TEST_CASE("BI client preserves native requests and both output interfaces", "[rg
     std::list<::rgw_cls_bi_entry> compatible;
     CHECK(0 == ::cls_rgw_bi_list(context, "object", request.name_filter, request.marker,
                                request.max, &compatible, &truncated, true));
+    CHECK(request_method == "bi_list");
     CHECK(request_bytes.contents_equal(expected));
     REQUIRE(compatible.size() == 1);
     CHECK(compatible.front().idx == "row");
@@ -94,6 +96,7 @@ TEST_CASE("BI client failures preserve caller outputs and native status", "[rgw]
         CHECK(-EIO == ::cls_rgw_bi_list(context, "object", "", "", 9, entries, truncated));
         CHECK(-EIO == ::cls_rgw_bi_list(context, "object", "", "", 9, &compatible, &truncated));
         CHECK(-EIO == ::cls_rgw_bi_list(context, "object", "", "", 9, nullptr, nullptr));
+        CHECK(request_method == "bi_list");
         REQUIRE(compatible.size() == 1);
         CHECK(compatible.front().idx == "preserve");
         REQUIRE(entries.size() == 1);
@@ -176,4 +179,67 @@ TEST_CASE("BI single put clients share request bytes and own borrowed inputs", "
     }
     CHECK(request_method == "bi_put");
     CHECK(request_bytes.contents_equal(expected));
+}
+
+TEST_CASE("BI get client owns its result and preserves synchronous error contracts", "[rgw][cls][bi-get]")
+{
+    ::librados::IoCtx context;
+    const ::cls_rgw_obj_key key {std::string {"a\0b", 3}, std::string(80, 'i')};
+    allocation_failure = false;
+    for (const auto type : {::BIIndexType::Plain, ::BIIndexType::Instance, ::BIIndexType::OLH,
+                           static_cast<::BIIndexType>(255)}) {
+        ::rgw_cls_bi_get_op request;
+        request.key = key;
+        request.type = type;
+        byte_buffer expected;
+        ::encode(request, expected);
+        for (const int status : {0, 7}) {
+            transport_status = status;
+            ::rgw_cls_bi_entry result;
+            const char *backing = nullptr;
+            {
+                ::rgw_cls_bi_get_ret reply;
+                reply.entry = {type, "stored-key", {}};
+                reply.entry.data.append(::ceph::buffer::ptr {::ceph::buffer::copy("a\0b", 3)});
+                backing = reply.entry.data.cbegin().get_current_ptr().c_str();
+                reply_bytes.clear();
+                ::encode(reply, reply_bytes);
+                CHECK(0 == ::cls_rgw_bi_get(context, "object", type, key, &result));
+            }
+            reply_bytes.clear();
+            CHECK(request_method == "bi_get");
+            CHECK(request_bytes.contents_equal(expected));
+            CHECK(result.type == type);
+            CHECK(result.idx == "stored-key");
+            CHECK(result.data.to_str() == std::string {"a\0b", 3});
+            CHECK(result.data.cbegin().get_current_ptr().c_str() == backing);
+        }
+    }
+    ::rgw_cls_bi_get_ret reply;
+    reply.entry = {::BIIndexType::Plain, "key", {}};
+    byte_buffer full;
+    ::encode(reply, full);
+    ::rgw_cls_bi_entry result {::BIIndexType::Invalid, "preserve", {}};
+    result.data.append("owned", 5);
+    transport_status = 0;
+    for (unsigned size = 0; size < full.length(); ++size) {
+        reply_bytes.clear();
+        reply_bytes.substr_of(full, 0, size);
+        CHECK(-EIO == ::cls_rgw_bi_get(context, "object", ::BIIndexType::Plain, key, &result));
+        CHECK(-EIO == ::cls_rgw_bi_get(context, "object", ::BIIndexType::Plain, key, nullptr));
+        CHECK(request_method == "bi_get");
+        CHECK(result.type == ::BIIndexType::Invalid);
+        CHECK(result.idx == "preserve");
+        CHECK(result.data.to_str() == "owned");
+    }
+    transport_status = -EAGAIN;
+    CHECK(-EAGAIN == ::cls_rgw_bi_get(context, "object", ::BIIndexType::Plain, key, nullptr));
+    CHECK(-EAGAIN == ::cls_rgw_bi_get(context, "object", ::BIIndexType::Plain, key, &result));
+    allocation_failure = true;
+    CHECK_THROWS_AS(::cls_rgw_bi_get(context, "object", ::BIIndexType::Plain, key, &result), std::bad_alloc);
+    allocation_failure = false;
+    transport_status = 0;
+    CHECK(result.type == ::BIIndexType::Invalid);
+    CHECK(result.idx == "preserve");
+    CHECK(result.data.to_str() == "owned");
 }

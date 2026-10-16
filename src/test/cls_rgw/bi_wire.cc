@@ -489,3 +489,86 @@ TEST_CASE("BI single put decoding is bounded and retains owned results", "[rgw][
     CHECK(owned.item.data.cbegin().get_current_ptr().c_str() == backing);
     CHECK(owned.item.data.contents_equal(payload()));
 }
+
+TEST_CASE("BI get shares key and entry profiles without a shared operation record", "[rgw][cls][datum][bi-get]")
+{
+    for (unsigned kind = 0; kind < 256; ++kind) {
+        const rgw_bi_oracle::get_request expected {std::string {"a\0b", 3}, std::string(80, 'i'),
+                                                 static_cast<std::uint8_t>(kind)};
+        const auto bytes = wire::encode_get_request(expected.name, expected.instance, expected.kind);
+        CHECK(bytes.contents_equal(rgw_bi_oracle::encode_get_request(expected)));
+        const auto old = rgw_bi_oracle::decode_get_request(bytes);
+        CHECK(old.name == expected.name);
+        CHECK(old.instance == expected.instance);
+        CHECK(old.kind == expected.kind);
+        for (const auto version : {1, 2}) {
+            const auto input = fragmented(rgw_bi_oracle::encode_get_request(expected, version));
+            auto cursor = input.cbegin();
+            native::get_request value;
+            native::decode(value, cursor);
+            CHECK(value.key.name == expected.name);
+            CHECK(value.key.instance == expected.instance);
+            CHECK(static_cast<std::uint8_t>(value.type) == expected.kind);
+            CHECK(cursor.end());
+        }
+    }
+    for (const auto& row : fixtures()) {
+        const native::entry source {static_cast<::BIIndexType>(row.kind), row.key, row.payload};
+        byte_buffer bytes;
+        native::encode_get_reply(source, bytes);
+        CHECK(bytes.contents_equal(rgw_bi_oracle::encode_get_reply(row)));
+        const auto old = rgw_bi_oracle::decode_get_reply(bytes);
+        CHECK(old.kind == row.kind);
+        CHECK(old.key == row.key);
+        CHECK(old.payload.contents_equal(row.payload));
+        for (const auto& input : {fragmented(bytes), fragmented(rgw_bi_oracle::extended_put_entry(row))}) {
+            const auto decoded = native::decode_get_reply(input);
+            CHECK(static_cast<std::uint8_t>(decoded.type) == row.kind);
+            CHECK(decoded.idx == row.key);
+            CHECK(decoded.data.contents_equal(row.payload));
+        }
+    }
+}
+
+TEST_CASE("BI get bounds key fields and preserves request publication on failure", "[rgw][cls][datum][bi-get]")
+{
+    const auto full = rgw_bi_oracle::encode_get_request({"key", "instance", 3});
+    std::vector<byte_buffer> invalid;
+    for (unsigned size = 0; size < full.length(); ++size) {
+        byte_buffer short_input;
+        short_input.substr_of(full, 0, size);
+        invalid.push_back(std::move(short_input));
+    }
+    for (const unsigned offset : {1, 7}) {
+        auto bytes = fragmented(full);
+        const char newer = 2;
+        bytes.begin(offset).copy_in(1, &newer);
+        invalid.push_back(std::move(bytes));
+    }
+    auto outside = fragmented(full);
+    const auto length = static_cast<char>(full.length() - 7);
+    outside.begin(2).copy_in(1, &length); // kind lies outside the outer frame
+    invalid.push_back(std::move(outside));
+    auto excessive = fragmented(full);
+    const char count[] = {char(0xFF), char(0xFF), char(0xFF), char(0xFF)};
+    excessive.begin(12).copy_in(4, count);
+    invalid.push_back(std::move(excessive));
+    for (const auto& bytes : invalid) {
+        byte_buffer input;
+        input.append("prefix", 6);
+        input.append(bytes);
+        auto cursor = input.cbegin(6);
+        native::get_request value {::BIIndexType::Invalid, {"preserve", "instance"}};
+        CHECK_THROWS(native::decode(value, cursor));
+        CHECK(cursor.get_off() == 6);
+        CHECK(value.type == ::BIIndexType::Invalid);
+        CHECK(value.key.name == "preserve");
+        CHECK(value.key.instance == "instance");
+    }
+    const auto bytes = rgw_bi_oracle::encode_get_reply(fixtures().front());
+    for (unsigned size = 0; size < bytes.length(); ++size) {
+        byte_buffer short_input;
+        short_input.substr_of(bytes, 0, size);
+        CHECK_THROWS(native::decode_get_reply(short_input));
+    }
+}

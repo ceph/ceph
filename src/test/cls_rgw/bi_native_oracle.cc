@@ -28,6 +28,60 @@ std::vector<row> take_rows(auto& entries)
 
 } // anonymous namespace
 
+::ceph::buffer::list encode_get_request(const get_request& value, const std::uint8_t version)
+{
+    ::ceph::buffer::list bytes;
+    if (version == 1) {
+        ::rgw_cls_bi_get_op request;
+        request.key = {value.name, value.instance};
+        request.type = static_cast<::BIIndexType>(value.kind);
+        ::encode(request, bytes);
+
+        return bytes;
+    }
+    ENCODE_START(version, 1, bytes);
+    {
+        ENCODE_START(version, 1, bytes);
+        ::ceph::encode(value.name, bytes);
+        ::ceph::encode(value.instance, bytes);
+        ::ceph::encode(std::uint64_t {0x11223344}, bytes);
+        ENCODE_FINISH(bytes);
+    }
+    ::ceph::encode(value.kind, bytes);
+    ::ceph::encode(std::uint64_t {0x55667788}, bytes);
+    ENCODE_FINISH(bytes);
+
+    return bytes;
+}
+
+get_request decode_get_request(const ::ceph::buffer::list& bytes)
+{
+    ::rgw_cls_bi_get_op value;
+    auto cursor = bytes.cbegin();
+    ::decode(value, cursor);
+
+    return {std::move(value.key.name), std::move(value.key.instance), static_cast<std::uint8_t>(value.type)};
+}
+
+::ceph::buffer::list encode_get_reply(const row& value)
+{
+    ::rgw_cls_bi_get_ret reply;
+    reply.entry = {static_cast<::BIIndexType>(value.kind), value.key, value.payload};
+    ::ceph::buffer::list bytes;
+    ::encode(reply, bytes);
+
+    return bytes;
+}
+
+row decode_get_reply(const ::ceph::buffer::list& bytes)
+{
+    ::rgw_cls_bi_get_ret value;
+    auto cursor = bytes.cbegin();
+    ::decode(value, cursor);
+
+    return {static_cast<std::uint8_t>(value.entry.type), std::move(value.entry.idx), std::move(value.entry.data)};
+}
+
 ::ceph::buffer::list encode_request(const request& value, const std::uint8_t version)
 {
     ::ceph::buffer::list bytes;

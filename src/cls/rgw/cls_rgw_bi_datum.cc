@@ -24,6 +24,38 @@ constexpr auto module_entry_fields = datum::binary_fields<&entry::type, &entry::
     return ::cls::rgw::bi_wire::encode_request(maximum, filter, marker, reshard);
 }
 
+::ceph::buffer::list encode_get_request(const ::cls_rgw_obj_key& key, const ::BIIndexType type)
+{
+    return ::cls::rgw::bi_wire::encode_get_request(key.name, key.instance, std::to_underlying(type));
+}
+
+void decode(get_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    using key = ::cls_rgw_obj_key;
+
+    auto cursor = input;
+    get_request candidate;
+    candidate.type = static_cast<::BIIndexType>(::cls::rgw::bi_wire::decode_get_request(
+        cursor, candidate.key, datum::binary_fields<&key::name, &key::instance> {}));
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void encode_get_reply(const entry& value, ::ceph::buffer::list& output)
+{
+    auto candidate = ::cls::rgw::bi_wire::encode_entry_message(value, module_entry_fields);
+    output.claim_append(candidate);
+}
+
+::rgw_cls_bi_entry decode_get_reply(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    ::rgw_cls_bi_entry candidate;
+    ::cls::rgw::bi_wire::decode_entry_message(cursor, candidate, native_entry_fields);
+
+    return candidate;
+}
+
 void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
