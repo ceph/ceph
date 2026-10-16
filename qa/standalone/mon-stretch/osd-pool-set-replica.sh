@@ -7,8 +7,8 @@ function run() {
     shift
 
     export CEPH_MON_A="127.0.0.1:7219" # git grep '\<7219\>' : there must be only one
-    export CEPH_MON_B="127.0.0.1:7220" # git grep '\<7220\>' : there must be only one
-    export CEPH_MON_C="127.0.0.1:7221" # git grep '\<7221\>' : there must be only one
+    export CEPH_MON_B="127.0.0.1:7224" # git grep '\<7224\>' : there must be only one
+    export CEPH_MON_C="127.0.0.1:7225" # git grep '\<7225\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
 
