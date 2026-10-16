@@ -88,6 +88,17 @@ class NFSRados:
                 _check_rados_notify(ioctx, config_obj)
             log.debug("Object deleted: %s", url)
 
+    def notify_conf(self, config_obj: str) -> None:
+        """Ask ganesha to reread the configuration without changing it.
+
+        Only needed when the write that should have carried the notification
+        did not happen; every other path notifies as part of its own write.
+        """
+        with self.rados.open_ioctx(self.pool) as ioctx:
+            ioctx.set_namespace(self.namespace)
+            _check_rados_notify(ioctx, config_obj)
+            log.debug("Notified ganesha for %s", config_obj)
+
     def remove_all_obj(self) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)

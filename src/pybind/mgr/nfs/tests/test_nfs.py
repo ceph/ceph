@@ -1,7 +1,7 @@
 # flake8: noqa
 import json
 import pytest
-from typing import Optional, Tuple, Iterator, List, Any
+from typing import Dict, Optional, Tuple, Iterator, List, Any
 
 from contextlib import contextmanager
 from unittest import mock
@@ -2334,12 +2334,27 @@ EXPORT {
 
         A change in client-pool mode writes both the export object and the
         CEPH_USERS object. Only the export object write notifies, and it is
-        always the last one, so ganesha rereads both at once.
+        always the last one, so ganesha rereads both at once and the
+        configuration it sees at that point is already the final one.
         """
-        from nfs.utils import ceph_users_obj_name
+        from nfs.export import get_pool_user_id
+        from nfs.utils import ceph_users_obj_name, conf_obj_name
 
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
+
+        users_obj = ceph_users_obj_name(self.cluster_id)
+        conf_obj = conf_obj_name(self.cluster_id)
+        pool_users = [get_pool_user_id(self.cluster_id, 'myfs', i) for i in range(2)]
+
+        # What ganesha would reread, captured at the moment it is notified.
+        notified_store: List[Dict[str, str]] = []
+
+        def snapshot_on_notify(*args: Any, **kwargs: Any) -> None:
+            namespace = self.temp_store.get(self.temp_store_namespace, {})
+            notified_store.append({k: o.raw for k, o in namespace.items()})
+
+        self.io_mock.notify.side_effect = snapshot_on_notify
 
         self.io_mock.notify.reset_mock()
         conf.create_export(
@@ -2352,11 +2367,13 @@ EXPORT {
             squash='none',
         )
         # Both objects were written ...
-        assert conf._rados(self.cluster_id).read_obj(
-            ceph_users_obj_name(self.cluster_id)) is not None
+        assert conf._rados(self.cluster_id).read_obj(users_obj) is not None
         # ... and ganesha was told about it exactly once.
         assert self.io_mock.notify.call_count == 1
+        # The users the new export refers to are visible in that single reread.
+        assert all(u in notified_store[0][users_obj] for u in pool_users)
 
+        notified_store.clear()
         self.io_mock.notify.reset_mock()
         r = conf.apply_export(self.cluster_id, json.dumps({
             'path': '/',
@@ -2369,17 +2386,28 @@ EXPORT {
         assert len(r.changes) == 1
         assert self.io_mock.notify.call_count == 1
 
+        rm_entities: List[str] = []
+
         def mock_check_mon_command(cmd):
+            if cmd.get('prefix') == 'auth rm':
+                rm_entities.append(cmd['entity'])
             return 0, '', ''
 
+        notified_store.clear()
         self.io_mock.notify.reset_mock()
         with mock.patch.object(nfs_mod, 'check_mon_command',
                                side_effect=mock_check_mon_command):
             conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/pool')
         # Export object removed and the pool torn down: still a single notify.
-        assert conf._rados(self.cluster_id).read_obj(
-            ceph_users_obj_name(self.cluster_id)) is None
+        assert conf._rados(self.cluster_id).read_obj(users_obj) is None
         assert self.io_mock.notify.call_count == 1
+        assert set(rm_entities) == {f'client.{u}' for u in pool_users}
+        # The pool is torn down before the notifying removal, so what ganesha
+        # rereads mentions neither the deleted export nor the deleted users.
+        snapshot = notified_store[0]
+        assert users_obj not in snapshot
+        assert users_obj not in snapshot[conf_obj]
+        assert not any(u in blob for u in pool_users for blob in snapshot.values())
 
 
     def test_cephfs_client_pool_rotate_key(self):
@@ -2589,6 +2617,80 @@ EXPORT {
         # Slot 0 was not rotated, so it keeps the key its export still carries.
         assert keys[pool0] == 'thekeyforclientabc'
         assert conf._fetch_export(self.cluster_id, '/poolrot').fsal.cephx_key == \
+            'thekeyforclientabc'
+
+    def test_cephfs_client_pool_rotate_key_notifies_when_export_fails(self):
+        self._do_mock_test(
+            self._do_test_cephfs_client_pool_rotate_key_notifies_when_export_fails,
+            clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_rotate_key_notifies_when_export_fails(self):
+        """The pool write stays quiet only if an export write follows it.
+
+        Rotating a pool-only slot together with a non-root export defers the
+        notification to that export's write. When the export refresh fails the
+        pool's new key is persisted with nobody left to announce it, so the
+        rotation has to notify ganesha itself.
+        """
+        import object_format
+        from nfs.export import get_pool_user_id, get_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/poolrot',
+            read_only=False,
+            squash='none',
+        )
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/volumes',
+            pseudo_path='/sub',
+            read_only=False,
+            squash='none',
+            cmount_path='/volumes',
+        )
+        pool1 = get_pool_user_id(self.cluster_id, 'myfs', 1)
+        hashed_user = f'nfs.{get_user_id(self.cluster_id, "myfs", "/volumes")}'
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            if entity_name == hashed_user:
+                raise RuntimeError('mon is unavailable')
+            return f'rotated-{entity_name}'
+
+        self.io_mock.notify.reset_mock()
+        with mock.patch.object(nfs_mod, 'check_mon_command'), \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            with pytest.raises(object_format.ErrorResponse) as e:
+                cluster.rotate_keys(
+                    cluster_id=self.cluster_id,
+                    auth_entities=[f'client.{pool1}', f'client.{hashed_user}'],
+                )
+
+        # The export that could not be refreshed is reported as stale ...
+        assert '/sub' in str(e.value)
+        redeploy.assert_not_called()
+        # ... and its failed write is exactly the one that was supposed to
+        # notify ganesha, so the rotation notifies in its place.
+        assert self.io_mock.notify.call_count == 1
+
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        # The notification is only owed because this key was persisted.
+        assert keys[pool1] == f'rotated-{pool1}'
+        assert conf._fetch_export(self.cluster_id, '/sub').fsal.cephx_key == \
             'thekeyforclientabc'
 
 

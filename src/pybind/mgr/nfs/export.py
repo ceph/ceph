@@ -452,11 +452,22 @@ class ExportMgr:
                     fs_name = export.fsal.fs_name
                     uses_pool = self._uses_cephfs_client_pool(cluster_id,
                                                               export.fsal.cmount_path)
-                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0] and not uses_pool:
-                    exports_count = self.get_export_count_with_same_fsal(export.fsal.cmount_path,  # type: ignore
-                                                                         cluster_id, export.fsal.fs_name)  # type: ignore
-                    if exports_count == 1:
-                        self._delete_export_user(export)
+                # Tear the cephx identities down before removing the export
+                # object: that removal is the write that notifies ganesha, so
+                # the configuration it rereads never references users that have
+                # just been deleted. The CEPH_USERS update does not notify on
+                # its own, which keeps a deletion down to a single reload and
+                # keeps skip_notify_nfs_server in charge of whether it happens.
+                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
+                    if uses_pool:
+                        if fs_name and self.get_export_count_with_same_fsal(
+                                "/", cluster_id, fs_name) == 1:
+                            self._cleanup_pool_users_for_fs(cluster_id, fs_name)
+                    else:
+                        exports_count = self.get_export_count_with_same_fsal(export.fsal.cmount_path,  # type: ignore
+                                                                             cluster_id, export.fsal.fs_name)  # type: ignore
+                        if exports_count == 1:
+                            self._delete_export_user(export)
                 if pseudo_path:
                     self._rados(cluster_id).remove_obj(
                         export_obj_name(export.export_id), conf_obj_name(cluster_id),
@@ -465,10 +476,6 @@ class ExportMgr:
                 self.exports[cluster_id].remove(export)
                 if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
                     self._delete_export_user(export)
-                if uses_pool and fs_name:
-                    remaining = self.get_export_count_with_same_fsal("/", cluster_id, fs_name)
-                    if remaining == 0:
-                        self._cleanup_pool_users_for_fs(cluster_id, fs_name)
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                     log.debug("Deleted all exports for cluster %s", cluster_id)
@@ -715,8 +722,13 @@ class ExportMgr:
             if isinstance(export.fsal, CephFSFSAL) and export.fsal.user_id
             and f'client.{export.fsal.user_id}' in entity_set
         ]
-        _, stale = self._refresh_pool_user_keys(
-            cluster_id, entity_set, should_notify=not matching)
+        notify_allowed = not self.skip_notify_nfs_server
+        # Ganesha is told once, by the last write. When exports are to be
+        # written too, the CEPH_USERS write stays quiet and lets them do it.
+        pool_updated, stale = self._refresh_pool_user_keys(
+            cluster_id, entity_set,
+            should_notify=notify_allowed and not matching)
+        notified = bool(pool_updated) and notify_allowed and not matching
 
         updated_pseudos: List[str] = []
         stale_pseudos: List[str] = []
@@ -738,11 +750,29 @@ class ExportMgr:
                 log.exception("Failed to update export %s after key rotation", export.pseudo)
                 continue
 
+            notified = notified or notify_allowed
             updated_pseudos.append(export.pseudo)
             log.info(
                 "Updated export %s with rotated key for user %s",
                 export.pseudo, fsal.user_id
             )
+
+        if pool_updated and notify_allowed and not notified:
+            # Every export write that was meant to carry the notification
+            # failed, but the pool's new keys are persisted: notify here so
+            # ganesha does not keep using a credential that no longer exists.
+            log.info(
+                "Notifying ganesha for cluster %s: pool users %s were rotated "
+                "but no export write succeeded to announce it",
+                cluster_id, pool_updated
+            )
+            try:
+                self._rados(cluster_id).notify_conf(conf_obj_name(cluster_id))
+            except Exception:
+                log.exception(
+                    "Failed to notify ganesha for cluster %s after rotating "
+                    "pool users %s", cluster_id, pool_updated
+                )
         return updated_pseudos, stale + stale_pseudos
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
