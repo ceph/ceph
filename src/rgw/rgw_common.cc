@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <vector>
 #include <algorithm>
+#include <iomanip>  // for std::setprecision, std::fixed
 #include <string>
 #include <boost/tokenizer.hpp>
 
