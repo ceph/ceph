@@ -139,10 +139,10 @@ TEST_stretch_cluster_uneven_crush_weights() {
     local dir=$1
     _setup_stretch_uneven_cluster $dir 4 || return 1
 
-    ceph osd getcrushmap > crushmap || return 1
-    crushtool --decompile crushmap > crushmap.txt || return 1
-    sed 's/^# end crush map$//' crushmap.txt > crushmap_modified.txt || return 1
-    cat >> crushmap_modified.txt << EOF
+    ceph osd getcrushmap > $dir/crushmap || return 1
+    crushtool --decompile $dir/crushmap > $dir/crushmap.txt || return 1
+    sed 's/^# end crush map$//' $dir/crushmap.txt > $dir/crushmap_modified.txt || return 1
+    cat >> $dir/crushmap_modified.txt << EOF
 rule stretch_rule {
         id 1
         type replicated
@@ -158,8 +158,8 @@ rule stretch_rule {
 # end crush map
 EOF
 
-    crushtool --compile crushmap_modified.txt -o crushmap.bin || return 1
-    ceph osd setcrushmap -i crushmap.bin  || return 1
+    crushtool --compile $dir/crushmap_modified.txt -o $dir/crushmap.bin || return 1
+    ceph osd setcrushmap -i $dir/crushmap.bin  || return 1
     local stretched_poolname=stretched_rbdpool
     ceph osd pool create $stretched_poolname 32 32 stretch_rule || return 1
     ceph osd pool set $stretched_poolname size 4 || return 1
