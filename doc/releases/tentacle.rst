@@ -60,7 +60,12 @@ CephFS
 RBD
 -----------------------
 
-* ``librbd`` live migration can now specify ``mon_host`` and ``key`` in the migration spec.
+* It's possible to specify the source cluster's ``mon_host`` and ``key`` for
+  ``native`` format migration via the migration spec now.  This eliminates the
+  dependency on a ``<cluster-name>.conf`` file in a known location, which is
+  rather rigid and also challenging to disseminate in some environments.  The
+  key can be embedded in the migration spec or just referenced from there while
+  stored in the MON config-key store.
 * Fixed a use-after-free in trash purge on image open error.
 * Fixed ``list_snaps()`` handling of non-existent groups in ``pybind/rbd``.
 
@@ -259,7 +264,6 @@ Changelog
 * test/libcephfs: validate asynchronous write and fsync executing concurrently (`issue#71515 <http://tracker.ceph.com/issues/71515>`_, `pr#65648 <https://github.com/ceph/ceph/pull/65648>`_, Venky Shankar)
 * test/mds: fix flaky RepeatedQuiesceAwait (`pr#69034 <https://github.com/ceph/ceph/pull/69034>`_, Kefu Chai)
 * tools/cephfs: allow scanning and flushing journal in batches (`pr#70276 <https://github.com/ceph/ceph/pull/70276>`_, Kefu Chai, Dhairya Parmar)
-* V20.2.4 tag (`pr#71161 <https://github.com/ceph/ceph/pull/71161>`_, Ceph Release Team, Patrick Donnelly, Adam King, Adam C. Emerson, Shilpa Jagannath, Marcus Watts, Pritha Srivastava, Yehuda Sadeh, Matan Breizman, Max Kellermann, Kamoltat Sirivadhna)
 * vstart.sh: only skip fs volume create when there's no mgr to run it (`pr#70019 <https://github.com/ceph/ceph/pull/70019>`_, Kefu Chai)
 * win32_deps_bild: bump openssl version (`pr#71204 <https://github.com/ceph/ceph/pull/71204>`_, Lucian Petrut)
 
