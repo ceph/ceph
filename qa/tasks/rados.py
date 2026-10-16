@@ -421,7 +421,7 @@ def task(ctx, config):
                         erasure_code_crush_rule_name=crush_name,
                         erasure_code_use_overwrites=
                             config.get('erasure_code_use_overwrites', False),
-                        num_zones=config.get('num_zones',None),
+                        num_zones=config.get('num_zones', None),
                         osd_failure_domain=config.get('osd_failure_domain', None),
                     )
                     created_pools.append(pool)
