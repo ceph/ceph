@@ -1051,7 +1051,8 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
 }
 
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_user& authenticated_user)
 {
   rgw::sal::Attrs attrs;
   std::string head_oid_in_cache;
@@ -1113,7 +1114,8 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
     if (cache_request) {
       return -ENOENT;
     }
-    auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
+    auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags,
+                                   authenticated_user);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
       return ret;
@@ -1778,7 +1780,8 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp,  uint32_t flags)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_user& authenticated_user, uint32_t flags)
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
@@ -1800,7 +1803,8 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
       return -ENOENT;
     }
 
-    auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
+    auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp,
+                                      authenticated_user, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
       return ret;
@@ -1810,7 +1814,7 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 }
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, const rgw_user& authenticated_user)
 {
   buffer::list bl;
   std::string head_oid_in_cache;
@@ -1848,7 +1852,8 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
     if (cache_request) {
       return -ENOENT;
     }
-    if (auto ret = next->delete_obj_attrs(dpp, attr_name, y); ret < 0) {
+    if (auto ret = next->delete_obj_attrs(dpp, attr_name, y,
+                                          authenticated_user); ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
       return ret;
     }

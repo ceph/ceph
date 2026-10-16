@@ -1184,7 +1184,9 @@ MotrObject::~MotrObject() {
 //    return read_op.prepare(dpp);
 //  }
 
-int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+			      Attrs* delattrs, optional_yield y, uint32_t flags,
+			      const rgw_user& authenticated_user)
 {
   // TODO: implement
   ldpp_dout(dpp, 20) <<__func__<< ": MotrObject::set_obj_attrs()" << dendl;
@@ -1231,7 +1233,9 @@ int MotrObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, r
   return 0;
 }
 
-int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+				 optional_yield y, const DoutPrefixProvider* dpp,
+				 const rgw_user& authenticated_user, uint32_t flags)
 {
   rgw_obj target = get_obj();
   int r = get_obj_attrs(y, dpp, &target);
@@ -1240,10 +1244,13 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, op
   }
   set_atomic(true);
   state.attrset[attr_name] = attr_val;
-  return set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
+  return set_obj_attrs(dpp, &state.attrset, nullptr, y, flags,
+		       authenticated_user);
 }
 
-int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
+int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
+				 const char* attr_name, optional_yield y,
+				 const rgw_user& authenticated_user)
 {
   rgw_obj target = get_obj();
   Attrs rmattr;
@@ -1251,7 +1258,8 @@ int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 
   set_atomic(true);
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP,
+		       authenticated_user);
 }
 
 bool MotrObject::is_expired() {

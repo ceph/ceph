@@ -1626,7 +1626,9 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     {
       bl.append("test_value", 10);
       rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
-      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
     }
     bl.append("copy_value", 10);
     rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
@@ -1748,7 +1750,9 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     {
       bl.append("test_value", 10);
       rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
-      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
     }
     bl.append("copy_value", 10);
     rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
@@ -1870,7 +1874,9 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     {
       bl.append("test_value", 10);
       rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
-      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
     }
     bl.append("copy_value", 10);
     rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
@@ -2384,7 +2390,9 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
     {
       bl.append("test_value", 10);
       rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
-      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
     }
     bl.append("copy_value", 10);
     rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
@@ -2483,7 +2491,9 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
     put_version_suspended_object(testName, yield);
     bl.append("test_value", 10);
     rgw::sal::Attrs testAttrs{{"user.rgw.test_attr", std::move(bl)}};
-    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
 
     {
       std::string destNameSuspended = "dest_object_suspended";
@@ -2605,7 +2615,9 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
     {
       bl.append("test_value", 10);
       rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
-      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
     }
     bl.append("copy_value", 10);
     rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
@@ -2704,7 +2716,9 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
     put_version_suspended_object(testName, yield);
     bl.append("test_value", 10);
     rgw::sal::Attrs testAttrs{{"user.rgw.test_attr", std::move(bl)}};
-    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
 
     {
       std::string destNameSuspended = "dest_object_suspended";
@@ -2826,7 +2840,9 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
     {
       bl.append("test_value", 10);
       rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
-      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
     }
     bl.append("copy_value", 10);
     rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
@@ -2925,7 +2941,9 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
     put_version_suspended_object(testName, yield);
     bl.append("test_value", 10);
     rgw::sal::Attrs testAttrs{{"user.rgw.test_attr", std::move(bl)}};
-    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield},
+			 rgw::sal::FLAG_LOG_OP,
+			 rgw::sal::no_authenticated_user);
 
     {
       std::string destNameSuspended = "dest_object_suspended";

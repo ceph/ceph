@@ -1208,13 +1208,15 @@ public:
                          const ceph::real_time& obj_mtime) override;
   virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
+			    Attrs* delattrs, optional_yield y, uint32_t flags,
+			    const rgw_user& authenticated_user) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 			       optional_yield y, const DoutPrefixProvider* dpp,
+			       const rgw_user& authenticated_user,
 			       uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-			       optional_yield y) override;
+			       optional_yield y, const rgw_user& authenticated_user) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
   virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,

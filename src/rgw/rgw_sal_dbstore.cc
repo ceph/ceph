@@ -541,7 +541,9 @@ namespace rgw::sal {
     return read_op.prepare(dpp);
   }
 
-  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+			      Attrs* delattrs, optional_yield y, uint32_t flags,
+			      const rgw_user& authenticated_user)
   {
     Attrs empty;
     DB::Object op_target(store->getDB(),
@@ -557,7 +559,9 @@ namespace rgw::sal {
     return read_attrs(dpp, read_op, y, nullptr);
   }
 
-  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+				 optional_yield y, const DoutPrefixProvider* dpp,
+				 const rgw_user& authenticated_user, uint32_t flags)
   {
     rgw_obj target = get_obj();
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
@@ -569,17 +573,21 @@ namespace rgw::sal {
     }
     set_atomic(true);
     state.attrset[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y, flags,
+			 authenticated_user);
   }
 
-  int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
+  int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
+				 const char* attr_name, optional_yield y,
+				 const rgw_user& authenticated_user)
   {
     Attrs rmattr;
     bufferlist bl;
 
     set_atomic(true);
     rmattr[attr_name] = bl;
-    return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+    return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP,
+			 authenticated_user);
   }
 
   bool DBObject::is_expired() {

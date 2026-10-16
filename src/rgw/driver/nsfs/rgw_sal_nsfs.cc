@@ -10243,9 +10243,11 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     }
   }
 
+  /* `remote_user` is the authenticated user here;  see the identity
+   * pinned above */
   ret = dobj->set_obj_attrs(dpp, &attrs,
 			    stale_meta.empty() ? nullptr : &stale_meta,
-			    y, rgw::sal::FLAG_LOG_OP);
+			    y, rgw::sal::FLAG_LOG_OP, remote_user);
   if (ret < 0) {
     return ret;
   }
@@ -11419,7 +11421,8 @@ int NSFSObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, 
 }
 
 int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_user& authenticated_user)
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
@@ -11484,7 +11487,8 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 }
 
 int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_user& authenticated_user, uint32_t flags)
 {
   /* held off while this bucket's tree is being rewritten, as the other
    * attribute writes are;  see NSFSDriver::mutation_enter() */
@@ -11501,7 +11505,7 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 }
 
 int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, const rgw_user& authenticated_user)
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
@@ -11685,7 +11689,9 @@ int NSFSObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yi
 
   Attrs setattrs;
   encode(policy, setattrs[RGW_ATTR_ACL]);
-  return set_obj_attrs(dpp, &setattrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  /* the chown is the operator's, and no request authenticated it */
+  return set_obj_attrs(dpp, &setattrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
+		       rgw::sal::no_authenticated_user);
 }
 
 int NSFSObject::get_cur_version(const DoutPrefixProvider* dpp, rgw_obj_key& key)
@@ -13697,7 +13703,12 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_NSFS_ATTR_MPUPLOAD] = bl;
 
-  ret = meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  /* who the upload is for.  Whether the meta object is written *as*
+   * them is the driver's question and is settled the other way
+   * (DECISIONS.md 2026-10-15:  staging and the meta object stay the
+   * gateway's);  this says who asked. */
+  ret = meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y,
+				rgw::sal::FLAG_LOG_OP, auth_user);
   if (ret < 0) {
     return ret;
   }

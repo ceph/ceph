@@ -1084,9 +1084,11 @@ int FilterObject::load_obj_state(const DoutPrefixProvider *dpp,
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-				Attrs* delattrs, optional_yield y, uint32_t flags)
+				Attrs* delattrs, optional_yield y, uint32_t flags,
+				const rgw_user& authenticated_user)
 {
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags,
+			     authenticated_user);
 }
 
 int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
@@ -1095,15 +1097,18 @@ int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 }
 
 int FilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-				   optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+				   optional_yield y, const DoutPrefixProvider* dpp,
+				   const rgw_user& authenticated_user, uint32_t flags)
 {
-  return next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
+  return next->modify_obj_attrs(attr_name, attr_val, y, dpp,
+				authenticated_user, flags);
 }
 
 int FilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
-				   const char* attr_name, optional_yield y)
+				   const char* attr_name, optional_yield y,
+				   const rgw_user& authenticated_user)
 {
-  return next->delete_obj_attrs(dpp, attr_name, y);
+  return next->delete_obj_attrs(dpp, attr_name, y, authenticated_user);
 }
 
 bool FilterObject::is_expired()

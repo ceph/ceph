@@ -606,7 +606,9 @@ int Restore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   using ceph::encode;
   encode(restore_status, bl);
 
-  ret = pobj->modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp, false);
+  /* restore runs on its own schedule, for nobody */
+  ret = pobj->modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp,
+			       rgw::sal::no_authenticated_user, false);
 
   return ret;
 }
@@ -675,7 +677,8 @@ int Restore::update_cloud_restore_exp_date(rgw::sal::Bucket* pbucket,
   pobj->set_atomic(true);
 
 
-  ret = pobj->set_obj_attrs(dpp, &attrs, nullptr, y, 0);
+  ret = pobj->set_obj_attrs(dpp, &attrs, nullptr, y, 0,
+			    rgw::sal::no_authenticated_user);
 
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to update restore expiry date ret=" << ret << dendl;

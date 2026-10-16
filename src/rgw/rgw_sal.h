@@ -172,6 +172,17 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
 static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
 
+/* No authenticated identity, for the attribute writes that take one.
+ *
+ * The parameter is not defaulted, deliberately:  a driver that maps
+ * an identity to filesystem credentials runs an unnamed write as the
+ * daemon, which reaches more of the filesystem than any user it
+ * would be acting for, so every caller is made to say which it is.
+ * This names the cases that genuinely have nobody -- lifecycle,
+ * restore, sync, a cache's own writeback -- and makes them greppable
+ * as a set. */
+inline const rgw_user no_authenticated_user{};
+
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
   RestoreAlreadyInProgress = 1,
@@ -1370,6 +1381,20 @@ public:
 
       virtual ~DeleteOp() = default;
 
+      /**
+       * Name the authenticated identity this operation is for.
+       *
+       * Distinct from the owner the object is attributed to:  for a
+       * member of an account `params.obj_owner` is the *account*,
+       * while this is the member.  A driver that maps an identity to
+       * filesystem credentials needs the latter, or every member of
+       * an account is served as one.
+       *
+       * Default does nothing, so a driver with no use for it is
+       * unaffected and none is obliged to implement it.
+       */
+      virtual void set_authenticated_user(const rgw_user& user) {}
+
       /** Delete the object */
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
     };
@@ -1506,15 +1531,28 @@ public:
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
-     * deleted.  @note the attribute APIs may be revisited in the future. */
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
+     * deleted.  @note the attribute APIs may be revisited in the future.
+     *
+     * `authenticated_user` names who the write is for, as
+     * ReadOp::set_authenticated_user() does for a read:  for a member
+     * of an account that is the member and not the account.  It is
+     * undefaulted so that a caller with nobody says so --
+     * `rgw::sal::no_authenticated_user` -- rather than leaving a
+     * driver to run the write as the daemon by omission. */
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+			      Attrs* delattrs, optional_yield y, uint32_t flags,
+			      const rgw_user& authenticated_user) = 0;
     /** Get attributes for this object */
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) = 0;
     /** Modify attributes for this object. */
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+				 optional_yield y, const DoutPrefixProvider* dpp,
+				 const rgw_user& authenticated_user,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) = 0;
     /** Delete attributes for this object */
-    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) = 0;
+    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp,
+				 const char* attr_name, optional_yield y,
+				 const rgw_user& authenticated_user) = 0;
     /** Check to see if this object has expired */
     virtual bool is_expired() = 0;
     /** Create a randomized instance ID for this object */

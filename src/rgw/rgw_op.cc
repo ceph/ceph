@@ -116,6 +116,18 @@ static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, re
 
 // this probably should belong in the rgw_iam_policy_keywords, I'll get it to it
 // at some point
+/* Who an attribute write is for, where the SAL asks.
+ *
+ * `s->user` is the authenticated user, which for a member of an
+ * account is the member;  `s->owner` would be the account.  A
+ * request with nothing authenticated -- anonymous, and the paths
+ * that run with no req_state user -- says so rather than leaving a
+ * driver to run the write as the daemon. */
+static const rgw_user& authenticated_user(const req_state* s)
+{
+  return s->user ? s->user->get_id() : rgw::sal::no_authenticated_user;
+}
+
 static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 static constexpr auto S3_RESOURCE_TAG = "s3:ResourceTag";
 static constexpr auto S3_RUNTIME_RESOURCE_VAL = "${s3:ResourceTag";
@@ -1025,7 +1037,8 @@ void handle_replication_status_header(
       bufferlist bl;
       bl.append("COMPLETED");
       setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
-      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, y, 0);
+      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, y, 0,
+					 authenticated_user(s));
       s->object->set_atomic(false);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to set object replication status to COMPLETED ret=" << ret << dendl;
@@ -1506,7 +1519,8 @@ void RGWPutObjTags::execute(optional_yield y)
   }
 
   s->object->set_atomic(true);
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this,
+				       authenticated_user(s));
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
   }
@@ -1558,7 +1572,8 @@ void RGWDeleteObjTags::execute(optional_yield y)
     return;
   }
 
-  op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y);
+  op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y,
+				       authenticated_user(s));
 }
 
 int RGWGetBucketTags::verify_permission(optional_yield y)
@@ -5880,7 +5895,9 @@ void RGWPutMetadataObject::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield, rgw::sal::FLAG_LOG_OP);
+  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield,
+				    rgw::sal::FLAG_LOG_OP,
+				    authenticated_user(s));
 }
 
 int RGWRestoreObj::init_processing(optional_yield y)
@@ -6134,6 +6151,11 @@ void RGWDeleteObj::execute(optional_yield y)
       }
 
       std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
+      /* who is deleting, as distinct from who the object belongs to:
+       * for a member of an account params.obj_owner is the account */
+      if (s->user) {
+        del_op->set_authenticated_user(s->user->get_id());
+      }
       del_op->params.obj_owner = s->owner;
       del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
@@ -7108,7 +7130,8 @@ void RGWPutACLs::execute(optional_yield y)
   if (!rgw::sal::Object::empty(s->object.get())) {
     s->object->set_atomic(true);
     //if instance is empty, we should modify the latest object
-    op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this);
+    op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this,
+					 authenticated_user(s));
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
@@ -8396,6 +8419,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
 
   std::string version_id; // empty
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  if (s->user) {
+    del_op->set_authenticated_user(s->user->get_id());
+  }
   del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
@@ -8606,6 +8632,9 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     obj->set_atomic(true);
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+    if (s->user) {
+      del_op->set_authenticated_user(s->user->get_id());
+    }
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner.id;
@@ -9317,7 +9346,9 @@ void RGWRMAttrs::execute(optional_yield y)
 
   s->object->set_atomic(true);
 
-  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y,
+				    rgw::sal::FLAG_LOG_OP,
+				    authenticated_user(s));
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to delete obj attrs, obj=" << s->object
 		       << " ret=" << op_ret << dendl;
@@ -9354,7 +9385,9 @@ void RGWSetAttrs::execute(optional_yield y)
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     rgw::sal::Attrs a(attrs);
-    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, rgw::sal::FLAG_LOG_OP);
+    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y,
+				      rgw::sal::FLAG_LOG_OP,
+				      authenticated_user(s));
   } else {
     op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }
@@ -9931,7 +9964,9 @@ void RGWPutObjRetention::execute(optional_yield y)
     return;
   }
 
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl,
+				       s->yield, this,
+				       authenticated_user(s));
 
   return;
 }
@@ -10056,7 +10091,9 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
   bufferlist bl;
   obj_legal_hold.encode(bl);
   //if instance is empty, we should modify the latest object
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl,
+				       s->yield, this,
+				       authenticated_user(s));
   return;
 }
 

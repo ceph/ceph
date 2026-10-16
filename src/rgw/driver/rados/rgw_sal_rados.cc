@@ -2904,7 +2904,9 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
   return read_op.prepare(y, dpp);
 }
 
-int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+			       Attrs* delattrs, optional_yield y, uint32_t flags,
+			       const rgw_user& authenticated_user)
 {
   Attrs empty;
   const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
@@ -2935,7 +2937,9 @@ int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+				  optional_yield y, const DoutPrefixProvider* dpp,
+				  const rgw_user& authenticated_user, uint32_t flags)
 {
   rgw_obj target = get_obj();
   rgw_obj save = get_obj();
@@ -2953,21 +2957,24 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
 
   Attrs mattr;
   mattr[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &mattr, nullptr, y, flags);
+  r = set_obj_attrs(dpp, &mattr, nullptr, y, flags, authenticated_user);
   /* Restore target */
   state.obj = save;
 
   return r;
 }
 
-int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
+int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
+				  const char* attr_name, optional_yield y,
+				  const rgw_user& authenticated_user)
 {
   Attrs rmattr;
   bufferlist bl;
 
   set_atomic(true);
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP,
+		       authenticated_user);
 }
 
 bool RadosObject::is_expired() {
@@ -3120,7 +3127,10 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   set_atomic(true);
   map<string, bufferlist> attrs;
   attrs[RGW_ATTR_ACL] = bl;
-  r = set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  /* the chown is the operator's, not new_user's, and no request
+   * authenticated it */
+  r = set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
+		    rgw::sal::no_authenticated_user);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-r) << dendl;
     return r;

@@ -898,7 +898,8 @@ int DaosObject::load_obj_state(const DoutPrefixProvider* dpp,
 DaosObject::~DaosObject() { close(nullptr); }
 
 int DaosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                              Attrs* delattrs, optional_yield y, uint32_t flags) {
+                              Attrs* delattrs, optional_yield y, uint32_t flags,
+                              const rgw_user& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: DaosObject::set_obj_attrs()" << dendl;
   // TODO handle target_obj
   // Get object's metadata (those stored in rgw_bucket_dir_entry)
@@ -932,7 +933,8 @@ int DaosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 
 int DaosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                  optional_yield y,
-                                 const DoutPrefixProvider* dpp, uint32_t flags) {
+                                 const DoutPrefixProvider* dpp,
+                                 const rgw_user& authenticated_user, uint32_t flags) {
   // Get object's metadata (those stored in rgw_bucket_dir_entry)
   ldpp_dout(dpp, 20) << "DEBUG: modify_obj_attrs" << dendl;
   rgw_bucket_dir_entry ent;
@@ -950,14 +952,16 @@ int DaosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 }
 
 int DaosObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
-                                 const char* attr_name, optional_yield y) {
+                                 const char* attr_name, optional_yield y,
+                                 const rgw_user& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: delete_obj_attrs" << dendl;
   rgw_obj target = get_obj();
   Attrs rmattr;
   bufferlist bl;
 
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP,
+                       authenticated_user);
 }
 
 bool DaosObject::is_expired() {

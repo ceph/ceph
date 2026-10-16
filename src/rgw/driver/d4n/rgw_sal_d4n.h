@@ -272,13 +272,15 @@ class D4NFilterObject : public FilterObject {
     virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
                              bool follow_olh = true) override;
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags) override;
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_user& authenticated_user) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_user& authenticated_user,
 			       uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y) override;
+                               optional_yield y, const rgw_user& authenticated_user) override;
     virtual ceph::real_time get_mtime(void) const override { return next->get_mtime(); };
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;

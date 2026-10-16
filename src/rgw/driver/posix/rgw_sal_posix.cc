@@ -4491,7 +4491,11 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = pot;
   }
-  return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  /* copy_object() carries no authenticated user of its own:  the SAL
+   * gives it an ACLOwner and, for multisite, a remote user, neither of
+   * which is who asked */
+  return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
+			     rgw::sal::no_authenticated_user);
 }
 
 int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -4646,7 +4650,8 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            const rgw_user& authenticated_user)
 {
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -4690,14 +4695,15 @@ int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 }
 
 int POSIXObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               const rgw_user& authenticated_user, uint32_t flags)
 {
   state.attrset[attr_name] = attr_val;
   return write_attrs(dpp, y);
 }
 
 int POSIXObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, const rgw_user& authenticated_user)
 {
   state.attrset.erase(attr_name);
 
@@ -5636,7 +5642,9 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
 
-  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y,
+				 rgw::sal::FLAG_LOG_OP,
+				 rgw::sal::no_authenticated_user);
 }
 
 int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
