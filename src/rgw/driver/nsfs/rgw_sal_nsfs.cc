@@ -13,6 +13,7 @@
  *
  */
 
+#include <linux/capability.h>
 #include <sys/resource.h>
 #include <sys/sysmacros.h>
 
@@ -692,6 +693,78 @@ static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
  * (a concurrent writer won), the link fails with EEXIST and we skip.
  * Retries on CAS mismatch (the candidate was moved by another thread).
  */
+/* What the promote's last rung raises, and nothing else raises.
+ *
+ * `CAP_DAC_OVERRIDE` for the bucket directory the link lands in and
+ * for the promoted file's attribute;  `CAP_FOWNER` for
+ * protected_hardlinks' check on the source inode
+ * (`inode_owner_or_capable()` in `may_linkat()`) and for a sticky
+ * `.versions` entry.  Both are in the gateway's permitted set
+ * already, so this names a site and not a new capability. */
+static constexpr uint64_t PROMOTE_RESIDUE_CAPS =
+  nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
+
+/* The identity an object records for itself, resolved to credentials.
+ *
+ * The third rung of the promote's ladder (n plan §5).  A uid can be
+ * carried by several identity rows -- every member of an account runs
+ * as the account -- and where their group lists differ the uid cannot
+ * say which applies.  A recorded owner can:  it is a name, and a name
+ * is the identity table's primary key, so this is the ordinary keyed
+ * resolve with no rule of its own.
+ *
+ * The read runs as the file's own owner, because the gateway cannot
+ * open an identity's `0660` file -- which is the same reason the
+ * promote needs this at all.  `inout` is written only on success.
+ *
+ * An object that records no owner returns false rather than an error.
+ * NooBaa records none (`object_owner()` returns -ENODATA and the
+ * caller supplies the bucket's), and neither does a file written over
+ * NFS or SMB, so this rung is empty in an adopted tree and in a
+ * sideloaded one.  Conversion synthesises an ACL from the bucket owner
+ * for every object and version that lacked one, so a converted tree
+ * has it.
+ */
+static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
+					    int dir_fd,
+					    const std::string& name,
+					    const nsfs::XattrStrategy* xs,
+					    const nsfs::IdentityDB& db,
+					    nsfs::Credentials& inout)
+{
+  ACLOwner recorded;
+  const nsfs::Credentials reader = inout;	/* the file's own owner */
+  auto read_owner = [&]() -> int {
+    int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
+    if (fd < 0) {
+      return -errno;
+    }
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+    return owner_from_fd(fd, xs, recorded);
+  };
+
+  const int ret = nsfs::impersonation_enabled()
+    ? nsfs::run_as(dpp, reader, read_owner) : read_owner();
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << "credentials_from_recorded_owner: " << name
+      << " records no usable owner: " << cpp_strerror(-ret) << dendl;
+    return false;
+  }
+
+  nsfs::Credentials named;
+  if (nsfs::resolve_credentials(dpp, db, recorded.id, named) < 0) {
+    return false;
+  }
+  /* the groups of the identity the object names, on the uid the file
+   * carries:  the uid is what protected_hardlinks asks about, and it
+   * is the file's */
+  inout.groups = std::move(named.groups);
+  ldpp_dout(dpp, 10) << "credentials_from_recorded_owner: " << name
+    << " names " << recorded.id << ", " << inout.groups.size()
+    << " groups" << dendl;
+  return true;
+}
+
 /* What promote_version() promoted, for a caller that has to describe the
  * new current version.  Both fields are free here:  the version id is the
  * suffix of the .versions/ entry name, and the etag is read from the
@@ -838,8 +911,20 @@ static int promote_version(int parent_fd, const std::string& leaf,
     nsfs::Credentials cand_owner;
     cand_owner.uid = cand_stx.stx_uid;
     cand_owner.gid = cand_stx.stx_gid;
+    /* whether an identity record names this file's owner at all.  It
+     * decides the last rung:  a refusal of an identity we could name
+     * is the tree's answer about that identity and is reported, while
+     * a refusal with no identity to name is what the raise is for. */
+    bool named = false;
     if (idb) {
-      (void) nsfs::complete_file_credentials(dpp, *idb, cand_owner);
+      const int cret = nsfs::complete_file_credentials(dpp, *idb, cand_owner);
+      named = (cret == 0);
+      if (cret == -ENODATA) {
+	/* rung 3:  several rows carry the uid and disagree, so ask the
+	 * object who it belongs to */
+	named = credentials_from_recorded_owner(dpp, vfd, max_name, xs,
+						*idb, cand_owner);
+      }
     }
 
     SafeResult sr = SafeResult::ERROR;
@@ -892,6 +977,34 @@ static int promote_version(int parent_fd, const std::string& leaf,
         << max_name << ": " << cpp_strerror(-aret) << dendl;
       ::close(vfd);
       return aret;
+    }
+
+    /* The ladder's last rung.  No identity record names this file's
+     * owner -- a version written over NFS or SMB, where there is no
+     * row to complete from and no recorded owner to read -- so there
+     * is no identity whose rights the refusal describes.  Raise, as
+     * the gateway and not as anybody:  CAP_DAC_OVERRIDE for the
+     * bucket directory and the promoted file's attribute,
+     * CAP_FOWNER for protected_hardlinks' check on the source inode
+     * and for the sticky `.versions` entry.
+     *
+     * After the refusal and never before it, so a tree whose bucket
+     * directories need no group never pays for this.  `SafeResult`
+     * cannot yet say *denied* rather than *failed* -- that is phase
+     * D's third piece -- so an I/O error reaches here too and is
+     * retried once pointlessly, which costs a syscall and reports
+     * the same thing twice. */
+    if ((sr == SafeResult::ERROR) && !named) {
+      ldpp_dout(dpp, 4) << "promote_version: " << leaf << " refused as uid "
+        << cand_owner.uid << ", which no identity record names;  retrying "
+        "as the gateway with DAC_OVERRIDE and FOWNER raised" << dendl;
+      const int rret = nsfs::with_capabilities(dpp, PROMOTE_RESIDUE_CAPS,
+                                               publish);
+      if (rret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+          << " could not be published with capabilities raised: "
+          << cpp_strerror(-rret) << dendl;
+      }
     }
 
     if (sr == SafeResult::OK) {
