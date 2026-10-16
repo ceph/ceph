@@ -4168,6 +4168,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_bal_replica_discover_reads",
     "mds_bal_replicate_threshold",
     "mds_bal_sample_interval",
+    "mds_bal_skip_replicate_ephemeral_random",
     "mds_bal_split_bits",
     "mds_bal_split_rd",
     "mds_bal_split_size",
