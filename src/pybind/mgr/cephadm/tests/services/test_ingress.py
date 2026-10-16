@@ -1617,6 +1617,16 @@ def _nfs_ingress_spec():
     )
 
 
+def _haproxy_daemon(status=DaemonDescriptionStatus.running):
+    return DaemonDescription(
+        daemon_type='haproxy',
+        daemon_id='test.host1.aaa',
+        hostname='host1',
+        service_name='ingress.test',
+        status=status,
+    )
+
+
 def test_haproxy_choose_next_action_reload_on_log_only_change_http():
     # A pure log-level change on an http (RGW) ingress should reload HAProxy
     # with SIGHUP instead of restarting the unit.
@@ -1629,6 +1639,7 @@ def test_haproxy_choose_next_action_reload_on_log_only_change_http():
                    'haproxy_log_level: debug'],
         last_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
                    'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(),
     )
     assert next_step.action is utils.Action.RECONFIG
     assert next_step.skip_restart_for_reconfig is True
@@ -1647,6 +1658,7 @@ def test_haproxy_choose_next_action_reload_on_log_only_change_tcp():
                    'haproxy_log_level: info'],
         last_deps=['nfs.foo.0', 'haproxy_log_target: journald',
                    'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(),
     )
     assert next_step.action is utils.Action.RECONFIG
     assert next_step.skip_restart_for_reconfig is True
@@ -1665,6 +1677,7 @@ def test_haproxy_choose_next_action_reload_on_log_activation_upgrade():
         curr_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
                    'haproxy_log_level: info'],
         last_deps=['rgw.foo.host1.aaa'],
+        daemon=_haproxy_daemon(),
     )
     assert next_step.action is utils.Action.RECONFIG
     assert next_step.skip_restart_for_reconfig is True
@@ -1683,6 +1696,7 @@ def test_haproxy_choose_next_action_restart_on_mixed_change():
                    'haproxy_log_level: debug'],
         last_deps=['rgw.foo.host1.aaa', 'placement_hosts:host1',
                    'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(),
     )
     assert next_step.action is utils.Action.RECONFIG
     assert next_step.skip_restart_for_reconfig is False
@@ -1701,8 +1715,83 @@ def test_haproxy_choose_next_action_restart_on_non_log_change():
                    'haproxy_log_level: info'],
         last_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
                    'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(),
     )
     assert next_step.action is utils.Action.RECONFIG
+    assert next_step.skip_restart_for_reconfig is False
+    assert next_step.send_signal_to_daemon is None
+
+
+def test_haproxy_choose_next_action_restart_when_stopped():
+    # A stopped daemon cannot process SIGHUP, so a log-only change must keep the
+    # restart-capable reconfigure path (so the serve loop can bring it back up),
+    # not a reload that would leave it down.
+    svc = IngressService(MagicMock())
+    next_step = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'haproxy',
+        _rgw_ingress_spec(),
+        curr_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: debug'],
+        last_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(DaemonDescriptionStatus.stopped),
+    )
+    assert next_step.action is utils.Action.RECONFIG
+    assert next_step.skip_restart_for_reconfig is False
+    assert next_step.send_signal_to_daemon is None
+
+
+def test_haproxy_choose_next_action_restart_when_failed():
+    # A failed (error) daemon likewise must not be reloaded via SIGHUP.
+    svc = IngressService(MagicMock())
+    next_step = svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'haproxy',
+        _rgw_ingress_spec(),
+        curr_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: debug'],
+        last_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(DaemonDescriptionStatus.error),
+    )
+    assert next_step.action is utils.Action.RECONFIG
+    assert next_step.skip_restart_for_reconfig is False
+    assert next_step.send_signal_to_daemon is None
+
+
+def test_haproxy_choose_next_action_no_reload_when_restart_queued():
+    # An explicitly queued restart must not be silently downgraded to a SIGHUP
+    # reload, even on a running daemon with a log-only dependency change.
+    svc = IngressService(MagicMock())
+    next_step = svc.choose_next_action(
+        utils.Action.RESTART,
+        'haproxy',
+        _rgw_ingress_spec(),
+        curr_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: debug'],
+        last_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(),
+    )
+    assert next_step.skip_restart_for_reconfig is False
+    assert next_step.send_signal_to_daemon is None
+
+
+def test_haproxy_choose_next_action_no_reload_when_start_queued():
+    # A queued start (daemon down) must keep the restart-capable path so the
+    # serve loop can start it, rather than signalling a process that is not up.
+    svc = IngressService(MagicMock())
+    next_step = svc.choose_next_action(
+        utils.Action.START,
+        'haproxy',
+        _rgw_ingress_spec(),
+        curr_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: debug'],
+        last_deps=['rgw.foo.host1.aaa', 'haproxy_log_target: journald',
+                   'haproxy_log_level: info'],
+        daemon=_haproxy_daemon(DaemonDescriptionStatus.stopped),
+    )
     assert next_step.skip_restart_for_reconfig is False
     assert next_step.send_signal_to_daemon is None
 

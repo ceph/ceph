@@ -685,10 +685,21 @@ class IngressService(CephService):
 
         # HAProxy logging options can be applied with a graceful SIGHUP reload
         # Here the master keeps the listening sockets, a new worker is forked
-        # with the new config, and the old worker drains. Log change with other
-        # changes (placement, certs, backend set) falls through to the normal
-        # reconfigure/redeploy handling. This is a no-op for non-haproxy daemons.
-        if daemon_type == 'haproxy' and action is utils.Action.RECONFIG:
+        # with the new config, and the old worker drains.
+        #
+        # Reload only a running daemon with no pending start/restart, for a
+        # log-only dep change. Any other case (mixed changes, stopped/failed
+        # daemon, queued start/restart, non-haproxy) falls through to the
+        # restart-capable reconfigure/redeploy path.
+        if (
+            daemon_type == 'haproxy'
+            and action is utils.Action.RECONFIG
+            and daemon is not None
+            and daemon.status == DaemonDescriptionStatus.running
+            and scheduled_action in (
+                utils.Action.NO_ACTION, utils.Action.RECONFIG
+            )
+        ):
             sym_diff = set(curr_deps).symmetric_difference(last_deps)
             if sym_diff and all(
                 s.startswith(HAPROXY_LOG_DEP_PREFIXES) for s in sym_diff
