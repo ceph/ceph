@@ -11,6 +11,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
+ #include "cls/rgw/cls_rgw_bilog_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -643,10 +644,47 @@ void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key
   op.exec(method::bucket_clear_olh, in);
 }
 
+#ifdef WITH_RGW_CLS_DATUM
+namespace {
+
+class bilog_completion final : public ObjectOperationCompletion {
+  cls_rgw_bi_log_list_ret *output;
+  int *status;
+
+public:
+  bilog_completion(cls_rgw_bi_log_list_ret *output, int *status)
+    : output(output), status(status) { ceph_assert(output); }
+
+  void handle_completion(int result, ::ceph::buffer::list& bytes) override {
+    if (0 <= result || RGWBIAdvanceAndRetryError == result) {
+      try {
+        auto [entries, truncated] =
+          ::cls::rgw::bilog_datum::decode_reply<std::list<::rgw_bi_log_entry>>(bytes);
+        output->entries = std::move(entries);
+        output->truncated = truncated;
+      } catch (const std::bad_alloc&) {
+        result = -ENOMEM;
+      } catch (const std::exception&) {
+        result = -EIO;
+      }
+    }
+    if (status) {
+      *status = result;
+    }
+  }
+};
+
+} // anonymous namespace
+#endif
+
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         const std::string& marker, uint32_t max,
                         cls_rgw_bi_log_list_ret *pdata, int *ret)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::bilog_datum::encode_list(marker, max);
+  op.exec(method::bi_log_list, in, new bilog_completion {pdata, ret});
+#else
   cls_rgw_bi_log_list_op call;
   call.marker = marker;
   call.max = max;
@@ -654,18 +692,23 @@ void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
   bufferlist in;
   encode(call, in);
   op.exec(method::bi_log_list, in, new ClsBucketIndexOpCtx<cls_rgw_bi_log_list_ret>(pdata, ret));
+#endif
 }
 
 void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
                         const std::string& end_marker)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::bilog_datum::encode_trim(start_marker, end_marker);
+#else
   cls_rgw_bi_log_trim_op call;
   call.start_marker = start_marker;
   call.end_marker = end_marker;
 
   bufferlist in;
   encode(call, in);
+#endif
   op.exec(method::bi_log_trim, in);
 }
 

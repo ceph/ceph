@@ -22,6 +22,7 @@
 #include "cls/rgw/cls_rgw_const.h"
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
+ #include "cls/rgw/cls_rgw_bilog_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -3867,14 +3868,14 @@ int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
 }
 
 
+template <typename EntriesT>
 static int bi_log_iterate_entries(cls_method_context_t hctx,
 				  const string& marker,
 				  const string& end_marker,
 				  string& key_iter,
 				  uint32_t max_entries,
 				  bool *truncated,
-				  int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
-				  void *param)
+                                  EntriesT& entries)
 {
   CLS_LOG(10, "bi_log_iterate_range");
 
@@ -3940,9 +3941,13 @@ static int bi_log_iterate_entries(cls_method_context_t hctx,
     if (ret < 0)
       return ret;
 
-    ret = cb(hctx, key, e, param);
-    if (ret < 0)
-      return ret;
+    if constexpr (requires { entries.reserve(keys.size()); }) {
+      if (entries.empty()) {
+        entries.reserve(keys.size());
+      }
+    }
+    // The decoded entry has no further use in this iteration.
+    entries.push_back(std::move(e));
 
     if (i == num_keys - 1) {
       key_iter = key;
@@ -3952,21 +3957,14 @@ static int bi_log_iterate_entries(cls_method_context_t hctx,
   return 0;
 }
 
-static int bi_log_list_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
-{
-  list<rgw_bi_log_entry> *l = (list<rgw_bi_log_entry> *)param;
-  l->push_back(info);
-  return 0;
-}
-
+template <typename EntriesT>
 static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
-			   uint32_t max, list<rgw_bi_log_entry>& entries, bool *truncated)
+			   uint32_t max, EntriesT& entries, bool *truncated)
 {
   string key_iter;
   string end_marker;
   int ret = bi_log_iterate_entries(hctx, marker, end_marker,
-                              key_iter, max, truncated,
-                              bi_log_list_cb, &entries);
+                              key_iter, max, truncated, entries);
   return ret;
 }
 
@@ -3975,7 +3973,11 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bilog_datum::list_request op;
+#else
   cls_rgw_bi_log_list_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -3983,7 +3985,11 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bilog_datum::reply op_ret;
+#else
   cls_rgw_bi_log_list_ret op_ret;
+#endif
   int ret = bi_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.truncated);
   if (ret < 0)
     return ret;
@@ -3998,7 +4004,11 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bilog_datum::trim_request op;
+#else
   cls_rgw_bi_log_trim_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {

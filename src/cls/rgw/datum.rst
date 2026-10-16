@@ -13,6 +13,9 @@ algorithms and nested metadata, packed-version and zone codecs remain native.
 OLH unlink, clear and refresh also use borrowed client encoders and independent
 module records. Key-only and key/tag messages reuse the object-key profile;
 unlink retains its tag and zone field-version gates and epoch receipt path.
+Bucket-index log list and trim use independent requests. Log list encodes the
+module's vector directly and decodes the same sequence into the public client
+list, retaining native log-entry codecs and storage pagination semantics.
 Other RGW CLS operations continue to use their existing codecs.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and

@@ -3,6 +3,7 @@
 // Native types and completion ownership never enter Datum's pure mechanisms.
 #include "cls_rgw_bi_datum.h"
 #include "cls_rgw_bi_wire.h"
+#include "cls_rgw_bilog_datum.h"
 #include "cls_rgw_write_datum.h"
 
 #include <utility>
@@ -125,6 +126,108 @@ template std::pair<std::list<::rgw_cls_bi_entry>, bool>
 decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::bi_datum
+
+namespace cls::rgw::bilog_datum {
+
+using ::cls::rgw::wire::reader;
+using ::cls::rgw::wire::writer;
+
+void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    list_request candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        fields.text(candidate.marker);
+        candidate.max = fields.template scalar<std::uint32_t>();
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    trim_request candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        fields.text(candidate.start_marker);
+        fields.text(candidate.end_marker);
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        archive.text(marker);
+        archive.scalar(maximum);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_trim(const std::string_view start, const std::string_view end)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        archive.text(start);
+        archive.text(end);
+    });
+
+    return output;
+}
+
+void encode(const reply& value, ::ceph::buffer::list& output)
+{
+    ::ceph::buffer::list candidate;
+    writer archive {candidate};
+    archive.frame(1, [&] {
+        archive.scalar(::cls::rgw::wire::checked_count(value.entries.size()));
+        for (const auto& entry : value.entries) {
+            archive.native(entry);
+        }
+        archive.scalar(static_cast<std::uint8_t>(value.truncated));
+    });
+    output.claim_append(candidate);
+}
+
+template <typename EntriesT>
+std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    reader archive {cursor};
+
+    return archive.frame(1, [&](auto& fields, std::uint8_t) {
+        // Even the shortest native entry needs its six-byte frame header.
+        const auto count = fields.template sequence_size<6>(1);
+        EntriesT entries;
+        if constexpr (requires { entries.reserve(count); }) {
+            entries.reserve(count);
+        }
+        for (std::uint32_t index = 0; index < count; ++index) {
+            fields.native(entries.emplace_back());
+        }
+        const bool truncated = 0 != fields.template scalar<std::uint8_t>();
+
+        return std::pair {std::move(entries), truncated};
+    });
+}
+
+template std::pair<std::vector<::rgw_bi_log_entry>, bool>
+decode_reply(const ::ceph::buffer::list& input);
+template std::pair<std::list<::rgw_bi_log_entry>, bool>
+decode_reply(const ::ceph::buffer::list& input);
+
+} // cls::rgw::bilog_datum
 
 namespace cls::rgw::write_datum {
 

@@ -1,4 +1,4 @@
-// RGW CLS: Actual index-write handlers with controlled OMAP effects and time.
+// RGW CLS: Actual index handlers with controlled OMAP effects and time.
 #include "module_loader.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "common/config_proxy.h"
@@ -35,6 +35,7 @@ struct storage final
 {
     std::map<std::string, byte_buffer> values;
     byte_buffer header;
+    byte_buffer reply;
     std::vector<std::pair<std::string, byte_buffer>> effects;
 
     std::uint64_t maximum = 4;
@@ -54,9 +55,10 @@ int effect(storage& state, std::string operation, byte_buffer arguments = {})
 auto invoke(storage& state, byte_buffer input, const std::string_view method = "bi_put_entries")
 {
     const auto [call, flags] = ::rgw_cls_test::get_method(method);
-    REQUIRE(flags == (CLS_METHOD_RD | CLS_METHOD_WR));
+    REQUIRE(flags == (method == "bi_log_list" ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
+    state.reply = output;
     if (const char *path = std::getenv("CEPH_TEST_CLS_RGW_TRANSCRIPT")) {
         static std::ofstream transcript {path, std::ios::binary};
         byte_buffer record;
@@ -232,6 +234,43 @@ int cls_cxx_map_get_vals(cls_method_context_t context, const std::string& after,
         }
         output->insert(*it);
     }
+
+    return 0;
+}
+
+int cls_cxx_map_get_keys(cls_method_context_t context, const std::string& after,
+                         const std::uint64_t maximum, std::set<std::string> *output, bool *more)
+{
+    auto& state = *static_cast<storage *>(context);
+    byte_buffer arguments;
+    ::ceph::encode(std::tuple {after, maximum}, arguments);
+    if (const int result = effect(state, "get-keys", arguments); result < 0) {
+        return result;
+    }
+    *more = false;
+    for (auto it = state.values.upper_bound(after); it != state.values.end(); ++it) {
+        if (output->size() == maximum) {
+            *more = true;
+            break;
+        }
+        output->insert(it->first);
+    }
+
+    return 0;
+}
+
+int cls_cxx_map_remove_range(cls_method_context_t context, const std::string& first,
+                             const std::string& last)
+{
+    auto& state = *static_cast<storage *>(context);
+    byte_buffer arguments;
+    ::ceph::encode(std::pair {first, last}, arguments);
+    if (const int result = effect(state, "remove-range", arguments); result < 0) {
+        return result;
+    }
+    const auto begin = state.values.lower_bound(first);
+    const auto end = state.values.lower_bound(last);
+    state.values.erase(begin, end);
 
     return 0;
 }
@@ -901,4 +940,168 @@ TEST_CASE("Remaining OLH request rejection and unlink failures preserve native s
         CHECK(invoke_write(state, unlink, "bucket_unlink_instance") == -EAGAIN);
         CHECK(state.effects.size() == call);
     }
+}
+
+namespace
+{
+const std::string log_prefix {"\x80" "0_"};
+const std::string instance_prefix {"\x80" "1000_"};
+
+storage log_storage()
+{
+    storage state;
+    for (const std::string id : {"a", "b", "c"}) {
+        ::rgw_bi_log_entry row;
+        row.id = id;
+        row.object = std::string {"n\0m", 3};
+        row.tag = std::string(80, 't');
+        row.op = ::CLS_RGW_OP_DEL;
+        row.state = ::CLS_RGW_STATE_COMPLETE;
+        row.zones_trace.insert("zone", "location");
+        ::encode(row, state.values[log_prefix + id]);
+    }
+    state.values["plain"] = {};
+    state.values[instance_prefix + "unrelated"] = {};
+
+    return state;
+}
+
+auto log_reply(const storage& state)
+{
+    ::cls_rgw_bi_log_list_ret reply;
+    auto cursor = state.reply.cbegin();
+    ::decode(reply, cursor);
+    CHECK(cursor.end());
+
+    return reply;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Bilog module list preserves page markers truncation and namespace bounds", "[rgw][cls][bilog]")
+{
+    storage state = log_storage();
+    const auto original = state.values;
+    ::cls_rgw_bi_log_list_op request;
+    request.max = 1;
+    for (const std::string id : {"a", "b", "c"}) {
+        REQUIRE(invoke_write(state, request, "bi_log_list") == 0);
+        const auto reply = log_reply(state);
+        REQUIRE(reply.entries.size() == 1);
+        CHECK(reply.entries.front().id == id);
+        CHECK(reply.entries.front().tag == std::string(80, 't'));
+        CHECK(reply.truncated);
+        request.marker = id;
+    }
+    REQUIRE(invoke_write(state, request, "bi_log_list") == 0);
+    CHECK(log_reply(state).entries.empty());
+    CHECK_FALSE(log_reply(state).truncated);
+    request.marker.clear();
+    request.max = 100;
+    REQUIRE(invoke_write(state, request, "bi_log_list") == 0);
+    const auto all = log_reply(state);
+    CHECK(all.entries.size() == 3);
+    CHECK_FALSE(all.truncated);
+    CHECK(state.values == original);
+    CHECK(std::ranges::all_of(effect_names(state), [](const auto& name) { return name == "get-values"; }));
+}
+
+TEST_CASE("Bilog module list retains zero limits empty results corruption and read errors", "[rgw][cls][bilog]")
+{
+    ::cls_rgw_bi_log_list_op request;
+    request.max = 0;
+    storage state = log_storage();
+    REQUIRE(invoke_write(state, request, "bi_log_list") == 0);
+    CHECK(log_reply(state).entries.empty());
+    CHECK(log_reply(state).truncated);
+    state = {};
+    request.max = 100;
+    REQUIRE(invoke_write(state, request, "bi_log_list") == 0);
+    CHECK(log_reply(state).entries.empty());
+    CHECK_FALSE(log_reply(state).truncated);
+    state = log_storage();
+    state.values[log_prefix + "b"].clear();
+    CHECK(invoke_write(state, request, "bi_log_list") == -EIO);
+    CHECK(state.reply.length() == 0);
+    state = log_storage();
+    // Native iteration compares > rather than >= at the namespace sentinel.
+    state.values[instance_prefix] = {};
+    CHECK(invoke_write(state, request, "bi_log_list") == -EIO);
+    CHECK(state.reply.length() == 0);
+    state = log_storage();
+    state.failure_call = 1;
+    CHECK(invoke_write(state, request, "bi_log_list") == -EAGAIN);
+    CHECK(state.effects.size() == 1);
+}
+
+TEST_CASE("Bilog module trim preserves exclusive start inclusive end and empty-end namespace", "[rgw][cls][bilog]")
+{
+    ::cls_rgw_bi_log_trim_op request;
+    request.start_marker = "a";
+    request.end_marker = "b";
+    storage state = log_storage();
+    REQUIRE(invoke_write(state, request, "bi_log_trim") == 0);
+    CHECK(state.values.contains(log_prefix + "a"));
+    CHECK_FALSE(state.values.contains(log_prefix + "b"));
+    CHECK(state.values.contains(log_prefix + "c"));
+    CHECK((effect_names(state) == std::vector<std::string> {"get-keys", "remove-range"}));
+    request.start_marker.clear();
+    request.end_marker.clear();
+    REQUIRE(invoke_write(state, request, "bi_log_trim") == 0);
+    CHECK(state.values.size() == 2);
+    CHECK(state.values.contains("plain"));
+    CHECK(state.values.contains(instance_prefix + "unrelated"));
+
+    state = log_storage();
+    state.values[log_prefix + std::string {"b\0", 2}] = {};
+    request.end_marker = "b";
+    REQUIRE(invoke_write(state, request, "bi_log_trim") == 0);
+    CHECK_FALSE(state.values.contains(log_prefix + "b"));
+    CHECK(state.values.contains(log_prefix + std::string {"b\0", 2}));
+}
+
+TEST_CASE("Bilog module trim retains empty-range and storage failure statuses", "[rgw][cls][bilog]")
+{
+    ::cls_rgw_bi_log_trim_op request;
+    request.start_marker = "z";
+    request.end_marker = "zz";
+    storage state = log_storage();
+    CHECK(invoke_write(state, request, "bi_log_trim") == -ENODATA);
+    CHECK((effect_names(state) == std::vector<std::string> {"get-keys"}));
+    state = {};
+    request.start_marker.clear();
+    request.end_marker.clear();
+    CHECK(invoke_write(state, request, "bi_log_trim") == -ENODATA);
+    for (const unsigned failure : {1, 2}) {
+        state = log_storage();
+        const auto original = state.values;
+        state.failure_call = failure;
+        CHECK(invoke_write(state, request, "bi_log_trim") == -EAGAIN);
+        CHECK(state.effects.size() == failure);
+        CHECK(state.values == original);
+    }
+}
+
+TEST_CASE("Bilog module rejects every incomplete request before storage access", "[rgw][cls][bilog]")
+{
+    const auto check = [](const auto& request, const std::string_view operation) {
+        byte_buffer full;
+        ::encode(request, full);
+        for (unsigned size = 0; size < full.length(); ++size) {
+            byte_buffer prefix;
+            prefix.substr_of(full, 0, size);
+            storage state;
+            CHECK(invoke(state, prefix, operation) == -EINVAL);
+            CHECK(state.effects.empty());
+            CHECK(state.reply.length() == 0);
+        }
+    };
+    ::cls_rgw_bi_log_list_op list;
+    list.marker = std::string {"m\0r", 3};
+    list.max = 100;
+    check(list, "bi_log_list");
+    ::cls_rgw_bi_log_trim_op trim;
+    trim.start_marker = "start";
+    trim.end_marker = "end";
+    check(trim, "bi_log_trim");
 }

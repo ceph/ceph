@@ -26,6 +26,14 @@ if(TARGET cls_rgw_datum)
     cls_rgw_client Catch2::Catch2 ceph-common ${FMT_LIB})
   set_target_properties(unittest_cls_rgw_write_wire PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
   add_test(NAME cls_rgw_write_wire COMMAND unittest_cls_rgw_write_wire)
+
+  add_executable(unittest_cls_rgw_bilog_wire
+    "${CMAKE_CURRENT_LIST_DIR}/bilog_wire.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/bi_wire_main.cc")
+  target_link_libraries(unittest_cls_rgw_bilog_wire PRIVATE
+    cls_rgw_client Catch2::Catch2 ceph-common ${FMT_LIB})
+  set_target_properties(unittest_cls_rgw_bilog_wire PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+  add_test(NAME cls_rgw_bilog_wire COMMAND unittest_cls_rgw_bilog_wire)
 endif()
 
 add_executable(unittest_cls_rgw_bi_client
@@ -35,3 +43,14 @@ target_link_libraries(unittest_cls_rgw_bi_client PRIVATE
   cls_rgw_client librados global Catch2::Catch2 ceph-common ${FMT_LIB})
 set_target_properties(unittest_cls_rgw_bi_client PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 add_test(NAME cls_rgw_bi_client COMMAND unittest_cls_rgw_bi_client)
+
+add_executable(unittest_cls_rgw_bilog_client
+  "${CMAKE_CURRENT_LIST_DIR}/bilog_client.cc"
+  "${CMAKE_CURRENT_LIST_DIR}/bi_wire_main.cc")
+target_link_libraries(unittest_cls_rgw_bilog_client PRIVATE
+  cls_rgw_client librados global Catch2::Catch2 ceph-common ${FMT_LIB})
+set_target_properties(unittest_cls_rgw_bilog_client PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+if(TARGET cls_rgw_datum)
+  target_compile_definitions(unittest_cls_rgw_bilog_client PRIVATE TEST_RGW_CLS_DATUM)
+endif()
+add_test(NAME cls_rgw_bilog_client COMMAND unittest_cls_rgw_bilog_client)
