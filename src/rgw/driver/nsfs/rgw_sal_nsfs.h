@@ -312,10 +312,16 @@ public:
    * been told otherwise.  Who, not a personality id:  open() and
    * create() look the id up on the thread they run on.
    *
-   * It applies to the *final component* only:  the parent
-   * descriptor was resolved by the gateway, so ancestor directories
-   * are not rechecked.  Per-directory enforcement is separate work
-   * and collides with the directory descriptor cache. */
+   * It applies to the *final component* only.  `resolve_path()`
+   * opens each ancestor with `Directory::open()`, which takes no
+   * identity, so a key directory's own permissions are never checked
+   * against the requester.  NooBaa checks every component, because
+   * it opens an object by its path under the requester's
+   * credentials;  closing that gap means passing this down the walk.
+   *
+   * There is no descriptor cache in the way:  `dir_chain` is built
+   * per request and `Directory::open()` memoises `fd` on the entry,
+   * which lasts one request. */
   void set_identity(const nsfs::FSIdentity& id) { identity = id; }
   const nsfs::FSIdentity& get_identity() const { return identity; }
 
