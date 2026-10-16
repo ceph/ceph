@@ -148,9 +148,14 @@ Dashboard
 cephadm / Orchestrator
 -----------------------
 
-- Certificate management overhaul: a ``certmgr`` service now
-  issues/tracks TLS certs across mgmt-gateway, monitoring stack, NFS,
-  RGW, and more, replacing ad hoc per-service cert handling.
+- **Extended certificate management:** cephadm now provides comprehensive
+  ``certmgr`` integration across managed services including mgmt-gateway,
+  monitoring stack, NFS, and RGW. Services support auto-generated and
+  renewed cephadm-signed certificates, user-provided certificates, and
+  certificate-store references. TLS PEM handling is now standardized with
+  support for full certificate chains and automatic separation of
+  certificates and private keys, simplifying certificate management across
+  services.
 - SMB/Samba cluster support (the managed service type itself shipped in
   Tentacle): new remote-control client tool, per-share QoS/bandwidth rate
   limiting, custom ports, keybridge/FSCrypt-based share configuration,
