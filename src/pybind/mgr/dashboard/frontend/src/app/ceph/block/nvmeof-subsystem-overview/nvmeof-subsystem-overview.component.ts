@@ -132,7 +132,8 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
       {
         label: $localize`Listeners`,
         value:
-          (this.subsystem.network_mask?.length ?? 0) > 0
+          (this.subsystem.network_mask?.length ?? 0) > 0 ||
+          this.subsystem.use_conf_listener_network_masks
             ? $localize`Auto-fetched`
             : $localize`Manually selected`,
         type: 'listeners',

@@ -131,6 +131,31 @@ describe('NvmeofSubsystemsFormComponent', () => {
       });
     });
 
+    it('should set use_conf_listener_network_masks in createSubsystem request when useGroupNetworkMask is true', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'auto-fetch',
+        useGroupNetworkMask: true
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        dhchap_key: '',
+        use_conf_listener_network_masks: true
+      });
+    });
+
     it('should not include network_mask in createSubsystem request when listenerMode is manual', () => {
       const payload: SubsystemPayload = {
         nqn: 'test-nqn',

@@ -50,11 +50,12 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
 
     nvmeofService = TestBed.inject(NvmeofService);
     spyOn(nvmeofService, 'getHostsForGroup').and.returnValue(of([]));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    component.group = mockGroupName;
     component.ngOnInit();
     form = component.formGroup;
     formHelper = new FormHelper(form);
     fixture.detectChanges();
-    component.group = mockGroupName;
   });
 
   it('should create', () => {
@@ -102,6 +103,32 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
       form.get('listeners')?.updateValueAndValidity();
 
       expect(form.get('listeners')?.hasError('required')).toBeFalsy();
+    });
+
+    it('should not require subnet mask when useGroupNetworkMask is true', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.AUTO_FETCH);
+      formHelper.setValue('useGroupNetworkMask', true);
+      formHelper.setValue('subnetMask', '');
+      form.get('subnetMask')?.updateValueAndValidity();
+
+      expect(form.get('subnetMask')?.hasError('required')).toBeFalsy();
+    });
+
+    it('should populate gwGroupNetworkMasks and set useGroupNetworkMask when group has listener_network_masks', () => {
+      const mockGwGroup = {
+        service_id: mockGroupName,
+        spec: {
+          group: mockGroupName,
+          listener_network_masks: ['10.0.0.0/24', '192.168.1.0/24']
+        }
+      };
+      (nvmeofService.listGatewayGroups as jasmine.Spy).and.returnValue(of([[mockGwGroup]]));
+
+      component.setHosts();
+
+      expect(component.hasGroupNetworkMask).toBe(true);
+      expect(component.gwGroupNetworkMasks).toEqual(['10.0.0.0/24', '192.168.1.0/24']);
+      expect(component.formGroup.get('useGroupNetworkMask')?.value).toBe(true);
     });
   });
 });
