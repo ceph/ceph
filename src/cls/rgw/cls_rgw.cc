@@ -2088,7 +2088,11 @@ static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in
 {
   CLS_LOG(10, "entered %s", __func__);
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::write_datum::refresh_request op;
+#else
   rgw_cls_refresh_instance_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2158,7 +2162,11 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   string instance_idx;
 
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::write_datum::unlink_request op;
+#else
   rgw_cls_unlink_instance_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2514,7 +2522,11 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::write_datum::clear_request op;
+#else
   rgw_cls_bucket_clear_olh_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);

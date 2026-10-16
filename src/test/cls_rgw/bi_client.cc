@@ -400,3 +400,58 @@ TEST_CASE("OLH link and trim builders own encoded bytes from borrowed fragmented
         }
     }
 }
+
+TEST_CASE("OLH unlink clear and refresh builders preserve native bytes and receipt paths", "[rgw][cls][write]")
+{
+    for (const bool populated : {false, true}) {
+        byte_buffer expected;
+        byte_buffer receipt;
+        {
+            ::rgw_cls_unlink_instance_op reference;
+            reference.key = {std::string {"n\0m", 3}, std::string(80, 'i')};
+            reference.op_tag = std::string(80, 't');
+            reference.olh_tag = std::string {"o\0h", 3};
+            reference.olh_epoch = std::numeric_limits<std::uint64_t>::max();
+            reference.log_op = populated;
+            reference.bilog_flags = 0xFEDC;
+            if (populated) { reference.zones_trace.insert("zone", "location"); }
+            ::encode(reference, expected);
+            ::librados::ObjectWriteOperation operation;
+            ::cls_rgw_bucket_unlink_instance(operation, reference.key, reference.op_tag,
+                reference.olh_tag, reference.olh_epoch, reference.log_op, reference.bilog_flags,
+                reference.zones_trace, populated ? &receipt : nullptr);
+        }
+        CHECK(request_method == "bucket_unlink_instance");
+        CHECK(request_output == (populated ? &receipt : nullptr));
+        CHECK(request_bytes.contents_equal(expected));
+    }
+
+    ::cls_rgw_obj_key key {"object", "instance"};
+    ::rgw_cls_refresh_instance_op refresh;
+    refresh.key = key;
+    byte_buffer expected;
+    ::encode(refresh, expected);
+    ::librados::ObjectWriteOperation operation;
+    ::cls_rgw_bucket_refresh_instance(operation, key);
+    CHECK(request_method == "bucket_refresh_instance");
+    CHECK(request_bytes.contents_equal(expected));
+    ::rgw_cls_bucket_clear_olh_op clear;
+    clear.key.name = "object";
+    clear.olh_tag = std::string {"t\0g", 3};
+    expected.clear();
+    ::encode(clear, expected);
+    ::cls_rgw_clear_olh(operation, clear.key, clear.olh_tag);
+    CHECK(request_method == "bucket_clear_olh");
+    CHECK(request_bytes.contents_equal(expected));
+
+    ::librados::IoCtx context;
+    std::string oid = "object";
+    const ::rgw_zone_set zones;
+    for (const int status : {-EAGAIN, 0, 7}) {
+        put_transport_status = status;
+        CHECK(::cls_rgw_bucket_unlink_instance(context, oid, key, "op", "olh", 7, false, 0, zones) ==
+              (status < 0 ? status : 0));
+        CHECK(::cls_rgw_clear_olh(context, oid, clear.key, clear.olh_tag) == status);
+    }
+    put_transport_status = 0;
+}

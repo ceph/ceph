@@ -10,6 +10,9 @@ The prepare, complete, OLH link and OLH trim builders borrow their arguments
 during encoding, and their modules decode independent request records. Complete
 decodes the client's removal-list encoding directly into a vector. Storage
 algorithms and nested metadata, packed-version and zone codecs remain native.
+OLH unlink, clear and refresh also use borrowed client encoders and independent
+module records. Key-only and key/tag messages reuse the object-key profile;
+unlink retains its tag and zone field-version gates and epoch receipt path.
 Other RGW CLS operations continue to use their existing codecs.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and

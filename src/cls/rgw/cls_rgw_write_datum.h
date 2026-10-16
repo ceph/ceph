@@ -66,11 +66,37 @@ struct trim_request final
     std::uint64_t ver = 0;
 };
 
+struct unlink_request final
+{
+    ::cls_rgw_obj_key key;
+    std::string op_tag;
+    std::string olh_tag;
+    ::rgw_zone_set zones_trace;
+
+    std::uint64_t olh_epoch = 0;
+    bool log_op = false;
+    std::uint16_t bilog_flags = 0;
+};
+
+struct clear_request final
+{
+    ::cls_rgw_obj_key key;
+    std::string olh_tag;
+};
+
+struct refresh_request final
+{
+    ::cls_rgw_obj_key key;
+};
+
 // Publish the complete candidate and input cursor together after validation.
 void decode(prepare_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(link_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(unlink_request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(clear_request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input);
 
 ::ceph::buffer::list encode_prepare(::RGWModifyOp operation, std::string_view tag,
                                     const ::cls_rgw_obj_key& key, std::string_view locator);
@@ -89,6 +115,11 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input);
                                  bool precise, bool log, const ::rgw_zone_set& zones);
 ::ceph::buffer::list encode_trim(const ::cls_rgw_obj_key& key, std::uint64_t version,
                                  std::string_view tag);
+::ceph::buffer::list encode_unlink(const ::cls_rgw_obj_key& key, std::string_view operation_tag,
+                                   std::string_view tag, std::uint64_t epoch, bool log,
+                                   std::uint16_t flags, const ::rgw_zone_set& zones);
+::ceph::buffer::list encode_clear(const ::cls_rgw_obj_key& key, std::string_view tag);
+::ceph::buffer::list encode_refresh(const ::cls_rgw_obj_key& key);
 
 } // cls::rgw::write_datum
 

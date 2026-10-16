@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -740,4 +741,164 @@ TEST_CASE("OLH link preserves version, time and tag behavior", "[rgw][cls][write
     request.zones_trace.insert("zone", "location");
     ++request.olh_epoch;
     REQUIRE(invoke_write(state, request, "bucket_link_olh") == 0);
+}
+
+TEST_CASE("OLH refresh copies instance metadata to its listing only", "[rgw][cls][write]")
+{
+    storage state;
+    const auto link = link_request();
+    REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+    const auto instance = std::ranges::find_if(state.values, [](const auto& item) {
+        return item.first.starts_with("\x80" "1000_");
+    });
+    REQUIRE(instance != state.values.end());
+    ::rgw_bucket_dir_entry updated;
+    auto cursor = instance->second.cbegin();
+    ::decode(updated, cursor);
+    updated.meta.etag = "updated";
+    instance->second.clear();
+    ::encode(updated, instance->second);
+    const auto stored_instance = instance->second;
+    const auto stored_head = state.values.at(olh_key());
+    state.effects.clear();
+    ::rgw_cls_refresh_instance_op refresh;
+    refresh.key = link.key;
+    REQUIRE(invoke_write(state, refresh, "bucket_refresh_instance") == 0);
+    CHECK(state.values.at(instance->first).contents_equal(stored_instance));
+    CHECK(state.values.at(olh_key()).contents_equal(stored_head));
+    CHECK(header(state).stats.empty());
+    CHECK(effect_names(state) == std::vector<std::string> {"read-header", "get-value", "set-value", "write-header"});
+    std::pair<std::string, byte_buffer> written;
+    cursor = state.effects[2].second.cbegin();
+    ::ceph::decode(written, cursor);
+    CHECK(written.first != instance->first);
+    CHECK(written.second.contents_equal(stored_instance));
+}
+
+TEST_CASE("OLH refresh skips missing and ordinary unversioned entries", "[rgw][cls][write]")
+{
+    for (const bool exists : {false, true}) {
+        storage state;
+        if (exists) { state.values["object"] = entry("object", 17).data; }
+        const auto before = state.values;
+        ::rgw_cls_refresh_instance_op request;
+        request.key.name = "object";
+        REQUIRE(invoke_write(state, request, "bucket_refresh_instance") == 0);
+        CHECK(effect_names(state) == std::vector<std::string> {"read-header", "get-value"});
+        CHECK(state.values.size() == before.size());
+        CHECK(state.header.length() == 0);
+    }
+}
+
+TEST_CASE("OLH clear removes version markers while preserving ordinary entries", "[rgw][cls][write]")
+{
+    for (const bool marker : {false, true}) {
+        storage state;
+        ::rgw_bucket_olh_entry head;
+        head.key.name = "object";
+        head.tag = "olh-tag";
+        ::encode(head, state.values[olh_key()]);
+        ::rgw_bucket_dir_entry plain;
+        plain.key.name = "object";
+        plain.flags = marker ? ::rgw_bucket_dir_entry::FLAG_VER_MARKER : 0;
+        ::encode(plain, state.values["object"]);
+        ::rgw_cls_bucket_clear_olh_op request;
+        request.key.name = "object";
+        request.olh_tag = "wrong";
+        CHECK(invoke_write(state, request, "bucket_clear_olh") == -ECANCELED);
+        CHECK(state.values.size() == 2);
+        request.olh_tag = head.tag;
+        REQUIRE(invoke_write(state, request, "bucket_clear_olh") == 0);
+        CHECK_FALSE(state.values.contains(olh_key()));
+        CHECK(state.values.contains("object") == !marker);
+    }
+}
+
+TEST_CASE("OLH unlink and clear retain last-version removal behavior", "[rgw][cls][write]")
+{
+    storage state;
+    const auto link = link_request();
+    REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+    ::rgw_cls_unlink_instance_op unlink;
+    unlink.key = link.key;
+    unlink.op_tag = "unlink";
+    unlink.olh_epoch = 6;
+    // The existing unlink operation does not compare this tag for an existing
+    // head. Retain that behavior;clear has a separate tag guard.
+    unlink.olh_tag = "different";
+    REQUIRE(invoke_write(state, unlink, "bucket_unlink_instance") == 0);
+    CHECK(olh_entry(state).tag == link.olh_tag);
+    CHECK_FALSE(olh_entry(state).exists);
+    CHECK(olh_entry(state).pending_removal);
+    CHECK(olh_entry(state).key.instance.empty());
+    ::rgw_cls_bucket_clear_olh_op clear;
+    clear.key.name = "object";
+    clear.olh_tag = link.olh_tag;
+    REQUIRE(invoke_write(state, clear, "bucket_clear_olh") == 0);
+    CHECK(state.values.empty());
+}
+
+TEST_CASE("OLH unlink promotes the next version and keeps the stored head tag", "[rgw][cls][write]")
+{
+    storage state;
+    auto link = link_request();
+    REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+    link.key.instance = "v2";
+    ++link.olh_epoch;
+    REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+    REQUIRE(olh_entry(state).key.instance == "v2");
+    ::rgw_cls_unlink_instance_op request;
+    request.key = link.key;
+    request.op_tag = "unlink";
+    request.olh_tag = "different";
+    request.olh_epoch = 7;
+    request.log_op = true;
+    request.zones_trace.insert("zone", "location");
+    REQUIRE(invoke_write(state, request, "bucket_unlink_instance") == 0);
+    CHECK(olh_entry(state).key.instance == "v1");
+    CHECK(olh_entry(state).exists);
+    CHECK(olh_entry(state).delete_marker);
+    CHECK(olh_entry(state).tag == link.olh_tag);
+}
+
+TEST_CASE("Remaining OLH request rejection and unlink failures preserve native stages", "[rgw][cls][write]")
+{
+    const auto reject_prefixes = [](const auto& request, const std::string_view operation) {
+        byte_buffer full;
+        ::encode(request, full);
+        for (unsigned size = 0; size < full.length(); ++size) {
+            storage state;
+            byte_buffer input;
+            input.substr_of(full, 0, size);
+            CHECK(invoke(state, std::move(input), operation) == -EINVAL);
+            CHECK(state.effects.empty());
+        }
+    };
+    ::rgw_cls_refresh_instance_op refresh;
+    refresh.key.name = "object";
+    reject_prefixes(refresh, "bucket_refresh_instance");
+    ::rgw_cls_bucket_clear_olh_op clear;
+    clear.key = {"object", "bad-instance"};
+    reject_prefixes(clear, "bucket_clear_olh");
+    storage invalid;
+    CHECK(invoke_write(invalid, clear, "bucket_clear_olh") == -EINVAL);
+    CHECK(invalid.effects.empty());
+    ::rgw_cls_unlink_instance_op unlink;
+    unlink.key = link_request().key;
+    unlink.olh_epoch = 6;
+    reject_prefixes(unlink, "bucket_unlink_instance");
+    CHECK(invoke_write(invalid, unlink, "bucket_unlink_instance") == -ENOENT);
+
+    storage baseline;
+    REQUIRE(invoke_write(baseline, link_request(), "bucket_link_olh") == 0);
+    baseline.effects.clear();
+    REQUIRE(invoke_write(baseline, unlink, "bucket_unlink_instance") == 0);
+    for (unsigned call = 1; call <= baseline.effects.size(); ++call) {
+        storage state;
+        REQUIRE(invoke_write(state, link_request(), "bucket_link_olh") == 0);
+        state.effects.clear();
+        state.failure_call = call;
+        CHECK(invoke_write(state, unlink, "bucket_unlink_instance") == -EAGAIN);
+        CHECK(state.effects.size() == call);
+    }
 }

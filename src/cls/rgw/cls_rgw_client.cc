@@ -437,10 +437,14 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
 
 void cls_rgw_bucket_refresh_instance(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::write_datum::encode_refresh(key);
+#else
   bufferlist in;
   rgw_cls_refresh_instance_op call;
   call.key = key;
   encode(call, in);
+#endif
   op.exec(method::bucket_refresh_instance, in);
 }
 
@@ -464,6 +468,10 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    uint16_t bilog_flags, const rgw_zone_set& zones_trace,
                                    bufferlist* epoch_out_bl)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::write_datum::encode_unlink(key, op_tag, olh_tag, olh_epoch,
+                                                log_op, bilog_flags, zones_trace);
+#else
   bufferlist in;
   rgw_cls_unlink_instance_op call;
   call.key = key;
@@ -474,6 +482,7 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
   call.zones_trace = zones_trace;
   call.bilog_flags = bilog_flags;
   encode(call, in);
+#endif
   if (epoch_out_bl) {
     op.exec(method::bucket_unlink_instance, in, epoch_out_bl, nullptr);
   } else {
@@ -622,11 +631,15 @@ int cls_rgw_clear_olh(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, co
 
 void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, const string& olh_tag)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::write_datum::encode_clear(olh, olh_tag);
+#else
   bufferlist in;
   rgw_cls_bucket_clear_olh_op call;
   call.key = olh;
   call.olh_tag = olh_tag;
   encode(call, in);
+#endif
   op.exec(method::bucket_clear_olh, in);
 }
 

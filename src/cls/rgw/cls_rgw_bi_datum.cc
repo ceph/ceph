@@ -292,6 +292,59 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
     input = cursor;
 }
 
+void decode(unlink_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    unlink_request candidate;
+    reader archive {cursor};
+    archive.frame(3, [&](auto& fields, const std::uint8_t version) {
+        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        fields.text(candidate.op_tag);
+        candidate.olh_epoch = fields.template scalar<std::uint64_t>();
+        candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
+        candidate.bilog_flags = fields.template scalar<std::uint16_t>();
+        if (version >= 2) {
+            fields.text(candidate.olh_tag);
+        }
+        if (version >= 3) {
+            fields.native(candidate.zones_trace);
+        }
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void decode(clear_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    clear_request candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        fields.text(candidate.olh_tag);
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    refresh_request candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
 ::ceph::buffer::list encode_prepare(const ::RGWModifyOp operation, const std::string_view tag,
                                     const ::cls_rgw_obj_key& key, const std::string_view locator)
 {
@@ -379,6 +432,48 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
         ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
         archive.scalar(version);
         archive.text(tag);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_unlink(const ::cls_rgw_obj_key& key, const std::string_view operation_tag,
+                                   const std::string_view tag, const std::uint64_t epoch,
+                                   const bool log, const std::uint16_t flags, const ::rgw_zone_set& zones)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(3, [&] {
+        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        archive.text(operation_tag);
+        archive.scalar(epoch);
+        archive.scalar(static_cast<std::uint8_t>(log));
+        archive.scalar(flags);
+        archive.text(tag);
+        archive.native(zones);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_clear(const ::cls_rgw_obj_key& key, const std::string_view tag)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        archive.text(tag);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_refresh(const ::cls_rgw_obj_key& key)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
     });
 
     return output;

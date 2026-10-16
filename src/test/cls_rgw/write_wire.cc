@@ -107,6 +107,34 @@ bytes encoded(const ::rgw_cls_trim_olh_log_op& value, const std::uint8_t version
     });
 }
 
+bytes encoded(const ::rgw_cls_unlink_instance_op& value, const std::uint8_t version)
+{
+    return envelope(version, false, [&](bytes& output) {
+        ::encode(value.key, output);
+        ::ceph::encode(value.op_tag, output);
+        ::ceph::encode(value.olh_epoch, output);
+        ::ceph::encode(std::uint8_t {0x80}, output);
+        ::ceph::encode(value.bilog_flags, output);
+        if (version >= 2) { ::ceph::encode(value.olh_tag, output); }
+        if (version >= 3) { ::encode(value.zones_trace, output); }
+    });
+}
+
+bytes encoded(const ::rgw_cls_bucket_clear_olh_op& value, const std::uint8_t version)
+{
+    return envelope(version, false, [&](bytes& output) {
+        ::encode(value.key, output);
+        ::ceph::encode(value.olh_tag, output);
+    });
+}
+
+bytes encoded(const ::rgw_cls_refresh_instance_op& value, const std::uint8_t version)
+{
+    return envelope(version, false, [&](bytes& output) {
+        ::encode(value.key, output);
+    });
+}
+
 auto native(const binding::prepare_request& value)
 {
     ::rgw_cls_obj_prepare_op result;
@@ -162,6 +190,37 @@ auto native(const binding::trim_request& value)
     result.olh = value.olh;
     result.olh_tag = value.olh_tag;
     result.ver = value.ver;
+
+    return result;
+}
+
+auto native(const binding::unlink_request& value)
+{
+    ::rgw_cls_unlink_instance_op result;
+    result.key = value.key;
+    result.op_tag = value.op_tag;
+    result.olh_tag = value.olh_tag;
+    result.olh_epoch = value.olh_epoch;
+    result.zones_trace = value.zones_trace;
+    result.log_op = value.log_op;
+    result.bilog_flags = value.bilog_flags;
+
+    return result;
+}
+
+auto native(const binding::clear_request& value)
+{
+    ::rgw_cls_bucket_clear_olh_op result;
+    result.key = value.key;
+    result.olh_tag = value.olh_tag;
+
+    return result;
+}
+
+auto native(const binding::refresh_request& value)
+{
+    ::rgw_cls_refresh_instance_op result;
+    result.key = value.key;
 
     return result;
 }
@@ -316,4 +375,28 @@ TEST_CASE("Independent OLH trim requests retain native framing", "[rgw][cls][dat
     request.olh_tag = std::string {"t\0g", 3};
     request.ver = std::numeric_limits<std::uint64_t>::max();
     check_versions<binding::trim_request>(request, 10);
+}
+
+TEST_CASE("Independent OLH unlink requests preserve tag and zone versions", "[rgw][cls][datum][write]")
+{
+    ::rgw_cls_unlink_instance_op request;
+    request.key = {std::string {"n\0m", 3}, "instance"};
+    request.op_tag = std::string {"t\0g", 3};
+    request.olh_tag = "olh-tag";
+    request.olh_epoch = std::numeric_limits<std::uint64_t>::max();
+    request.bilog_flags = 0xFEDC;
+    request.zones_trace.insert("zone", "location");
+    check_versions<binding::unlink_request>(request, 10);
+}
+
+TEST_CASE("Independent OLH clear and refresh requests reuse the key profile", "[rgw][cls][datum][write]")
+{
+    ::rgw_cls_bucket_clear_olh_op clear;
+    clear.key.name = std::string {"n\0m", 3};
+    clear.olh_tag = std::string {"t\0g", 3};
+    check_versions<binding::clear_request>(clear, 10);
+    ::rgw_cls_refresh_instance_op refresh;
+    refresh.key = clear.key;
+    refresh.key.instance = "instance";
+    check_versions<binding::refresh_request>(refresh, 10);
 }
