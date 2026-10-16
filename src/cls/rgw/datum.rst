@@ -27,6 +27,12 @@ records with native header codecs; check/rebuild page sequences use vectors.
 Tag-timeout requests also have independent bindings. Header mutation, accounting
 and resharding rules retain their existing behavior.
 
+Object removal, PG-version storage, attribute-prefix guards and modification-time
+guards also bind independent requests. Removal decodes the public prefix-list
+encoding into a vector; its client borrows the list. String arguments are borrowed
+during encoding, and timestamps retain the native clock codec. Attribute storage,
+missing-object behavior, precision and comparison rules remain native.
+
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
 provides the C++26 implementation. Its language requirements and Datum headers
@@ -112,7 +118,8 @@ envelopes and every subsequent field-version gate. Complete reads old name-only
 removal sequences directly into key candidates as well as current key frames.
 Link retains the version-2 seconds-only timestamp and the later precise timestamp
 rules. Compatible future tails and nonzero booleans keep their native meaning.
-Each decoder publishes its candidate and cursor only after the envelope succeeds.
+A shared RGW adapter publishes each decoder's candidate and cursor only after the
+envelope succeeds, with no-throw move assignment required for publication.
 No temporary native operation record or removal-list nodes are required.
 
 Batch writes

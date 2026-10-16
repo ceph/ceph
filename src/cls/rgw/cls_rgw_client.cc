@@ -13,6 +13,7 @@
  #include "cls/rgw/cls_rgw_bi_datum.h"
  #include "cls/rgw/cls_rgw_bilog_datum.h"
  #include "cls/rgw/cls_rgw_bucket_datum.h"
+ #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -260,39 +261,55 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::object_datum::encode_remove(keep_attr_prefixes);
+#else
   rgw_cls_obj_remove_op call;
   call.keep_attr_prefixes = keep_attr_prefixes;
   encode(call, in);
+#endif
   o.exec(method::obj_remove, in);
 }
 
 void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const string& attr)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::object_datum::encode_version(attr);
+#else
   rgw_cls_obj_store_pg_ver_op call;
   call.attr = attr;
   encode(call, in);
+#endif
   o.exec(method::obj_store_pg_ver, in);
 }
 
 void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::object_datum::encode_prefix(prefix, fail_if_exist);
+#else
   rgw_cls_obj_check_attrs_prefix call;
   call.check_prefix = prefix;
   call.fail_if_exist = fail_if_exist;
   encode(call, in);
+#endif
   o.exec(method::obj_check_attrs_prefix, in);
 }
 
 void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::object_datum::encode_mtime(mtime, high_precision_time, static_cast<std::uint8_t>(type));
+#else
   rgw_cls_obj_check_mtime call;
   call.mtime = mtime;
   call.high_precision_time = high_precision_time;
   call.type = type;
   encode(call, in);
+#endif
   o.exec(method::obj_check_mtime, in);
 }
 

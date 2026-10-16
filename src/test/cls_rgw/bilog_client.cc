@@ -319,3 +319,47 @@ TEST_CASE("Index check client preserves synchronous decode and candidate error c
     CHECK(canonical(output).contents_equal(full));
 #endif
 }
+
+TEST_CASE("Object client builders retain native wire bytes after borrowed inputs change", "[rgw][cls][object]")
+{
+    ::librados::ObjectWriteOperation operation;
+    ::rgw_cls_obj_remove_op removal;
+    removal.keep_attr_prefixes = {"", "z", std::string {"a\0b", 3}, "z", std::string(80, 'x')};
+    auto expected = canonical(removal);
+    ::cls_rgw_remove_obj(operation, removal.keep_attr_prefixes);
+    removal.keep_attr_prefixes.clear();
+    CHECK(request_method == "obj_remove");
+    CHECK(request_bytes.contents_equal(expected));
+
+    for (const auto& text : {std::string {}, std::string {"a\0b", 3}, std::string(80, 'x')}) {
+        ::rgw_cls_obj_store_pg_ver_op version {text};
+        expected = canonical(version);
+        ::cls_rgw_obj_store_pg_ver(operation, version.attr);
+        version.attr.clear();
+        CHECK(request_method == "obj_store_pg_ver");
+        CHECK(request_bytes.contents_equal(expected));
+        for (const bool fail : {false, true}) {
+            ::rgw_cls_obj_check_attrs_prefix prefix;
+            prefix.check_prefix = text;
+            prefix.fail_if_exist = fail;
+            expected = canonical(prefix);
+            ::cls_rgw_obj_check_attrs_prefix(operation, prefix.check_prefix, fail);
+            prefix.check_prefix.clear();
+            CHECK(request_method == "obj_check_attrs_prefix");
+            CHECK(request_bytes.contents_equal(expected));
+        }
+    }
+    for (unsigned kind = 0; kind < 8; ++kind) {
+        for (const bool precise : {false, true}) {
+            ::rgw_cls_obj_check_mtime check;
+            check.mtime = ::ceph::real_time {std::chrono::seconds {123} + std::chrono::nanoseconds {987654321}};
+            check.type = static_cast<::RGWCheckMTimeType>(kind);
+            check.high_precision_time = precise;
+            expected = canonical(check);
+            ::cls_rgw_obj_check_mtime(operation, check.mtime, precise, check.type);
+            check.mtime = {};
+            CHECK(request_method == "obj_check_mtime");
+            CHECK(request_bytes.contents_equal(expected));
+        }
+    }
+}

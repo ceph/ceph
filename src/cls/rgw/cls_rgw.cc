@@ -24,6 +24,7 @@
  #include "cls/rgw/cls_rgw_bi_datum.h"
  #include "cls/rgw/cls_rgw_bilog_datum.h"
  #include "cls/rgw/cls_rgw_bucket_datum.h"
+ #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
@@ -2843,7 +2844,11 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::object_datum::remove_request op;
+#else
   rgw_cls_obj_remove_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2917,7 +2922,11 @@ static int rgw_obj_store_pg_ver(cls_method_context_t hctx, bufferlist *in, buffe
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::object_datum::version_request op;
+#else
   rgw_cls_obj_store_pg_ver_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2942,7 +2951,11 @@ static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in,
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::object_datum::prefix_request op;
+#else
   rgw_cls_obj_check_attrs_prefix op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2986,7 +2999,11 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::object_datum::mtime_request op;
+#else
   rgw_cls_obj_check_mtime op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
