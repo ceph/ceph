@@ -704,11 +704,17 @@ struct PromoteResult {
   std::string etag;
 };
 
-static void promote_version(int parent_fd, const std::string& leaf,
-                            const DoutPrefixProvider* dpp,
-                            FSStrategy* fs_strategy,
-                            const nsfs::XattrStrategy* xs,
-                            PromoteResult* out = nullptr)
+/* 0 when the current name ends up in the state it should be in --
+ * promoted here, held by a writer who got there first, or nothing to
+ * promote -- and -errno when a promote was needed and did not happen.
+ * A promote that fails leaves the version entry in .versions/, so the
+ * bucket is never empty and DeleteBucket answers 409 forever;  that
+ * went unreported while this returned void. */
+static int promote_version(int parent_fd, const std::string& leaf,
+                           const DoutPrefixProvider* dpp,
+                           FSStrategy* fs_strategy,
+                           const nsfs::XattrStrategy* xs,
+                           PromoteResult* out = nullptr)
 {
   ldpp_dout(dpp, 10) << "promote_version: enter leaf=" << leaf
     << " parent_fd=" << parent_fd << dendl;
@@ -720,15 +726,17 @@ static void promote_version(int parent_fd, const std::string& leaf,
       ldpp_dout(dpp, 10) << "promote_version: " << leaf
         << " current already exists (ino=" << cur_stx.stx_ino
         << "), bail" << dendl;
-      return;
+      return 0;
     }
 
     int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
                        O_RDONLY | O_DIRECTORY);
     if (vfd < 0) {
-      ldpp_dout(dpp, 10) << "promote_version: " << leaf
-        << " .versions/ not found (errno=" << errno << ")" << dendl;
-      return;
+      int err = errno;
+      ldpp_dout(dpp, err == ENOENT ? 10 : 0) << "promote_version: " << leaf
+        << " .versions/ not opened (errno=" << err << ")" << dendl;
+      /* no .versions/ is nothing to promote;  anything else is */
+      return err == ENOENT ? 0 : -err;
     }
 
     /* find newest version entry for this key (including delete markers) */
@@ -775,7 +783,7 @@ static void promote_version(int parent_fd, const std::string& leaf,
       ldpp_dout(dpp, 10) << "promote_version: " << leaf
         << " no versions to promote" << dendl;
       ::close(vfd);
-      return;
+      return 0;
     }
     ldpp_dout(dpp, 10) << "promote_version: " << leaf
       << " candidate=" << max_name << dendl;
@@ -783,47 +791,133 @@ static void promote_version(int parent_fd, const std::string& leaf,
     struct statx cand_stx;
     if (statx(vfd, max_name.c_str(), AT_SYMLINK_NOFOLLOW,
               STATX_ALL, &cand_stx) < 0) {
+      int err = errno;
       ::close(vfd);
-      return;
+      if (err == ENOENT) {
+        /* the entry went while the scan was running, so another
+         * thread is working this key.  Re-scan rather than report:
+         * either its promote took the current name, which the next
+         * attempt's first check sees, or another entry is the newest
+         * now. */
+        struct timespec ts = {0, 100000 + (rand() % 500000)};
+        nanosleep(&ts, nullptr);
+        continue;
+      }
+      ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+        << " cannot stat candidate " << max_name << ": "
+        << cpp_strerror(err) << dendl;
+      return -err;
     }
 
-    /* CAS link: .versions/candidate → current path */
-    SafeResult sr = fs_strategy->safe_link(dpp, vfd, max_name,
-                                           parent_fd, leaf,
-                                           statx_mtime_ns(cand_stx),
-                                           cand_stx.stx_ino);
-    ldpp_dout(dpp, 10) << "promote_version: safe_link " << max_name
-      << " → " << leaf << " result=" << (int)sr << dendl;
-    if (sr == SafeResult::OK) {
-      /* unlink the .versions/ entry */
-      ::unlinkat(vfd, max_name.c_str(), 0);
+    /* As the owner of the version being promoted.
+     *
+     * Each of the three steps below is refused to the gateway against
+     * a version an identity wrote:  fs.protected_hardlinks permits a
+     * link only to the target's owner, a sticky .versions/ entry is
+     * the file owner's to unlink, and the timestamp comes off the
+     * owner's file.  Nobody configures a promote, so neither the
+     * requester nor the bucket owner has a claim to perform it, and
+     * either is refused the same way unless it happens to be the
+     * writer.  The file says who wrote it, and a hard link preserves
+     * the inode's owner, so publishing it under the current name
+     * grants nobody access they did not already have
+     * (inflight/n-plan.md §5).
+     *
+     * This credential carries no groups, so it is still refused where
+     * the bucket directory is reachable only through one (§5.3).
+     * That case is reported below rather than passing silently.
+     *
+     * run_as() decides whether a switch is needed, because it is the
+     * only thing that knows who this thread already is;  a geteuid()
+     * test here would match by accident on a thread already acting as
+     * somebody, as it did in the part eviction. */
+    nsfs::Credentials cand_owner;
+    cand_owner.uid = cand_stx.stx_uid;
+    cand_owner.gid = cand_stx.stx_gid;
+
+    SafeResult sr = SafeResult::ERROR;
+    auto publish = [&]() -> int {
+      /* CAS link: .versions/candidate → current path */
+      sr = fs_strategy->safe_link(dpp, vfd, max_name,
+                                  parent_fd, leaf,
+                                  statx_mtime_ns(cand_stx),
+                                  cand_stx.stx_ino);
+      ldpp_dout(dpp, 10) << "promote_version: safe_link " << max_name
+        << " → " << leaf << " result=" << (int)sr << dendl;
+      if (sr != SafeResult::OK) {
+        return 0;
+      }
+      /* unlink the .versions/ entry.  The inode is under both names
+       * until this returns, so a failure here lists the object
+       * twice, once current and once not. */
+      if (::unlinkat(vfd, max_name.c_str(), 0) < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+          << " promoted, but " << max_name << " stays in "
+          << HIDDEN_VERSIONS_PATH << ": " << cpp_strerror(errno)
+          << ";  the object lists twice" << dendl;
+      }
       /* remove non_current_timestamp on the promoted file */
       int pfd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
-      if (pfd >= 0) {
-        std::string ts_x = xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
-        ::fremovexattr(pfd, ts_x.c_str());
-        if (out) {
-          out->etag = etag_from_fd(pfd, xs);
-        }
-        ::close(pfd);
+      if (pfd < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+          << " promoted, but it cannot be opened: " << cpp_strerror(errno)
+          << ";  it keeps its non-current timestamp" << dendl;
+        return 0;
       }
+      std::string ts_x = xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
+      if (::fremovexattr(pfd, ts_x.c_str()) < 0 && errno != ENODATA) {
+        ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+          << " promoted, but its non-current timestamp stays: "
+          << cpp_strerror(errno) << dendl;
+      }
+      if (out) {
+        out->etag = etag_from_fd(pfd, xs);
+      }
+      ::close(pfd);
+      return 0;
+    };
+
+    const int aret = nsfs::impersonation_enabled()
+      ? nsfs::run_as(dpp, cand_owner, publish) : publish();
+    if (aret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+        << " cannot run as uid " << cand_owner.uid << ", the owner of "
+        << max_name << ": " << cpp_strerror(-aret) << dendl;
+      ::close(vfd);
+      return aret;
+    }
+
+    if (sr == SafeResult::OK) {
       if (out) {
         out->promoted = true;
         out->version_id = max_name.substr(leaf.size() + 1);
       }
       ::close(vfd);
-      return;
+      return 0;
     }
 
     ::close(vfd);
     if (sr == SafeResult::ERROR) {
-      /* EEXIST on the link means a concurrent PUT won — skip */
-      return;
+      /* The link was refused, and a retry is refused the same way --
+       * the strategy logged the errno.  What an operator needs is the
+       * consequence, which no other line states. */
+      ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+        << " not promoted from " << max_name << " as uid "
+        << cand_owner.uid << ";  the entry stays in "
+        << HIDDEN_VERSIONS_PATH
+        << ", so the bucket is not empty and will not delete" << dendl;
+      return -EIO;
     }
     /* MISMATCH — candidate changed, retry */
     struct timespec ts = {0, 100000 + (rand() % 500000)};
     nanosleep(&ts, nullptr);
   }
+
+  ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
+    << " not promoted after " << NSFS_VERSION_RETRIES
+    << " attempts;  the newest version stays in " << HIDDEN_VERSIONS_PATH
+    << ", so the bucket is not empty and will not delete" << dendl;
+  return -EAGAIN;
 }
 
 /* Under impersonation as every directory nsfs makes, sticky and
@@ -12767,7 +12861,11 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           ldpp_dout(dpp, 10) << "delete_obj: promoting after delete of "
             << promote_leaf << dendl;
           PromoteResult promoted;
-          promote_version(promote_fd, promote_leaf, dpp,
+          /* Reported where it fails, and not reported to the client:
+           * the version the request named is gone, which is what the
+           * delete undertook.  What is left behind is an operator's
+           * problem, not something DeleteObject can express. */
+          (void) promote_version(promote_fd, promote_leaf, dpp,
                           source->driver->get_fs_strategy(),
 			  source->xattr_strategy(), &promoted);
           struct statx pstx;
@@ -12894,7 +12992,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
          * exists, promote the newest non-DM version */
         if (is_dm && parent_fd >= 0) {
           PromoteResult promoted;
-          promote_version(parent_fd, leaf_name, dpp,
+          /* as above:  reported where it fails, and the delete of the
+           * marker still succeeded */
+          (void) promote_version(parent_fd, leaf_name, dpp,
                           source->driver->get_fs_strategy(),
 			  source->xattr_strategy(), &promoted);
           /* update cache for the promoted version */
