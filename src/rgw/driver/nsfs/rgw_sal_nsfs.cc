@@ -15842,6 +15842,30 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* A user's credentials as a request resolves them -- its own row, else
+ * its account's -- for the hints that act as a user.  -ENOENT for an
+ * empty user, or one with no record, or one whose record cannot be
+ * applied. */
+static int hint_credentials(const DoutPrefixProvider* dpp, NSFSDriver* driver,
+			    const std::string& user, nsfs::Credentials& cred)
+{
+  rgw_user who;
+  who.from_str(user);
+  if (who.empty()) {
+    return -ENOENT;
+  }
+  rgw_account_id account;
+  {
+    std::unique_ptr<User> u = driver->get_user(who);
+    if (u->load_user(dpp, null_yield) == 0) {
+      account = u->get_info().account_id;
+    }
+  }
+  const int ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
+					    who, account, cred);
+  return (ret == -EPERM) ? -ENOENT : ret;
+}
+
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 			    const std::string& hint,
 			    const std::map<std::string, std::string>& params,
@@ -16337,25 +16361,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       return -EINVAL;
     }
 
-    rgw_user who;
-    who.from_str(u_it->second);
-    if (who.empty()) {
-      put("no-identity");
-      return 0;
-    }
     /* resolved as a request resolves it:  the user's row, else its
      * account's */
-    rgw_account_id account;
-    {
-      std::unique_ptr<User> u = get_user(who);
-      if (u->load_user(dpp, null_yield) == 0) {
-	account = u->get_info().account_id;
-      }
-    }
     nsfs::Credentials cred;
-    int ret = nsfs::resolve_credentials(dpp, *get_identity_db(), who,
-					account, cred);
-    if ((ret == -ENOENT) || (ret == -EPERM)) {
+    int ret = hint_credentials(dpp, this, u_it->second, cred);
+    if (ret == -ENOENT) {
       put("no-identity");
       return 0;
     }
