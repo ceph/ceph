@@ -762,6 +762,29 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_bal_replica_discover_reads
+  type: uint
+  level: advanced
+  desc: reads of a dentry on a replica of a read-replicated dirfrag before the
+    replica fetches it
+  long_desc: When the balancer replicates a hot dirfrag for read load (see
+    mds_bal_replicate_threshold), clients send their lookups to any of its
+    replicas. A replica that does not hold the dentry forwards the read to the
+    auth MDS; once the same dentry has been read on that replica this many
+    times within 30 to 60 seconds, the replica fetches it from the auth and
+    answers that read and the next ones itself. 1 fetches it at the first
+    read; 2 or more leaves out dentries read only once, like files that are
+    stat'ed once and then removed, which cost more to fetch than to forward
+    and then also have to be unlinked on the replica, and lets the auth keep
+    serving the clients that first read a dentry from it; 0 never fetches,
+    so a replica forwards every read of a dentry it does not hold.
+  default: 2
+  services:
+  - mds
+  flags:
+  - runtime
+  see_also:
+  - mds_bal_replicate_threshold
 - name: mds_bal_split_size
   type: int
   level: advanced
