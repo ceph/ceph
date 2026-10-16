@@ -2,6 +2,7 @@
 
 import yaml
 import argparse
+import io
 import math
 import os
 import sys
@@ -234,6 +235,18 @@ class UniqueKeySafeLoader(yaml.SafeLoader):
         return mapping
 
 
+def write_if_changed(path, content):
+    # Keep unchanged outputs untouched so ninja's restat skips dependents.
+    try:
+        with open(path) as f:
+            if f.read() == content:
+                return
+    except FileNotFoundError:
+        pass
+    with open(path, 'w') as f:
+        f.write(content)
+
+
 def translate(opts):
     if opts.raw:
         prelude, epilogue = '', ''
@@ -246,10 +259,9 @@ def translate(opts):
         name = os.path.split(opts.input)[-1]
         name = name.rsplit('.', 1)[0]
     name = name.replace('-', '_')
-    # noqa: E127
-    with open(opts.input) as infile, \
-         open(opts.output, 'w') as cc_file, \
-         open(opts.legacy, 'w') as h_file:
+    cc_file = io.StringIO()
+    h_file = io.StringIO()
+    with open(opts.input) as infile:
         yml = yaml.load(infile, Loader=UniqueKeySafeLoader)
         headers = yml.get('headers', '')
         cc_file.write(prelude.format(name=name, headers=headers))
@@ -260,10 +272,12 @@ def translate(opts):
                 if option.get('with_legacy', False):
                     h_file.write(yaml_to_h(option) + '\n')
             except ValueError as e:
-                print(f'failed to translate option "{name}": {e}',
-                      file=sys.stderr)
+                print(f'failed to translate {name} option '
+                      f'"{option.get("name")}": {e}', file=sys.stderr)
                 return 1
         cc_file.write(epilogue.replace("}}", "}"))
+    write_if_changed(opts.output, cc_file.getvalue())
+    write_if_changed(opts.legacy, h_file.getvalue())
 
 
 def readable_size(value, typ):
@@ -358,7 +372,7 @@ def main():
                         help='operation to perform.')
     opts = parser.parse_args(sys.argv[1:])
     if opts.op == 'translate':
-        translate(opts)
+        sys.exit(translate(opts))
     else:
         readable(opts)
 

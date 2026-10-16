@@ -38,7 +38,7 @@ function(add_options name)
       --output ${cc_file}
       --legacy ${h_file}
       --name ${name}
-      DEPENDS ${yaml_file})
+      DEPENDS ${yaml_file} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py)
   list(APPEND common_options_srcs ${cc_file})
   set(common_options_srcs ${common_options_srcs} PARENT_SCOPE)
   list(APPEND legacy_options_headers ${h_file})
