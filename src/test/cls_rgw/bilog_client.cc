@@ -5,7 +5,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cerrno>
+#include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <new>
 #include <utility>
 
@@ -247,5 +249,73 @@ TEST_CASE("Bucket list completion contains malformed replies", "[rgw][cls][bucke
     schedule_bucket(output);
     complete(0, full, true);
     CHECK(canonical(output).contents_equal(preserved));
+#endif
+}
+
+TEST_CASE("Index stat and timeout clients encode borrowed native arguments", "[rgw][cls][stats]")
+{
+    for (const bool absolute : {false, true}) {
+        for (const bool subtract : {false, true}) {
+            bytes expected;
+            {
+                ::rgw_cls_bucket_update_stats_op reference;
+                reference.absolute = absolute;
+                reference.stats[::RGWObjCategory::Main].total_size = 123;
+                reference.stats[static_cast<::RGWObjCategory>(255)].actual_size = 456;
+                if (subtract) {
+                    reference.dec_stats[::RGWObjCategory::Main].num_entries = 3;
+                }
+                expected = canonical(reference);
+                ::librados::ObjectWriteOperation operation;
+                ::cls_rgw_bucket_update_stats(operation, absolute, reference.stats,
+                    subtract ? &reference.dec_stats : nullptr);
+                reference.stats.clear();
+                reference.dec_stats.clear();
+            }
+            CHECK(request_method == "bucket_update_stats");
+            CHECK(request_bytes.contents_equal(expected));
+        }
+    }
+    for (const std::uint64_t timeout : {std::uint64_t {0}, std::uint64_t {120},
+                                       std::numeric_limits<std::uint64_t>::max()}) {
+        ::librados::ObjectWriteOperation operation;
+        ::cls_rgw_bucket_set_tag_timeout(operation, timeout);
+        CHECK(request_method == "bucket_set_tag_timeout");
+        CHECK(request_bytes.contents_equal(canonical(::rgw_cls_tag_timeout_op {.tag_timeout = timeout})));
+    }
+}
+
+TEST_CASE("Index check client preserves synchronous decode and candidate error contracts", "[rgw][cls][stats]")
+{
+    ::rgw_cls_check_index_ret expected;
+    expected.existing_header.ver = 17;
+    expected.existing_header.stats[::RGWObjCategory::Main].total_size = 23;
+    expected.calculated_header.ver = 29;
+    expected.calculated_header.stats[::RGWObjCategory::MultiPart].actual_size = 31;
+    const auto full = canonical(expected);
+    ::rgw_cls_check_index_ret output;
+    ::cls_rgw_bucket_check_index_decode(full, output);
+    CHECK(canonical(output).contents_equal(full));
+    for (unsigned size = 0; size < full.length(); ++size) {
+        output = expected;
+        bytes prefix;
+        prefix.substr_of(full, 0, size);
+        CHECK_THROWS_AS(::cls_rgw_bucket_check_index_decode(prefix, output), ::ceph::buffer::error);
+#ifdef TEST_RGW_CLS_DATUM
+        CHECK(canonical(output).contents_equal(full));
+#endif
+    }
+#ifdef TEST_RGW_CLS_DATUM
+    output = expected;
+    bool failed = false;
+    fail_allocation = true;
+    try {
+        ::cls_rgw_bucket_check_index_decode(full, output);
+    } catch (const std::bad_alloc&) {
+        failed = true;
+    }
+    fail_allocation = false;
+    CHECK(failed);
+    CHECK(canonical(output).contents_equal(full));
 #endif
 }

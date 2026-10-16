@@ -21,6 +21,12 @@ preserves sorted keys, last-wins duplicate decoding and the existing flat-map
 storage. Header and directory-entry codecs, filtering and retry markers stay native.
 Other RGW CLS operations continue to use their existing codecs.
 
+Statistics updates borrow the public maps during encoding and decode ordered,
+first-wins vector associations in the module. Index checks use independent reply
+records with native header codecs; check/rebuild page sequences use vectors.
+Tag-timeout requests also have independent bindings. Header mutation, accounting
+and resharding rules retain their existing behavior.
+
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
 provides the C++26 implementation. Its language requirements and Datum headers

@@ -108,9 +108,13 @@ void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
 void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
                                     uint64_t timeout)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::bucket_datum::encode_timeout(timeout);
+#else
   const auto call = rgw_cls_tag_timeout_op{.tag_timeout = timeout};
   bufferlist in;
   encode(call, in);
+#endif
   op.exec(method::bucket_set_tag_timeout, in);
 }
 
@@ -119,6 +123,9 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  const map<RGWObjCategory, rgw_bucket_category_stats>& stats,
                                  const map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::bucket_datum::encode_stats(absolute, stats, dec_stats);
+#else
   rgw_cls_bucket_update_stats_op call;
   call.absolute = absolute;
   call.stats = stats;
@@ -126,6 +133,7 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
     call.dec_stats = *dec_stats;
   bufferlist in;
   encode(call, in);
+#endif
   o.exec(method::bucket_update_stats, in);
 }
 
@@ -729,8 +737,15 @@ void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
 void cls_rgw_bucket_check_index_decode(const bufferlist& out,
                                        rgw_cls_check_index_ret& result)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  static_assert(std::is_nothrow_move_assignable_v<rgw_cls_check_index_ret>);
+  auto candidate = ::cls::rgw::bucket_datum::decode_check_reply(out);
+  result.existing_header = std::move(candidate.existing_header);
+  result.calculated_header = std::move(candidate.calculated_header);
+#else
   auto p = out.cbegin();
   decode(result, p);
+#endif
 }
 
 void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op)

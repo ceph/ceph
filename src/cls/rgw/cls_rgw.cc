@@ -820,7 +820,11 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bucket_datum::stats_request op;
+#else
   rgw_cls_bucket_update_stats_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -893,7 +897,11 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bucket_datum::timeout_request op;
+#else
   rgw_cls_tag_timeout_op op;
+#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3602,7 +3610,7 @@ static int check_index(cls_method_context_t hctx,
   calc_header->ver = existing_header.ver;
   calc_header->syncstopped = existing_header.syncstopped;
 
-  std::list<rgw_cls_bi_entry> entries;
+  std::vector<rgw_cls_bi_entry> entries;
   string start_obj;
   string filter_prefix;
 
@@ -3698,7 +3706,11 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
 int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::bucket_datum::check_reply ret;
+#else
   rgw_cls_check_index_ret ret;
+#endif
   int rc = read_bucket_header(hctx, &ret.existing_header);
   if (rc < 0) {
     CLS_LOG(1, "ERROR: check_index(): failed to read header\n");

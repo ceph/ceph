@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 
 #include <algorithm>
 #include <chrono>
@@ -55,7 +56,7 @@ int effect(storage& state, std::string operation, byte_buffer arguments = {})
 auto invoke(storage& state, byte_buffer input, const std::string_view method = "bi_put_entries")
 {
     const auto [call, flags] = ::rgw_cls_test::get_method(method);
-    const bool read_only = method == "bi_log_list" || method == "bucket_list";
+    const bool read_only = method == "bi_log_list" || method == "bucket_list" || method == "bucket_check_index";
     REQUIRE(flags == (read_only ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
@@ -1279,4 +1280,227 @@ TEST_CASE("Bucket directory module retains corruption storage errors and request
         CHECK(invoke(state, prefix, "bucket_list") == -EINVAL);
         CHECK(state.effects.empty());
     }
+}
+
+namespace {
+
+storage stat_storage()
+{
+    storage state;
+    ::rgw_bucket_dir_header value;
+    value.ver = 7;
+    value.master_ver = 19;
+    value.tag_timeout = 3;
+    value.syncstopped = true;
+    value.max_marker = "retained";
+    auto& stats = value.stats[::RGWObjCategory::Main];
+    stats.total_size = 20;
+    stats.total_size_rounded = 30;
+    stats.num_entries = 4;
+    stats.actual_size = 50;
+    ::encode(value, state.header);
+
+    return state;
+}
+
+auto stat_value(const std::uint64_t total, const std::uint64_t rounded,
+                const std::uint64_t count, const std::uint64_t actual)
+{
+    ::rgw_bucket_category_stats result;
+    result.total_size = total;
+    result.total_size_rounded = rounded;
+    result.num_entries = count;
+    result.actual_size = actual;
+
+    return result;
+}
+
+auto check_reply(const storage& state)
+{
+    ::rgw_cls_check_index_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    CHECK(cursor.end());
+
+    return result;
+}
+
+storage check_storage()
+{
+    auto state = stat_storage();
+    auto add = [&](const std::string& index, const std::string& name, const std::uint64_t size,
+                   const std::uint64_t accounted, const std::uint16_t flags, const bool exists) {
+        ::rgw_bucket_dir_entry row;
+        row.key.name = name;
+        row.exists = exists;
+        row.meta.category = ::RGWObjCategory::Main;
+        row.meta.size = size;
+        row.meta.accounted_size = accounted;
+        row.flags = flags;
+        ::encode(row, state.values[index]);
+    };
+    add("plain", "plain", 100, 80, 0, true);
+    add("\xC3\xA9", "\xC3\xA9", 11, 11, 0, true);
+    add("version-listing", "version-listing", 999, 999, ::rgw_bucket_dir_entry::FLAG_VER, true);
+    add("absent", "absent", 999, 999, 0, false);
+    add(instance_prefix + "version", "instance", 200, 160, ::rgw_bucket_dir_entry::FLAG_VER, true);
+    state.values[std::string {"\x80" "1001_unrelated"}] = {};
+
+    return state;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Index statistics module retains absolute incremental subtraction and metadata rules", "[rgw][cls][stats]")
+{
+    ::rgw_cls_bucket_update_stats_op request;
+    request.stats[::RGWObjCategory::Main] = stat_value(10, 20, 2, 30);
+    request.dec_stats[::RGWObjCategory::Main] = stat_value(3, 5, 1, 7);
+    storage state = stat_storage();
+    REQUIRE(invoke_write(state, request, "bucket_update_stats") == 0);
+    auto result = header(state);
+    CHECK(result.stats.at(::RGWObjCategory::Main) == stat_value(27, 45, 5, 73));
+    CHECK(result.ver == 8);
+    CHECK(result.master_ver == 19);
+    CHECK(result.tag_timeout == 3);
+    CHECK(result.syncstopped);
+    CHECK(result.max_marker == "retained");
+    CHECK((effect_names(state) == std::vector<std::string> {"read-header", "write-header"}));
+
+    state = stat_storage();
+    request.absolute = true;
+    const auto original = state.header;
+    CHECK(invoke_write(state, request, "bucket_update_stats") == -EINVAL);
+    CHECK(state.header.contents_equal(original));
+    CHECK((effect_names(state) == std::vector<std::string> {"read-header"}));
+    request.dec_stats.clear();
+    REQUIRE(invoke_write(state, request, "bucket_update_stats") == 0);
+    CHECK(header(state).stats.at(::RGWObjCategory::Main) == stat_value(10, 20, 2, 30));
+
+    state = {};
+    request.absolute = false;
+    request.stats.clear();
+    request.dec_stats[static_cast<::RGWObjCategory>(255)] = stat_value(1, 1, 1, 1);
+    REQUIRE(invoke_write(state, request, "bucket_update_stats") == 0);
+    const auto maximum = std::numeric_limits<std::uint64_t>::max();
+    CHECK(header(state).stats.at(static_cast<::RGWObjCategory>(255)) ==
+          stat_value(maximum, maximum, maximum, maximum));
+    request.dec_stats.clear();
+    REQUIRE(invoke_write(state, request, "bucket_update_stats") == 0);
+    CHECK(header(state).ver == 2);
+}
+
+TEST_CASE("Tag timeout changes only timeout and header generation", "[rgw][cls][stats]")
+{
+    for (const std::uint64_t timeout : {std::uint64_t {0}, std::numeric_limits<std::uint64_t>::max()}) {
+        storage state = stat_storage();
+        ::rgw_cls_tag_timeout_op request {.tag_timeout = timeout};
+        REQUIRE(invoke_write(state, request, "bucket_set_tag_timeout") == 0);
+        const auto value = header(state);
+        CHECK(value.tag_timeout == timeout);
+        CHECK(value.ver == 8);
+        CHECK(value.master_ver == 19);
+        CHECK(value.syncstopped);
+        CHECK(value.stats.at(::RGWObjCategory::Main) == stat_value(20, 30, 4, 50));
+    }
+}
+
+TEST_CASE("Index stat request errors preserve storage and native I/O stages", "[rgw][cls][stats]")
+{
+    const auto check = [](const auto& request, const std::string_view operation) {
+        byte_buffer full;
+        ::encode(request, full);
+        for (unsigned size = 0; size < full.length(); ++size) {
+            auto state = stat_storage();
+            byte_buffer prefix;
+            prefix.substr_of(full, 0, size);
+            CHECK(invoke(state, prefix, operation) == -EINVAL);
+            CHECK(state.effects.empty());
+        }
+        for (const unsigned failure : {1, 2}) {
+            auto state = stat_storage();
+            const auto original = state.header;
+            state.failure_call = failure;
+            CHECK(invoke_write(state, request, operation) == -EAGAIN);
+            CHECK(state.effects.size() == failure);
+            CHECK(state.header.contents_equal(original));
+        }
+        auto state = stat_storage();
+        state.header.clear();
+        state.header.append("x", 1);
+        CHECK(invoke_write(state, request, operation) == -EIO);
+    };
+    ::rgw_cls_bucket_update_stats_op update;
+    update.stats[::RGWObjCategory::Main] = stat_value(1, 2, 3, 4);
+    check(update, "bucket_update_stats");
+    check(::rgw_cls_tag_timeout_op {.tag_timeout = 17}, "bucket_set_tag_timeout");
+}
+
+TEST_CASE("Index check and rebuild retain accounting metadata and storage effects", "[rgw][cls][stats]")
+{
+    auto state = check_storage();
+    const auto original = state.header;
+    REQUIRE(invoke(state, {}, "bucket_check_index") == 0);
+    const auto result = check_reply(state);
+    byte_buffer existing;
+    ::encode(result.existing_header, existing);
+    CHECK(existing.contents_equal(original));
+    const auto& calculated = result.calculated_header;
+    CHECK(calculated.stats.at(::RGWObjCategory::Main) == stat_value(251, 12288, 3, 311));
+    CHECK(calculated.ver == 7);
+    CHECK(calculated.tag_timeout == 3);
+    CHECK(calculated.syncstopped);
+    CHECK(calculated.master_ver == 0);
+    CHECK(calculated.max_marker.empty());
+    CHECK(state.header.contents_equal(original));
+    state.effects.clear();
+    REQUIRE(invoke(state, {}, "bucket_rebuild_index") == 0);
+    CHECK(header(state).stats.at(::RGWObjCategory::Main) == calculated.stats.at(::RGWObjCategory::Main));
+    CHECK(header(state).ver == 8);
+    CHECK(header(state).master_ver == 0);
+    CHECK(effect_names(state).back() == "write-header");
+}
+
+TEST_CASE("Index check and rebuild page through more than one thousand entries", "[rgw][cls][stats]")
+{
+    storage state;
+    for (unsigned index = 0; index < 1003; ++index) {
+        const auto name = "object-" + std::to_string(index);
+        state.values[name] = entry(name, 1).data;
+    }
+    REQUIRE(invoke(state, {}, "bucket_check_index") == 0);
+    CHECK(check_reply(state).calculated_header.stats.at(::RGWObjCategory::Main) ==
+          stat_value(1003, 1003 * 4096, 1003, 1003));
+    CHECK(std::ranges::count(effect_names(state), "get-values") >= 3);
+    REQUIRE(invoke(state, {}, "bucket_rebuild_index") == 0);
+    CHECK(header(state).stats.at(::RGWObjCategory::Main).num_entries == 1003);
+}
+
+TEST_CASE("Index check and rebuild retain corruption reshard guards and failure stages", "[rgw][cls][stats]")
+{
+    for (const std::string operation : {"bucket_check_index", "bucket_rebuild_index"}) {
+        auto baseline = check_storage();
+        REQUIRE(invoke(baseline, {}, operation) == 0);
+        for (unsigned failure = 1; failure <= baseline.effects.size(); ++failure) {
+            auto state = check_storage();
+            const auto original = state.header;
+            state.failure_call = failure;
+            CHECK(invoke(state, {}, operation) == -EAGAIN);
+            CHECK(state.effects.size() == failure);
+            CHECK(state.header.contents_equal(original));
+        }
+        for (const auto& corrupt : {std::string {"plain"}, instance_prefix + "version"}) {
+            auto state = check_storage();
+            state.values.at(corrupt).clear();
+            CHECK(invoke(state, {}, operation) == -EIO);
+        }
+    }
+    auto state = check_storage();
+    auto value = header(state);
+    value.new_instance.reshard_status = ::cls_rgw_reshard_status::IN_PROGRESS;
+    state.header.clear();
+    ::encode(value, state.header);
+    CHECK(invoke(state, {}, "bucket_rebuild_index") == -CLS_RGW_ERR_BUSY_RESHARDING);
+    CHECK((effect_names(state) == std::vector<std::string> {"read-header"}));
+    CHECK(invoke(state, {}, "bucket_check_index") == 0);
 }

@@ -349,6 +349,116 @@ template list_reply<flat_entries> decode_reply(const ::ceph::buffer::list& input
 template list_reply<std::map<std::string, ::rgw_bucket_dir_entry>>
 decode_reply(const ::ceph::buffer::list& input);
 
+namespace {
+
+stat_associations decode_stats(reader& fields)
+{
+    static_assert(std::same_as<std::underlying_type_t<::RGWObjCategory>, std::uint8_t>);
+    const auto count = fields.sequence_size<26>();
+    stat_associations result;
+    constexpr auto categories = 1u + std::numeric_limits<std::uint8_t>::max();
+    result.reserve(std::min(count, categories));
+    for (std::uint32_t index = 0; index < count; ++index) {
+        const auto category = static_cast<::RGWObjCategory>(fields.scalar<std::uint8_t>());
+        ::rgw_bucket_category_stats stats;
+        fields.native(stats);
+        const auto position = std::ranges::lower_bound(result, category, {}, &stat_association::first);
+        if (position == result.end() || position->first != category) {
+            result.emplace(position, category, std::move(stats));
+        }
+    }
+
+    return result;
+}
+
+} // anonymous namespace
+
+::ceph::buffer::list encode_stats(const bool absolute, const ::rgw_bucket_dir_stats& stats,
+                                  const ::rgw_bucket_dir_stats *dec_stats)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(2, [&] {
+        archive.scalar(static_cast<std::uint8_t>(absolute));
+        archive.native(stats);
+        if (dec_stats) {
+            archive.native(*dec_stats);
+
+            return;
+        }
+        archive.scalar(std::uint32_t {0});
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_timeout(const std::uint64_t timeout)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] { archive.scalar(timeout); });
+
+    return output;
+}
+
+void decode(stats_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    stats_request candidate;
+    reader archive {cursor};
+    archive.frame(2, [&](auto& fields, const std::uint8_t version) {
+        candidate.absolute = 0 != fields.template scalar<std::uint8_t>();
+        candidate.stats = decode_stats(fields);
+        if (version >= 2) {
+            candidate.dec_stats = decode_stats(fields);
+        }
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void decode(timeout_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    timeout_request candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        candidate.tag_timeout = fields.template scalar<std::uint64_t>();
+
+        return 0;
+    });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void encode(const check_reply& value, ::ceph::buffer::list& output)
+{
+    ::ceph::buffer::list candidate;
+    writer archive {candidate};
+    archive.frame(1, [&] {
+        archive.native(value.existing_header);
+        archive.native(value.calculated_header);
+    });
+    output.claim_append(candidate);
+}
+
+check_reply decode_check_reply(const ::ceph::buffer::list& input)
+{
+    auto cursor = input.cbegin();
+    check_reply candidate;
+    reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        fields.native(candidate.existing_header);
+        fields.native(candidate.calculated_header);
+
+        return 0;
+    });
+
+    return candidate;
+}
+
 } // cls::rgw::bucket_datum
 
 namespace cls::rgw::write_datum {
