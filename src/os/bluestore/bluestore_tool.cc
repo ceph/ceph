@@ -304,6 +304,7 @@ int main(int argc, char **argv)
   string dest_file;
   string key, value;
   vector<string> allocs_name;
+  vector<string> bdev_type;
   string empty_sharding(1, '\0');
   string new_sharding = empty_sharding;
   string resharding_ctrl;
@@ -329,6 +330,8 @@ int main(int argc, char **argv)
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
+    ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
+    ("bdev-type", po::value<vector<string>>(&bdev_type), "bdev type to inspect: 'bdev-block'/'bdev-wal'/'bdev-db'")
     ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
@@ -365,8 +368,9 @@ int main(int argc, char **argv)
         "bluefs-stats, "
         "reshard, "
         "show-sharding, "
-        "zap-device"
-)
+        "zap-device, "
+        "trim"
+        )
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -620,6 +624,29 @@ int main(int argc, char **argv)
            << std::endl;
       exit(EXIT_FAILURE);
     }
+  }
+  if (action == "trim") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (!vm.count("yes-i-really-really-mean-it")) {
+      cerr << "Trimming a non healthy bluestore is a dangerous operation which could cause data loss, "
+           << "please run fsck and confirm with --yes-i-really-really-mean-it option"
+           << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    for (auto type : bdev_type) {
+      if (!type.empty() &&
+          type != "bdev-block" &&
+          type != "bdev-db" &&
+          type != "bdev-wal") {
+        cerr << "unknown bdev type '" << type << "'" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+    if (bdev_type.empty())
+      bdev_type = vector<string>{"bdev-block", "bdev-db", "bdev-wal"};
   }
 
   if (action == "restore_cfb") {
@@ -1306,6 +1333,20 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
       }
     }
+  } else if (action == "trim") {
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.cold_open();
+    if (r < 0) {
+      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    for (auto type : bdev_type) {
+      cout << "trimming: " << type << std::endl;
+      ostringstream outss;
+      bluestore.trim_free_space(type, outss);
+      cout << "status: " << outss.str() << std::endl;
+    }
+    bluestore.cold_close();
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;

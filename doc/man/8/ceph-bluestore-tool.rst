@@ -33,6 +33,7 @@ Synopsis
 | **ceph-bluestore-tool** reshard --path *osd path* --sharding *new sharding* [ --sharding-ctrl *control string* ]
 | **ceph-bluestore-tool** show-sharding --path *osd path*
 | **ceph-bluestore-tool** zap-device --dev *dev path*
+| **ceph-bluestore-tool** trim --path *osd path*
 
 
 Description
@@ -163,6 +164,13 @@ Commands
 :command: `zap-device` --dev *dev path*
 
    Zeros all device label locations. This effectively makes device appear empty.
+
+:command: `trim` --path *osd path*
+
+   An SSD that has been used heavily may experience performance degradation.
+   This operation uses TRIM / discard to free unused blocks from BlueStore and BlueFS block devices,
+   and allows the drive to perform more efficient internal housekeeping.
+   If BlueStore runs with discard enabled, this option may not be useful.
 
 Options
 =======
