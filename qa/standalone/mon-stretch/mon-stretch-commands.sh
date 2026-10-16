@@ -47,6 +47,11 @@ function TEST_stretch_set_replicated_pool() {
     ceph osd pool stretch set rep 2 2 zone replicated_rule 4 2 || return 1
     test "$(pool_field rep peering_crush_bucket_count)" = 2 || return 1
     test "$(pool_field rep size)" = 4 || return 1
+    # an individual stretch pool is one zone with min_size over all its
+    # copies, as in earlier releases
+    test "$(pool_field rep num_zones)" = 1 || return 1
+    test "$(pool_field rep replica)" = 4 || return 1
+    test "$(pool_field rep min_size)" = 2 || return 1
     ceph osd pool stretch unset rep replicated_rule 3 2 || return 1
     test "$(pool_field rep peering_crush_bucket_count)" = 0 || return 1
     test "$(pool_field rep size)" = 3 || return 1
@@ -75,8 +80,10 @@ function TEST_stretch_set_counts_above_zones() {
         done
     done
     test "$(pool_field rep peering_crush_bucket_count)" = 0 || return 1
-    expect_failure $dir "is not evenly divisible by the number of zone zones (2)" \
-        ceph osd pool stretch set rep 2 2 zone replicated_rule 5 2 || return 1
+    # an individual stretch pool records no zones, so as in earlier releases
+    # its size need not divide by them
+    ceph osd pool stretch set rep 2 2 zone replicated_rule 5 2 || return 1
+    test "$(pool_field rep size)" = 5 || return 1
 }
 
 function TEST_stretch_set_ec_pool() {

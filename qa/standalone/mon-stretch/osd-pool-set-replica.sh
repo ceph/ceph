@@ -266,9 +266,11 @@ function TEST_pool_set_num_zones_options_only() {
 function TEST_pool_replica_two_take_rule() {
     local dir=$1
 
-    CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A"
     run_mon $dir a --public-addr "$CEPH_MON_A" || return 1
-    wait_for_quorum 300 1 || return 1
+    run_mon $dir b --public-addr "$CEPH_MON_B" || return 1
+    run_mon $dir c --public-addr "$CEPH_MON_C" || return 1
+    CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A,$CEPH_MON_B,$CEPH_MON_C"
+    wait_for_quorum 300 3 || return 1
     for zone in zone-a zone-b; do
         ceph osd crush add-bucket $zone zone || return 1
         ceph osd crush move $zone root=default || return 1
@@ -285,6 +287,9 @@ function TEST_pool_replica_two_take_rule() {
             osd=$((osd + 1))
         done
     done
+    ceph mon set_location a zone=zone-a || return 1
+    ceph mon set_location b zone=zone-b || return 1
+    ceph mon set_location c zone=arbiter || return 1
     ceph osd getcrushmap > $dir/crushmap || return 1
     crushtool --decompile $dir/crushmap > $dir/crushmap.txt || return 1
     sed 's/^# end crush map$//' $dir/crushmap.txt > $dir/crushmap_modified.txt || return 1
@@ -304,8 +309,9 @@ rule two_take {
 EOF
     crushtool --compile $dir/crushmap_modified.txt -o $dir/crushmap.bin || return 1
     ceph osd setcrushmap -i $dir/crushmap.bin || return 1
-    ceph osd pool create p 8 8 replicated two_take || return 1
-    ceph osd pool stretch set p 2 2 zone two_take 4 2 || return 1
+    ceph osd pool create p 8 8 replicated || return 1
+    ceph osd pool set p num_zones 2 --crush_rule two_take --replica 2 \
+        --zone_failure_domain zone || return 1
 
     ceph osd pool set p replica 1 || return 1
     assert_pool_rule p p-replica-1 1 1 || return 1
