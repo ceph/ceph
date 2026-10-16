@@ -370,6 +370,9 @@ def _apply_crush_zones(mon_remote, cluster_name, crush_config):
     """
     zones = crush_config.get('zones', [])
     failure_domain = crush_config.get('failure_domain', 'osd')
+    if failure_domain not in ('osd', 'host'):
+        raise ValueError(f"crush_map_config failure_domain {failure_domain} "
+                         "is not supported: use osd or host")
     
     log.info(f"Applying CRUSH zone configuration with {len(zones)} zones, "
              f"failure_domain={failure_domain}")
