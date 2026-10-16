@@ -2,6 +2,8 @@
 Design Document: Ceph Erasure Coded (EC) Stretch Cluster
 ========================================================
 
+.. sectnum::
+
 .. note::
 
    **Phased Delivery (R1, R2, …)**
