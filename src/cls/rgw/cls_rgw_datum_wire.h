@@ -73,6 +73,14 @@ class writer final
 {
     byte_buffer& output;
 
+    void copy_payload(const byte_buffer& value, const unsigned offset, const unsigned size)
+    {
+        ensure(size);
+        auto storage = output.get_contiguous_appender(size);
+        auto first = value.cbegin(offset);
+        first.copy(size, storage.get_pos_add(size));
+    }
+
 public:
     explicit writer(byte_buffer& output) : output(output)
     {}
@@ -109,6 +117,21 @@ public:
         output.append(value);
     }
 
+    void payload(const byte_buffer& value, const unsigned offset, const unsigned size)
+    {
+        if (0 == size) {
+            return;
+        }
+        if (size <= output.get_append_buffer_unused_tail_length()) {
+            copy_payload(value, offset, size);
+
+            return;
+        }
+        ensure(size);
+        auto first = value.cbegin(offset);
+        first.copy(size, output);
+    }
+
     void text(const std::string_view value)
     {
         const auto size = checked_count(value.size());
@@ -123,8 +146,19 @@ public:
         scalar(static_cast<std::uint32_t>(value.length()));
         ensure(value.length());
         auto storage = output.get_contiguous_appender(value.length());
+        auto target = storage.get_pos_add(value.length());
         for (const auto& fragment : value.buffers()) {
-            storage.append(fragment.c_str(), fragment.length());
+            const auto size = fragment.length();
+            if (0 == size) {
+                continue;
+            }
+            // Match native string copying without a per-fragment memcpy dispatch.
+            if (1 == size) {
+                *target++ = *fragment.c_str();
+                continue;
+            }
+            std::char_traits<char>::copy(target, fragment.c_str(), size);
+            target += size;
         }
     }
 

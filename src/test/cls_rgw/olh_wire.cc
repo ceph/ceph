@@ -258,31 +258,48 @@ TEST_CASE("Stored OLH projection retains canonical bytes and their owners", "[rg
     for (const bool fragments : {false, true}) {
         for (const std::uint64_t marker : {0ULL, 7ULL, 42ULL, 0xFFFFFFFFFFFFFFFFULL}) {
             byte_buffer input = fragments ? fragmented(original) : original;
-            std::vector<std::pair<std::uintptr_t, std::uintptr_t>> owners;
-            for (const auto& fragment : input.buffers()) {
-                const auto start = reinterpret_cast<std::uintptr_t>(fragment.c_str());
-                owners.emplace_back(start, start + fragment.length());
-            }
             ::rgw_cls_read_olh_log_ret expected;
             expected.log.insert(stored.pending_log.upper_bound(marker), stored.pending_log.end());
             byte_buffer wanted;
             ::encode(expected, wanted);
             byte_buffer output;
             const auto status = native::encode_stored_reply(input, marker, stored.tag, output);
+            if (fragments) {
+                CHECK_FALSE(status.has_value());
+                CHECK(output.length() == 0);
+                continue;
+            }
             REQUIRE(status.has_value());
             CHECK(*status == 0);
             input.clear();
             CHECK(output.contents_equal(wanted));
-            if (!expected.log.empty()) {
-                CHECK(std::ranges::any_of(output.buffers(), [&owners](const auto& fragment) {
-                    const auto start = reinterpret_cast<std::uintptr_t>(fragment.c_str());
-                    return std::ranges::any_of(owners, [start, size = fragment.length()](const auto& owner) {
-                        return owner.first <= start && start + size <= owner.second && 0 != size;
-                    });
-                }));
-            }
         }
     }
+
+    auto large = stored;
+    large.pending_log.begin()->second.front().op_tag.assign(8192, 't');
+    byte_buffer source;
+    ::encode(large, source);
+    std::vector<std::pair<std::uintptr_t, std::uintptr_t>> owners;
+    for (const auto& fragment : source.buffers()) {
+        const auto start = reinterpret_cast<std::uintptr_t>(fragment.c_str());
+        owners.emplace_back(start, start + fragment.length());
+    }
+    byte_buffer retained;
+    REQUIRE(native::encode_stored_reply(source, 0, stored.tag, retained) == 0);
+    CHECK(std::ranges::any_of(retained.buffers(), [&owners](const auto& fragment) {
+        const auto start = reinterpret_cast<std::uintptr_t>(fragment.c_str());
+        return std::ranges::any_of(owners, [start, size = fragment.length()](const auto& owner) {
+            return owner.first <= start && start + size <= owner.second && 0 != size;
+        });
+    }));
+    source.clear();
+    ::rgw_cls_read_olh_log_ret expected;
+    expected.log = std::move(large.pending_log);
+    byte_buffer wanted;
+    ::encode(expected, wanted);
+    CHECK(retained.contents_equal(wanted));
+
     byte_buffer preserved;
     preserved.append("preserve", 8);
     auto output = preserved;

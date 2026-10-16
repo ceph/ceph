@@ -375,6 +375,7 @@ TEST_CASE("OLH link and trim builders own encoded bytes from borrowed fragmented
                     reference.op_tag, populated ? &reference.meta : nullptr, reference.olh_epoch,
                     reference.unmod_since, reference.high_precision_time, reference.log_op,
                     reference.zones_trace, populated ? &receipt : nullptr);
+                tag.zero(); // A string field must not retain mutable input bytes.
             }
             CHECK(request_method == "bucket_link_olh");
             CHECK(request_output == (populated ? &receipt : nullptr));

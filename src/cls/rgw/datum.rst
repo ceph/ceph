@@ -178,7 +178,7 @@ uses that count and each event vector's size without extra counting passes.
 For true-stales reads, the module can project a canonical stored OLH log directly
 from its encoded field. A bounded scan validates the complete record, including
 events outside the selected page, and checks the tag before producing output.
-It retains the selected encoded fragments and rebuilds only the reply framing,
+It forwards the selected encoded range and rebuilds only the reply framing,
 count and truncation flag. It does not construct a stored map or owning events.
 
 This path requires canonical version/compatibility bytes, strictly ordered unique
@@ -189,9 +189,12 @@ already-fetched value, so there is still one exact OMAP lookup. Native buffers
 and this encoded-field projection remain RGW adapter concerns; no Datum-core
 facility or native type enrollment is added.
 
-Retained fragments keep their underlying allocations alive until the reply is
-released. A small page can therefore retain an allocation containing additional
-stored events; avoiding materialization does not imply minimum retained memory.
+Records whose buffer-owner metadata exceeds their encoded size also use the
+native fallback: its single pass handles dense fragment chains more efficiently.
+Encoded ranges use existing reply append space when they fit. Larger ordinary
+ranges retain their owners. Those underlying allocations remain alive until the
+reply is released and may contain additional stored events; avoiding
+materialization does not imply minimum retained memory.
 
 Every nested frame has its own read boundary. Counts are checked against minimum
 encoded element sizes before reserving storage. These checks prevent impossible

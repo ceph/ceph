@@ -86,6 +86,11 @@ void encode_reply(const log_page groups, const bool stales, const bool truncated
 std::optional<int> encode_stored_reply(const ::ceph::buffer::list& input, const std::uint64_t marker,
                                        const std::string_view tag, ::ceph::buffer::list& output)
 try {
+    // Dense fragment chains favor the existing single-pass owning decoder.
+    const auto owner_bytes = std::uint64_t {input.get_num_buffers()} * sizeof(::ceph::buffer::ptr_node);
+    if (input.length() < owner_bytes) {
+        return std::nullopt;
+    }
     auto cursor = input.cbegin();
     reader archive {cursor};
     unsigned lower = 0;
@@ -141,8 +146,7 @@ try {
     ::cls::rgw::wire::writer writer {candidate};
     writer.frame(1, [&] {
         writer.scalar(selected);
-        auto first = input.cbegin(lower);
-        first.copy(upper - lower, candidate);
+        writer.payload(input, lower, upper - lower);
         writer.scalar(static_cast<std::uint8_t>(truncated));
     });
     output.claim_append(candidate);

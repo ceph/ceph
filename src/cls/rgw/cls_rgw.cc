@@ -2366,6 +2366,8 @@ try {
       }
     }
     ret = decode_omap_entry(encoded, olh_data_entry);
+    // Match the native input lifetime before encoding the owning fallback.
+    encoded.clear();
     if (0 == ret) {
       log_entry("read_index_entry", "existing entry", &olh_data_entry);
     }
