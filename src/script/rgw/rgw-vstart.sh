@@ -347,6 +347,12 @@ IMP_USER_A=rgwalice
 IMP_UID_A=70101
 IMP_USER_B=rgwbob
 IMP_UID_B=70102
+# the suite's *tenanted* user is a principal like any other, and under
+# impersonation a principal with no identity row cannot be served -- so
+# the cors `_tenant` tests refused with "no POSIX identity recorded for
+# testx$..." and were measuring that rather than CORS (2026-10-16).
+IMP_USER_T=rgwtenant
+IMP_UID_T=70104
 IMP_BUCKET=impersonate-fixture
 IMP_OWNED=impersonate-owned
 IMP_MULTI=impersonate-multiproto
@@ -385,6 +391,11 @@ if $IMPERSONATE; then
 	getent passwd "$IMP_USER_B" >/dev/null 2>&1 || \
 		sudo useradd -u "$IMP_UID_B" -M -N -s /sbin/nologin \
 			"$IMP_USER_B"
+	# the tenanted user, in no gating group:  what it tests is CORS
+	# and presigning, not group reach
+	getent passwd "$IMP_USER_T" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_T" -M -N -s /sbin/nologin \
+			"$IMP_USER_T"
 
 	# ninja clears file capabilities on every relink, so this is
 	# reapplied on each start rather than being one-time setup.
@@ -647,9 +658,13 @@ if $IMPERSONATE; then
 	# meets a different identity rather than none.  Its id is the one
 	# vstart.sh gives it.
 	IMP_ALT_USER=56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234
+	# single-quoted:  the id begins with a digit after the tenant's
+	# `$`, which double quotes would read as a positional parameter
+	IMP_TENANT_USER='testx$9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 	if ! python3 "$SRC_DIR/src/script/rgw/nsfs-impersonate-fixture.py" \
 			localhost 8000 "$IMP_AK" "$IMP_SK" "$IMP_BUCKET" \
-			testid "$IMP_UID_A" "$IMP_ALT_USER" "$IMP_UID_B"; then
+			testid "$IMP_UID_A" "$IMP_ALT_USER" "$IMP_UID_B" \
+			"$IMP_TENANT_USER" "$IMP_UID_T"; then
 		echo "error: could not create the impersonation fixture" >&2
 		exit 1
 	fi
