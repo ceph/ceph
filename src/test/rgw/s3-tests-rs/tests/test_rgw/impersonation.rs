@@ -570,3 +570,56 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
     assert_eq!(r, 403, "alice created a bucket where she cannot write");
     assert_eq!(ok, 200, "alice was refused where she can write");
 }
+
+/// A nested `run_as` cannot run work as the wrong identity.
+///
+/// `run_as` takes a fast path when its thread is already
+/// impersonating, because enqueueing to the helper pool from a pool
+/// thread can deadlock.  That path used to be taken for *any*
+/// identity, so a nested call asking for a different one ran as the
+/// outer one and returned success -- the operation worked, under the
+/// wrong uid, and nothing said so.  The multipart cache's eviction
+/// reaches `run_as` that way.
+///
+/// Both polarities, from one hint call, and each asserted on the uid
+/// the inner call actually observed rather than on its status alone:
+/// a nested call for the same identity must still run *and see that
+/// identity*, and one for another identity must be refused with
+/// `-EDEADLK`.  Asserting only the refusal would pass against a
+/// `run_as` that had simply stopped working.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_nested_run_as_refuses_a_different_identity() {
+    if !nsfs_only().await {
+        return;
+    }
+    let cfg = get_config();
+    let r = s3_tests_rs::admin::driver_hint_results(
+        "nested-identity",
+        &[("outer", &s3_tests_rs::admin::q(&cfg.main_user_id)),
+          ("inner", &s3_tests_rs::admin::q(&cfg.alt_user_id))]).await;
+    let m = match r {
+        Some(m) => m,
+        /* no admin access, or a driver without the hint */
+        None => return,
+    };
+    match m.get("verdict").map(String::as_str) {
+        Some("ran") => {}
+        /* impersonation off, or the fixture's users carry no identity:
+         * the nested path is unreachable, so there is nothing to assert */
+        _ => return,
+    }
+
+    let outer = m.get("outer_uid").cloned().unwrap_or_default();
+    let inner = m.get("inner_uid").cloned().unwrap_or_default();
+    assert_ne!(outer, inner,
+               "the two identities must differ for this to test anything");
+
+    assert_eq!(m.get("same").map(String::as_str), Some(outer.as_str()),
+               "a nested run_as for the identity in force must run, and see \
+                it:  outer={outer} inner={inner} results={m:?}");
+    assert_eq!(m.get("different").map(String::as_str), Some("-35"),
+               "a nested run_as for another identity must be refused with \
+                -EDEADLK, not run as the outer one:  outer={outer} \
+                inner={inner} results={m:?}");
+}
