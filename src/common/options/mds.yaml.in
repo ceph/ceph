@@ -785,6 +785,28 @@ options:
   - runtime
   see_also:
   - mds_bal_replicate_threshold
+- name: mds_bal_skip_replicate_ephemeral_random
+  type: bool
+  level: advanced
+  desc: do not replicate the dirfrags of randomly pinned directories for read
+    load
+  long_desc: A directory under a ceph.dir.pin.random policy sits on one rank,
+    and its dirfrags are replicated for read load like those of any other hot
+    directory, so that their replicas answer some of the reads. That helps a
+    set of dentries read over and over, but slows down workloads that read
+    each dentry only once or twice and then remove it, such as mdtest-easy of
+    IO500, as every read sent to a replica is forwarded or discovered and
+    replicated dentries have to be unlinked on the replicas too. Set this to
+    keep such dirfrags on their auth rank only.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+  see_also:
+  - mds_bal_replicate_threshold
+  - mds_bal_replica_discover_reads
+  - mds_export_ephemeral_random
 - name: mds_bal_split_size
   type: int
   level: advanced

@@ -27,8 +27,10 @@
   dirfrag replicas that were not replicated for read load in its replies, no
   longer read-replicates the dirfrags of ephemerally distributed directories,
   and lets the replicas of a dirfrag replicated for read load answer the reads
-  that clients send to them instead of forwarding them to the auth rank. See
-  doc/cephfs/multimds.rst.
+  that clients send to them instead of forwarding them to the auth rank
+  (``mds_bal_replica_discover_reads``);
+  ``mds_bal_skip_replicate_ephemeral_random`` keeps randomly pinned
+  directories from being replicated. See doc/cephfs/multimds.rst.
 
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients

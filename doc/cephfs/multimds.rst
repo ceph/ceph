@@ -268,7 +268,11 @@ The ranks do not replicate the fragments of directories under a distributed
 ephemeral pin for read load: those fragments are already spread over the
 ranks. Other hot directories, randomly pinned ones included, can be
 replicated; a replica then answers the reads that clients send to it, and
-fetches the dentries it does not hold from the auth rank.
+fetches the dentries it does not hold from the auth rank once they have been
+read there ``mds_bal_replica_discover_reads`` times. Workloads that read each
+file only once or twice and then remove it are faster without replicas for
+randomly pinned directories: set ``mds_bal_skip_replicate_ephemeral_random``
+for that.
 
 The random and distributed ephemeral pin policies are enabled by the
 ``mds_export_ephemeral_random`` and ``mds_export_ephemeral_distributed``
