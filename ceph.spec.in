@@ -165,18 +165,6 @@
   [ $jobs -lt 1 ] && jobs=1 \
   echo $jobs )
 
-# $1==1: fresh install; $1==0: removal. Skip try-restart on upgrade ($1>1).
-%define ceph_mgr_module_scripts() \
-%post %1\
-if [ $1 -eq 1 ] ; then\
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :\
-fi\
-\
-%postun %1\
-if [ $1 -eq 1 ] ; then\
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :\
-fi
-
 %if 0%{?_smp_ncpus_max} == 0
 %if 0%{?__isa_bits} == 32
 # 32-bit builds can use 3G memory max, which is not enough even for -j2
@@ -2294,12 +2282,8 @@ fi
 %files mgr-dashboard
 %{_datadir}/ceph/mgr/dashboard
 
-%ceph_mgr_module_scripts mgr-dashboard
-
 %files mgr-diskprediction-local
 %{_datadir}/ceph/mgr/diskprediction_local
-
-%ceph_mgr_module_scripts mgr-diskprediction-local
 
 %files mgr-modules-core
 %dir %{_datadir}/ceph/mgr
@@ -2319,117 +2303,71 @@ fi
 %files mgr-alerts
 %{_datadir}/ceph/mgr/alerts
 
-%ceph_mgr_module_scripts mgr-alerts
-
 %files mgr-influx
 %{_datadir}/ceph/mgr/influx
-
-%ceph_mgr_module_scripts mgr-influx
 
 %files mgr-insights
 %{_datadir}/ceph/mgr/insights
 
-%ceph_mgr_module_scripts mgr-insights
-
 %files mgr-iostat
 %{_datadir}/ceph/mgr/iostat
-
-%ceph_mgr_module_scripts mgr-iostat
 
 %files mgr-localpool
 %{_datadir}/ceph/mgr/localpool
 
-%ceph_mgr_module_scripts mgr-localpool
-
 %files mgr-mds-autoscaler
 %{_datadir}/ceph/mgr/mds_autoscaler
-
-%ceph_mgr_module_scripts mgr-mds-autoscaler
 
 %files mgr-mirroring
 %{_datadir}/ceph/mgr/mirroring
 
-%ceph_mgr_module_scripts mgr-mirroring
-
 %files mgr-nfs
 %{_datadir}/ceph/mgr/nfs
-
-%ceph_mgr_module_scripts mgr-nfs
 
 %files mgr-nvmeof
 %{_datadir}/ceph/mgr/nvmeof
 
-%ceph_mgr_module_scripts mgr-nvmeof
-
 %files mgr-osd-perf-query
 %{_datadir}/ceph/mgr/osd_perf_query
-
-%ceph_mgr_module_scripts mgr-osd-perf-query
 
 %files mgr-osd-support
 %{_datadir}/ceph/mgr/osd_support
 
-%ceph_mgr_module_scripts mgr-osd-support
-
 %files mgr-prometheus
 %{_datadir}/ceph/mgr/prometheus
-
-%ceph_mgr_module_scripts mgr-prometheus
 
 %files mgr-rgw
 %{_datadir}/ceph/mgr/rgw
 
-%ceph_mgr_module_scripts mgr-rgw
-
 %files mgr-selftest
 %{_datadir}/ceph/mgr/selftest
-
-%ceph_mgr_module_scripts mgr-selftest
 
 %files mgr-smb
 %{_datadir}/ceph/mgr/smb
 
-%ceph_mgr_module_scripts mgr-smb
-
 %files mgr-snap-schedule
 %{_datadir}/ceph/mgr/snap_schedule
-
-%ceph_mgr_module_scripts mgr-snap-schedule
 
 %files mgr-stats
 %{_datadir}/ceph/mgr/stats
 
-%ceph_mgr_module_scripts mgr-stats
-
 %files mgr-telegraf
 %{_datadir}/ceph/mgr/telegraf
-
-%ceph_mgr_module_scripts mgr-telegraf
 
 %files mgr-test-orchestrator
 %{_datadir}/ceph/mgr/test_orchestrator
 
-%ceph_mgr_module_scripts mgr-test-orchestrator
-
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
-
-%ceph_mgr_module_scripts mgr-rook
 
 %files mgr-k8sevents
 %{_datadir}/ceph/mgr/k8sevents
 
-%ceph_mgr_module_scripts mgr-k8sevents
-
 %files mgr-cephadm
 %{_datadir}/ceph/mgr/cephadm
 
-%ceph_mgr_module_scripts mgr-cephadm
-
 %files mgr-cli-api
 %{_datadir}/ceph/mgr/cli_api
-
-%ceph_mgr_module_scripts mgr-cli-api
 
 %files mon
 %{_bindir}/ceph-mon
