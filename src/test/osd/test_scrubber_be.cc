@@ -186,6 +186,11 @@ class TestPg : public PgScrubBeListener {
   };
 
   bool get_ec_supports_crc_encode_decode() const final {
+    // ReplicatedBackend aborts if asked
+    if (get_pgpool().info.is_replicated()) {
+      ADD_FAILURE() << "get_ec_supports_crc_encode_decode() for a replicated pool";
+      return false;
+    }
     return get_is_ec_optimized() && ec_crc_encode_decode;
   }
   // whether the plugin can encode and decode CRCs, as jerasure's FastEC

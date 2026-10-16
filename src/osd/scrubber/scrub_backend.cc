@@ -1207,7 +1207,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   std::map<shard_id_t, shard_id_t> corrupt_copies;
   // the copies of a shard in different zones are compared whatever the
   // plugin; checking a zone's stripe needs it to encode and decode CRCs
-  const bool crc_decode = m_pg.get_ec_supports_crc_encode_decode();
+  const bool crc_decode =
+    !m_is_replicated && m_pg.get_ec_supports_crc_encode_decode();
   if (!m_is_replicated && m_depth == scrub_level_t::deep &&
       (crc_decode || m_pg.get_ec_sinfo().get_num_zones() > 1)) {
     zone_digests = collect_ec_zone_digests(ho, auth_sel);
