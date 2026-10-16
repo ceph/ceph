@@ -1421,9 +1421,8 @@ is refused unless:
   stretch mode is off, such a pool is an individual stretch pool (:ref:`Individual Stretch Pools
   <ecsc-individual-stretch-pools>`), and stretch mode would take over its stretch values. The
   command fails with "pool '<pool>' is an individual stretch pool; individual stretch pools and
-  stretch mode cannot be combined, so unstretch it first with 'ceph osd pool stretch unset' or 'ceph
-  osd pool set <pool> num_zones 1'". ``num_zones 1`` helps only a pool with ``num_zones`` greater
-  than 1; a pool with one zone and stretch values from an earlier release needs ``stretch unset``.
+  stretch mode cannot be combined, so unstretch it first with 'ceph osd pool stretch unset'". An
+  individual stretch pool has one zone, so ``stretch unset`` is what clears its stretch values.
 
 Enabling stretch mode changes:
 
@@ -1761,8 +1760,9 @@ Individual Stretch Pools
 ``ceph osd pool stretch set`` and ``unset`` (``prepare_command_pool_stretch_set``,
 ``prepare_command_pool_stretch_unset``) make an individual stretch pool. They take the pool's
 stretch values (``peering_crush_bucket_*``, ``crush_rule``, ``size`` and ``min_size``) from the
-command line, and ``stretch set`` also sets ``num_zones`` to the number of zone buckets its rule
-spans and ``replica`` to ``size / num_zones``.
+command line. An individual stretch pool keeps ``num_zones`` 1 and ``replica`` equal to ``size``,
+and its ``min_size`` counts all its copies, exactly as in earlier releases: it is not a pool over
+zones in the sense of this design, and stretch mode does not manage it.
 
 An erasure coded pool is stretched and unstretched only with
 ``ceph osd pool set <pool> num_zones <n>``, which works out all of these values, and the shards
@@ -1785,14 +1785,13 @@ For every pool type:
   not enabled while an individual stretch pool exists (:ref:`Entering Stretch Mode
   <ecsc-entering-stretch-mode>`).
 - ``stretch set``'s ``min_size`` keeps its meaning in earlier releases, a total over all zones,
-  from 1 to ``size``; 0 gives ``peering_crush_bucket_count``. The pool keeps ``min_size`` per
-  zone, so ``stretch set`` stores the total divided by the zone count, rounded up: ``size`` 4
-  with ``min_size`` 3 needs 2 replicas in each zone. Rounding up never accepts writes with fewer
-  replicas than the total asked for.
-- ``stretch set`` takes ``--replica`` (``size`` is ``num_zones × replica``) or ``size``, which
-  must divide by the zone count, but not both ("cannot specify both 'size' and 'replica'
-  parameters; ..."); ``stretch unset`` takes either as the pool's one-zone ``size``. ``size``
-  stays the earlier releases' positional argument.
+  from 1 to ``size``; 0 gives ``peering_crush_bucket_count``. The pool stores it unchanged, and
+  peering counts it over the whole acting set, as for any stretched pool with one zone
+  (:ref:`Stretch Set Validation <ecsc-stretch-set-validation>`).
+- ``stretch set`` takes ``--replica`` (``size`` is the number of zones the rule spans ×
+  ``replica``) or ``size``, but not both ("cannot specify both 'size' and 'replica' parameters;
+  ..."); ``stretch unset`` takes either as the pool's one-zone ``size``. ``size`` stays the
+  earlier releases' positional argument.
 - ``peering_crush_bucket_count`` and ``peering_crush_bucket_target`` cannot exceed the number of
   zones the rule spans ("peering_crush_bucket_count (<n>) cannot exceed the number of <type> zones
   (<m>) spanned by crush rule <rule>"), and so cannot exceed the cluster's buckets of that type
@@ -2645,9 +2644,10 @@ Each zone's OSDs are checked against the per-zone ``min_size`` instead
 ``min_size`` OSDs, and in degraded and recovery stretch mode only the surviving zone, the mandatory
 member, is counted (:ref:`min_size in Each State <ecsc-min-size-in-each-state>`). Two layouts are
 counted over the whole acting set, which needs ``min_size × num_zones`` OSDs: a stretched pool with
-one zone, such as an erasure coded pool that an earlier release's ``stretch set`` gave stretch
-values (:ref:`Pools from Earlier Releases <ecsc-pools-from-earlier-releases>`), and an individual
-stretch pool over three zones with a ``peering_crush_bucket_count`` of 2. The zones counted are all
+one zone, that is an individual stretch pool or an erasure coded pool that an earlier release's
+``stretch set`` gave stretch values (:ref:`Pools from Earlier Releases
+<ecsc-pools-from-earlier-releases>`), and a pool over three zones with a
+``peering_crush_bucket_count`` of 2, for a later release. The zones counted are all
 the buckets of the zone type that have OSDs under the rule's ``take`` roots (shadow buckets of a
 device class included), not only those the acting set uses, so the "exactly ``num_zones`` zone
 buckets" of :ref:`The Rule of a Pool <ecsc-the-rule-of-a-pool>` matters for peering too.
@@ -2758,13 +2758,18 @@ Encoding
 * **New fields get a new version.** ``replica`` and ``num_zones`` are struct version 34, written
   only with the feature bit of the release that ships this design (:ref:`Release Gate
   <ecsc-release-gate>`). Version 33 is Umbrella's.
-* **Decode derives what an older version lacks.** For an older version, ``num_zones`` is
-  ``peering_crush_bucket_target`` for a replicated stretched pool and 1 for any other pool,
-  including an erasure coded pool that an earlier ``stretch set`` gave stretch values.
-  ``replica`` is ``size / num_zones``, and the per-zone ``min_size`` is ``min_size / num_zones``
-  rounded up, as ``stretch set`` rounds it: a pool that degraded stretch mode left at
-  ``min_size`` 1 keeps 1 per zone, not 0. Every pool in memory therefore has ``num_zones`` and
-  ``replica``, whichever format it was read from.
+* **Decode derives what an older version lacks.** For an older version, every pool has
+  ``num_zones`` 1, ``replica`` equal to ``size`` and its ``min_size`` unchanged. A replicated pool
+  with stretch values is either an individual stretch pool, which keeps these, or a pool of global
+  stretch mode, which needs the zones of stretch mode. ``pg_pool_t::decode`` cannot tell them
+  apart, so it marks the pool, and ``OSDMap::decode()`` and ``OSDMap::apply_incremental()`` settle
+  it once they know whether the map is in stretch mode
+  (``OSDMap::settle_legacy_stretch_pools()``). In stretch mode the pool gets ``num_zones``
+  ``peering_crush_bucket_target``, ``replica`` ``size / num_zones`` and the per-zone ``min_size``
+  ``min_size / num_zones`` rounded up: a pool that degraded stretch mode left at ``min_size`` 1
+  keeps 1 per zone, not 0. Every pool in memory therefore has ``num_zones`` and ``replica``,
+  whichever format it was read from. An erasure coded pool that an earlier ``stretch set`` gave
+  stretch values always keeps one zone.
 * **Encode in an older format writes the older meaning,** so that decode, encode and decode
   again give the same pool. ``size`` is already the total. ``min_size`` is written as the total,
   the per-zone ``min_size`` × ``num_zones``, which decode divides back exactly. A total from an
@@ -2834,9 +2839,8 @@ require-osd-release <release>'".
 * ``ceph mon enable_stretch_mode`` and ``disable_stretch_mode`` behave as in earlier releases
   (:ref:`Global Stretch Mode in Earlier Releases <ecsc-global-stretch-mode-in-earlier-releases>`),
   except that ``min_size`` is per zone: ``enable_stretch_mode`` gives each pool
-  ``mon_stretch_pool_min_size`` divided by the zone count, rounded up as ``stretch set`` rounds it
-  (:ref:`Individual Stretch Pools <ecsc-individual-stretch-pools>`), and at most the replicas per
-  zone. The default 2 gives 1 in each zone. ``enable_stretch_mode`` is also refused while an
+  ``mon_stretch_pool_min_size`` divided by the zone count and rounded up (:ref:`Encoding
+  <ecsc-encoding>`), and at most the replicas per zone. The default 2 gives 1 in each zone. ``enable_stretch_mode`` is also refused while an
   individual stretch pool exists (:ref:`Entering Stretch Mode <ecsc-entering-stretch-mode>`), which
   earlier releases allowed.
 * The degraded and healthy transitions no longer halve and restore ``min_size`` (:ref:`Degraded,
@@ -2848,12 +2852,10 @@ require-osd-release <release>'".
   daemons see multiplied by the zone count; ``ceph osd pool get <pool> min_size`` reports the
   per-zone value; ``size`` is refused for a pool over zones (:ref:`Other Pool Settings
   <ecsc-other-pool-settings>`); and ``replica`` can be set.
-* A ``min_size`` total from an earlier release that does not divide by the zone count reaches
-  earlier daemons raised (:ref:`Encoding <ecsc-encoding>`).
+* A ``min_size`` total of a pool of global stretch mode that does not divide by the zone count
+  reaches earlier daemons raised (:ref:`Encoding <ecsc-encoding>`).
 * ``ceph osd pool stretch set`` and ``unset`` follow :ref:`Individual Stretch Pools
-  <ecsc-individual-stretch-pools>`, and for ``stretch set`` the target must equal the number of
-  zones the rule spans, which the older format records as ``num_zones``
-  ("peering_crush_bucket_target (<t>) must equal the number of zones (<n>) until ...").
+  <ecsc-individual-stretch-pools>`.
 * These are not gated on the release, so an earlier-release monitor behaves differently: a profile
   is deleted with its last pool (:ref:`Profile Lifetime <ecsc-profile-lifetime>`); an unused rule is
   removed on ``ceph osd pool delete``, ``ceph osd pool set <pool> crush_rule`` and ``replica``, and
@@ -2943,12 +2945,15 @@ Pools from Earlier Releases
   a standard ``k+m`` acting set, with no new on-disk format and no new wire messages, so existing
   OSDs and clients handle it as a conventional EC pool. If it refers to ``default``, it refers to a
   copy of it after the commit (:ref:`At the Commit <ecsc-at-the-commit>`).
-* A replicated stretched pool from an earlier release is decoded with ``num_zones``
+* A replicated pool of global stretch mode from an earlier release gets ``num_zones``
   ``peering_crush_bucket_target``, ``replica`` ``size / num_zones`` and ``min_size`` divided between
   the zones, rounded up (:ref:`Encoding <ecsc-encoding>`), and keeps its custom CRUSH rule. Its
   ``min_size`` then applies to each zone, where the earlier release counted it over all zones:
   ``size`` 4 with ``min_size`` 3 needs 2 replicas in each zone. With the ``size`` 4 and ``min_size``
   2 of global stretch mode, each zone needs 1 replica, as in the earlier release.
+* An individual stretch pool from an earlier release keeps ``num_zones`` 1, ``replica`` equal to
+  ``size`` and its ``min_size`` over all its copies, and peers exactly as in the earlier release
+  (:ref:`Individual Stretch Pools <ecsc-individual-stretch-pools>`).
 * An erasure coded pool that an earlier release's ``stretch set`` gave stretch values keeps one
   zone. It is decoded with ``num_zones`` 1 and its ``min_size`` unchanged, and peers as a
   single-zone erasure coded pool (``calc_ec_acting``) that needs ``min_size`` shards in its whole
