@@ -876,6 +876,17 @@ public:
   bool subtree_is_down(int id, std::set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, std::set<int> *down_cache) const;
 
+  void get_stretch_zones(const pg_pool_t& pool,
+                         std::map<int, std::set<int>>* zone_osds) const;
+  bool at_least_one_zone_has_min_size(const pg_pool_t& pool, const std::vector<int>& acting) const ;
+  unsigned stretch_num_acting_below_min_size(const pg_pool_t& pool, const std::vector<int>& acting) const;
+
+  /// Whether async recovery may leave the PG the acting set candidate_want,
+  /// which lacks one OSD of the set it wants: each zone of a stretch pool,
+  /// or else the whole set, keeps min_size OSDs.
+  bool async_recovery_can_shrink(const pg_pool_t& pool,
+                                 const std::vector<int>& candidate_want) const;
+
   bool subtree_type_is_down(CephContext *cct, int id, int subtree_type, std::set<int> *down_in_osds, std::set<int> *up_in_osds,
                             std::set<int> *subtree_up, std::unordered_map<int, std::set<int> > *subtree_type_down) const;
 
@@ -1198,12 +1209,14 @@ public:
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 			   const pg_t pg,
 			   const std::vector<int>& acting) const;
-  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
-				       const pg_t pg,
-				       const shard_id_t shard) const;
   shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 					    const pg_t pg,
 					    const shard_id_t shard) const;
+  /// Correct the shard that a pre-Tentacle client gives an op to an
+  /// optimized EC pool with pg_temp: its position in primary-first order.
+  /// The client's map can be older than this one: false if the pool or
+  /// the shard is not in this map.
+  bool undo_pre_tentacle_primaryfirst(spg_t *pgid) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);

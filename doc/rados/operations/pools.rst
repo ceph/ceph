@@ -181,17 +181,23 @@ following:
 .. describe:: [crush-rule-name]
 
    The name of the CRUSH rule to use for this pool. The specified rule must
-   already exist, otherwise the command will fail.
+   already exist, otherwise the command will fail. For a pool with
+   ``num_zones`` greater than 1, the rule must place the pool in that many
+   buckets of the zone failure domain type, with the pool's replicas per zone,
+   or its K+M shards, in each bucket, otherwise the command will fail.
 
    :Type: String
    :Required: No.
-   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` :ref:`erasure code profile <erasure-code-profiles>` is used or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
+   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist. A replicated pool with ``num_zones`` greater than 1 gets the ``{pool-name}`` rule instead, unless :confval:`osd_pool_default_crush_rule` names a rule, for example one set with ``ceph osd pool default set --rule``, that places the pool in its zones as described above.  For ``erasure`` pools, it is the ``erasure-code`` rule if neither an :ref:`erasure code profile <erasure-code-profiles>` nor ``--k``, ``--m`` or a CRUSH option is given and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
    For ``erasure`` pools only. Instructs Ceph to use the specified :ref:`erasure
    code profile <erasure-code-profiles>`. This profile must be an existing profile as defined via
-   the dashboard or invoking ``osd erasure-code-profile set``.  Note that
+   the dashboard or invoking ``osd erasure-code-profile set``. Without a
+   profile, or with ``default``, a profile of the pool's own is created from
+   the ``default`` profile and ``--k`` and ``--m``, if given (see
+   :ref:`erasure-code-profile-lifecycle`).  Note that
    changes to the EC profile of a pool after creation do *not* take effect.
    To change the EC profile of an existing pool one must modify the pool to
    use a different CRUSH rule defined with the desired profile.
@@ -275,8 +281,18 @@ pools.
 
 For more information, see :ref:`Monitor Configuration <monitor-config-reference>`.
 
-If there are custom CRUSH rules that are no longer in use or needed, consider
-deleting those rules.
+Deleting the last erasure-coded pool that uses an erasure code profile also
+deletes that profile (unless it is the ``default`` profile), and deletes the
+pool's CRUSH rule if no other pool uses it. See
+:ref:`erasure-code-profile-lifecycle`.
+
+Deleting a pool of any type, or giving a pool another CRUSH rule, deletes the
+CRUSH rule that it used if no other pool uses it, unless it is the default
+replicated rule. This applies to custom rules too: to keep a rule that no pool
+uses, create it again when it is needed.
+
+Custom CRUSH rules that no pool has used yet are not deleted automatically. If
+they are no longer needed, consider deleting those rules.
 
 .. prompt:: bash $
 
@@ -354,6 +370,46 @@ To remove a snapshot of a pool, run a command of the following form:
 
    ceph osd pool rmsnap {pool-name} {snap-name}
 
+.. _pool-creation-defaults:
+
+Pool Creation Defaults
+======================
+
+``ceph osd pool create`` takes every parameter that it is not given from an
+``osd_pool_default_*`` configuration option. To show the defaults that it
+would use now, and where each comes from, run:
+
+.. prompt:: bash $
+
+   ceph osd pool default get
+
+To set defaults, run a command that takes the parameters of
+``ceph osd pool create``, for example:
+
+.. prompt:: bash $
+
+   ceph osd pool default set --replica 2 --num_zones 2 --zone_failure_domain datacenter
+
+The command writes each given parameter to the ``global`` section of the
+configuration database. It never changes an existing pool. It makes the checks
+that ``ceph osd pool create`` would make with the resulting defaults and
+refuses a default that would make pool creation fail, for example
+``--num_zones 2`` on a cluster that cannot be stretched. It also refuses a value
+that a ``mon`` section of the configuration database or a monitor's local
+configuration would override. To set such a default, remove the overriding
+value first, as :ref:`pool-default-config-override` describes, and then run
+``ceph osd pool default set`` again.
+
+``--replica`` is the number of copies in each zone, so a replicated pool with
+two zones and two replicas per zone has a ``size`` of ``4``. ``--size`` is the
+legacy name of ``--replica``: it gives the size of a single-zone pool and is
+refused together with ``--replica``, or with a ``num_zones``, given or default,
+greater than ``1``. ``--k`` and ``--m`` are not written to the configuration
+database: they change ``k`` and ``m`` of the ``default`` erasure code profile,
+which new erasure-coded pools copy (see :ref:`erasure-code-profile-lifecycle`).
+``--rule`` names a default CRUSH rule, and ``--rule none`` returns to generated
+rules.
+
 .. _setpoolvalues:
 
 Setting Pool Values
@@ -416,7 +472,7 @@ You may set values for the following keys:
 
 .. describe:: min_size
    
-   :Description: Sets the minimum number of active replicas (or shards) required for PGs to be active and thus for I/O operations to proceed.  For further details, see `Setting the Number of RADOS Object Replicas`_.  For erasure-coded pools, this should be set to a value greater than ``K``. If I/O is allowed with only ``K`` shards available, there will be no redundancy and data will be lost in the event of an additional, permanent OSD failure. For more information, see :ref:`ecpool`
+   :Description: Sets the minimum number of active replicas (or shards) required for PGs to be active and thus for I/O operations to proceed.  For further details, see `Setting the Number of RADOS Object Replicas`_.  For erasure-coded pools, this should be set to a value greater than ``K``. If I/O is allowed with only ``K`` shards available, there will be no redundancy and data will be lost in the event of an additional, permanent OSD failure. For more information, see :ref:`ecpool`. For a pool with ``num_zones`` greater than 1, ``min_size`` is the number of OSDs that a PG needs active in each zone. For a replicated pool, it is from 1 to the number of OSDs that hold a copy of the PG in each zone.
    :Type: Integer
    :Version: ``0.54`` and above
 
@@ -778,18 +834,38 @@ See :ref:`managing_bulk_flagged_pools`.
 .. _setting_values_for_a_stretch_pool:
 
 Setting values for a stretch pool
-=================================
+==================================
 To set values for a stretch pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
 
+or, giving the replicas in each zone in place of ``{size}``:
+
+.. prompt:: bash $
+
+   ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} --min_size {min_size} --replica {replica} [--yes-i-really-mean-it]
+
+This command configures an individual stretch pool, which is an alternative to
+stretch mode. It fails while stretch mode is enabled, and stretch mode cannot be
+enabled while such a pool exists. See :ref:`stretch_mode`. Individual stretch
+pools are a legacy feature: for a pool over two zones, use ``num_zones``. In
+this release ``num_zones`` is 1 or 2, so a pool over three or more zones still
+needs this command.
+
+.. note::
+
+   This command is only supported for replicated pools. For EC (erasure-coded)
+   pools, use ``ceph osd pool set {pool-name} num_zones {N}`` instead.
+   ``num_zones`` works for both replicated and EC pools.
+
 Here are the breakdowns of the arguments:
 
 .. describe:: {pool-name}
 
-   The name of the pool. It must be an existing pool: this command doesn't create a new pool.
+   The name of the pool. It must be an existing replicated pool: this command
+   doesn't create a new pool, and it refuses erasure-coded pools.
 
    :Type: String
    :Required: Yes.
@@ -821,36 +897,36 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {crush_rule}
       
-   The CRUSH rule to use for the pool. The type of pool must match the type of the CRUSH rule
-   (``replicated`` or ``erasure``).
+   The CRUSH rule to use for the pool. It must be a ``replicated`` rule.
 
    :Type: String
    :Required: Yes.
 
 .. describe:: {size}
          
-   The number of replicas for RADOS objects (and thus PGs) in the pool.
+   The number of replicas for RADOS objects (and thus PGs) in the pool. It
+   must divide by the number of zones that the CRUSH rule spans.
    
    :Type: Integer
-   :Required: Yes.
+   :Required: Yes, unless ``--replica`` is given.
+
+.. describe:: {--replica}
+
+   The number of replicas in each zone, in place of ``{size}``: the pool's
+   ``size`` is the number of zones that the CRUSH rule spans times ``replica``.
+
+   :Type: Integer
+   :Required: No.
 
 .. describe:: {min_size}
             
    The minimum number of replicas that must be active for I/O operations to be
-   serviced.
+   serviced, counted over all zones, from 1 to ``{size}``. The pool keeps it
+   per zone, divided by the number of zones and rounded up, so ``{size}`` 4
+   with ``{min_size}`` 3 needs 2 replicas in each zone.
 
    :Type: Integer
    :Required: Yes.
-
-.. describe:: {--yes-i-really-mean-it}
-   
-      This flag is required to confirm that you really want to bypass
-      safety checks and set the values for a pool, e.g,
-      when you are trying to set ``peering_crush_bucket_count`` or 
-      ``peering_crush_bucket_target`` to be more than the number of buckets in the crush map.
-   
-      :Type: Flag
-      :Required: No.
 
 Unsetting values for a stretch pool
 ===================================
@@ -859,6 +935,16 @@ To move the pool back to non-stretch, run a command of the following form:
 .. prompt:: bash $
 
    ceph osd pool stretch unset {pool-name} {crush_rule} {size} {min_size}
+
+``--replica {replica}`` can be given in place of ``{size}``, with
+``--min_size {min_size}``. This command fails while stretch mode is enabled.
+
+.. note::
+
+   For an EC (erasure-coded) pool with ``num_zones`` greater than 1, use
+   ``ceph osd pool set {pool-name} num_zones 1`` instead. This command accepts
+   an EC pool only to clear stretch values that an older release gave it, with
+   ``{size}`` K+M and ``{min_size}`` from K to K+M.
 
 Here are the breakdowns of the arguments:
 
@@ -880,7 +966,9 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {size}
          
-   The number of replicas for objects after exiting stretch pool.
+   The number of replicas for objects after exiting stretch pool. For an
+   erasure-coded pool that an older release made a stretch pool, this must be
+   ``k+m``, and ``min_size`` must be between ``k`` and ``k+m``.
    
    :Type: Integer
    :Required: Yes.
