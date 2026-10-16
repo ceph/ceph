@@ -1,8 +1,9 @@
 
+import json
 from unittest.mock import Mock, call, patch
 
 from .. import mgr
-from ..controllers.rgw import Rgw, RgwBucket, RgwDaemon, RgwTopic, RgwUser
+from ..controllers.rgw import Rgw, RgwBucket, RgwBucketUi, RgwDaemon, RgwTopic, RgwUser
 from ..rest_client import RequestException
 from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
@@ -734,3 +735,80 @@ class RgwBucketControllerTestCase(ControllerTestCase):
 
         self._get('/test/api/rgw/bucket/i-do-not-exist')
         self.assertStatus(500)
+
+
+class RgwBucketUiControllerTestCase(ControllerTestCase):
+    URL = '/ui-api/rgw/bucket/buckets_and_users_count'
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([RgwBucketUi])
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_empty_buckets(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': ''}
+        ])
+        mock_proxy.return_value = []
+        mock_user_list.return_value = json.dumps(['user1'])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 0,
+            'users_count': 1,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_empty_usage(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': ''}
+        ])
+        mock_proxy.return_value = [
+            {'bucket': 'b1'},
+            {'bucket': 'b2', 'usage': {}},
+            {'bucket': 'b3', 'usage': {'rgw.main': {'num_objects': 0, 'size_actual': 0}}},
+        ]
+        mock_user_list.return_value = json.dumps(['user1', 'user2'])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 3,
+            'users_count': 2,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_with_realm(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': 'realm1'},
+            {'id': 'daemon2', 'realm_name': 'realm1'},
+        ])
+        mock_proxy.return_value = [
+            {'bucket': 'b1', 'usage': {'rgw.main': {'num_objects': 0, 'size_actual': 0}}},
+        ]
+        mock_user_list.return_value = json.dumps([])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 1,
+            'users_count': 0,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+        # Same realm must only be accumulated once.
+        mock_proxy.assert_called_once_with('daemon1', 'GET', 'bucket?stats=true')
