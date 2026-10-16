@@ -1424,3 +1424,42 @@ def test_cluster_update_client_compat_nonexistent(tmodule):
         tmodule.cluster_update_client_compat(
             smb.enums.ClientSupportMode.MACOS, 'nonexistent'
         )
+
+
+def test_overlapping_shares_result_state(tmodule, monkeypatch):
+    # will be used to verify warnings are correctly added to result
+    monkeypatch.setattr(
+        smb.handler._FakePathResolver,
+        '_result_resolve_case_sensitivity',
+        (True, True),
+    )
+    _example_cfg_1(tmodule)
+    # inject duplicate change ops
+    same1 = smb.resources.Share(
+        cluster_id='foo',
+        share_id='sthree',
+        name='Share Three',
+        cephfs=smb.resources.CephFSStorage(
+            volume='tres',
+            path='/',
+        ),
+    )
+    same2 = smb.resources.Share(
+        cluster_id='foo',
+        share_id='sthree',
+        name='Share Tres',
+        cephfs=smb.resources.CephFSStorage(
+            volume='tres',
+            path='/',
+        ),
+    )
+    rg = tmodule._handler.apply([same1, same2])
+    assert rg.success, rg.to_simplified()
+    res = rg.to_simplified()
+    # verify that a single result is returend WITH warnings
+    assert set(res.keys()) == {'success', 'results', 'warnings_summary'}
+    assert len(res['results']) == 1
+    rr1 = res['results'][0]['resource']
+    assert rr1['resource_type'] == 'ceph.smb.share'
+    assert rr1['cluster_id'] == 'foo'
+    assert rr1['share_id'] == 'sthree'
