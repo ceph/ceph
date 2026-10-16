@@ -16327,6 +16327,67 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  /* `nested-identity` -- that a nested run_as() cannot run as the
+   * wrong identity.
+   *
+   * `run_as` takes a fast path when the calling thread is already
+   * impersonating, because enqueueing to the helper pool from a pool
+   * thread can deadlock.  That path used to be taken for *any*
+   * identity, so a nested call asking for a different one ran as the
+   * outer one and said nothing.  The multipart cache's eviction is
+   * reachable that way.
+   *
+   * Both polarities in one call, and each reports the uid the inner
+   * call actually observed rather than only its status, so neither
+   * assertion can pass vacuously:
+   *
+   *   same=<uid>        nested as the same identity still runs, and
+   *                     the uid is the outer one
+   *   different=-35     nested as another identity is refused, -EDEADLK
+   *
+   * Only reachable on a gateway that can assume an identity, so the
+   * suite skips it when `verdict=not-impersonating`. */
+  if (hint == "nested-identity") {
+    if (!nsfs::impersonation_enabled()) {
+      if (out) {
+	(*out)["verdict"] = "not-impersonating";
+      }
+      return 0;
+    }
+    auto o_it = params.find("outer");
+    auto i_it = params.find("inner");
+    if ((o_it == params.end()) || (i_it == params.end())) {
+      return -EINVAL;
+    }
+    nsfs::Credentials outer, inner;
+    if ((hint_credentials(dpp, this, o_it->second, outer) < 0) ||
+	(hint_credentials(dpp, this, i_it->second, inner) < 0)) {
+      if (out) {
+	(*out)["verdict"] = "no-identity";
+      }
+      return 0;
+    }
+    /* the inner call returns who it is, so a pass proves the identity
+     * and not merely the status */
+    const nsfs::ImpersonatedFn who = []() -> int {
+      return static_cast<int>(::geteuid());
+    };
+    int same = 0, different = 0;
+    (void) nsfs::run_as(dpp, outer, [&]() -> int {
+      same = nsfs::run_as(dpp, outer, who);
+      different = nsfs::run_as(dpp, inner, who);
+      return 0;
+    });
+    if (out) {
+      (*out)["verdict"] = "ran";
+      (*out)["outer_uid"] = std::to_string(outer.uid);
+      (*out)["inner_uid"] = std::to_string(inner.uid);
+      (*out)["same"] = std::to_string(same);
+      (*out)["different"] = std::to_string(different);
+    }
+    return 0;
+  }
+
   if (hint == "access") {
     /* The filesystem's verdict on a request, for the tests that check
      * the gateway against it:  whether `user`, served as its POSIX

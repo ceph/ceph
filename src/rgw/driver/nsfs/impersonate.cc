@@ -315,6 +315,27 @@ PersonalityTable& thread_personality_table()
 
 thread_local bool tl_impersonating;
 
+/* Which identity that thread assumed.
+ *
+ * `tl_impersonating` says only *that* a pool thread is running
+ * somebody's work.  A nested run_as() asking for a *different*
+ * identity then took the fast path below and ran as the outer one,
+ * silently:  the operation succeeded, under the wrong uid, and
+ * nothing said so.  Recording who makes the two cases
+ * distinguishable.
+ *
+ * A pointer, not a copy:  the job outlives the call it is running,
+ * and copying the group vector on every nested call would cost more
+ * than the comparison it serves. */
+thread_local const Credentials* tl_current_cred;
+
+namespace {
+bool same_identity(const Credentials& a, const Credentials& b)
+{
+  return (a.uid == b.uid) && (a.gid == b.gid) && (a.groups == b.groups);
+}
+}
+
 /* The pool behind run_as().
  *
  * Deliberately plain:  it exists to be deleted once the kernel can
@@ -362,7 +383,9 @@ class ImpersonationPool {
 	ret = scope.push(*job->cred);
 	if (ret == 0) {
 	  tl_impersonating = true;
+	  tl_current_cred = job->cred;
 	  ret = (*job->fn)();
+	  tl_current_cred = nullptr;
 	  tl_impersonating = false;
 	}
       }
@@ -429,7 +452,17 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
 	   const ImpersonatedFn& fn)
 {
   if (tl_impersonating) {
-    return fn();
+    /* The fast path is only correct for the identity in force.  For
+     * any other it would run the work as the wrong one, so refuse:
+     * enqueueing instead is what the comment above rules out. */
+    if (tl_current_cred && same_identity(*tl_current_cred, cred)) {
+      return fn();
+    }
+    ldpp_dout(dpp, 0) << "ERROR: refusing to run as uid " << cred.uid
+      << " on a thread already running as uid "
+      << (tl_current_cred ? tl_current_cred->uid : (uid_t)-1)
+      << ";  the work would have run as the wrong identity" << dendl;
+    return -EDEADLK;
   }
   static ImpersonationPool pool;
   const int ret = pool.run(cred, fn);
