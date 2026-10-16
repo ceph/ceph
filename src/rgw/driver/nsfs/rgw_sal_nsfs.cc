@@ -2895,6 +2895,20 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 int File::read(int64_t ofs, int64_t left, bufferlist& bl,
 		      const DoutPrefixProvider* dpp, optional_yield y)
 {
+  /* Open, or say why not.
+   *
+   * This read the member descriptor without checking it, so a
+   * refused open earlier in the request left `fd` at -1, and the
+   * pread that followed returned EBADF -- which reached the client
+   * as a 500 where the filesystem had said EACCES.  A permission the
+   * tree does not grant, reported as a gateway failure. */
+  if (fd < 0) {
+    const int oret = open(dpp);
+    if (oret < 0) {
+      return oret;
+    }
+  }
+
   int64_t read_chunk_size =
     ctx->_conf.get_val<Option::size_t>("rgw_nsfs_read_chunk_size");
   if (read_chunk_size <= 0) {
