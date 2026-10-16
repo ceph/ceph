@@ -994,7 +994,8 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * D's third piece -- so an I/O error reaches here too and is
      * retried once pointlessly, which costs a syscall and reports
      * the same thing twice. */
-    if ((sr == SafeResult::ERROR) && !named) {
+    if (((sr == SafeResult::ERROR) || (sr == SafeResult::DENIED)) &&
+        !named) {
       ldpp_dout(dpp, 4) << "promote_version: " << leaf << " refused as uid "
         << cand_owner.uid << ", which no identity record names;  retrying "
         "as the gateway with DAC_OVERRIDE and FOWNER raised" << dendl;
@@ -1017,7 +1018,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
     }
 
     ::close(vfd);
-    if (sr == SafeResult::ERROR) {
+    if ((sr == SafeResult::ERROR) || (sr == SafeResult::DENIED)) {
       /* The link was refused, and a retry is refused the same way --
        * the strategy logged the errno.  What an operator needs is the
        * consequence, which no other line states. */
@@ -1621,6 +1622,14 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
     result.demoted_ver_id = cur_ver_id;
   } else if (sr == SafeResult::MISMATCH && cur_is_null) {
     /* null version already demoted by a concurrent writer */
+  } else if (sr == SafeResult::DENIED) {
+    /* the filesystem refused this identity, which S3 reports as a
+     * 403:  the request passed the bucket's policy and not the
+     * tree's permissions, and saying 500 would name the gateway for
+     * the tree's answer */
+    ldpp_dout(dpp, 4) << "version demote refused for " << leaf
+      << ":  the filesystem denied the writer" << dendl;
+    return -EACCES;
   } else if (sr != SafeResult::OK) {
     ldpp_dout(dpp, 0) << "ERROR: version demote failed for "
       << leaf << " sr=" << (int)sr << dendl;
@@ -13338,11 +13347,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       uint64_t cur_ino = cur_stx.stx_ino;
 
       /* Still the gateway's, and it fails the same way the writer's
-       * demote did, against an object an identity wrote.  A delete
-       * has no requester to pass yet:  rgw::sal::Object::DeleteOp
-       * carries no authenticated user, which is the SAL change
-       * (inflight/n-plan.md, phase C).  The identity threads through
-       * here once it does, along with promote_version() below. */
+       * demote did, against an object an identity wrote. */
       SafeResult sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
                                 vfd, ver_name,
@@ -13365,6 +13370,18 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         demoted_ver_id = cur_ver_id;
         did_demote = true;
         break;
+      }
+      if (sr == SafeResult::DENIED) {
+        /* the tree refused the requester, which is a 403 and not the
+         * silent give-up this used to be:  without it the delete
+         * marker is written over a current version that was never
+         * demoted, and the version history loses an entry */
+        ldpp_dout(dpp, 4) << "delete_obj: demote of " << dm_leaf
+          << " refused by the filesystem" << dendl;
+        /* vfd is this function's;  parent_fd is the Directory's and
+         * is not ours to close */
+        ::close(vfd);
+        return -EACCES;
       }
       if (sr == SafeResult::ERROR) {
         break;

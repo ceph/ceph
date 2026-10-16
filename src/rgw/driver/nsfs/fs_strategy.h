@@ -93,6 +93,17 @@ enum class SafeResult {
   OK = 0,
   MISMATCH = 1,
   ERROR = 2,
+  /* The filesystem refused this identity:  EACCES or EPERM, as
+   * distinct from an I/O failure.
+   *
+   * Separate because the two mean opposite things to a client.  A
+   * refusal is the intersection rule working -- S3 allowed the
+   * request and POSIX did not -- and it is a 403;  an I/O failure is
+   * a 500.  With one ERROR for both, a cross-identity overwrite
+   * reached the client as `-ERR_INTERNAL_ERROR`, which reads as a
+   * gateway bug rather than as a permission the tree does not
+   * grant. */
+  DENIED = 3,
 };
 
 /* RAII handle returned by FSStrategy::version_lock().

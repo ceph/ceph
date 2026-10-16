@@ -114,6 +114,9 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
     if (errno == EEXIST) {
       return SafeResult::MISMATCH;
     }
+    if ((errno == EACCES) || (errno == EPERM)) {
+      return SafeResult::DENIED;
+    }
     return SafeResult::ERROR;
   }
   if (stat_matches(dst_dir_fd, dst_name, expected_mtime_ns, expected_ino)) {
@@ -141,6 +144,9 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     if (errno == ENOENT) {
       return SafeResult::OK;
+    }
+    if ((errno == EACCES) || (errno == EPERM)) {
+      return SafeResult::DENIED;
     }
     return SafeResult::ERROR;
   }
@@ -831,6 +837,9 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
     }
     ldpp_dout(dpp, 0) << "ERROR: linkat failed: " << cpp_strerror(err)
       << " src=" << src_name << " dst=" << dst_name << dendl;
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
+    }
     return SafeResult::ERROR;
   }
 
@@ -863,6 +872,9 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
     }
     ldpp_dout(dpp, 0) << "ERROR: gpfs safe_unlink: openat " << name
       << " failed: " << cpp_strerror(err) << dendl;
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
+    }
     return SafeResult::ERROR;
   }
 
@@ -885,6 +897,9 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
       << cpp_strerror(err) << " name=" << name << dendl;
     if (err == EEXIST) {
       return SafeResult::MISMATCH;
+    }
+    if ((err == EACCES) || (err == EPERM)) {
+      return SafeResult::DENIED;
     }
     return SafeResult::ERROR;
   }
