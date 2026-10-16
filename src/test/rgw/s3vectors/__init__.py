@@ -70,12 +70,16 @@ def setup():
         secondary_port = None
         secondary_cluster = None
 
-    # s3vector backend type (local, s3, or rgw)
+    # s3vector backend type (local or rgw)
     global s3vector_backend
     s3vector_backend = defaults.get("s3vector_backend", "rgw")
 
-    global s3vector_s3_bucket
-    s3vector_s3_bucket = cfg.getboolean("DEFAULT", "s3vector_s3_bucket", fallback=False)
+    global s3vector_data_s3_bucket
+    # Only the RGW backend uses this option; ignore its value for local storage.
+    s3vector_data_s3_bucket = False
+    if s3vector_backend == "rgw":
+        s3vector_data_s3_bucket = cfg.getboolean(
+            "DEFAULT", "s3vector_data_s3_bucket", fallback=False)
 
     # backend options.
     # when not set, a value that fits the tested zone is used
@@ -154,13 +158,13 @@ def get_s3vector_local_path():
     return s3vector_local_path
 
 
-def get_s3vector_s3_bucket():
-    return s3vector_s3_bucket
+def get_s3vector_data_s3_bucket():
+    return s3vector_data_s3_bucket
 
 
 def has_backing_bucket():
     """Whether a separate S3 bucket must be created for the RGW backend."""
-    return get_s3vector_backend() == "rgw" and get_s3vector_s3_bucket()
+    return get_s3vector_backend() == "rgw" and get_s3vector_data_s3_bucket()
 
 
 @pytest.fixture(autouse=True, scope="package")

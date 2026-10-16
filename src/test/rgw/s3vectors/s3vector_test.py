@@ -26,7 +26,7 @@ from . import(
     get_config_master_cluster,
     has_backing_bucket,
     get_s3vector_backend,
-    get_s3vector_s3_bucket,
+    get_s3vector_data_s3_bucket,
     get_s3vector_local_path
     )
 
@@ -123,7 +123,8 @@ def _backend_options(host, port, cluster):
     if backend == 'local':
         options['rgw_s3vector_local_path'] = _configured_local_path(port, cluster)
     else:
-        options['rgw_s3vector_data_s3_bucket'] = str(get_s3vector_s3_bucket()).lower()
+        options['rgw_s3vector_data_s3_bucket'] = str(
+            get_s3vector_data_s3_bucket()).lower()
     return options
 
 
@@ -368,9 +369,9 @@ def another_account_user(account_id=None, tenant=None):
 
 def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None, retries=12, delay=5):
     """
-    When using the RGW backend, create a S3 bucket with the same name
-    as the vector bucket. Required because that backend stores LanceDB data
-    directly in an S3 bucket with the vector bucket name.
+    When using a separate S3 backing bucket, create it with the same name as
+    the vector bucket. Native vector-bucket storage and local storage need no
+    S3 backing bucket.
     In a multisite configuration, the connection of the second zone should be
     used to create the bucket there as well, since a vector bucket cannot be
     used in a zone before its backing bucket exists in it. Note that a creation
@@ -434,8 +435,8 @@ def _allow_backing_bucket_access(bucket_name, principals, s3conn=None):
 
 def _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
     """
-    When using the RGW backend, delete the S3 bucket that was created
-    for the vector bucket. The connection of the owner must be given when the
+    Delete the separate S3 backing bucket only when that mode is configured.
+    The connection of the owner must be given when the
     bucket is not owned by the main user, since it is not visible to it.
     """
     if not has_backing_bucket():
@@ -500,9 +501,9 @@ def _delete_vector_bucket_if_exists(conn, bucket_name):
 
 def _cleanup_vector_bucket(conn, bucket_name, s3conn=None):
     """
-    Best effort deletion of a vector bucket, with its indexes and its backing
-    bucket. The "s3" connection of the owner must be given when it is not the
-    main user
+    Best effort deletion of a vector bucket and its indexes, plus its separate
+    S3 backing bucket when configured. The "s3" connection of the owner must
+    be given when it is not the main user.
     """
     _delete_vector_bucket_if_exists(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn)
@@ -656,13 +657,19 @@ def test_vector_bucket_without_backend():
 
 @pytest.mark.vector_bucket_test
 @pytest.mark.parametrize('use_s3_bucket', [False, True])
-def test_vector_bucket_storage_mode(use_s3_bucket):
+@pytest.mark.parametrize('owner_type', ['user', 'account', 'tenant_account'])
+def test_vector_bucket_storage_mode(use_s3_bucket, owner_type):
     """Storage choice survives config changes and same-name buckets stay isolated."""
     if get_s3vector_backend() != 'rgw' or get_config_host2():
         pytest.skip("requires the RGW backend in a single zone")
 
-    conn = connection()
-    s3conn = connection('s3')
+    if owner_type == 'user':
+        conn = connection()
+        s3conn = connection('s3')
+    else:
+        tenant = gen_tenant_name() if owner_type == 'tenant_account' else None
+        conn = another_account_user(tenant=tenant)
+        s3conn = conn.s3
     bucket_name = gen_bucket_name()
     index_name = 'test-index'
     vector_created = False
@@ -708,6 +715,9 @@ def test_vector_bucket_storage_mode(use_s3_bucket):
         keys = {o['Key'] for o in s3conn.list_objects_v2(Bucket=bucket_name).get('Contents', [])}
         if use_s3_bucket:
             assert keys - {'probe'}
+            if owner_type != 'user':
+                assert all(key.startswith(conn.account_id + '/')
+                           for key in keys - {'probe'})
         else:
             assert keys == {'probe'}
             s3conn.delete_object(Bucket=bucket_name, Key='probe')
@@ -729,7 +739,8 @@ def test_vector_bucket_storage_mode(use_s3_bucket):
                         s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
                 s3conn.delete_bucket(Bucket=bucket_name)
         finally:
-            set_rgw_config_option(option, str(get_s3vector_s3_bucket()).lower())
+            set_rgw_config_option(
+                option, str(get_s3vector_data_s3_bucket()).lower())
 
 
 @pytest.mark.vector_bucket_test
@@ -758,11 +769,25 @@ def test_get_vector_bucket():
 
 @pytest.mark.vector_bucket_test
 @pytest.mark.parametrize('delete_first', ['vector', 's3'])
-def test_vector_bucket_shared_instance_namespace(delete_first):
+@pytest.mark.parametrize('owner_type', ['user', 'account', 'tenant_account'])
+def test_vector_bucket_shared_instance_namespace(delete_first, owner_type):
     """Same-name buckets share instance storage, but resolve and delete independently."""
-    conn = connection()
-    s3conn = connection('s3')
+    if owner_type == 'user':
+        conn = connection()
+        s3conn = connection('s3')
+    else:
+        tenant = gen_tenant_name() if owner_type == 'tenant_account' else None
+        conn = another_account_user(tenant=tenant)
+        s3conn = conn.s3
     bucket_name = gen_bucket_name()
+    s3_namespace = getattr(conn, 'tenant', None) or ''
+    vector_namespace = getattr(conn, 'account_id', s3_namespace)
+    s3_name = f'{s3_namespace}/{bucket_name}' if s3_namespace else bucket_name
+    vector_name = (f'{vector_namespace}/{bucket_name}'
+                   if vector_namespace else bucket_name)
+    # --tenant qualifies a user ID; bucket-only commands use namespace/name.
+    s3_args = ['--bucket', s3_name]
+    vector_args = ['--bucket', vector_name]
     vector_created = False
     s3_created = False
 
@@ -782,25 +807,28 @@ def test_vector_bucket_shared_instance_namespace(delete_first):
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
         vector_created = True
 
-        s3_entry = metadata_get(f'bucket:{bucket_name}')
-        vector_entry = metadata_get(f'vectorbucket:{bucket_name}')
+        s3_entry = metadata_get(f'bucket:{s3_name}')
+        vector_entry = metadata_get(f'vectorbucket:{vector_name}')
+        assert s3_entry['bucket']['tenant'] == s3_namespace
+        assert vector_entry['bucket']['tenant'] == vector_namespace
         s3_id = s3_entry['bucket']['bucket_id']
         vector_id = vector_entry['bucket']['bucket_id']
         assert s3_id != vector_id
-        s3_key = f'{bucket_name}:{s3_id}'
-        vector_key = f'{bucket_name}:{vector_id}'
+        s3_key = f'{s3_name}:{s3_id}'
+        vector_key = f'{vector_name}:{vector_id}'
 
         # These calls use the common bucket controller, including for the vector
         # instance. Name-only lookup must still resolve the S3 entrypoint.
         vector_index = ('Normal' if get_s3vector_backend() == 'rgw' and
                         not has_backing_bucket() else 'Indexless')
-        for bucket_id, index_type in ((s3_id, 'Normal'),
-                                      (vector_id, vector_index)):
-            result = admin_json(['bucket', 'layout', '--bucket', bucket_name,
-                                 '--bucket-id', bucket_id])
+        for bucket_id, index_type, bucket_args in (
+                (s3_id, 'Normal', s3_args),
+                (vector_id, vector_index, vector_args)):
+            result = admin_json(['bucket', 'layout'] + bucket_args +
+                                ['--bucket-id', bucket_id])
             layout = result['layout']['current_index']['layout']
             assert layout['type'] == index_type
-        result = admin_json(['bucket', 'stats', '--bucket', bucket_name])
+        result = admin_json(['bucket', 'stats'] + s3_args)
         assert result['id'] == s3_id
 
         # Metadata sections are used by full metadata sync. Each section must
@@ -830,22 +858,22 @@ def test_vector_bucket_shared_instance_namespace(delete_first):
             metadata_get(f'bucket.instance:{s3_key}')
             _, ret = admin(['metadata', 'get', f'vectorbucket.instance:{vector_key}'])
             assert ret != 0
-            _, ret = admin(['bucket', 'layout', '--bucket', bucket_name,
-                            '--bucket-id', vector_id])
+            _, ret = admin(['bucket', 'layout'] + vector_args +
+                           ['--bucket-id', vector_id])
             assert ret != 0
 
             # Reusing the vector bucket name allocates another instance id.
             conn.create_vector_bucket(vectorBucketName=bucket_name)
             vector_created = True
-            new_entry = metadata_get(f'vectorbucket:{bucket_name}')
+            new_entry = metadata_get(f'vectorbucket:{vector_name}')
             assert new_entry['bucket']['bucket_id'] not in (s3_id, vector_id)
-            assert metadata_get(f'bucket:{bucket_name}')['bucket']['bucket_id'] == s3_id
+            assert metadata_get(f'bucket:{s3_name}')['bucket']['bucket_id'] == s3_id
         else:
             s3conn.delete_bucket(Bucket=bucket_name)
             s3_created = False
             assert _vector_bucket_exists(conn, bucket_name)
             metadata_get(f'vectorbucket.instance:{vector_key}')
-            _, ret = admin(['metadata', 'get', f'bucket:{bucket_name}'])
+            _, ret = admin(['metadata', 'get', f'bucket:{s3_name}'])
             assert ret != 0
             # Restore the backing bucket so the RGW backend can clean up normally.
             _create_s3bucket(s3conn, bucket_name)
@@ -4084,65 +4112,63 @@ def test_query_vectors_filter():
 @pytest.mark.vector_test
 def test_query_vectors_post_filtering():
     """Test that postFiltering forces all filtering through JSON post-filtering."""
+    # The candidate count must not depend on a previous test or cluster config.
+    set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
     conn = connection()
     bucket_name = gen_bucket_name()
     dimension = 4
-    _ensure_s3_bucket_for_vector_bucket(bucket_name)
-    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    index_name = 'test-index'
-    filterable_keys = [
-        {'name': 'genre'},
-        {'name': 'year', 'type': 'Number'},
-        {'name': 'popular', 'type': 'Boolean'},
-    ]
-    result = conn.create_index(
-        vectorBucketName=bucket_name, indexName=index_name,
-        dataType='float32', dimension=dimension, distanceMetric='euclidean',
-        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    # v0 (index=0) and v3 (index=10) are rock; v1 and v2 are jazz.
-    # query is centered at index 0, so v0 is nearest and v3 is far away.
-    # with topK=2: pre-filtering on genre=rock searches only rock vectors
-    # and returns both (v0, v3). post-filtering fetches the 2 nearest
-    # overall (v0, v1), then filters to rock, returning only v0.
-    vectors = [
-        {'key': 'v0', 'data': generate_data(dimension, 0),
-         'metadata': json.dumps({'genre': 'rock', 'year': 2020, 'popular': True, 'color': 'red'})},
-        {'key': 'v1', 'data': generate_data(dimension, 1),
-         'metadata': json.dumps({'genre': 'jazz', 'year': 2019, 'popular': False, 'color': 'blue'})},
-        {'key': 'v2', 'data': generate_data(dimension, 2),
-         'metadata': json.dumps({'genre': 'jazz', 'year': 2018, 'popular': True, 'color': 'green'})},
-        {'key': 'v3', 'data': generate_data(dimension, 10),
-         'metadata': json.dumps({'genre': 'rock', 'year': 2021, 'popular': False, 'color': 'red'})},
-    ]
-    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    query_vector = generate_data(dimension, 0)
-
-    def query_keys(filter_expr, top_k, post_filtering=False):
-        kwargs = dict(vectorBucketName=bucket_name, indexName=index_name,
-                      queryVector=query_vector, topK=top_k, filter=filter_expr)
-        if post_filtering:
-            kwargs['postFiltering'] = True
-        result = conn.query_vectors(**kwargs)
+    try:
+        _ensure_s3_bucket_for_vector_bucket(bucket_name)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-        return sorted([v['key'] for v in result['vectors']])
 
-    # pre-filtering on genre=rock with topK=2 returns both rock vectors
-    assert query_keys({'genre': 'rock'}, top_k=2) == ['v0', 'v3']
-    # post-filtering with topK=3 only sees the 3 nearest (v0, v1, v2), so v3 is excluded
-    assert query_keys({'genre': 'rock'}, top_k=3, post_filtering=True) == ['v0']
+        index_name = 'test-index'
+        filterable_keys = [
+            {'name': 'genre'},
+            {'name': 'year', 'type': 'Number'},
+            {'name': 'popular', 'type': 'Boolean'},
+        ]
+        result = conn.create_index(
+            vectorBucketName=bucket_name, indexName=index_name,
+            dataType='float32', dimension=dimension, distanceMetric='euclidean',
+            metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # post-filtering allows mixed $or (column + JSON fields)
-    assert query_keys({'$or': [{'genre': 'rock'}, {'color': 'blue'}]}, top_k=10, post_filtering=True) == ['v0', 'v1', 'v3']
+        # Fixed vectors make the distance order v0, v1, v2, v3. With
+        # oversampling disabled, post-filtering topK=3 excludes the distant v3.
+        vectors = [
+            {'key': 'v0', 'data': {'float32': [0.0] * dimension},
+             'metadata': json.dumps({'genre': 'rock', 'year': 2020, 'popular': True, 'color': 'red'})},
+            {'key': 'v1', 'data': {'float32': [1.0] * dimension},
+             'metadata': json.dumps({'genre': 'jazz', 'year': 2019, 'popular': False, 'color': 'blue'})},
+            {'key': 'v2', 'data': {'float32': [2.0] * dimension},
+             'metadata': json.dumps({'genre': 'jazz', 'year': 2018, 'popular': True, 'color': 'green'})},
+            {'key': 'v3', 'data': {'float32': [10.0] * dimension},
+             'metadata': json.dumps({'genre': 'rock', 'year': 2021, 'popular': False, 'color': 'red'})},
+        ]
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # cleanup
-    _ = _delete_vector_bucket(conn, bucket_name)
-    _delete_s3_bucket_for_vector_bucket(bucket_name)
+        query_vector = {'float32': [0.0] * dimension}
+
+        def query_keys(filter_expr, top_k, post_filtering=False):
+            kwargs = dict(vectorBucketName=bucket_name, indexName=index_name,
+                          queryVector=query_vector, topK=top_k, filter=filter_expr)
+            if post_filtering:
+                kwargs['postFiltering'] = True
+            result = conn.query_vectors(**kwargs)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            return sorted([v['key'] for v in result['vectors']])
+
+        # pre-filtering on genre=rock with topK=2 returns both rock vectors
+        assert query_keys({'genre': 'rock'}, top_k=2) == ['v0', 'v3']
+        # post-filtering with topK=3 only sees the 3 nearest (v0, v1, v2), so v3 is excluded
+        assert query_keys({'genre': 'rock'}, top_k=3, post_filtering=True) == ['v0']
+
+        # post-filtering allows mixed $or (column + JSON fields)
+        assert query_keys({'$or': [{'genre': 'rock'}, {'color': 'blue'}]}, top_k=10, post_filtering=True) == ['v0', 'v1', 'v3']
+    finally:
+        _cleanup_vector_bucket(conn, bucket_name)
 
 @pytest.mark.vector_test
 def test_query_vectors_filter_nonfilterable():
@@ -4481,110 +4507,122 @@ def test_query_vectors_filter_errors():
 def test_query_vectors_post_filter_topk():
     """ Test topK oversampling with JSON post-filtering """
 
-    set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1.5)
     conn = connection()
     bucket_name = gen_bucket_name()
     dimension = 4
-    _ensure_s3_bucket_for_vector_bucket(bucket_name)
-    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    try:
+        set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1.5)
+        _ensure_s3_bucket_for_vector_bucket(bucket_name)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    index_name = 'test-index'
-    result = conn.create_index(
-        vectorBucketName=bucket_name, indexName=index_name,
-        dataType='float32', dimension=dimension, distanceMetric='euclidean')
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        index_name = 'test-index'
+        result = conn.create_index(
+            vectorBucketName=bucket_name, indexName=index_name,
+            dataType='float32', dimension=dimension, distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    vectors = []
-    for i in range(7):
-        vectors.append({
-            'key': f'red-{i}',
-            'data': generate_data(dimension, i),
-            'metadata': json.dumps({'color': 'red'}),
-        })
-    for i in range(13):
-        vectors.append({
-            'key': f'blue-{i}',
-            'data': generate_data(dimension, 100 + i),
-            'metadata': json.dumps({'color': 'blue'}),
-        })
-    result = conn.put_vectors(
-        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vectors = []
+        for i in range(7):
+            vectors.append({
+                'key': f'red-{i}',
+                'data': generate_data(dimension, i),
+                'metadata': json.dumps({'color': 'red'}),
+            })
+        for i in range(13):
+            vectors.append({
+                'key': f'blue-{i}',
+                'data': generate_data(dimension, 100 + i),
+                'metadata': json.dumps({'color': 'blue'}),
+            })
+        result = conn.put_vectors(
+            vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    top_k = 9
+        top_k = 9
 
-    # test 1: fewer than k matches after filtering — return all matches
-    # query near red vectors (index 0), so all 7 red are in the top results
-    result = conn.query_vectors(
-        vectorBucketName=bucket_name, indexName=index_name,
-        queryVector=generate_data(dimension, 0), topK=top_k, filter={'color': 'red'})
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result['vectors']) == 7
+        # test 1: fewer than k matches after filtering — return all matches
+        # query near red vectors (index 0), so all 7 red are in the top results
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=generate_data(dimension, 0), topK=top_k, filter={'color': 'red'})
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result['vectors']) == 7
 
-    # test 2: more than k matches after filtering — return exactly k
-    # query near blue vectors (index 106), so all 13 blue are in the top results
-    # do not request returnDistance
-    result = conn.query_vectors(
-        vectorBucketName=bucket_name, indexName=index_name,
-        queryVector=generate_data(dimension, 106), topK=top_k, filter={'color': 'blue'})
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result['vectors']) == top_k
-    # verify distance is not in the response
-    for v in result['vectors']:
-        log.info(v)
-        assert 'distance' not in v, "distance should not be in response when not requested"
-
-    # cleanup
-    _ = _delete_vector_bucket(conn, bucket_name)
-    set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
+        # test 2: more than k matches after filtering — return exactly k
+        # query near blue vectors (index 106), so all 13 blue are in the top results
+        # do not request returnDistance
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=generate_data(dimension, 106), topK=top_k, filter={'color': 'blue'})
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result['vectors']) == top_k
+        # verify distance is not in the response
+        for v in result['vectors']:
+            log.info(v)
+            assert 'distance' not in v, "distance should not be in response when not requested"
+    finally:
+        try:
+            _cleanup_vector_bucket(conn, bucket_name)
+        finally:
+            set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
 
 @pytest.mark.vector_test
 def test_sal_error_propagation():
     """Verify that SAL errors propagate through LanceDB back to the S3Vector API.
 
-    For RGW backend: create a vector bucket and index, delete the backing
-    S3 bucket, then attempt put_vectors. The operation should fail because the
-    underlying storage is gone. This validates the error chain:
+    Remove a data object from either native vector storage or an S3 backing
+    bucket, then read its vectors. Keep the bucket and index metadata intact
+    so that the request reaches SAL. This validates the error chain:
     rgw_sal_wrapper -> store.rs -> LanceDB -> lancedb-c -> rgw_s3vector.cc
     """
-    if not has_backing_bucket():
+    if get_s3vector_backend() != 'rgw':
         pytest.skip("error propagation test only applies to RGW backend")
 
     conn = connection()
     bucket_name = gen_bucket_name()
     _ensure_s3_bucket_for_vector_bucket(bucket_name)
-    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    vector_created = False
 
-    index_name = 'test-error-prop'
-    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
-                               dataType='float32', dimension=4, distanceMetric='cosine')
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    # put some initial vectors to ensure the index is working
-    vectors = generate_vectors(2, 4)
-    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    # delete the backing S3 bucket to trigger SAL errors
-    _delete_s3_bucket_for_vector_bucket(bucket_name)
-
-    # put_vectors should now fail since the backing store is gone
-    new_vectors = generate_vectors(2, 4)
     try:
-        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=new_vectors)
-        # if we get here, the operation unexpectedly succeeded
-        log.warning("put_vectors succeeded after backing bucket deletion (status=%s)",
-                    result['ResponseMetadata']['HTTPStatusCode'])
-    except conn.exceptions.ClientError as err:
-        log.info("put_vectors correctly failed after backing bucket deletion: %s", err)
-        assert err.response['ResponseMetadata']['HTTPStatusCode'] >= 400
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_created = True
 
-    # cleanup - recreate backing bucket so delete_vector_bucket can clean up
-    _ensure_s3_bucket_for_vector_bucket(bucket_name)
-    _ = _delete_vector_bucket(conn, bucket_name)
-    _delete_s3_bucket_for_vector_bucket(bucket_name)
+        index_name = 'test-error-prop'
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=4, distanceMetric='cosine')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        vectors = generate_vectors(2, 4)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                 vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        section = 'bucket' if has_backing_bucket() else 'vectorbucket'
+        out, ret = admin(['metadata', 'get', f'{section}:{bucket_name}'], stderr=None)
+        assert ret == 0, out
+        bucket_id = json.loads(out)['data']['bucket']['bucket_id']
+        bucket_args = ['--bucket', bucket_name, '--bucket-id', bucket_id]
+        out, ret = admin(['bucket', 'list'] + bucket_args, stderr=None)
+        assert ret == 0, out
+        data_objects = [entry['name'] for entry in json.loads(out)
+                        if entry['name'].endswith('.lance')]
+        assert data_objects, "the index must contain a Lance data object"
+        for name in data_objects:
+            out, ret = admin(['object', 'rm'] + bucket_args + ['--object', name])
+            assert ret == 0, out
+
+        with pytest.raises(conn.exceptions.ClientError) as exc:
+            conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                             keys=[vector['key'] for vector in vectors], returnData=True)
+        assert exc.value.response['ResponseMetadata']['HTTPStatusCode'] >= 400
+    finally:
+        try:
+            if vector_created:
+                _delete_vector_bucket(conn, bucket_name)
+        finally:
+            _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 
 @pytest.mark.vector_bucket_test
@@ -4784,6 +4822,10 @@ def test_account_vector_buckets():
                                    dataType='float32', dimension=dimension,
                                    distanceMetric='euclidean')
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector = {'key': 'account-vector', 'data': {'float32': [1, 2, 3, 4]}}
+        result = conn.put_vectors(vectorBucketName=bucket_name,
+                                  indexName=index_name, vectors=[vector])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
         # the vector bucket belongs to the account, so it is listed by the user that
         # created it, and by any other user of the same account
@@ -4795,6 +4837,10 @@ def test_account_vector_buckets():
                 f"user '{account_conn.uid}' of the account sees the vector buckets: {bucket_names}"
             result = account_conn.get_vector_bucket(vectorBucketName=bucket_name)
             assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            result = account_conn.get_vectors(
+                vectorBucketName=bucket_name, indexName=index_name,
+                keys=[vector['key']], returnData=True)
+            assert result['vectors'] == [vector]
 
         # the vector bucket is not owned by the user that created it, so it is not
         # part of the data of that user: the user is deleted with its data purged,
@@ -4809,6 +4855,18 @@ def test_account_vector_buckets():
         result = other.list_indexes(vectorBucketName=bucket_name)
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
         assert [i['indexName'] for i in result['indexes']] == [index_name]
+        result = other.get_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            keys=[vector['key']], returnData=True)
+        assert result['vectors'] == [vector]
+        vector['data']['float32'] = [4, 3, 2, 1]
+        result = other.put_vectors(vectorBucketName=bucket_name,
+                                   indexName=index_name, vectors=[vector])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = other.get_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            keys=[vector['key']], returnData=True)
+        assert result['vectors'] == [vector]
     finally:
         # best effort cleanup. the account and its users are left behind, as done
         # for the users created by another_user()
@@ -5175,8 +5233,8 @@ def _share_backing_bucket(bucket_name, account_conns):
 
 
 def _cleanup_shared_vector_bucket(conns, bucket_name):
-    """ best effort deletion of the vector buckets that share a name, and a
-    backing bucket. see: _share_backing_bucket() """
+    """Delete same-name vector buckets, then their shared S3 backing bucket
+    only when configured. See: _share_backing_bucket()."""
     for conn in conns:
         _delete_vector_bucket_if_exists(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
