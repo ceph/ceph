@@ -97,6 +97,7 @@ MDBalancer::MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) :
   bal_merge_size = g_conf().get_val<int64_t>("mds_bal_merge_size");
   bal_mode = g_conf().get_val<int64_t>("mds_bal_mode");
   bal_replicate_threshold = g_conf().get_val<double>("mds_bal_replicate_threshold");
+  bal_skip_replicate_ephemeral_random = g_conf().get_val<bool>("mds_bal_skip_replicate_ephemeral_random");
   bal_sample_interval = g_conf().get_val<double>("mds_bal_sample_interval");
   bal_split_rd = g_conf().get_val<double>("mds_bal_split_rd");
   bal_split_bits = g_conf().get_val<int64_t>("mds_bal_split_bits");
@@ -128,6 +129,8 @@ void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const 
     bal_mode = g_conf().get_val<int64_t>("mds_bal_mode");
   if (changed.count("mds_bal_replicate_threshold"))
     bal_replicate_threshold = g_conf().get_val<double>("mds_bal_replicate_threshold");
+  if (changed.count("mds_bal_skip_replicate_ephemeral_random"))
+    bal_skip_replicate_ephemeral_random = g_conf().get_val<bool>("mds_bal_skip_replicate_ephemeral_random");
   if (changed.count("mds_bal_sample_interval"))
     bal_sample_interval = g_conf().get_val<double>("mds_bal_sample_interval");
   if (changed.count("mds_bal_split_rd"))
@@ -1382,8 +1385,13 @@ void MDBalancer::hit_dir(CDir *dir, int type, double amount)
     if (dir->is_auth() && !dir->is_ambiguous_auth() && dir->can_rep()) {
       // The fragments of an ephemerally distributed directory are already
       // spread over the ranks: do not replicate them for read load too.
+      // Those of a randomly pinned one are on one rank, but replicating
+      // them slows down workloads that read each dentry only once or twice
+      // and then remove it, so that can be turned off.
       if (dir_pop >= bal_replicate_threshold &&
-	  !dir->inode->is_ephemeral_dist()) {
+	  !dir->inode->is_ephemeral_dist() &&
+	  !(bal_skip_replicate_ephemeral_random &&
+	    dir->inode->is_ephemeral_rand())) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
