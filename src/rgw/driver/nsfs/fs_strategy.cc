@@ -813,23 +813,35 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
     return SafeResult::MISMATCH;
   }
 
-  /* gpfs_linkatif with replacefd=0 skips the destination inode check,
-   * creating a new link or unconditionally replacing an existing one */
-  int ret = fn_linkatif(src_dir_fd, src_name.c_str(),
-                        dst_dir_fd, dst_name.c_str(),
-                        0, 0);
-  int err = errno;
-
+  /* linkat(2), not gpfs_linkatif():  every caller needs the link to
+   * fail when the destination exists, and gpfs_linkatif() replaces it
+   * instead.  Its replacement is conditional on the destination's
+   * inode matching replacefd, and "if the inode passed in is zero skip
+   * the check" (gpfs.h) -- zero is what this passed, so the
+   * destination was replaced unconditionally, discarding a version
+   * entry or a current version another writer had just put there.
+   * linkat() is "fail if the destination exists" by definition, and a
+   * GPFS file is an ordinary file to it. */
+  int ret = ::linkat(src_dir_fd, src_name.c_str(),
+                     dst_dir_fd, dst_name.c_str(), 0);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: gpfs_linkatif failed: "
-      << cpp_strerror(err)
-      << " src=" << src_name << " dst=" << dst_name << dendl;
+    int err = errno;
     if (err == EEXIST) {
       return SafeResult::MISMATCH;
     }
+    ldpp_dout(dpp, 0) << "ERROR: linkat failed: " << cpp_strerror(err)
+      << " src=" << src_name << " dst=" << dst_name << dendl;
     return SafeResult::ERROR;
   }
-  return SafeResult::OK;
+
+  /* the source was checked above, but between that check and the link
+   * it could have been replaced;  a hard link shares the inode, so
+   * checking the destination checks what was actually linked */
+  if (stat_matches(dst_dir_fd, dst_name, expected_mtime_ns, expected_ino)) {
+    return SafeResult::OK;
+  }
+  ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+  return SafeResult::MISMATCH;
   });
 }
 
