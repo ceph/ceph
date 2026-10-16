@@ -714,6 +714,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
                            const DoutPrefixProvider* dpp,
                            FSStrategy* fs_strategy,
                            const nsfs::XattrStrategy* xs,
+                           const nsfs::IdentityDB* idb,
                            PromoteResult* out = nullptr)
 {
   ldpp_dout(dpp, 10) << "promote_version: enter leaf=" << leaf
@@ -823,9 +824,12 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * grants nobody access they did not already have
      * (inflight/n-plan.md §5).
      *
-     * This credential carries no groups, so it is still refused where
-     * the bucket directory is reachable only through one (§5.3).
-     * That case is reported below rather than passing silently.
+     * The groups come from the identity row that carries this uid,
+     * because the bucket directory is reachable by group for everyone
+     * but its owner and `stat()` cannot see a group list (§5.3).  No
+     * row, or rows that disagree, leaves the file owner's own rights,
+     * which is what this did before and is reported where it is
+     * refused rather than passing silently.
      *
      * run_as() decides whether a switch is needed, because it is the
      * only thing that knows who this thread already is;  a geteuid()
@@ -834,6 +838,9 @@ static int promote_version(int parent_fd, const std::string& leaf,
     nsfs::Credentials cand_owner;
     cand_owner.uid = cand_stx.stx_uid;
     cand_owner.gid = cand_stx.stx_gid;
+    if (idb) {
+      (void) nsfs::complete_file_credentials(dpp, *idb, cand_owner);
+    }
 
     SafeResult sr = SafeResult::ERROR;
     auto publish = [&]() -> int {
@@ -4280,6 +4287,12 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	      }
 	      owner.uid = st.st_uid;
 	      owner.gid = st.st_gid;
+	      /* and its groups from the row that carries the uid, where
+	       * one does:  a stat cannot see a group list, and the same
+	       * rule serves both file-derived identities */
+	      if (userDB) {
+		(void) nsfs::complete_file_credentials(&dp, *userDB, owner);
+	      }
 	    }
 	    auto write_record = [&]() -> int {
 	      int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
@@ -12867,7 +12880,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
            * problem, not something DeleteObject can express. */
           (void) promote_version(promote_fd, promote_leaf, dpp,
                           source->driver->get_fs_strategy(),
-			  source->xattr_strategy(), &promoted);
+			  source->xattr_strategy(),
+			  source->driver->get_identity_db(), &promoted);
           struct statx pstx;
           if (statx(promote_fd, promote_leaf.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
@@ -12996,7 +13010,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
            * marker still succeeded */
           (void) promote_version(parent_fd, leaf_name, dpp,
                           source->driver->get_fs_strategy(),
-			  source->xattr_strategy(), &promoted);
+			  source->xattr_strategy(),
+			  source->driver->get_identity_db(), &promoted);
           /* update cache for the promoted version */
           struct statx pstx;
           if (statx(parent_fd, leaf_name.c_str(),

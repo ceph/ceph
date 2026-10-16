@@ -369,6 +369,21 @@ public:
   int list_identities(const DoutPrefixProvider* dpp,
 		      std::vector<Identity>& out) const;
 
+  /* The rows carrying `uid`, in Identity order.
+   *
+   * The one read keyed on `Uid` rather than on `Identity`, for
+   * completing a credential built from a file (see
+   * complete_file_credentials()).  An empty result is not an error:  a
+   * uid no row claims is ordinary in a sideloaded tree, which
+   * inherit_ids() already treats as real.
+   *
+   * Several rows is also not an error.  `Uid` is not unique, and on
+   * Scale every member of an account runs as the account
+   * (ACCOUNT_IMPORT.md section 2.8), so the account's row and each
+   * member's carry one uid. */
+  int get_identities_by_uid(const DoutPrefixProvider* dpp, uid_t uid,
+			    std::vector<Identity>& out) const;
+
   const std::string& get_identity_table() const { return identity_table; }
 };
 
@@ -455,6 +470,44 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const req_state* s, Credentials& out,
 			std::string* row = nullptr);
+
+/* Complete a credential built from a file's owner.
+ *
+ * A credential derived from `stat()` carries a uid and a gid and
+ * nothing else, and `ScopedCredentials` installs that as
+ * `setgroups(0, NULL)`, so an identity whose access to its tree comes
+ * through a group loses it.  Two sites build such a credential -- the
+ * multipart part eviction and promote-on-delete -- because they act
+ * on one file with no request in hand, and the file is the only thing
+ * that says who wrote it.
+ *
+ * Only `groups` is taken from the row.  The uid and gid on `inout`
+ * came from the file and are authoritative for the file;  the row's
+ * are the account's, and a member writing in a directory that is not
+ * SGID creates files with its own primary gid.
+ *
+ *   0         `inout.groups` is filled from the row, and `key`, if
+ *             given, receives that row's identity -- which is also
+ *             what makes an `FSIdentity` active, so a caller may use
+ *             a registered personality rather than a thread hop
+ *   -ENOENT   no row carries that uid.  `inout` is unchanged and the
+ *             caller proceeds on the file owner's own rights, which
+ *             is what both sites did before this existed
+ *   -ENODATA  several rows carry that uid and they do not agree on
+ *             the group list, so the file cannot say which one to
+ *             use.  `inout` is unchanged, and this reports it
+ *
+ * Where several rows carry the uid and agree on the groups there is
+ * no ambiguity in fact, so the groups are returned and `key` is left
+ * alone:  the rows are distinct identities and only their credentials
+ * coincide.  Guessing between rows that disagree is what -ENODATA
+ * refuses -- it would lend one identity's reach to another identity's
+ * file, which is the error docs/ACCOUNT_IMPORT.md section 2.5 calls
+ * the sharpest, in a second place.
+ */
+int complete_file_credentials(const DoutPrefixProvider* dpp,
+			      const IdentityDB& db, Credentials& inout,
+			      std::string* key = nullptr);
 
 std::string groups_to_text(const std::vector<uint32_t>& groups);
 bool groups_from_text(const std::string& text, std::vector<uint32_t>& out);

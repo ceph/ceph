@@ -1660,6 +1660,100 @@ TEST_F(NSFSIdentityDBTest, ResolveDirectoryBackedFailsClosed)
   EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), -EPERM);
 }
 
+/* Completing a credential built from a file:  the groups come from
+ * the row carrying the uid, and the uid and gid do not.  The file's
+ * are authoritative for the file -- a member writing in a directory
+ * that is not SGID creates files with its own primary gid, which the
+ * account's row does not know. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsTakesTheRowsGroups)
+{
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$fileowner")), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = 1001;			/* as a stat of the file yields */
+  cred.gid = 4242;			/* not the row's 2002 */
+  std::string key;
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred, &key), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{10, 20, 30}));
+  EXPECT_EQ(cred.uid, 1001u);
+  EXPECT_EQ(cred.gid, 4242u) << "the row's gid displaced the file's";
+  EXPECT_EQ(key, "user$fileowner")
+      << "one row names an identity, which is what makes an FSIdentity "
+	 "active";
+}
+
+/* Several rows carrying one uid is the normal case, not an error:
+ * every member of an account runs as the account.  Where they agree
+ * there is no ambiguity in fact. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsAgreeingRowsAreNotAmbiguous)
+{
+  auto a = local_identity("user$member1");
+  auto b = local_identity("user$member2");
+  ASSERT_EQ(a.uid, b.uid);
+  ASSERT_EQ(db->put_identity(env->dpp, a), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, b), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = *a.uid;
+  std::string key = "untouched";
+  ASSERT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred, &key), 0);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{10, 20, 30}));
+  EXPECT_EQ(key, "untouched")
+      << "two identities whose credentials coincide have no one key";
+}
+
+/* The polarity that matters.  Rows that disagree cannot be chosen
+ * between -- a file names its owner by uid alone -- and guessing
+ * would lend one identity's reach to another identity's file.  The
+ * caller is left with the file owner's own rights. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsDisagreeingRowsRefuse)
+{
+  auto a = local_identity("user$member1");
+  auto b = local_identity("user$member2");
+  b.groups = std::vector<uint32_t>{10, 20, 30, 40};
+  ASSERT_EQ(db->put_identity(env->dpp, a), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, b), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = *a.uid;
+  cred.groups = std::vector<gid_t>{7};	/* must not be written to */
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred),
+	    -ENODATA);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{7}))
+      << "a refused completion wrote to its output";
+}
+
+/* No row carrying the uid is not an error:  a uid no account maps to
+ * is ordinary in a sideloaded tree. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsNoRowIsNotAnError)
+{
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$someone")), 0);
+
+  nsfs::Credentials cred;
+  cred.uid = 65534;			/* no row carries it */
+  cred.groups = std::vector<gid_t>{7};
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{7}));
+}
+
+/* A row carrying only placement data asks for no impersonation, and
+ * has no uid to be found by. */
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsIgnoresRowsWithoutIds)
+{
+  nsfs::Identity placement;
+  placement.key = "user$placementonly";
+  placement.new_buckets_path = "/gpfs/rgw1/nsfs/newbuckets";
+  ASSERT_EQ(db->put_identity(env->dpp, placement), 0);
+
+  std::vector<nsfs::Identity> rows;
+  ASSERT_EQ(db->get_identities_by_uid(env->dpp, 0, rows), 0);
+  EXPECT_TRUE(rows.empty()) << "a NULL Uid was matched by a uid lookup";
+
+  nsfs::Credentials cred;
+  cred.uid = 0;
+  EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
+}
+
 /* The upstream behaviour this design keys on, pinned.
  *
  * Two different owners come out of one applier.  `get_aclowner()`

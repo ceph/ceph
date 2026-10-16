@@ -255,6 +255,13 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "         OR SupplementalGroups NOT GLOB '*[^0-9,]*')"
     ");"
 
+    /* Completing a credential built from a file reads by uid, which
+     * is the only lookup here not keyed on `Identity`.  Unlike a
+     * column, an index does reach a table that already exists, so
+     * this needs none of X1's reasoning. */
+    "CREATE INDEX IF NOT EXISTS '" + identity_table + "_uid' ON '"
+    + identity_table + "' (Uid);"
+
     /* Provenance:  NooBaa's `_id` to the owner it was imported as.
      * The primary key is the whole uniqueness rule, and nothing writes
      * here with OR REPLACE, so a second import of one id is refused
@@ -768,6 +775,78 @@ int IdentityDB::list_identities(const DoutPrefixProvider* dpp,
     out.push_back(std::move(id));
   }
   return (rc == SQLITE_DONE) ? 0 : -EIO;
+}
+
+int IdentityDB::get_identities_by_uid(const DoutPrefixProvider* dpp,
+				      uid_t uid,
+				      std::vector<Identity>& out) const
+{
+  const std::string sql =
+    std::string("SELECT ") + IDENTITY_COLUMNS + " FROM '" + identity_table
+    + "' WHERE Uid = ? ORDER BY Identity;";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    return -EIO;
+  }
+  auto done = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_int64(st, 1, static_cast<sqlite3_int64>(uid));
+
+  int rc;
+  while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+    Identity id;
+    int ret = row_to_identity(dpp, st, id);
+    if (ret < 0) {
+      return ret;
+    }
+    out.push_back(std::move(id));
+  }
+  return (rc == SQLITE_DONE) ? 0 : -EIO;
+}
+
+int complete_file_credentials(const DoutPrefixProvider* dpp,
+			      const IdentityDB& db, Credentials& inout,
+			      std::string* key)
+{
+  std::vector<Identity> rows;
+  int ret = db.get_identities_by_uid(dpp, inout.uid, rows);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* A directory-backed row carries no uid, so it cannot be here;  a
+   * row carrying only placement data can, and it asks for no
+   * impersonation.  Drop those rather than read an empty group list
+   * off them. */
+  std::erase_if(rows, [](const Identity& id) { return !id.local(); });
+  if (rows.empty()) {
+    return -ENOENT;
+  }
+
+  const auto& first = rows.front();
+  for (const auto& id : rows) {
+    if (id.groups != first.groups) {
+      ldpp_dout(dpp, 0) << "ERROR: uid " << inout.uid << " is carried by "
+	<< rows.size() << " identities whose supplemental group lists "
+	"differ (" << first.key << ", " << id.key << ");  a file names its "
+	"owner by uid alone, so it cannot say which applies.  Acting on "
+	"the file owner's own rights instead" << dendl;
+      return -ENODATA;
+    }
+  }
+
+  inout.groups.clear();
+  if (first.groups) {
+    inout.groups.assign(first.groups->begin(), first.groups->end());
+  }
+  /* Only one row names an identity.  Where several agree, their
+   * credentials coincide and their keys do not, so there is nothing
+   * to name. */
+  if (key && (rows.size() == 1)) {
+    *key = first.key;
+  }
+  return 0;
 }
 
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
