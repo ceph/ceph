@@ -6,6 +6,7 @@
 #include "cls_rgw_bilog_datum.h"
 #include "cls_rgw_bucket_datum.h"
 #include "cls_rgw_gc_datum.h"
+#include "cls_rgw_lc_datum.h"
 #include "cls_rgw_object_datum.h"
 #include "cls_rgw_reshard_datum.h"
 #include "cls_rgw_usage_datum.h"
@@ -1302,3 +1303,118 @@ template list_reply<std::vector<::cls_rgw_gc_obj_info>> decode_reply(const ::cep
 template list_reply<std::list<::cls_rgw_gc_obj_info>> decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::gc_datum
+
+namespace cls::rgw::lc_datum {
+
+using ::cls::rgw::wire::decode_record;
+using ::cls::rgw::wire::writer;
+
+::ceph::buffer::list encode_marker(const std::string_view marker)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] { archive.text(marker); });
+
+    return output;
+}
+
+::ceph::buffer::list encode_entry(const ::cls_rgw_lc_entry& entry)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(2, 2, [&] { archive.native(entry); });
+
+    return output;
+}
+
+::ceph::buffer::list encode_head(const ::cls_rgw_lc_obj_head& head)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] { archive.native(head); });
+
+    return output;
+}
+
+::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(3, [&] {
+        archive.text(marker);
+        archive.scalar(maximum);
+    });
+
+    return output;
+}
+
+void decode(marker_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        fields.text(candidate.marker);
+    });
+}
+
+void decode(entry_message& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        if (version < 2) {
+            fields.text(candidate.entry.bucket);
+            candidate.entry.status = fields.template scalar<std::uint32_t>();
+
+            return;
+        }
+        fields.native(candidate.entry);
+    });
+}
+
+void decode(head_message& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+        fields.native(candidate.head);
+    });
+}
+
+void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    decode_record<3>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        candidate.compat_v = version;
+        fields.text(candidate.marker);
+        candidate.max_entries = fields.template scalar<std::uint32_t>();
+    });
+}
+
+void encode(const entry_message& value, ::ceph::buffer::list& output)
+{
+    auto candidate = encode_entry(value.entry);
+    output.claim_append(candidate);
+}
+
+void encode(const head_message& value, ::ceph::buffer::list& output)
+{
+    auto candidate = encode_head(value.head);
+    output.claim_append(candidate);
+}
+
+void encode(const list_reply& value, ::ceph::buffer::list& output)
+{
+    ::ceph::buffer::list candidate;
+    writer archive {candidate};
+    archive.frame(value.compat_v, [&] {
+        if (value.compat_v <= 2) {
+            std::map<std::string_view, int> old_entries;
+            for (const auto& entry : value.entries) {
+                old_entries.emplace(entry.bucket, static_cast<int>(entry.status));
+            }
+            archive.native(old_entries);
+        }
+        if (value.compat_v > 2) {
+            archive.native(value.entries);
+        }
+        // Native v0/1 encoders also emit this flag, although those decoders skip it.
+        archive.scalar(static_cast<std::uint8_t>(value.is_truncated));
+    });
+    output.claim_append(candidate);
+}
+
+} // cls::rgw::lc_datum

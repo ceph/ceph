@@ -66,7 +66,8 @@ auto invoke(storage& state, byte_buffer input, const std::string_view method = "
 {
     const auto [call, flags] = ::rgw_cls_test::get_method(method);
     const bool read_only = method == "bi_log_list" || method == "bucket_list" || method == "bucket_check_index" || method == "user_usage_log_read" || method == "reshard_list" ||
-                           method == "reshard_get" || method == "guard_bucket_resharding" || method == "get_bucket_resharding" || method == "gc_list";
+                           method == "reshard_get" || method == "guard_bucket_resharding" || method == "get_bucket_resharding" || method == "gc_list" || method == "lc_get_entry" ||
+                           method == "lc_get_next_entry" || method == "lc_list_entries" || method == "lc_get_head";
     REQUIRE(flags == (read_only ? CLS_METHOD_RD : CLS_METHOD_RD | CLS_METHOD_WR));
     byte_buffer output;
     const int status = call(&state, &input, &output);
@@ -2226,4 +2227,182 @@ TEST_CASE("Legacy GC structural request errors precede storage", "[rgw][cls][gc]
             CHECK(state.effects.empty());
         }
     }
+}
+
+namespace {
+
+byte_buffer lc_list_request(const std::uint8_t version, const std::uint32_t maximum = 3, const std::string& marker = {})
+{
+    byte_buffer output;
+    ENCODE_START(version, 1, output);
+    ::ceph::encode(marker, output);
+    ::ceph::encode(maximum, output);
+    ENCODE_FINISH(output);
+
+    return output;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Lifecycle set get next and remove preserve native keys and entry values", "[rgw][cls][lc]")
+{
+    storage state;
+    ::cls_rgw_lc_set_entry_op set;
+    set.entry = {std::string {"b\0t", 3}, 17, 23};
+    CHECK(invoke(state, usage_bytes(set), "lc_set_entry") == 0);
+    CHECK(state.values.at(set.entry.bucket).contents_equal(usage_bytes(set.entry)));
+    ::cls_rgw_lc_get_entry_op get {set.entry.bucket};
+    REQUIRE(invoke(state, usage_bytes(get), "lc_get_entry") == 0);
+    ::cls_rgw_lc_get_entry_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    CHECK(usage_bytes(result.entry).contents_equal(usage_bytes(set.entry)));
+    ::cls_rgw_lc_get_next_entry_op next;
+    REQUIRE(invoke(state, usage_bytes(next), "lc_get_next_entry") == 0);
+    ::cls_rgw_lc_get_next_entry_ret next_result;
+    cursor = state.reply.cbegin();
+    ::decode(next_result, cursor);
+    CHECK(next_result.entry.bucket == set.entry.bucket);
+    next.marker = set.entry.bucket;
+    REQUIRE(invoke(state, usage_bytes(next), "lc_get_next_entry") == 0);
+    cursor = state.reply.cbegin();
+    ::decode(next_result, cursor);
+    CHECK(next_result.entry.bucket.empty());
+    CHECK(next_result.entry.start_time == 0);
+    CHECK(next_result.entry.status == 0);
+    ::cls_rgw_lc_rm_entry_op remove;
+    remove.entry = set.entry;
+    CHECK(invoke(state, usage_bytes(remove), "lc_rm_entry") == 0);
+    CHECK(state.values.empty());
+    CHECK(invoke(state, usage_bytes(remove), "lc_rm_entry") == -ENOENT);
+    CHECK(invoke(state, usage_bytes(get), "lc_get_entry") == -ENOENT);
+}
+
+TEST_CASE("Lifecycle list retains request versions, legacy normalization and exact pagination", "[rgw][cls][lc]")
+{
+    storage state;
+    state.values["a"] = usage_bytes(::cls_rgw_lc_entry {"z", 17, 11});
+    state.values["b"] = usage_bytes(::cls_rgw_lc_entry {"a", 19, 13});
+    state.values["c"] = usage_bytes(::cls_rgw_lc_entry {"z", 23, 99});
+    state.values["d"] = usage_bytes(std::pair {std::string {"old"}, -17});
+    for (const std::uint8_t version : {0, 1, 2, 3, 10}) {
+        REQUIRE(invoke(state, lc_list_request(version), "lc_list_entries") == 0);
+        auto header_cursor = state.reply.cbegin();
+        std::uint8_t actual_version;
+        ::ceph::decode(actual_version, header_cursor);
+        CHECK(actual_version == version);
+        ::cls_rgw_lc_list_entries_ret result;
+        auto cursor = state.reply.cbegin();
+        ::decode(result, cursor);
+        REQUIRE(result.entries.size() == (version <= 2 ? 2 : 3));
+        CHECK(result.is_truncated == (version >= 2));
+        if (version <= 2) {
+            CHECK(result.entries.front().bucket == "a");
+            CHECK(result.entries.back().bucket == "z");
+            CHECK(result.entries.back().status == 11);
+            CHECK(result.entries.back().start_time == 0);
+        }
+        if (version > 2) {
+            CHECK(result.entries.front().bucket == "z");
+            CHECK(result.entries.front().start_time == 17);
+            CHECK(result.entries.back().status == 99);
+        }
+    }
+    REQUIRE(invoke(state, lc_list_request(3, 3, "c"), "lc_list_entries") == 0);
+    ::cls_rgw_lc_list_entries_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    REQUIRE(result.entries.size() == 1);
+    CHECK(result.entries.front().bucket == "old");
+    CHECK(result.entries.front().start_time == 0);
+    CHECK(result.entries.front().status == static_cast<std::uint32_t>(-17));
+    CHECK_FALSE(result.is_truncated);
+    REQUIRE(invoke(state, lc_list_request(3, 0), "lc_list_entries") == 0);
+    cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    CHECK(result.entries.empty());
+    CHECK(result.is_truncated);
+}
+
+TEST_CASE("Lifecycle head storage preserves fields, defaults, versioning and ignored input", "[rgw][cls][lc]")
+{
+    storage state;
+    CHECK(invoke(state, usage_bytes(std::string {"ignored input"}), "lc_get_head") == 0);
+    ::cls_rgw_lc_get_head_ret result;
+    auto cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    CHECK(result.head.start_date == 0);
+    CHECK(result.head.marker.empty());
+    CHECK(result.head.shard_rollover_date == 0);
+    ::cls_rgw_lc_put_head_op put;
+    put.head.start_date = 17;
+    put.head.marker = std::string(80, 'm');
+    put.head.shard_rollover_date = 19;
+    CHECK(invoke(state, usage_bytes(put), "lc_put_head") == 0);
+    CHECK(state.header.contents_equal(usage_bytes(put.head)));
+    CHECK(invoke(state, {}, "lc_get_head") == 0);
+    cursor = state.reply.cbegin();
+    ::decode(result, cursor);
+    CHECK(result.head.marker == put.head.marker);
+    CHECK(result.head.shard_rollover_date == 19);
+}
+
+TEST_CASE("Lifecycle old pair requests remain distinct from stored-entry compatibility", "[rgw][cls][lc]")
+{
+    for (const std::uint8_t version : {0, 1}) {
+        byte_buffer request;
+        ENCODE_START(version, 1, request);
+        ::ceph::encode(std::pair {std::string {"bucket"}, -17}, request);
+        ENCODE_FINISH(request);
+        storage state;
+        CHECK(invoke(state, request, "lc_set_entry") == 0);
+        ::cls_rgw_lc_entry stored;
+        auto cursor = state.values.at("bucket").cbegin();
+        ::decode(stored, cursor);
+        CHECK(stored.start_time == 0);
+        CHECK(stored.status == static_cast<std::uint32_t>(-17));
+        CHECK(invoke(state, request, "lc_rm_entry") == 0);
+        CHECK(state.values.empty());
+    }
+    storage state;
+    state.values["bucket"] = usage_bytes(std::pair {std::string {"old"}, -17});
+    CHECK(invoke(state, usage_bytes(::cls_rgw_lc_get_entry_op {"bucket"}), "lc_get_entry") == -EIO);
+    ::cls_rgw_lc_get_next_entry_op next;
+    CHECK(invoke(state, usage_bytes(next), "lc_get_next_entry") == -EIO);
+    CHECK(invoke(state, lc_list_request(3), "lc_list_entries") == 0);
+}
+
+TEST_CASE("Lifecycle failures retain stage-specific errors and request admission", "[rgw][cls][lc]")
+{
+    ::cls_rgw_lc_set_entry_op set;
+    set.entry = {"bucket", 17, 23};
+    ::cls_rgw_lc_rm_entry_op remove;
+    remove.entry = set.entry;
+    ::cls_rgw_lc_put_head_op head;
+    const std::map<std::string, byte_buffer> requests {
+        {"lc_set_entry", usage_bytes(set)}, {"lc_rm_entry", usage_bytes(remove)},
+        {"lc_get_entry", usage_bytes(::cls_rgw_lc_get_entry_op {"bucket"})},
+        {"lc_get_next_entry", usage_bytes(::cls_rgw_lc_get_next_entry_op {})},
+        {"lc_list_entries", lc_list_request(3)}, {"lc_put_head", usage_bytes(head)}
+    };
+    for (const auto& [method, full] : requests) {
+        for (unsigned size = 0; size < full.length(); ++size) {
+            byte_buffer input;
+            input.substr_of(full, 0, size);
+            storage state;
+            CHECK(invoke(state, input, method) == -EINVAL);
+            CHECK(state.effects.empty());
+        }
+        storage state;
+        state.failure_call = 1;
+        CHECK(invoke(state, full, method) == -EAGAIN);
+    }
+    storage state;
+    state.failure_call = 1;
+    CHECK(invoke(state, {}, "lc_get_head") == -EAGAIN);
+    state.failure_call = -1;
+    state.header = usage_bytes(std::string {"corrupt"});
+    CHECK(invoke(state, {}, "lc_get_head") == -EINVAL);
+    state.values["a"] = state.header;
+    CHECK(invoke(state, lc_list_request(3), "lc_list_entries") == -EIO);
 }

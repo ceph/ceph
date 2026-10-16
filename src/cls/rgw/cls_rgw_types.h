@@ -1387,9 +1387,13 @@ struct cls_rgw_lc_entry {
     : start_time(0), status(0) {}
 
   cls_rgw_lc_entry(const cls_rgw_lc_entry& rhs) = default;
+  cls_rgw_lc_entry(cls_rgw_lc_entry&&) = default;
 
   cls_rgw_lc_entry(const std::string& b, uint64_t t, uint32_t s)
     : bucket(b), start_time(t), status(s) {};
+
+  cls_rgw_lc_entry& operator=(const cls_rgw_lc_entry&) = default;
+  cls_rgw_lc_entry& operator=(cls_rgw_lc_entry&&) = default;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

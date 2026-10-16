@@ -53,6 +53,14 @@ the native info/chain codecs, expired-only default, cutoff and continuation rule
 The same direct move also benefits native-only builds; fetched future rows do not
 cause eager reply allocation. Name/time-index storage and cleanup remain native.
 
+Lifecycle operations use borrowed builders and independent module records. The
+client keeps its native compatibility decoders, including the unmarked version-1
+get-reply forms. Old list replies retain ordered first-wins map encoding while
+borrowing bucket keys as string views. The RGW-owned entry type has default move
+operations as well as copy operations, so existing moves and sorting can transfer
+bucket storage. Leaf encoding, request-version negotiation and storage rules stay
+unchanged. Rebuild affected callers before measuring this header change.
+
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
 provides the C++26 implementation. Its language requirements and Datum headers

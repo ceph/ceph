@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <limits>
 #include <new>
+#include <type_traits>
 #include <utility>
 
 #include <chrono>
@@ -804,5 +805,177 @@ TEST_CASE("GC clients borrow chains and tags while retaining native reply public
         CHECK(entries.front().tag == "result");
         CHECK(truncated);
         CHECK(marker == reply.next_marker);
+    }
+}
+
+TEST_CASE("Lifecycle entry retains copy semantics and transfers bucket ownership on moves", "[rgw][cls][lc]")
+{
+    static_assert(std::is_copy_constructible_v<::cls_rgw_lc_entry>);
+    static_assert(std::is_copy_assignable_v<::cls_rgw_lc_entry>);
+    static_assert(std::is_nothrow_move_constructible_v<::cls_rgw_lc_entry>);
+    static_assert(std::is_nothrow_move_assignable_v<::cls_rgw_lc_entry>);
+    ::cls_rgw_lc_entry original {std::string(4096, 'b'), 17, 23};
+    const auto *storage = original.bucket.data();
+    ::cls_rgw_lc_entry moved {std::move(original)};
+    CHECK(moved.bucket.data() == storage);
+    CHECK(moved.start_time == 17);
+    CHECK(moved.status == 23);
+    ::cls_rgw_lc_entry assigned;
+    assigned = std::move(moved);
+    CHECK(assigned.bucket.data() == storage);
+    ::cls_rgw_lc_entry copied {assigned};
+    CHECK(copied.bucket == assigned.bucket);
+    CHECK(copied.bucket.data() != assigned.bucket.data());
+    ::cls_rgw_lc_entry copy_assigned;
+    copy_assigned = assigned;
+    assigned.bucket.front() = 'x';
+    CHECK(copy_assigned.bucket.front() == 'b');
+    CHECK(copied.bucket.front() == 'b');
+    CHECK(copy_assigned.start_time == 17);
+    CHECK(copy_assigned.status == 23);
+}
+
+TEST_CASE("Lifecycle builders borrow marker entry and head data while preserving wire bytes", "[rgw][cls][lc]")
+{
+    ::librados::ObjectReadOperation read;
+    ::librados::ObjectWriteOperation write;
+    byte_buffer output, expected;
+    ::cls_rgw_lc_entry value {std::string(80, 'b'), 17, 23};
+    ::cls_rgw_lc_set_entry_op set;
+    set.entry = value;
+    ::encode(set, expected);
+    ::cls_rgw_lc_set_entry(write, value);
+    CHECK(request_method == "lc_set_entry");
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_lc_rm_entry(write, value);
+    value.bucket.clear();
+    CHECK(request_method == "lc_rm_entry");
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_lc_get_entry_op marker;
+    marker.marker = std::string {"m\0r", 3};
+    expected.clear();
+    ::encode(marker, expected);
+    ::cls_rgw_lc_get_entry(read, marker.marker, output);
+    CHECK(request_method == "lc_get_entry");
+    CHECK(request_bytes.contents_equal(expected));
+    CHECK(request_output == &output);
+    ::cls_rgw_lc_get_next_entry(read, marker.marker, output);
+    marker.marker.clear();
+    CHECK(request_method == "lc_get_next_entry");
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_lc_put_head_op head;
+    head.head.start_date = 17;
+    head.head.marker = std::string(80, 'm');
+    head.head.shard_rollover_date = 19;
+    expected.clear();
+    ::encode(head, expected);
+    ::cls_rgw_lc_put_head(write, head.head);
+    head.head.marker.clear();
+    CHECK(request_method == "lc_put_head");
+    CHECK(request_bytes.contents_equal(expected));
+    ::cls_rgw_lc_get_head(read, output);
+    CHECK(request_method == "lc_get_head");
+    CHECK(request_bytes.length() == 0);
+    ::cls_rgw_lc_list_entries_op list;
+    list.marker = std::string(80, 'm');
+    list.max_entries = 23;
+    expected.clear();
+    ::encode(list, expected);
+    ::cls_rgw_lc_list(read, list.marker, 23, output);
+    list.marker.clear();
+    CHECK(request_method == "lc_list_entries");
+    CHECK(request_bytes.contents_equal(expected));
+}
+
+TEST_CASE("Lifecycle clients retain ambiguous v1 entry replies and distinct next-entry compatibility", "[rgw][cls][lc]")
+{
+    for (const bool native_leaf : {false, true}) {
+        byte_buffer input;
+        ENCODE_START(1, 1, input);
+        if (native_leaf) { ::encode(::cls_rgw_lc_entry {std::string(80, 'b'), 17, 23}, input); }
+        if (!native_leaf) { ::ceph::encode(std::pair {std::string(80, 'b'), -17}, input); }
+        ENCODE_FINISH(input);
+        ::cls_rgw_lc_entry value;
+        CHECK(::cls_rgw_lc_get_entry_decode(input, value) == 0);
+        CHECK(value.bucket == std::string(80, 'b'));
+        CHECK(value.start_time == (native_leaf ? 17 : 0));
+        CHECK(value.status == (native_leaf ? 23 : static_cast<std::uint32_t>(-17)));
+        CHECK(::cls_rgw_lc_get_next_entry_decode(input, value) == (native_leaf ? -EIO : 0));
+    }
+    ::cls_rgw_lc_get_entry_ret response;
+    response.entry = {std::string(80, 'b'), 17, 23};
+    byte_buffer full;
+    ::encode(response, full);
+    ::cls_rgw_lc_entry value {"saved", 29, 31};
+    for (unsigned size = 0; size < full.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(full, 0, size);
+        CHECK(::cls_rgw_lc_get_entry_decode(prefix, value) == -EIO);
+        CHECK(::cls_rgw_lc_get_next_entry_decode(prefix, value) == -EIO);
+        CHECK(value.bucket == "saved");
+        CHECK(value.start_time == 29);
+        CHECK(value.status == 31);
+    }
+    CHECK(::cls_rgw_lc_get_entry_decode(full, value) == 0);
+    CHECK(value.bucket == response.entry.bucket);
+}
+
+TEST_CASE("Lifecycle list and head clients retain sorting and malformed-output preservation", "[rgw][cls][lc]")
+{
+    for (const std::uint8_t version : {1, 2, 3}) {
+        ::cls_rgw_lc_list_entries_ret response {version};
+        response.entries = {{"z", 17, 11}, {"a", 19, 13}, {"z", 23, 99}};
+        response.is_truncated = true;
+        byte_buffer input;
+        ::encode(response, input);
+        std::vector<::cls_rgw_lc_entry> entries;
+        REQUIRE(::cls_rgw_lc_list_decode(input, entries) == 0);
+        REQUIRE(entries.size() == (version < 3 ? 2 : 3));
+        CHECK(entries.front().bucket == "a");
+        CHECK(entries.back().bucket == "z");
+        if (version < 3) { CHECK(entries.back().status == 11); }
+        for (unsigned size = 0; size < input.length(); ++size) {
+            byte_buffer prefix;
+            prefix.substr_of(input, 0, size);
+            CHECK(::cls_rgw_lc_list_decode(prefix, entries) == -EIO);
+            CHECK(entries.front().bucket == "a");
+            CHECK(entries.back().bucket == "z");
+        }
+    }
+    ::cls_rgw_lc_list_entries_ret unsorted;
+    std::map<std::string, std::pair<std::uint64_t, std::uint32_t>> expected;
+    for (unsigned index = 0; index < 100; ++index) {
+        const auto bucket = std::to_string(100 - index) + std::string(80, 'b');
+        unsorted.entries.emplace_back(bucket, 17 + index, 23 + index);
+        expected.emplace(bucket, std::pair {17 + index, 23 + index});
+    }
+    byte_buffer encoded;
+    ::encode(unsorted, encoded);
+    std::vector<::cls_rgw_lc_entry> sorted;
+    REQUIRE(::cls_rgw_lc_list_decode(encoded, sorted) == 0);
+    REQUIRE(sorted.size() == expected.size());
+    auto found = expected.begin();
+    for (const auto& value : sorted) {
+        CHECK(value.bucket == found->first);
+        CHECK(value.start_time == found->second.first);
+        CHECK(value.status == found->second.second);
+        ++found;
+    }
+    ::cls_rgw_lc_get_head_ret response;
+    response.head.start_date = 17;
+    response.head.marker = std::string(80, 'm');
+    response.head.shard_rollover_date = 19;
+    byte_buffer input;
+    ::encode(response, input);
+    ::cls_rgw_lc_obj_head head;
+    REQUIRE(::cls_rgw_lc_get_head_decode(input, head) == 0);
+    CHECK(head.marker == response.head.marker);
+    for (unsigned size = 0; size < input.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(input, 0, size);
+        CHECK(::cls_rgw_lc_get_head_decode(prefix, head) == -EIO);
+        CHECK(head.marker == response.head.marker);
+        CHECK(head.start_date == 17);
+        CHECK(head.shard_rollover_date == 19);
     }
 }

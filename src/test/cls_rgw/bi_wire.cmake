@@ -30,7 +30,7 @@ if(TARGET cls_rgw_datum)
     add_test(NAME "cls_rgw_${name}_wire" COMMAND ${target})
   endfunction()
 
-  foreach(name IN ITEMS write bilog bucket index_stats object usage reshard gc)
+  foreach(name IN ITEMS write bilog bucket index_stats object usage reshard gc lifecycle)
     rgw_cls_add_wire_test(${name})
   endforeach()
 endif()

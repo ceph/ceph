@@ -14,6 +14,7 @@
  #include "cls/rgw/cls_rgw_bilog_datum.h"
  #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_gc_datum.h"
+ #include "cls/rgw/cls_rgw_lc_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_reshard_datum.h"
@@ -1051,9 +1052,13 @@ int cls_rgw_lc_get_head_decode(const bufferlist& out, cls_rgw_lc_obj_head& head)
 void cls_rgw_lc_put_head(ObjectWriteOperation& op, const cls_rgw_lc_obj_head& head)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::lc_datum::encode_head(head);
+#else
   cls_rgw_lc_put_head_op call;
   call.head = head;
   encode(call, in);
+#endif
   op.exec(method::lc_put_head, in);
 }
 
@@ -1061,9 +1066,13 @@ void cls_rgw_lc_get_next_entry(ObjectReadOperation& op, const string& marker,
                                bufferlist& out)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::lc_datum::encode_marker(marker);
+#else
   cls_rgw_lc_get_next_entry_op call;
   call.marker = marker;
   encode(call, in);
+#endif
   op.exec(method::lc_get_next_entry, in, &out, nullptr);
 }
 
@@ -1085,19 +1094,27 @@ void cls_rgw_lc_rm_entry(ObjectWriteOperation& op,
                          const cls_rgw_lc_entry& entry)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::lc_datum::encode_entry(entry);
+#else
   cls_rgw_lc_rm_entry_op call;
   call.entry = entry;
   encode(call, in);
+#endif
   op.exec(method::lc_rm_entry, in);
 }
 
 void cls_rgw_lc_set_entry(ObjectWriteOperation& op,
                           const cls_rgw_lc_entry& entry)
 {
-  bufferlist in, out;
+  bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::lc_datum::encode_entry(entry);
+#else
   cls_rgw_lc_set_entry_op call;
   call.entry = entry;
   encode(call, in);
+#endif
   op.exec(method::lc_set_entry, in);
 }
 
@@ -1105,8 +1122,12 @@ void cls_rgw_lc_get_entry(ObjectReadOperation& op, const std::string& marker,
                           bufferlist& out)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::lc_datum::encode_marker(marker);
+#else
   cls_rgw_lc_get_entry_op call{marker};
   encode(call, in);
+#endif
   op.exec(method::lc_get_entry, in, &out, nullptr);
 }
 
@@ -1128,11 +1149,15 @@ void cls_rgw_lc_list(ObjectReadOperation& op, const string& marker,
                      uint32_t max_entries, bufferlist& out)
 {
   bufferlist in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::lc_datum::encode_list(marker, max_entries);
+#else
   cls_rgw_lc_list_entries_op call;
   call.marker = marker;
   call.max_entries = max_entries;
 
   encode(call, in);
+#endif
 
   op.exec(method::lc_list_entries, in, &out, nullptr);
 }
