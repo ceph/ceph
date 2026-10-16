@@ -11,7 +11,6 @@ from cephadm.services.service_registry import service_registry
 import orchestrator
 from cephadm.image_prepull import (
     PrePullBatchResult,
-    UpgradeImagePrePullMethod,
     UpgradeImagePrePull,
 )
 from cephadm.registry import Registry
@@ -826,11 +825,9 @@ class CephadmUpgrade:
             self._validate_failure_domain_upgrade_options(
                 bucket_type, bucket_name, daemon_types)
 
-        # Reuse the validation pull's metadata only for registry pre-pull.
+        # Reuse the validation pull's metadata only when pre-pull is enabled.
         # Otherwise _do_upgrade() still does the normal first pull.
-        registry_prepull = (
-            self.image_prepull.configured_method() == UpgradeImagePrePullMethod.REGISTRY
-        )
+        registry_prepull = self.image_prepull.enabled()
         if daemon_types is not None or services is not None or hosts is not None:
             scoped_id, scoped_ver, scoped_digests, scoped_host = (
                 self._validate_upgrade_filters(target_name, daemon_types, hosts, services))
@@ -950,7 +947,7 @@ class CephadmUpgrade:
             # staggered start keeps default_cephadm_command_timeout.
             pull_timeout = (
                 self.image_prepull.pull_timeout_sec()
-                if self.image_prepull.configured_method() == UpgradeImagePrePullMethod.REGISTRY
+                if self.image_prepull.enabled()
                 else None
             )
             first_host = next(iter(self.mgr.inventory.keys()), None)
@@ -2313,9 +2310,7 @@ class CephadmUpgrade:
         target_digests = self.upgrade_state.target_digests
         target_version = self.upgrade_state.target_version
 
-        method = self.image_prepull.parse_method_or_fail()
-        if method is None:
-            return
+        prepull = self.image_prepull.enabled()
 
         first = False
         first_host: Optional[str] = None
@@ -2327,7 +2322,7 @@ class CephadmUpgrade:
             self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
             pull_timeout = (
                 self.image_prepull.pull_timeout_sec()
-                if method == UpgradeImagePrePullMethod.REGISTRY
+                if prepull
                 else None
             )
             first_host = next(iter(self.mgr.inventory.keys()), None)
@@ -2402,7 +2397,7 @@ class CephadmUpgrade:
             })
             return
 
-        if method == UpgradeImagePrePullMethod.REGISTRY:
+        if prepull:
             daemons = self._get_filtered_daemons()
             hosts = self.image_prepull.get_upgrade_scope_hosts(daemons)
             if first and first_host and first_host in hosts:

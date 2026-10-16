@@ -22,19 +22,6 @@ SHA256_REPO_DIGEST_SEPARATOR = '@sha256:'
 UPGRADE_IMAGE_PRE_PULL_MIN_TIMEOUT_SEC = 7200
 
 
-class UpgradeImagePrePullMethod(str, Enum):
-    NONE = 'none'
-    REGISTRY = 'registry'
-
-    @classmethod
-    def from_config(cls, raw: Optional[str]) -> 'UpgradeImagePrePullMethod':
-        """Normalize config to a method. Empty string is a default, not a method."""
-        value = (raw or '').strip().lower()
-        if not value:
-            return cls.NONE
-        return cls(value)
-
-
 class PrePullBatchResult(str, Enum):
     COMPLETE = 'complete'
     IN_PROGRESS = 'in_progress'
@@ -52,37 +39,15 @@ class UpgradeImagePrePull:
         self.upgrade = upgrade
         self.mgr: 'CephadmOrchestrator' = upgrade.mgr
 
-    def parse_method_or_fail(self) -> Optional[UpgradeImagePrePullMethod]:
-        raw = getattr(self.mgr, 'upgrade_prepull_method', '') or ''
-        try:
-            return UpgradeImagePrePullMethod.from_config(raw)
-        except ValueError:
-            self.upgrade._fail_upgrade('UPGRADE_FAILED_PULL', {
-                'severity': 'error',
-                'summary': 'Upgrade: invalid upgrade_prepull_method',
-                'count': 1,
-                'detail': [
-                    f'unknown upgrade_prepull_method {str(raw).strip().lower()!r}; '
-                    f'expected empty/{UpgradeImagePrePullMethod.NONE.value!r} '
-                    f'(disabled) or {UpgradeImagePrePullMethod.REGISTRY.value!r}',
-                ],
-            })
-            return None
+    def enabled(self) -> bool:
+        return bool(getattr(self.mgr, 'upgrade_prepull_image', False))
 
     def get_upgrade_scope_hosts(self, daemons: List[DaemonDescription]) -> List[str]:
         hosts = sorted({d.hostname for d in daemons if d.hostname})
         return [h for h in hosts if h not in self.mgr.offline_hosts]
 
-    def configured_method(self) -> UpgradeImagePrePullMethod:
-        """Configured pre-pull method. Unknown values are not registry."""
-        raw = getattr(self.mgr, 'upgrade_prepull_method', '') or ''
-        try:
-            return UpgradeImagePrePullMethod.from_config(raw)
-        except ValueError:
-            return UpgradeImagePrePullMethod.NONE
-
     def pull_timeout_sec(self) -> int:
-        """Long cephadm pull timeout. Callers must use this only for registry."""
+        """Long cephadm pull timeout. Callers must use this only when pre-pull is enabled."""
         return max(
             UPGRADE_IMAGE_PRE_PULL_MIN_TIMEOUT_SEC,
             self.mgr.default_cephadm_command_timeout,

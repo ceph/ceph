@@ -73,37 +73,30 @@ already be offline while a host still downloads the image.
 
 When enabled, cephadm pre-pulls the target image to in-scope hosts
 **before any daemon is upgraded**. Configure this with
-``mgr/cephadm/upgrade_prepull_method``:
+``mgr/cephadm/upgrade_prepull_image`` (default ``false``).
 
-``''`` / ``none`` (default)
-  Disabled. Upgrade behaves as before (per-host pull on demand during
-  daemon upgrade).
-
-``registry``
-  Pull in parallel batches on each in-scope host from the cluster registry
-  (Harbor, Quay, etc.). Use this when every node already has registry
-  connectivity. The existing first pull on one host still learns the target
-  digest and Ceph version (and rejects a bad target) before the cluster-wide
-  pre-pull. The longer pull timeout, and a staggered upgrade's reuse of the
-  image already inspected at start, apply only while this method is
-  ``registry``. Hosts already completed are skipped after a pause or mgr failover.
-  If pre-pull fails on any host, the upgrade is paused before any daemon is
-  upgraded. Staggered upgrades pre-pull only on hosts in the current upgrade
-  scope.
+Pull in parallel batches on each in-scope host from the cluster registry
+(Harbor, Quay, etc.). Use this when every node already has registry
+connectivity. The existing first pull on one host still learns the target
+digest and Ceph version (and rejects a bad target) before the cluster-wide
+pre-pull. The longer pull timeout, and a staggered upgrade's reuse of the
+image already inspected at start, apply only while this option is
+enabled. Hosts already completed are skipped after a pause or mgr failover.
+If pre-pull fails on any host, the upgrade is paused before any daemon is
+upgraded. Staggered upgrades pre-pull only on hosts in the current upgrade
+scope.
 
 Enable pre-pull:
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/cephadm/upgrade_prepull_method registry
+   ceph config set mgr mgr/cephadm/upgrade_prepull_image true
 
-Disable again (either form):
+Disable again:
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/cephadm/upgrade_prepull_method none
-   # or clear to empty
-   ceph config set mgr mgr/cephadm/upgrade_prepull_method ''
+   ceph config set mgr mgr/cephadm/upgrade_prepull_image false
 
 Optional tuning (hosts pulled per serve iteration):
 
