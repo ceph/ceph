@@ -571,6 +571,88 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
     assert_eq!(ok, 200, "alice was refused where she can write");
 }
 
+/// A raised capability is effective for one call and gone after it,
+/// and cannot be raised while impersonating.
+///
+/// The raise is the whole of what (n) adds to the gateway's
+/// authority, and the only site that uses it -- the promote's residue
+/// -- needs a version file owned by a uid no identity row claims, so
+/// no S3 sequence reaches it.  The hint asks the primitive directly
+/// and reports what the kernel said.
+///
+/// Four assertions, and the raise itself is the least of them.  That
+/// the capability is **not** effective before the call is what the
+/// startup lowering is for, and a gateway that never lowered would
+/// pass every other check here while serving every request with
+/// `CAP_DAC_OVERRIDE`.  That it is gone after the call is the one
+/// that would otherwise leak:  a thread returning to the frontend's
+/// pool still holding it serves everything that follows with it.  The
+/// last is the refusal while impersonating, where the capability
+/// would be the *identity's* rather than the gateway's.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_a_raise_is_effective_for_one_call_and_dropped_after() {
+    if !nsfs_only().await {
+        return;
+    }
+    let cfg = get_config();
+    let r = s3_tests_rs::admin::driver_hint_results(
+        "raise",
+        &[("cap", "promote"),
+          ("user", &s3_tests_rs::admin::q(&cfg.main_user_id))]).await;
+    let m = match r {
+        Some(m) => m,
+        /* no admin access, or a driver without the hint */
+        None => return,
+    };
+
+    match m.get("verdict").map(String::as_str) {
+        Some("ran") => {
+            assert_eq!(
+                m.get("before").map(String::as_str), Some("0"),
+                "the capability was effective before the raise, so the \
+                 startup lowering did not happen and every ordinary \
+                 request holds it:  results={m:?}");
+            assert_eq!(
+                m.get("inside").map(String::as_str), Some("1"),
+                "the raised capability was not effective inside the \
+                 call:  results={m:?}");
+            assert_eq!(
+                m.get("after").map(String::as_str), Some("0"),
+                "a raised capability outlived the call that raised it, \
+                 so every later request on this thread holds it:  \
+                 results={m:?}");
+        }
+        /* a gateway started without the file capabilities cannot raise
+         * one.  That is the deployment's answer, not the primitive's,
+         * and the two states that do not need the capability still
+         * hold. */
+        Some("not-permitted") => {
+            assert_eq!(
+                m.get("before").map(String::as_str), Some("0"),
+                "the capability is effective on an ordinary request \
+                 thread:  results={m:?}");
+            assert_eq!(
+                m.get("after").map(String::as_str), Some("0"),
+                "a refused raise left the capability effective:  \
+                 results={m:?}");
+        }
+        _ => return,
+    }
+
+    match m.get("impersonating").map(String::as_str) {
+        /* -EPERM:  raising on an impersonating thread would hand the
+         * capability to the identity */
+        Some("-1") => {}
+        /* impersonation off, or the fixture's user carries no identity:
+         * that arm is unreachable, and the three above still hold */
+        Some("not-impersonating") | Some("no-identity") | None => {}
+        other => panic!(
+            "a raise on an impersonating thread returned {other:?} \
+             rather than -EPERM:  results={m:?}"),
+    }
+}
+
 /// A nested `run_as` cannot run work as the wrong identity.
 ///
 /// `run_as` takes a fast path when its thread is already
