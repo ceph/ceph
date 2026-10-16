@@ -1550,8 +1550,13 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 				  const nsfs::FSIdentity& id,
 				  const nsfs::XattrStrategy* alt = nullptr)
 {
+  ldpp_dout(dpp, 10) << "nsfs: demote enter leaf=" << leaf
+    << " enabled=" << ver_enabled << " as="
+    << (id.active() ? id.key.to_str() : std::string("gateway")) << dendl;
   int vfd = open_versions_dir(parent_fd);
   if (vfd < 0) {
+    ldpp_dout(dpp, 10) << "nsfs: demote " << leaf
+      << " has no .versions: " << cpp_strerror(-vfd) << dendl;
     return vfd;
   }
   auto close_vfd = make_scope_guard([vfd] { ::close(vfd); });
@@ -1591,6 +1596,8 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
     dpp, parent_fd, leaf,
     vfd, ver_name,
     statx_mtime_ns(cur_stx), cur_stx.stx_ino, id);
+  ldpp_dout(dpp, 10) << "nsfs: demote " << leaf << " -> " << ver_name
+    << " result=" << (int)sr << dendl;
 
   if (sr == SafeResult::OK) {
     int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
@@ -12137,7 +12144,34 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
       std::string ver_id = binfo.versioning_enabled()
         ? nsfs_version_id_from_statx(stx) : NULL_VERSION_ID;
       std::string xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-      ::fsetxattr(fd, xattr.c_str(), ver_id.c_str(), ver_id.size(), 0);
+      /* As the identity that wrote the object, and checked.
+       *
+       * A `user.*` attribute needs write permission on the file,
+       * tested against the *calling* thread rather than against
+       * whoever opened the descriptor -- so the gateway writing
+       * through the requester's fd is refused on a 0660 file it does
+       * not own.  This ignored its result, so under impersonation
+       * every versioned PUT published an object carrying no recorded
+       * version id while reporting the derived one to the client.
+       * The next demote then read no record, filed the object as the
+       * null version (`6ac7174791c`), and the id the client holds
+       * named nothing:  20 versioning tests, all of them a GET or a
+       * HEAD by a version id that exists only in the response. */
+      const int vret = nsfs::with_identity(dpp, ent->get_identity(),
+					   [&]() -> int {
+	if (::fsetxattr(fd, xattr.c_str(), ver_id.c_str(),
+			ver_id.size(), 0) < 0) {
+	  return -errno;
+	}
+	return 0;
+      });
+      if (vret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
+          << get_name() << ": " << cpp_strerror(-vret)
+          << ";  a later demote would file it as the null version"
+          << dendl;
+        return vret;
+      }
       set_instance(ver_id);
     }
     flags = FSEnt::FLAG_LIST_VERSIONS;
@@ -15268,6 +15302,15 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   bool versioned = binfo.versioned();
   bool ver_enabled = binfo.versioning_enabled();
   DemoteResult demote;
+
+  /* What this write believes about the bucket, which decides whether
+   * anything is demoted at all.  The bucket object here is the one
+   * the request resolved, so a stale or unread `flags` shows up as a
+   * PUT that quietly overwrites the current version instead of
+   * keeping it. */
+  ldpp_dout(dpp, 10) << "nsfs: publish " << obj->get_name()
+    << " versioned=" << versioned << " enabled=" << ver_enabled
+    << " flags=0x" << std::hex << binfo.flags << std::dec << dendl;
 
   /* versioned PUT: demote current version to .versions/ before publishing */
   if (versioned) {
