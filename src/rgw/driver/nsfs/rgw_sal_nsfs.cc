@@ -12874,6 +12874,24 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       return cret;
     }
   }
+  /* Who this delete is for.  Resolved once, here, rather than at
+   * each site that needs it:  a delete in a versioned bucket links
+   * and unlinks inside `.versions`, and those are writes against an
+   * identity's files.
+   *
+   * -ENODATA is impersonation off, which is not a failure -- the
+   * identity stays inactive and every call below runs exactly as it
+   * did before.  Any other refusal fails the delete rather than
+   * falling back to the gateway. */
+  nsfs::FSIdentity identity;
+  {
+    const int pret = pin_personality_for(dpp, source->driver, auth_user,
+					 &identity, /*tolerate_absent=*/false);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
+
   bool has_cond = params.if_match ||
     !real_clock::is_zero(params.last_mod_time_match) ||
     params.size_match.has_value();
@@ -13346,12 +13364,15 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
 
-      /* Still the gateway's, and it fails the same way the writer's
-       * demote did, against an object an identity wrote. */
+      /* As the requester, which phase C's DeleteOp parameter now
+       * supplies.  The link's target is the current version, which an
+       * identity wrote, and fs.protected_hardlinks refuses it to the
+       * gateway -- the same refusal the writer's demote had before it
+       * carried one. */
       SafeResult sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
                                 vfd, ver_name,
-                                cur_mtime, cur_ino);
+                                cur_mtime, cur_ino, identity);
       if (sr == SafeResult::OK) {
         int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
         if (demoted_fd >= 0) {
@@ -13363,10 +13384,12 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                       now_ms.c_str(), now_ms.size(), 0);
           ::close(demoted_fd);
         }
-        /* CAS unlink: remove current only if it still matches */
+        /* CAS unlink: remove current only if it still matches.  The
+         * requester's too:  the entry it removes is in the bucket
+         * directory, which phase D hands to the account. */
         source->driver->get_fs_strategy()->safe_unlink(
                     dpp, parent_fd, dm_leaf, vfd,
-                    cur_mtime, cur_ino);
+                    cur_mtime, cur_ino, identity);
         demoted_ver_id = cur_ver_id;
         did_demote = true;
         break;
@@ -13406,57 +13429,93 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   std::string dm_tmp = ".dm_tmp_" +
     std::to_string(getpid()) + "_" + std::to_string(dm_counter.fetch_add(1));
 
-  int dm_fd = ::openat(vfd, dm_tmp.c_str(),
-                       O_WRONLY | O_CREAT | O_EXCL,
-                       nsfs::file_create_mode());
+  /* As the requester, all of it.
+   *
+   * A delete marker is a version in the requester's tree, so it is
+   * the requester's file by the same rule as any other object.  It
+   * was the gateway's, and that is not only an ownership
+   * inconsistency:  the *next* delete demotes this marker, and a
+   * demote hard-links the file it demotes, which
+   * fs.protected_hardlinks permits only to the source inode's owner.
+   * A gateway-owned marker is therefore undemotable by the identity
+   * that made it -- `delete_obj: demote of <key> refused by the
+   * filesystem`, a 403 on the second delete of a key.
+   *
+   * The attribute writes are inside the same switch for the reason
+   * the version id is (`0dcf4a191f6`):  a `user.*` write is tested
+   * against the calling thread, so the gateway writing to the
+   * requester's file would be refused, and these are unchecked. */
+  int dm_fd = -1;
+  const int dmret = nsfs::with_identity(dpp, identity, [&]() -> int {
+    dm_fd = ::openat(vfd, dm_tmp.c_str(),
+                     O_WRONLY | O_CREAT | O_EXCL,
+                     nsfs::file_create_mode());
+    if (dm_fd < 0) {
+      return -errno;
+    }
+    return 0;
+  });
+  if (dmret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: delete_obj: could not create the delete"
+      " marker for " << dm_leaf << ": " << cpp_strerror(-dmret) << dendl;
+    ::close(vfd);
+    return dmret;
+  }
   if (dm_fd >= 0) {
     (void) nsfs::apply_create_mode(dpp, dm_fd, nsfs::file_create_mode());
-    /* set delete_marker xattr */
-    std::string dm_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
-    std::string dm_val = "true";
-    ::fsetxattr(dm_fd, dm_xattr.c_str(), dm_val.c_str(), dm_val.size(), 0);
-
-    /* stat for version ID */
-    struct statx dm_stx;
+    /* Every attribute on the marker is written as its owner, for the
+     * reason the version id is:  a `user.*` write is tested against
+     * the calling thread, so the gateway writing to the requester's
+     * file is refused, and none of these is checked. */
     std::string dm_ver_id;
-    if (statx(dm_fd, "", AT_EMPTY_PATH, STATX_ALL, &dm_stx) == 0) {
-      dm_ver_id = ver_enabled
-        ? nsfs_version_id_from_statx(dm_stx)
-        : NULL_VERSION_ID;
-    } else {
-      dm_ver_id = NULL_VERSION_ID;
-    }
+    (void) nsfs::with_identity(dpp, identity, [&]() -> int {
+      /* set delete_marker xattr */
+      std::string dm_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
+      std::string dm_val = "true";
+      ::fsetxattr(dm_fd, dm_xattr.c_str(), dm_val.c_str(), dm_val.size(), 0);
 
-    /* set version_id xattr */
-    std::string vid_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-    ::fsetxattr(dm_fd, vid_xattr.c_str(),
-                dm_ver_id.c_str(), dm_ver_id.size(), 0);
+      /* stat for version ID */
+      struct statx dm_stx;
+      if (statx(dm_fd, "", AT_EMPTY_PATH, STATX_ALL, &dm_stx) == 0) {
+        dm_ver_id = ver_enabled
+          ? nsfs_version_id_from_statx(dm_stx)
+          : NULL_VERSION_ID;
+      } else {
+        dm_ver_id = NULL_VERSION_ID;
+      }
 
-    /* copy ACL from the source object so the DM has owner info.
-     *
-     * There is not always one to copy.  A DELETE of a key that does
-     * not exist still writes a marker, and then the source carries no
-     * ACL, so the marker got none and listed as unknown/unknown --
-     * RGW emits an <Owner> for a delete marker, and on this backend
-     * the recorded ACL is the only thing that field reads from.
-     * params.obj_owner is the caller the SAL contract supplies for
-     * exactly this ("acl owner for delete marker if necessary"), so
-     * the marker is owned by whoever deleted, which is also what S3
-     * says it is. */
-    bufferlist acl_bl;
-    if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ACL, acl_bl)) {
-      RGWAccessControlPolicy policy;
-      policy.create_default(params.obj_owner.id,
-			    params.obj_owner.display_name);
-      policy.encode(acl_bl);
-    }
-    if (acl_bl.length() > 0) {
-      std::string acl_xattr = source->xattr_strategy()->disk_name(RGW_ATTR_ACL);
-      std::string acl_v = attr_on_disk(source->xattr_strategy(),
-                                       RGW_ATTR_ACL, acl_bl);
-      ::fsetxattr(dm_fd, acl_xattr.c_str(),
-                  acl_v.data(), acl_v.size(), 0);
-    }
+      /* set version_id xattr */
+      std::string vid_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
+      ::fsetxattr(dm_fd, vid_xattr.c_str(),
+                  dm_ver_id.c_str(), dm_ver_id.size(), 0);
+
+      /* copy ACL from the source object so the DM has owner info.
+       *
+       * There is not always one to copy.  A DELETE of a key that does
+       * not exist still writes a marker, and then the source carries no
+       * ACL, so the marker got none and listed as unknown/unknown --
+       * RGW emits an <Owner> for a delete marker, and on this backend
+       * the recorded ACL is the only thing that field reads from.
+       * params.obj_owner is the caller the SAL contract supplies for
+       * exactly this ("acl owner for delete marker if necessary"), so
+       * the marker is owned by whoever deleted, which is also what S3
+       * says it is. */
+      bufferlist acl_bl;
+      if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ACL, acl_bl)) {
+        RGWAccessControlPolicy policy;
+        policy.create_default(params.obj_owner.id,
+  			    params.obj_owner.display_name);
+        policy.encode(acl_bl);
+      }
+      if (acl_bl.length() > 0) {
+        std::string acl_xattr = source->xattr_strategy()->disk_name(RGW_ATTR_ACL);
+        std::string acl_v = attr_on_disk(source->xattr_strategy(),
+                                         RGW_ATTR_ACL, acl_bl);
+        ::fsetxattr(dm_fd, acl_xattr.c_str(),
+                    acl_v.data(), acl_v.size(), 0);
+      }
+      return 0;
+    });
     ::close(dm_fd);
 
     /* rename to final name */

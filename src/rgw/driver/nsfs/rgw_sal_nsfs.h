@@ -2173,10 +2173,28 @@ public:
 
   struct NSFSDeleteOp : DeleteOp {
     NSFSObject* source;
+    /* who asked, for the writes a delete makes inside `.versions`;
+     * see set_authenticated_user() */
+    rgw_user auth_user;
 
     NSFSDeleteOp(NSFSObject* _source) :
       source(_source) {}
     virtual ~NSFSDeleteOp() = default;
+
+    /* A delete of a current version in a versioned bucket *writes*:
+     * it links the current name into `.versions` and unlinks it from
+     * the bucket directory, against an object an identity wrote.  As
+     * the gateway that link is refused by fs.protected_hardlinks, so
+     * the requester is what those two calls need
+     * (inflight/n-plan.md phase D).
+     *
+     * Not the promote that may follow them.  That publishes as the
+     * version file's own owner (§5) and must stay outside any
+     * `with_identity` here:  `run_as` refuses to act as one identity
+     * on a thread already acting as another. */
+    void set_authenticated_user(const rgw_user& user) override {
+      auth_user = user;
+    }
 
     virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
   };
