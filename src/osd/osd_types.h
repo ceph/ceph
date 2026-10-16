@@ -1402,6 +1402,9 @@ struct pg_pool_t {
   __u8 size = 0, min_size = 0;  ///< number of osds in each pg
   __u8 replica = 0;             ///< number of replicas per zone
   __u8 num_zones = 1;           ///< number of zones
+  /// not encoded: a replicated stretch pool decoded from before num_zones,
+  /// which OSDMap gives the zones of global stretch mode if it is enabled
+  bool legacy_stretch = false;
   __u8 crush_rule = 0;          ///< crush placement rule
   __u8 object_hash = 0;         ///< hash mapping object name to ps
   pg_autoscale_mode_t pg_autoscale_mode = pg_autoscale_mode_t::UNKNOWN;
@@ -1701,6 +1704,15 @@ public:
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
   unsigned get_num_zones() const { return num_zones; }
+  /// a legacy_stretch pool of global stretch mode: one zone per bucket of
+  /// the stretch rule, and min_size, a total in earlier releases, per zone
+  /// and rounded up, so no zone accepts writes with fewer copies than asked for
+  void convert_legacy_stretch_zones() {
+    num_zones = peering_crush_bucket_target;
+    replica = size / num_zones;
+    min_size = (min_size + num_zones - 1) / num_zones;
+    legacy_stretch = false;
+  }
   unsigned get_replica() const { return replica; }
   int get_crush_rule() const { return crush_rule; }
   int get_object_hash() const { return object_hash; }

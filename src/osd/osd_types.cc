@@ -2527,24 +2527,17 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
   if (struct_v >= 34) {
     decode(replica, bl);
     decode(num_zones, bl);
+    legacy_stretch = false;
   } else {
-    // Old pools that don't have num_zones and replica. Upgrade edge case: an
-    // older 'osd pool stretch set' accepted EC pools, so an EC pool can have
-    // stretch values, but it has no zones.
-    if (is_stretch_pool() && !is_erasure()) {
-      // Stretch pool: infer num_zones from peering_crush_bucket_target
-      // we don't use peering_crush_bucket_count because there are some clusters
-      // that set peering_crush_bucket_count to less than the actual number of 
-      // zones in order to survive more failures without degraded stretch mode.
-      num_zones = peering_crush_bucket_target;
-      replica = size / num_zones;
-    } else {
-      // Non-stretch pool: single-zone, replica = size
-      num_zones = 1;
-      replica = size;
-    }
-    // rounded up, so no zone accepts writes with fewer copies than asked for
-    min_size = (min_size + num_zones - 1) / num_zones;
+    // An earlier release's pool has one zone and a min_size over all its
+    // copies. A replicated stretch pool keeps them if it is an individual
+    // stretch pool; if it belongs to global stretch mode, the OSDMap gives it
+    // the zones of stretch mode (OSDMap::settle_legacy_stretch_pools()). An
+    // earlier 'osd pool stretch set' also accepted EC pools, which keep one zone.
+    num_zones = 1;
+    replica = size;
+    legacy_stretch = is_stretch_pool() && !is_erasure() &&
+                     peering_crush_bucket_target > 1;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();

@@ -1044,6 +1044,9 @@ private:
   void encode_classic(ceph::buffer::list& bl, uint64_t features) const;
   void decode_classic(ceph::buffer::list::const_iterator& p);
   void post_decode();
+  /// give the legacy_stretch pools of a map in global stretch mode its zones;
+  /// in other maps they are individual stretch pools and keep one zone
+  void settle_legacy_stretch_pools();
 public:
   void encode(ceph::buffer::list& bl, uint64_t features=CEPH_FEATURES_ALL) const;
   void decode(ceph::buffer::list& bl);
