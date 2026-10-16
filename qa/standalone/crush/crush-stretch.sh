@@ -769,7 +769,7 @@ function TEST_stretch_diff_bucket_barrier() {
     ceph mon set_location c zone=arbiter || return 1
 
 
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_zone --zone-failure-domain=zone --class=ssd  || return 1
+    ceph osd crush rule create-stretch-replicated --rule-name=stretch_zone --zone_failure_domain=zone --class=ssd  || return 1
 
     ceph osd pool create pool_zone || return 1
 
@@ -781,7 +781,7 @@ function TEST_stretch_diff_bucket_barrier() {
     ceph mon dump | grep "stretch_mode_enabled 1" || return 1
 
     # the stretch checks come before the rule is built
-    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --num-zones 2 --class=ssd 2>&1 | grep "there are 0datacenter's in the cluster but stretch mode currently only works with 2" || return 1
+    ceph osd pool create pool_dc replicated --zone_failure_domain=datacenter --num-zones 2 --class=ssd 2>&1 | grep "there are 0datacenter's in the cluster but stretch mode currently only works with 2" || return 1
 
 }
 
