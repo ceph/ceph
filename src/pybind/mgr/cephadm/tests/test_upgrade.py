@@ -1493,6 +1493,50 @@ def test_full_upgrade_completes_when_all_daemons_upgraded(
     assert _run_do_upgrade_for_completion(cephadm_module, daemons) is None
 
 
+def test_mgr_only_upgrade_never_processes_grafana(
+    cephadm_module: CephadmOrchestrator,
+):
+    # Regression for 614344: the monitoring stack must not enter a mgr-only
+    # upgrade pass, even if Grafana still has an old image.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('mgr', 'y', 'host2', True),
+        _completion_dd('grafana', 'host1', 'host1', False),
+        _completion_dd('mon', 'host1', 'host1', False),
+        _completion_dd('osd', '0', 'host1', False),
+    ]
+    with mock.patch.object(
+        CephadmUpgrade, '_detect_need_upgrade',
+        wraps=cephadm_module.upgrade._detect_need_upgrade,
+    ) as detect:
+        assert _run_do_upgrade_for_completion(
+            cephadm_module, daemons, daemon_types=['mgr'],
+        ) is None
+    for call in detect.call_args_list:
+        assert all(d.daemon_type != 'grafana' for d in call.args[0])
+
+
+@pytest.mark.parametrize('in_bucket_upgraded', [True, False])
+@mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, []))
+def test_crush_scoped_upgrade_completion_ignores_other_buckets(
+    _to_upgrade: mock.MagicMock,
+    in_bucket_upgraded: bool,
+    cephadm_module: CephadmOrchestrator,
+):
+    # Only osd.0 belongs to the chosen rack. Out-of-bucket osd.1 is old.
+    daemons = [
+        _completion_dd('mgr', 'x', 'host1', True),
+        _completion_dd('osd', '0', 'host1', in_bucket_upgraded),
+        _completion_dd('osd', '1', 'host2', False),
+    ]
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = {'osd.0'}
+    state = _run_do_upgrade_for_completion(
+        cephadm_module, daemons, daemon_types=['osd'],
+        crush_bucket_type='rack', crush_bucket_name='rack-a',
+    )
+    assert (state is None) == in_bucket_upgraded
+
+
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_check_host_cpu_isa_level(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):
