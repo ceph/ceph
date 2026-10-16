@@ -979,3 +979,39 @@ TEST_CASE("Lifecycle list and head clients retain sorting and malformed-output p
         CHECK(head.shard_rollover_date == 19);
     }
 }
+
+TEST_CASE("Multipart client preserves native manifest normalization and owns encoded bytes", "[rgw][cls][multipart]")
+{
+    ::RGWUploadPartInfo info;
+    info.num = 17;
+    info.size = 4096;
+    info.accounted_size = 8192;
+    info.etag = std::string(100, 'e');
+    ::rgw_placement_rule placement;
+    placement.name = "head-placement";
+    info.manifest.set_head(placement, {}, 31);
+    info.manifest.set_trivial_rule(31, 4096);
+    info.manifest.set_prefix("current");
+    info.cs_info.compression_type = "zstd";
+    info.cs_info.blocks = {{0, 0, 4096}};
+    info.past_prefixes = {std::string(100, 'p'), std::string {"a\0b", 3}};
+    info.crypt_salt = std::string(100, 's');
+    std::string key {"p\0t", 3};
+    ::cls_rgw_mp_upload_part_info_update_op expected;
+    expected.part_key = key;
+    expected.info = info;
+    byte_buffer encoded;
+    ::encode(expected, encoded);
+    ::librados::ObjectWriteOperation operation;
+    ::cls_rgw_mp_upload_part_info_update(operation, key, info);
+    CHECK(request_method == "mp_upload_part_info_update");
+    CHECK(request_bytes.contents_equal(encoded));
+    CHECK(info.manifest.get_head_placement_rule().name == "head-placement");
+    CHECK(info.past_prefixes.size() == 2);
+    key.assign(100, 'x');
+    info.etag.clear();
+    info.cs_info.blocks.clear();
+    info.past_prefixes.clear();
+    info.crypt_salt.clear();
+    CHECK(request_bytes.contents_equal(encoded));
+}

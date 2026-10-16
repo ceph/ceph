@@ -15,6 +15,7 @@
  #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_gc_datum.h"
  #include "cls/rgw/cls_rgw_lc_datum.h"
+ #include "cls/rgw/cls_rgw_multipart_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_reshard_datum.h"
@@ -1183,12 +1184,15 @@ void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op,
                                         const std::string& part_key,
                                         const RGWUploadPartInfo& info)
 {
+  buffer::list in;
+#ifdef WITH_RGW_CLS_DATUM
+  in = ::cls::rgw::multipart_datum::encode_update(part_key, info);
+#else
   cls_rgw_mp_upload_part_info_update_op call;
   call.part_key = part_key;
   call.info     = info;
-
-  buffer::list in;
   encode(call, in);
+#endif
 
   op.exec(method::mp_upload_part_info_update, in);
 }

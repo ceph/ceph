@@ -2406,3 +2406,109 @@ TEST_CASE("Lifecycle failures retain stage-specific errors and request admission
     state.values["a"] = state.header;
     CHECK(invoke(state, lc_list_request(3), "lc_list_entries") == -EIO);
 }
+
+namespace {
+
+void multipart_info(::RGWUploadPartInfo& value, const std::string& prefix)
+{
+    value.num = 17;
+    value.size = 4096;
+    value.accounted_size = 8192;
+    value.etag = "etag";
+    ::rgw_placement_rule placement;
+    placement.name = "raw-head-placement";
+    value.manifest.set_head(placement, {}, 31);
+    value.manifest.set_trivial_rule(31, 4096);
+    value.manifest.set_prefix(prefix);
+    value.past_prefixes = {"older", "shared"};
+    value.crypt_salt = std::string {"s\0t", 3};
+}
+
+byte_buffer multipart_request(const ::RGWUploadPartInfo& value, const std::uint8_t version = 1)
+{
+    byte_buffer output;
+    ENCODE_START(version, 1, output);
+    ::ceph::encode(std::string {"p\0t", 3}, output);
+    ::encode(value, output);
+    if (version > 1) { ::ceph::encode(std::uint64_t {37}, output); }
+    ENCODE_FINISH(output);
+
+    return output;
+}
+
+} // anonymous namespace
+
+TEST_CASE("Multipart update stores raw manifest head placement and merges previous prefixes", "[rgw][cls][multipart]")
+{
+    ::RGWUploadPartInfo incoming;
+    multipart_info(incoming, "current");
+    ::RGWUploadPartInfo old;
+    multipart_info(old, "previous");
+    old.past_prefixes = {"oldest", "shared"};
+    for (const std::uint8_t version : {0, 1, 10}) {
+        storage state;
+        state.values[std::string {"p\0t", 3}] = usage_bytes(old);
+        REQUIRE(invoke(state, multipart_request(incoming, version), "mp_upload_part_info_update") == 0);
+        ::RGWUploadPartInfo stored;
+        auto cursor = state.values.at(std::string {"p\0t", 3}).cbegin();
+        ::decode(stored, cursor);
+        CHECK(stored.manifest.get_head_placement_rule().name == "raw-head-placement");
+        CHECK(stored.past_prefixes == std::set<std::string> {"older", "shared", "oldest", "previous"});
+        CHECK(stored.crypt_salt == incoming.crypt_salt);
+        CHECK(stored.accounted_size == 8192);
+        CHECK(state.reply.length() == 0);
+        const auto effects = effect_names(state);
+        REQUIRE(effects.size() == 2);
+        CHECK(effects.front() == "get-value");
+        CHECK(effects.back() == "set-value");
+    }
+}
+
+TEST_CASE("Multipart missing entry succeeds and prefix collisions never write", "[rgw][cls][multipart]")
+{
+    ::RGWUploadPartInfo incoming;
+    multipart_info(incoming, "current");
+    storage state;
+    REQUIRE(invoke(state, multipart_request(incoming), "mp_upload_part_info_update") == 0);
+    CHECK(state.values.at(std::string {"p\0t", 3}).contents_equal(usage_bytes(incoming)));
+    // Both a stored current manifest prefix and an older prefix reject reuse.
+    for (const bool manifest_collision : {false, true}) {
+        ::RGWUploadPartInfo old;
+        multipart_info(old, manifest_collision ? "current" : "previous");
+        if (!manifest_collision) { old.past_prefixes.insert("current"); }
+        storage collision;
+        const auto original = usage_bytes(old);
+        collision.values[std::string {"p\0t", 3}] = original;
+        CHECK(invoke(collision, multipart_request(incoming), "mp_upload_part_info_update") == -EEXIST);
+        CHECK(collision.values.at(std::string {"p\0t", 3}).contents_equal(original));
+        CHECK(effect_names(collision) == std::vector<std::string> {"get-value"});
+    }
+    incoming.past_prefixes.insert("current");
+    storage self_collision;
+    CHECK(invoke(self_collision, multipart_request(incoming), "mp_upload_part_info_update") == -EEXIST);
+    CHECK(self_collision.values.empty());
+}
+
+TEST_CASE("Multipart decode and storage failures preserve native stage and status", "[rgw][cls][multipart]")
+{
+    ::RGWUploadPartInfo incoming;
+    multipart_info(incoming, "current");
+    const auto full = multipart_request(incoming);
+    for (unsigned size = 0; size < full.length(); ++size) {
+        byte_buffer prefix;
+        prefix.substr_of(full, 0, size);
+        storage state;
+        CHECK(invoke(state, prefix, "mp_upload_part_info_update") == -EINVAL);
+        CHECK(state.effects.empty());
+    }
+    for (const int stage : {1, 2}) {
+        storage state;
+        state.failure_call = stage;
+        CHECK(invoke(state, full, "mp_upload_part_info_update") == -EAGAIN);
+        CHECK(state.values.empty());
+    }
+    storage corrupt;
+    corrupt.values[std::string {"p\0t", 3}] = usage_bytes(std::string {"bad"});
+    CHECK(invoke(corrupt, full, "mp_upload_part_info_update") == -EIO);
+    CHECK(effect_names(corrupt) == std::vector<std::string> {"get-value"});
+}

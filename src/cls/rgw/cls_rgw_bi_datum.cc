@@ -7,6 +7,7 @@
 #include "cls_rgw_bucket_datum.h"
 #include "cls_rgw_gc_datum.h"
 #include "cls_rgw_lc_datum.h"
+#include "cls_rgw_multipart_datum.h"
 #include "cls_rgw_object_datum.h"
 #include "cls_rgw_reshard_datum.h"
 #include "cls_rgw_usage_datum.h"
@@ -1418,3 +1419,47 @@ void encode(const list_reply& value, ::ceph::buffer::list& output)
 }
 
 } // cls::rgw::lc_datum
+
+namespace cls::rgw::multipart_datum {
+
+::ceph::buffer::list encode_update(const std::string_view part_key, const ::RGWUploadPartInfo& info)
+{
+    // The established client copies info into a fresh operation. Manifest's
+    // custom copy omits head_placement_rule; preserve that normalization while
+    // borrowing the other fields. Borrowing the raw info would change the wire.
+    const ::RGWObjManifest manifest {info.manifest};
+    ::ceph::buffer::list output;
+    ::cls::rgw::wire::writer archive {output};
+    archive.frame(1, [&] {
+        archive.text(part_key);
+        archive.frame(7, 2, [&] {
+            archive.scalar(info.num);
+            archive.scalar(info.size);
+            archive.text(info.etag);
+            archive.native(info.modified);
+            archive.native(manifest);
+            archive.native(info.cs_info);
+            archive.scalar(info.accounted_size);
+            archive.native(info.past_prefixes);
+            archive.native(info.cksum);
+            archive.text(info.crypt_salt);
+        });
+    });
+
+    return output;
+}
+
+void decode(update_request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    ::cls::rgw::wire::reader archive {cursor};
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        fields.text(value.part_key);
+        fields.native(value.info);
+
+        return 0;
+    });
+    input = cursor;
+}
+
+} // cls::rgw::multipart_datum

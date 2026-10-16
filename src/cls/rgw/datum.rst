@@ -272,3 +272,10 @@ put module targets share a plugin loader and supply controlled OMAP effects.
 Batch cases cover duplicate accounting, overwrite checks, quota/error ordering,
 reshard guards, empty batches and malformed opaque payloads. The controlled host
 records staged effects; live OSD validation separately checks transaction rollback.
+
+Multipart update borrows the key and upload fields, retaining the native manifest
+copy because its custom copy drops the encoded head placement rule. The module
+uses an independent local request and decodes the native upload leaf in place:
+copying or moving a decoded candidate would drop a received placement rule. The
+cursor commits on success; a failed request may be partially decoded, is local,
+and never reaches storage. No shared manifest implementation changes are needed.

@@ -26,6 +26,7 @@
  #include "cls/rgw/cls_rgw_bucket_datum.h"
  #include "cls/rgw/cls_rgw_gc_datum.h"
  #include "cls/rgw/cls_rgw_lc_datum.h"
+ #include "cls/rgw/cls_rgw_multipart_datum.h"
  #include "cls/rgw/cls_rgw_object_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
  #include "cls/rgw/cls_rgw_reshard_datum.h"
@@ -5234,7 +5235,11 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
 static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::multipart_datum::update_request op;
+#else
   cls_rgw_mp_upload_part_info_update_op op;
+#endif
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
