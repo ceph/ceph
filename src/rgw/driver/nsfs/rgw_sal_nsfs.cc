@@ -16689,6 +16689,100 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  /* `raise` -- the raise primitive, which no test can reach from S3
+   * because the only site that uses it is the promote's residue, and
+   * reaching that needs a version file owned by a uid no identity row
+   * claims.
+   *
+   * Three answers in one call, and each reports what the kernel said
+   * rather than only a status, so none can pass vacuously:
+   *
+   *   inside=1          the capability is effective inside the call
+   *   after=0           and is gone when it returns
+   *   impersonating=-1  a raise on a thread already running as an
+   *                     identity is refused, -EPERM:  the capability
+   *                     would be the identity's
+   *
+   * `cap` names what to raise, `dac_override` by default;  `user` is
+   * an rgw_user string for the impersonating arm, which is skipped
+   * without one.  On a gateway started without the file capabilities
+   * the first two are `verdict=not-permitted`, which is the
+   * deployment answer and not a failure of the primitive. */
+  if (hint == "raise") {
+    auto effective_set = []() -> uint64_t {
+      struct __user_cap_header_struct hdr = {};
+      struct __user_cap_data_struct data[2] = {};
+      hdr.version = _LINUX_CAPABILITY_VERSION_3;
+      hdr.pid = 0;
+      if (::syscall(SYS_capget, &hdr, data) < 0) {
+	return ~0ull;
+      }
+      return (static_cast<uint64_t>(data[1].effective) << 32) |
+	     data[0].effective;
+    };
+
+    uint64_t want = nsfs::cap_bit(CAP_DAC_OVERRIDE);
+    if (auto c_it = params.find("cap"); c_it != params.end()) {
+      if (c_it->second == "fowner") {
+	want = nsfs::cap_bit(CAP_FOWNER);
+      } else if (c_it->second == "promote") {
+	want = PROMOTE_RESIDUE_CAPS;
+      } else if (c_it->second != "dac_override") {
+	return -EINVAL;
+      }
+    }
+
+    /* before the raise:  0 is what the startup lowering is for, and
+     * the reason it is reported here is that nothing else would
+     * notice its absence -- a gateway that never lowered would serve
+     * every request with DAC_OVERRIDE effective and pass every other
+     * assertion in this hint. */
+    const uint64_t before = effective_set();
+    uint64_t inside = 0;
+    const int ret = nsfs::with_capabilities(dpp, want,
+					    [&]() -> int {
+      inside = effective_set();
+      return 0;
+    });
+    const uint64_t after = effective_set();
+
+    if (out) {
+      (*out)["verdict"] = (ret == 0) ? "ran" : "not-permitted";
+      (*out)["requested"] = std::to_string(want);
+      (*out)["before"] = std::to_string((before & want) ? 1 : 0);
+      (*out)["inside"] =
+	std::to_string((ret == 0) && ((inside & want) == want) ? 1 : 0);
+      (*out)["after"] = std::to_string((after & want) ? 1 : 0);
+    }
+
+    /* and that it is refused where it would be the identity's */
+    if (auto u_it = params.find("user"); u_it != params.end()) {
+      if (!nsfs::impersonation_enabled()) {
+	if (out) {
+	  (*out)["impersonating"] = "not-impersonating";
+	}
+      } else {
+	nsfs::Credentials cred;
+	if (hint_credentials(dpp, this, u_it->second, cred) < 0) {
+	  if (out) {
+	    (*out)["impersonating"] = "no-identity";
+	  }
+	} else {
+	  int refused = 0;
+	  (void) nsfs::run_as(dpp, cred, [&]() -> int {
+	    refused = nsfs::with_capabilities(dpp, want,
+					      []() -> int { return 0; });
+	    return 0;
+	  });
+	  if (out) {
+	    (*out)["impersonating"] = std::to_string(refused);
+	  }
+	}
+      }
+    }
+    return 0;
+  }
+
   /* `nested-identity` -- that a nested run_as() cannot run as the
    * wrong identity.
    *
