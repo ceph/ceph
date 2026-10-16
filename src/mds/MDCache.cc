@@ -196,6 +196,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
   export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
+  replica_discover_reads = g_conf().get_val<uint64_t>("mds_bal_replica_discover_reads");
   export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
 
   symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
@@ -236,6 +237,11 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
     /* copy to vector to avoid removals during iteration */
     ephemeral_pin_config_changed = true;
+  }
+  if (changed.count("mds_bal_replica_discover_reads")) {
+    replica_discover_reads = g_conf().get_val<uint64_t>("mds_bal_replica_discover_reads");
+    replica_read_misses[0].clear();
+    replica_read_misses[1].clear();
   }
   if (changed.count("mds_export_ephemeral_distributed_tree_min_entries")) {
     export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
@@ -991,6 +997,47 @@ mds_rank_t MDCache::dist_tree_rank(inodeno_t ino, frag_t fg)
   if (bits > 0)
     n += frag_t(fg.value(), bits).value() >> (24 - bits);
   return mds_rank_t(n % max_mds);
+}
+
+bool MDCache::replica_read_missed_before(CDir *dir, std::string_view dname)
+{
+  /* A replica discovers a dentry for the reads clients send it only once
+   * that dentry has been read here mds_bal_replica_discover_reads times:
+   * one that is read once, like a file a client stats and then removes,
+   * is cheaper to forward, and is then not left replicated here for its
+   * unlink to gather.  0 never discovers.  The misses are counted by hash
+   * of the dirfrag and the name in two generations, the current one and
+   * the one before it, each of up to 64k entries and rotated every 30
+   * seconds, so the reads have to come within 30 to 60 seconds.  A hash
+   * collision only discovers a dentry early.
+   */
+  const uint64_t want = replica_discover_reads;
+  if (want == 0)
+    return false;
+  if (want == 1)
+    return true;
+  constexpr size_t max_misses = 65536;
+  constexpr auto window = std::chrono::seconds(30);
+  auto now = clock::now();
+  if (replica_read_misses[0].size() >= max_misses ||
+      now - replica_read_misses_rotated > window) {
+    replica_read_misses[1].swap(replica_read_misses[0]);
+    replica_read_misses[0].clear();
+    replica_read_misses_rotated = now;
+  }
+  uint64_t h = std::hash<std::string_view>{}(dname);
+  h ^= (uint64_t)dir->ino() * 0x9e3779b97f4a7c15ull + dir->get_frag().value();
+  uint64_t seen = 0;
+  for (auto& gen : replica_read_misses) {
+    if (auto p = gen.find(h); p != gen.end()) {
+      seen += p->second;
+      gen.erase(p);
+    }
+  }
+  if (seen + 1 >= want)
+    return true;
+  replica_read_misses[0][h] = seen + 1;
+  return false;
 }
 
 bool MDCache::is_in_auth_parent_subtree(CDir *dir)
@@ -8944,15 +8991,18 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
        * holds the dentries this rank discovered for itself, such as those
        * on the way to its own subtrees, so forwarding every other lookup
        * to the auth would only add a hop to the reads the replication was
-       * meant to take off it.  Get the dentry from the auth instead, and
-       * answer this read and the next ones of it here.  Only on the first
-       * try.  For a dentry that does not exist, the auth (after fetching
-       * the dirfrag if needed) replies with a null dentry, which this
-       * replica keeps and answers ENOENT from on the retry; a dentry being
-       * purged comes back as an error, and the retry is forwarded.
+       * meant to take off it.  Once a dentry has been read here
+       * mds_bal_replica_discover_reads times, get it from the auth
+       * instead, and answer this read and the next ones of it here (see
+       * replica_read_missed_before()).  Only on the first try.  For a
+       * dentry that does not exist, the auth (after fetching the dirfrag
+       * if needed) replies with a null dentry, which this replica keeps
+       * and answers ENOENT from on the retry; a dentry being purged comes
+       * back as an error, and the retry is forwarded.
        */
       if (forward && !want_auth && curdir->is_rep() &&
-	  mdr && mdr->client_request && mdr->retry == 0) {
+	  mdr && mdr->client_request && mdr->retry == 0 &&
+	  replica_read_missed_before(curdir, path[depth])) {
 	dout(7) << "traverse: replicated " << *curdir
 		<< ", discovering instead of forwarding" << dendl;
 	discover = true;
