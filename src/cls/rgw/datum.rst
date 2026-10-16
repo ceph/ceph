@@ -7,6 +7,9 @@ share the existing Ceph encoding, including versions, lengths, scalar widths,
 element encodings and map semantics. A container category alone does not define
 that contract.
 Other RGW CLS operations continue to use their existing codecs.
+The prepare, complete, OLH link and OLH trim request builders also borrow their
+arguments during encoding. Their module decoders and storage effects retain the
+existing native implementations.
 
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
 ``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
@@ -70,6 +73,23 @@ It performs no opaque payload interpretation or accounting. Native behavior is
 preserved: reshard deletions ignore their payload, and set/remove errors are
 logged while the operation returns success. Structural request errors still return
 ``-EINVAL`` before storage effects.
+
+Borrowed index and OLH builders
+------------------------------
+
+Prepare and complete encode their key, tag, locator and metadata without creating
+an owning request copy. Complete borrows removal lists and zone sets; link borrows
+its optional metadata and zone set. A fragmented OLH tag is copied directly into
+the encoded string field, without constructing a temporary string. Trim borrows
+its key and tag. No input view escapes the synchronous builder.
+
+The outer request versions and compatibility bytes remain prepare7/5,
+complete9/7, link5/1 and trim1/1. The existing metadata, packed-version, removal
+and zone codecs remain nested wire contracts. In particular, borrowing does not
+change packed-integer boundary behavior. Optional arguments preserve their native
+defaults, and link retains its existing zero bilog flags and epoch-output path.
+The public interfaces remain C++23 and the private implementation still has two
+C++26 translation units.
 
 Batch writes
 ------------

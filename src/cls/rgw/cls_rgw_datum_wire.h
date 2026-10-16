@@ -109,6 +109,33 @@ public:
         output.append(value);
     }
 
+    void text(const std::string_view value)
+    {
+        const auto size = checked_count(value.size());
+        using record = scalar_record<std::string_view>;
+
+        fields(4ull + size, record {value}, datum::binary_fields<&record::value> {});
+    }
+
+    // A native byte chain can carry a string without an owning string temporary:
+    void text(const byte_buffer& value)
+    {
+        scalar(static_cast<std::uint32_t>(value.length()));
+        ensure(value.length());
+        auto storage = output.get_contiguous_appender(value.length());
+        for (const auto& fragment : value.buffers()) {
+            storage.append(fragment.c_str(), fragment.length());
+        }
+    }
+
+    // Keep established nested RGW codecs while borrowing their owning records:
+    template <typename T>
+    void native(const T& value)
+    {
+        using ::ceph::encode;
+        encode(value, output);
+    }
+
     template <typename BytesT>
     requires datum::byte_block<const BytesT>
     void payload(const BytesT& value)
@@ -119,16 +146,22 @@ public:
     }
 
     template <typename BodyT>
-    void frame(const std::uint8_t version, BodyT&& body)
+    void frame(const std::uint8_t version, const std::uint8_t compatible, BodyT&& body)
     {
         ensure(6);
         auto header = output.append_hole(6);
         const auto start = output.length();
         std::invoke(std::forward<BodyT>(body));
-        const frame_header value {version, 1, output.length() - start};
+        const frame_header value {version, compatible, output.length() - start};
         std::span bytes {header.c_str(), std::size_t {6}};
         zpp::bits::out archive {bytes, zpp::bits::endian::little {}};
         datum::serialize_schema(archive, value, header_fields {}).or_throw();
+    }
+
+    template <typename BodyT>
+    void frame(const std::uint8_t version, BodyT&& body)
+    {
+        frame(version, 1, std::forward<BodyT>(body));
     }
 
 };

@@ -3,6 +3,7 @@
 // Native types and completion ownership never enter Datum's pure mechanisms.
 #include "cls_rgw_bi_datum.h"
 #include "cls_rgw_bi_wire.h"
+#include "cls_rgw_write_datum.h"
 
 #include <utility>
 
@@ -124,3 +125,121 @@ template std::pair<std::list<::rgw_cls_bi_entry>, bool>
 decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::bi_datum
+
+namespace cls::rgw::write_datum {
+
+namespace {
+
+namespace datum = ::ceph::salad::datum;
+using ::cls::rgw::wire::writer;
+
+struct prepare_prefix final
+{
+    std::uint8_t operation;
+    std::string_view tag;
+    std::string_view locator;
+
+    std::uint8_t log;
+};
+
+struct complete_prefix final
+{
+    std::uint8_t operation;
+    std::uint64_t epoch;
+};
+
+} // anonymous namespace
+
+::ceph::buffer::list encode_prepare(const ::RGWModifyOp operation, const std::string_view tag,
+                                    const ::cls_rgw_obj_key& key, const std::string_view locator)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(7, 5, [&] {
+        using prefix = prepare_prefix;
+
+        archive.fields(::cls::rgw::wire::checked_count(10ull + tag.size() + locator.size()),
+            prefix {static_cast<std::uint8_t>(operation), tag, locator, 0},
+            datum::binary_fields<&prefix::operation, &prefix::tag, &prefix::locator, &prefix::log> {});
+        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        archive.scalar(std::uint16_t {0});
+        archive.scalar(std::uint32_t {0}); // Empty compatibility zone set.
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_complete(const ::RGWModifyOp operation, const std::string_view tag,
+                                     const ::rgw_bucket_entry_ver& version,
+                                     const ::cls_rgw_obj_key& key,
+                                     const ::rgw_bucket_dir_entry_meta& metadata,
+                                     const std::list<::cls_rgw_obj_key> *removed,
+                                     const bool log, const std::uint16_t flags,
+                                     const ::rgw_zone_set *zones, const std::string_view locator)
+{
+    const std::list<::cls_rgw_obj_key> empty_keys;
+    const ::rgw_zone_set empty_zones;
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(9, 7, [&] {
+        using prefix = complete_prefix;
+
+        archive.fields(9, prefix {static_cast<std::uint8_t>(operation), version.epoch},
+            datum::binary_fields<&prefix::operation, &prefix::epoch> {});
+        archive.native(metadata);
+        archive.text(tag);
+        archive.text(locator);
+        archive.native(removed ? *removed : empty_keys);
+        archive.native(version);
+        archive.scalar(static_cast<std::uint8_t>(log));
+        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        archive.scalar(flags);
+        archive.native(zones ? *zones : empty_zones);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_link(const ::cls_rgw_obj_key& key,
+                                 const ::ceph::buffer::list& tag, const bool deleted,
+                                 const std::string_view operation_tag,
+                                 const ::rgw_bucket_dir_entry_meta *metadata,
+                                 const std::uint64_t epoch, const ::ceph::real_time unmodified,
+                                 const bool precise, const bool log, const ::rgw_zone_set& zones)
+{
+    const ::rgw_bucket_dir_entry_meta empty_metadata;
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(5, [&] {
+        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        archive.text(tag);
+        archive.scalar(static_cast<std::uint8_t>(deleted));
+        archive.text(operation_tag);
+        archive.native(metadata ? *metadata : empty_metadata);
+        archive.scalar(epoch);
+        archive.scalar(static_cast<std::uint8_t>(log));
+        archive.scalar(std::uint16_t {0}); // The existing public link builder has no flags argument.
+        archive.scalar(static_cast<std::uint64_t>(::ceph::real_clock::to_time_t(unmodified)));
+        archive.native(unmodified);
+        archive.scalar(static_cast<std::uint8_t>(precise));
+        archive.native(zones);
+    });
+
+    return output;
+}
+
+::ceph::buffer::list encode_trim(const ::cls_rgw_obj_key& key, const std::uint64_t version,
+                                 const std::string_view tag)
+{
+    ::ceph::buffer::list output;
+    writer archive {output};
+    archive.frame(1, [&] {
+        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        archive.scalar(version);
+        archive.text(tag);
+    });
+
+    return output;
+}
+
+} // cls::rgw::write_datum

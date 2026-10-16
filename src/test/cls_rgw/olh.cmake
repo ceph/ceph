@@ -31,7 +31,7 @@ if(TARGET cls_rgw_datum)
     $<TARGET_OBJECTS:cls_rgw_olh_native_oracle>
     $<TARGET_OBJECTS:cls_rgw_datum>)
   target_link_libraries(unittest_cls_rgw_olh_wire PRIVATE
-    datum::zpp Catch2::Catch2 ceph-common ${FMT_LIB})
+    cls_rgw_client datum::zpp Catch2::Catch2 ceph-common ${FMT_LIB})
   target_include_directories(unittest_cls_rgw_olh_wire PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/../../rgw")
   set_target_properties(unittest_cls_rgw_olh_wire PROPERTIES CXX_SCAN_FOR_MODULES OFF)

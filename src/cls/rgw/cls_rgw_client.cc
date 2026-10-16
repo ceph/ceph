@@ -12,6 +12,7 @@
 #ifdef WITH_RGW_CLS_DATUM
  #include "cls/rgw/cls_rgw_bi_datum.h"
  #include "cls/rgw/cls_rgw_olh_datum.h"
+ #include "cls/rgw/cls_rgw_write_datum.h"
 #endif
 
 #include "common/debug.h"
@@ -97,6 +98,9 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const string& tag,
                                const cls_rgw_obj_key& key, const string& locator)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::write_datum::encode_prepare(op, tag, key, locator);
+#else
   rgw_cls_obj_prepare_op call;
   call.op = op;
   call.tag = tag;
@@ -104,6 +108,7 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const st
   call.locator = locator;
   bufferlist in;
   encode(call, in);
+#endif
   o.exec(method::bucket_prepare_op, in);
 }
 
@@ -116,7 +121,11 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
                                 const rgw_zone_set *zones_trace,
 				const std::string& obj_locator)
 {
-
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::write_datum::encode_complete(op, tag, ver, key, dir_meta,
+                                                  remove_objs, log_op, bilog_flags,
+                                                  zones_trace, obj_locator);
+#else
   bufferlist in;
   rgw_cls_obj_complete_op call;
   call.op = op;
@@ -133,6 +142,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
     call.zones_trace = *zones_trace;
   }
   encode(call, in);
+#endif
   o.exec(method::bucket_complete_op, in);
 }
 
@@ -397,6 +407,11 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace,
                             bufferlist* epoch_out_bl)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::write_datum::encode_link(key, olh_tag, delete_marker, op_tag, meta,
+                                              olh_epoch, unmod_since, high_precision_time,
+                                              log_op, zones_trace);
+#else
   bufferlist in;
   rgw_cls_link_olh_op call;
   call.key = key;
@@ -412,6 +427,7 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
   call.high_precision_time = high_precision_time;
   call.zones_trace = zones_trace;
   encode(call, in);
+#endif
   if (epoch_out_bl) {
     op.exec(method::bucket_link_olh, in, epoch_out_bl, nullptr);
   } else {
@@ -583,12 +599,16 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, const std::string& oid, const cls_rgw_obj
 
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  auto in = ::cls::rgw::write_datum::encode_trim(olh, ver, olh_tag);
+#else
   bufferlist in;
   rgw_cls_trim_olh_log_op call;
   call.olh = olh;
   call.ver = ver;
   call.olh_tag = olh_tag;
   encode(call, in);
+#endif
   op.exec(method::bucket_trim_olh_log, in);
 }
 
