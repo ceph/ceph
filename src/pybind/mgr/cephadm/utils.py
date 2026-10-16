@@ -75,6 +75,32 @@ ROTATION_CIPHER = 'aes256k'
 SERVICE_CIPHER = 'aes256k'
 
 
+def auth_allowed_cipher_names_from_mon_map(mon_map: Any) -> List[str]:
+    """Return auth_allowed_ciphers names from a MonMap dump (mgr get('mon_map'))."""
+    if not isinstance(mon_map, dict):
+        return []
+    raw = mon_map.get('auth_allowed_ciphers') or []
+    if isinstance(raw, str):
+        return [part.strip() for part in raw.split(',') if part.strip()]
+    if not isinstance(raw, list):
+        return []
+    names: List[str] = []
+    for item in raw:
+        if isinstance(item, dict):
+            name = item.get('name')
+            if name:
+                names.append(str(name))
+        elif isinstance(item, str) and item.strip():
+            names.append(item.strip())
+    return names
+
+
+def allowed_ciphers_are_aes256k_only(cipher_names: List[str]) -> bool:
+    """True when allowed ciphers are already restricted to aes256k (no legacy aes)."""
+    names = {name.strip() for name in cipher_names if name and name.strip()}
+    return names == {ROTATION_CIPHER}
+
+
 DEFAULT_SSH_CONFIG = """
 Host *
   User root
