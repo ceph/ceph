@@ -14,7 +14,11 @@ from cephadm.upgrade import (
     request_osd_ok_to_upgrade_report,
 )
 from cephadm.ssh import HostConnectionError
-from cephadm.utils import ContainerInspectInfo
+from cephadm.utils import (
+    ContainerInspectInfo,
+    allowed_ciphers_are_aes256k_only,
+    auth_allowed_cipher_names_from_mon_map,
+)
 from orchestrator import OrchestratorError, DaemonDescription, HostSpec, daemon_type_to_service
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
@@ -1739,3 +1743,129 @@ def test_to_upgrade_rgw_listener_batching(
 
     assert proceed is True
     assert [d.name() for d, _ in to_upgrade] == expected
+
+
+@pytest.mark.parametrize(
+    "mon_map,expected_names,expected_aes256k_only",
+    [
+        # the shape mgr actually gets back from MonMap::dump()
+        pytest.param({'auth_allowed_ciphers': [{'name': 'aes256k', 'value': 2}]},
+                     ['aes256k'], True, id='dump-aes256k-only'),
+        pytest.param({'auth_allowed_ciphers': [{'name': 'aes', 'value': 1},
+                                               {'name': 'aes256k', 'value': 2}]},
+                     ['aes', 'aes256k'], False, id='dump-aes-and-aes256k'),
+        # mons predating the cephx cipher settings don't report the field at all
+        pytest.param({'fsid': 'foobar'}, [], False, id='field-absent'),
+        pytest.param({'auth_allowed_ciphers': []}, [], False, id='field-empty'),
+        # cephx disabled
+        pytest.param({'auth_allowed_ciphers': [{'name': 'none', 'value': 0}]},
+                     ['none'], False, id='cephx-none'),
+        # tolerated alternative encodings
+        pytest.param({'auth_allowed_ciphers': 'aes, aes256k'},
+                     ['aes', 'aes256k'], False, id='comma-separated-string'),
+        pytest.param({'auth_allowed_ciphers': ' aes256k '}, ['aes256k'], True,
+                     id='comma-separated-string-single'),
+        pytest.param({'auth_allowed_ciphers': ['aes256k']}, ['aes256k'], True,
+                     id='plain-string-list'),
+        # malformed input must not raise, or the upgrade dies here
+        pytest.param(None, [], False, id='mon-map-not-a-dict'),
+        pytest.param({'auth_allowed_ciphers': 7}, [], False, id='ciphers-not-a-list'),
+        pytest.param({'auth_allowed_ciphers': [{'value': 2}, {'name': ''}, '', 'aes256k']},
+                     ['aes256k'], True, id='skips-nameless-entries'),
+    ],
+)
+def test_auth_allowed_cipher_names_from_mon_map(mon_map, expected_names, expected_aes256k_only):
+    names = auth_allowed_cipher_names_from_mon_map(mon_map)
+    assert names == expected_names
+    assert allowed_ciphers_are_aes256k_only(names) is expected_aes256k_only
+
+
+def _set_mon_map_allowed_ciphers(
+    cephadm_module: CephadmOrchestrator, cipher_names: Optional[List[str]]
+) -> None:
+    """Put an auth_allowed_ciphers entry shaped like MonMap::dump() into mon_map."""
+    mon_map = dict(cephadm_module.get('mon_map'))
+    if cipher_names is not None:
+        mon_map['auth_allowed_ciphers'] = [{'name': c, 'value': 0} for c in cipher_names]
+    cephadm_module.mock_store_set('_ceph_get', 'mon_map', mon_map)
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_maybe_set_cephx_allowed_ciphers_skips_aes256k_only(
+    check_mon_command, cephadm_module: CephadmOrchestrator
+):
+    # a cluster already narrowed down to aes256k (by an operator following the
+    # AUTH_INSECURE_KEYS_ALLOWED docs, or freshly bootstrapped) must not have
+    # the weaker aes cipher re-enabled by the upgrade
+    _set_mon_map_allowed_ciphers(cephadm_module, ['aes256k'])
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+
+    cephadm_module.upgrade._maybe_set_cephx_allowed_ciphers()
+
+    check_mon_command.assert_not_called()
+    # the step is still marked done and persisted, so later upgrade passes
+    # don't keep re-evaluating it
+    assert cephadm_module.upgrade.upgrade_state.has_set_cephx_allowed_ciphers
+    saved = json.loads(cephadm_module.get_store('upgrade_state'))
+    assert saved['has_set_cephx_allowed_ciphers'] is True
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+@pytest.mark.parametrize(
+    "current_ciphers",
+    [
+        pytest.param(['aes'], id='aes-only'),
+        pytest.param(['aes', 'aes256k'], id='aes-and-aes256k'),
+        pytest.param(['none'], id='cephx-none'),
+        # mons too old to report the setting
+        pytest.param(None, id='field-absent'),
+    ],
+)
+def test_maybe_set_cephx_allowed_ciphers_sets_when_not_aes256k_only(
+    check_mon_command, current_ciphers, cephadm_module: CephadmOrchestrator
+):
+    # every other starting state keeps the pre-existing behaviour, so clusters
+    # coming from a release with aes keys can still rotate them
+    check_mon_command.return_value = (0, '', '')
+    _set_mon_map_allowed_ciphers(cephadm_module, current_ciphers)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+
+    cephadm_module.upgrade._maybe_set_cephx_allowed_ciphers()
+
+    check_mon_command.assert_called_once_with({
+        'prefix': 'mon set',
+        'name': 'auth_allowed_ciphers',
+        'value': 'aes,aes256k',
+    })
+    assert cephadm_module.upgrade.upgrade_state.has_set_cephx_allowed_ciphers
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.upgrade.CephadmUpgrade._maybe_set_cephx_allowed_ciphers")
+@mock.patch("cephadm.upgrade.CephadmUpgrade._detect_need_upgrade")
+@mock.patch("cephadm.module.CephadmOrchestrator._daemon_action")
+@mock.patch("cephadm.module.CephadmOrchestrator._daemon_action_set_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.key_rotate")
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+def test_rotate_mgr_mon_auth_keys_goes_through_cipher_check(
+    get_daemons_by_service,
+    key_rotate,
+    _daemon_action_set_image,
+    _daemon_action,
+    _detect_need_upgrade,
+    _maybe_set_cephx_allowed_ciphers,
+    cephadm_module: CephadmOrchestrator,
+):
+    # the key rotation path must reach the guarded helper rather than issuing
+    # the 'mon set auth_allowed_ciphers' command itself
+    mon = DaemonDescription(daemon_type='mon', daemon_id='a', hostname='test')
+    get_daemons_by_service.side_effect = \
+        lambda service_name: [mon] if service_name == 'mon' else []
+    _detect_need_upgrade.return_value = ([], [], 0, 0)  # no mons still need upgrading
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+
+    cephadm_module.upgrade._rotate_mgr_mon_auth_keys('target_image', ['digest1'])
+
+    _maybe_set_cephx_allowed_ciphers.assert_called_once_with()

@@ -26,6 +26,8 @@ from cephadm.utils import (
     ALL_GATEWAY_TYPES,
     ALLOWED_CIPHERS,
     SERVICE_CIPHER,
+    allowed_ciphers_are_aes256k_only,
+    auth_allowed_cipher_names_from_mon_map,
 )
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
@@ -1870,6 +1872,23 @@ class CephadmUpgrade:
 
         return True, self._limit_gateway_upgrade_batch(to_upgrade)
 
+    def _maybe_set_cephx_allowed_ciphers(self) -> None:
+        """Set auth_allowed_ciphers for mixed-version upgrade, unless already aes256k-only."""
+        assert self.upgrade_state
+        current = auth_allowed_cipher_names_from_mon_map(self.mgr.get('mon_map'))
+        if allowed_ciphers_are_aes256k_only(current):
+            logger.info(
+                'Upgrade: auth_allowed_ciphers is already aes256k-only; skipping set'
+            )
+        else:
+            ret, image, err = self.mgr.check_mon_command({
+                'prefix': 'mon set',
+                'name': 'auth_allowed_ciphers',
+                'value': ','.join(ALLOWED_CIPHERS),
+            })
+        self.upgrade_state.has_set_cephx_allowed_ciphers = True
+        self._save_upgrade_state()
+
     def _rotate_mgr_mon_auth_keys(self, target_image: str, target_digests: Optional[List[str]] = None) -> None:
         if self.upgrade_state:
             if self.upgrade_state.rotated_mgr_mon_auth_key_daemons is None:
@@ -1889,14 +1908,10 @@ class CephadmUpgrade:
                     # all mons have been upgraded if we get here so keyrings can be rotated
                     # start by setting the allowed ciphers. Preferred ciphers should be left
                     # to the user to not potentially brake clusters and the service cipher
-                    # cannot be set until after all keyrings have been rotated
-                    ret, image, err = self.mgr.check_mon_command({
-                        'prefix': 'mon set',
-                        'name': 'auth_allowed_ciphers',
-                        'value': ','.join(ALLOWED_CIPHERS),
-                    })
-                    self.upgrade_state.has_set_cephx_allowed_ciphers = True
-                    self._save_upgrade_state()
+                    # cannot be set until after all keyrings have been rotated.
+                    # If the cluster already allows only aes256k, skip so we do
+                    # not re-enable the weaker aes cipher.
+                    self._maybe_set_cephx_allowed_ciphers()
                 for dd in self.mgr.cache.get_daemons_by_service('mgr'):
                     if dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons:
                         continue
