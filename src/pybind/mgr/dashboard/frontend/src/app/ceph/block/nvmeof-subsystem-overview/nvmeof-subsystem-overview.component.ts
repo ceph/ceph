@@ -97,6 +97,9 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
   }
 
   private buildDetails(authStatus: string, allowAllHosts: boolean, initiatorCount: number = 0) {
+    const isAutoFetched =
+      (this.subsystem.network_mask?.length ?? 0) > 0 ||
+      this.subsystem.use_conf_listener_network_masks;
     this.details = [
       {
         label: $localize`Serial number`,
@@ -131,12 +134,11 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
       },
       {
         label: $localize`Listeners`,
-        value:
-          (this.subsystem.network_mask?.length ?? 0) > 0
-            ? $localize`Auto-fetched`
-            : $localize`Manually selected`,
+        value: isAutoFetched ? $localize`Auto-fetched` : $localize`Manually selected`,
         type: 'listeners',
-        tooltip: $localize`Listeners are automatically fetched from the gateway`,
+        tooltip: isAutoFetched
+          ? $localize`Listeners are automatically fetched from the gateway`
+          : $localize`Listeners were manually selected from available gateway hosts`,
         row: 3
       },
       {
