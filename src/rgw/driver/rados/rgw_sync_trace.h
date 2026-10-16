@@ -8,8 +8,11 @@
 #include "common/ceph_mutex.h"
 #include "common/shunique_lock.h"
 #include "common/admin_socket.h"
+#include "include/buffer_fwd.h"
 
-#include <set>
+#include <cstdint>
+#include <list>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <shared_mutex>
@@ -20,6 +23,7 @@
 #define RGW_SNS_FLAG_ACTIVE   1
 #define RGW_SNS_FLAG_ERROR    2
 
+namespace ceph { class Formatter; }
 class RGWRados;
 class RGWSyncTraceManager;
 class RGWSyncTraceNode;
@@ -129,9 +133,9 @@ public:
 
   int hook_to_admin_command();
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   const bufferlist&,
-	   Formatter *f,
+	   const ceph::bufferlist&,
+	   ceph::Formatter *f,
 	   std::ostream& ss,
-	   bufferlist& out) override;
+	   ceph::bufferlist& out) override;
   std::string get_active_names();
 };
