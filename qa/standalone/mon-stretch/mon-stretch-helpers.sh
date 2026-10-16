@@ -96,17 +96,3 @@ function ec_stretch_cluster_without_dc2() {
     ceph osd down osd.3 osd.4 osd.5 || return 1
     wait_for_stretch_state 1 0 || return 1
 }
-
-# stretch mode over the datacenters, with pool stretched on a stretch rule
-function enable_global_stretch_mode() {
-    ceph osd crush rule create-stretch-replicated --rule-name=stretch_rule || return 1
-    ceph osd pool create stretched 8 8 replicated stretch_rule || return 1
-    ceph mon set election_strategy connectivity || return 1
-    # the command can be resent after the election it causes
-    ceph mon enable_stretch_mode c stretch_rule datacenter
-    for i in $(seq 1 30); do
-        test "$(ceph mon dump -f json | jq .stretch_mode)" = true && return 0
-        sleep 1
-    done
-    return 1
-}

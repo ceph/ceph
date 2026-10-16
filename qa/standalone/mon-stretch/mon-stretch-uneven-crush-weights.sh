@@ -174,7 +174,7 @@ TEST_ec_stretch_cluster_uneven_crush_weights() {
     _setup_stretch_uneven_cluster $dir 6 || return 1
 
     local stretched_poolname=stretched_rbdpool
-    ceph osd pool create $stretched_poolname 32 32 erasure --num-zones 2 --zone-failure-domain zone --k 2 --m 1 || return 1
+    ceph osd pool create $stretched_poolname 32 32 erasure --num-zones 2 --zone_failure_domain zone --k 2 --m 1 || return 1
 
     _run_stretch_uneven_weight_checks $dir || return 1
 }

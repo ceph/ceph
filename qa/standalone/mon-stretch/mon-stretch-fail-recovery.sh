@@ -220,7 +220,7 @@ TEST_ec_stretched_cluster_failover_add_three_osds(){
     ceph osd crush remove $hostname || return 1
 
     local stretched_poolname=stretched_rbdpool
-    ceph osd pool create $stretched_poolname 32 32 erasure --num-zones 2 --zone-failure-domain zone --k 2 --m 1 || return 1
+    ceph osd pool create $stretched_poolname 32 32 erasure --num-zones 2 --zone_failure_domain zone --k 2 --m 1 || return 1
     ceph osd pool application enable $stretched_poolname rbd || return 1
 
     # A full stripe lives in each zone, so the pool reaches active+clean.
