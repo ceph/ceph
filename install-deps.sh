@@ -250,7 +250,20 @@ function install_boost_on_ubuntu {
         ceph-libboost-thread${boost_ver}-dev \
         ceph-libboost-timer${boost_ver}-dev \
         ceph-libboost-url${boost_ver}-dev \
-	|| ci_debug "ceph-libboost package unavailable, you can build the submodule"
+	|| {
+        # A developer box can fall back to building the boost submodule,
+        # but a CI environment set up without /opt/ceph boost is poison:
+        # build-with-container.py keeps the image for a week, and a build
+        # tree configured against /opt/ceph boost on another builder then
+        # fails in it with FindBoost "0.0.0" or a missing libboost_*.so.
+        # Fail here instead, so the image build fails while shaman/chacra
+        # is down rather than succeeding wrongly.
+        if [ -n "$FOR_MAKE_CHECK" ]; then
+            echo "ERROR: ceph-libboost${boost_ver} packages unavailable from shaman; not continuing with FOR_MAKE_CHECK set" >&2
+            exit 1
+        fi
+        ci_debug "ceph-libboost package unavailable, you can build the submodule"
+    }
 
 }
 
