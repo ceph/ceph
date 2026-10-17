@@ -47,7 +47,34 @@ class FileSystemAuthorizer:
 
 
 class CephFSSubvolumeResolutionError(KeyError):
-    pass
+    def __init__(
+        self,
+        msg: str,
+        cluster_id: Optional[str] = None,
+        share_id: Optional[str] = None,
+        subvolume_id: Optional[str] = None,
+    ) -> None:
+        super().__init__(msg)
+        self.msg = msg
+        self.cluster_id = cluster_id
+        self.share_id = share_id
+        self.subvolume_id = subvolume_id
+
+    def set_resource_context(
+        self,
+        msg: str,
+        cluster_id: str,
+        share_id: str,
+        subvolume_id: str,
+    ) -> None:
+        self.msg = msg
+        self.args = (msg,)
+        self.cluster_id = cluster_id
+        self.share_id = share_id
+        self.subvolume_id = subvolume_id
+
+    def __str__(self) -> str:
+        return self.msg
 
 
 class CephFSPathResolver:
