@@ -66,6 +66,7 @@ from .resources import SMBResource
 from .results import ErrorResult, ResourceResult, Result, ResultGroup
 from .rgw_auth import RGWAuthorizer
 from .staging import (
+    CrossCheckToolbox,
     Staging,
     auth_refs,
     cross_check_resource,
@@ -123,6 +124,8 @@ class ClusterChangeGroup:
 class _FakePathResolver:
     """A stub PathResolver for unit testing."""
 
+    _result_resolve_case_sensitivity = (False, False)
+
     def resolve(
         self, volume: str, subvolumegroup: str, subvolume: str, path: str
     ) -> str:
@@ -143,6 +146,11 @@ class _FakePathResolver:
         return f'/{path}'
 
     resolve_exists = resolve
+
+    def resolve_case_sensitivity(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> Tuple[bool, bool]:
+        return self._result_resolve_case_sensitivity
 
 
 class ExoResolver:
@@ -401,7 +409,9 @@ class ClusterConfigHandler:
                 len(list(results)),
             )
             with _store_transaction(staging.destination_store):
-                results = staging.save()
+                db_results = staging.save()
+                db_results.merge(results)
+                results = db_results
                 staging.prune_linked_entries()
             _reconcile_store(staging.destination_store)
             with _store_transaction(staging.destination_store):
@@ -496,18 +506,21 @@ class ClusterConfigHandler:
             earmark_resolver = self._choose_earmark_resolver(
                 resource, staging
             )
+            pending_result = ResourceResult.pending(resource)
             cross_check_resource(
                 resource,
                 staging,
-                path_resolver=path_resolver,
-                earmark_resolver=earmark_resolver,
+                toolbox=CrossCheckToolbox(
+                    path_resolver=path_resolver,
+                    earmark_resolver=earmark_resolver,
+                    recorder=pending_result,
+                ),
             )
         except ErrorResult as err:
             log.debug('rejected resource: %r', resource)
             return err
         log.debug('checked resource: %r', resource)
-        result = ResourceResult.checked(resource)
-        return result
+        return ResourceResult.checked_from_result(pending_result)
 
     def _choose_path_resolver(
         self, resource: SMBResource, staging: Staging
