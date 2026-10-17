@@ -582,7 +582,7 @@ unsigned AlienStore::get_max_attr_name_length() const
   return 256;
 }
 
-seastar::future<struct stat> AlienStore::stat(
+AlienStore::stat_ertr::future<struct stat> AlienStore::stat(
   CollectionRef ch,
   const ghobject_t& oid,
   uint32_t op_flags)
@@ -591,8 +591,12 @@ seastar::future<struct stat> AlienStore::stat(
   return do_with_op_gate((struct stat){}, [this, ch, oid](auto& st) {
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [this, ch, oid, &st] {
       auto c = static_cast<AlienCollection*>(ch.get());
-      store->stat(c->collection, oid, &st);
-      return st;
+      return store->stat(c->collection, oid, &st);
+    }).then([&st](int r) -> stat_ertr::future<struct stat> {
+      if (r == -ENOENT) {
+        return crimson::ct_error::enoent::make();
+      }
+      return stat_ertr::make_ready_future<struct stat>(st);
     });
   });
 }

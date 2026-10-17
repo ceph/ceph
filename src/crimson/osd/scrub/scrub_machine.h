@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "include/int_types.h"
+
 #include <string>
 #include <ranges>
 
@@ -21,9 +23,28 @@
 #include "common/hobject.h"
 #include "crimson/common/log.h"
 #include "osd/osd_types_fmt.h"
+#include "osd/scrubber_common.h"
+#include "osd/scrubber/scrub_reservations.h"
 #include "scrub_validator.h"
+#include "scrub_metrics.h"
+
+namespace crimson::osd {
+  class PG;
+}
 
 namespace crimson::osd::scrub {
+
+// Forward declaration to break circular dependency
+enum class reservation_status_t {
+  unreserved,
+  requested_or_granted ///< i.e. must be released
+};
+
+class PGScrubber;
+
+// Event tracking stubs (no-ops for now)
+inline void on_event_creation(const char*) {}
+inline void on_event_discard(const char*) {}
 
 /* Development Notes
  *
@@ -81,6 +102,40 @@ struct value_event_t : sc::event<T> {
       std::forward<Args>(args)...) {}					\
   };
 
+ template <typename EV>
+ struct OpCarryingEvent : sc::event<EV> {
+  static constexpr const char* event_name = "<>";
+  const Message &m;
+  const pg_shard_t m_from;
+  OpCarryingEvent(Message &_m, pg_shard_t from) : m{_m}, m_from{from}
+  {
+    on_event_creation(static_cast<EV*>(this)->event_name);
+  }
+
+  OpCarryingEvent(const OpCarryingEvent&) = default;
+  OpCarryingEvent(OpCarryingEvent&&) = default;
+  OpCarryingEvent& operator=(const OpCarryingEvent&) = default;
+  OpCarryingEvent& operator=(OpCarryingEvent&&) = default;
+
+  void print(std::ostream* out) const
+  {
+    *out << fmt::format("{} (from: {})", EV::event_name, m_from);
+  }
+  std::string fmt_print() const
+  {
+    return fmt::format("{} (from: {})", EV::event_name, m_from);
+  }
+  std::string_view print() const { return EV::event_name; }
+  ~OpCarryingEvent() { on_event_discard(EV::event_name); }
+};
+#define OP_EV(T)                                                     \
+  struct T : OpCarryingEvent<T> {                                    \
+    static constexpr const char* event_name = #T;                    \
+    template <typename... Args>                                      \
+    T(Args&&... args) : OpCarryingEvent(std::forward<Args>(args)...) \
+    {                                                                \
+    }                                                                \
+  }
 /**
  * ScrubContext
  *
@@ -105,14 +160,19 @@ struct ScrubContext {
     }
   }
 
+  virtual void schedule_scrub_with_osd() = 0;
+  virtual void update_scrub_job() = 0;
+  virtual void rm_from_osd_scrubbing() = 0;
+  virtual void clear_pgscrub_state() = 0;
+
   /// return struct defining chunk validation rules
   virtual chunk_validation_policy_t get_policy() const = 0;
 
   /// notifies implementation of scrub start
   virtual void notify_scrub_start(bool deep) = 0;
 
-  /// notifies implementation of scrub end
-  virtual void notify_scrub_end(bool deep) = 0;
+  /// notifies implementation of scrub end; default no-op, override to observe.
+  virtual void notify_scrub_end(bool /*deep*/) {}
 
   /// requests range to scrub starting at start
   struct request_range_result_t {
@@ -180,6 +240,8 @@ struct ScrubContext {
     const request_range_result_t &range,
     chunk_result_t &&result) = 0;
 
+  SIMPLE_EVENT(digest_updates_complete_t);
+
   /// notifies implementation of full scrub results
   virtual void emit_scrub_result(
     bool deep,
@@ -195,6 +257,12 @@ struct Inactive;
 namespace events {
 /// reset ScrubMachine
 SIMPLE_EVENT(reset_t);
+
+/// abort scrub and return to AwaitScrub (stays in PrimaryActive)
+SIMPLE_EVENT(abort_t);
+
+/// internal event to schedule next chunk after sleep
+SIMPLE_EVENT(internal_sched_scrub_t);
 
 /// start (deep) scrub
 struct start_scrub_event_t {
@@ -252,9 +320,24 @@ struct replica_scan_event_t {
 };
 VALUE_EVENT(replica_scan_t, replica_scan_event_t);
 
+/// Primary requests reservation from replica
+OP_EV(replica_reserve_request_t);
+
+/// Primary releases reservation from replica
+OP_EV(replica_release_t);
+
+/// Replica has granted reservation request
+OP_EV(replica_grant_t);
+
+/// Replica has rejected reservation request
+OP_EV(replica_reject_t);
+
+/// All replicas have granted reservation
+SIMPLE_EVENT(remotes_reserved_t);
+
+/// the async-reserver granted our reservation request
+VALUE_EVENT(reserver_granted_t, AsyncScrubResData);
 }
-
-
 /**
  * ScrubMachine
  *
@@ -279,7 +362,9 @@ public:
   static constexpr std::string_view full_name = "ScrubMachine";
 
   ScrubContext &context;
-  ScrubMachine(ScrubContext &context) : context(context) {}
+  PGScrubber* m_scrbr;
+  spg_t m_pg_id;
+  ScrubMachine(ScrubContext &context, PGScrubber* scrbr) : context(context), m_scrbr(scrbr) {}
 };
 
 /**
@@ -357,6 +442,35 @@ struct Inactive : ScrubState<Inactive, ScrubMachine> {
     sc::custom_reaction<events::reset_t>,
     sc::custom_reaction<events::start_scrub_t>,
     sc::custom_reaction<events::op_stats_t>,
+    // Discard stale async completions and network messages that arrive after a
+    // reset (e.g. when on_interval_change() resets the machine to Inactive
+    // while any of the following are still in flight):
+    //   - ScrubSleep          -> internal_sched_scrub_t
+    //   - ScrubFindRange      -> request_range_complete_t
+    //   - ScrubReserveRange   -> reserve_range_complete_t
+    //   - await_update        -> await_update_complete_t
+    //   - ScrubScan (local)   -> scan_range_complete_t
+    //   - ScrubDigestUpdate   -> digest_updates_complete_t
+    //   - replica ScrubScan   -> generate_and_submit_chunk_result_complete_t
+    //   - async reserver      -> reserver_granted_t
+    //   - MSG_OSD_REP_SCRUB   -> replica_scan_t
+    //   - reserve messages    -> replica_reserve_request_t / replica_release_t
+    //                           / replica_grant_t / replica_reject_t
+    // Without these handlers the event_base catch-all below would fire,
+    // transitioning to Crash and aborting the OSD.
+    sc::custom_reaction<events::internal_sched_scrub_t>,
+    sc::custom_reaction<events::replica_release_t>,
+    sc::custom_reaction<events::replica_scan_t>,
+    sc::custom_reaction<events::replica_reserve_request_t>,
+    sc::custom_reaction<events::replica_grant_t>,
+    sc::custom_reaction<events::replica_reject_t>,
+    sc::custom_reaction<events::reserver_granted_t>,
+    sc::custom_reaction<ScrubContext::request_range_complete_t>,
+    sc::custom_reaction<ScrubContext::reserve_range_complete_t>,
+    sc::custom_reaction<ScrubContext::await_update_complete_t>,
+    sc::custom_reaction<ScrubContext::scan_range_complete_t>,
+    sc::custom_reaction<ScrubContext::digest_updates_complete_t>,
+    sc::custom_reaction<ScrubContext::generate_and_submit_chunk_result_complete_t>,
     sc::transition< boost::statechart::event_base, Crash >
     >;
 
@@ -369,28 +483,165 @@ struct Inactive : ScrubState<Inactive, ScrubMachine> {
   sc::result react(const events::op_stats_t &) {
     return discard_event();
   }
+  sc::result react(const events::internal_sched_scrub_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_release_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_scan_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reserve_request_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_grant_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reject_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::reserver_granted_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::request_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::reserve_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::await_update_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::scan_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::digest_updates_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::generate_and_submit_chunk_result_complete_t &) {
+    return discard_event();
+  }
 };
 
 struct AwaitScrub;
 struct PrimaryActive : ScrubState<PrimaryActive, ScrubMachine, AwaitScrub> {
   static constexpr std::string_view state_name = "PrimaryActive";
-  explicit PrimaryActive(my_context ctx) : ScrubState(ctx) {}
+  explicit PrimaryActive(my_context ctx) : ScrubState(ctx), scrub_context(get_scrub_context()) {
+    scrub_context.schedule_scrub_with_osd();
+  }
 
+  ~PrimaryActive() {
+    LOG_PREFIX(PrimaryActive::~PrimaryActive);
+    SUBDEBUGDPP(osd, "destructor called, cleanup_done={}", dpp, cleanup_done);
+    // Ensure cleanup happens even if exit() wasn't called.
+    // This can happen when the state machine is terminated without a proper
+    // state transition (e.g., during PG shutdown). We must clean up resources
+    // to prevent memory leaks.
+    if (!cleanup_done) {
+      do_cleanup();
+    }
+  }
+
+  void exit() {
+    LOG_PREFIX(PrimaryActive::exit);
+    SUBDEBUGDPP(osd, "exit called, cleanup_done={}", dpp, cleanup_done);
+    // Match classic OSD behavior: clear scrub state before removing from OSD queue
+    // exit() is called during normal state transitions while context is valid
+    if (!cleanup_done) {
+      do_cleanup();
+    }
+  }
+
+private:
+  ScrubContext& scrub_context;
+  bool cleanup_done = false;
+
+  void do_cleanup() {
+    LOG_PREFIX(PrimaryActive::do_cleanup);
+    SUBDEBUGDPP(osd, "performing cleanup", dpp);
+    scrub_context.clear_pgscrub_state();
+    scrub_context.rm_from_osd_scrubbing();
+    cleanup_done = true;
+  }
+
+public:
   bool local_reservation_held = false;
   std::set<pg_shard_t> remote_reservations_held;
+  reservation_nonce_t last_request_sent_nonce{1};
 
   using reactions = boost::mpl::list<
     sc::transition<events::reset_t, Inactive>,
-    sc::custom_reaction<events::start_scrub_t>,
+    sc::transition<events::abort_t, AwaitScrub>,
     sc::custom_reaction<events::op_stats_t>,
+    // Discard stale replica messages that arrive while in any PrimaryActive
+    // substate that doesn't handle them (e.g. AwaitScrub, WaitUpdate,
+    // WaitDigestUpdate).  Without these handlers the event_base catch-all
+    // below would fire, transitioning to Crash and aborting the OSD.
+    sc::custom_reaction<events::replica_grant_t>,
+    sc::custom_reaction<events::replica_reject_t>,
+    sc::custom_reaction<events::replica_release_t>,
+    sc::custom_reaction<events::replica_reserve_request_t>,
+    sc::custom_reaction<events::replica_scan_t>,
+    // Discard stale async completions that arrive in AwaitScrub (or any
+    // PrimaryActive substate) after an abort_t has cancelled a Scrubbing
+    // session.  Without these handlers the event_base catch-all below
+    // would fire, transitioning to Crash and aborting the OSD.
+    sc::custom_reaction<events::internal_sched_scrub_t>,
+    sc::custom_reaction<events::reserver_granted_t>,
+    sc::custom_reaction<events::remotes_reserved_t>,
+    sc::custom_reaction<ScrubContext::request_range_complete_t>,
+    sc::custom_reaction<ScrubContext::reserve_range_complete_t>,
+    sc::custom_reaction<ScrubContext::await_update_complete_t>,
+    sc::custom_reaction<ScrubContext::scan_range_complete_t>,
+    sc::custom_reaction<ScrubContext::digest_updates_complete_t>,
+    sc::custom_reaction<ScrubContext::generate_and_submit_chunk_result_complete_t>,
     sc::transition< boost::statechart::event_base, Crash >
     >;
 
-  sc::result react(const events::start_scrub_t &event) {
+  sc::result react(const events::op_stats_t &) {
     return discard_event();
   }
-
-  sc::result react(const events::op_stats_t &) {
+  sc::result react(const events::replica_grant_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reject_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_release_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reserve_request_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_scan_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::internal_sched_scrub_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::reserver_granted_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::remotes_reserved_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::request_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::reserve_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::await_update_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::scan_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::digest_updates_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::generate_and_submit_chunk_result_complete_t &) {
     return discard_event();
   }
 };
@@ -405,28 +656,52 @@ struct AwaitScrub : ScrubState<AwaitScrub, PrimaryActive> {
   explicit AwaitScrub(my_context ctx) : ScrubState(ctx) {}
 
   using reactions = boost::mpl::list<
-    sc::custom_reaction<events::start_scrub_t>
+    sc::custom_reaction<events::start_scrub_t>,
+    sc::custom_reaction<events::primary_activate_t>
     >;
 
   sc::result react(const events::start_scrub_t &event) {
     post_event(internal_events::set_deep_t{event.value.deep});
     return transit<Scrubbing>();
   }
+
+  sc::result react(const events::primary_activate_t &) {
+    // Already in PrimaryActive state, discard redundant activation event
+    // This can happen when PG transitions to Active+Clean after recovery
+    return discard_event();
+  }
 };
 
+struct ReservingReplicas;
 struct ChunkState;
-struct Scrubbing : ScrubState<Scrubbing, PrimaryActive, ChunkState> {
+struct Scrubbing : ScrubState<Scrubbing, PrimaryActive, ReservingReplicas> {
   static constexpr std::string_view state_name = "Scrubbing";
-  explicit Scrubbing(my_context ctx)
-    : ScrubState(ctx), policy(get_scrub_context().get_policy()) {}
+  explicit Scrubbing(my_context ctx);
 
+  ~Scrubbing() {
+    // Match classic OSD behavior: release reservations and clear state
+    // See Session::~Session() in src/osd/scrubber/scrub_machine.cc
+    if (m_reservations) {
+      m_reservations.reset();
+    }
+    // Use the cached reference rather than context<ScrubMachine>(), because
+    // in the destructor the state machine vtable is already rewound to the
+    // base class, causing polymorphic_downcast to fail.
+    m_scrub_context.clear_pgscrub_state();
+  }
 
   using reactions = boost::mpl::list<
     sc::custom_reaction<internal_events::set_deep_t>,
     sc::custom_reaction<events::op_stats_t>
     >;
 
+  /// Cached at construction to avoid calling context<ScrubMachine>() from
+  /// the destructor (where the state machine vtable is already rewound to
+  /// the base class, causing polymorphic_downcast to fail).
+  ScrubContext &m_scrub_context;
+
   chunk_validation_policy_t policy;
+  std::optional<ReplicaReservations> m_reservations{std::nullopt};
 
   /// hobjects < current have been scrubbed
   hobject_t current;
@@ -437,9 +712,15 @@ struct Scrubbing : ScrubState<Scrubbing, PrimaryActive, ChunkState> {
   /// stats for objects < current, maintained via events::op_stats_t
   object_stat_sum_t stats;
 
+  /// timestamp when scrubbing started, for elapsed time calculation (using ScrubClock)
+  ScrubTimePoint scrub_start_time;
+
   void advance_current(const hobject_t &next) {
     current = next;
   }
+
+  // Access metrics for dumping - returns pointer from PGScrubber
+  ScrubMetrics* get_metrics();
 
   sc::result react(const internal_events::set_deep_t &event) {
     deep = event.value;
@@ -448,6 +729,10 @@ struct Scrubbing : ScrubState<Scrubbing, PrimaryActive, ChunkState> {
   }
 
   void exit() {
+    // Release replica reservations if they were acquired
+    if (m_reservations) {
+      m_reservations.reset();
+    }
     get_scrub_context().notify_scrub_end(deep);
   }
 
@@ -459,6 +744,30 @@ struct Scrubbing : ScrubState<Scrubbing, PrimaryActive, ChunkState> {
   }
 };
 
+struct ReservingReplicas : ScrubState<ReservingReplicas, Scrubbing> {
+  static constexpr std::string_view state_name = "ReservingReplicas";
+  explicit ReservingReplicas(my_context ctx);
+  ~ReservingReplicas() = default;
+
+  /// Track which replicas have granted reservations
+  std::set<pg_shard_t> granted_replicas;
+
+  /// Track total replicas we're waiting for
+  unsigned waiting_on = 0;
+
+  using reactions = boost::mpl::list<
+    sc::custom_reaction<events::replica_grant_t>,
+    sc::custom_reaction<events::replica_reject_t>,
+    sc::custom_reaction<events::remotes_reserved_t>,
+    sc::transition<events::abort_t, AwaitScrub>
+    >;
+
+  sc::result react(const events::replica_grant_t &);
+  sc::result react(const events::replica_reject_t &);
+  sc::result react(const events::remotes_reserved_t &);
+};
+
+struct PendingTimer;
 struct GetRange;
 struct ChunkState : ScrubState<ChunkState, Scrubbing, GetRange> {
   static constexpr std::string_view state_name = "ChunkState";
@@ -478,6 +787,16 @@ struct ChunkState : ScrubState<ChunkState, Scrubbing, GetRange> {
       get_scrub_context().release_range();
     }
   }
+};
+
+/// State between chunks - sleeps for osd_scrub_sleep duration before next chunk
+struct PendingTimer : ScrubState<PendingTimer, Scrubbing> {
+  static constexpr std::string_view state_name = "PendingTimer";
+  explicit PendingTimer(my_context ctx);
+
+  using reactions = boost::mpl::list<
+    sc::transition<events::internal_sched_scrub_t, ChunkState>
+    >;
 };
 
 struct WaitUpdate;
@@ -506,10 +825,7 @@ struct WaitUpdate : ScrubState<WaitUpdate, ChunkState> {
     sc::custom_reaction<ScrubContext::reserve_range_complete_t>
     >;
 
-  sc::result react(const ScrubContext::reserve_range_complete_t &e) {
-    context<ChunkState>().version = e.value;
-    return transit<ScanRange>();
-  }
+  sc::result react(const ScrubContext::reserve_range_complete_t &e);
 };
 
 struct ScanRange : ScrubState<ScanRange, ChunkState> {
@@ -526,16 +842,33 @@ struct ScanRange : ScrubState<ScanRange, ChunkState> {
   sc::result react(const ScrubContext::scan_range_complete_t &);
 };
 
+struct WaitDigestUpdate : ScrubState<WaitDigestUpdate, ChunkState> {
+  static constexpr std::string_view state_name = "WaitDigestUpdate";
+  explicit WaitDigestUpdate(my_context ctx);
+
+  using reactions = boost::mpl::list<
+    sc::custom_reaction<ScrubContext::digest_updates_complete_t>
+    >;
+
+  sc::result react(const ScrubContext::digest_updates_complete_t &);
+};
+
+// -------- for replicas -----------------------------------------------------
 struct ReplicaIdle;
 struct ReplicaActive :
     ScrubState<ReplicaActive, ScrubMachine, ReplicaIdle> {
   static constexpr std::string_view state_name = "ReplicaActive";
-  explicit ReplicaActive(my_context ctx) : ScrubState(ctx) {}
+  explicit ReplicaActive(my_context ctx);
+  ~ReplicaActive();
 
+  seastar::future<> clear_remote_reservation(bool warn_if_no_reservation);
   using reactions = boost::mpl::list<
     sc::transition<events::reset_t, Inactive>,
     sc::custom_reaction<events::start_scrub_t>,
     sc::custom_reaction<events::op_stats_t>,
+    sc::custom_reaction<events::reserver_granted_t>,
+    sc::custom_reaction<events::replica_reserve_request_t>,
+    sc::custom_reaction<events::replica_release_t>,
     sc::transition< boost::statechart::event_base, Crash >
     >;
 
@@ -546,6 +879,67 @@ struct ReplicaActive :
   sc::result react(const events::op_stats_t &) {
     return discard_event();
   }
+  sc::result react(const events::reserver_granted_t &);
+  sc::result react(const events::replica_reserve_request_t &);
+  sc::result react(const events::replica_release_t &);
+
+  MOSDScrubReserve::reservation_nonce_t pending_reservation_nonce{0};
+
+  /// Discard any pending re-request parameters stored for the in-flight
+  /// cancel-and-rerequest chain, preventing a spurious request_reservation
+  /// once the chain completes.  Must be called before clear_remote_reservation
+  /// whenever we do not want a subsequent request_reservation.
+  void discard_pending_rerequest() { m_pending_rerequest_params.reset(); }
+
+  private:
+    /// Cached at construction to avoid calling context<ScrubMachine>() from
+    /// the destructor (where the state machine vtable is already rewound to
+    /// the base class, causing polymorphic_downcast to fail).
+    crimson::osd::PG &m_pg;
+    spg_t m_pg_id;
+    bool reservation_granted{false};
+    reservation_status_t m_reservation_status{reservation_status_t::unreserved};
+    /// true while a cancel-and-rerequest future chain is already in flight;
+    /// additional requests arriving during that window update the stored
+    /// parameters instead of spawning a second chain (which would cause a
+    /// double-registration assert in AsyncReserver).
+    bool m_pending_rerequest{false};
+    /// Shared alive-flag: set to false by the destructor so that any
+    /// in-flight cancel-and-rerequest future chain can detect that
+    /// ReplicaActive has been destroyed and skip accessing *this.
+    std::shared_ptr<bool> m_alive{std::make_shared<bool>(true)};
+    struct PendingRerequestParams {
+      pg_shard_t from;
+      epoch_t map_epoch{0};
+      MOSDScrubReserve::reservation_nonce_t reservation_nonce{0};
+      bool wait_for_resources{false};
+    };
+    std::optional<PendingRerequestParams> m_pending_rerequest_params;
+    void handle_reservation_request(
+      pg_shard_t from,
+      epoch_t map_epoch,
+      MOSDScrubReserve::reservation_nonce_t reservation_nonce,
+      bool wait_for_resources);
+
+    struct RtReservationCB : public Context {
+    crimson::osd::PG &pg;
+    AsyncScrubResData res_data;
+    /// Shared alive-flag from the owning ReplicaActive.  If false when the
+    /// reserver fires the callback, the ReplicaActive has been destroyed and
+    /// the just-granted reservation must be cancelled immediately to avoid
+    /// leaking an entry in AsyncReserver.
+    std::shared_ptr<bool> alive;
+
+    explicit RtReservationCB(crimson::osd::PG& pg,
+                             AsyncScrubResData request_details,
+                             std::shared_ptr<bool> alive)
+ : pg{pg}
+ , res_data{request_details}
+ , alive{std::move(alive)}
+    {}
+
+    void finish(int) override;
+  };
 };
 
 struct ReplicaChunkState;
@@ -557,12 +951,7 @@ struct ReplicaIdle : ScrubState<ReplicaIdle, ReplicaActive> {
     sc::custom_reaction<events::replica_scan_t>
     >;
 
-  sc::result react(const events::replica_scan_t &event) {
-    LOG_PREFIX(ScrubState::ReplicaIdle::react(events::replica_scan_t));
-    SUBDEBUGDPP(osd, "event.value: {}", get_scrub_context().get_dpp(), event.value);
-    post_event(event);
-    return transit<ReplicaChunkState>();
-  }
+  sc::result react(const events::replica_scan_t &event);
 };
 
 struct ReplicaWaitUpdate;
@@ -571,20 +960,16 @@ struct ReplicaChunkState : ScrubState<ReplicaChunkState, ReplicaActive, ReplicaW
   explicit ReplicaChunkState(my_context ctx) : ScrubState(ctx) {}
 
   using reactions = boost::mpl::list<
-    sc::custom_reaction<events::replica_scan_t>
+    sc::custom_reaction<events::replica_scan_t>,
+    sc::custom_reaction<events::replica_release_t>
     >;
+
 
   events::replica_scan_event_t to_scan;
 
-  sc::result react(const events::replica_scan_t &event) {
-    LOG_PREFIX(ScrubState::ReplicaWaitUpdate::react(events::replica_scan_t));
-    SUBDEBUGDPP(osd, "event.value: {}", get_scrub_context().get_dpp(), event.value);
-    to_scan = event.value;
-    if (get_scrub_context().await_update(event.value.version)) {
-      post_event(ScrubContext::await_update_complete_t{});
-    }
-    return discard_event();
-  }
+  sc::result react(const events::replica_scan_t &event);
+  sc::result react(const events::replica_release_t &event);
+
 };
 
 struct ReplicaScanChunk;

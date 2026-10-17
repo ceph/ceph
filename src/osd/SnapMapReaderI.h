@@ -67,3 +67,13 @@ struct snap_mapper_fix_t {
 };
 
 }  // namespace Scrub
+
+#ifdef WITH_CRIMSON
+// In the crimson build, provide aliases in the crimson::osd::scrub namespace
+// so that pg_scrubber.cc can refer to Scrub::snap_mapper_op_t and
+// Scrub::SnapMapReaderI without namespace conflicts.
+namespace crimson::osd::scrub {
+using snap_mapper_op_t = ::Scrub::snap_mapper_op_t;
+using SnapMapReaderI   = ::Scrub::SnapMapReaderI;
+}  // namespace crimson::osd::scrub
+#endif

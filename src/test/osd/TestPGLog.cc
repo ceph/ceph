@@ -3806,6 +3806,32 @@ TEST_F(PGLogTrimTest, TestCopyAfter2) {
   EXPECT_EQ(7u, copy.dups.size()) << copy;
 }
 
+// This tests that copy_after() and copy_up_to() handle the case where
+// log entries with version <= other.tail exist in other.log (e.g. after trim_all or tail movement)
+TEST_F(PGLogTrimTest, TestCopyWhenLogHasEntriesBelowTail) {
+  SetUp(5);
+  PGLog::IndexedLog log, copy1, copy2;
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(21, 107);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  // Add an entry that is <= tail (e.g. version 9'99 or below)
+  log.log.push_back(mk_ple_mod(mk_obj(1), mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+       osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+      osd_reqid_t(client, 8, 2)));
+
+  // copy_after should not assert even with entry <= other.tail in other.log
+  copy1.copy_after(cct, log, mk_evt(10, 100));
+  EXPECT_EQ(1u, copy1.log.size()) << copy1;
+
+  // copy_up_to should also not assert
+  copy2.copy_up_to(cct, log, 1);
+  EXPECT_EQ(1u, copy2.log.size()) << copy2;
+}
+
 // Test for merge_log with existing missing list and divergent log
 // This reproduces the issue where missing and rmissing lists become inconsistent
 // Test that merge_log correctly handles epoch changes with out-of-order recovery.

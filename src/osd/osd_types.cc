@@ -6083,7 +6083,8 @@ static void _handle_dups(CephContext* cct, pg_log_t &target, const pg_log_t &oth
   }
 
   for (auto i = other.log.cbegin(); i != other.log.cend(); ++i) {
-    ceph_assert(i->version > other.tail);
+    if (i->version <= other.tail)
+      continue;
     if (i->version > target.tail)
       break;
     if (i->version.version >= earliest_dup_version) {
@@ -6105,7 +6106,8 @@ void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
 				 << " dups.size()=" << dups.size()
 				 << " other.dups.size()=" << other.dups.size() << dendl;
   for (auto i = other.log.crbegin(); i != other.log.crend(); ++i) {
-    ceph_assert(i->version > other.tail);
+    if (i->version <= other.tail)
+      break;
     if (i->version <= v) {
       // make tail accurate.
       tail = i->version;
@@ -6130,7 +6132,8 @@ void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
 				<< " dups.size()=" << dups.size()
 				<< " other.dups.size()=" << other.dups.size() << dendl;
   for (auto i = other.log.crbegin(); i != other.log.crend(); ++i) {
-    ceph_assert(i->version > other.tail);
+    if (i->version <= other.tail)
+      break;
     if (n++ >= max) {
       tail = i->version;
       break;

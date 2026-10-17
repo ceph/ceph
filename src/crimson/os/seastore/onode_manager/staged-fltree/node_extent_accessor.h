@@ -525,9 +525,9 @@ class NodeExtentAccessorT {
     return c.nm.alloc_extent(c.t, hint, alloc_size
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::input_output_error::assert_failure(fmt::format(
+      crimson::ct_error::input_output_error::assert_failure(
         "{} during allocate -- node_size={}, to_discard={}",
-        FNAME, alloc_size, extent->get_laddr()).c_str())
+        FNAME, alloc_size, extent->get_laddr())
     ).si_then([this, c, FNAME] (auto fresh_extent) {
       SUBDEBUGT(seastore_onode,
           "update addr from {} to {} ...",

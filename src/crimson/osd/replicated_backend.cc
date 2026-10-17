@@ -142,7 +142,17 @@ ReplicatedBackend::submit_transaction(
       continue;
     }
     MURef<MOSDRepOp> m;
-    if (pg.should_send_op(pg_shard, hoid)) {
+    // should_send_op() decides based on the backfill scan watermark
+    // (last_backfill_started/last_backfill), which can race ahead of a
+    // freshly created head object if the backfill scan already passed
+    // this hoid's position before the object existed. When that happens,
+    // peer_missing is the authoritative record that the peer never
+    // actually received the head object. Shipping a real op containing
+    // an OP_CLONE whose source the peer doesn't have would make the
+    // peer's local _do_transaction_step() abort with ENOENT, so fall
+    // back to the safe "empty op + explicit push" path in that case.
+    if (pg.should_send_op(pg_shard, hoid) &&
+	!(_new_clone && pg.is_missing_on_peer(pg_shard, hoid))) {
       m = new_repop_msg(
 	pg_shard, hoid, encoded_txn_p_bl, encoded_txn_d_bl, osd_op_p,
 	min_epoch, map_epoch, log_entries, true, tid);
@@ -180,6 +190,15 @@ ReplicatedBackend::submit_transaction(
     txn,
     false);
 
+  // Notify the scrubber that this (primary) transaction is in-flight before
+  // submitting it.  on_rep_op_submitted() records the version in
+  // pending_writes so that await_update() cannot be satisfied by a
+  // later-versioned commit until this write is also durable.  Without this,
+  // ScrubReserveRange can find the log entry in projected_log and release
+  // the scan while the primary's objectstore transaction is still in-flight,
+  // causing the scrub to see SHARD_MISSING for the object on the primary.
+  pg.scrubber.on_rep_op_submitted(osd_op_p.at_version);
+
   auto all_completed = interruptor::make_interruptible(
     crimson::os::with_store_do_transaction(
       shard_services.get_store(pg.get_store_index()),
@@ -192,6 +211,9 @@ ReplicatedBackend::submit_transaction(
       ERRORDPP("peers is null, this should be impossible", dpp);
       assert(0 == "impossible");
     }
+    // Only now is the write actually durable in our local object store;
+    // safe to let a waiting scrub chunk scan proceed against it.
+    pg.scrubber.on_log_update(peers->at_version);
     if (--peers->pending == 0) {
       // no peers other than me, replication size is 1
       pg.complete_write(peers->at_version, peers->last_complete);
@@ -201,7 +223,7 @@ ReplicatedBackend::submit_transaction(
     }
     // wait for all peers to ack (ReplicatedBackend::got_rep_op_reply)
     return peers->all_committed.get_shared_future();
-  }).then_interruptible([pending_txn, this, _new_clone, &hoid,
+  }).then_interruptible([pending_txn, this, _new_clone, hoid,
 			to_push_delete=std::move(to_push_delete),
 			to_push_clone=std::move(to_push_clone)] {
     auto acked_peers = std::move(pending_txn->second.acked_peers);

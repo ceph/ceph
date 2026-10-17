@@ -10,6 +10,16 @@
 #include <numeric> // for std::accumulate()
 #include <optional>
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/log.h"
+#define CRIMSON_SET_SUBSYS(...) SET_SUBSYS(__VA_ARGS__)
+#define CRIMSON_LOG_PREFIX(...) LOG_PREFIX(__VA_ARGS__)
+#define CRIMSON_DEBUG(...) DEBUG(__VA_ARGS__)
+#else
+#define CRIMSON_SET_SUBSYS(...)
+#define CRIMSON_LOG_PREFIX(...)
+#define CRIMSON_DEBUG(...)
+#endif
 /**
  * not_before_queue_t
  *
@@ -164,10 +174,18 @@ public:
     auto *item = new container_t(std::forward<Args>(args)...);
     removal_registry.insert(*item);
 
+    CRIMSON_SET_SUBSYS(osd);
+    CRIMSON_LOG_PREFIX(not_before_queue_t::enqueue);
+
     if (project_not_before(item->v) > current_time) {
+      CRIMSON_DEBUG("enqueue item: {} to ineligible_queue, current_time {}, item not before {}",
+        item->v, current_time, project_not_before(item->v));
+
       item->status = status_t::INELIGIBLE;
       ineligible_queue.insert(*item);
     } else {
+      CRIMSON_DEBUG("enqueue item: {} to eligible_queue, current_time {}, item not before {}",
+        item->v, current_time, project_not_before(item->v));
       item->status = status_t::ELIGIBLE;
       eligible_queue.insert(*item);
     }
@@ -196,9 +214,17 @@ public:
   /// Dequeue 1st eligible item that satisfies pred, std::nullopt if none
   template <typename PRED>
   std::optional<V> dequeue_by_pred(const PRED& pred) {
+    CRIMSON_SET_SUBSYS(osd);
+    CRIMSON_LOG_PREFIX(not_before_queue_t::dequeue_by_pred);
+    CRIMSON_DEBUG("eligible_queue size {}, ineligible_queue size {}", eligible_queue.size(), ineligible_queue.size());
+
     auto iter = std::find_if(
-	eligible_queue.begin(), eligible_queue.end(),
-	[&pred](const auto &i) { return pred(i.v); });
+      eligible_queue.begin(), eligible_queue.end(),
+      [&pred](const auto &i) {
+      CRIMSON_LOG_PREFIX(not_before_queue_t::dequeue_by_pred);
+      CRIMSON_DEBUG("checking item: {}, pred(item): {}", i.v, pred(i.v));
+      return pred(i.v);
+    });
 
     if (iter == eligible_queue.end()) {
       return std::nullopt;
@@ -230,6 +256,9 @@ public:
    *          had to ignore the update.
    */
   bool advance_time(T next_time) {
+    CRIMSON_SET_SUBSYS(osd);
+    CRIMSON_LOG_PREFIX(not_before_queue_t::advance_time);
+    CRIMSON_DEBUG("current_time {}, next_time {}", current_time, next_time);
     if (next_time < current_time) {
       return false;
     }
@@ -244,8 +273,12 @@ public:
       assert(item.status == status_t::INELIGIBLE);
 
       if (project_not_before(item.v) > current_time) {
-	break;
+        CRIMSON_DEBUG("next item is still ineligible item: {} not before {} , current_time : {}",
+          item.v, project_not_before(item.v), current_time);
+        break;
       }
+
+      CRIMSON_DEBUG("next item is eligible, item: {}", item.v);
 
       item.status = status_t::ELIGIBLE;
       ineligible_queue.erase(typename ineligible_queue_t::const_iterator(iter));
