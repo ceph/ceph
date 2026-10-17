@@ -5,6 +5,7 @@ import { BehaviorSubject, Observable, of } from 'rxjs';
 import _ from 'lodash';
 
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SMB_BASE_CEPHFS } from '~/app/shared/constants/smb.constant';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -14,7 +15,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { SMBUsersGroups } from '../smb.model';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -24,13 +25,20 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
-export const USERSGROUPS_PATH = 'cephfs/smb/standalone';
-
 @Component({
   selector: 'cd-smb-users-list',
   templateUrl: './smb-usersgroups-list.component.html',
   styleUrls: ['./smb-usersgroups-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(USERSGROUPS_PATH) }],
+  providers: [
+    {
+      provide: URLBuilderService,
+      useFactory: (route: ActivatedRoute) =>
+        new URLBuilderService(
+          `${route.snapshot.data['smbBasePath'] ?? SMB_BASE_CEPHFS}/standalone`
+        ),
+      deps: [ActivatedRoute]
+    }
+  ],
   standalone: false
 })
 export class SmbUsersgroupsListComponent extends ListWithDetails implements OnInit {
@@ -44,6 +52,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
   usersGroups$: Observable<SMBUsersGroups[]>;
   subject$ = new BehaviorSubject<SMBUsersGroups[]>([]);
   selection: CdTableSelection = new CdTableSelection();
+  private smbBasePath: string;
 
   constructor(
     private router: Router,
@@ -52,13 +61,15 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
     public actionLabels: ActionLabelsI18n,
     private smbService: SmbService,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private route: ActivatedRoute
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().smb;
   }
 
   ngOnInit() {
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? SMB_BASE_CEPHFS;
     this.columns = [
       {
         name: $localize`Name`,
@@ -83,7 +94,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
         flexGrow: 2,
         cellTransformation: CellTemplate.redirect,
         customTemplateConfig: {
-          redirectLink: ['/cephfs/smb/cluster', '::prop', 'overview']
+          redirectLink: [`/${this.smbBasePath}/cluster`, '::prop', 'overview']
         }
       }
     ];
@@ -119,7 +130,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
           map((usersGroups: SMBUsersGroups[]) => {
             usersGroups.forEach((resource: SMBUsersGroups) => {
               resource['cdLink'] =
-                `/${USERSGROUPS_PATH}/${encodeURIComponent(resource.users_groups_id)}/overview`;
+                `/${this.smbBasePath}/standalone/${encodeURIComponent(resource.users_groups_id)}/overview`;
             });
             return usersGroups;
           }),
@@ -144,7 +155,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       itemNames: [usersGroupsId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${USERSGROUPS_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${this.smbBasePath}/standalone/${URLVerbs.DELETE}`, {
             usersGroupsId: usersGroupsId
           }),
           call: this.smbService.deleteUsersgroups(usersGroupsId)

@@ -4,6 +4,7 @@ import { Subscription } from 'rxjs';
 
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
+import { SMB_BASE_CEPHFS } from '~/app/shared/constants/smb.constant';
 import { SMBCluster } from '../smb.model';
 
 @Component({
@@ -20,11 +21,14 @@ export class SmbClusterResourceSidebarComponent implements OnInit, OnDestroy {
   clusterName = '';
   selection: SMBCluster | undefined;
   sidebarItems: SidebarItem[] = [];
+  private smbBasePath: string;
 
   constructor(
     private route: ActivatedRoute,
     private smbClusterResourceStateService: SmbClusterResourceStateService
-  ) {}
+  ) {
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? SMB_BASE_CEPHFS;
+  }
 
   ngOnInit(): void {
     this.sub.add(
@@ -52,7 +56,7 @@ export class SmbClusterResourceSidebarComponent implements OnInit, OnDestroy {
     this.sidebarItems = [
       {
         label: $localize`Overview`,
-        route: ['/cephfs/smb/cluster', this.clusterId, 'overview'],
+        route: [`/${this.smbBasePath}/cluster`, this.clusterId, 'overview'],
         routerLinkActiveOptions: { exact: true }
       }
     ];

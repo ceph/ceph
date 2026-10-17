@@ -3,6 +3,7 @@ import { SmbUsersgroupsResourceSidebarComponent } from './smb-usersgroups-resour
 import { ActivatedRoute, convertToParamMap, provideRouter, ParamMap } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
 import { Component, Input } from '@angular/core';
+import { SMB_BASE_CEPHFS } from '~/app/shared/constants/smb.constant';
 
 // Mock the sidebar layout component so Angular doesn't throw errors about unknown elements
 @Component({ selector: 'cd-sidebar-layout', template: '', standalone: false })
@@ -23,7 +24,8 @@ describe('SmbUsersgroupsResourceSidebarComponent', () => {
     );
 
     const activatedRouteMock = {
-      paramMap: paramMapSubject.asObservable()
+      paramMap: paramMapSubject.asObservable(),
+      snapshot: { data: { smbBasePath: SMB_BASE_CEPHFS, isRgw: false } }
     };
 
     await TestBed.configureTestingModule({
@@ -56,7 +58,7 @@ describe('SmbUsersgroupsResourceSidebarComponent', () => {
       const overviewItem = component.sidebarItems[0];
       expect(overviewItem.label).toBe('Overview');
       expect(overviewItem.route).toEqual([
-        '/cephfs/smb/standalone',
+        `/${SMB_BASE_CEPHFS}/standalone`,
         'standalone-url-id',
         'overview'
       ]);
@@ -75,7 +77,11 @@ describe('SmbUsersgroupsResourceSidebarComponent', () => {
       expect(component.standaloneName).toBe('');
 
       // Sidebar items should still be built, just with empty route fragments
-      expect(component.sidebarItems[0].route).toEqual(['/cephfs/smb/standalone', '', 'overview']);
+      expect(component.sidebarItems[0].route).toEqual([
+        `/${SMB_BASE_CEPHFS}/standalone`,
+        '',
+        'overview'
+      ]);
     });
   });
 
