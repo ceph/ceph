@@ -465,6 +465,12 @@ inline void BlueStore::Writer::_blob_put_data_subau_allocate(
   PExtentVector blob_allocs;
   _get_disk_space(in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
   bblob.allocated(in_blob_alloc_offset, in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
+  if (do_deferred) {
+    // Space reused from this txn's released extents; see
+    // _blob_create_with_data(). The blob may still carry "unused" bits for
+    // it from when it was created, so clear them for the whole AU.
+    bblob.mark_used(in_blob_alloc_offset, in_blob_alloc_end - in_blob_alloc_offset);
+  }
   PExtentVector& disk_extents = blob_allocs;
   _crop_allocs_to_io(disk_extents, in_blob_offset - in_blob_alloc_offset,
     in_blob_alloc_end - in_blob_offset - disk_data.length());
@@ -509,7 +515,11 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   _get_disk_space(blob_length - alloc_offset, blob_allocs);
   bblob.allocated(alloc_offset, blob_length - alloc_offset, blob_allocs);
   //^sets also logical_length = blob_length
-  if (min_alloc_size != block_size) {
+  // With do_deferred the space comes from extents released in this very
+  // transaction, and an older deferred write queued by a previous txc may
+  // still target it. Leave it "used": a later write into an unused chunk is
+  // issued as direct IO and would be overwritten by that deferred write.
+  if (min_alloc_size != block_size && !do_deferred) {
     bblob.add_unused_all();
   }
   dout(25) << __func__ << " @0x" << std::hex << in_blob_offset
