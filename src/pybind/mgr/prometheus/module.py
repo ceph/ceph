@@ -34,6 +34,9 @@ MetricValue = Dict[LabelValues, Number]
 DEFAULT_PORT = 9283
 DEFAULT_SSL_PORT = 9284
 
+# Bound configure()'s mon commands so a stuck orchestrator can't block serve().
+CONFIGURE_TIMEOUT = 10
+
 # to access things in class Module from subclass Root.  Because
 # it's a dict, the writer doesn't need to declare 'global' for access
 
@@ -2420,7 +2423,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     def configure(self) -> Tuple[Dict[str, Dict[str, Any]], Optional[Dict[str, str]], str]:
         cmd = {'prefix': 'orch get-security-config'}
-        ret, out, _ = self.mon_command(cmd)
+        ret, out, _ = self.mon_command(cmd, timeout=CONFIGURE_TIMEOUT)
 
         if ret == 0 and out is not None:
             try:
@@ -2469,7 +2472,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         cmd = {'prefix': 'orch certmgr generate-certificates',
                'module_name': 'prometheus',
                'format': 'json'}
-        ret, out, err = self.mon_command(cmd)
+        ret, out, err = self.mon_command(cmd, timeout=CONFIGURE_TIMEOUT)
         if ret != 0:
             self.log.error(f'mon command to generate-certificates failed: {err}')
             return self.setup_default_config()
