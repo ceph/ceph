@@ -774,6 +774,10 @@ public:
     }
 
     bool sent_reply = false;
+    /// a read of the op parked it until its object is repaired
+    /// (rep_repair_primary_object()): it runs again then, and nothing
+    /// of this run counts, whatever a CALL that read made of the -EAGAIN
+    bool parked_for_repair = false;
 
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     std::list<std::pair<boost::tuple<uint64_t, uint64_t, unsigned>,
