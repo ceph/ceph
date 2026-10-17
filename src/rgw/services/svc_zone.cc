@@ -567,7 +567,14 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yiel
 	return -EINVAL;
       }
     }
-    const auto& endpoints = master->second.endpoints;
+    if (current_period->get_map().zonegroups.size() > 1 &&
+        rgw::uses_legacy_system_endpoints(zg)) {
+      ldpp_dout(dpp, 1) << "WARNING: zonegroup " << zg.get_name()
+          << " has no admin_endpoints, using its master zone endpoints for "
+             "system traffic. This fallback is deprecated" << dendl;
+    }
+    const auto& endpoints =
+        rgw::get_zonegroup_system_endpoints(zg, master->second.endpoints);
     add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, zg.get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zg.api_name));
     if (!current_period->get_master_zonegroup().empty() &&
         zg.get_id() == current_period->get_master_zonegroup()) {
@@ -602,7 +609,8 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield
 	return -EINVAL;
       }
     }
-    const auto& endpoints = master->second.endpoints;
+    const auto& endpoints =
+        rgw::get_zonegroup_system_endpoints(*zonegroup, master->second.endpoints);
     rest_master_conn = new RGWRESTConn(cct, zonegroup->get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
   }
 
