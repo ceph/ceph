@@ -217,7 +217,7 @@ struct RGWZoneParams {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneParams> generate_test_instances();
+  static std::vector<RGWZoneParams> generate_test_instances();
 
   bool get_placement(const std::string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_pools.find(placement_id);
@@ -389,7 +389,7 @@ struct RGWZoneGroup {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneGroup> generate_test_instances();
+  static std::vector<RGWZoneGroup> generate_test_instances();
 
   bool supports(std::string_view feature) const {
     return enabled_features.contains(feature);
@@ -527,7 +527,7 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWRealm> generate_test_instances();
+  static std::vector<RGWRealm> generate_test_instances();
 
   const std::string& get_current_period() const {
     return current_period;
@@ -567,7 +567,7 @@ struct RGWPeriodLatestEpochInfo {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWPeriodLatestEpochInfo> generate_test_instances();
+  static std::vector<RGWPeriodLatestEpochInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 
@@ -721,7 +721,7 @@ public:
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWPeriod> generate_test_instances();
+  static std::vector<RGWPeriod> generate_test_instances();
 
   static std::string get_staging_id(const std::string& realm_id) {
     return realm_id + ":staging";

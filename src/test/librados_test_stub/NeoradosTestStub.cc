@@ -65,7 +65,7 @@ public:
       return it->second;
     }
 
-    std::list<std::pair<int64_t, std::string>> pools;
+    std::vector<std::pair<int64_t, std::string>> pools;
     int r = test_rados_client->pool_list(pools);
     if (r < 0) {
       return nullptr;

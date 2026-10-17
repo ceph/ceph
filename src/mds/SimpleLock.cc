@@ -95,8 +95,8 @@ void SimpleLock::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-std::list<SimpleLock> SimpleLock::generate_test_instances() {
-  std::list<SimpleLock> ls;
+std::deque<SimpleLock> SimpleLock::generate_test_instances() {
+  std::deque<SimpleLock> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().set_state(LOCK_SYNC);

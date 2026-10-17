@@ -60,7 +60,7 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
   return paddr;
 }
 
-BlockRBManager::allocate_ret_bare
+alloc_paddr_results_t
 BlockRBManager::alloc_extents(size_t size, paddr_t hint)
 {
   LOG_PREFIX(BlockRBManager::alloc_extents);
@@ -71,7 +71,8 @@ BlockRBManager::alloc_extents(size_t size, paddr_t hint)
   if (!alloc) {
     return {};
   }
-  allocate_ret_bare ret;
+  alloc_paddr_results_t ret;
+  ret.reserve((*alloc).num_intervals());
   size_t len = 0;
   for (auto extent = (*alloc).begin();
        extent != (*alloc).end();

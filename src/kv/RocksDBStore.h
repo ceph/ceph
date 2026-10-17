@@ -10,6 +10,7 @@
 #include "include/types.h"
 #include "include/buffer_fwd.h"
 #include "KeyValueDB.h"
+#include <deque>
 #include <set>
 #include <map>
 #include <string>
@@ -190,7 +191,7 @@ private:
   ceph::mutex compact_queue_lock =
     ceph::make_mutex("RocksDBStore::compact_thread_lock");
   ceph::condition_variable compact_queue_cond;
-  std::list<std::pair<std::string,std::string>> compact_queue;
+  std::deque<std::pair<std::string,std::string>> compact_queue;
   bool compact_queue_stop;
   class CompactThread : public Thread {
     RocksDBStore *db;

@@ -13,6 +13,7 @@
 #include "librbd/Types.h"
 #include <iosfwd>
 #include <list>
+#include <vector>
 #include <variant>
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
@@ -452,7 +453,7 @@ struct EventEntry {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<EventEntry> generate_test_instances();
+  static std::vector<EventEntry> generate_test_instances();
 
 private:
   static const uint32_t EVENT_FIXED_SIZE = 14; /// version encoding, type
@@ -593,7 +594,7 @@ struct ClientData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<ClientData> generate_test_instances();
+  static std::vector<ClientData> generate_test_instances();
 };
 
 // Journal Tag data structures
@@ -648,7 +649,7 @@ struct TagData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<TagData> generate_test_instances();
+  static std::vector<TagData> generate_test_instances();
 };
 
 std::ostream &operator<<(std::ostream &out, const EventType &type);

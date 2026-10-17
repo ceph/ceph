@@ -286,7 +286,7 @@ struct scrub_chunk_t {
   digests_fixes_t missing_digest;
 
   /// Map from object with errors to good peers
-  std::map<hobject_t, std::list<pg_shard_t>> authoritative;
+  std::map<hobject_t, std::vector<pg_shard_t>> authoritative;
 
   inconsistent_objs_t m_inconsistent_objs;
 
@@ -404,7 +404,7 @@ class ScrubBackend {
   LoggerSinkSet& clog;
 
   struct auth_and_obj_errs_t {
-    std::list<pg_shard_t> auth_list;
+    std::vector<pg_shard_t> auth_list;
     std::set<pg_shard_t> object_errors;
   };
 
@@ -452,7 +452,7 @@ class ScrubBackend {
       const ScrubMap::object& auth_object);
 
   std::optional<auth_and_obj_errs_t> for_empty_auth_list(
-    std::list<pg_shard_t>&& auths,
+    std::vector<pg_shard_t>&& auths,
     std::set<pg_shard_t>&& obj_errors,
     shard_to_scrubmap_t::const_iterator auth,
     const hobject_t& ho,

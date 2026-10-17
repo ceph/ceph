@@ -77,9 +77,9 @@ bool is_v2_upload_id(const string& upload_id)
          (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
-list<RGWUploadPartInfo> RGWUploadPartInfo::generate_test_instances()
+vector<RGWUploadPartInfo> RGWUploadPartInfo::generate_test_instances()
 {
-  list<RGWUploadPartInfo> o;
+  vector<RGWUploadPartInfo> o;
   RGWUploadPartInfo i;
   i.num = 1;
   i.size = 10 * 1024 * 1024;

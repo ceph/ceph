@@ -9,16 +9,16 @@
 #include <cstdarg>
 #include <cstdint>
 #include <functional>
-#include <list>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/fmt_common.h"
 
 namespace ceph {
 
   struct FormatterAttrs {
-    std::list< std::pair<std::string, std::string> > attrs;
+    std::vector<std::pair<std::string, std::string>> attrs;
 
     FormatterAttrs(const char *attr, ...);
   };
@@ -256,4 +256,3 @@ namespace ceph {
   std::string fixed_u_to_string(uint64_t num, int scale);
 }
 #endif
-

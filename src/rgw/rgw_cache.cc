@@ -368,9 +368,9 @@ ObjectCache::~ObjectCache()
   }
 }
 
-list<ObjectMetaInfo> ObjectMetaInfo::generate_test_instances()
+vector<ObjectMetaInfo> ObjectMetaInfo::generate_test_instances()
 {
-  list<ObjectMetaInfo> o;
+  vector<ObjectMetaInfo> o;
   ObjectMetaInfo m;
   m.size = 1024 * 1024;
   o.push_back(std::move(m));
@@ -384,10 +384,10 @@ void ObjectMetaInfo::dump(Formatter *f) const
   encode_json("mtime", utime_t(mtime), f);
 }
 
-list<ObjectCacheInfo> ObjectCacheInfo::generate_test_instances()
+vector<ObjectCacheInfo> ObjectCacheInfo::generate_test_instances()
 {
   using ceph::encode;
-  list<ObjectCacheInfo> o;
+  vector<ObjectCacheInfo> o;
   ObjectCacheInfo i;
   i.status = 0;
   i.flags = CACHE_FLAG_MODIFY_XATTRS;
@@ -418,9 +418,9 @@ void ObjectCacheInfo::dump(Formatter *f) const
 
 }
 
-list<RGWCacheNotifyInfo> RGWCacheNotifyInfo::generate_test_instances()
+vector<RGWCacheNotifyInfo> RGWCacheNotifyInfo::generate_test_instances()
 {
-  list<RGWCacheNotifyInfo> o;
+  vector<RGWCacheNotifyInfo> o;
   o.emplace_back();
   return o;
 }

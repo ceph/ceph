@@ -5,6 +5,7 @@
 #define CEPH_COMMON_SLOPPYCRCMAP_H
 
 #include <map>
+#include <vector>
 
 #include "include/encoding.h"
 
@@ -71,7 +72,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<SloppyCRCMap> generate_test_instances();
+  static std::vector<SloppyCRCMap> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SloppyCRCMap)
 
