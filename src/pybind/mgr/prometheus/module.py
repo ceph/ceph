@@ -369,6 +369,11 @@ class HealthHistory:
                         check.count += 1
                         changes_made = True
 
+                    new_severity = current_checks[name].get('severity')
+                    if check.severity != new_severity:
+                        check.severity = new_severity
+                        changes_made = True
+
                     check.last_seen = now
                     check.active = True
                 else:
@@ -1252,16 +1257,26 @@ class Module(MgrModule, OrchestratorClientMixin):
 
         self.health_history.check(health)
 
+        # Keep OSD_DOWN's message stable to avoid message-driven time-series churn.
+        # Severity changes can still change the label set.
+        _scalar_checks = frozenset({'OSD_DOWN'})
+
         for name, info in self.health_history.healthcheck.items():
             # Skip CEPHADM_CERT_ERROR and CEPHADM_CERT_WARNING as they're handled specially above with message details
             if name in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
                 continue
             v = 1 if info.active else 0
+            if info.active and name not in _scalar_checks:
+                msg = active_healthchecks[name]['summary'].get('message', '')
+            else:
+                # Inactive checks have no current summary to expose.
+                # Keep scalar()-targeted checks' message labels stable.
+                msg = ''
             self.metrics['health_detail'].set(
                 v, (
                     name,
                     str(info.severity),
-                    '')
+                    msg)
             )
 
     @profile_method()
