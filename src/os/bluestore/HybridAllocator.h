@@ -56,6 +56,8 @@ public:
     }
   }
   void init_rm_free(uint64_t offset, uint64_t length) override;
+  int64_t claim_range(uint64_t offset, uint64_t length,
+                      PExtentVector *extents) override;
 
   void expand(int64_t new_size) override {
     std::lock_guard l(PrimaryAllocator::get_lock());

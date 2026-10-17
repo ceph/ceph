@@ -97,6 +97,8 @@ public:
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
   void shutdown() override;
+  int64_t claim_range(uint64_t offset, uint64_t length,
+                       PExtentVector *extents) override;
 
 private:
   CephContext* cct;
@@ -293,6 +295,8 @@ protected:
   void _remove_from_tree(uint64_t start, uint64_t size);
   void _try_remove_from_tree(uint64_t start, uint64_t size,
     std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
+  int64_t _claim_range(uint64_t offset, uint64_t length,
+                        PExtentVector *extents);
 
   uint64_t _get_free() const {
     return num_free;

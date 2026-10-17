@@ -14,6 +14,7 @@
 #include <bit>
 #include <vector>
 #include <algorithm>
+#include <limits>
 #include <mutex>
 #include <string_view>
 #include <utility>
@@ -766,6 +767,73 @@ public:
     uint64_t cursor =
       l1.get_free_extents_internal(l0_pos_start, l0_pos_end, max_count, emit);
     return cursor >= l0_pos_end ? range_end : cursor * alloc_size;
+  }
+
+  // [start, end) L0 bits covering the byte range.
+  std::pair<uint64_t, uint64_t> bytes_to_l0_bit(
+    uint64_t offset, uint64_t length) const
+  {
+    auto au = get_min_alloc_size();
+    return { offset / au, p2roundup(offset + length, au) / au };
+  }
+
+  // [start, end) L2 bits covering the byte range.
+  std::pair<uint64_t, uint64_t> bytes_to_l2_bit(
+    uint64_t offset, uint64_t length) const
+  {
+    return { offset / l2_granularity,
+             p2roundup(offset + length, l2_granularity) / l2_granularity };
+  }
+
+  int64_t claim_range_internal(
+    uint64_t offset,
+    uint64_t length,
+    PExtentVector* extents)
+  {
+    const uint64_t alloc_size = get_min_alloc_size();
+
+    // bluestore_pextent_t::length is 32 bit, so a longer run has to be
+    // reported as several extents. Round down and align -- the cap itself
+    // is not a multiple of the allocation unit.
+    constexpr uint64_t cap =
+      std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
+    const uint64_t max_units = p2align(cap, alloc_size) / alloc_size;
+
+    // (start, len) pairs in L0 units. Collected before anything is marked:
+    // we must not mutate l0/l1 while the walk is reading them.
+    std::vector<std::pair<uint64_t, uint64_t>> free_runs;
+    uint64_t units = 0;
+
+    auto [l0_pos_start, l0_pos_end] = bytes_to_l0_bit(offset, length);
+
+    std::lock_guard l(lock);
+    l1.get_free_extents_internal(
+      l0_pos_start, l0_pos_end, 0,
+      [&](uint64_t o, uint64_t len) {
+        units += len;
+        while (len > max_units) {
+          free_runs.emplace_back(o, max_units);
+          o += max_units;
+          len -= max_units;
+        }
+        free_runs.emplace_back(o, len);
+      });
+
+    // Mark each run allocated at L0 and refresh the L1 summaries covering it,
+    // then report it in bytes. Runs are alloc-unit aligned by construction.
+    for (auto& [start, len] : free_runs) {
+      l1._mark_alloc_l1_l0(int64_t(start), int64_t(start + len));
+      extents->emplace_back(start * alloc_size, len * alloc_size);
+    }
+
+    // Re-summarize L2 over the whole window in one pass.
+    auto [l2_pos_start, l2_pos_end] = bytes_to_l2_bit(offset, length);
+    _mark_l2_on_l1(l2_pos_start, l2_pos_end);
+
+    const int64_t claimed = units * alloc_size;
+    ceph_assert(available >= claimed);
+    available -= claimed;
+    return claimed;
   }
 
   double get_fragmentation_internal() {
