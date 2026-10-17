@@ -1331,6 +1331,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (ret < 0)
     return ret;
 
+  ret = open_gc_pool_neo_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
   ret = open_lc_pool_ctx(dpp);
   if (ret < 0)
     return ret;
@@ -1369,7 +1373,11 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
 
   if (use_gc) {
     gc = new RGWGC();
-    gc->initialize(cct, this, y);
+    ret = gc->initialize(cct, this, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: GC initialize failed: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   } else {
     ldpp_dout(dpp, 5) << "note: GC not initialized" << dendl;
   }
@@ -1599,6 +1607,22 @@ int RGWRados::open_root_pool_ctx(const DoutPrefixProvider *dpp)
 int RGWRados::open_gc_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().gc_pool, gc_pool_ctx, true, true);
+}
+
+int RGWRados::open_gc_pool_neo_ctx(const DoutPrefixProvider *dpp)
+{
+  maybe_warn_about_blocking(dpp);
+  try {
+    gc_pool_neo_ctx = rgw::init_iocontext(dpp, driver->get_neorados(),
+                                          svc.zone->get_zone_params().gc_pool,
+                                          rgw::create, ceph::async::use_blocked);
+  } catch (const boost::system::system_error& e) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ": Failed to initialize ioctx: "
+                       << e.what()
+                       << ", for gc pool" << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
 }
 
 int RGWRados::open_lc_pool_ctx(const DoutPrefixProvider *dpp)
@@ -11162,9 +11186,13 @@ int RGWRados::gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::O
   return rgw_rados_operate(dpp, gc_pool_ctx, oid, std::move(op), pbl, y);
 }
 
-int RGWRados::list_gc_objs(int& index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id)
+int RGWRados::list_gc_objs(int& index, string& marker, uint32_t max, bool expired_only,
+                           std::list<cls_rgw_gc_obj_info>& result, bool& truncated,
+                           bool& processing_fifo,
+                           std::optional<int> shard_id)
 {
-  return gc->list(index, marker, max, expired_only, result, truncated, processing_queue, shard_id);
+  return gc->list(index, marker, max, expired_only, result, truncated,
+                  processing_fifo, shard_id);
 }
 
 int RGWRados::process_gc(bool expired_only, optional_yield y, std::optional<int> shard_id)
