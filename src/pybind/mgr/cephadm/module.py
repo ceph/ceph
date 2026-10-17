@@ -59,6 +59,7 @@ from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
+from cephadm.agent_metrics import AgentMetadataStats
 from cephadm.services.service_registry import service_registry
 
 
@@ -791,6 +792,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         self.config_checker = CephadmConfigChecks(self)
 
+        # In-memory diagnostics for the cephadm-agent HTTP/persistence path.
+        # These stats are intentionally process-local and reset on mgr restart/failover.
+        self.agent_metadata_stats = AgentMetadataStats(self.log)
+
         self.http_server = CephadmHttpServer(self)
         self.http_server.start()
 
@@ -1439,6 +1444,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if ssh_config:
             return HandleCommandResult(stdout=ssh_config)
         return HandleCommandResult(stdout=get_default_ssh_config())
+
+    @CephadmCLICommand.Read('cephadm agent-stats')
+    def _agent_stats(self, format: Format = Format.plain) -> HandleCommandResult:
+        """Show in-memory cephadm-agent request and persistence diagnostics."""
+        if format not in [Format.plain, Format.json, Format.json_pretty]:
+            return HandleCommandResult(
+                retval=1,
+                stderr='Requested format is not supported for cephadm agent stats',
+            )
+
+        mgr_name = f'mgr.{self.get_mgr_id()}'
+        if format == Format.plain:
+            return HandleCommandResult(
+                stdout=self.agent_metadata_stats.format_plain(mgr_name)
+            )
+
+        stats = self.agent_metadata_stats.snapshot(mgr_name)
+        return HandleCommandResult(
+            stdout=json.dumps(stats, indent=2 if format == Format.json_pretty else None,
+                              sort_keys=True) + '\n'
+        )
+
+    @CephadmCLICommand.Write('cephadm agent-stats reset')
+    def _agent_stats_reset(self) -> HandleCommandResult:
+        """Reset in-memory cephadm-agent diagnostics."""
+        self.agent_metadata_stats.reset()
+        return HandleCommandResult(stdout='cephadm agent stats reset\n')
 
     @CephadmCLICommand.Write('cephadm generate-key')
     def _generate_key(self) -> Tuple[int, str, str]:

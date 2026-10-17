@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import socket
+import time
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
     NamedTuple, Type, ValuesView, Union
 
@@ -40,6 +41,29 @@ HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
 NODE_PROXY_CACHE_PREFIX = 'node_proxy'
+
+
+def _timed_set_store(mgr: 'CephadmOrchestrator', key: str, value: Optional[str], category: str) -> None:
+    """Persist a cache entry and attribute its latency to Phase-0 agent stats.
+
+    Only the host/device/agent cache persistence call sites use this helper. This
+    intentionally avoids wrapping mgr.set_store() globally, so unrelated cephadm
+    store traffic cannot skew the agent metadata measurements.
+    """
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if not stats:
+        mgr.set_store(key, value)
+        return
+
+    start = time.monotonic()
+    error = False
+    try:
+        mgr.set_store(key, value)
+    except Exception:
+        error = True
+        raise
+    finally:
+        stats.record_store(category, time.monotonic() - start, error=error)
 
 
 class HostCacheStatus(enum.Enum):
@@ -1258,7 +1282,7 @@ class HostCache():
         if host in self.devices:
             self.save_host_devices(host)
 
-        self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
+        _timed_set_store(self.mgr, HOST_CACHE_PREFIX + host, json.dumps(j), 'host')
 
     def save_host_devices(self, host: str) -> None:
         host = normalize_hostname(host)
@@ -1287,12 +1311,20 @@ class HostCache():
                 dev_dict: Dict[str, Any] = {'devices': dev_list}
                 if dev_cache_counter == 0:
                     dev_dict.update({'entries': len(dev_lists)})
-                self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
-                                   + str(dev_cache_counter), json.dumps(dev_dict))
+                _timed_set_store(
+                    self.mgr,
+                    HOST_CACHE_PREFIX + host + '.devices.' + str(dev_cache_counter),
+                    json.dumps(dev_dict),
+                    'devices',
+                )
                 dev_cache_counter += 1
         else:
-            self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
-                               + str(dev_cache_counter), json.dumps({'devices': devs, 'entries': 1}))
+            _timed_set_store(
+                self.mgr,
+                HOST_CACHE_PREFIX + host + '.devices.' + str(dev_cache_counter),
+                json.dumps({'devices': devs, 'entries': 1}),
+                'devices',
+            )
 
     def load_host_devices(self, host: str) -> List[inventory.Device]:
         dev_cache_counter: int = 0
@@ -2118,7 +2150,7 @@ class AgentCache():
         if host in self.agent_timestamp:
             j['agent_timestamp'] = datetime_to_str(self.agent_timestamp[host])
 
-        self.mgr.set_store(AGENT_CACHE_PREFIX + host, json.dumps(j))
+        _timed_set_store(self.mgr, AGENT_CACHE_PREFIX + host, json.dumps(j), 'agent')
 
     def update_agent_config_deps(self, host: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.agent_config_deps[host] = {
