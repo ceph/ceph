@@ -724,6 +724,12 @@ public:
   virtual int get_cache_obj_count() = 0;
 
   virtual void snap_trimmer(epoch_t epoch_queued) = 0;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  /// the reply of a read of head whose pushes a transfer thread ran left:
+  /// if the fence of head waits for no other, run its ops again
+  /// (PGOobReadKick)
+  virtual void oob_read_kick(const hobject_t& head) {}
+#endif
   virtual void do_command(
     std::string_view prefix,
     const cmdmap_t& cmdmap,

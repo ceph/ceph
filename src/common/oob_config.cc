@@ -8,16 +8,23 @@
 #include <cerrno>
 #include <charconv>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #include <vector>
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
+#ifdef __linux__
+#include <sys/capability.h>
+#include <sys/prctl.h>
+#endif
 
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/errno.h"
 #include "common/pick_address.h"
 #include "include/ipaddr.h"
 #include "include/scope_guard.h"
@@ -187,6 +194,44 @@ std::string iface_of_addr(const std::string& addr)
   }
   return {};
 }
+
+#ifdef __linux__
+/// whether the calling thread holds CAP_NET_RAW in its effective set
+/// and in its permitted set; 0, or -errno when it cannot tell
+int net_raw_held(bool* effective, bool* permitted)
+{
+  cap_t caps = cap_get_proc();
+  if (!caps) {
+    return -errno;
+  }
+  auto free_caps = make_scope_guard([caps] { cap_free(caps); });
+  cap_flag_value_t e = CAP_CLEAR;
+  cap_flag_value_t p = CAP_CLEAR;
+  if (cap_get_flag(caps, CAP_NET_RAW, CAP_EFFECTIVE, &e) < 0 ||
+      cap_get_flag(caps, CAP_NET_RAW, CAP_PERMITTED, &p) < 0) {
+    return -errno;
+  }
+  *effective = e == CAP_SET;
+  *permitted = p == CAP_SET;
+  return 0;
+}
+
+/// raise CAP_NET_RAW into the calling thread's effective set, or drop it
+int set_net_raw(cap_flag_value_t v)
+{
+  cap_t caps = cap_get_proc();
+  if (!caps) {
+    return -errno;
+  }
+  auto free_caps = make_scope_guard([caps] { cap_free(caps); });
+  const cap_value_t raw[1] = {CAP_NET_RAW};
+  if (cap_set_flag(caps, CAP_EFFECTIVE, 1, raw, v) < 0 ||
+      cap_set_proc(caps) < 0) {
+    return -errno;
+  }
+  return 0;
+}
+#endif
 
 } // anonymous namespace
 
@@ -364,6 +409,113 @@ void ofi_where(const location_t& loc, std::string_view provider,
   }
 }
 
+bool needs_net_raw(std::string_view provider)
+{
+  return provider == "uet";
+}
+
+int keep_caps(std::string* err)
+{
+#ifdef __linux__
+  if (prctl(PR_SET_KEEPCAPS, 1) == -1) {
+    const int r = -errno;
+    *err = "unable to set the keepcaps flag: " + cpp_strerror(r);
+    return r;
+  }
+#endif
+  return 0;
+}
+
+int keep_only_net_raw(bool* kept, std::string* err)
+{
+  *kept = false;
+#ifdef __linux__
+  bool effective = false;
+  bool permitted = false;
+  if (int r = net_raw_held(&effective, &permitted); r < 0) {
+    *err = "unable to read the capabilities: " + cpp_strerror(r);
+    return r;
+  }
+  // every set empty, but CAP_NET_RAW in the permitted one
+  cap_t caps = cap_init();
+  if (!caps) {
+    const int r = -errno;
+    *err = "unable to drop the capabilities: " + cpp_strerror(r);
+    return r;
+  }
+  auto free_caps = make_scope_guard([caps] { cap_free(caps); });
+  const cap_value_t raw[1] = {CAP_NET_RAW};
+  if ((permitted &&
+       cap_set_flag(caps, CAP_PERMITTED, 1, raw, CAP_SET) < 0) ||
+      cap_set_proc(caps) < 0) {
+    const int r = -errno;
+    *err = "unable to drop the capabilities: " + cpp_strerror(r);
+    return r;
+  }
+  *kept = permitted;
+  // nothing is left to keep; only a later setuid() reads the flag
+  prctl(PR_SET_KEEPCAPS, 0);
+#endif
+  return 0;
+}
+
+int with_net_raw(const std::function<void()>& fn, std::string* err)
+{
+#ifdef __linux__
+  bool effective = false;
+  bool permitted = false;
+  if (int r = net_raw_held(&effective, &permitted); r < 0) {
+    *err = "unable to read the capabilities: " + cpp_strerror(r);
+    fn();
+    return r;
+  }
+  if (effective) {
+    fn();
+    return 0;
+  }
+  if (!permitted) {
+    *err = "the process does not hold CAP_NET_RAW";
+    fn();
+    return -EPERM;
+  }
+  // a plain thread, not a named one: the threads that fn starts take
+  // its name, the caller's
+  int r = 0;
+  std::exception_ptr ex;
+  std::thread t([&] {
+    r = set_net_raw(CAP_SET);
+    try {
+      fn();
+    } catch (...) {
+      ex = std::current_exception();
+    }
+    if (r == 0) {
+      set_net_raw(CAP_CLEAR);
+    }
+  });
+  t.join();
+  if (ex) {
+    std::rethrow_exception(ex);
+  }
+  if (r < 0) {
+    *err = "unable to raise CAP_NET_RAW: " + cpp_strerror(r);
+  }
+  return r;
+#else
+  fn();
+  return 0;
+#endif
+}
+
+bool osd_keeps_net_raw(CephContext* cct)
+{
+  return cct->get_set_uid() != 0 &&
+    cct->get_module_type() == CEPH_ENTITY_TYPE_OSD &&
+    !cct->_conf.get_val<bool>("set_keepcaps") &&
+    (cct->_conf.get_val<bool>("oob_keep_net_raw") ||
+     needs_net_raw(read_transports(cct).ofi_provider));
+}
+
 ceph::rdma::oob_transports read_transports(CephContext* cct)
 {
   return ceph::rdma::parse_oob_transports(
@@ -374,6 +526,17 @@ ceph::rdma::oob_transports read_transports(CephContext* cct)
 uint64_t memory(CephContext* cct)
 {
   return cct->_conf.get_val<Option::size_t>("oob_memory");
+}
+
+int dc_key(CephContext* cct, uint64_t* key, std::string* err)
+{
+  const auto s = cct->_conf.get_val<std::string>("cuobj_dc_key");
+  if (!parse_dc_key(s, key)) {
+    *err = "cuobj_dc_key '" + s + "' is not a 64-bit key in hexadecimal "
+      "after 0x, such as 0xffeeddcc, or in decimal";
+    return -EINVAL;
+  }
+  return 0;
 }
 
 } // namespace ceph::oob

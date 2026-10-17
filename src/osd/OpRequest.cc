@@ -36,6 +36,16 @@ OpRequest::OpRequest(Message* req, OpTracker* tracker)
       hit_flag_points(0),
       latest_flag_point(0),
       hitset_inserted(false) {
+  {
+    // the message's age, which only the wall clock can tell: the
+    // messenger stamped it at receipt, a moment ago. None for one that
+    // was never received, or that the clock now reads as not yet
+    const utime_t recv = req->get_recv_stamp();
+    const utime_t now = ceph_clock_now();
+    const utime_t age = !recv.is_zero() && now > recv ? now - recv : utime_t();
+    mono_recv_stamp = ceph::mono_clock::now() -
+      ceph::make_timespan(static_cast<double>(age));
+  }
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;

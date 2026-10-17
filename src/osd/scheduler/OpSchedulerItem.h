@@ -594,6 +594,41 @@ public:
   }
 };
 
+#ifdef HAVE_OSD_OOB_DELIVERY
+/**
+ * The reply of a read whose pushes a transfer thread ran left, and the
+ * fence of its object may wait for no other: the PG runs the ops that
+ * waited in it again (PrimaryLogPG::oob_read_kick()). The thread that
+ * sent the reply queues it, since it takes no PG lock. It holds no PG
+ * reference: a PG that went away drops it, as it does any item.
+ */
+class PGOobReadKick : public PGOpQueueable {
+  utime_t time_queued;
+  hobject_t head;
+public:
+  PGOobReadKick(spg_t pgid, hobject_t head)
+    : PGOpQueueable(pgid),
+      time_queued(ceph_clock_now()),
+      head(std::move(head)) {}
+  std::ostream &print(std::ostream &rhs) const final {
+    return rhs << "PGOobReadKick(pgid=" << get_pgid()
+	       << " head=" << head << ")";
+  }
+  std::string print() const final {
+    return fmt::format(
+	"PGOobReadKick(pgid={} head={})", get_pgid(), head);
+  }
+  utime_t get_time_queued() const final {
+    return time_queued;
+  }
+  void run(
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  SchedulerClass get_scheduler_class() const final {
+    return SchedulerClass::immediate;
+  }
+};
+#endif
+
 class PGDelete : public PGOpQueueable {
   epoch_t epoch_queued;
 public:

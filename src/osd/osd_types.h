@@ -1083,8 +1083,8 @@ public:
      * cut off. The lease bounds when a write may start, the drain when
      * it may still land: an OSD stops waiting for its writes at receipt
      * plus lease plus drain and cuts off any still in flight, and a
-     * cut-off can end up to the transport's cut-off tolerance after
-     * that. A window owner that gave up on a request writes the
+     * libfabric cut-off can end up to osd_oob_cutoff_late_tolerance
+     * after that. A window owner that gave up on a request writes the
      * window again only once lease plus drain plus that tolerance have
      * passed since the last operation of the request reached its OSD.
      * A pool option for the same reason as the lease. Unset means

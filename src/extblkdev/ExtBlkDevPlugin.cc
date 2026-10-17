@@ -22,6 +22,8 @@
 
 #include <errno.h>
 
+#include <vector>
+
 #include "ceph_ver.h"
 #include "ExtBlkDevPlugin.h"
 #include "common/errno.h"
@@ -40,6 +42,18 @@ namespace ceph {
 
   namespace extblkdev {
 
+#ifdef __linux__
+    // what limit_caps() keeps in the permitted set besides the plugins'
+    // capabilities
+    static std::vector<cap_value_t> kept_caps;
+#endif
+
+    void keep_permitted_cap(int cap)
+    {
+#ifdef __linux__
+      kept_caps.push_back(cap);
+#endif
+    }
 
 #ifdef __linux__
     // iterate across plugins and determine each capability's reqirement
@@ -176,6 +190,11 @@ namespace ceph {
       int rc = get_required_caps(cct, merge_caps);
       if (rc != 0) {
 	return rc;
+      }
+      if (!kept_caps.empty() &&
+	  cap_set_flag(merge_caps, CAP_PERMITTED, kept_caps.size(),
+		       kept_caps.data(), CAP_SET) < 0) {
+	return -errno;
       }
       return trim_caps(cct, merge_caps);
     }

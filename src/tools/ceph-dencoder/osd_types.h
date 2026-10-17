@@ -80,7 +80,7 @@ TYPE(ECLegacy::ECUtilL::HashInfo)
 TYPE_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
-TYPE(ECSubReadReply)
+TYPE_FEATUREFUL(ECSubReadReply)
 
 #include "osd/SnapMapper.h"
 TYPE(SnapMapper::Mapping)

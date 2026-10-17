@@ -618,9 +618,10 @@ else()
   set(WITH_RADOSGW_LANCEDB_DEFAULT OFF)
 endif()
 option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ${WITH_RADOSGW_LANCEDB_DEFAULT})
-# builds ofi-rma for out-of-band delivery over libfabric, on any
-# provider (tcp, shm, verbs, efa, a UET provider such as the UEC
-# reference provider's libfabric wrapper)
+# out-of-band delivery over libfabric: one transport for the OSD
+# executor and EC gather windows, on any provider (tcp, shm, verbs,
+# efa, a UET provider such as the UEC reference provider's libfabric
+# wrapper)
 option(WITH_OOB_OFI "out-of-band delivery over libfabric" OFF)
 if(WITH_OOB_OFI)
   # pkg-config first, as src/ofi-rma does and as src/script/run-make.sh
@@ -652,10 +653,18 @@ if(WITH_OOB_OFI)
   endif()
 endif()
 # See doc/radosgw/s3rdma.rst for build and runtime requirements.
+# It also builds the cuObject transport of the OSD, for OSD-direct transfers.
 option(WITH_RADOSGW_CUOBJ "cuObject RDMA support for RADOS Gateway (experimental)" OFF)
 if(WITH_RADOSGW_CUOBJ)
   find_library(CUOBJSERVER_LIBRARY cuobjserver REQUIRED)
   message(STATUS "cuObject RDMA support for RADOS Gateway is enabled (experimental)")
+  # osd_cuobj.cc uses ibverbs types; make IBVerbs::verbs exist even
+  # when WITH_RDMA (the async messenger transport) is disabled
+  find_package(verbs REQUIRED)
+  # the OSD's gather windows sit behind a DC target, which
+  # osd_dc_target.cc creates with the mlx5 direct verbs
+  find_path(MLX5DV_INCLUDE_DIR infiniband/mlx5dv.h REQUIRED)
+  find_library(MLX5_LIBRARY mlx5 REQUIRED)
 endif()
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)

@@ -222,7 +222,9 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(4, 2, bl);
+  // compat stays below the version: decode reads subchunks only when
+  // struct_v > struct_compat
+  ENCODE_START(5, 2, bl);
   encode(from, bl);
   encode(tid, bl);
   encode(to_read, bl);
@@ -230,12 +232,13 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
   encode(subchunks, bl);
   encode(omap_read_from, bl);
   encode(omap_headers_to_read, bl);
+  encode(push_token, bl);  // v5
   ENCODE_FINISH(bl);
 }
 
 void ECSubRead::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(4, bl);
+  DECODE_START(5, bl);
   decode(from, bl);
   decode(tid, bl);
   if (struct_v == 1) {
@@ -265,6 +268,11 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
   } else {
     omap_read_from.clear();
     omap_headers_to_read.clear();
+  }
+  if (struct_v >= 5) {
+    decode(push_token, bl);
+  } else {
+    push_token.clear();
   }
   DECODE_FINISH(bl);
 }
@@ -332,14 +340,17 @@ uint64_t ECSubRead::cost(CephContext *cct, std::pair<int, int>& subchunk_info)
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubRead &rhs)
 {
-  return lhs
-    << "ECSubRead(tid=" << rhs.tid
-    << ", to_read=" << rhs.to_read
-    << ", subchunks=" << rhs.subchunks
-    << ", attrs_to_read=" << rhs.attrs_to_read
-    << ", omap_headers_to_read=" << rhs.omap_headers_to_read
-    << ", omap_read_from=" << rhs.omap_read_from
-    << ")";
+  lhs << "ECSubRead(tid=" << rhs.tid
+      << ", to_read=" << rhs.to_read
+      << ", subchunks=" << rhs.subchunks
+      << ", attrs_to_read=" << rhs.attrs_to_read
+      << ", omap_headers_to_read=" << rhs.omap_headers_to_read
+      << ", omap_read_from=" << rhs.omap_read_from;
+  // the primary's gather window, which only a gather's sub-read lends
+  if (!rhs.push_token.empty()) {
+    lhs << ", push_token=" << rhs.push_token;
+  }
+  return lhs << ")";
 }
 
 void ECSubRead::dump(Formatter *f) const
@@ -380,6 +391,9 @@ void ECSubRead::dump(Formatter *f) const
 	f.dump_string("start_after", read_from.first);
         f.dump_unsigned("max_bytes", read_from.second);
       });
+
+  // the primary's gather window, empty for an ordinary sub-read
+  f->dump_string("push_token", push_token);
 }
 
 list<ECSubRead> ECSubRead::generate_test_instances()
@@ -401,19 +415,28 @@ list<ECSubRead> ECSubRead::generate_test_instances()
   o.back().to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
   o.back().to_read[hoid2].push_back(boost::make_tuple(2000, 600, 0));
   o.back().attrs_to_read.insert(hoid2);
+  // a gather's sub-read, which lends the shard a window to push into
+  o.push_back(ECSubRead());
+  o.back().from = pg_shard_t(2, shard_id_t(1));
+  o.back().tid = 301;
+  o.back().to_read[hoid1].push_back(boost::make_tuple(0, 65536, 0));
+  o.back().push_token = "gather-window-token";
   return o;
 }
 
-void ECSubReadReply::encode(bufferlist &bl) const
+void ECSubReadReply::encode(bufferlist &bl, uint64_t features) const
 {
-  encode(bl, bl);
+  encode(bl, bl, features);
 }
 
 void ECSubReadReply::encode(bufferlist &p_bl,
 			    bufferlist &d_bl,
 			    uint64_t features) const
 {
-  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 3 : 1;
+  // only a primary that sent a push token reads pushed, pushed_crc and
+  // push_declined, and such a primary is new enough to decode v4; an
+  // older one skips them
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 4 : 1;
   uint8_t compat_ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 2 : 1;
   ENCODE_START(ver, compat_ver, p_bl);
   encode(from, p_bl);
@@ -444,6 +467,11 @@ void ECSubReadReply::encode(bufferlist &p_bl,
     encode(omap_entries_read, p_bl);
     encode(omaps_complete, p_bl);
   }
+  if (ver >= 4) {
+    encode(pushed, p_bl);
+    encode(pushed_crc, p_bl);
+    encode(push_declined, p_bl);
+  }
   ENCODE_FINISH(p_bl);
 }
 
@@ -455,7 +483,7 @@ void ECSubReadReply::decode(bufferlist::const_iterator &bl)
 void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
 			    bufferlist::const_iterator &d_bl)
 {
-  DECODE_START(3, p_bl);
+  DECODE_START(4, p_bl);
   decode(from, p_bl);
   decode(tid, p_bl);
   if (struct_v < 2) {
@@ -496,6 +524,15 @@ void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
     omap_entries_read.clear();
     omaps_complete.clear();
   }
+  if (struct_v >= 4) {
+    decode(pushed, p_bl);
+    decode(pushed_crc, p_bl);
+    decode(push_declined, p_bl);
+  } else {
+    pushed.clear();
+    pushed_crc = 0;
+    push_declined = false;
+  }
 
   DECODE_FINISH(p_bl);
 }
@@ -520,7 +557,17 @@ std::ostream &operator<<(
     }
   }
 
-  lhs << "])";
+  lhs << "]";
+  if (!rhs.pushed.empty() || rhs.push_declined) {
+    lhs << ", pushed=" << rhs.pushed.size();
+    if (!rhs.pushed.empty()) {
+      lhs << ", pushed_crc=0x" << std::hex << rhs.pushed_crc << std::dec;
+    }
+    if (rhs.push_declined) {
+      lhs << ", push_declined";
+    }
+  }
+  lhs << ")";
   return lhs;
 }
 
@@ -600,6 +647,23 @@ void ECSubReadReply::dump(Formatter* f) const
 	f.dump_stream("oid") << oid;
         f.dump_unsigned("omap_complete", complete);
       });
+
+  // what a gather shard placed in the primary's window, or that it
+  // placed nothing: map<hobject_t, list<pair<offset, length>>>
+  f->with_obj_array_section(
+      "object_pushed"sv, pushed,
+      [](Formatter& f, const hobject_t& oid,
+	 const std::list<std::pair<uint64_t, uint64_t>>& l) {
+	f.dump_stream("oid") << oid;
+	f.with_obj_array_section(
+	    "extent", l,
+	    [](Formatter& f, const std::pair<uint64_t, uint64_t>& e) {
+	      f.dump_unsigned("off", e.first);
+	      f.dump_unsigned("len", e.second);
+	    });
+      });
+  f->dump_unsigned("pushed_crc", pushed_crc);
+  f->dump_bool("push_declined", push_declined);
 }
 
 list<ECSubReadReply> ECSubReadReply::generate_test_instances()
@@ -626,5 +690,20 @@ list<ECSubReadReply> ECSubReadReply::generate_test_instances()
   o.back().attrs_read[hoid2]["foo"] = bl;
   o.back().attrs_read[hoid2]["_"] = bl2;
   o.back().errors[hoid1] = -2;
+  // a gather shard that pushed its data into the primary's window
+  o.push_back(ECSubReadReply());
+  o.back().from = pg_shard_t(2, shard_id_t(1));
+  o.back().tid = 301;
+  o.back().pushed[hoid1].emplace_back(0, 4096);
+  o.back().pushed[hoid1].emplace_back(8192, 4096);
+  o.back().pushed[hoid2].emplace_back(0, 512);
+  o.back().pushed_crc = 0x1234abcd;
+  o.back().attrs_read[hoid1]["_"] = bl;
+  // and one that sent nothing into it, and replies inline
+  o.push_back(ECSubReadReply());
+  o.back().from = pg_shard_t(2, shard_id_t(1));
+  o.back().tid = 302;
+  o.back().buffers_read[hoid1].push_back(make_pair(0, bl2));
+  o.back().push_declined = true;
   return o;
 }

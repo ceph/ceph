@@ -33,6 +33,15 @@ private:
 
 public:
   std::optional<CoroHandles> coro_handles = std::nullopt;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  /// the reply to the request's reads was handed to their pushes, which
+  /// may write the client's windows until the pool's lease plus drain
+  /// after receipt: no other reply to the request may say that no
+  /// transfer started (reply_op_error(), complete_read_ctx()). Set
+  /// under the PG lock before the first push is submitted, and never
+  /// cleared.
+  bool oob_push_started = false;
+#endif
 
   int maybe_init_op_info(const OSDMap &osdmap);
 
@@ -81,6 +90,7 @@ private:
   uint8_t latest_flag_point;
   const char* last_event_detail = nullptr;
   utime_t dequeued_time;
+  ceph::mono_clock::time_point mono_recv_stamp;
   static const uint8_t flag_queued_for_pg=1 << 0;
   static const uint8_t flag_reached_pg =  1 << 1;
   static const uint8_t flag_delayed =     1 << 2;
@@ -180,6 +190,14 @@ public:
   }
   void mark_commit_sent() {
     mark_flag_point(flag_commit_sent, "commit_sent");
+  }
+
+  /// when the message arrived, on the monotonic clock: fixed once, as
+  /// the OpRequest is built, from the age of its recv_stamp then, so
+  /// that no later step of the wall clock moves an age taken from it,
+  /// as the out-of-band delivery lease is
+  ceph::mono_clock::time_point get_mono_recv_stamp() const {
+    return mono_recv_stamp;
   }
 
   utime_t get_dequeued_time() const {

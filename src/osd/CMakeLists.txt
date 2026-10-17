@@ -58,10 +58,19 @@ set(osd_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}
   ${osdc_osd_srcs}
+  oob_placement.cc
+  oob_read_delivery.cc
+  oob_xfer.cc
   osd_tracer.cc)
 if(HAS_VTA)
   set_source_files_properties(osdcap.cc
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
+if(WITH_RADOSGW_CUOBJ)
+  list(APPEND osd_srcs osd_cuobj.cc osd_dc_target.cc)
+endif()
+if(WITH_OOB_OFI)
+  list(APPEND osd_srcs osd_ofi.cc)
 endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
@@ -69,6 +78,15 @@ target_link_libraries(osd
   PRIVATE
     legacy-option-headers
     os heap_profiler cpu_profiler ${FMT_LIB} ${CRYPTO_LIBS} ${CMAKE_DL_LIBS})
+if(WITH_RADOSGW_CUOBJ)
+  # osd_dc_target.cc calls mlx5dv_create_qp()
+  target_include_directories(osd PRIVATE ${MLX5DV_INCLUDE_DIR})
+  target_link_libraries(osd PRIVATE ${CUOBJSERVER_LIBRARY} IBVerbs::verbs
+    ${MLX5_LIBRARY})
+endif()
+if(WITH_OOB_OFI)
+  target_link_libraries(osd PRIVATE ofi_rma)
+endif()
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

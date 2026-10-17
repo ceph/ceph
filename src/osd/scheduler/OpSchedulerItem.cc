@@ -195,6 +195,18 @@ void PGRecoveryContext::run(
   pg->unlock();
 }
 
+#ifdef HAVE_OSD_OOB_DELIVERY
+void PGOobReadKick::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->oob_read_kick(head);
+  pg->unlock();
+}
+#endif
+
 void PGDelete::run(
   OSD *osd,
   OSDShard *sdata,

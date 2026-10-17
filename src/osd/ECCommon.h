@@ -46,6 +46,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #include "ECTransaction.h"
 #include "ECExtentCache.h"
 #include "ECListener.h"
+#include "osd/oob_executor.h"
 #include "common/dout.h"
 
 //forward declaration
@@ -210,6 +211,9 @@ struct ECCommon {
     /// shards whose own store failed the read with a media error (-EIO)
     /// and that the decode did without: a client read has them repaired
     std::set<pg_shard_t> media_errors;
+    /// shards read again, inline, after their push into a gather window
+    /// failed (-EBADMSG): a second failure is final
+    std::set<pg_shard_t> gather_rereads;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
     std::optional<ceph::buffer::list> omap_header;
     std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
@@ -226,6 +230,9 @@ struct ECCommon {
       os << "read_result_t(r=" << r << ", errors=" << errors;
       if (!media_errors.empty()) {
         os << ", media_errors=" << media_errors;
+      }
+      if (!gather_rereads.empty()) {
+        os << ", gather_rereads=" << gather_rereads;
       }
       if (attrs) {
         os << ", attrs=" << *(attrs);
@@ -295,6 +302,55 @@ struct ECCommon {
     }
   };
 
+  /**
+   * Windows a primary lent to peer shards for one gather. A shard that
+   * received a window's token may still write into it until the pool's
+   * delivery lease runs out, so a window whose data was not consumed -
+   * the shard replied inline, the read was cancelled or restarted - is
+   * returned with that quarantine.
+   */
+  struct gather_windows_t {
+    /// a sub-read of fewer bytes comes back in its reply: a push would
+    /// cost it a staging buffer, an RDMA write, a crc32c on each side
+    /// and, over libfabric, the window's new key, more than the
+    /// messenger's copy, and hold one of the few windows the OSD can
+    /// lend
+    static constexpr uint64_t min_bytes = 64 << 10;
+
+    OSDOobExecutor* exec = nullptr;
+    uint64_t quarantine_ms = 0;
+    std::map<pg_shard_t, OSDOobExecutor::window_t> windows;
+    /// a push failed: the reads this gather still sends, to read that
+    /// shard again or to rebuild what it lost, come back inline
+    bool inline_only = false;
+
+    gather_windows_t() = default;
+    gather_windows_t(const gather_windows_t&) = delete;
+    gather_windows_t(gather_windows_t&& o) noexcept
+      : exec(o.exec), quarantine_ms(o.quarantine_ms),
+	windows(std::move(o.windows)), inline_only(o.inline_only) {
+      o.windows.clear();
+    }
+    ~gather_windows_t() {
+      for (auto& [shard, w] : windows) {
+	exec->release_window(w.id, quarantine_ms);
+      }
+    }
+    /// the window lent to shard, or null
+    const OSDOobExecutor::window_t* find(pg_shard_t shard) const {
+      auto it = windows.find(shard);
+      return it == windows.end() ? nullptr : &it->second;
+    }
+    /// return shard's window; clean when its data was consumed
+    void release(pg_shard_t shard, bool clean) {
+      auto it = windows.find(shard);
+      if (it != windows.end()) {
+	exec->release_window(it->second.id, clean ? 0 : quarantine_ms);
+	windows.erase(it);
+      }
+    }
+  };
+
   struct ReadOp {
     int priority;
     ceph_tid_t tid;
@@ -321,6 +377,17 @@ struct ECCommon {
     std::set<pg_shard_t> in_progress;
 
     std::list<ECUtil::log_entry_t> debug_log;
+
+    /// windows peer shards push their reads into (oob_cluster_transport)
+    gather_windows_t gather;
+    /// whether this read lends gather windows. Only a client read that
+    /// is not a fast read does. When a push fails its checksum, a client
+    /// read reads that shard again inline, and if that fails too
+    /// decodes from the other shards, which the read of a partial
+    /// write, needing those very shards, cannot. A fast read completes
+    /// once enough shards replied, and the windows of those that had
+    /// not would stay out of use for the quarantine
+    bool lends_windows = false;
 
     ReadOp(
         int priority,
@@ -387,7 +454,8 @@ struct ECCommon {
         std::map<hobject_t, read_request_t> &to_read,
         bool do_redundant_reads,
         bool for_recovery,
-        std::unique_ptr<ReadCompleter> on_complete);
+        std::unique_ptr<ReadCompleter> on_complete,
+        bool lend_windows = false);
 
     void do_read_op(ReadOp &rop);
 

@@ -282,6 +282,16 @@ add_executable(unittest_oob_gid
 add_ceph_unittest(unittest_oob_gid)
 target_link_libraries(unittest_oob_gid ceph-common)
 
+if(LINUX)
+  # unittest_oob_caps: keeping and raising CAP_NET_RAW for the uet
+  # provider across the switch to the ceph user
+  add_executable(unittest_oob_caps
+    test_oob_caps.cc
+    )
+  add_ceph_unittest(unittest_oob_caps)
+  target_link_libraries(unittest_oob_caps ceph-common cap)
+endif()
+
 if(WITH_OOB_OFI AND NOT WITH_SYSTEM_OFI_RMA)
   # unittest_ofi_rma: the ofi-rma submodule's own tests, token encoding
   # and writes over the tcp and shm providers, which need no special

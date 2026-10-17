@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <iterator>
+
+#include <fmt/format.h>
 
 #include "common/Formatter.h"
 
@@ -63,6 +66,20 @@ std::optional<token_window> parse_rdma_token(std::string_view token)
     return std::nullopt;
   }
   return token_window{*addr, *size};
+}
+
+std::string format_cuobj_descriptor(uint64_t addr, uint32_t size,
+				    uint32_t rkey, uint16_t lid,
+				    uint32_t dctn,
+				    std::span<const uint8_t, 16> gid)
+{
+  // has_gid is always 1: a writer addresses the target by its GID
+  std::string token = fmt::format("{:016x}:{:08x}:{:08x}:{:04x}:{:06x}:1:",
+				  addr, size, rkey, lid, dctn);
+  for (uint8_t b : gid) {
+    fmt::format_to(std::back_inserter(token), "{:02x}", b);
+  }
+  return token;
 }
 
 bool is_ofi_token(std::string_view token)

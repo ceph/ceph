@@ -451,6 +451,12 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual shard_id_map<bufferlist> ec_decode_acting_set(
        const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
    virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
+   /// whether the EC code serves a read of one shard's part with no
+   /// decode (ECUtil::stripe_info_t::supports_direct_reads()), asked
+   /// without a copy of the stripe info; false for a replicated pool
+   virtual bool ec_supports_direct_reads() const {
+     return false;
+   }
    virtual bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
      return false; // Only EC uses ec_omap_journal
    };

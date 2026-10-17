@@ -40,6 +40,9 @@ struct ECSubWriteReply;
 struct ECSubRead;
 struct ECSubReadReply;
 class ECSwitch;
+namespace ceph::osd::oob {
+struct sub_read_push;
+}
 
 class ECSwitch;
 
@@ -84,6 +87,20 @@ class ECBackend : public ECCommon {
       ECSubReadReply *reply,
       const ZTracer::Trace &trace
     );
+  /**
+   * The push of a sub-read's data into the primary's gather window (the
+   * op's push_token), once handle_sub_read() filled in reply: checks
+   * it, finds the executor, takes the data read and fixes the bounds of
+   * the transfer, from received, when the sub-read arrived on the
+   * monotonic clock (OpRequest::get_mono_recv_stamp()). Marks the
+   * reply as having sent nothing into the window, which a push that
+   * starts revises, and returns the push, or nullopt when the reply
+   * goes inline as it is. Starts no transfer.
+   */
+  std::optional<ceph::osd::oob::sub_read_push> prepare_sub_read_push(
+    const ECSubRead &op, ECSubReadReply *reply,
+    ceph::mono_clock::time_point received);
+
   void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
@@ -206,6 +223,9 @@ class ECBackend : public ECCommon {
   shard_id_map<bufferlist> ec_decode_acting_set(
       const shard_id_map<bufferlist> &shard_map, int chunk_size) const;
   ECUtil::stripe_info_t ec_get_sinfo() const;
+  bool ec_supports_direct_reads() const {
+    return sinfo.supports_direct_reads();
+  }
 
  private:
   friend struct ECRecoveryHandle;

@@ -45,6 +45,15 @@ class PGLSFilter;
 class HitSet;
 struct TierAgentState;
 class OSDService;
+#ifdef HAVE_OSD_OOB_DELIVERY
+namespace ceph::osd::oob {
+struct bounds_t;
+struct ec_direct_geometry;
+class pg_perf_stats;
+struct read_push;
+template <typename Op> class read_fences;
+}
+#endif
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg);
 void intrusive_ptr_release(PrimaryLogPG *pg);
@@ -1244,6 +1253,10 @@ protected:
   void reply_ctx(OpContext *ctx, int err);
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
+  /// the part of log_op_stats() that counts in the OSD's logger, which
+  /// needs no PG and runs on any thread; returns the op's latency
+  static utime_t log_op_osd_stats(OSDService *osd, const OpRequest& op,
+				  uint64_t inb, uint64_t outb);
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   interval_set<uint64_t>& modified, uint64_t offset,
@@ -1333,6 +1346,70 @@ protected:
   int prepare_transaction(OpContext *ctx);
   std::list<std::pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
+#ifdef HAVE_OSD_OOB_DELIVERY
+  /**
+   * Prepare to deliver the read reply's data out of band per the
+   * MOSDOp's per-op rdma delivery descriptors: checks the request, and
+   * for each op carrying a descriptor builds an op-aware placement plan
+   * (linear, sparse-extent or EC-direct interleave), finds the executor
+   * for its token and fixes the bounds of its transfer. Returns the
+   * pushes to run. An op that will not be pushed keeps its data inline
+   * in rops, and is reported declined in oob[i], unless the descriptors
+   * do not mirror the ops, when no op gets a result. Starts no
+   * transfer.
+   */
+  std::vector<ceph::osd::oob::read_push> deliver_oob_prepare(
+    OpContext *ctx, const std::vector<OSDOp>& rops,
+    std::vector<ceph::rdma::oob_result_t>& oob);
+  /**
+   * Whether deliver_oob_prepare() declines every descriptor of ctx's
+   * request, whatever its reads find: an earlier attempt of it may still
+   * write the windows, the PG's read lease ran out, or the pool's
+   * delivery lease did since receipt. Logs why, as caller. *bounds, when
+   * given, gets the bounds of the request's transfers otherwise.
+   */
+  bool oob_read_declined(const OpContext *ctx, const char *caller,
+			 ceph::osd::oob::bounds_t *bounds = nullptr);
+  /// whether oob_ec_direct_geometry() has a geometry for ec_direct,
+  /// without the copy of the stripe info that the geometry takes
+  bool oob_ec_direct_possible(bool ec_direct) const;
+  /// the stripe geometry that the plan of an EC shard-direct read needs
+  /// (ec_direct), when the pool allows such reads; nullopt otherwise
+  std::optional<ceph::osd::oob::ec_direct_geometry> oob_ec_direct_geometry(
+    bool ec_direct);
+  /**
+   * Run the pushes deliver_oob_prepare() returned, send the reply, with
+   * rops and oob back in it, once every push is over, and close ctx. A
+   * push that placed its op's data strips it from the op, and each
+   * records its result in oob. With transfer threads the pushes run
+   * there: ctx is closed, releasing the object's lock, before the
+   * reply leaves, and the reply leaves once the last push is over, from
+   * the transfer thread that ran it, or from this thread, before this
+   * returns, when every push ended first. A push that runs on this
+   * thread (no transfer threads, or an executor whose transfers stay on
+   * the op threads) runs before this returns, and when all do, the
+   * reply leaves before ctx is closed.
+   */
+  void deliver_oob(OpContext *ctx, MOSDOpReply *reply,
+		   std::vector<OSDOp>&& rops,
+		   std::vector<ceph::rdma::oob_result_t>&& oob,
+		   std::vector<ceph::osd::oob::read_push>&& pushes);
+  /**
+   * The objects whose reads handed their pushes off, and the client ops
+   * that wait for the replies of those reads
+   * (ceph::osd::oob::read_fences). A PG that stays primary keeps them
+   * through an interval change, since such a reply may still be out.
+   */
+  std::unique_ptr<ceph::osd::oob::read_fences<OpRequestRef>> oob_read_fences;
+  /**
+   * The check at the top of do_op(), before every list an op can wait in
+   * and every check that can answer it: an op that may change an object
+   * whose read replies are out waits for them, and so does any client op
+   * on an object behind one that waits. Returns true when op waits.
+   */
+  bool maybe_wait_for_oob_reads(OpRequestRef& op);
+  void dump_oob_read_fences(ceph::Formatter *f) const;
+#endif
 
   // pg on-disk content
   void check_local() override;
@@ -1612,6 +1689,9 @@ public:
 		  OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  void oob_read_kick(const hobject_t& head) override;
+#endif
   void snap_trimmer_scrub_complete() override;
   int do_osd_ops(OpContext *ctx, std::vector<OSDOp>& ops);
 
@@ -2000,6 +2080,12 @@ public:
   bool check_failsafe_full() override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
   struct ECListener *get_eclistener() override;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  OSDOobExecutor* oob_executor_for(const std::string& token) override;
+  int oob_submit(std::unique_ptr<ceph::osd::oob::xfer_job>& j) override;
+  bool oob_runs_inline(const OSDOobExecutor* e) const override;
+  OSDOobExecutor* oob_gather_executor() override;
+#endif
   const pg_missing_const_i * maybe_get_shard_missing(
     pg_shard_t peer) const {
     if (peer == primary_shard()) {
@@ -2056,6 +2142,12 @@ public:
 
 private:
   DynamicPerfStats m_dynamic_perf_stats;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  /// the stats of the reads whose replies leave once their pushes are
+  /// over (deliver_oob()), which get_dynamic_perf_stats() reports with
+  /// m_dynamic_perf_stats
+  std::shared_ptr<ceph::osd::oob::pg_perf_stats> oob_perf_stats;
+#endif
 
 };
 

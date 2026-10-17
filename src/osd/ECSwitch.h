@@ -409,6 +409,10 @@ public:
     return {0, 0, 0};
   }
 
+  bool ec_supports_direct_reads() const override {
+    return is_optimized() && optimized.ec_supports_direct_reads();
+  }
+
   int objects_get_attrs(
     const hobject_t &hoid,
     std::map<std::string, ceph::buffer::list, std::less<>> *out) override

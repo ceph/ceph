@@ -68,6 +68,65 @@ add_executable(unittest_ec_coroutines
 add_ceph_unittest(unittest_ec_coroutines)
 target_link_libraries(unittest_ec_coroutines Boost::context)
 
+# unittest_oob_placement
+add_executable(unittest_oob_placement
+  test_oob_placement.cc
+  )
+add_ceph_unittest(unittest_oob_placement)
+target_link_libraries(unittest_oob_placement osd global)
+
+# unittest_oob_abandoned
+add_executable(unittest_oob_abandoned
+  test_oob_abandoned.cc
+  )
+add_ceph_unittest(unittest_oob_abandoned)
+
+# unittest_oob_xfer
+add_executable(unittest_oob_xfer
+  test_oob_xfer.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_oob_xfer)
+target_link_libraries(unittest_oob_xfer osd global)
+
+# unittest_oob_read_delivery
+add_executable(unittest_oob_read_delivery
+  test_oob_read_delivery.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_oob_read_delivery)
+target_link_libraries(unittest_oob_read_delivery osd global)
+
+# unittest_ec_gather
+add_executable(unittest_ec_gather
+  test_ec_gather.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_ec_gather)
+target_link_libraries(unittest_ec_gather osd global)
+
+if(WITH_OOB_OFI)
+  # unittest_osd_ofi: the libfabric executor over the tcp provider, which
+  # needs no special hardware
+  add_executable(unittest_osd_ofi
+    test_osd_ofi.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_osd_ofi)
+  target_link_libraries(unittest_osd_ofi osd global)
+  # ceph_test_osd_oob_read: reads with out-of-band delivery over the tcp
+  # provider, for qa/standalone/osd/osd-oob-async.sh
+  add_executable(ceph_test_osd_oob_read
+    ceph_test_osd_oob_read.cc
+    )
+  target_link_libraries(ceph_test_osd_oob_read librados ceph-common ofi_rma)
+  install(TARGETS
+    ceph_test_osd_oob_read
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+  # built by make check too, so that a change that breaks it fails there
+  add_dependencies(tests ceph_test_osd_oob_read)
+endif()
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc

@@ -64,6 +64,11 @@
 #include "OpRequest.h"
 #include "PG.h"
 #include "Session.h"
+#ifdef HAVE_OSD_OOB_DELIVERY
+#include "oob_executor.h"
+#include "osd/oob_placement.h"
+#include "osd/oob_read_delivery.h"
+#endif
 #include "osd/oob_xfer.h"
 
 // required includes order:
@@ -1087,6 +1092,10 @@ void PrimaryLogPG::do_command(
       agent_state->dump(f.get());
     f->close_section();
 
+#ifdef HAVE_OSD_OOB_DELIVERY
+    dump_oob_read_fences(f.get());
+#endif
+
     f->close_section();
   }
   else if (prefix == "log") {
@@ -1797,6 +1806,11 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
   temp_seq(0),
   snap_trimmer_machine(this)
 {
+#ifdef HAVE_OSD_OOB_DELIVERY
+  oob_perf_stats = std::make_shared<ceph::osd::oob::pg_perf_stats>(p);
+  oob_read_fences =
+    std::make_unique<ceph::osd::oob::read_fences<OpRequestRef>>();
+#endif
   recovery_state.set_backend_predicates(
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
@@ -2626,6 +2640,15 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     op->reset_desc();
     m->clear_payload();
   }
+
+#ifdef HAVE_OSD_OOB_DELIVERY
+  // Before anything else that can make the op wait or answer it: an op
+  // checked later could enter a list ahead of the op it should follow
+  // (maybe_wait_for_oob_reads())
+  if (maybe_wait_for_oob_reads(op)) {
+    return;
+  }
+#endif
 
   if (coro_op_in_flight) {
     dout(20) << __func__ << ": coroutine op in flight, queuing " << op << dendl;
@@ -4623,6 +4646,24 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
 				const uint64_t outb)
 {
   auto m = op.get_req<MOSDOp>();
+  const utime_t latency = log_op_osd_stats(osd, op, inb, outb);
+
+  dout(15) << "log_op_stats " << *m
+	   << " inb " << inb
+	   << " outb " << outb
+	   << " lat " << latency << dendl;
+
+  if (m_dynamic_perf_stats.is_enabled()) {
+    m_dynamic_perf_stats.add(osd->get_nodeid(), info, op, inb, outb, latency);
+  }
+}
+
+utime_t PrimaryLogPG::log_op_osd_stats(OSDService *osd,
+				       const OpRequest& op,
+				       const uint64_t inb,
+				       const uint64_t outb)
+{
+  auto m = op.get_req<MOSDOp>();
   const utime_t now = ceph_clock_now();
 
   const utime_t latency = now - m->get_recv_stamp();
@@ -4659,25 +4700,30 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
     ceph_abort();
   }
 
-  dout(15) << "log_op_stats " << *m
-	   << " inb " << inb
-	   << " outb " << outb
-	   << " lat " << latency << dendl;
-
-  if (m_dynamic_perf_stats.is_enabled()) {
-    m_dynamic_perf_stats.add(osd->get_nodeid(), info, op, inb, outb, latency);
-  }
+  return latency;
 }
 
 void PrimaryLogPG::set_dynamic_perf_stats_queries(
     const std::list<OSDPerfMetricQuery> &queries)
 {
   m_dynamic_perf_stats.set_queries(queries);
+#ifdef HAVE_OSD_OOB_DELIVERY
+  oob_perf_stats->set_queries(queries);
+#endif
 }
 
 void PrimaryLogPG::get_dynamic_perf_stats(DynamicPerfStats *stats)
 {
+#ifdef HAVE_OSD_OOB_DELIVERY
+  // *stats comes with no counts and the OSD's queries, which the stats
+  // of the reads whose replies left after their pushes take too, as
+  // m_dynamic_perf_stats does in the swap
+  auto pushed = oob_perf_stats->take(*stats);
+#endif
   std::swap(m_dynamic_perf_stats, *stats);
+#ifdef HAVE_OSD_OOB_DELIVERY
+  stats->merge(pushed);
+#endif
 }
 
 void PrimaryLogPG::do_scan(
@@ -9526,6 +9572,283 @@ void PrimaryLogPG::apply_stats(
   m_scrubber->stats_of_handled_objects(delta_stats, soid);
 }
 
+#ifdef HAVE_OSD_OOB_DELIVERY
+std::vector<ceph::osd::oob::read_push> PrimaryLogPG::deliver_oob_prepare(
+  OpContext *ctx, const std::vector<OSDOp>& rops,
+  std::vector<ceph::rdma::oob_result_t>& oob)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  const auto& deliveries = m->get_rdma_deliveries();
+  ceph_assert(oob.size() == rops.size());
+  std::vector<ceph::osd::oob::read_push> pushes;
+  if (deliveries.size() != rops.size()) {
+    // the descriptor vector must mirror the ops; anything else is
+    // malformed and everything stays inline
+    dout(10) << __func__ << " " << deliveries.size()
+	     << " delivery descriptors for " << rops.size()
+	     << " ops, delivering inline" << dendl;
+    return pushes;
+  }
+  ceph::osd::oob::bounds_t bounds;
+  if (oob_read_declined(ctx, __func__, &bounds)) {
+    ceph::osd::oob::decline_all(deliveries, oob);
+    return pushes;
+  }
+  const bool ec_direct = ctx->op->ec_direct_read();
+  const auto ec = oob_ec_direct_geometry(ec_direct);
+  for (size_t i = 0; i < rops.size(); i++) {
+    const auto& d = deliveries[i];
+    if (d.empty()) {
+      continue;
+    }
+    auto p = ceph::osd::oob::plan_read_push(i, rops[i], d, ec_direct, ec);
+    // the descriptor is opaque here: the executor that recognizes the
+    // token's transport places the data, and a token nothing serves
+    // stays inline
+    OSDOobExecutor* exec = p ? osd->oob_executor_for(d.token) : nullptr;
+    // the writes must land, or be cut off, by receipt plus the pool's
+    // lease plus its drain: past that the window's owner may reuse it
+    if (!exec || ceph::mono_clock::now() >= bounds.land_by) {
+      // inline: declined, since nothing of it went out
+      oob[i].flags |= ceph::rdma::attempt_flags(false, false, false);
+      continue;
+    }
+    p->exec = exec;
+    p->token = d.token;
+    p->bounds = bounds;
+    pushes.push_back(std::move(*p));
+  }
+  return pushes;
+}
+
+bool PrimaryLogPG::oob_read_declined(
+  const OpContext *ctx, const char *caller, ceph::osd::oob::bounds_t *out)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  // a resent op could double-execute against client memory while the
+  // superseded attempt's write is still in flight on another OSD;
+  // deliver inline so at most one attempt ever writes the window -
+  // unless the client vouches that every earlier attempt was answered
+  // declined or landed (a replica bounced it, say), when none can
+  if (m->get_retry_attempt() > 0 &&
+      !ceph::rdma::prior_attempts_settled(m->get_rdma_deliveries())) {
+    dout(10) << caller << " attempt " << m->get_retry_attempt()
+	     << " and earlier ones not settled, delivering inline" << dendl;
+    return true;
+  }
+  // check_laggy ran at dispatch, but the push runs after the read
+  // completes; a read that stalled in between can find the PG's read
+  // lease has lapsed. Past readable_until another acting set may be
+  // serving this object (and the client re-driving the request into
+  // the same window), so a push now would be a stale write - deliver
+  // inline, the same way a laggy PG stops serving reads.
+  if (osd->get_mnow() > recovery_state.get_readable_until()) {
+    dout(10) << caller << " past readable_until "
+	     << recovery_state.get_readable_until()
+	     << ", delivering inline" << dendl;
+    return true;
+  }
+  // every push of the request keeps to the same bounds, fixed here
+  // under the PG lock: it starts before the lease runs out, and not
+  // past readable_until as it is now, and its writes land, or are cut
+  // off, by receipt plus the lease plus the pool's drain. No step of
+  // the wall clock moves them.
+  const double lease = pool.info.get_rdma_delivery_lease();
+  const auto bounds = ceph::osd::oob::make_bounds(
+    ctx->op->get_mono_recv_stamp(), lease,
+    pool.info.get_rdma_delivery_drain(),
+    recovery_state.get_readable_until(), osd->get_mnow());
+  // the pool's delivery lease bounds how long after receipt this OSD
+  // may still initiate a transfer against the descriptor; a client
+  // that abandoned the request reasons about window reuse from the
+  // same bound, so a late push must degrade to inline rather than
+  // race that reuse. The bounds are monotonic, as the read lease's
+  // check above is: a step of the wall clock since receipt does not
+  // hide it
+  if (ceph::osd::oob::lease_expired(bounds)) {
+    dout(10) << caller << " lease of " << lease << "s expired, "
+	     << "delivering inline" << dendl;
+    return true;
+  }
+  if (out) {
+    *out = bounds;
+  }
+  return false;
+}
+
+bool PrimaryLogPG::oob_ec_direct_possible(bool ec_direct) const
+{
+  return ec_direct && pool.info.is_erasure() &&
+    pool.info.allows_ecoptimizations() &&
+    pgbackend->ec_supports_direct_reads();
+}
+
+std::optional<ceph::osd::oob::ec_direct_geometry>
+PrimaryLogPG::oob_ec_direct_geometry(bool ec_direct)
+{
+  if (!oob_ec_direct_possible(ec_direct)) {
+    return std::nullopt;
+  }
+  const auto sinfo = pgbackend->ec_get_sinfo();
+  ceph::osd::oob::ec_direct_geometry g;
+  g.chunk_size = sinfo.get_chunk_size();
+  g.k = sinfo.get_k();
+  g.raw_shard = static_cast<uint32_t>(
+    static_cast<int>(sinfo.get_raw_shard(pg_whoami.shard)));
+  return g;
+}
+
+void PrimaryLogPG::deliver_oob(OpContext *ctx, MOSDOpReply *reply,
+			       std::vector<OSDOp>&& rops,
+			       std::vector<ceph::rdma::oob_result_t>&& oob,
+			       std::vector<ceph::osd::oob::read_push>&& pushes)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  const bool log_stats = !ctx->ignore_log_op_stats;
+  const hobject_t head = m->get_hobj().get_head();
+  // the reply as the fence of the object sees it, when there is one
+  auto out = std::make_shared<ceph::osd::oob::read_out>();
+  // the reply waits until every push is over, and the last one sends
+  // it. Nothing in it needs the PG: what it reports besides the pushes'
+  // results was fixed under the PG lock
+  auto join = std::make_shared<ceph::osd::oob::oob_reply>(
+    reply, std::move(rops), std::move(oob),
+    [osd = osd, op = ctx->op, con = m->get_connection(), log_stats,
+     inb = ctx->bytes_written, outb = ctx->bytes_read,
+     pgid = info.pgid, pg_stats = oob_perf_stats, out, head,
+     epoch = get_osdmap_epoch()](MOSDOpReply *r) {
+      if (log_stats) {
+	// from receipt to reply, the pushes included, in the OSD's logger
+	// and in the PG's dynamic perf stats, as log_op_stats() does
+	const utime_t latency = log_op_osd_stats(osd, *op, inb, outb);
+	lgeneric_subdout(osd->cct, osd, 15)
+	  << "osd." << osd->whoami << " " << pgid << " log_op_stats "
+	  << *op->get_req() << " inb " << inb << " outb " << outb
+	  << " lat " << latency << dendl;
+	pg_stats->add(osd->get_nodeid(), *op, inb, outb, latency);
+      }
+      op->mark_event("oob_settled");
+      osd->send_message_osd_client(r, con);
+      // only now may the ops that the fence of the object holds run: the
+      // messenger sends their replies after this one
+      if (out->settle()) {
+	osd->queue_oob_read_kick(pgid, epoch, op->get_req()->get_cost(),
+				 op->get_req()->get_source().num(), head);
+      }
+    });
+  // from here on a push of this attempt may be writing the client's
+  // windows, and no reply to it may say that none started
+  ctx->op->oob_push_started = true;
+  const bool handed_off = ceph::osd::oob::submit_pushes(
+    cct, osd->oob_transfers(), join, m->get_hobj().oid.name,
+    std::move(pushes),
+    [osd = osd](const OSDOobExecutor* e) { return osd->oob_runs_inline(e); });
+  if (log_stats) {
+    // as complete_read_ctx() does; the op's latency, in the OSD's logger
+    // and in the PG's dynamic perf stats, goes with the reply
+    publish_stats_to_osd();
+  }
+  if (handed_off) {
+    dout(20) << __func__ << " " << *m << " handed off to the transfer "
+	     << "threads" << dendl;
+    ctx->op->mark_event("oob_handed_off");
+    // the transfer threads run the pushes, and the reply goes out once
+    // the last is over: from its transfer thread, or from here, at the
+    // guard drop, when every push ended first. Before that the request
+    // lets go of its unit of the client's message throttle, so that a
+    // slow transfer does not hold back the client's other messages, and
+    // of the object's lock: the reply's data, versions and result were
+    // fixed under it. The op is in no list of the PG from here on, so an
+    // interval change neither requeues nor runs it again; a reply that
+    // leaves after the client resent is dropped by the client. Until the
+    // reply left, an op that may change the object waits in its fence,
+    // and so does any op on it behind one that waits: a client that
+    // sends the read again after the PG split, or after its primary
+    // changed, still gets the object as it was before the ops it sent
+    // after the read. A replica serves no op that changes the object
+    if (is_primary()) {
+      oob_read_fences->add(head, out);
+    }
+    ceph::osd::oob::hand_off(join, [this, ctx] {
+      ctx->op->get_nonconst_req()->release_message_throttle();
+      close_op_ctx(ctx);
+    });
+    return;
+  }
+  // drop the guard: every push ran on this thread, so the reply goes out
+  // now, before the object's lock is released
+  join->put();
+  close_op_ctx(ctx);
+}
+
+bool PrimaryLogPG::maybe_wait_for_oob_reads(OpRequestRef& op)
+{
+  // every client op comes here: on a PG without fences it goes on at once
+  if (oob_read_fences->empty()) {
+    return false;
+  }
+  auto m = op->get_req<MOSDOp>();
+  // Two kinds pass, as they pass the object's other blocks: the ops of a
+  // cache tier's flush, which deliver nothing out of band, and pg ops,
+  // which do_pg_op() runs whatever object they name. A pg op is told by
+  // its ops, as do_op_impl() routes it, not by the flag the client sets
+  if ((m->has_flag(CEPH_OSD_FLAG_FLUSH) && !m->has_rdma_delivery()) ||
+      std::any_of(m->ops.begin(), m->ops.end(), [](const OSDOp& o) {
+	return ceph_osd_op_type_pg(o.op.op);
+      })) {
+    return false;
+  }
+  const hobject_t head = m->get_hobj().get_head();
+  if (!oob_read_fences->wait(
+	head, op, ceph::osd::oob::may_change_object(m->ops, m->get_flags()),
+	ceph_clock_now())) {
+    return false;
+  }
+  dout(10) << __func__ << " " << *m << " waits for the replies of the "
+	   << "reads of " << head << dendl;
+  op->mark_delayed("waiting for oob read replies");
+  return true;
+}
+
+void PrimaryLogPG::oob_read_kick(const hobject_t& head)
+{
+  auto ls = oob_read_fences->kick(head);
+  if (ls.empty()) {
+    // another reply of a read of head is out, or nothing waits; or an
+    // interval change took the ops, which run again or went away
+    dout(20) << __func__ << " " << head << ": nothing to run" << dendl;
+    return;
+  }
+  // in one call, which keeps their order
+  dout(10) << __func__ << " " << head << ": the replies of its reads "
+	   << "left, requeuing " << ls.size() << " ops" << dendl;
+  requeue_ops(ls);
+}
+
+void PrimaryLogPG::dump_oob_read_fences(ceph::Formatter *f) const
+{
+  const utime_t now = ceph_clock_now();
+  f->open_array_section("oob_read_fences");
+  for (const auto& [head, fence] : oob_read_fences->get()) {
+    f->open_object_section("fence");
+    f->dump_stream("object") << head;
+    f->dump_unsigned("reads_out", std::count_if(
+      fence.out.begin(), fence.out.end(),
+      [](const auto& r) { return !r->settled(); }));
+    f->open_array_section("waiters");
+    for (const auto& w : fence.waiters) {
+      f->dump_stream("reqid") << w->get_reqid();
+    }
+    f->close_section();
+    if (!fence.waiters.empty()) {
+      f->dump_float("age", now - fence.since);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+#endif // HAVE_OSD_OOB_DELIVERY
+
 void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 {
   auto m = ctx->op->get_req<MOSDOp>();
@@ -9544,17 +9867,59 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
   MOSDOpReply *reply = ctx->reply;
   ctx->reply = nullptr;
 
+  std::vector<OSDOp> rops;
+  std::vector<ceph::rdma::oob_result_t> oob;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  std::vector<ceph::osd::oob::read_push> pushes;
+#endif
   if (m->has_rdma_delivery()) {
-    // this OSD starts no out-of-band transfer: the data goes inline,
-    // and the reply says that each descriptor was declined, so that
-    // the client need not fence its window
-    std::vector<ceph::rdma::oob_result_t> oob(m->ops.size());
-    ceph::osd::oob::decline_all(m->get_rdma_deliveries(), oob);
-    reply->set_oob_results(std::move(oob));
+    // advisory out-of-band delivery: try to RDMA-write each
+    // descriptor-bearing op's read data straight into the client
+    // window; on any refusal or failure the reply simply keeps that
+    // op's data inline. The reply constructor
+    // already copied the ops (shallow bufferlists), so mutate the
+    // reply's own copy via the claim_ops swap.
+    reply->claim_ops(rops);
+    oob.resize(rops.size());
+#ifdef HAVE_OSD_OOB_DELIVERY
+    if (ctx->op->oob_push_started) {
+      // a push of this request was handed off already, and may still be
+      // writing the client's windows. No path runs a request again once
+      // its pushes started; should one, its data goes inline, and its
+      // reply says nothing of the descriptors, rather than that no
+      // transfer started: the client then fences its windows
+      dout(1) << __func__ << " " << *m << " already pushed, delivering "
+	      << "inline" << dendl;
+    } else if (result >= 0 && osd->has_oob_executor()) {
+      pushes = deliver_oob_prepare(ctx, rops, oob);
+    } else
+#endif
+    {
+      // a failed read, or an OSD without a transport (or built without
+      // one), starts no transfer
+      ceph::osd::oob::decline_all(m->get_rdma_deliveries(), oob);
+    }
+  }
+#ifdef HAVE_OSD_OOB_DELIVERY
+  // the ops and results of a read with pushes go back in its reply once
+  // the pushes are over, and deliver_oob() counts its stats
+  const bool pushing = !pushes.empty();
+#else
+  const bool pushing = false;
+#endif
+  if (m->has_rdma_delivery() && !pushing) {
+    // report what was delivered, and what was declined: a client that
+    // learns no transfer started for any op need not fence its window
+    if (std::any_of(oob.begin(), oob.end(), [](const auto& r) {
+	  return r.bytes || r.flags;
+	})) {
+      reply->set_oob_results(std::move(oob));
+    }
+    reply->claim_ops(rops);
   }
 
   if (result >= 0) {
-    if (!ctx->ignore_log_op_stats) {
+    if (!ctx->ignore_log_op_stats && !pushing) {
       log_op_stats(*ctx->op, ctx->bytes_written, ctx->bytes_read);
 
       publish_stats_to_osd();
@@ -9573,6 +9938,14 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 
   reply->set_result(result);
   reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+#ifdef HAVE_OSD_OOB_DELIVERY
+  if (pushing) {
+    // sends the reply, now or once the pushes are over, and closes ctx
+    deliver_oob(ctx, reply, std::move(rops), std::move(oob),
+		std::move(pushes));
+    return;
+  }
+#endif
   osd->send_message_osd_client(reply, m->get_connection());
   close_op_ctx(ctx);
 }
@@ -13449,6 +13822,10 @@ void PrimaryLogPG::on_shutdown()
   object_contexts.clear();
 
   clear_async_reads();
+#ifdef HAVE_OSD_OOB_DELIVERY
+  // no op runs here again; a kick that comes finds no fence
+  oob_read_fences->clear();
+#endif
 
   osd->remote_reserver.cancel_reservation(info.pgid);
   osd->local_reserver.cancel_reservation(info.pgid);
@@ -13637,6 +14014,20 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     waiting_for_cache_not_full.clear();
   }
   objects_blocked_on_cache_full.clear();
+
+#ifdef HAVE_OSD_OOB_DELIVERY
+  // the ops that wait for the replies of reads whose pushes may still run;
+  // the reads in progress came before them. A primary keeps the fences,
+  // and an op that runs again waits again while such a reply is out. Any
+  // other drops them with their ops, which the client sends again to the
+  // primary, after the reads it sent before them
+  if (is_primary()) {
+    auto ls = oob_read_fences->take_waiters();
+    requeue_ops(ls);
+  } else {
+    oob_read_fences->clear();
+  }
+#endif
 
   for (list<pair<OpRequestRef, OpContext*> >::iterator i =
          in_progress_async_reads.begin();
@@ -16682,6 +17073,29 @@ struct ECListener *PrimaryLogPG::get_eclistener()
 {
   return this;
 }
+
+#ifdef HAVE_OSD_OOB_DELIVERY
+OSDOobExecutor* PrimaryLogPG::oob_executor_for(const std::string& token)
+{
+  return osd->oob_executor_for(token);
+}
+
+int PrimaryLogPG::oob_submit(std::unique_ptr<ceph::osd::oob::xfer_job>& j)
+{
+  auto *xfer = osd->oob_transfers();
+  return xfer ? xfer->submit(j) : -ESHUTDOWN;
+}
+
+bool PrimaryLogPG::oob_runs_inline(const OSDOobExecutor* e) const
+{
+  return osd->oob_runs_inline(e);
+}
+
+OSDOobExecutor* PrimaryLogPG::oob_gather_executor()
+{
+  return osd->oob_gather_executor();
+}
+#endif
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg) { pg->get("intptr"); }
 void intrusive_ptr_release(PrimaryLogPG *pg) { pg->put("intptr"); }

@@ -27,6 +27,7 @@
 #include "ECMsgTypes.h"
 #include "PGLog.h"
 #include "osd_tracer.h"
+#include "osd/oob_xfer.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -482,7 +483,8 @@ void ECCommon::ReadPipeline::start_read_op(
     map<hobject_t, read_request_t> &to_read,
     const bool do_redundant_reads,
     const bool for_recovery,
-    std::unique_ptr<ReadCompleter> on_complete) {
+    std::unique_ptr<ReadCompleter> on_complete,
+    const bool lend_windows) {
   ceph_tid_t tid = get_parent()->get_tid();
   ceph_assert(!tid_to_read_map.contains(tid));
   auto &op = tid_to_read_map.emplace(
@@ -494,6 +496,7 @@ void ECCommon::ReadPipeline::start_read_op(
       for_recovery,
       std::move(on_complete),
       std::move(to_read))).first->second;
+  op.lends_windows = lend_windows;
   dout(10) << __func__ << ": starting " << op << dendl;
   if (op.op) {
 #ifndef WITH_CRIMSON
@@ -571,10 +574,45 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   m.reserve(messages.size());
   // Matches default_sub_chunk above: every read is of whole chunks.
   std::pair<int, int> subchunk_info(1, sinfo.get_chunk_size());
+  // a client read may have its peer shards push their data into windows
+  // of this OSD's memory instead of returning it in the reply
+  OSDOobExecutor* gather_exec =
+    rop.lends_windows ? get_parent()->oob_gather_executor() : nullptr;
+  if (gather_exec) {
+    rop.gather.exec = gather_exec;
+    // a shard holding the window's token may start a push within the
+    // pool's lease of receiving the sub-read, and its writes land or
+    // are cut off within the drain after that
+    const auto& pool = get_parent()->get_pool();
+    const auto window = ceph::osd::oob::delivery_window(
+      pool.get_rdma_delivery_lease(), pool.get_rdma_delivery_drain());
+    rop.gather.quarantine_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(window).count();
+  }
   for (auto &&[pg_shard, read]: messages) {
     rop.in_progress.insert(pg_shard);
     shard_to_read_map[pg_shard].insert(rop.tid);
     read.tid = tid;
+    read.push_token.clear();
+    // our own shard is read through a message to ourselves; there is
+    // nothing to gain pushing it back to this OSD
+    if (gather_exec && !rop.gather.inline_only &&
+	pg_shard != get_parent()->whoami_shard() &&
+	!rop.gather.find(pg_shard)) {
+      uint64_t bytes = 0;
+      for (auto& [hoid, extents] : read.to_read) {
+	for (auto& e : extents) {
+	  bytes += e.get<1>();
+	}
+      }
+      // a small sub-read comes back in its reply (@see gather_windows_t)
+      if (bytes >= gather_windows_t::min_bytes) {
+	if (auto w = gather_exec->acquire_window(bytes); w) {
+	  read.push_token = w->token;
+	  rop.gather.windows.emplace(pg_shard, std::move(*w));
+	}
+      }
+    }
 #ifdef WITH_CRIMSON // crimson only
     if (pg_shard == get_parent()->whoami_shard()) {
       local_read_op = std::move(read);
@@ -796,7 +834,8 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     fast_read,
     false,
     std::make_unique<ClientReadCompleter>(
-      *this, &(in_progress_client_reads.back())));
+      *this, &(in_progress_client_reads.back())),
+    !fast_read);
 }
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(
@@ -854,10 +893,30 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
     dout(10) << __func__ << " want omap_keys again" << dendl;
   }
 
+  // A shard whose push into a gather window failed (-EBADMSG) read its
+  // copy fine: read it again, once, rather than decode around it, as
+  // more such faults than the pool has parity shards would fail a read
+  // that every shard can serve. The failed push set gather.inline_only,
+  // so the shard replies inline. Dropping its error makes it a source
+  // again, and has its reply taken; its buffers and processed extents
+  // went when the error came (@see ECBackend::handle_sub_read_reply).
+  read_result_t &read_result = rop.complete.at(hoid);
+  for (auto it = read_result.errors.begin();
+       it != read_result.errors.end();) {
+    if (it->second == -EBADMSG &&
+        read_result.gather_rereads.insert(it->first).second) {
+      dout(10) << __func__ << " reading shard " << it->first
+               << " again after its push failed" << dendl;
+      it = read_result.errors.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
   read_request_t &read_request = rop.to_read.at(hoid);
   // reset the old shard reads, we are going to read them again.
   read_request.shard_reads.clear();
-  return get_remaining_shards(hoid, rop.complete.at(hoid), read_request,
+  return get_remaining_shards(hoid, read_result, read_request,
                               rop.for_recovery, want_attrs, want_omap_header,
                               want_omap_keys);
 }

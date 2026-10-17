@@ -46,6 +46,11 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
+#ifdef WITH_OOB_OFI
+#include <sys/capability.h>
+#include "common/oob_config.h"
+#include "extblkdev/ExtBlkDevPlugin.h"
+#endif
 
 #include "log/Log.h"
 #include "perfglue/heap_profiler.h"
@@ -123,6 +128,17 @@ static void usage()
 
 int main(int argc, const char **argv)
 {
+#ifdef WITH_OOB_OFI
+  // a released libfabric window must get a new key, and verbs caches
+  // registrations and hands back the old key unless the cache is off.
+  // set it before any thread starts: setenv() can free the environment
+  // that a concurrent getenv() is reading
+  setenv("FI_MR_CACHE_MONITOR", "disabled", 0);
+  // that makes global_init's setenv("HOME") for --setuser a second new
+  // variable, which can free the environment while the log thread runs.
+  // read TZ now: the log thread's localtime_r() then never calls getenv()
+  tzset();
+#endif
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
@@ -225,6 +241,16 @@ int main(int argc, const char **argv)
   }
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
+#ifdef WITH_OOB_OFI
+  // the UEC reference provider ("uet") sends and receives on a raw socket
+  // that it opens in OSD::init, with the capability that
+  // ceph::oob::with_net_raw() raises from the permitted set; keep it there
+  // when the object store trims the capabilities
+  if (ceph::oob::needs_net_raw(
+	ceph::oob::read_transports(g_ceph_context).ofi_provider)) {
+    ceph::extblkdev::keep_permitted_cap(CAP_NET_RAW);
+  }
+#endif
 
   if (get_journal_fsid) {
     device_path = g_conf().get_val<std::string>("osd_journal");

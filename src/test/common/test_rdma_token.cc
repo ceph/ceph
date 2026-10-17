@@ -399,6 +399,58 @@ TEST(OobConfig, ResolveRejectsMalformedNetworks)
   }
 }
 
+// cuobj_dc_key is hexadecimal after 0x, as cufile.json gives rdma_dc_key,
+// or decimal. The option's validator rejects anything else when it is
+// set, as it does for `ceph config set`, and the key stays as it was.
+TEST(OobConfig, DcKey)
+{
+  boost::intrusive_ptr<CephContext> cct{
+    new CephContext(CEPH_ENTITY_TYPE_OSD), false};
+  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
+  uint64_t key = 0;
+  std::string err;
+  // the default is the client library's
+  EXPECT_EQ(0, ceph::oob::dc_key(cct.get(), &key, &err)) << err;
+  EXPECT_EQ(0xffeeddccull, key);
+  const std::pair<const char*, uint64_t> good[] = {
+    {"0x11223344", 0x11223344}, {"0X11223344", 0x11223344},
+    {"0xFFEEDDCC", 0xffeeddcc}, {"4293844428", 0xffeeddcc},
+    {"0", 0}, {"0x0", 0},
+    // decimal, not octal
+    {"010", 10},
+    {"0xffffffffffffffff", UINT64_MAX},
+    {"18446744073709551615", UINT64_MAX},
+  };
+  for (const auto& [val, want] : good) {
+    key = 1;
+    EXPECT_TRUE(ceph::oob::parse_dc_key(val, &key)) << val;
+    EXPECT_EQ(want, key) << val;
+    ASSERT_EQ(0, cct->_conf.set_val("cuobj_dc_key", val)) << val;
+    key = 1;
+    err.clear();
+    EXPECT_EQ(0, ceph::oob::dc_key(cct.get(), &key, &err))
+      << val << ": " << err;
+    EXPECT_EQ(want, key) << val;
+  }
+  ASSERT_EQ(0, cct->_conf.set_val("cuobj_dc_key", "0x11223344"));
+  for (const char* bad : {"", "0x", "x10", "ffeeddcc", "0xffeeddcg",
+			  "-1", "+1", " 1", "1 ", "0x-1", "0x 1", "0x0x1",
+			  "1K", "0x10000000000000000",
+			  "18446744073709551616"}) {
+    key = 7;
+    EXPECT_FALSE(ceph::oob::parse_dc_key(bad, &key)) << bad;
+    EXPECT_EQ(7u, key) << bad;
+    std::stringstream ss;
+    EXPECT_EQ(-EINVAL, cct->_conf.set_val("cuobj_dc_key", bad, &ss)) << bad;
+    EXPECT_NE(std::string::npos, ss.str().find("0xffeeddcc")) << ss.str();
+    err.clear();
+    EXPECT_EQ(0, ceph::oob::dc_key(cct.get(), &key, &err))
+      << bad << ": " << err;
+    EXPECT_EQ(0x11223344u, key) << bad;
+  }
+}
+
+
 TEST(RdmaToken, OfiShape)
 {
   using ceph::rdma::is_ofi_token;
@@ -445,6 +497,35 @@ TEST(RdmaToken, CuobjDescriptor)
   EXPECT_FALSE(is_cuobj_descriptor(""));
   EXPECT_FALSE(is_cuobj_descriptor("xyz:1234:rkey"));
   EXPECT_FALSE(is_cuobj_descriptor("0:10"));
+}
+
+TEST(RdmaToken, FormatCuobjDescriptor)
+{
+  using ceph::rdma::format_cuobj_descriptor;
+  const uint8_t gid[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+			   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+  EXPECT_EQ(valid_token,
+	    format_cuobj_descriptor(0x0102030405060708ull, 0x01020304,
+				    0x0102aabb, 0x0102, 0x010203, gid));
+
+  // every field has a fixed width, so a descriptor is always as long
+  const uint8_t v4_gid[16] = {0, 0, 0, 0, 0, 0, 0, 0,
+			      0, 0, 0xff, 0xff, 192, 168, 1, 10};
+  const std::string t =
+    format_cuobj_descriptor(0x7f0000001000ull, 0x800000, 0x5, 0, 0x12,
+			    v4_gid);
+  EXPECT_EQ("00007f0000001000:00800000:00000005:0000:000012:1:"
+	    "00000000000000000000ffffc0a8010a", t);
+  EXPECT_EQ(81u, t.size());
+  EXPECT_EQ(valid_token.size(), t.size());
+
+  // which the gateway and the OSD read back as a cuObject window
+  auto w = parse_rdma_token(t);
+  ASSERT_TRUE(w);
+  EXPECT_EQ(0x7f0000001000ull, w->addr);
+  EXPECT_EQ(0x800000ull, w->size);
+  EXPECT_TRUE(ceph::rdma::is_cuobj_descriptor(t));
+  EXPECT_FALSE(ceph::rdma::is_ofi_token(t));
 }
 
 TEST(RdmaToken, LongestOfiTokenFits)

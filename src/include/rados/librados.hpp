@@ -731,8 +731,8 @@ inline namespace v14_2_0 {
      * later than the pool's rdma_delivery_lease after receiving the op. Every
      * write it started has landed or been cut off by the pool's
      * rdma_delivery_drain after that (see IoCtx::pool_rdma_delivery_lease()
-     * and IoCtx::pool_rdma_delivery_drain()). A cut-off can end up to the
-     * transport's cut-off tolerance later. A
+     * and IoCtx::pool_rdma_delivery_drain()). A libfabric cut-off can end up
+     * to the OSDs' osd_oob_cutoff_late_tolerance (1 s by default) later. A
      * caller abandons a request by cancelling it (IoCtx::aio_cancel()) or by
      * letting it time out (rados_osd_op_timeout). Until then the op stays
      * live, and the Objecter can send an attempt of it long after the caller
@@ -1074,8 +1074,9 @@ inline namespace v14_2_0 {
     /**
      * The pool's rdma_delivery_drain in seconds: how long after the
      * delivery lease runs out every out-of-band write an OSD started
-     * for an operation has landed or been cut off. A cut-off can end up
-     * to the transport's cut-off tolerance later. A caller that gave up on a request, by cancelling
+     * for an operation has landed or been cut off. A libfabric cut-off
+     * can end up to the OSDs' osd_oob_cutoff_late_tolerance (1 s by
+     * default) later. A caller that gave up on a request, by cancelling
      * it or letting it time out, may write its window again once the
      * lease, the drain, that tolerance and the transit of an attempt
      * already sent have passed since the request completed (see

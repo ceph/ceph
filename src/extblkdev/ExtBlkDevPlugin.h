@@ -29,6 +29,10 @@ namespace ceph {
 
   namespace extblkdev {
     int preload(CephContext *cct);
+    // keep cap in the permitted set when preload() trims the
+    // capabilities of a daemon that no longer runs as root, for a daemon
+    // that raises it later; call it before preload()
+    void keep_permitted_cap(int cap);
     int detect_device(CephContext *cct,
 			  const std::string &logdevname,
 			  ExtBlkDevInterfaceRef& ebd_impl);

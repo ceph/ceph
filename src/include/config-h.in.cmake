@@ -154,11 +154,16 @@
 /*define if D4N filter enabled */
 #cmakedefine WITH_RADOSGW_D4N 
 
-/* define if cuObject RDMA enabled */
+/* define if cuObject RDMA is built, in the gateway and in the OSD */
 #cmakedefine WITH_RADOSGW_CUOBJ
 
 /* Define if out-of-band delivery over libfabric is built */
 #cmakedefine WITH_OOB_OFI
+
+/* out-of-band read delivery is compiled in when any transport is */
+#if defined(WITH_RADOSGW_CUOBJ) || defined(WITH_OOB_OFI)
+#define HAVE_OSD_OOB_DELIVERY 1
+#endif
 
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
