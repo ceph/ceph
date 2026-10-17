@@ -15,11 +15,13 @@ namespace librbd {
 
 class ImageCtx;
 class ProgressContext;
+template <typename> class ObjectMap;
 
 namespace operation {
 
 template <typename ImageCtxT = ImageCtx>
 using ObjectIterateWork = bool(*)(ImageCtxT &image_ctx,
+				  ObjectMap<ImageCtxT> &object_map,
 				  uint64_t object_no,
 				  uint8_t current_state,
 				  uint8_t new_state);
@@ -27,11 +29,15 @@ using ObjectIterateWork = bool(*)(ImageCtxT &image_ctx,
 template <typename ImageCtxT = ImageCtx>
 class ObjectMapIterateRequest : public AsyncRequest<ImageCtxT> {
 public:
+  // the object map to verify against is owned by the caller and must stay
+  // valid for the lifetime of the request
   ObjectMapIterateRequest(ImageCtxT &image_ctx, Context *on_finish,
 			  ProgressContext &prog_ctx,
+			  ObjectMap<ImageCtxT> &object_map,
 			  ObjectIterateWork<ImageCtxT> handle_mismatch)
     : AsyncRequest<ImageCtxT>(image_ctx, on_finish), m_image_ctx(image_ctx),
-    m_prog_ctx(prog_ctx), m_handle_mismatch(handle_mismatch)
+    m_prog_ctx(prog_ctx), m_object_map(object_map),
+    m_handle_mismatch(handle_mismatch)
   {
   }
 
@@ -48,6 +54,7 @@ private:
 
   ImageCtxT &m_image_ctx;
   ProgressContext &m_prog_ctx;
+  ObjectMap<ImageCtxT> &m_object_map;
   ObjectIterateWork<ImageCtxT> m_handle_mismatch;
   std::atomic_flag m_invalidate = ATOMIC_FLAG_INIT;
   State m_state = STATE_VERIFY_OBJECTS;

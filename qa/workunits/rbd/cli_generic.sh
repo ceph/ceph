@@ -436,6 +436,28 @@ test_clone() {
     rbd flatten clone3
     test "$(rbd ls -l | grep -c rbd2/clone@s1)" = '1'
 
+    # a copy of a clone must contain the data the clone inherits from its
+    # parent, whether the source is the clone itself or a snapshot of it
+    # (test2 is the parent, test3 the clone and test4 each copy in turn)
+    dd if=/dev/urandom bs=1M count=1 | rbd $RBD_CREATE_ARGS import - test2
+    md5sum=$(rbd export test2 - | md5sum)
+    rbd snap create test2@s
+    rbd snap protect test2@s
+    rbd clone test2@s test3
+    rbd snap create test3@s
+    test "$(rbd export test3 - | md5sum)" = "${md5sum}"
+    rbd cp test3 test4
+    test "$(rbd export test4 - | md5sum)" = "${md5sum}"
+    rbd rm test4
+    rbd cp test3@s test4
+    test "$(rbd export test4 - | md5sum)" = "${md5sum}"
+    rbd rm test4
+    rbd snap rm test3@s
+    rbd rm test3
+    rbd snap unprotect test2@s
+    rbd snap rm test2@s
+    rbd rm test2
+
     rbd rm clone2
     rbd snap unprotect rbd2/clone@s1
     rbd snap rm rbd2/clone@s1

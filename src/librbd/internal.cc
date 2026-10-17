@@ -1328,6 +1328,21 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 			     LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
     uint64_t object_id = 0;
+
+    // the object map only tracks the objects that belong to the image itself,
+    // so for a clone everything it still inherits from its parent is marked
+    // as non-existent in it.  Anything the parent overlap covers therefore
+    // has to be read regardless of what the object map says -- use the raw
+    // overlap, which is never smaller than the data one, and fall back to
+    // copying everything if it can't be determined.
+    uint64_t parent_overlap;
+    {
+      std::shared_lock image_locker{src->image_lock};
+      if (src->get_parent_overlap(src->snap_id, &parent_overlap) < 0) {
+        parent_overlap = src_size;
+      }
+    }
+
     for (uint64_t offset = 0; offset < src_size; offset += period) {
       if (throttle.pending_error()) {
         return throttle.wait_for_ret();
@@ -1335,7 +1350,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       {
 	std::shared_lock image_locker{src->image_lock};
-        if (src->object_map != nullptr) {
+        if (src->object_map != nullptr && offset >= parent_overlap) {
           bool skip = true;
           // each period is related to src->stripe_count objects, check them all
           for (uint64_t i=0; i < src->stripe_count; i++) {
