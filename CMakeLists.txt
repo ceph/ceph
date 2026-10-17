@@ -815,6 +815,31 @@ if(sanitizers)
   string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${sanitiers_compile_flags}")
 endif()
 
+# Frame pointers: cheap and reliable stack walking for profilers (perf, eBPF)
+# and debuggers. Off by default for release build types, to keep production
+# packages unchanged; CI/QA package builds enable it explicitly.
+# (crimson always builds with frame pointers; see src/crimson/CMakeLists.txt)
+if(CMAKE_BUILD_TYPE STREQUAL Debug)
+  set(frame_pointers_default ON)
+else()
+  set(frame_pointers_default OFF)
+endif()
+option(WITH_FRAME_POINTERS "build with -fno-omit-frame-pointer"
+  ${frame_pointers_default})
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-mno-omit-leaf-frame-pointer"
+  HAS_NO_OMIT_LEAF_FRAME_POINTER)
+set(FRAME_POINTER_COMPILE_OPTIONS
+  $<$<COMPILE_LANGUAGE:C,CXX>:-fno-omit-frame-pointer>)
+if(HAS_NO_OMIT_LEAF_FRAME_POINTER)
+  list(APPEND FRAME_POINTER_COMPILE_OPTIONS
+    $<$<COMPILE_LANGUAGE:C,CXX>:-mno-omit-leaf-frame-pointer>)
+endif()
+if(WITH_FRAME_POINTERS)
+  add_compile_options(${FRAME_POINTER_COMPILE_OPTIONS})
+endif()
+message(STATUS "frame pointers: ${WITH_FRAME_POINTERS}")
+
 # Jerasure & GF-Complete
 option(WITH_SYSTEM_JERASURE "require and build with system jerasure and gf-complete" OFF)
 if(WITH_SYSTEM_JERASURE)
