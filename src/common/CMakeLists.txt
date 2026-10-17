@@ -173,6 +173,11 @@ endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/version.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
+# only version.cc uses CEPH_VENDOR_RELEASE, so keep the define off other
+# sources to avoid rebuilding the whole tree when it changes
+set_property(SOURCE ${CMAKE_SOURCE_DIR}/src/common/version.cc
+  APPEND PROPERTY COMPILE_DEFINITIONS
+  "CEPH_VENDOR_RELEASE=\"${CEPH_VENDOR_RELEASE}\"")
 
 if(HAS_VTA)
   set_source_files_properties(

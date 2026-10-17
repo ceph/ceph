@@ -152,6 +152,11 @@ target_compile_definitions(crimson-common PRIVATE
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
+# see src/common/CMakeLists.txt
+set_property(SOURCE ${PROJECT_SOURCE_DIR}/src/common/version.cc
+  APPEND PROPERTY COMPILE_DEFINITIONS
+  "CEPH_VENDOR_RELEASE=\"${CEPH_VENDOR_RELEASE}\"")
+
 target_link_libraries(crimson-common
   PUBLIC
     $<$<BOOL:${WITH_JAEGER}>:jaeger_base>
