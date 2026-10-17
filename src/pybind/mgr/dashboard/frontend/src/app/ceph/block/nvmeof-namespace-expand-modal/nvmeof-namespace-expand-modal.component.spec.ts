@@ -9,14 +9,18 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ModalModule, NumberModule } from 'carbon-components-angular';
-import { of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 describe('NvmeofNamespaceExpandModalComponent', () => {
   let component: NvmeofNamespaceExpandModalComponent;
   let fixture: ComponentFixture<NvmeofNamespaceExpandModalComponent>;
   let nvmeofService: NvmeofService;
+  let nvmeofStateService: { requestRefresh: jest.Mock };
+  let taskWrapper: { wrapTaskAroundCall: jest.Mock };
 
   const mockNvmeofService = {
     getNamespace: () =>
@@ -53,7 +57,27 @@ describe('NvmeofNamespaceExpandModalComponent', () => {
     ],
     providers: [
       { provide: NvmeofService, useValue: mockNvmeofService },
-      { provide: ActivatedRoute, useValue: activatedRouteStub }
+      { provide: ActivatedRoute, useValue: activatedRouteStub },
+      {
+        provide: NvmeofStateService,
+        useFactory: () => {
+          nvmeofStateService = { requestRefresh: jest.fn() };
+          return nvmeofStateService;
+        }
+      },
+      {
+        provide: TaskWrapperService,
+        useFactory: () => {
+          taskWrapper = {
+            wrapTaskAroundCall: jest.fn().mockReturnValue(
+              new Observable((observer) => {
+                observer.complete();
+              })
+            )
+          };
+          return taskWrapper;
+        }
+      }
     ]
   });
 
@@ -61,6 +85,8 @@ describe('NvmeofNamespaceExpandModalComponent', () => {
     fixture = TestBed.createComponent(NvmeofNamespaceExpandModalComponent);
     component = fixture.componentInstance;
     nvmeofService = TestBed.inject(NvmeofService);
+    nvmeofStateService = TestBed.inject(NvmeofStateService) as any;
+    taskWrapper = TestBed.inject(TaskWrapperService) as any;
 
     // params are already set in constructor of stub above
 
@@ -88,5 +114,24 @@ describe('NvmeofNamespaceExpandModalComponent', () => {
     component.nsForm.get('image_size').setValue(2);
     component.nsForm.get('image_size').updateValueAndValidity();
     expect(component.nsForm.get('image_size').hasError('minSize')).toBe(false);
+  });
+
+  it('should request list refresh after successful expand', () => {
+    spyOn(component, 'closeModal');
+    component.nsForm.get('image_size').setValue(2);
+    component.onSubmit();
+
+    expect(nvmeofStateService.requestRefresh).toHaveBeenCalledTimes(1);
+    expect(component.closeModal).toHaveBeenCalled();
+  });
+
+  it('should not request list refresh after failed expand', () => {
+    taskWrapper.wrapTaskAroundCall.mockReturnValue(throwError(() => ({ message: 'failed' })));
+    spyOn(component, 'closeModal');
+    component.nsForm.get('image_size').setValue(2);
+    component.onSubmit();
+
+    expect(nvmeofStateService.requestRefresh).not.toHaveBeenCalled();
+    expect(component.closeModal).not.toHaveBeenCalled();
   });
 });

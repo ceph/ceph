@@ -61,6 +61,10 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
         }
       });
 
+    this.nvmeofStateService.refresh$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.listNamespaces());
+
     this.setupColumns();
     this.setupTableActions();
   }
