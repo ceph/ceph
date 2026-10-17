@@ -165,6 +165,8 @@ ReplicatedBackend::submit_transaction(
     }
     pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
     // TODO: set more stuff. e.g., pg_states
+    // Sent on this reactor's own session to the peer, so the rep op
+    // never hops through the primary reactor.
     sends->emplace_back(
       shard_services.send_to_osd(
 	pg_shard.osd, std::move(m), map_epoch));

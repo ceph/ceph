@@ -7,6 +7,8 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
 
+#include <vector>
+
 #include "include/buffer.h"
 
 #include "crimson/common/log.h"
@@ -89,6 +91,11 @@ public:
   static seastar::future<SocketRef>
   connect(const entity_addr_t& peer_addr);
 
+  // Bind local_port before connecting. The peer's port load balancer
+  // accepts on local_port % shard_count.
+  static seastar::future<SocketRef>
+  connect(const entity_addr_t& peer_addr, uint16_t local_port);
+
   /*
    * test interfaces
    */
@@ -148,6 +155,55 @@ private:
   friend class ShardedServerSocket;
 };
 
+// The cluster listener uses Seastar's load_balancing_algorithm::port.
+// The accepting reactor is the peer's source port modulo the shard
+// count, so an OSD sender binds a source port in that class and the
+// peer takes the connection on that reactor. One advertised port is
+// enough; there is no extra listen port per reactor.
+//
+// That does not replace the client nonce. The lossless map keys on the
+// address we advertise, which is still the bind address, so two reactors
+// would collapse into one session without a nonce that differs per
+// reactor. The helpers below only recognize an older peer that connected
+// to advertised_port + stride * (reactor + 1).
+inline constexpr uint16_t CRIMSON_OSD_SHARD_PORT_STRIDE = 256;
+
+inline entity_addr_t with_osd_shard_port(entity_addr_t addr, unsigned sid) {
+  const unsigned port = static_cast<unsigned>(addr.get_port())
+      + CRIMSON_OSD_SHARD_PORT_STRIDE * (sid + 1u);
+  if (port > 65535u) {
+    return entity_addr_t{};
+  }
+  addr.set_port(static_cast<uint16_t>(port));
+  return addr;
+}
+
+// True when `port` is advertised_port + stride * (sid + 1) for some reactor.
+inline bool is_osd_shard_port(uint16_t base, uint16_t port, unsigned nshards) {
+  if (port <= base) {
+    return false;
+  }
+  const unsigned delta = static_cast<unsigned>(port) - base;
+  if (delta % CRIMSON_OSD_SHARD_PORT_STRIDE != 0) {
+    return false;
+  }
+  const unsigned tag = delta / CRIMSON_OSD_SHARD_PORT_STRIDE;
+  return tag >= 1u && tag <= nshards;
+}
+
+// `addr` is `advertised`, or the same host/nonce on one of its reactor ports.
+inline bool is_osd_msgr_addr(const entity_addr_t& advertised,
+                             const entity_addr_t& addr,
+                             unsigned nshards) {
+  if (advertised == addr) {
+    return true;
+  }
+  return advertised.is_same_host(addr) &&
+      advertised.get_type() == addr.get_type() &&
+      advertised.get_nonce() == addr.get_nonce() &&
+      is_osd_shard_port(advertised.get_port(), addr.get_port(), nshards);
+}
+
 using listen_ertr = crimson::errorator<
   crimson::ct_error::address_in_use, // The address is already bound
   crimson::ct_error::address_not_available // https://techoverflow.net/2021/08/06/how-i-fixed-python-oserror-errno-99-cannot-assign-requested-address/
@@ -174,7 +230,10 @@ public:
     return dispatch_only_on_primary_sid;
   }
 
-  listen_ertr::future<> listen(entity_addr_t addr);
+  // balance_by_source_port: accept with load_balancing_algorithm::port
+  // so the peer's source port selects the reactor.
+  listen_ertr::future<> listen(entity_addr_t addr,
+                               bool balance_by_source_port = false);
 
   using accept_func_t =
     std::function<seastar::future<>(SocketRef, entity_addr_t)>;
@@ -191,8 +250,18 @@ private:
   const bool dispatch_only_on_primary_sid;
   entity_addr_t listen_addr;
   std::optional<seastar::server_socket> listener;
+  // Exclusive port accepted on this reactor. On the main reactor this is a
+  // kernel socket. On every other reactor it is the accept endpoint that
+  // receives connections steered here from the main reactor.
+  entity_addr_t shard_listen_addr;
+  std::optional<seastar::server_socket> shard_listener;
+  // Kernel sockets for the other reactors' exclusive ports. Only the main
+  // reactor fills this; accept() there forwards each connection onward.
+  std::vector<seastar::server_socket> foreign_shard_listeners;
   seastar::gate shutdown_gate;
   accept_func_t fn_accept;
+
+  void arm_accept_loop(seastar::server_socket& sock);
 
   using sharded_service_t = seastar::sharded<ShardedServerSocket>;
   std::unique_ptr<sharded_service_t> service;

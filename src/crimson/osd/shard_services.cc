@@ -20,6 +20,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Connection.h"
+#include "crimson/net/SocketMessenger.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/pg.h"
@@ -300,6 +301,91 @@ OSDSingletonState::OSDSingletonState(
 
   recoverystate_perf = build_recoverystate_perf(&cct);
   cct.get_perfcounters_collection()->add(recoverystate_perf);
+}
+
+seastar::future<> ShardServices::send_to_osd(
+  int peer, MessageURef m, epoch_t from_epoch)
+{
+  LOG_PREFIX(ShardServices::send_to_osd);
+  const auto& osdmap = local_state.osdmap;
+  if (osdmap->is_down(peer)) {
+    INFO("osd.{} is_down", peer);
+    return seastar::now();
+  }
+  if (osdmap->get_info(peer).up_from > from_epoch) {
+    INFO("osd.{} {} > {}", peer,
+         osdmap->get_info(peer).up_from, from_epoch);
+    return seastar::now();
+  }
+
+  if (auto found = osd_peer_conns.find(peer); found != osd_peer_conns.end()) {
+    auto& conn = found->second;
+    if (conn->is_connected() &&
+        conn->get_shard_id() == seastar::this_shard_id()) {
+      // Queue on the session we already have. A standby session
+      // reconnects only when a message is queued; opening another
+      // connection and waiting for READY never wakes it, so the
+      // peering log that creates the replica PG is never sent.
+      return conn->send_with_throttling(std::move(m));
+    }
+    // The messenger already closed this session. Sending on it drops
+    // the message. Forget it and open another.
+    osd_peer_conns.erase(found);
+  }
+
+  // This runs on the PG's reactor. The cluster listener accepts with
+  // Seastar's port load balancing, so a source port in this reactor's
+  // residue class is delivered here on a peer with the same shard count.
+  // Placement uses pgid.ps() % shard count when that option is on.
+  const auto my_sid = seastar::this_shard_id();
+  const entity_addr_t base = osdmap->get_cluster_addrs(peer).front();
+  const bool steer = crimson::common::get_conf<bool>(
+      "crimson_osd_deterministic_pg_shard");
+  auto msg = seastar::make_lw_shared<MessageURef>(std::move(m));
+  auto attempt = [this, my_sid, peer, base, steer](auto message) {
+    return osd_singleton_state.invoke_on(
+      PRIMARY_CORE,
+      [base, my_sid, peer, steer](OSDSingletonState& singleton) {
+        auto& msgr = static_cast<crimson::net::SocketMessenger&>(
+            singleton.cluster_msgr);
+        return msgr.connect_on_shard(
+            base, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer), my_sid, 0, steer
+        ).then([](crimson::net::ConnectionRef conn) {
+          return conn.get_foreign();
+        });
+      }).then([this, peer, message](auto fconn) {
+        auto conn = crimson::make_local_shared_foreign(std::move(fconn));
+        osd_peer_conns[peer] = conn;
+        return conn->send_with_throttling(std::move(*message));
+      });
+  };
+  // Handshake failed before the message was queued. Leave it on the
+  // lossless out queue and return success. Failing the caller drops the
+  // message; a standby session reconnects once something is queued.
+  auto queue_on = [this, my_sid, peer, base, steer, msg] {
+    return osd_singleton_state.invoke_on(
+      PRIMARY_CORE,
+      [base, my_sid, peer, steer](OSDSingletonState& singleton) {
+        auto& msgr = static_cast<crimson::net::SocketMessenger&>(
+            singleton.cluster_msgr);
+        auto conn = msgr.open_on_shard(
+            base, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer), my_sid, 0, steer);
+        return conn.get_foreign();
+      }).then([this, peer, msg](auto fconn) {
+        auto conn = crimson::make_local_shared_foreign(std::move(fconn));
+        osd_peer_conns[peer] = conn;
+        if (!*msg) {
+          return seastar::now();
+        }
+        return conn->send_with_throttling(std::move(*msg));
+      });
+  };
+  return attempt(msg).handle_exception(
+    [this, peer, queue_on, FNAME](std::exception_ptr) {
+      osd_peer_conns.erase(peer);
+      ERROR("osd.{} connect failed, queueing on the session", peer);
+      return queue_on();
+    });
 }
 
 seastar::future<> OSDSingletonState::send_to_osd(
