@@ -1651,6 +1651,10 @@ class CephadmUpgrade:
     # to_upgrade is a list of daemons that need to be upgraded
     def _to_upgrade(self, need_upgrade: List[Tuple[DaemonDescription, bool]], target_image: str) -> Tuple[bool, List[Tuple[DaemonDescription, bool]]]:
         to_upgrade: List[Tuple[DaemonDescription, bool]] = []
+
+        # Track RGW listener ports already selected on each host so that
+        # daemons sharing a listener are not restarted in the same batch.
+        rgw_ports_in_batch: Dict[str, Set[int]] = {}
         known_ok_to_stop: List[str] = []
         known_ok_to_upgrade: List[str] = []
         self._ok_to_upgrade_all_osds_upgraded = False
@@ -1747,6 +1751,27 @@ class CephadmUpgrade:
                 and not self.is_osd_upgrade_valid_for_failure_domain(d)
             ):
                 continue
+
+            if d.daemon_type == 'rgw' and d.ports:
+                selected_ports = rgw_ports_in_batch.setdefault(
+                    d.hostname, set()
+                )
+                daemon_ports = set(d.ports)
+
+                # If another RGW selected for this host is listening on any
+                # of the same ports, leave this daemon for the next upgrade
+                # pass. This keeps one SO_REUSEPORT peer serving while the
+                # other is redeployed.
+                shared_ports = selected_ports.intersection(daemon_ports)
+                if shared_ports:
+                    logger.info(
+                        'Upgrade: Deferring %s because another RGW on host %s '
+                        'using port(s) %s is already selected for this batch',
+                        d.name(), d.hostname, sorted(shared_ports)
+                    )
+                    continue
+
+                selected_ports.update(daemon_ports)
 
             to_upgrade.append(d_entry)
 
