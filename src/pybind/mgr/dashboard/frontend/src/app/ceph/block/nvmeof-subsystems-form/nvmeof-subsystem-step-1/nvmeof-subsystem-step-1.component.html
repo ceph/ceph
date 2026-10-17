@@ -113,35 +113,65 @@
         </fieldset>
       </div>
       @if (listenerMode === LISTENER_MODE.AUTO_FETCH) {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <cds-text-label
-            i18n
-            [invalid]="subnetMaskRef.isInvalid"
-            [invalidText]="requiredFieldInvalidText"
-            helperText="Listeners from this subnet-masks will be use."
-            i18n-helperText
+        @if (hasGroupNetworkMask) {
+          <div
+            cdsRow
+            class="form-item"
           >
-            Subnet-mask
-            <input
-              cdsText
-              cdValidate
-              #subnetMaskRef="cdValidate"
-              type="text"
-              placeholder="e.g. 255.0.0.0"
-              i18n-placeholder
-              id="subnetMask"
-              name="subnetMask"
-              formControlName="subnetMask"
+            <div cdsCol>
+              <cds-checkbox
+                id="useGroupNetworkMask"
+                formControlName="useGroupNetworkMask"
+              >
+                <span
+                  class="cds--type-body-01"
+                  i18n
+                >
+                  Use network mask configured at gateway group level ({{
+                    gwGroupNetworkMasks.join(', ')
+                  }})
+                </span>
+              </cds-checkbox>
+              <cd-help-text>
+                <span i18n>
+                  Listeners will automatically be fetched using the gateway group's network mask.
+                  Uncheck to specify a custom network mask.
+                </span>
+              </cd-help-text>
+            </div>
+          </div>
+        }
+        @if (!hasGroupNetworkMask || !formGroup.get('useGroupNetworkMask')?.value) {
+          <div
+            cdsRow
+            class="form-item"
+          >
+            <cds-text-label
+              i18n
               [invalid]="subnetMaskRef.isInvalid"
-            />
-          </cds-text-label>
-          <ng-template #requiredFieldInvalidText>
-            <span i18n>This field is required.</span>
-          </ng-template>
-        </div>
+              [invalidText]="requiredFieldInvalidText"
+              helperText="Listeners from this subnet-masks will be use."
+              i18n-helperText
+            >
+              Subnet-mask
+              <input
+                cdsText
+                cdValidate
+                #subnetMaskRef="cdValidate"
+                type="text"
+                placeholder="e.g. 255.0.0.0"
+                i18n-placeholder
+                id="subnetMask"
+                name="subnetMask"
+                formControlName="subnetMask"
+                [invalid]="subnetMaskRef.isInvalid"
+              />
+            </cds-text-label>
+            <ng-template #requiredFieldInvalidText>
+              <span i18n>This field is required.</span>
+            </ng-template>
+          </div>
+        }
       }
       @if (listenerMode === LISTENER_MODE.MANUAL) {
         <div
