@@ -200,6 +200,49 @@ These values are converted to bytes when written into a ``CEPH`` block in
 ``ganesha.conf`` (as ``client_oc``, ``client_oc_size``, and
 ``client_oc_max_dirty``) when object caching is enabled.
 
+.. _cephadm-nfs-conditional-logging:
+
+Conditional Logging
+-------------------
+
+Conditional logging lets user raise or lower log levels for selected clients
+and/or exports, without changing the global log levels used for other traffic.
+It is handy for debugging a single client or export on a busy server.
+
+Set it with two optional fields in the NFS service specification:
+
+* ``log_match_policy`` — ``ANY`` (match client **or** export, default) or
+  ``ALL`` (match client **and** export).
+* ``log_conditional`` — a block with ``clients`` (list of IPs/CIDRs),
+  ``exports`` (list of export IDs), and ``COMPONENT: LEVEL`` pairs
+  (for example ``NFS4: DEBUG``).
+
+Example:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+      hosts: [host1]
+    spec:
+      port: 2049
+      log_match_policy: ANY
+      log_conditional:
+        clients:
+          - 192.0.2.25
+        exports:
+          - 101
+        NFS4: DEBUG
+
+Notes:
+
+* If neither field is set, no ``LOG`` block is written.
+* ``ALL`` requires a non-empty ``clients`` list and a non-empty ``exports``
+  list, or the spec is rejected.
+* Changes are applied with a ``SIGHUP`` reload; daemons are not restarted.
+
 .. _cephadm-nfs-colocation:
 
 NFS Daemon Colocation

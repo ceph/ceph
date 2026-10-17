@@ -973,6 +973,182 @@ class TestNFS:
                 assert "Enable_Metrics" not in ganesha_conf
                 assert '9588' not in str(daemon_spec.port_ips)
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_log_conditional_omitted(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """No log fields: ganesha.conf must not contain a LOG block."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'LOG {' not in ganesha_conf
+                assert 'Conditional {' not in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_log_conditional_match_all(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """MATCH_ALL with both clients and exports renders correctly.
+        Also verifies multiple export IDs are comma-joined."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                log_match_policy='MATCH_ALL',
+                log_conditional={
+                    'clients': ['192.0.2.25'],
+                    'exports': [101, 202],
+                    'ALL': 'DEBUG',
+                },
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'Match_Policy = MATCH_ALL;' in ganesha_conf
+                assert 'Clients = 192.0.2.25;' in ganesha_conf
+                assert 'Exports = 101, 202;' in ganesha_conf
+                assert 'ALL = DEBUG;' in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_log_conditional_clients_only(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Conditional with multiple clients and no exports: verifies comma-joining of clients,
+        no Exports line, and that Match_Policy and Conditional block work independently."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                log_match_policy='MATCH_ANY',
+                log_conditional={
+                    'clients': ['192.0.2.25', '10.0.0.0/24'],
+                    'FSAL': 'WARN',
+                },
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'Match_Policy = MATCH_ANY;' in ganesha_conf
+                assert 'Clients = 192.0.2.25, 10.0.0.0/24;' in ganesha_conf
+                assert 'Exports' not in ganesha_conf
+                assert 'FSAL = WARN;' in ganesha_conf
+
+    @patch("cephadm.services.nfs.subprocess.run")
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_log_user_body_merged(self, _run_cephadm, _subprocess_run,
+                                      cephadm_module: CephadmOrchestrator):
+        """When user has set a LOG block in userconf, all its settings must appear
+        in the final config together with Match_Policy and Conditional block.
+        A closing brace inside a comment must not break the LOG body extraction."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        # What the user sets via: ceph nfs cluster config set <cluster> '<this>'
+        fake_userconf = (
+            b'LOG {\n'
+            b'    Default_Log_Level = WARN;\n'
+            b'    # this comment is stripped\n'
+            b'    COMPONENTS {\n'
+            b'        NFS4 = INFO;\n'
+            b'        /* block comment with fake } brace */\n'
+            b'        FSAL = DEBUG;\n'
+            b'    }\n'
+            b'}\n'
+        )
+        _subprocess_run.return_value = MagicMock(
+            returncode=0, stdout=fake_userconf, stderr=b''
+        )
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                log_match_policy='MATCH_ANY',
+                log_conditional={'clients': ['192.0.2.1'], 'ALL': 'EVENT'},
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                # Ganesha allows only one LOG block - verify there's exactly one
+                assert ganesha_conf.count('LOG {') == 1
+                # User's Default_Log_Level is preserved
+                assert 'Default_Log_Level = WARN;' in ganesha_conf
+                assert 'NFS4 = INFO;' in ganesha_conf
+                assert 'FSAL = DEBUG;' in ganesha_conf
+                # Managed conditional settings are also in the same LOG block
+                assert 'Match_Policy = MATCH_ANY;' in ganesha_conf
+                assert 'Clients = 192.0.2.1;' in ganesha_conf
+                assert 'ALL = EVENT;' in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_log_conditional_exports_only(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Conditional with only exports and multiple components: verifies no Clients line,
+        no Match_Policy line, and multiple component levels all render correctly."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                log_conditional={'exports': [101], 'NFS4': 'CRIT', 'ALL': 'EVENT'},
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                    )))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'Exports = 101;' in ganesha_conf
+                assert 'Clients' not in ganesha_conf
+                assert 'Match_Policy' not in ganesha_conf
+                assert 'NFS4 = CRIT;' in ganesha_conf
+                assert 'ALL = EVENT;' in ganesha_conf
+
 
 def test_nfs_enable_nfs_metrics_spec_roundtrip():
     """Verify enable_nfs_metrics survives JSON serialization round-trip."""

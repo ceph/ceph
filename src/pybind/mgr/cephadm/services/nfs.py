@@ -2,6 +2,7 @@ import errno
 import ipaddress
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from threading import Lock
@@ -196,6 +197,11 @@ class NFSService(CephService):
                     f'client_object_cache_max_dirty: '
                     f'{nfs_spec.client_object_cache_max_dirty}'
                 )
+        # Conditional logging — LOG is applied on SIGHUP, no restart needed
+        if nfs_spec.log_match_policy is not None:
+            deps.append(f'log_conditional: log_match_policy: {nfs_spec.log_match_policy}')
+        if nfs_spec.log_conditional is not None:
+            deps.append(f'log_conditional: log_conditional: {nfs_spec.log_conditional}')
 
         return sorted(deps)
 
@@ -378,6 +384,51 @@ class NFSService(CephService):
         elif nfs_spec.enable_rdma:
             rdma_port = nfs_spec.rdma_port
 
+        def get_log_user_body() -> Optional[str]:
+            """Read userconf and return the full content of the user's LOG block.
+            Ganesha only allows one LOG block, so we merge user content into ours.
+            Returns the body text (without the outer braces) or None if not found."""
+            if not (nfs_spec.log_match_policy or nfs_spec.log_conditional):
+                return None
+            userconf_obj = f'userconf-{nfs_spec.service_name()}'
+            cmd = [
+                'rados',
+                '-n', f"mgr.{self.mgr.get_mgr_id()}",
+                '-k', str(self.mgr.get_ceph_option('keyring')),
+                '-p', POOL_NAME,
+                '--namespace', cast(str, nfs_spec.service_id),
+                'get', userconf_obj, '-',
+            ]
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=10
+            )
+            if result.returncode != 0:
+                return None
+            userconf_text = result.stdout.decode('utf-8', errors='replace')
+            # Strip comments so brace counting works correctly.
+            text = re.sub(r'/\*.*?\*/', '', userconf_text, flags=re.DOTALL)
+            text = re.sub(r'(#|//).*', '', text)
+            # Find LOG { and count braces to find the matching closing }.
+            match = re.search(r'\bLOG\s*\{', text, re.IGNORECASE)
+            if not match:
+                return None
+            start = match.end()
+            depth = 1
+            pos = start
+            while pos < len(text) and depth > 0:
+                if text[pos] == '{':
+                    depth += 1
+                elif text[pos] == '}':
+                    depth -= 1
+                pos += 1
+            if depth != 0:
+                logger.warning('userconf LOG block has unbalanced braces; skipping merge')
+                return None
+            body = text[start:pos - 1].strip()
+            return body or None
+
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
                 "user": rados_user,
@@ -416,6 +467,9 @@ class NFSService(CephService):
                     with_units_to_int(str(nfs_spec.client_object_cache_max_dirty))
                     if nfs_spec.client_object_cache_max_dirty is not None else None
                 ),
+                "log_match_policy": nfs_spec.log_match_policy,
+                "log_conditional": nfs_spec.log_conditional,
+                "log_user_body": get_log_user_body(),
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -839,6 +893,14 @@ class NFSService(CephService):
         action = utils.Action.RECONFIG
         # check what has changed, based on that decide action
         only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
+        only_log_updated = all(s.startswith('log_conditional') for s in sym_diff)
+        # Conditional logging changes only need a SIGHUP reload, not a full restart
+        if only_log_updated:
+            return utils.NextDaemonStep(
+                utils.Action.RECONFIG,
+                skip_restart_for_reconfig=True,
+                send_signal_to_daemon='SIGHUP',
+            )
         if not only_kmip_updated:
             action = utils.Action.REDEPLOY
         return utils.NextDaemonStep(action)

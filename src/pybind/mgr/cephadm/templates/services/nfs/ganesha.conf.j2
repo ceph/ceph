@@ -101,4 +101,30 @@ TLS_CONFIG{
 {% endif %}
 }
 {% endif %}
+{% if log_match_policy or log_conditional %}
+LOG {
+{% if log_user_body %}
+{{ log_user_body }}
+{% endif %}
+{% if log_match_policy %}
+        Match_Policy = {{ log_match_policy }};
+{% endif %}
+{% if log_conditional %}
+        Conditional {
+{% if log_conditional.get('clients') %}
+                Clients = {{ log_conditional.get('clients')|join(', ') }};
+{% endif %}
+{% if log_conditional.get('exports') %}
+                Exports = {{ log_conditional.get('exports')|join(', ') }};
+{% endif %}
+{% for comp, level in log_conditional.items() %}
+{% if comp not in ('clients', 'exports') %}
+                {{ comp }} = {{ level }};
+{% endif %}
+{% endfor %}
+        }
+{% endif %}
+}
+
+{% endif %}
 %url    {{ url }}
