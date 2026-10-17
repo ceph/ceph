@@ -176,11 +176,11 @@ public:
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(std::string option_str="") = 0;
-  virtual int open(std::ostream &out, const std::string& cfs="") = 0;
+  virtual int open(std::ostream &out) = 0;
   // std::vector cfs contains column families to be created when db is created.
   virtual int create_and_open(std::ostream &out, const std::string& cfs="") = 0;
 
-  virtual int open_read_only(std::ostream &out, const std::string& cfs="") {
+  virtual int open_read_only(std::ostream &out) {
     return -ENOTSUP;
   }
 
