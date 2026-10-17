@@ -15,6 +15,7 @@
 
 #include <cerrno>
 #include <cstdlib>
+#include <set>
 #include <string>
 
 #include <unistd.h>
@@ -410,21 +411,39 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
 
   ListResults results;
-  results.is_truncated = own_bucket; // if we don't have the index, we're done
+  std::set<rgw_obj_index_key> previous_page;
 
-  while (results.is_truncated) {
+  while (own_bucket) {
     results.objs.clear();
+    // Deleting a page also deletes its continuation marker. Start over so
+    // remaining versions of that marker's name cannot be skipped.
+    params.marker = {};
 
     ret = list(dpp, params, 1000, results, y);
     if (ret < 0) {
       return ret;
     }
 
-    if (!results.objs.empty() && !delete_children) {
+    if (results.objs.empty()) {
+      break;
+    }
+
+    if (!delete_children) {
       ldpp_dout(dpp, -1) << "ERROR: could not remove non-empty bucket " << info.bucket.name <<
 	dendl;
       return -ENOTEMPTY;
     }
+
+    std::set<rgw_obj_index_key> current_page;
+    for (const auto &obj : results.objs) {
+      current_page.insert(obj.key);
+    }
+    if (current_page == previous_page) {
+      ldpp_dout(dpp, -1) << "ERROR: bucket purge made no progress for "
+                         << info.bucket.name << dendl;
+      return -EAGAIN;
+    }
+    previous_page = std::move(current_page);
 
     for (const auto& obj : results.objs) {
       rgw_obj_key key(obj.key);
