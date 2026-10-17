@@ -1052,7 +1052,7 @@ struct rgw_usage_log_entry {
 
    void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(4, bl);
-    std::string s;
+    std::string s CEPH_INDETERMINATE;
     decode(s, bl);
     owner.from_str(s);
     decode(bucket, bl);
@@ -1067,7 +1067,7 @@ struct rgw_usage_log_entry {
       decode(usage_map, bl);
     }
     if (struct_v >= 3) {
-      std::string p;
+      std::string p CEPH_INDETERMINATE;
       decode(p, bl);
       payer.from_str(p);
     }

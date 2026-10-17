@@ -5,6 +5,7 @@
 
 #include "datum/codec/zpp.h"
 #include "include/buffer.h"
+#include "include/compat.h"
 
 #include <concepts>
 #include <cstddef>
@@ -243,7 +244,7 @@ public:
     void fields(RecordT& value, datum::binary_fields<Member...> selected)
     {
         require(Size);
-        std::array<char, Size> storage;
+        std::array<char, Size> storage CEPH_INDETERMINATE;
         const char *bytes = nullptr;
         const auto first = input.get_ptr_and_advance(Size, &bytes);
         if (first < Size) {
@@ -260,7 +261,7 @@ public:
     T scalar()
     {
         using record = scalar_record<T>;
-        record value;
+        record value CEPH_INDETERMINATE;
         fields<sizeof(T)>(value, datum::binary_fields<&record::value> {});
 
         return value.value;
@@ -276,7 +277,7 @@ public:
 
     std::string text()
     {
-        std::string value;
+        std::string value CEPH_INDETERMINATE;
         text(value);
 
         return value;
@@ -334,7 +335,7 @@ public:
     template <typename BodyT>
     decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
     {
-        frame_header header;
+        frame_header header CEPH_INDETERMINATE;
         fields<6>(header, header_fields {});
         if (header.compatible > supported) {
             throw ::ceph::buffer::malformed_input {"RGW CLS frame needs a newer decoder"};
@@ -356,7 +357,7 @@ public:
     {
         require(1);
         auto cursor = input;
-        std::uint8_t version;
+        std::uint8_t version CEPH_INDETERMINATE;
         ::ceph::decode(version, cursor);
         if (version >= first_framed) {
             return frame(supported, std::forward<BodyT>(body));
@@ -371,7 +372,7 @@ public:
     template <typename BodyT>
     bool canonical_frame(const std::uint8_t version, BodyT&& body)
     {
-        frame_header header;
+        frame_header header CEPH_INDETERMINATE;
         fields<6>(header, header_fields {});
         require(header.length);
         if (version != header.version || 1 != header.compatible) {
