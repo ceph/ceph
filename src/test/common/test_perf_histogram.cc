@@ -85,6 +85,26 @@ TEST(PerfHistogram, GetBucketForAxis) {
                    std::numeric_limits<int64_t>::min(), logarithmic));
   ASSERT_EQ(4, PerfHistogramAccessor<1>::get_bucket_for_axis(
                    std::numeric_limits<int64_t>::max(), logarithmic));
+
+  std::array<int64_t, 3> custom_bounds = {100, 200, 500};
+  PerfHistogramCommon::axis_config_d custom{"", custom_bounds};
+
+  ASSERT_EQ(0, PerfHistogramAccessor<1>::get_bucket_for_axis(-1, custom));
+  ASSERT_EQ(1, PerfHistogramAccessor<1>::get_bucket_for_axis(0, custom));
+  ASSERT_EQ(1, PerfHistogramAccessor<1>::get_bucket_for_axis(99, custom));
+  ASSERT_EQ(1, PerfHistogramAccessor<1>::get_bucket_for_axis(100, custom));
+  // note: compared to log2/linear buckets are inclusive and 101 falls
+  // into bucket 2 not 1 as above
+  ASSERT_EQ(2, PerfHistogramAccessor<1>::get_bucket_for_axis(101, custom));
+  ASSERT_EQ(2, PerfHistogramAccessor<1>::get_bucket_for_axis(200, custom));
+  ASSERT_EQ(3, PerfHistogramAccessor<1>::get_bucket_for_axis(201, custom));
+  ASSERT_EQ(3, PerfHistogramAccessor<1>::get_bucket_for_axis(500, custom));
+  ASSERT_EQ(4, PerfHistogramAccessor<1>::get_bucket_for_axis(501, custom));
+
+  ASSERT_EQ(0, PerfHistogramAccessor<1>::get_bucket_for_axis(
+                   std::numeric_limits<int64_t>::min(), custom));
+  ASSERT_EQ(4, PerfHistogramAccessor<1>::get_bucket_for_axis(
+                   std::numeric_limits<int64_t>::max(), custom));
 }
 
 static const int XS = 5;
@@ -138,6 +158,9 @@ TEST(PerfHistogram, Copy) {
         ASSERT_EQ(h1.read_bucket(x, y), h2.read_bucket(x, y));
       }
     }
+  }
+  for (int i = 0; i < 2; i++) {
+    ASSERT_EQ(h1.get_sum(i), h2.get_sum(i));
   }
 }
 
@@ -216,6 +239,68 @@ TEST(PerfHistogram, LogarithmicBucketRange) {
   }
 }
 
+TEST(PerfHistogram, CustomBucketRange) {
+  std::array<int64_t, 3> custom_bounds = {100, 200, 500};
+  PerfHistogramCommon::axis_config_d ac{"", custom_bounds};
+  auto ranges = PerfHistogramAccessor<1>::get_axis_bucket_ranges(ac);
+
+  ASSERT_EQ(std::size(custom_bounds) + 2, ranges.size());
+
+  for (size_t i = 0; i < ranges.size(); ++i) {
+    ASSERT_EQ(
+      static_cast<long>(i), PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].first, ac));
+    ASSERT_EQ(
+      static_cast<long>(i), PerfHistogramAccessor<1>::get_bucket_for_axis(ranges[i].second, ac));
+  }
+
+  for (size_t i = 1; i < ranges.size(); ++i) {
+    ASSERT_EQ(ranges[i].first, ranges[i - 1].second + 1);
+  }
+
+  for (size_t i = 0; i < std::size(custom_bounds); ++i) {
+    ASSERT_EQ(custom_bounds[i], ranges[i + 1].second);
+  }
+}
+
+TEST(PerfHistogram, CustomAxisBucketsInclusiveValues) {
+  std::array<int64_t, 3> custom_bounds = {100, 200, 500};
+  PerfHistogramAccessor<1> h{
+      PerfHistogramCommon::axis_config_d{"", custom_bounds}};
+
+  h.inc(100);
+  h.inc(101);
+  h.inc(1000);
+
+  ASSERT_EQ(0UL, h.read_bucket(0));
+  ASSERT_EQ(1UL, h.read_bucket(1));
+  ASSERT_EQ(1UL, h.read_bucket(2));
+  ASSERT_EQ(0UL, h.read_bucket(3));
+  ASSERT_EQ(1UL, h.read_bucket(4));
+  ASSERT_EQ(1201UL, h.get_sum(0));
+}
+
+TEST(PerfHistogram, WebLatencyBucketRange) {
+  auto ac = PerfHistogramCommon::axis_config_d::web_latency("");
+  auto ranges = PerfHistogramAccessor<1>::get_axis_bucket_ranges(ac);
+
+  ASSERT_EQ(13, ac.m_buckets);
+  ASSERT_EQ(13UL, ranges.size());
+  ASSERT_EQ(PerfHistogramCommon::AXIS_UNIT_NANOSECONDS, ac.m_unit);
+
+  // Upper edges land exactly on the Prometheus defaults expressed in
+  // nanoseconds, so an exporter emits le="0.005" .. le="10"
+  ASSERT_EQ(5'000'000, ranges[1].second);
+  ASSERT_EQ(10'000'000, ranges[2].second);
+  ASSERT_EQ(25'000'000, ranges[3].second);
+  ASSERT_EQ(10'000'000'000, ranges[11].second);
+  ASSERT_EQ(std::numeric_limits<int64_t>::max(), ranges[12].second);
+
+  ASSERT_EQ(1, PerfHistogramAccessor<1>::get_bucket_for_axis(5'000'000, ac));
+  ASSERT_EQ(2, PerfHistogramAccessor<1>::get_bucket_for_axis(5'000'001, ac));
+  ASSERT_EQ(12,
+            PerfHistogramAccessor<1>::get_bucket_for_axis(10'000'000'001, ac));
+}
+
 TEST(PerfHistogram, AxisAddressing) {
   PerfHistogramCommon::axis_config_d ac1{"", PerfHistogramCommon::SCALE_LINEAR,
                                          0, 1, 7};
@@ -245,4 +330,36 @@ TEST(PerfHistogram, AxisAddressing) {
         break;
     }
   }
+}
+
+TEST(PerfHistogram, SumPerDimensionAndBucketIndependent)
+{
+  const auto x_axis = PerfHistogramCommon::axis_config_d{
+      "x", PerfHistogramCommon::SCALE_LINEAR, 100, 10, 5};
+  const auto y_axis = PerfHistogramCommon::axis_config_d{
+      "y", PerfHistogramCommon::SCALE_LINEAR, 0, 1, 5};
+  PerfHistogramAccessor<2> h{x_axis, y_axis};
+  h.inc(50, 1);
+  h.inc(105, 2);
+  h.inc(108, 3);
+  h.inc(10000, 4);
+
+  ASSERT_EQ(h.get_sum(0), 50 + 105 + 108 + 10000);
+  ASSERT_EQ(h.get_sum(1), 1 + 2 + 3 + 4);
+  h.reset();
+  ASSERT_EQ(h.get_sum(0), 0);
+  ASSERT_EQ(h.get_sum(1), 0);
+}
+
+TEST(PerfHistogram, IncBucketDoesNotSum)
+{
+  PerfHistogramAccessor<2> h{x_axis, y_axis};
+  // inc_bucket increments counts at bucket indices. This means we
+  // have no observed values and cannot increment the sum
+  h.inc_bucket(1, 1);
+  h.inc_bucket(2, 3);
+
+  ASSERT_EQ(1UL, h.read_bucket(1,1));
+  ASSERT_EQ(h.get_sum(0), 0);
+  ASSERT_EQ(h.get_sum(1), 0);
 }
