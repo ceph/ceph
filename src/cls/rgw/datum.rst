@@ -1,11 +1,13 @@
 Datum wire bindings for RGW CLS
 ==============================
 
-The ``bi_get``, ``bi_list``, ``bi_put``, ``bi_put_entries`` and ``bucket_read_olh_log`` bindings
-let the client and module use different owning records and containers. They
-share the existing Ceph encoding, including versions, lengths, scalar widths,
-element encodings and map semantics. A container category alone does not define
-that contract.
+The RGW-owned ``cls_rgw``, ``cls_rgw_gc`` and ``cls_user`` classes bind all
+61 structured operations to independent client and module records. Seven
+data-free entries (including an alias) and one encoded-stream entry need no
+structured outer binding. The endpoints share the existing Ceph encoding,
+including versions, lengths, scalar widths, element encodings and map semantics.
+A container category alone does not define that contract. Generic classes used
+by RGW remain outside this migration.
 The prepare, complete, OLH link and OLH trim builders borrow their arguments
 during encoding, and their modules decode independent request records. Complete
 decodes the client's removal-list encoding directly into a vector. Storage
@@ -19,7 +21,6 @@ list, retaining native log-entry codecs and storage pagination semantics.
 Bucket directory listing also uses independent records. Its associative profile
 preserves sorted keys, last-wins duplicate decoding and the existing flat-map
 storage. Header and directory-entry codecs, filtering and retry markers stay native.
-Other RGW CLS operations continue to use their existing codecs.
 
 Statistics updates borrow the public maps during encoding and decode ordered,
 first-wins vector associations in the module. Index checks use independent reply
@@ -61,11 +62,35 @@ operations as well as copy operations, so existing moves and sorting can transfe
 bucket storage. Leaf encoding, request-version negotiation and storage rules stay
 unchanged. Rebuild affected callers before measuring this header change.
 
+Multipart update borrows the key and upload fields, retaining the native manifest
+copy because its custom copy drops the encoded head placement rule. The module
+uses an independent local request and decodes the native upload leaf in place:
+copying or moving a decoded candidate would drop a received placement rule. The
+cursor commits on success; a failed request may be partially decoded, is local,
+and never reaches storage. No shared manifest implementation changes are needed.
+
+The dedicated RGW GC queue wrapper reuses the legacy GC set/list/reply profiles
+for enqueue, full-info defer, and listing. Only queue initialization and the
+64-bit remove count need new scalar profiles. It borrows fetched queue records
+and moves accepted object chains into vector replies. Shared queue operations,
+storage helpers, urgent-data codecs, and public list outputs remain native.
+
+User bucket and account operations also bind independent requests and replies.
+Bulk bucket updates borrow the public list while encoding and decode directly
+into a module vector. Bucket listing encodes its vector into the established
+public list profile. Account listing retains its public vector interface. The
+native bucket-header callback retains its existing partial-result behavior on decode errors; it does not acquire the BI/OLH
+candidate-publication guarantee. Reset-statistics borrows the incoming buffer
+and retains native handling of the accumulated header and update ordering.
+Native leaf codecs, account key ordering and shared storage helpers stay unchanged.
+
 Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
-``WITH_RGW_CLS_DATUM`` enabled, the private ``cls_rgw_datum`` object target
-provides the C++26 implementation. Its language requirements and Datum headers
-do not propagate through the client library's public interface. Disabling the
-RGW option retains both client result interfaces using native codecs.
+``WITH_RGW_CLS_DATUM`` enabled, three private object targets provide four
+C++26 translation units: bucket-index and OLH bindings in ``cls_rgw_datum``,
+GC bindings in ``cls_rgw_datum_gc``, and user bindings in ``cls_user_datum``.
+Their language requirements and Datum headers do not propagate through the
+client libraries' public interfaces. Disabling the RGW option retains the
+public result interfaces using native codecs.
 
 Independent client results
 --------------------------
@@ -91,9 +116,9 @@ An OLH caller can use the native map result or independent client records::
 
 The OLH compound-operation overload takes the same result and a completion
 status reference. Keep those outputs alive until the operation completes.
-Successful decoding produces complete candidates before publishing outputs;
-decode failures preserve the caller's previous result. Completion errors map
-allocation failures to ``-ENOMEM`` and malformed responses to ``-EIO``.
+These BI and OLH interfaces decode complete candidates before publishing
+outputs; decode failures preserve the caller's previous result. Completion errors
+map allocation failures to ``-ENOMEM`` and malformed responses to ``-EIO``.
 
 Single-entry reads
 ------------------
@@ -138,8 +163,7 @@ complete9/7, link5/1 and trim1/1. The existing metadata, packed-version, removal
 and zone codecs remain nested wire contracts. In particular, borrowing does not
 change packed-integer boundary behavior. Optional arguments preserve their native
 defaults, and link retains its existing zero bilog flags and epoch-output path.
-The public interfaces remain C++23 and the private implementation still has two
-C++26 translation units.
+The public interfaces remain C++23; the C++26 implementations remain private.
 
 The module profiles preserve the older single-version-byte prepare/complete
 envelopes and every subsequent field-version gate. Complete reads old name-only
@@ -177,9 +201,10 @@ native entry just to interpret an independent incoming record.
 Wire contracts
 --------------
 
-All frame headers are version byte, compatibility byte and little-endian
-uint32 body length. Counted strings and containers use little-endian uint32
-lengths. Strings preserve arbitrary bytes. Decoders skip compatible frame
+Framed records have a version byte, compatibility byte and little-endian
+uint32 body length. The legacy prepare/complete forms described above use their
+older single-version-byte envelopes. Counted strings and containers use
+little-endian uint32 lengths. Strings preserve arbitrary bytes. Decoders skip compatible frame
 extensions and retain native nonzero-byte boolean semantics.
 
 * BI list request v2/compat1: maximum uint32, filter string, marker string, reshard
@@ -255,10 +280,10 @@ ranges retain their owners. Those underlying allocations remain alive until the
 reply is released and may contain additional stored events; avoiding
 materialization does not imply minimum retained memory.
 
-Every nested frame has its own read boundary. Counts are checked against minimum
-encoded element sizes before reserving storage. These checks prevent impossible
-allocations; they are not a total work or memory quota for an arbitrarily large
-valid message. Native stored-object codecs and their resource policy remain
+Adapter-decoded nested frames have their own read boundaries. Outer sequence
+counts are checked against minimum encoded element sizes before reserving storage.
+These checks reject impossible outer allocations; they are not a total work or
+memory quota for an arbitrarily large valid message. Native stored-object codecs and their resource policy remain
 separate from the request/reply adapters.
 
 Validation
@@ -272,16 +297,3 @@ put module targets share a plugin loader and supply controlled OMAP effects.
 Batch cases cover duplicate accounting, overwrite checks, quota/error ordering,
 reshard guards, empty batches and malformed opaque payloads. The controlled host
 records staged effects; live OSD validation separately checks transaction rollback.
-
-Multipart update borrows the key and upload fields, retaining the native manifest
-copy because its custom copy drops the encoded head placement rule. The module
-uses an independent local request and decodes the native upload leaf in place:
-copying or moving a decoded candidate would drop a received placement rule. The
-cursor commits on success; a failed request may be partially decoded, is local,
-and never reaches storage. No shared manifest implementation changes are needed.
-
-The dedicated RGW GC queue wrapper reuses the legacy GC set/list/reply profiles
-for enqueue, full-info defer, and listing. Only queue initialization and the
-64-bit remove count need new scalar profiles. It borrows fetched queue records
-and moves accepted object chains into vector replies. Shared queue operations,
-storage helpers, urgent-data codecs, and public list outputs remain native.
