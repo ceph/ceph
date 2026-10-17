@@ -43,12 +43,18 @@ class NFSRados:
             log.debug("write configuration into rados object %s/%s/%s",
                       self.pool, self.namespace, obj)
 
-            # Add created obj url to common config obj
-            ioctx.append(config_obj, format_block(
-                         self._create_url_block(obj)).encode('utf-8'))
+            # Add created obj url to common config obj if not already present
+            try:
+                size, _ = ioctx.stat(config_obj)
+                existing = ioctx.read(config_obj, size).decode('utf-8')
+            except ObjectNotFound:
+                existing = ''
+            url_block = format_block(self._create_url_block(obj))
+            if url_block not in existing:
+                ioctx.append(config_obj, url_block.encode('utf-8'))
+                log.debug("Added %s url to %s", obj, config_obj)
             if should_notify:
                 _check_rados_notify(ioctx, config_obj)
-            log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
         with self.rados.open_ioctx(self.pool) as ioctx:
@@ -81,6 +87,17 @@ class NFSRados:
             if should_notify:
                 _check_rados_notify(ioctx, config_obj)
             log.debug("Object deleted: %s", url)
+
+    def notify_conf(self, config_obj: str) -> None:
+        """Ask ganesha to reread the configuration without changing it.
+
+        Only needed when the write that should have carried the notification
+        did not happen; every other path notifies as part of its own write.
+        """
+        with self.rados.open_ioctx(self.pool) as ioctx:
+            ioctx.set_namespace(self.namespace)
+            _check_rados_notify(ioctx, config_obj)
+            log.debug("Notified ganesha for %s", config_obj)
 
     def remove_all_obj(self) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:
