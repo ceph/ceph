@@ -790,6 +790,13 @@ public:
     ObcLockManager lock_manager;
 
     std::map<int, std::unique_ptr<OpFinisher>> op_finishers;
+    /// the finishers of nested do_osd_ops() calls, such as the reads of a
+    /// CALL's method, by the depth of the call and the number of the op
+    /// that made it: a nested call numbers its own ops from 0 too
+    std::map<std::pair<int, int>,
+	     std::map<int, std::unique_ptr<OpFinisher>>> nested_op_finishers;
+    /// how many do_osd_ops() calls for this op run now
+    int osd_ops_depth = 0;
 
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);

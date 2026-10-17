@@ -84,6 +84,7 @@
 #define dout_prefix _prefix(_dout, this)
 
 #include "osd_tracer.h"
+#include "include/scope_guard.h"
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
@@ -6217,6 +6218,24 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
   int result = 0;
+  // A nested call, such as the reads of a CALL's method, numbers its ops
+  // from 0 too. It runs with finishers of its own, kept for the op that
+  // made the call, so that it does not run the finisher of the request's
+  // op 0, and it gives the caller's loop its op number back.
+  const int outer_subop_num = ctx->current_osd_subop_num;
+  const int depth = ctx->osd_ops_depth++;
+  if (depth > 0) {
+    std::swap(ctx->op_finishers,
+	      ctx->nested_op_finishers[{depth, outer_subop_num}]);
+  }
+  auto restore_outer = make_scope_guard([ctx, depth, outer_subop_num] {
+    --ctx->osd_ops_depth;
+    if (depth > 0) {
+      std::swap(ctx->op_finishers,
+		ctx->nested_op_finishers[{depth, outer_subop_num}]);
+      ctx->current_osd_subop_num = outer_subop_num;
+    }
+  });
   SnapSetContext *ssc = ctx->obc->ssc;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
