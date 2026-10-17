@@ -1559,6 +1559,28 @@ options:
   level: advanced
   default: true
   with_legacy: true
+- name: osd_ec_repair_on_read
+  type: bool
+  level: advanced
+  desc: Repair an erasure-coded shard whose read failed with a media error
+  long_desc: When a client read of an object in an erasure-coded pool with
+    allow_ec_optimizations decodes its data around a shard whose own object
+    store failed the read with EIO, the primary marks the object missing on
+    that shard and recovers it straight away, instead of leaving the damaged
+    copy, and the parity decode every read of it costs, to a deep scrub with
+    repair. The PG goes through recovery, and the repair counts toward the
+    damaged OSD's repair total, as a read repair in a replicated pool does.
+    Only an active+clean PG repairs this way, and only while k+1 shards that
+    the read did not find damaged hold the object, so that the recovery
+    survives one more error elsewhere in it; a pool with m=1 never does.
+  default: true
+  services:
+  - osd
+  see_also:
+  - osd_scrub_auto_repair
+  flags:
+  - runtime
+  with_legacy: true
 - name: osd_recovery_delay_start
   type: float
   level: advanced

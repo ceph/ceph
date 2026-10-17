@@ -724,6 +724,13 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
                         res.buffers_read.get_ro_buffer(read.offset, read.size));
         }
       }
+      if (!res.media_errors.empty()) {
+        // the data is whole without the shards whose store failed to
+        // read it: the PG may repair them, the read completes regardless
+        dout(10) << __func__ << " " << hoid << " decoded around media errors"
+                 << " on shards " << res.media_errors << dendl;
+        read_pipeline.get_parent()->ec_repair_on_read(hoid, res.media_errors);
+      }
     }
     dout(20) << __func__ << " calling complete_object with result="
              << result << dendl;
