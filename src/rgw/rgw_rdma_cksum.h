@@ -90,6 +90,10 @@ inline rgw::cksum::Cksum cksum_crc32c(uint32_t canonical)
 void dump_checksums(req_state* s, const std::optional<uint64_t>& crc64,
                     const std::optional<uint32_t>& crc32c);
 
+/// the canonical CRC-32C of len bytes at p, as rgw::digest::Crc32c
+/// computes it
+uint32_t crc32c_of(const void* p, uint64_t len);
+
 /// the canonical CRCs of some bytes, those that are known
 struct crcs {
   std::optional<uint64_t> crc64;

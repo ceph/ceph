@@ -33,7 +33,8 @@ namespace ceph::rdma {
  * protection domain the owner opened, with a CQ and an SRQ of its own
  * that nothing polls, and brings it to RTR, which is all a target
  * needs. Peers may only write through it. The OSD's gather windows
- * (osd/osd_dc_target.h) sit behind one.
+ * (osd/osd_dc_target.h) and the gateway's relay buffers
+ * (rgw/rgw_rdma_dc_target.h) sit behind one.
  *
  * Only mlx5 devices implement DC. This is header-only so that it builds
  * into the daemons that include it, which are the ones that link the
@@ -154,7 +155,7 @@ inline int dc_target::open(ibv_context* ctx, ibv_pd* pd, uint8_t port,
   qpa.ah_attr.is_global = 1;
   qpa.ah_attr.port_num = port;
   // the DCT's ACKs carry this as their RoCE v2 TTL; leave room for a
-  // routed multi-tier fabric
+  // routed multi-tier fabric, as the gateway's RC transport does
   qpa.ah_attr.grh.hop_limit = 64;
   qpa.ah_attr.grh.sgid_index = static_cast<uint8_t>(gid_index);
   if (int r = ibv_modify_qp(m_dct, &qpa, IBV_QP_STATE | IBV_QP_MIN_RNR_TIMER |

@@ -117,8 +117,8 @@ class AppMain {
   std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
   std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
   std::unique_ptr<ActiveRateLimiter> ratelimiter;
-  /// the memory the cuObject server registers for out-of-band
-  /// transfers (oob_memory); null when it does not run
+  /// the memory the cuObject server and the RC service register for
+  /// out-of-band transfers (oob_memory); null when neither runs
   std::shared_ptr<ceph::oob::Arena> oob_arena;
   std::map<std::string, std::string> service_map_meta;
   // wow, realm reloader has a lot of parts

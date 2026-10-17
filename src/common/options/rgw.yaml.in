@@ -4867,7 +4867,7 @@ options:
   - debug
   flags:
   - startup
-# S3 over RDMA options
+# S3 over RDMA options: OSD-direct transfers and hipobj-rc-v2 sessions
 - name: rgw_rdma_checksum
   type: bool
   level: advanced
@@ -4878,8 +4878,9 @@ options:
     full-object checksum. It combines the values, reports them in
     x-amz-rdma-checksum-crc64nvme or x-amz-rdma-checksum-crc32c, which lets
     the client test its own buffer, and compares whole-object GETs with the
-    stored checksum before it responds. An OSD-direct PUT always asks the
-    OSDs for checksums, whatever this option says.
+    stored checksum before it responds. For hipobj-rc-v2 sessions, the READY
+    answer reports the same headers. An OSD-direct PUT always asks the OSDs
+    for checksums, whatever this option says.
   default: true
   services:
   - rgw
@@ -4890,7 +4891,8 @@ options:
   long_desc: For a token of a transport in oob_client_transports, the
     gateway forwards the token to the OSDs in a delivery descriptor on each
     stripe operation. The OSDs write the data of a GET into the client's
-    window. They pull the object of a body-less PUT
+    window, and into the relay buffers of hipobj-rc-v2 sessions when
+    oob_cluster_transport is set. They pull the object of a body-less PUT
     out of client memory. The object bypasses the gateway. A stripe that an
     OSD returns inline restarts a GET in gateway-staged mode or over plain
     HTTP, and a PUT that the OSDs cannot pull is declined with 501. Only
@@ -4901,6 +4903,7 @@ options:
   - rgw
   see_also:
   - oob_client_transports
+  - oob_cluster_transport
 - name: rgw_rdma_token_allow_anonymous
   type: bool
   level: advanced
@@ -4922,6 +4925,142 @@ options:
   - rgw_rdma_osd_direct
   flags:
   - runtime
+- name: rgw_rdma_rc_trust_loopback
+  type: bool
+  level: advanced
+  desc: Take hipobj-rc-v2 requests whose connection comes from a loopback
+    address as requests of clients on the gateway's host
+  long_desc: Only a client on the gateway's host may send the all-zero
+    x-amz-rdma-token, or a token that names a GID of the host, because the
+    gateway then pairs with a queue pair on its own host. The gateway takes
+    a request as one of such a client when its HTTP connection comes from a
+    loopback address (127.0.0.0/8 or ::1). It reads the connection's peer,
+    not rgw_remote_addr_param, and an address of the host's interfaces does
+    not count. Turn this off when a proxy on the gateway's host connects to
+    the gateway from a loopback address, since every client behind it would
+    then count as local. A proxy that connects to the host's own address,
+    as cephadm's ingress service does, needs no change.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - oob_client_transports
+  flags:
+  - runtime
+- name: rgw_rdma_rc_dc_relay
+  type: bool
+  level: advanced
+  desc: Let the OSDs write hipobj-rc-v2 GET relays into the gateway through a
+    cuObject DC target
+  long_desc: With cuobj as oob_cluster_transport, the gateway can expose its
+    RC relay buffers to the OSDs behind a cuObject Dynamically Connected
+    target. Such a target takes writes from any host that holds
+    cuobj_dc_key, and every cuObject client holds that key. A host that
+    also learns a relay buffer's key and address could write into it, and
+    the gateway would relay those bytes to another user as object data.
+    Turn this on only when every host that holds cuobj_dc_key is trusted,
+    for example when the key is a secret that only the OSDs and gateways
+    hold. Without it, the gateway copies RC GETs into its buffers itself.
+  default: false
+  services:
+  - rgw
+  see_also:
+  - cuobj_dc_key
+  - oob_cluster_transport
+  - rgw_rdma_osd_direct
+  flags:
+  - startup
+- name: rgw_rdma_rc_max_sessions
+  type: uint
+  level: advanced
+  desc: Maximum concurrent hipobj-rc-v2 sessions
+  default: 1024
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_rdma_rc_max_sessions_per_user
+  type: uint
+  level: advanced
+  desc: Maximum concurrent hipobj-rc-v2 sessions per account, or per user
+    outside an account
+  long_desc: The sessions of every subuser and role session of the account
+    or user count against it.
+  default: 64
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_rdma_rc_max_bytes_per_user
+  type: size
+  level: advanced
+  desc: Most out-of-band memory that the hipobj-rc-v2 session buffers of one
+    account, or of one user outside an account, may hold
+  long_desc: Each session holds a buffer of the gateway's out-of-band memory,
+    its transfer size rounded up to a power of two and at least 1 MiB. The
+    buffer counts against its user from PREPARE until it is back in that
+    memory, which can be after the session ends, while an OSD write may
+    still land in it. A PREPARE that would go over the limit gets 503. A
+    user who holds no buffer can always take one. The default, 0, is a fair
+    share of oob_memory, which a user gets without a fixed limit. While one
+    user holds buffers and no other user waits for one, it can hold all of
+    oob_memory, so that a gateway that serves one account can use all of
+    it. While several users hold buffers, or found no room for one in the
+    last 10 seconds, each can hold an equal part of oob_memory.
+  default: 0
+  services:
+  - rgw
+  see_also:
+  - oob_memory
+  - rgw_rdma_rc_max_sessions_per_user
+  flags:
+  - startup
+- name: rgw_rdma_rc_send_depth
+  type: uint
+  level: advanced
+  desc: Send queue depth of each session's queue pair; bounds how many stripe
+    writes a GET relay may have in flight toward the client
+  default: 64
+  min: 1
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_rdma_rc_prepare_timeout_ms
+  type: uint
+  level: advanced
+  desc: Milliseconds a prepared session waits for READY before it is reaped
+  default: 100000
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_rdma_rc_exec_timeout_ms
+  type: uint
+  level: advanced
+  desc: Milliseconds a READY transfer may take, including the object read
+  default: 30000
+  services:
+  - rgw
+  flags:
+  - startup
+- name: rgw_rdma_rc_path_mtu
+  type: uint
+  level: advanced
+  desc: Path MTU in bytes of the queue pairs that hipobj-rc-v2 sessions pair
+    with clients; 0 takes the gateway port's active MTU
+  long_desc: Both ends of a pairing must use the same path MTU, and the
+    protocol does not carry it. When the clients' path MTU is below the
+    gateway port's, every transfer longer than it fails. Set this to the
+    clients' path MTU, for example 1024 for clients on a 1500-byte Ethernet
+    MTU. The value is rounded down to 256, 512, 1024, 2048 or 4096 and never
+    exceeds the port's active MTU. A value from 1 to 255 keeps the RC server
+    from starting.
+  default: 0
+  services:
+  - rgw
+  flags:
+  - startup
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced

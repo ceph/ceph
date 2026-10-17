@@ -619,9 +619,9 @@ else()
 endif()
 option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ${WITH_RADOSGW_LANCEDB_DEFAULT})
 # out-of-band delivery over libfabric: one transport for the OSD
-# executor and EC gather windows, on any provider (tcp, shm, verbs,
-# efa, a UET provider such as the UEC reference provider's libfabric
-# wrapper)
+# executor, EC gather windows and the gateway's relay window, on any
+# provider (tcp, shm, verbs, efa, a UET provider such as the UEC
+# reference provider's libfabric wrapper)
 option(WITH_OOB_OFI "out-of-band delivery over libfabric" OFF)
 if(WITH_OOB_OFI)
   # pkg-config first, as src/ofi-rma does and as src/script/run-make.sh
@@ -650,6 +650,18 @@ if(WITH_OOB_OFI)
   elseif(FABRIC_VERSION VERSION_LESS 1.20)
     message(FATAL_ERROR "WITH_OOB_OFI needs libfabric 1.20 or later, but "
       "${FABRIC_INCLUDE_DIR}/rdma/fabric.h is ${FABRIC_VERSION}")
+  endif()
+endif()
+cmake_dependent_option(WITH_RDMA_RC
+  "hipobj-rc-v2 S3-over-RDMA (RC transport) server in RADOS Gateway"
+  ON "WITH_RADOSGW;WITH_RDMA" OFF)
+if(WITH_RDMA_RC)
+  # the gateway can also stand in as a cuObject DC target for OSD-direct
+  # delivery, which needs the mlx5 direct verbs; optional
+  find_path(MLX5DV_INCLUDE_DIR infiniband/mlx5dv.h)
+  find_library(MLX5_LIBRARY mlx5)
+  if(MLX5DV_INCLUDE_DIR AND MLX5_LIBRARY)
+    set(HAVE_MLX5DV TRUE)
   endif()
 endif()
 # See doc/radosgw/s3rdma.rst for build and runtime requirements.

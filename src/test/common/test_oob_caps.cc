@@ -24,10 +24,12 @@
 #include "include/msgr.h"
 #include "gtest/gtest.h"
 
+using ceph::oob::drop_net_raw;
 using ceph::oob::keep_caps;
 using ceph::oob::keep_only_net_raw;
 using ceph::oob::needs_net_raw;
 using ceph::oob::osd_keeps_net_raw;
+using ceph::oob::rgw_keeps_net_raw;
 using ceph::oob::with_net_raw;
 using ceph::rdma::parse_oob_transports;
 
@@ -188,8 +190,10 @@ TEST(OobCaps, NeedsNetRaw)
   // the provider of the daemon's one endpoint, which the cluster
   // transport names before the client list does
   EXPECT_TRUE(needs_net_raw(parse_oob_transports("tcp", "uet").ofi_provider));
+  EXPECT_TRUE(needs_net_raw(parse_oob_transports("rc, uet", "").ofi_provider));
   EXPECT_FALSE(needs_net_raw(
     parse_oob_transports("tcp, uet", "").ofi_provider));
+  EXPECT_FALSE(needs_net_raw(parse_oob_transports("rc", "cuobj").ofi_provider));
 }
 
 // global_init(): an OSD keeps it through --setuser when uet is the
@@ -212,7 +216,7 @@ TEST(OobCaps, OsdKeepsNetRaw)
   // without a cluster transport, the client list's first libfabric
   // provider
   conf.set_val("oob_cluster_transport", "");
-  conf.set_val("oob_client_transports", "cuobj, uet");
+  conf.set_val("oob_client_transports", "rc, uet");
   EXPECT_TRUE(osd_keeps_net_raw(cct.get()));
   conf.set_val("oob_client_transports", "tcp, uet");
   EXPECT_FALSE(osd_keeps_net_raw(cct.get()));
@@ -240,6 +244,37 @@ TEST(OobCaps, OsdKeepsNetRaw)
   EXPECT_FALSE(osd_keeps_net_raw(other.get()));
   other->_conf.set_val("oob_keep_net_raw", "true");
   EXPECT_FALSE(osd_keeps_net_raw(other.get()));
+}
+
+// drop_privileges(): a gateway keeps it through --setuser when its RC
+// service opens relay windows over uet
+TEST(OobCaps, RgwKeepsNetRaw)
+{
+  auto cct = context(CEPH_ENTITY_TYPE_CLIENT, 167);
+  auto& conf = cct->_conf;
+  conf.set_val("oob_client_transports", "rc");
+  conf.set_val("oob_cluster_transport", "uet");
+  conf.set_val("rgw_rdma_osd_direct", "true");
+  EXPECT_TRUE(rgw_keeps_net_raw(cct.get()));
+  cct->set_uid_gid(0, 0);
+  EXPECT_FALSE(rgw_keeps_net_raw(cct.get()));
+  cct->set_uid_gid(167, 167);
+  // no relay windows: no RC service, or the gateway relays the stripes
+  conf.set_val("rgw_rdma_osd_direct", "false");
+  EXPECT_FALSE(rgw_keeps_net_raw(cct.get()));
+  conf.set_val("rgw_rdma_osd_direct", "true");
+  conf.set_val("oob_client_transports", "uet");
+  EXPECT_FALSE(rgw_keeps_net_raw(cct.get()));
+  // relay windows over another transport
+  conf.set_val("oob_client_transports", "rc");
+  conf.set_val("oob_cluster_transport", "verbs");
+  EXPECT_FALSE(rgw_keeps_net_raw(cct.get()));
+  conf.set_val("oob_cluster_transport", "cuobj");
+  EXPECT_FALSE(rgw_keeps_net_raw(cct.get()));
+  // the gateway opens no endpoint for a libfabric client transport
+  conf.set_val("oob_client_transports", "rc, uet");
+  conf.set_val("oob_cluster_transport", "");
+  EXPECT_FALSE(rgw_keeps_net_raw(cct.get()));
 }
 
 // whatever the test process holds: fn runs once, the result says
@@ -375,6 +410,61 @@ TEST(OobCaps, KeepOnlyNetRawWithout)
   if (!ran) {
     GTEST_SKIP() << NO_ROOT_SKIP;
   }
+}
+
+// once its endpoint is open, the gateway drops what it kept, and the
+// threads it starts afterwards hold nothing
+TEST(OobCaps, DropNetRaw)
+{
+  const bool ran = as_root([] {
+    std::string err;
+    bool kept = false;
+    ASSERT_EQ(0, keep_only_net_raw(&kept, &err)) << err;
+    ASSERT_TRUE(kept);
+    bool dropped = false;
+    ASSERT_EQ(0, drop_net_raw(&dropped, &err)) << err;
+    EXPECT_TRUE(dropped);
+    EXPECT_EQ("=", caps_text());
+    std::thread([] {
+      EXPECT_EQ("=", caps_text());
+    }).join();
+    // nothing is left to drop
+    ASSERT_EQ(0, drop_net_raw(&dropped, &err)) << err;
+    EXPECT_FALSE(dropped);
+  });
+  if (!ran) {
+    GTEST_SKIP() << NO_ROOT_SKIP;
+  }
+}
+
+// a thread that holds other capabilities, as one of a daemon running as
+// root does, keeps them all
+TEST(OobCaps, DropNetRawKeepsRoot)
+{
+  const bool ran = as_root([] {
+    ASSERT_TRUE(holds(CAP_PERMITTED));
+    const std::string before = caps_text();
+    std::string err;
+    bool dropped = true;
+    ASSERT_EQ(0, drop_net_raw(&dropped, &err)) << err;
+    EXPECT_FALSE(dropped);
+    EXPECT_EQ(before, caps_text());
+  });
+  if (!ran) {
+    GTEST_SKIP() << NO_ROOT_SKIP;
+  }
+  // nor does a thread without any capability change
+  std::thread([] {
+    if (holds(CAP_PERMITTED)) {
+      return;
+    }
+    const std::string before = caps_text();
+    std::string err;
+    bool dropped = true;
+    EXPECT_EQ(0, drop_net_raw(&dropped, &err)) << err;
+    EXPECT_FALSE(dropped);
+    EXPECT_EQ(before, caps_text());
+  }).join();
 }
 
 // root that switches to another user keeps CAP_NET_RAW, and only it,

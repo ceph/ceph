@@ -828,7 +828,7 @@ TEST(RGWCksum, RdmaCanonical)
     auto stored2 = rgw::cksum::finalize_digest(digest2, t);
     EXPECT_EQ(stored2.to_armor(),
 	      rgw::rdma::cksum_crc32c(
-		crc32iscsi_word(0U, p, s->length())).to_armor());
+		rgw::rdma::crc32c_of(p, s->length())).to_armor());
   }
 
   /* the values that DigestCRC32c and CRC64NVME2 compare with */
@@ -838,7 +838,7 @@ TEST(RGWCksum, RdmaCanonical)
 	      spdk_crc64_nvme(p, dolor.length(), 0)).to_armor());
   EXPECT_EQ("ldwuSw==",
 	    rgw::rdma::cksum_crc32c(
-	      crc32iscsi_word(0U, p, dolor.length())).to_armor());
+	      rgw::rdma::crc32c_of(p, dolor.length())).to_armor());
 }
 
 TEST(RGWCksum, RdmaStoredOrder)
@@ -869,7 +869,7 @@ rdma_result(const std::string& s)
   R r;
   r.bytes = s.length();
   r.crc64 = spdk_crc64_nvme(p, s.length(), 0);
-  r.crc32c = crc32iscsi_word(0U, p, s.length());
+  r.crc32c = rgw::rdma::crc32c_of(p, s.length());
   r.flags = R::COMBINABLE | R::CRC64_VALID |
     R::CRC32C_VALID;
   return r;

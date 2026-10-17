@@ -143,6 +143,33 @@ TEST(RgwRdmaFence, PlacedStripesThatDidNotLandNeedTheFence)
   EXPECT_FALSE(rgw::rdma::fence_needed(rs));
 }
 
+TEST(RgwRdmaFence, ResentRelayThatSucceeded)
+{
+  // the results of a relay that delivered every stripe, one of them on a
+  // resend, read as RGWRados::Object::Read::iterate() reads them: its
+  // window is held like a failed relay's. An OSD that pushes a resend
+  // whose earlier attempts did not settle gives these; ours return it
+  // inline, and the fallback waits out the fence instead
+  std::deque<result> rs = {
+    with(R::LANDED, 4 << 20),
+    with(R::LANDED | R::RESENT, 4 << 20)};
+  EXPECT_TRUE(rgw::rdma::fence_needed(rs));
+  // without the resend every write settled: the window is free at once,
+  // after a relay that failed past the reads as after one that did not
+  rs.back() = with(R::LANDED, 4 << 20);
+  EXPECT_FALSE(rgw::rdma::fence_needed(rs));
+}
+
+TEST(RgwRdmaFence, RelayOverPlacedStripes)
+{
+  // a relay over a transport that does not promise delivery-complete
+  // writes (a libfabric provider without FI_DELIVERY_COMPLETE): every
+  // stripe placed, none of them landed. The window is held whether the
+  // reads failed or delivered the range: a write may still be on its way
+  std::deque<result> rs = {with(0, 4 << 20), with(0, 4 << 20)};
+  EXPECT_TRUE(rgw::rdma::fence_needed(rs));
+}
+
 TEST(RgwRdmaFence, PassthroughHoldsAfterAStripeThatDidNotLand)
 {
   // a GET whose OSD placed a stripe without saying that it landed waits

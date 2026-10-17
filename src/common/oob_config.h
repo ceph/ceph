@@ -112,6 +112,16 @@ int keep_caps(std::string* err);
 int keep_only_net_raw(bool* kept, std::string* err);
 
 /**
+ * Once the endpoint that needed it is open: on a thread that holds no
+ * capability but CAP_NET_RAW, as keep_only_net_raw() leaves one, drop
+ * that too, from every set. The threads that it starts afterwards hold
+ * none. A thread that holds other capabilities, as one of a daemon
+ * running as root does, keeps them all. *dropped says whether there was
+ * something to drop. Returns 0, or -errno with *err.
+ */
+int drop_net_raw(bool* dropped, std::string* err);
+
+/**
  * Run fn with CAP_NET_RAW in the effective set, for a provider that
  * needs it while its endpoint opens (see needs_net_raw()).
  *
@@ -139,6 +149,14 @@ int with_net_raw(const std::function<void()>& fn, std::string* err);
  * and the command line then: the mon config arrives after the switch.
  */
 bool osd_keeps_net_raw(CephContext* cct);
+
+/**
+ * Whether a gateway that switches from root to cct's uid when its
+ * frontends start keeps CAP_NET_RAW, and only it: when its RC service
+ * will open relay windows over uet (rc in oob_client_transports,
+ * rgw_rdma_osd_direct, and uet as oob_cluster_transport).
+ */
+bool rgw_keeps_net_raw(CephContext* cct);
 
 /// public_addr's address, for a daemon without a messenger of its own,
 /// or empty

@@ -48,7 +48,7 @@ inline constexpr double delivery_fence()
  * Whether a write of OSD-direct reads, every one of them completed, may
  * still land in the window: the fence (delivery_fence()) that a fallback
  * and a response wait out before anything else writes the window or the
- * client hears back.
+ * client hears back, or a relay window's quarantine in its place.
  *
  * Not when every descriptor-bearing read came back, without having been
  * resent, saying either that its OSD started no transfer for it

@@ -101,14 +101,16 @@ TEST(RdmaToken, OobTransports)
   auto t = parse_oob_transports("", "");
   EXPECT_TRUE(t.ofi_provider.empty());
   EXPECT_FALSE(t.cuobj());
+  EXPECT_FALSE(t.client_rc());
   EXPECT_TRUE(t.warnings.empty());
 
-  // one provider for both roles, and cuObject clients, in either
+  // one provider for both roles, cuObject and RC clients, in either
   // spelling
-  t = parse_oob_transports("verbs_ofi_rxm, cuobj", "verbs;ofi_rxm");
+  t = parse_oob_transports("verbs_ofi_rxm, cuobj, rc", "verbs;ofi_rxm");
   EXPECT_EQ("verbs;ofi_rxm", t.ofi_provider);
   EXPECT_TRUE(t.client_ofi());
   EXPECT_TRUE(t.client_cuobj());
+  EXPECT_TRUE(t.client_rc());
   EXPECT_TRUE(t.cluster_ofi());
   EXPECT_FALSE(t.cluster_cuobj());
   EXPECT_TRUE(t.names_provider("verbs;ofi_rxm"));
@@ -130,7 +132,10 @@ TEST(RdmaToken, OobTransports)
   EXPECT_EQ("tcp", t.ofi_provider);
   EXPECT_EQ(1u, t.warnings.size());
 
-  // the cluster transport is one
+  // rc is no cluster transport, and the cluster transport is one
+  t = parse_oob_transports("", "rc");
+  EXPECT_TRUE(t.cluster.empty());
+  EXPECT_EQ(1u, t.warnings.size());
   t = parse_oob_transports("", "cuobj, tcp");
   EXPECT_EQ("cuobj", t.cluster);
   EXPECT_TRUE(t.ofi_provider.empty());

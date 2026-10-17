@@ -495,12 +495,27 @@ protected:
     NONE,        ///< HTTP body (x-amz-rdma-reply: 501 when a token was sent)
     STAGED,      ///< staged in RGW memory, one RDMA_WRITE from the local cuObjServer
     PASSTHROUGH, ///< OSDs RDMA-write stripes directly (delivery descriptor)
+    RELAY,       ///< OSDs RDMA-write stripes into a gateway window that a
+                 ///< subclass forwards to the client (hipobj-rc-v2)
+    RELAY_STAGED,///< stripes copied into that gateway window instead
   };
   std::string rdma_token;  ///< x-amz-rdma-token header, empty if absent
   RdmaMode rdma_mode = RdmaMode::NONE;
   /// the out-of-band mode get_data_cb() switched away from when the
   /// store streamed the data instead; NONE when it did not
   RdmaMode rdma_switched_from = RdmaMode::NONE;
+  /// a gateway memory window for the relay modes: the subclass serving
+  /// an RC session sets these before execute(); relay_token is the
+  /// delivery descriptor (cuObject DC or libfabric) the OSDs push into
+  /// (empty = no OSD-direct delivery, so RELAY_STAGED)
+  std::string relay_token;
+  size_t relay_window = 0;
+  /// whether the OSDs' results say when their writes into that window
+  /// landed (rdma_delivery_result::LANDED): the cluster transport
+  /// promises delivery-complete writes. Without it, the relay could push
+  /// no relayed byte before the fence passed, so the stripes are copied
+  /// in instead (RELAY_STAGED)
+  bool relay_lands = false;
   /// The fence a GET owes once descriptor-bearing reads reached OSDs: a
   /// write of theirs that no reply accounts for may still land in the
   /// window until the largest lease plus drain that any pool can have,
@@ -511,6 +526,7 @@ protected:
   struct rdma_fence_t {
     bool sent = false;           ///< descriptor-bearing reads went out
     bool needed = true;          ///< see rgw::rdma::fence_needed()
+    bool client_window = false;  ///< they wrote the client's window
     bool settled = false;        ///< waited out, or found not needed
     uint64_t wait_ms = 0;        ///< the fence, delivery_fence()
   } rdma_fence_state;
@@ -527,12 +543,19 @@ protected:
   void note_rdma_reads(bool submitted, bool needed, double fence_s);
   /// wait the fence owed, once, before what: a fallback rewriting the
   /// window, or a response (success or not)
-  void rdma_fence_before(const char* what, bool success);
+  void rdma_fence_before(const char* what, bool response, bool success);
+  /// after execute(): how long a relay window must stay out of use for
+  /// the fence the response did not wait out (delivery_fence()); 0 when
+  /// no write of the reads can land any more (see
+  /// rgw::rdma::fence_needed()). Whether the reads delivered the whole
+  /// range does not shorten it: a reply that does not say landed may
+  /// come before its bytes
+  uint64_t rdma_window_hold_ms() const;
   /// where a GET that sent descriptor-bearing reads failed, for the log
   const char* rdma_failed_at = nullptr;
-  /// true for the mode where the OSDs deliver out of band
+  /// true for the modes where the OSDs deliver out of band
   bool rdma_oob_mode() const {
-    return rdma_mode == RdmaMode::PASSTHROUGH;
+    return rdma_mode == RdmaMode::PASSTHROUGH || rdma_mode == RdmaMode::RELAY;
   }
   uint64_t rdma_bytes = 0; ///< bytes delivered out of band (passthrough)
   /// what x-amz-rdma-bytes-transferred reports: the bytes the response
@@ -622,9 +645,14 @@ public:
 
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
   /// an OSD placed an out-of-band stripe, whose result said whether it
-  /// landed: counted in rdma_placed
+  /// landed: counted in rdma_placed, for any mode
   void note_placed(bool landed) {
     ++(landed ? rdma_placed.landed : rdma_placed.unlanded);
+  }
+  /// an out-of-band stripe landed in a relay window (see
+  /// RGWGetDataCB::handle_oob())
+  virtual int get_oob_cb(uint64_t ofs, uint64_t len, bool landed) {
+    return 0;
   }
 
   virtual int get_params(optional_yield y) = 0;
@@ -668,7 +696,7 @@ public:
   }
   int handle_oob(uint64_t ofs, uint64_t len, bool landed) override {
     op->note_placed(landed);
-    return 0;
+    return op->get_oob_cb(ofs, len, landed);
   }
 };
 
@@ -1457,6 +1485,10 @@ protected:
   /// a body (rdma_put_declined), which ignoring the token would store as
   /// an empty object
   const char* rdma_token_refusal = nullptr;
+  /// S3-over-RDMA (cuObject): a subclass whose get_data() supplies the
+  /// body (an RC session buffer) clears this before execute(), so that
+  /// no x-amz-rdma-token stages the body from the client's memory
+  bool rdma_staging_allowed = true;
   /// S3-over-RDMA (cuObject): after execute(), whether the body came
   /// from the client's memory (a gateway-staged PUT), which the reply
   /// reports

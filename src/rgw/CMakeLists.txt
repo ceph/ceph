@@ -343,6 +343,18 @@ endif()
 # the checksums of out-of-band transfers, of every transport
 list(APPEND librgw_common_srcs rgw_rdma_cksum.cc)
 
+# hipobj-rc-v2 wire encoding: pure, no transport dependency
+list(APPEND librgw_common_srcs rgw_rdma_rc_wire.cc)
+if(WITH_RDMA_RC)
+  list(APPEND librgw_common_srcs
+    rgw_rdma_rc_transport.cc
+    rgw_rdma_rc_session.cc
+    rgw_rest_rdma_rc.cc)
+  if(HAVE_MLX5DV)
+    list(APPEND librgw_common_srcs rgw_rdma_dc_target.cc)
+  endif()
+endif()
+
 add_library(rgw_common STATIC
   ${librgw_common_srcs}
   ${librgw_driver_srcs})
@@ -434,6 +446,18 @@ endif()
 if(WITH_JAEGER)
   add_dependencies(rgw_common jaeger_base)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
+endif()
+
+if(WITH_RDMA_RC)
+  target_link_libraries(rgw_common PRIVATE IBVerbs::verbs)
+  if(HAVE_MLX5DV)
+    target_include_directories(rgw_common PRIVATE ${MLX5DV_INCLUDE_DIR})
+    target_link_libraries(rgw_common PRIVATE ${MLX5_LIBRARY})
+  endif()
+  if(WITH_OOB_OFI)
+    # relay windows OSDs write into over libfabric
+    target_link_libraries(rgw_common PRIVATE ofi_rma)
+  endif()
 endif()
 
 if(WITH_RADOSGW_RADOS)
@@ -531,6 +555,17 @@ if(WITH_RADOSGW_STANDALONE)
   if(WITH_JAEGER)
     add_dependencies(rgw_common_standalone jaeger_base)
     target_link_libraries(rgw_common_standalone PUBLIC jaeger_base)
+  endif()
+
+  if(WITH_RDMA_RC)
+    target_link_libraries(rgw_common_standalone PRIVATE IBVerbs::verbs)
+    if(HAVE_MLX5DV)
+      target_include_directories(rgw_common_standalone PRIVATE ${MLX5DV_INCLUDE_DIR})
+      target_link_libraries(rgw_common_standalone PRIVATE ${MLX5_LIBRARY})
+    endif()
+    if(WITH_OOB_OFI)
+      target_link_libraries(rgw_common_standalone PRIVATE ofi_rma)
+    endif()
   endif()
 endif()
 

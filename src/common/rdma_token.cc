@@ -216,7 +216,7 @@ std::vector<std::string> parse_transport_list(std::string_view list)
 
 bool is_libfabric_provider(std::string_view name)
 {
-  return !name.empty() && name != TRANSPORT_CUOBJ;
+  return !name.empty() && name != TRANSPORT_CUOBJ && name != TRANSPORT_RC;
 }
 
 bool oob_transports::client_names(std::string_view t) const
@@ -243,6 +243,11 @@ oob_transports parse_oob_transports(std::string_view client,
     if (c.size() > 1) {
       t.warnings.push_back("oob_cluster_transport names one transport; "
 			   "using " + t.cluster);
+    }
+    if (t.cluster == TRANSPORT_RC) {
+      t.warnings.push_back("rc is a client transport only; "
+			   "oob_cluster_transport ignores it");
+      t.cluster.clear();
     }
   }
   if (t.cluster_ofi()) {

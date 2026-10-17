@@ -27,6 +27,7 @@
 
 #include "common/async/shared_mutex.h"
 #include "common/errno.h"
+#include "common/oob_config.h"
 #include "common/strtol.h"
 
 #include "rgw_asio_client.h"
@@ -575,14 +576,47 @@ static int drop_privileges(CephContext *ctx)
     ldout(ctx, -1) << "unable to setgid " << gid << ": " << cpp_strerror(err) << dendl;
     return -err;
   }
+  // the RC service, which starts after the frontends, opens its relay
+  // windows over the cluster transport. The UEC reference provider
+  // ("uet") opens a raw socket, which needs CAP_NET_RAW: keep that
+  // capability, and no other, for ceph::oob::with_net_raw() to raise
+  // while the endpoint opens. Only this thread keeps it, and only until
+  // the endpoint is open (Service::do_init() drops it); the workers of
+  // the io_context pool started before (in init_storage()) and lose
+  // every capability
+  bool keep_net_raw = false;
+#if defined(WITH_RDMA_RC) && defined(WITH_OOB_OFI)
+  keep_net_raw = ceph::oob::rgw_keeps_net_raw(ctx);
+#endif
+  if (keep_net_raw) {
+    if (std::string err; ceph::oob::keep_caps(&err) < 0) {
+      ldout(ctx, 0) << "WARNING: " << err << dendl;
+    }
+  }
   if (uid && setuid(uid) != 0) {
     int err = errno;
     ldout(ctx, -1) << "unable to setuid " << uid << ": " << cpp_strerror(err) << dendl;
     return -err;
   }
+  bool kept_net_raw = false;
+  if (keep_net_raw) {
+    std::string err;
+    if (int r = ceph::oob::keep_only_net_raw(&kept_net_raw, &err); r < 0) {
+      ldout(ctx, -1) << err << dendl;
+      return r;
+    }
+  }
   if (uid && gid) {
     ldout(ctx, 0) << "set uid:gid to " << uid << ":" << gid
                   << " (" << uid_string << ":" << gid_string << ")" << dendl;
+  }
+  if (keep_net_raw) {
+    if (kept_net_raw) {
+      ldout(ctx, 0) << "kept CAP_NET_RAW for the uet relay windows" << dendl;
+    } else {
+      ldout(ctx, 0) << "WARNING: CAP_NET_RAW, which the uet relay windows "
+                    << "need, is not available" << dendl;
+    }
   }
   return 0;
 }

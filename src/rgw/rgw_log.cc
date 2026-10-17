@@ -194,7 +194,7 @@ void rgw_log_usage_finalize()
 
 // the bytes a request moved: those that crossed the HTTP socket, and
 // the out-of-band RDMA ones toward the direction the object data
-// moved. The op gives the direction
+// moved. The op gives the direction, not the method: an RC PUT is a POST
 static void bytes_moved(req_state *s, uint64_t *sent, uint64_t *received)
 {
   *sent = ACCOUNTING_IO(s)->get_bytes_sent();

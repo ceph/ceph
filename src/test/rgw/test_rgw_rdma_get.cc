@@ -78,7 +78,11 @@ public:
   using RGWGetObj::select_rdma_mode;
   using RGWGetObj::note_rdma_reads;
   using RGWGetObj::rdma_fence_before;
+  using RGWGetObj::rdma_window_hold_ms;
   using RGWGetObj::rdma_write_staged;
+  using RGWGetObj::relay_token;
+  using RGWGetObj::relay_window;
+  using RGWGetObj::relay_lands;
 
   std::string body;
   int responses = 0;  ///< calls of send_response_data()
@@ -499,6 +503,54 @@ TEST(RgwRdmaGet, NoPassthroughWithAnOpTimeout)
   EXPECT_EQ(Mode::PASSTHROUGH, op.rdma_mode);
 }
 
+TEST(RgwRdmaGet, NoRelayWithAnOpTimeout)
+{
+  // the same for an RC relay window: the gateway stages the object into
+  // it instead
+  OsdDirect osd_direct;
+  osd_direct.cct->_conf.set_val_or_die("rados_osd_op_timeout", "30");
+  osd_direct.cct->_conf.apply_changes(nullptr);
+  DEFINE_REQ_STATE(osd_direct.cct.get());
+  TestGetObj op(&s);
+  op.relay_window = WINDOW;
+  op.relay_token = TOKEN_1M;
+  op.relay_lands = true;
+  op.total_len = 4096;
+  op.select_rdma_mode(PLAIN_CHAIN);
+  EXPECT_EQ(Mode::RELAY_STAGED, op.rdma_mode);
+  EXPECT_TRUE(op.rdma_token.empty());
+
+  osd_direct.cct->_conf.set_val_or_die("rados_osd_op_timeout", "0");
+  osd_direct.cct->_conf.apply_changes(nullptr);
+  op.select_rdma_mode(PLAIN_CHAIN);
+  EXPECT_EQ(Mode::RELAY, op.rdma_mode);
+  EXPECT_EQ(TOKEN_1M, op.rdma_token);
+}
+
+TEST(RgwRdmaGet, NoRelayWithoutLandedWrites)
+{
+  // over a cluster transport whose writes do not come back saying that
+  // they landed, a relay could push nothing the OSDs placed before the
+  // whole fence passed: the gateway stages the object instead, and no
+  // OSD gets the window
+  OsdDirect osd_direct;
+  osd_direct.cct->_conf.set_val_or_die("rados_osd_op_timeout", "0");
+  osd_direct.cct->_conf.apply_changes(nullptr);
+  DEFINE_REQ_STATE(osd_direct.cct.get());
+  TestGetObj op(&s);
+  op.relay_window = WINDOW;
+  op.relay_token = TOKEN_1M;
+  op.total_len = 4096;
+  op.select_rdma_mode(PLAIN_CHAIN);
+  EXPECT_EQ(Mode::RELAY_STAGED, op.rdma_mode);
+  EXPECT_TRUE(op.rdma_token.empty());
+
+  op.relay_lands = true;
+  op.select_rdma_mode(PLAIN_CHAIN);
+  EXPECT_EQ(Mode::RELAY, op.rdma_mode);
+  EXPECT_EQ(TOKEN_1M, op.rdma_token);
+}
+
 TEST(RgwRdmaGet, NoResponseOnACallbackWithoutDataOutOfBand)
 {
   // a callback without data, as at the end of a part, sends nothing out
@@ -516,6 +568,10 @@ TEST(RgwRdmaGet, NoResponseOnACallbackWithoutDataOutOfBand)
   EXPECT_EQ(0, op.responses);
   EXPECT_EQ(Mode::PASSTHROUGH, op.rdma_mode);
   EXPECT_EQ(Mode::NONE, op.rdma_switched_from);
+
+  op.rdma_mode = Mode::RELAY;
+  EXPECT_EQ(0, op.get_data_cb(bl, 0, 0));
+  EXPECT_EQ(0, op.responses);
 
   // over HTTP it goes to the response as before
   op.rdma_mode = Mode::NONE;
@@ -605,7 +661,7 @@ TEST(RgwRdmaGet, InlineDataSwitchesToAFallbackInPlace)
   EXPECT_EQ(Mode::PASSTHROUGH, op.rdma_switched_from);
 }
 
-TEST(RgwRdmaGet, ReadsOfASwitchedGetArmTheFence)
+TEST(RgwRdmaGet, ReadsOfASwitchedGetWroteTheClientWindow)
 {
   // reads that a store sent with the token before it streamed the data
   // anyway went out in passthrough: the response and an error wait for
@@ -623,7 +679,27 @@ TEST(RgwRdmaGet, ReadsOfASwitchedGetArmTheFence)
 
   op.note_rdma_reads(true, true, 0.25);
   EXPECT_TRUE(op.rdma_fence_state.sent);
+  EXPECT_TRUE(op.rdma_fence_state.client_window);
   EXPECT_EQ(250u, op.rdma_fence_state.wait_ms);
+}
+
+TEST(RgwRdmaGet, ReadsOfAFallbackWroteNoClientWindow)
+{
+  OsdDirect osd_direct;
+  DEFINE_REQ_STATE(osd_direct.cct.get());
+  TestGetObj op(&s);
+  op.rdma_token = TOKEN_1M;
+  op.total_len = WINDOW + 1;
+  op.select_rdma_mode(PLAIN_CHAIN);
+  ASSERT_EQ(Mode::NONE, op.rdma_mode);
+  op.note_rdma_reads(true, true, 0.25);
+  EXPECT_FALSE(op.rdma_fence_state.client_window);
+
+  op.total_len = WINDOW;
+  op.select_rdma_mode(PLAIN_CHAIN);
+  ASSERT_EQ(Mode::PASSTHROUGH, op.rdma_mode);
+  op.note_rdma_reads(true, true, 0.25);
+  EXPECT_TRUE(op.rdma_fence_state.client_window);
 }
 
 TEST(RgwRdmaGet, ASuccessThatDidNotLandWaitsForTheFence)
@@ -640,14 +716,16 @@ TEST(RgwRdmaGet, ASuccessThatDidNotLandWaitsForTheFence)
   ASSERT_EQ(Mode::PASSTHROUGH, op.rdma_mode);
 
   op.note_rdma_reads(true, true, 0.05);
+  EXPECT_EQ(50u, op.rdma_window_hold_ms());
   const auto start = ceph::mono_clock::now();
-  op.rdma_fence_before("the response", true);
+  op.rdma_fence_before("the response", true, true);
   EXPECT_GE(ceph::mono_clock::now() - start, std::chrono::milliseconds(50));
   EXPECT_TRUE(op.rdma_fence_state.settled);
 
   // every stripe landed, and none was resent: answered at once
   op.note_rdma_reads(true, false, 60.0);
-  op.rdma_fence_before("the response", true);
+  EXPECT_EQ(0u, op.rdma_window_hold_ms());
+  op.rdma_fence_before("the response", true, true);
   EXPECT_TRUE(op.rdma_fence_state.settled);
 }
 
@@ -674,6 +752,14 @@ TEST(RgwRdmaGet, NoPassthroughAfterAStripeThatDidNotLand)
   RGWGetObj_CB landed(op.get());
   EXPECT_EQ(0, landed.handle_oob(0, 4096, true));
   op->note_rdma_reads(true, false, 0.0);
+  EXPECT_EQ(Mode::PASSTHROUGH, passthrough()->rdma_mode);
+
+  // so do those of a relay, which go to the gateway's window
+  op = passthrough();
+  op->rdma_mode = Mode::RELAY;
+  RGWGetObj_CB relayed(op.get());
+  EXPECT_EQ(0, relayed.handle_oob(0, 4096, false));
+  op->note_rdma_reads(true, true, 0.0);
   EXPECT_EQ(Mode::PASSTHROUGH, passthrough()->rdma_mode);
 
   // one stripe that did not land: the next GET goes over HTTP, as no

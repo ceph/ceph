@@ -13,11 +13,13 @@
 
 #include "rgw_rdma_cksum.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
 #include "common/crc64nvme.h"
 #include "common/rdma_token.h"
+#include "include/crc32c.h"
 #include "rgw_rest.h"
 
 namespace rgw::rdma {
@@ -42,6 +44,20 @@ void dump_checksums(req_state* s, const std::optional<uint64_t>& crc64,
   if (crc32c) {
     dump_header(s, HDR_CRC32C, cksum_crc32c(*crc32c).to_armor());
   }
+}
+
+uint32_t crc32c_of(const void* p, uint64_t len)
+{
+  // ceph_crc32c() takes an unsigned length
+  const auto* b = static_cast<const unsigned char*>(p);
+  uint32_t crc = 0xffffffff;
+  while (len > 0) {
+    const unsigned n = static_cast<unsigned>(std::min<uint64_t>(len, 1u << 30));
+    crc = ceph_crc32c(crc, b, n);
+    b += n;
+    len -= n;
+  }
+  return crc ^ 0xffffffff;
 }
 
 crcs delivered_crcs(

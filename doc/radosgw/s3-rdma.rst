@@ -22,7 +22,7 @@ Overview
 Clients
 -------
 
-The gateway serves two kinds of client. They differ in how they
+The gateway serves three kinds of client. They differ in how they
 describe the memory that receives the data.
 
 cuObject clients
@@ -45,33 +45,46 @@ libfabric clients
   wire: ``tcp``, ``shm``, RDMA reliable connections, AWS SRD or Ultra
   Ethernet.
 
+Reliable Connection clients
+  AMD's hipObject library is an example of a client that uses Reliable
+  Connection (RC) transport. Such a client pairs a queue pair with the
+  gateway through the ``hipobj-rc-v2`` control protocol on
+  ``/.hipobj-rc/``. A queue pair
+  is the RDMA endpoint of one connection. RC exists on every RDMA
+  adapter. Only the paired gateway can write to the client, so the
+  gateway relays the data.
+
 Data paths
 ----------
 
 Object data takes one of two paths, whatever the client's transport.
 
 OSD-direct
-  The OSDs write each stripe straight into a window. The window is the
-  client's own memory, and the object data never passes through the
-  gateway. This is OSD passthrough mode, and its bandwidth grows with
-  the number of OSDs. The gateway
-  needs no RDMA adapter and no transport library for it.
-  ``rgw_rdma_osd_direct`` turns it on, and it is on by default.
+  The OSDs write each stripe straight into a window. For cuObject and
+  libfabric clients, the window is the client's own memory, and the
+  object data never passes through the gateway. This is OSD passthrough
+  mode, and its bandwidth grows with the number of OSDs. The gateway
+  needs no RDMA adapter and no transport library for it. For RC
+  clients, the window is a gateway session buffer. The gateway writes
+  the buffer to the client over the paired queue pair while the
+  stripes arrive. This is OSD-direct relay. ``rgw_rdma_osd_direct``
+  turns on both, and it is on by default.
 
 Gateway-staged
   The gateway reads the object from RADOS into a registered buffer and
   writes it to the client over the client's transport. For cuObject
   clients, the gateway's cuObject server writes the buffer in one
-  transfer. Libfabric clients have no gateway-staged mode yet, so they
-  fall back to HTTP. A gateway-staged PUT takes the object into a
-  registered buffer, and stores it through the gateway's filters, such
-  as compression and encryption.
+  transfer. For RC clients, the gateway writes the session buffer while
+  the stripes arrive, which is staged relay. Libfabric clients have no
+  gateway-staged mode yet, so they fall back to HTTP. A gateway-staged
+  PUT takes the object into a registered buffer, and stores it through
+  the gateway's filters, such as compression and encryption.
 
 The gateway uses OSD-direct when it can, and gateway-staged otherwise.
-A body-less cuObject or libfabric PUT is OSD-direct when
-``rgw_rdma_osd_direct`` is on, a transport in ``oob_client_transports``
-serves the token, and none of the cases in `OSD-direct PUT`_ applies,
-such as a filter that needs
+An RC PUT is the exception: it is always gateway-staged. A body-less
+cuObject or libfabric PUT is OSD-direct when ``rgw_rdma_osd_direct`` is
+on, a transport in ``oob_client_transports`` serves the token, and none
+of the cases in `OSD-direct PUT`_ applies, such as a filter that needs
 the bytes. A cuObject PUT is gateway-staged only when it cannot be
 OSD-direct, for example because the gateway must encrypt or compress
 the object. When an OSD cannot pull a stripe of an OSD-direct PUT, the
@@ -323,10 +336,11 @@ Client transports
 
 Cluster transport
   The transport that moves object data between Ceph daemons. It carries
-  the shard reads that an erasure-coded primary gathers.
+  the shard reads that an erasure-coded primary gathers, and the stripes
+  that the OSDs write into the gateway's relay buffers.
   ``oob_cluster_transport`` names it.
 
-Two transports exist:
+Three transports exist:
 
 libfabric
   Any libfabric provider, for example ``verbs_ofi_rxm``, ``uet`` or
@@ -337,6 +351,10 @@ cuObject (``cuobj``)
   Writes into the windows that DC descriptors name, with NVIDIA's
   ``cuobjserver`` library. It needs a ConnectX adapter on each host that
   runs it. It can be a client transport and the cluster transport.
+
+Reliable Connection (``rc``)
+  The gateway's ``hipobj-rc-v2`` server. It is a client transport, and
+  only the gateway runs it.
 
 An OSD runs the libfabric and cuObject transports through executors. An
 executor writes the bytes of a read into the window that a token names,
@@ -361,22 +379,24 @@ values. A daemon reads them only when it starts.
 #. Set ``oob_network`` to the subnets of the interfaces that carry
    out-of-band traffic. See `The out-of-band network`_.
 #. Set ``oob_client_transports`` to the transports of your clients: the
-   libfabric provider that they use, and ``cuobj`` for cuObject clients.
+   libfabric provider that they use, ``cuobj`` for cuObject clients,
+   and ``rc`` for RC clients such as hipObject.
 #. Set ``oob_cluster_transport`` to the transport between the daemons:
    one libfabric provider, or ``cuobj``. If you leave it empty, the
-   gathers of erasure-coded reads stay on the messenger.
+   gathers of erasure-coded reads stay on the messenger, and RC GETs
+   take staged relay.
 #. Give each OSD and each gateway unlimited locked memory:
    ``LimitMEMLOCK=infinity`` in its systemd unit, or ``--ulimit
    memlock=-1:-1`` under cephadm. See `Registered memory`_ and
    `Deploying with cephadm`_.
 #. Restart the OSDs and the gateways.
 
-This configuration serves libfabric and cuObject clients on
+This configuration serves libfabric, cuObject and RC clients on
 ConnectX adapters, and moves data between the daemons over libfabric::
 
   [global]
   oob_network           = 10.90.0.0/24
-  oob_client_transports = verbs_ofi_rxm, cuobj
+  oob_client_transports = verbs_ofi_rxm, cuobj, rc
   oob_cluster_transport = verbs_ofi_rxm
 
 ``fi_info`` names a layered provider with a semicolon, as in
@@ -398,7 +418,7 @@ is the daemon's out-of-band address. The daemon finds the interface
 that carries the address, and from the interface what each transport
 needs:
 
-* ``verbs_ofi_rxm`` and ``cuobj``: the RDMA device, its port,
+* ``verbs_ofi_rxm``, ``cuobj`` and ``rc``: the RDMA device, its port,
   and the index of the RoCE v2 GID that holds the address. The GID
   table names the interface of each GID, so an address on a VLAN above
   a bond works too. If no GID holds the address, as for an IPoIB address
@@ -439,8 +459,11 @@ its ``public_addr`` option instead, and only when that option is set.
 The gateway does not take an address from ``public_network``.
 
 Without an address, the gateway's cuObject server does not start, and
-logs ``no out-of-band address: set oob_network``. So set
-``oob_network`` or ``oob_addr`` for every gateway that runs it.
+logs ``no out-of-band address: set oob_network``. Its RC server takes
+the first RDMA device, and the first RoCE v2 GID on port 1. Its
+libfabric relay windows take the device that the provider chooses.
+Either can be the wrong device, so set ``oob_network`` or ``oob_addr``
+for every gateway.
 
 Two options change the choice for one daemon:
 
@@ -458,7 +481,7 @@ to clients:
 * Each OSD starts an executor for the libfabric provider in the list,
   and one for ``cuobj``.
 * The gateway starts its cuObject server for ``cuobj``, for
-  gateway-staged mode.
+  gateway-staged mode, and its ``hipobj-rc-v2`` server for ``rc``.
 * The gateway passes a cuObject descriptor to the OSDs only when the
   list names ``cuobj``. It passes a libfabric token only when the list
   names a libfabric provider. An OSD whose provider speaks another wire
@@ -466,10 +489,14 @@ to clients:
   falls back. See `Fallback order`_.
 
 ``oob_cluster_transport`` names one transport for the transfers between
-daemons. Every daemon must run the same one. With it, the primary of an
-erasure-coded client read lends windows to its peer shards, which write
-their shard data into them. It lends none for a fast read, or for a
-sub-read of less than 64 KiB. See `Gathering shard reads out of band`_.
+daemons. Every daemon must run the same one. It turns on two things:
+
+* The primary of an erasure-coded client read lends windows to its peer
+  shards, which write their shard data into them. It lends none for a
+  fast read, or for a sub-read of less than 64 KiB. See `Gathering
+  shard reads out of band`_.
+* The gateway exposes its RC session buffers to the OSDs, which write
+  their stripes into them. See `GET relay`_.
 
 A libfabric provider works on any adapter that it supports. ``cuobj``
 needs a ConnectX adapter on every host that runs it.
@@ -497,6 +524,13 @@ up to a power of two from 1 MiB to 64 MiB:
   arena once for this.
 * The gateway stages each cuObject transfer of gateway-staged mode in
   one buffer.
+* The gateway gives each RC session a buffer of the session's size. It
+  takes the buffer from the arena at PREPARE. It registers the buffer
+  for that session alone, because the client and the OSDs write into
+  it. When the session ends, the gateway removes the registration and
+  returns the buffer. A PUT's buffer and queue pair have their own
+  protection domain. No other session's queue pair can reach the
+  buffer, whatever key it holds.
 
 The executor of the cluster transport also reserves 16 gather windows of
 8 MiB, two blocks of the arena, when the OSD starts. It reserves them
@@ -512,6 +546,8 @@ A transfer larger than 64 MiB, or one that finds no room in the arena,
 takes its fallback. An OSD delivers the read inline, and a shard replies
 inline. A pull fails, and the gateway declines the PUT with ``501``. A
 cuObject GET gets the HTTP body, and a cuObject PUT fails with ``503``.
+An RC PREPARE fails with ``413`` for a transfer larger than 64 MiB, and
+with ``503 SlowDown`` when the arena is full.
 
 A window that a daemon lends to a peer gets a memory key of its own. A
 libfabric window gets a new key when it comes back. The OSD's gather
@@ -556,7 +592,7 @@ specification. See :ref:`cephadm-extra-container-args`.
 * An OSD runs in a privileged container that mounts ``/dev`` and
   ``/sys``. It needs only ``--ulimit memlock=-1:-1``.
 * A gateway runs in an unprivileged container without the RDMA device
-  nodes. When ``oob_client_transports`` names ``cuobj``, the
+  nodes. When ``oob_client_transports`` names ``rc`` or ``cuobj``, the
   gateway needs ``--ulimit memlock=-1:-1`` and
   ``--device=/dev/infiniband``. A gateway that serves only libfabric
   clients needs neither.
@@ -597,9 +633,12 @@ monitors store, as ``ceph.conf`` does. So
 these OSDs. To change the transport, change the service specification
 and redeploy the OSDs.
 
-The OSD's privileged container holds ``CAP_NET_RAW``. Each daemon also
-needs the provider's wrapper in its container. Mount the wrapper's
-directory with ``-v``, and point ``FI_PROVIDER_PATH`` at it with ``-e``.
+The OSD's privileged container holds ``CAP_NET_RAW``. A gateway with
+``uet`` relay windows needs ``--cap-add=NET_RAW`` in its
+``extra_container_args``, because podman's default capabilities do not
+include it. Each daemon also needs the provider's wrapper in its
+container. Mount the wrapper's directory with ``-v``, and point
+``FI_PROVIDER_PATH`` at it with ``-e``.
 
 How a read reaches client memory
 ================================
@@ -918,7 +957,9 @@ data:
   attempt of it that is still on its way to an OSD could write the
   client's window after the fence. The gateway logs this once, at
   level 1, and serves such GETs in the next mode. It declines
-  OSD-direct PUTs for the same reason (see `OSD-direct PUT`_).
+  OSD-direct PUTs for the same reason (see `OSD-direct PUT`_), and
+  stages the GETs of RC clients instead of having the OSDs relay them
+  (see `GET relay`_).
 
 Multipart objects and range requests are supported. Every stripe lands
 at its logical offset in the requested range. Replicated and
@@ -1321,9 +1362,9 @@ late writes could be cut off one at a time, about 90% of GETs from
 every client fell back to HTTP.
 
 Ceph does the first for the windows it lends itself, as soon as the
-operation that used a window ends, also when a gather failed. An OSD's
-libfabric gather windows get a new key when the gather releases them,
-in place where the provider can. When a window is
+operation that used a window ends, also when a gather or a relay
+failed. An OSD's libfabric gather windows get a new key when the gather
+releases them, in place where the provider can. When a window is
 registered again instead, the key that leaves service is not used for
 another window for 10 s. An endpoint also asks a provider with a fixed
 table of regions, such as UET's, for a table of 16384 regions. A gather
@@ -1331,18 +1372,29 @@ window returned while a ``FI_THREAD_DOMAIN`` provider adds a client gets
 its new key from a later gather instead, and is not lent before (see
 `libfabric`_).
 
-The registration cache of the verbs provider keeps the key of a closed
-region valid. So a daemon sets ``FI_MR_CACHE_MONITOR=disabled`` in its
-own environment before it opens a libfabric endpoint.
+The gateway closes the libfabric relay window of an RC session when the
+session ends, which retires the window's key. The registration cache of
+the verbs provider keeps the key of a closed region valid. So a daemon
+sets ``FI_MR_CACHE_MONITOR=disabled`` in its own environment before it
+opens a libfabric endpoint. If the provider keeps the key of a closed
+region all the same, the gateway finds this at startup and logs it.
+Every relay buffer whose window an OSD got then stays out of use for
+10 s after its session. A buffer of a staged GET, whose window no OSD
+got, goes back at once.
 
-A libfabric window whose gather may still have a write in flight
-stays out of use for its quarantine all the same, and for 10 s
+A libfabric window whose gather or relay may still have a write in
+flight stays out of use for its quarantine all the same, and for 10 s
 at least. Its old key keeps a late write out only if the provider drops
 what carries it. A gather window whose re-key fails also stays out of
 use for 10 s.
 
 Only the OSD's gather windows behind a cuObject DC target keep their
-key.
+key. The gateway registers each relay buffer behind its DC target for
+one session, so each session's buffer has a key of its own. The gateway
+removes that registration when the session ends. A buffer that OSD
+writes may still reach stays registered until its quarantine passes,
+and only then goes back to the arena. Until then, the registration
+keeps the buffer's key from naming other memory.
 
 Erasure-coded pools
 ===================
@@ -1564,6 +1616,226 @@ With ``osd_read_ec_check_for_errors`` on (off by default), the read
 fails with ``-EIO`` instead, whatever the cause, and nothing is
 repaired. A gather fault whose shard the primary read again
 successfully does not fail the read.
+
+Reliable Connection clients (hipobj-rc-v2)
+==========================================
+
+Control protocol
+----------------
+
+An RC transfer needs a queue pair on each side, paired before data
+moves. The client and the gateway exchange the pairing parameters in
+three signed HTTP requests:
+
+``POST /.hipobj-rc/prepare``
+  The client sends its RC token (queue pair number and GID), a packet
+  sequence number (PSN), a cookie, the operation, the object and the
+  byte range. The range can start at any offset in the object, and only
+  its size is limited. The gateway authorizes the request as the S3
+  operation that it stands for. It creates a session, and answers with
+  the session ID and its own queue pair number and PSN.
+
+  A client on the gateway's host can send the all-zero token instead,
+  and the gateway then pairs with its own GID. A token that names a GID
+  of the gateway's host does the same: the gateway's own GID, another
+  GID of a port of one of the host's RDMA devices, the RoCE GID of an
+  address of the host's interfaces, or a loopback address. The gateway
+  takes such a token only from a client on its host, and answers
+  ``400`` otherwise. It reads the GIDs and addresses of the host when it
+  starts, and again every 5 seconds.
+
+  A client is on the gateway's host when its HTTP connection comes from
+  a loopback address, 127.0.0.0/8 or ``::1``. The gateway reads the
+  connection's peer address, not ``rgw_remote_addr_param``. A connection
+  from another address of the host's interfaces does not count, because
+  a proxy on the host connects from such an address for clients on
+  other hosts. So does a container network that translates the address
+  of a client to an address of the node. For example, the haproxy of
+  cephadm's ingress service connects to the gateway at the host's
+  address, and the clients behind it never count as local, also when it
+  runs on the gateway's host. A proxy that connects to the gateway from
+  a loopback address, for example one with ``127.0.0.1`` as its backend,
+  makes every client behind it count as local. With such a proxy, set
+  ``rgw_rdma_rc_trust_loopback`` to false. No client then counts as
+  local, and no client can send the all-zero token or a token that
+  names a GID of the gateway's host.
+
+``POST /.hipobj-rc/ready``
+  The client sends its queue pair number and the address and remote key
+  of its memory region. The gateway pairs its queue pair with the
+  client's, runs the transfer, and answers when the transfer is
+  complete. The answer carries the byte count, the ETag, the version ID
+  and a CRC-64/NVME of the delivered bytes.
+
+``POST /.hipobj-rc/cancel``
+  The client ends a session that it no longer needs. When a READY of
+  the session is still transferring, the gateway stops the transfer: it
+  moves the session's queue pair to the error state, and the transfer
+  ends at its next step. That READY answers ``409
+  RdmaSessionCancelled``, also when CANCEL comes while the READY pairs
+  its queue pair, or while it returns the session for another READY
+  after ``RdmaPeerBusy``. A PUT stores nothing, unless the gateway had
+  read the whole buffer already. CANCEL answers once the transfer has
+  stopped. If it has not stopped after 5 s, or by the session's deadline
+  if that comes first, for example while a read from RADOS is slow,
+  CANCEL answers ``409 RdmaTransferInProgress``, and the session ends
+  when the transfer does. Only one CANCEL of a session waits. Another
+  CANCEL of the session that comes meanwhile answers ``409
+  RdmaTransferInProgress`` at once. A client can send CANCEL again
+  later. Once the session has ended, CANCEL succeeds.
+
+Every ``x-amz-rdma-*`` request header must be signed. With SigV4 it
+must be in the ``SignedHeaders`` list; SigV2 signs every ``x-amz-*``
+header. The gateway refuses a request with an unsigned protocol header
+with ``403``. A device on the network path can change such a header
+without breaking the signature. The gateway also refuses anonymous
+requests. A session belongs to the identity that prepared it: the user,
+subuser or role session. READY and CANCEL from another identity fail,
+and leave the session alone. A CANCEL of a session that has already
+ended succeeds. The per-user limits count the sessions of an account
+together, those of all its users, subusers and role sessions. Outside
+an account, they count those of a user and its subusers together.
+
+When ``oob_client_transports`` does not name ``rc``, or the RC service
+is not up, the control routes answer ``501`` with
+``x-amz-rdma-protocol-status: unsupported``. The service starts after
+the frontends, and stays down if its setup fails. That answer tells a
+hipObject client to use plain HTTP.
+
+GET relay
+---------
+
+For a GET, the session buffer sits between the OSDs and the client.
+The object reaches the buffer in one of two ways:
+
+OSD-direct relay
+  The gateway exposes its session buffers to the OSDs. Each stripe read
+  carries a delivery descriptor for the session buffer, and the OSDs
+  write their stripes into it, as in passthrough mode. The gateway does
+  not copy the object. This needs ``rgw_rdma_osd_direct`` and an
+  ``oob_cluster_transport``. With a libfabric provider, the gateway
+  exposes the buffers over libfabric, on any adapter that the provider
+  supports, when the provider has delivery-complete writes. With
+  ``cuobj``, it exposes them as a cuObject DC target,
+  which needs an mlx5 adapter on the gateway, and only when
+  ``rgw_rdma_rc_dc_relay`` is on. See `Relay buffers behind a DC
+  target`_.
+
+Staged relay
+  This is gateway-staged mode for RC clients. The gateway reads the
+  object from RADOS as usual and copies it into the session buffer. The
+  gateway uses this path when OSD-direct relay is not available, and
+  for objects whose data it must transform, such as compressed objects.
+  It is also the fallback when an OSD returns a stripe inline.
+
+In both cases the gateway sends the bytes to the client while the read
+is still in progress. Each time the start of the buffer is complete up
+to a new point, the gateway writes the new bytes to the client. A
+stripe that an OSD relayed counts as complete when the OSD's result
+says that it landed. Over a libfabric provider without delivery-complete
+writes, the OSD can reply before its bytes are in the buffer, and its
+result does not say landed. The gateway would then have to wait until
+the reads are done and the fence has passed, 12 s, before it
+could write those bytes to the client. So over such a provider it uses
+the staged relay instead, and logs ``does not promise delivery-complete
+writes`` when it starts. The OSDs' cuObject writes into a DC target say
+landed. When a relayed stripe does not say landed all the same, as from
+an OSD of an older release, the gateway writes its bytes to the client
+only after the reads are done and the fence has passed. That wait does
+not count against ``rgw_rdma_rc_exec_timeout_ms`` for the writes to the
+client that follow it. See `Fencing a window before reuse`_. The
+last write carries the session cookie as its immediate value. RC
+delivers writes in order, so the completion of the last write tells the
+client that all earlier writes are in its memory.
+
+The client arms the receive for the last write before it sends READY.
+A last write that finds no receive fails after six RNR retries, each a
+wait of the client's ``min_rnr_timer``. A write to a queue pair that
+does not answer at all fails too. If no earlier write of the transfer
+reached the client, READY then answers ``409 RdmaPeerBusy``, and the
+session stays prepared. When the OSDs wrote into its relay window, the
+window then gets a new key first, so that a late duplicate of an OSD
+write of the first attempt cannot land in the next one. Where the window
+cannot get a new key, as with a provider that caches registrations, the
+gateway ends the session and answers ``500`` instead. The gateway does
+the same on a device that does not take a queue pair from RESET back to
+INIT, such as an Intel E810 under irdma. It logs that at startup. A transfer that
+the gateway staged gave no OSD the window, and its window keeps its key.
+If earlier writes reached the client, the
+gateway ends the session and answers ``500``, and the client prepares a
+new session.
+
+A GET of more than 64 KiB always writes to the client before its last
+write, so an unarmed receive ends it with ``500``. Before a client
+sends READY again after a ``409``, it arms the receive. It also resets
+its queue pair and brings it back to RTS with the PSNs from PREPARE, or
+pairs a new one. The gateway starts its writes again from the PSN that
+PREPARE gave. A queue pair that kept its state can drop them as
+duplicates.
+
+A relay can fail after the OSDs received delivery descriptors. An OSD
+can then still take on a write into the session buffer until the pool's
+``rdma_delivery_lease`` expires. That write can land until the pool's
+``rdma_delivery_drain`` runs out after the lease. When the reads fail,
+the gateway keeps the buffer out of use for the fence, 12 s (see
+`Fencing a window before reuse`_). It skips that when every stripe
+came back declined or landed, and none was resent. Over a libfabric
+provider without delivery-complete writes, no stripe comes back landed,
+so such a relay is held unless every stripe was
+declined. When the reads deliver the whole object, the gateway holds the
+buffer by the same rule: a stripe that did not come back landed can
+still have bytes on their way, and the earlier attempt of a resent
+stripe read can write after every reply. That is so even when the writes
+to the client fail afterwards. A session whose buffer is held this way
+ends, even when the client's queue pair was only not ready, which
+otherwise lets the client send READY again. When a stripe comes back
+inline, the gateway waits for the same fence before staged relay copies
+the object into the buffer.
+
+The gateway also closes the buffer's libfabric window when the session
+ends, which retires the window's key. No OSD write meant for that
+session can then land where the provider drops writes with a retired
+key. A buffer whose session left a write in flight keeps the
+quarantine, and for 10 s at least. Any other buffer is free at once,
+unless the provider caches registrations. Such a provider keeps the key
+of a closed window, so every relay buffer then stays out of use for
+10 s after its session. See `Reusing a window`_.
+
+Relay buffers behind a DC target
+--------------------------------
+
+A DC target takes a write from any initiator that holds its DC key. The
+OSDs' cuObject library writes with ``cuobj_dc_key``, the key of every
+cuObject initiator and target, which every cuObject client holds as
+well. Its default is the library's, ``0xffeeddcc``. The descriptor that
+an OSD receives names no key of its own. So the gateway cannot give a
+relay buffer a protection domain, a memory window or a key that the
+OSDs can write through and a cuObject client cannot. A host that holds
+the DC key, and learns or guesses a relay buffer's DC target number,
+remote key and address, can write into the buffer while the relay runs.
+The gateway would then send those bytes to the RC client as object
+data, and that client can be another user.
+
+So the gateway does not expose RC relay buffers behind a DC target
+unless ``rgw_rdma_rc_dc_relay`` is on, and stages RC GETs instead.
+Turn it on only when every host that holds ``cuobj_dc_key`` is
+trusted: for example, when the key is a secret that only the OSDs and
+the gateways hold, and no cuObject client uses the cluster. Relay
+windows over libfabric take no key that clients share: a writer needs
+the window's own key, which the gateway retires when the session ends.
+
+PUT
+---
+
+For a PUT, the gateway takes a session buffer at PREPARE, arms a
+receive on it, and gives the client its address and remote key. The
+buffer has a registration of its own, whose addresses start at 0, so
+the address is always 0, and the client does not learn where the buffer
+is in the gateway's memory. The client writes the whole object with one
+RDMA write-with-immediate,
+with the session cookie as its immediate value. The gateway then stores
+the buffer through the normal PUT path. Bucket default encryption,
+compression, notifications and object lock apply as they do to any PUT.
 
 Transports
 ==========
@@ -1828,11 +2100,15 @@ Each OSD needs these settings:
 * The ``CAP_NET_RAW`` capability, for the raw socket that the provider
   opens.
 
+The gateway's relay windows need ``uet`` in ``oob_cluster_transport``,
+an address in ``oob_network`` on the gateway's own UET interface, and
+``CAP_NET_RAW``.
+
 The packaged systemd units and cephadm start each daemon as root, with
 ``--setuser ceph``. A daemon normally loses every capability when it
-switches to the ``ceph`` user. For ``uet``, the OSD keeps
-``CAP_NET_RAW``, and no other capability, in its permitted set. It
-raises it into its effective set only while its endpoint opens, on
+switches to the ``ceph`` user. For ``uet``, the OSD and the gateway
+keep ``CAP_NET_RAW``, and no other capability, in their permitted set.
+Each raises it into its effective set only while its endpoint opens, on
 a short-lived thread of its own. The threads that the provider and
 ofi-rma start during the open keep it in their effective set.
 
@@ -1868,9 +2144,29 @@ keep the whole permitted set, such as the messenger worker threads,
 which start when the OSD reads the monitors' configuration. With
 ``bluestore_use_ebd`` off, nothing trims the set.
 
+A gateway keeps ``CAP_NET_RAW`` when ``rgw_rdma_osd_direct`` is on,
+``oob_client_transports`` names ``rc``, and ``oob_cluster_transport`` is
+``uet``. The gateway switches users when its frontends start, after it
+reads the monitors' configuration, so ``ceph config set`` works for it.
+It logs ``kept CAP_NET_RAW for the uet relay windows``, or
+``WARNING: CAP_NET_RAW, which the uet relay windows need, is not available``.
+
 Every thread that the OSD starts after the switch holds ``CAP_NET_RAW``
-in its permitted set, its messenger and op threads included. Code that
-runs on a thread that holds the capability can raise it.
+in its permitted set, its messenger and op threads included. In the
+gateway, only the main thread holds it after the switch, and only until
+the RC service has opened its relay windows. The main thread then drops
+it, and logs ``rgw_rdma_rc: dropped CAP_NET_RAW``, before the RC service
+opens its RDMA device and starts its threads. It drops it as well when
+the RC service fails to start. The gateway starts the RC service before
+the cuObject server, so the main thread has dropped the capability
+before the cuObject server opens its RDMA files and starts its threads.
+The server's threads hold no capability, and the main thread keeps the
+credentials that opened those files, which the kernel checks on its
+later calls into the server. The threads that the provider and ofi-rma
+start during the open keep it, and so no other thread of the gateway
+holds it. The HTTP worker threads start before the switch, and hold no
+capability. Code that runs on a thread that holds the capability can
+raise it.
 
 A daemon that runs as another user from the start, without
 ``--setuser``, needs ``CAP_NET_RAW`` itself, for example in its ambient
@@ -1923,7 +2219,7 @@ The reference provider has these limits:
   deadline passes during the wait are delivered inline.
 * A memory key is the index of a region in a table that the provider
   fills round robin, so a key comes back after as many registrations as
-  the table holds. The OSD asks for 16384 regions. See
+  the table holds. The OSD and the gateway ask for 16384 regions. See
   `Reusing a window`_.
 * RUDI keeps no state at the target, so duplicates of completed writes
   can arrive late. See `Reusing a window`_.
@@ -1932,7 +2228,7 @@ The reference provider has these limits:
 * It supports IPv4 only.
 
 To run several endpoints on one host, put each UET interface in its own
-VRF. The provider finds a peer's next
+VRF, the gateway's interface included. The provider finds a peer's next
 hop by a route lookup on its own interface. Without VRFs, a peer's
 address is a local address of the host, so the lookup finds no next hop
 on the wire.
@@ -2007,6 +2303,13 @@ delivers such a read inline, so the GET falls back to HTTP. It fails
 such a pull, so the PUT falls back to the HTTP body. Before you ask for
 CRC-32C, make sure that every OSD runs this release.
 
+If ``rgw_rdma_checksum`` is on, RC clients get the same headers in the
+READY answer. The READY request asks for an algorithm with
+``x-amz-rdma-checksum-algorithm``. For a relayed GET, the gateway uses
+the OSDs' values. If a stripe reported no value, the gateway computes
+the values from its own buffer. A READY answer of a PUT also reports the object's stored
+checksum in ``x-amz-checksum-<algorithm>``.
+
 Configuration reference
 =======================
 
@@ -2014,9 +2317,9 @@ Build options
 -------------
 
 ``WITH_OOB_OFI``
-  The libfabric transport: the OSD's executor and its gather windows
-  over libfabric. Needs the libfabric headers and library, version 1.20
-  or later, the first with
+  The libfabric transport: the OSD's executor, gather windows over
+  libfabric, and the gateway's relay windows over libfabric. Needs the
+  libfabric headers and library, version 1.20 or later, the first with
   dma-buf registration (``FI_MR_DMABUF``).
 
 ``WITH_RADOSGW_CUOBJ``
@@ -2025,6 +2328,12 @@ Build options
   build time: ``libmlx5`` and ``infiniband/mlx5dv.h``, from the
   development package of ``rdma-core``. The OSD's DC target for gather
   windows uses them. Without them, the configure step fails.
+
+``WITH_RDMA_RC``
+  The gateway's ``hipobj-rc-v2`` server. It is on by default when
+  ``WITH_RDMA`` is on. With ``cuobj`` as the cluster transport, the
+  gateway's DC target also needs the ``mlx5`` direct verbs library at
+  build time.
 
 Pool options
 ------------
@@ -2079,13 +2388,13 @@ starts.
 
 ``oob_client_transports``
   The transports that the cluster serves to clients: a libfabric
-  provider and ``cuobj``. The default is empty, which turns
+  provider, ``cuobj`` and ``rc``. The default is empty, which turns
   out-of-band transfers with clients off. See `Choosing transports`_.
 
 ``oob_cluster_transport``
   The transport between daemons: one libfabric provider, or ``cuobj``.
-  The default is empty, which keeps gathers on the messenger. See
-  `Choosing transports`_.
+  The default is empty, which keeps gathers on the messenger and relays
+  in the gateway. See `Choosing transports`_.
 
 ``oob_memory``
   The size of the arena that each daemon allocates for out-of-band
@@ -2107,8 +2416,8 @@ Gateway options
 
 ``rgw_rdma_osd_direct``
   Have the OSDs move object data straight to and from client memory.
-  The OSDs write the data of a GET into client windows. They pull the
-  object of a body-less PUT out of client memory.
+  The OSDs write the data of a GET into client windows and into RC relay
+  buffers. They pull the object of a body-less PUT out of client memory.
   The default is true. See `Data paths`_ and `OSD-direct PUT`_.
 
 ``rgw_rdma_token_allow_anonymous``
@@ -2117,12 +2426,81 @@ Gateway options
   and decline an anonymous PUT without a body that carries one with
   ``501``. See `Anonymous requests`_.
 
+``rgw_rdma_rc_trust_loopback``
+  Take an RC request whose HTTP connection comes from a loopback address
+  as a request of a client on the gateway's host. Only such a client can
+  send the all-zero token or a token that names a GID of the host. The
+  default is true. Set it to false when a proxy on the gateway's host
+  connects to the gateway from a loopback address. See `Control
+  protocol`_.
+
+``rgw_rdma_rc_dc_relay``
+  Expose RC relay buffers to the OSDs behind a cuObject DC target, when
+  ``oob_cluster_transport`` is ``cuobj``. The default is false, and the
+  gateway then stages RC GETs. See `Relay buffers behind a DC target`_.
+
 ``rgw_rdma_checksum``
   Compute checksums of out-of-band transfers. The gateway reports them
   in ``x-amz-rdma-checksum-<algorithm>``, and compares whole-object
   passthrough GETs with the stored checksum. An OSD-direct PUT computes
   them whatever this option says. The default is true. See
   `Integrity`_.
+
+RC sessions:
+
+* ``rgw_rdma_rc_max_sessions`` and ``rgw_rdma_rc_max_sessions_per_user``:
+  the session limits, 1024 and 64 by default. A PREPARE over a limit,
+  or one that finds no room in the arena, gets ``503 SlowDown``.
+* ``rgw_rdma_rc_max_bytes_per_user``: the most arena memory that the
+  session buffers of one user can hold. A PREPARE that would go over it
+  gets ``503 SlowDown``. A user who holds no buffer can always take one,
+  also one larger than the limit. The default, 0, is a fair share of
+  ``oob_memory``. While one user holds buffers and no other user waits
+  for one, that user can hold all of ``oob_memory``. A gateway that
+  serves one account, for example as a KV cache for an inference
+  service, then uses all of its memory for that account. While several
+  users hold buffers, each can hold an equal part of ``oob_memory``. A
+  user whose PREPARE found no room in the arena counts as one of them
+  for 10 s, so that the users who hold the memory leave room for it as
+  their buffers come back. Set a fixed limit for a gateway whose users
+  must not wait for each other at all.
+* ``rgw_rdma_rc_send_depth``: the writes to the client that can be in
+  flight for one session, 64 by default and 1 at least.
+* ``rgw_rdma_rc_prepare_timeout_ms`` and ``rgw_rdma_rc_exec_timeout_ms``:
+  how long a session waits for READY, and how long a transfer can take,
+  100 s and 30 s by default.
+* ``rgw_rdma_rc_path_mtu``: the path MTU, in bytes, of the queue pairs
+  that the gateway pairs with clients. Both ends of a pairing must use
+  the same path MTU, and ``hipobj-rc-v2`` does not carry it. When the
+  clients' path MTU is lower than the gateway port's, every transfer
+  longer than it fails. So set this option to the clients' path MTU,
+  for example 1024 for clients on a 1500-byte Ethernet MTU.
+
+  The value is the RoCE path MTU, the ``active_mtu`` that
+  ``ibv_devinfo`` shows, not the interface MTU. The gateway rounds it
+  down to 256, 512, 1024, 2048 or 4096, and never goes above the port's
+  active MTU. The default, 0, takes the port's active MTU. A value from
+  1 to 255 keeps the RC server from starting.
+
+Each session holds one buffer from PREPARE until the session ends. A
+transfer larger than 64 MiB is refused with ``413``. The buffer comes
+from the arena, and goes back to it when the session ends. Its size is
+the transfer size rounded up to a power of two, 1 MiB at least. The
+gateway registers the buffer, and zeroes a PUT's, up to 64 MiB of work,
+on a worker thread, not on the frontend thread that takes the PREPARE, so
+that many PREPAREs at once cannot take the frontend threads from other
+requests. The PREPARE waits for it there. A PREPARE on the synchronous
+beast frontend (``rgw_beast_enable_async`` off) still does this work on
+its frontend thread, because it cannot wait off it.
+
+A buffer that an OSD write can still land in stays out of the arena for
+the fence, 12 s (see `Fencing a window before reuse`_).
+See `GET relay`_. Such a buffer no longer counts against its user's
+session limit, but it counts against ``rgw_rdma_rc_max_bytes_per_user``
+until it is back in the arena. Until it goes back, no RC session and no
+cuObject staging can use that memory. If the gateway cannot remove the
+buffer's registration, it never uses that memory again, and the buffer
+no longer counts against its user.
 
 OSD options
 -----------
@@ -2366,7 +2744,7 @@ Bytes that move out of band appear in the beast access log, the ops log
 and the usage log. They count as bytes sent for a GET and bytes
 received for a PUT, although they do not cross the HTTP socket. The ops
 log and the usage log take the direction from the operation, not from
-the HTTP method.
+the HTTP method. The RC control requests are all POSTs.
 
 They count whatever becomes of the request. A GET counts the bytes that
 the OSDs report for its stripe reads, also when the GET fails or falls
@@ -2376,13 +2754,28 @@ PUT counts the bytes that the OSDs report they pulled, also when the
 gateway declines the PUT afterwards. ``x-amz-rdma-bytes-transferred``
 still reports only the bytes of the response itself.
 
+For an RC GET, the gateway counts the bytes that it sends to the
+client, in OSD-direct and staged relay alike. It does not count the
+bytes that the OSDs write into the relay buffer. A READY that fails
+after some writes counts what it sent. When the client sends READY
+again after a ``409``, the gateway counts those bytes again. For an RC
+PUT, the gateway counts the bytes that the client writes into the
+session buffer, also when it does not store them.
+
 Rate limits charge the same bytes. They count against the user's and
 the bucket's ``max-read-bytes`` for a GET, and ``max-write-bytes`` for
-a PUT. The gateway charges out-of-band bytes once, when the request
-ends, and HTTP bytes as they
+a PUT. The operation gives the direction, so the bytes of an RC GET
+count as reads although the request is a ``POST``. The gateway charges
+out-of-band bytes once, when the request ends, and HTTP bytes as they
 cross the socket. Either way the request completes, and the debt holds
 back later requests in the same direction. See
 :ref:`radosgw-rate-limit-management`.
+
+The gateway admits or holds back a request by its HTTP method. Every RC
+request is a ``POST``, so the gateway checks an RC GET against the
+write limits, ``max-write-ops`` and ``max-write-bytes``. Its bytes still
+count against ``max-read-bytes``. The read debt that RC GETs build up
+therefore holds back the user's HTTP GETs, but not the next RC GET.
 
 Testing
 -------
@@ -2442,8 +2835,8 @@ Testing
   completion that the library returns twice counts once, and gives back
   no buffer that a posted write still uses.
 * ``unittest_rdma_token`` tests token parsing and transport lists.
-* ``unittest_oob_caps`` tests when an OSD keeps ``CAP_NET_RAW`` across
-  ``--setuser``, and how it raises the capability
+* ``unittest_oob_caps`` tests when an OSD or a gateway keeps
+  ``CAP_NET_RAW`` across ``--setuser``, and how it raises the capability
   while an endpoint opens. It runs the tests that need
   capabilities in a user namespace, and skips them where the system
   refuses one. Its test of the switch itself needs root.
@@ -2523,6 +2916,13 @@ Testing
   other ETag.
 * ``unittest_rgw_ofi_sigv4`` tests the SigV4 signing of the libfabric
   test clients against the examples of the S3 API reference.
+* ``unittest_rgw_rdma_rc_wire`` tests the ``hipobj-rc-v2`` wire
+  encoding and, with ``WITH_RDMA_RC``, the session limits, the order of
+  session teardowns and the path MTU.
+* ``unittest_rgw_rdma_rc_session`` tests the RC session service on the
+  host's first verbs device: limits, BUSY and CANCEL, the loopback and
+  host-GID checks, and the PUT buffer. Each test skips on a host without
+  one.
 * ``ceph_test_rgw_ofi_get`` is an S3 client for OSD-direct delivery
   over libfabric. It registers a window, sends a signed GET with the
   token, and compares the window with a local copy of the object::
@@ -2616,6 +3016,24 @@ Limitations
 * An OSD-direct PUT does not serve appends, multipart parts, compressed
   or encrypted objects. The cuObject pull is compiled against a header
   stub only and is not tested on hardware.
+* The gateway does not serve encrypted objects, or objects with a DLO
+  or SLO manifest, to RC clients. PREPARE answers ``501`` with the
+  unsupported marker, and the client reads the object over HTTP.
+* An RC GET can name a ``versionId``. Multipart part uploads and other
+  subresources are not available over RC.
+* An RC PUT must arrive as one write-with-immediate that carries the
+  whole object.
+* An RC transfer runs on the request thread.
+* Each RC session registers its buffer when PREPARE runs, and removes
+  the registration when the session ends. A PUT also zeroes its buffer.
+  On an E810 adapter, this costs about 2.5 ms for a 64 MiB PUT session.
+  Zeroing takes 1.6 ms, registering 0.74 ms and deregistering 0.21 ms.
+  At 4 MiB it costs about 0.13 ms. Soft-RoCE (``rxe``) is similar.
+  PREPARE registers its buffer, and zeroes a PUT's, on one of two
+  worker threads, and so does the teardown of ended sessions when the
+  arena has no room. The request yields meanwhile, and the frontend
+  thread serves other requests. On the synchronous beast frontend, this
+  work runs on the frontend thread.
 * The cuObject executor's gather windows, and cuObject transfers on the
   transfer threads, are not tested on hardware.
 * A token can name any endpoint that the OSDs can reach. The gateway

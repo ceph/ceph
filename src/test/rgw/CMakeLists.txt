@@ -140,6 +140,20 @@ if(WITH_OOB_OFI)
   target_link_libraries(unittest_rgw_ofi_sigv4 ${CRYPTO_LIBS})
 endif()
 
+# unittest_rgw_rdma_rc_wire
+add_executable(unittest_rgw_rdma_rc_wire test_rgw_rdma_rc_wire.cc)
+add_ceph_unittest(unittest_rgw_rdma_rc_wire)
+target_link_libraries(unittest_rgw_rdma_rc_wire ${rgw_libs})
+
+if(WITH_RDMA_RC)
+  # unittest_rgw_rdma_rc_session: the RC session service on the host's
+  # first verbs device; each test skips on a host without one
+  add_executable(unittest_rgw_rdma_rc_session test_rgw_rdma_rc_session.cc)
+  add_ceph_unittest(unittest_rgw_rdma_rc_session)
+  target_link_libraries(unittest_rgw_rdma_rc_session ${rgw_libs}
+    IBVerbs::verbs)
+endif()
+
 # unittest_rgw_rdma_fence
 add_executable(unittest_rgw_rdma_fence test_rgw_rdma_fence.cc)
 add_ceph_unittest(unittest_rgw_rdma_fence)

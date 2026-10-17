@@ -21,7 +21,8 @@
  * for remote writes only. token() names a window of the pool in the
  * descriptor form the cuObject server parses,
  * "raddr:rsize:rkey:lid:dctn:has_gid:gid". The DCT itself is
- * ceph::rdma::dc_target.
+ * ceph::rdma::dc_target, which the gateway's relay target
+ * (rgw_rdma_dc_target) brings up too.
  */
 class OSDDcTarget {
 public:

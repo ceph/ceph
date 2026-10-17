@@ -2868,35 +2868,47 @@ void RGWGetObj::note_rdma_reads(bool submitted, bool needed, double fence_s)
   auto& f = rdma_fence_state;
   f.sent = true;
   f.needed = needed;
+  // the mode they went out in, before any switch in get_data_cb()
+  f.client_window = (rdma_switched_from != RdmaMode::NONE ?
+                     rdma_switched_from : rdma_mode) == RdmaMode::PASSTHROUGH;
   f.settled = false;
   f.wait_ms = static_cast<uint64_t>(std::ceil(fence_s * 1000.0));
-  // what the stripes said about the OSDs' transport for this kind of
-  // token: one that does not say landed makes every passthrough GET
-  // wait out the fence, so the next ones are declined for a while
-  using reports = rgw::rdma::landing_reports;
-  auto& landing = rgw::rdma::passthrough_landing(rdma_token);
-  if (landing.note(reports::clock::now(), rdma_placed.unlanded > 0,
-                   rdma_placed.landed > 0)) {
-    ldpp_dout(this, 1) << "rdma passthrough: an OSD placed "
-                       << rdma_placed.unlanded << " stripes without "
-                       << "saying that they landed: its transport does "
-                       << "not promise delivery-complete writes, and a "
-                       << "passthrough GET waits out the fence before "
-                       << "its response. Declining passthrough for "
-                       << reports::HOLD.count() << "s" << dendl;
-  } else if (rdma_placed.unlanded > 0) {
-    ldpp_dout(this, 4) << "rdma passthrough: " << rdma_placed.unlanded
-                       << " stripes did not say that they landed; "
-                       << "declining passthrough for "
-                       << reports::HOLD.count() << "s" << dendl;
+  if (f.client_window) {
+    // what the stripes said about the OSDs' transport for this kind of
+    // token: one that does not say landed makes every passthrough GET
+    // wait out the fence, so the next ones are declined for a while
+    using reports = rgw::rdma::landing_reports;
+    auto& landing = rgw::rdma::passthrough_landing(rdma_token);
+    if (landing.note(reports::clock::now(), rdma_placed.unlanded > 0,
+                     rdma_placed.landed > 0)) {
+      ldpp_dout(this, 1) << "rdma passthrough: an OSD placed "
+                         << rdma_placed.unlanded << " stripes without "
+                         << "saying that they landed: its transport does "
+                         << "not promise delivery-complete writes, and a "
+                         << "passthrough GET waits out the fence before "
+                         << "its response. Declining passthrough for "
+                         << reports::HOLD.count() << "s" << dendl;
+    } else if (rdma_placed.unlanded > 0) {
+      ldpp_dout(this, 4) << "rdma passthrough: " << rdma_placed.unlanded
+                         << " stripes did not say that they landed; "
+                         << "declining passthrough for "
+                         << reports::HOLD.count() << "s" << dendl;
+    }
   }
   rdma_placed = {};
 }
 
-void RGWGetObj::rdma_fence_before(const char* what, bool success)
+void RGWGetObj::rdma_fence_before(const char* what, bool response,
+                                  bool success)
 {
   auto& f = rdma_fence_state;
   if (!f.sent || f.settled) {
+    return;
+  }
+  if (response && !f.client_window) {
+    // the reads wrote a gateway relay window, which goes back to its pool
+    // quarantined for rdma_window_hold_ms() instead of holding up the
+    // answer
     return;
   }
   f.settled = true;
@@ -2935,9 +2947,63 @@ void RGWGetObj::rdma_fence_before(const char* what, bool success)
   }
 }
 
+uint64_t RGWGetObj::rdma_window_hold_ms() const
+{
+  // the fence rdma_fence_before() left to the window's pool, by the same
+  // rule: none when it was waited out already, before a fallback
+  const auto& f = rdma_fence_state;
+  if (!f.sent || f.settled || !f.needed) {
+    return 0;
+  }
+  return f.wait_ms;
+}
+
 void RGWGetObj::select_rdma_mode(bool plain_chain)
 {
   rdma_mode = RdmaMode::NONE;
+  if (relay_window) {
+    // a subclass relays the data from a gateway window: the OSDs push
+    // into it when they can (the window has a descriptor, the data needs
+    // no transformation and fits, and their results say when the bytes
+    // landed), else the stripes are copied in
+    if (total_len > relay_window) {
+      ldpp_dout(this, 4) << "rdma relay: response larger than the gateway "
+                         << "window" << dendl;
+      return;
+    }
+    if (plain_chain && !relay_token.empty() &&
+        s->cct->_conf.get_val<bool>("rgw_rdma_osd_direct") &&
+        rados_op_timeout_set(s->cct)) {
+      // as for passthrough: a stripe read that timed out can still write
+      // the window after the fence, when it relays another session
+      static std::atomic<bool> logged = false;
+      if (!logged.exchange(true)) {
+        ldpp_dout(this, 1) << "rdma relay: staging OSD-direct relays while "
+                           << "rados_osd_op_timeout is set: a read that "
+                           << "times out can still write the window after "
+                           << "the fence" << dendl;
+      }
+      ldpp_dout(this, 4) << "rdma relay: staged, rados_osd_op_timeout is "
+                         << "set" << dendl;
+      rdma_mode = RdmaMode::RELAY_STAGED;
+    } else if (plain_chain && !relay_token.empty() &&
+               s->cct->_conf.get_val<bool>("rgw_rdma_osd_direct") &&
+               !relay_lands) {
+      // the OSDs' results would not say that their bytes landed, so the
+      // relay would wait out the whole fence before it pushed them:
+      // copying the stripes in is faster
+      ldpp_dout(this, 4) << "rdma relay: staged, the cluster transport does "
+                         << "not report landed writes" << dendl;
+      rdma_mode = RdmaMode::RELAY_STAGED;
+    } else if (plain_chain && !relay_token.empty() &&
+        s->cct->_conf.get_val<bool>("rgw_rdma_osd_direct")) {
+      rdma_token = relay_token;
+      rdma_mode = RdmaMode::RELAY;
+    } else {
+      rdma_mode = RdmaMode::RELAY_STAGED;
+    }
+    return;
+  }
   if (rdma_token.empty() || !get_data || get_type() != RGW_OP_GET_OBJ ||
       !rdma_eligible()) {
     return;
@@ -3489,7 +3555,7 @@ void RGWGetObj::execute(optional_yield y)
     // switched over in get_data_cb().
     ldpp_dout(this, 4) << "rdma passthrough unsupported, restarting GET "
                        << "in fallback mode" << dendl;
-    rdma_fence_before("the fallback", false);
+    rdma_fence_before("the fallback", false, false);
     read_op->params.rdma_token.clear();
     read_op->params.rdma_bytes = nullptr;
     read_op->params.rdma_crc64 = nullptr;
@@ -3568,7 +3634,7 @@ void RGWGetObj::execute(optional_yield y)
   }
 
   // before the staged write too, which goes to the client's window
-  rdma_fence_before("the response", true);
+  rdma_fence_before("the response", true, true);
   if (rdma_mode == RdmaMode::STAGED) {
     // the response tells the client that its window holds the body, so
     // it goes out once the write put all of it there; a failed or short
@@ -3594,7 +3660,7 @@ done_err:
   }
   // no answer, not even an error, before nothing of the reads can write
   // the client's window any more
-  rdma_fence_before("the error response", false);
+  rdma_fence_before("the error response", true, false);
   send_response_data_error(y);
 }
 
@@ -5442,7 +5508,7 @@ void RGWPutObj::execute(optional_yield y)
   // served out of band is: ignoring the token would store an empty
   // object. It leaves nothing behind, and the client sends the body
   if (rdma_token_refusal && copy_source.empty() && s->content_length == 0 &&
-      !chunked_upload) {
+      !chunked_upload && rdma_staging_allowed) {
     ldpp_dout(this, 4) << "S3 over RDMA: declining a PUT without a body: "
                        << rdma_token_refusal << dendl;
     s->err.message = std::string(rdma_token_refusal) +
@@ -5492,7 +5558,7 @@ void RGWPutObj::execute(optional_yield y)
   // (RGWPutObj_ObjStore_S3::get_params()).
   const auto& rdma_put_token = rdma_token;
   const bool rdma_put_bodyless = rdma_put_token && copy_source.empty() &&
-    s->content_length == 0 && !chunked_upload;
+    s->content_length == 0 && !chunked_upload && rdma_staging_allowed;
   std::optional<ceph::rdma::token_window> rdma_put_window;
   if (rdma_put_bodyless) {
     rdma_put_window = ceph::rdma::parse_rdma_token(*rdma_put_token);
@@ -5820,7 +5886,7 @@ void RGWPutObj::execute(optional_yield y)
 #ifdef WITH_RADOSGW_CUOBJ
   std::string rdma_descr;
   bool rdma_put = false;
-  if (cuobj_srv && copy_source.empty() && !osd_put) {
+  if (cuobj_srv && copy_source.empty() && rdma_staging_allowed && !osd_put) {
     if (rdma_token && ceph::rdma::is_ofi_token(*rdma_token)) {
       // the cuObjServer can only read from cuObject descriptors, and
       // libfabric clients have no staged PUT: the token is advisory and

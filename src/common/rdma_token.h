@@ -44,8 +44,8 @@ std::optional<token_window> parse_rdma_token(std::string_view token);
 /// The cuObject descriptor of the window [addr, addr+size), registered
 /// with rkey, behind the Dynamically Connected target dctn at lid and
 /// gid: "raddr:rsize:rkey:lid:dctn:1:gid" in fixed-width lowercase hex,
-/// the form the cuObject server library parses. The DC target of the
-/// OSD's gather windows (common/rdma_dc_target.h) hands these out.
+/// the form the cuObject server library parses. The DC targets of the
+/// OSD and the gateway (common/rdma_dc_target.h) hand these out.
 std::string format_cuobj_descriptor(uint64_t addr, uint32_t size,
 				    uint32_t rkey, uint16_t lid,
 				    uint32_t dctn,
@@ -67,6 +67,7 @@ bool is_cuobj_descriptor(std::string_view token);
 /// the transport names of oob_client_transports and
 /// oob_cluster_transport that are not libfabric providers
 inline constexpr std::string_view TRANSPORT_CUOBJ = "cuobj";
+inline constexpr std::string_view TRANSPORT_RC = "rc";
 
 /// Split a transport list ("verbs_ofi_rxm, cuobj") into its names, in
 /// order, lower-cased, without duplicates or empty entries. A name of
@@ -82,7 +83,7 @@ std::vector<std::string> parse_transport_list(std::string_view list);
 std::string libfabric_name(std::string_view name);
 
 /// whether a transport name is a libfabric provider: any name but
-/// cuobj
+/// cuobj and rc
 bool is_libfabric_provider(std::string_view name);
 
 /**
@@ -103,6 +104,7 @@ struct oob_transports {
 
   bool client_names(std::string_view t) const;
   bool client_cuobj() const { return client_names(TRANSPORT_CUOBJ); }
+  bool client_rc() const { return client_names(TRANSPORT_RC); }
   /// whether the client list names a libfabric provider
   bool client_ofi() const;
   bool cluster_cuobj() const { return cluster == TRANSPORT_CUOBJ; }

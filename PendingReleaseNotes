@@ -214,10 +214,10 @@
   ``public_network`` does. ``oob_client_transports`` lists the tokens that
   the cluster accepts: a libfabric provider (build with ``WITH_OOB_OFI``;
   ``verbs_ofi_rxm``, ``efa`` or a UET provider, or ``tcp`` for tests only,
-  because it cannot cut off a write that misses its deadline), and
-  ``cuobj`` for NVIDIA's cuObject library (DC transport on ConnectX; build
-  with ``WITH_RADOSGW_CUOBJ``), which also serves gateway-staged GET and
-  PUT. ``oob_cluster_transport`` names the
+  because it cannot cut off a write that misses its deadline), ``cuobj`` for
+  NVIDIA's cuObject library (DC transport on ConnectX; build with
+  ``WITH_RADOSGW_CUOBJ``), which also serves gateway-staged GET and PUT, and ``rc``
+  for Reliable Connection clients. ``oob_cluster_transport`` names the
   transport between daemons, which lets an EC primary gather its shards out
   of band. ``oob_memory`` sizes the memory that each daemon registers. OSDs
   can checksum (CRC-64/NVME or CRC-32C) each stripe they deliver, and the
@@ -244,6 +244,13 @@
   gateway ignores the token of an anonymous
   request, and declines an anonymous body-less PUT with a token with
   ``501``, unless ``rgw_rdma_token_allow_anonymous`` is true.
+* RGW: The gateway now serves S3 over RDMA to clients that use Reliable
+  Connection transport, such as AMD's hipObject library (the ``hipobj-rc-v2``
+  control protocol on ``/.hipobj-rc/``). These clients do not need NVIDIA
+  ConnectX NICs. For a GET, the OSDs can write the stripes into a gateway
+  session buffer over ``oob_cluster_transport``, and the gateway relays
+  them to the client while the read is still in progress. Enable with
+  ``rc`` in ``oob_client_transports``. See ``doc/radosgw/s3-rdma.rst``.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 
 * RGW: PutBucketEncryption and GetBucketEncryption now support the

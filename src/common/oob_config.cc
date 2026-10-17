@@ -460,6 +460,49 @@ int keep_only_net_raw(bool* kept, std::string* err)
   return 0;
 }
 
+int drop_net_raw(bool* dropped, std::string* err)
+{
+  *dropped = false;
+#ifdef __linux__
+  cap_t caps = cap_get_proc();
+  if (!caps) {
+    const int r = -errno;
+    *err = "unable to read the capabilities: " + cpp_strerror(r);
+    return r;
+  }
+  auto free_caps = make_scope_guard([caps] { cap_free(caps); });
+  cap_flag_value_t held = CAP_CLEAR;
+  if (cap_get_flag(caps, CAP_NET_RAW, CAP_PERMITTED, &held) < 0) {
+    const int r = -errno;
+    *err = "unable to read the capabilities: " + cpp_strerror(r);
+    return r;
+  }
+  cap_t none = cap_init();
+  if (!none) {
+    const int r = -errno;
+    *err = "unable to drop CAP_NET_RAW: " + cpp_strerror(r);
+    return r;
+  }
+  auto free_none = make_scope_guard([none] { cap_free(none); });
+  const cap_value_t raw[1] = {CAP_NET_RAW};
+  // without CAP_NET_RAW, the thread must hold nothing at all
+  if (held != CAP_SET ||
+      cap_set_flag(caps, CAP_PERMITTED, 1, raw, CAP_CLEAR) < 0 ||
+      cap_set_flag(caps, CAP_EFFECTIVE, 1, raw, CAP_CLEAR) < 0 ||
+      cap_set_flag(caps, CAP_INHERITABLE, 1, raw, CAP_CLEAR) < 0 ||
+      cap_compare(caps, none) != 0) {
+    return 0;
+  }
+  if (cap_set_proc(none) < 0) {
+    const int r = -errno;
+    *err = "unable to drop CAP_NET_RAW: " + cpp_strerror(r);
+    return r;
+  }
+  *dropped = true;
+#endif
+  return 0;
+}
+
 int with_net_raw(const std::function<void()>& fn, std::string* err)
 {
 #ifdef __linux__
@@ -515,6 +558,17 @@ bool osd_keeps_net_raw(CephContext* cct)
     !cct->_conf.get_val<bool>("set_keepcaps") &&
     (cct->_conf.get_val<bool>("oob_keep_net_raw") ||
      needs_net_raw(read_transports(cct).ofi_provider));
+}
+
+bool rgw_keeps_net_raw(CephContext* cct)
+{
+  if (cct->get_set_uid() == 0) {
+    return false;
+  }
+  const auto oob = read_transports(cct);
+  return oob.client_rc() &&
+    cct->_conf.get_val<bool>("rgw_rdma_osd_direct") &&
+    needs_net_raw(oob.cluster);
 }
 
 std::string public_ip(CephContext* cct)
