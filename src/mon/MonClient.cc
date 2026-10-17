@@ -276,7 +276,9 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   int keyload = keyring.from_ceph_context(cct, css.get());
   if (keyload < 0) {
     ldout(cct, 10) << "could not load key: " << css->strv() << dendl;
-    return keyload;
+    if (!auth_registry.any_supported_methods(CEPH_ENTITY_TYPE_MON)) {
+      return keyload;
+    }
   }
   RotatingKeyRing rkeyring(cct, cct->get_module_type(), &keyring);
 
