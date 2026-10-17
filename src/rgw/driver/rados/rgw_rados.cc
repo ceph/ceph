@@ -4732,9 +4732,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
-  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
-                                  owner, dest_obj_ctx, dest_obj, olh_epoch,
-				  tag, rctx.dpp, rctx.y, no_trace);
+  // Keep the remote NULL selector separate from its canonical local BI key.
+  rgw_obj dest_obj_bi = dest_obj;
+  if (dest_obj_bi.key.have_null_instance()) {
+    dest_obj_bi.key.instance.clear();
+  }
+  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr, owner,
+                                  dest_obj_ctx, dest_obj_bi, olh_epoch, tag,
+                                  rctx.dpp, rctx.y, no_trace);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -5067,7 +5072,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
     if (copy_if_newer && canceled) {
       ldpp_dout(rctx.dpp, 20) << "raced with another write of obj: " << fetched_obj << dendl;
-      dest_obj_ctx.invalidate(dest_obj); /* object was overwritten */
+      dest_obj_ctx.invalidate(dest_obj_bi); /* object was overwritten */
+      if (!(stat_dest_obj == dest_obj_bi)) {
+        dest_obj_ctx.invalidate(stat_dest_obj);
+      }
       ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
       if (ret < 0) {
         ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret
@@ -5108,8 +5116,9 @@ set_err_state:
     // for OP_LINK_OLH to call set_olh() with a real olh_epoch
     if (olh_epoch && *olh_epoch > 0) {
       constexpr bool log_data_change = true;
-      ret = set_olh(rctx.dpp, dest_obj_ctx, dest_bucket_info, dest_obj, false, nullptr,
-                    *olh_epoch, real_time(), false, rctx.y, zones_trace, log_data_change);
+      ret = set_olh(rctx.dpp, dest_obj_ctx, dest_bucket_info, dest_obj_bi,
+                    false, nullptr, *olh_epoch, real_time(), false, rctx.y,
+                    zones_trace, log_data_change);
     } else {
       // we already have the latest copy
       ret = 0;
