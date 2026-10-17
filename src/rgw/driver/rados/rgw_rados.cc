@@ -3466,6 +3466,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (r < 0) {
     return r;
   }
+  if (meta.id_tag_guard) {
+    // the caller read the head before the state above, and may reuse what
+    // it read, such as the tail. the head must still be that one. this goes
+    // before prepare_atomic_modification() sets the new ID tag
+    op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, *meta.id_tag_guard);
+  }
   bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
   r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
@@ -3780,7 +3786,10 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
   index_op.set_zones_trace(meta.zones_trace);
   
-  bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
+  // a guarded write expects the head it names; an exclusive create would
+  // recreate it if it was deleted meanwhile
+  bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL &&
+                       meta.id_tag_guard == nullptr);
   int r;
   if (assume_noent) {
     r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
@@ -5215,8 +5224,11 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
-               jspan_context& trace)
+               jspan_context& trace,
+               int copy_self_attempt)
 {
+  // a copy onto itself that loses its guard runs again with these
+  const rgw::sal::Attrs request_attrs = attrs;
   int ret;
   uint64_t obj_size;
   rgw_obj shadow_obj = dest_obj;
@@ -5545,10 +5557,35 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.delete_at = delete_at;
   write_op.meta.modify_tail = !copy_itself;
   write_op.meta.keep_tail = copy_itself;
+  if (copy_itself && astate->obj_tag.length() > 0 && !astate->fake_tag) {
+    // the head keeps the tail read above, so it must be the head read
+    // above. an overwrite since then has sent that tail to GC
+    write_op.meta.id_tag_guard = &astate->obj_tag;
+  }
 
   ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
     goto done_ret;
+  }
+  if (copy_itself && write_op.meta.canceled) {
+    // the head changed since the copy read it: a write replaced it, or an
+    // attribute update (tagging, ACL) gave it a new ID tag. nothing of
+    // this copy was written. answered as success, it would drop the
+    // copy's metadata, or with the tag set it read, the update's: copy the
+    // object again as it is now
+    if (copy_self_attempt < 2) {
+      ldpp_dout(dpp, 5) << "copy of " << src_obj << " onto itself lost its guard, retrying" << dendl;
+      src_obj_ctx.invalidate(src_obj);
+      dest_obj_ctx.invalidate(dest_obj);
+      attrs = request_attrs;
+      return copy_obj(src_obj_ctx, dest_obj_ctx, owner, remote_user, info, source_zone,
+                      dest_obj, src_obj, dest_bucket_info, src_bucket_info, dest_placement,
+                      src_mtime, mtime, mod_ptr, unmod_ptr, high_precision_time,
+                      if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
+                      olh_epoch, delete_at, version_id, ptag, petag, progress_cb,
+                      progress_data, dp_factory, dpp, y, trace, copy_self_attempt + 1);
+    }
+    return -ERR_INTERNAL_ERROR;
   }
 
   return 0;
