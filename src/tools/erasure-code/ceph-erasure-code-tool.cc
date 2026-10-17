@@ -7,6 +7,7 @@
 #include "common/ceph_argparse.h"
 #include "common/config_proxy.h"
 #include "common/errno.h"
+#include "common/strtol.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -87,15 +88,28 @@ int ec_init(const std::string &profile_str,
     return 0;
   }
 
-  uint64_t stripe_unit = atoi(stripe_unit_str.c_str());
-  if (stripe_unit <= 0) {
-    usage("invalid stripe unit", std::cerr);
+  if ((*ec_impl)->get_supported_optimizations() &
+      ceph::ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) {
+    usage("invalid profile: fast EC does not support sub-chunks", std::cerr);
     return 1;
   }
 
-  uint64_t stripe_size = atoi(profile["k"].c_str());
-  ceph_assert(stripe_size > 0);
+  std::string err;
+  long long stripe_unit_arg = strict_strtoll(stripe_unit_str, 10, &err);
+  if (!err.empty() || stripe_unit_arg <= 0) {
+    usage("invalid stripe unit", std::cerr);
+    return 1;
+  }
+  uint64_t stripe_unit = stripe_unit_arg;
+
+  uint64_t stripe_size = (*ec_impl)->get_data_chunk_count();
   uint64_t stripe_width = stripe_size * stripe_unit;
+  uint64_t chunk_size = (*ec_impl)->get_chunk_size(stripe_width);
+  if (chunk_size != stripe_unit) {
+    usage("invalid stripe unit: the plugin rounds it up to " +
+          stringify(chunk_size), std::cerr);
+    return 1;
+  }
   sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, nullptr, stripe_width));
 
   return 0;
@@ -126,7 +140,7 @@ int do_validate_profile(const std::vector<const char*> &args) {
 
   ceph::ErasureCodeInterfaceRef ec_impl;
   int r = ec_init(args[0], {}, &ec_impl, nullptr);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -169,7 +183,7 @@ int do_calc_chunk_size(const std::vector<const char*> &args) {
 
   ceph::ErasureCodeInterfaceRef ec_impl;
   int r = ec_init(args[0], {}, &ec_impl, nullptr);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -192,7 +206,7 @@ int do_encode(const std::vector<const char*> &args) {
   ceph::ErasureCodeInterfaceRef ec_impl;
   std::unique_ptr<ECUtil::stripe_info_t> sinfo;
   int r = ec_init(args[0], args[1], &ec_impl, &sinfo);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -258,24 +272,35 @@ int do_decode(const std::vector<const char*> &args) {
 
   std::set<int> want_to_read;
   const auto chunk_mapping = ec_impl->get_chunk_mapping();
+  uint64_t shard_size = 0;
   for (auto &shard_str : shards) {
-    std::string name = fname + "." + shard_str;
     std::string error;
+    int shard_num = strict_strtol(shard_str, 10, &error);
+    if (!error.empty() || shard_num < 0 ||
+        shard_num >= (int)sinfo->get_k_plus_m()) {
+      usage("invalid shard " + shard_str, std::cerr);
+      return 1;
+    }
+    std::string name = fname + "." + shard_str;
     bufferlist bl;
     r = bl.read_file(name.c_str(), &error);
     if (r < 0) {
       std::cerr << "failed to read " << name << ": " << error << std::endl;
       return 1;
     }
-    shard_id_t shard = sinfo->get_shard(raw_shard_id_t(atoi(shard_str.c_str())));
+    shard_id_t shard(shard_num);
     encoded_data.insert_in_shard(shard, 0, bl);
+    shard_size = std::max<uint64_t>(shard_size, bl.length());
   }
 
+  // shard files hold whole stripes from offset 0
+  uint64_t chunk_size = sinfo->get_chunk_size();
+  uint64_t ro_end = (shard_size + chunk_size - 1) / chunk_size *
+                    sinfo->get_stripe_width();
   ECUtil::shard_extent_set_t wanted(sinfo->get_k_plus_m());
-  sinfo->ro_range_to_shard_extent_set(encoded_data.get_ro_start(),
-    encoded_data.get_ro_end() - encoded_data.get_ro_start(), wanted);
+  sinfo->ro_range_to_shard_extent_set(0, ro_end, wanted);
 
-  r = encoded_data.decode(ec_impl, wanted, encoded_data.get_ro_end());
+  r = encoded_data.decode(ec_impl, wanted, ro_end);
   if (r < 0) {
     std::cerr << "failed to decode: " << cpp_strerror(r) << std::endl;
     return 1;
