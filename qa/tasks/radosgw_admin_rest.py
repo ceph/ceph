@@ -415,6 +415,123 @@ def task(ctx, config):
     assert out['type'] == 'rgw'
     assert out['mfa_ids'] == []
 
+    # TESTCASES for the tenant parameter on user info, modify and remove
+    tenant_user = 'tuser'
+    tenant_name = 'ttenant'
+    combined_uid = tenant_name + '$' + tenant_user
+
+    # TESTCASE 'create-tenanted','user','create','tenant as request param','succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds,
+            ['user', 'create'],
+            {'uid' : tenant_user,
+             'tenant' : tenant_name,
+             'display-name' : 'Tenanted User'
+            })
+    assert ret == 200
+
+    # TESTCASE 'info-tenant-param','user','info','bare uid with tenant param','finds tenanted user'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'],
+            {'uid' : tenant_user, 'tenant' : tenant_name})
+    assert ret == 200
+    assert out['tenant'] == tenant_name
+
+    # TESTCASE 'info-tenant-match','user','info','tenanted uid with matching tenant param','succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'],
+            {'uid' : combined_uid, 'tenant' : tenant_name})
+    assert ret == 200
+    assert out['tenant'] == tenant_name
+
+    # TESTCASE 'info-tenant-mismatch','user','info','tenanted uid with different tenant param','fails'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'],
+            {'uid' : combined_uid, 'tenant' : 'othertenant'})
+    assert ret == 400
+
+    # TESTCASE 'modify-tenant-param','user','modify','bare uid with tenant param','modifies tenanted user'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : tenant_user, 'tenant' : tenant_name, 'display-name' : 'Tenanted User Two'})
+    assert ret == 200
+
+    # TESTCASE 'modify-tenant-match','user','modify','tenanted uid with matching tenant param','succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : combined_uid, 'tenant' : tenant_name, 'display-name' : 'Tenanted User Three'})
+    assert ret == 200
+
+    # TESTCASE 'modify-tenant-mismatch','user','modify','tenanted uid with different tenant param','fails'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : combined_uid, 'tenant' : 'othertenant', 'display-name' : 'Other User'})
+    assert ret == 400
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : combined_uid})
+    assert ret == 200
+    assert out['display_name'] == 'Tenanted User Three'
+
+    # TESTCASE 'rm-tenant-mismatch','user','rm','tenanted uid with different tenant param','fails'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'rm'],
+            {'uid' : combined_uid, 'tenant' : 'othertenant'})
+    assert ret == 400
+
+    # TESTCASE 'rm-tenant-match','user','rm','tenanted uid with matching tenant param','succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'rm'],
+            {'uid' : combined_uid, 'tenant' : tenant_name})
+    assert ret == 200
+
+    # TESTCASE 'rm-tenant-param','user','rm','bare uid with tenant param','removes tenanted user'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds,
+            ['user', 'create'],
+            {'uid' : tenant_user,
+             'tenant' : tenant_name,
+             'display-name' : 'Tenanted User'
+            })
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'rm'],
+            {'uid' : tenant_user, 'tenant' : tenant_name})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : combined_uid})
+    assert ret == 404
+
+    # TESTCASE 'tenant-param-namesake','user','rm','untenanted namesake alongside','never touches the namesake'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds,
+            ['user', 'create'],
+            {'uid' : tenant_user, 'display-name' : 'Bare Namesake'})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds,
+            ['user', 'create'],
+            {'uid' : tenant_user,
+             'tenant' : tenant_name,
+             'display-name' : 'Tenanted User'
+            })
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'],
+            {'uid' : tenant_user, 'tenant' : tenant_name})
+    assert ret == 200
+    assert out['tenant'] == tenant_name
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : tenant_user, 'tenant' : tenant_name, 'display-name' : 'Tenanted User Two'})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : tenant_user})
+    assert ret == 200
+    assert out['display_name'] == 'Bare Namesake'
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'rm'],
+            {'uid' : tenant_user, 'tenant' : tenant_name})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : combined_uid})
+    assert ret == 404
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : tenant_user})
+    assert ret == 200
+    assert out['display_name'] == 'Bare Namesake'
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'rm'], {'uid' : tenant_user})
+    assert ret == 200
+
     # TESTCASES for cap user-info-without-keys
     test_cap_user_info_without_keys(ctx, client, endpoint, admin_creds, admin_user, user1)
 
