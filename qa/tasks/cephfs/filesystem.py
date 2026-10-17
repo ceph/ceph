@@ -413,7 +413,7 @@ class MDSClusterBase(CephClusterBase):
     def newfs(self, name='cephfs', create=True, **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
-        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        confirm_opt: bool and fs_ops: list[str]
         """
         return Filesystem(self._ctx, name=name, create=create, **kwargs)
 
@@ -551,7 +551,7 @@ class FilesystemBase(MDSClusterBase):
                  **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
-        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        confirm_opt: bool and fs_ops: list[str]
         """
         super(FilesystemBase, self).__init__(ctx, cluster_name=cluster_name)
 
@@ -703,24 +703,89 @@ class FilesystemBase(MDSClusterBase):
     target_size_ratio = 0.9
     target_size_ratio_ec = 0.9
 
+    def get_pool_usage(self, pool_name):
+            output = self.get_ceph_cmd_stdout('df --format json-pretty')
+            output = json.loads(output)
+            for pool in output['pools']:
+                if pool['name'] == pool_name:
+                    return pool['stats']['stored']
+
+    def create_osd_pool(self, pool_name, meta_pool=False):
+        if meta_pool:
+            cmd = f'osd pool create {pool_name} --pg_num_min {self.pg_num_min}'
+        else:
+            cmd = (f'osd pool create {pool_name} {self.pg_num} --pg_num_min '
+                   f'{self.pg_num_min} --target_size_ratio '
+                   f'{self.target_size_ratio}')
+
+        try:
+            cmd_stderr = self.get_ceph_cmd_stderr(cmd)
+            if 'already exists' in cmd_stderr.strip():
+                if self.get_pool_usage(pool_name) != 0:
+                    self.run_ceph_cmd(f'osd pool rm {pool_name} {pool_name} '
+                                      '--yes-i-really-really-mean-it')
+                    self.run_ceph_cmd(cmd)
+        except CommandFailedError as e:
+            # nautilus couldn't specify --pg_num_min option
+            if e.exitstatus == 22:
+                if meta_pool:
+                    cmd = (f'osd pool create {pool_name} {self.pg_num_min}')
+                else:
+                    cmd = (f'osd pool create {pool_name} {self.pg_num} '
+                           f'{self.pg_num_min}')
+
+                self.run_ceph_cmd(cmd)
+            else:
+                raise
+
+    def rm_all_pool_app_tags(self, pool_name):
+        output = self.get_ceph_stdout(f'osd pool application get {pool_name} '
+                                      '--format json-pretty').strip()
+        if output == '{}':
+            return
+
+        output = json_loads(output)
+        k, v = output['cephfs']
+        self.get_ceph_cmd_stdout(f'osd pool application rm {pool_name} {k}')
+
+    def run_fs_new_cmd(self, recover, metadata_overlay, confirm_opt, fs_ops):
+        fs_new_cmd = (f'fs new {self.name} {self.metadata_pool_name} '
+                      f'{self.data_pool_name}')
+        if recover:
+            fs_new_cmd += ' --recover'
+        if metadata_overlay:
+            fs_new_cmd += ' --allow-dangerous-metadata-overlay'
+        if confirm_opt:
+            fs_new_cmd += ' --yes-i-really-really-mean-it'
+        if fs_ops:
+            fs_new_cmd += ' set'
+            args.append('set')
+            for key_or_val in fs_ops:
+                fs_new_cmd += key_or_val
+
+        try:
+            self.run_ceph_cmd(fs_new_cmd)
+        except CommandFailedError as e:
+            if e.exitstatus == errno.EINVAL:
+                for i in (self.metadata_pool_name, self.data_pool_name):
+                    self.rm_all_pool_app_tags()
+                self.run_ceph_cmd(fs_new_cmd)
+
     def create(self, **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
-        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        confirm: bool and fs_ops: list[str]
         """
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
             self.metadata_pool_name = "{0}_metadata".format(self.name)
         if self.data_pool_name is None:
-            data_pool_name = "{0}_data".format(self.name)
-        else:
-            data_pool_name = self.data_pool_name
+            self.data_pool_name = "{0}_data".format(self.name)
 
         recover = kwargs.pop("recover", False)
         metadata_overlay = kwargs.pop("metadata_overlay", False)
-        yes_i_really_really_mean_it = kwargs.pop("yes_i_really_really_mean_it",
-                                                 False)
+        confirm_opt = kwargs.pop("confirm_opt", False)
         fs_ops = kwargs.pop("fs_ops", None)
 
         # will use the ec pool to store the data and a small amount of
@@ -730,43 +795,13 @@ class FilesystemBase(MDSClusterBase):
 
         log.debug("Creating filesystem '{0}'".format(self.name))
 
-        try:
-            self.run_ceph_cmd('osd', 'pool', 'create',self.metadata_pool_name,
-                              '--pg_num_min', str(self.pg_num_min))
-
-            self.run_ceph_cmd('osd', 'pool', 'create', data_pool_name,
-                              str(self.pg_num),
-                              '--pg_num_min', str(self.pg_num_min),
-                              '--target_size_ratio',
-                              str(self.target_size_ratio))
-        except CommandFailedError as e:
-            if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                self.run_ceph_cmd('osd', 'pool', 'create',
-                                  self.metadata_pool_name,
-                                  str(self.pg_num_min))
-
-                self.run_ceph_cmd('osd', 'pool', 'create',
-                                  data_pool_name, str(self.pg_num),
-                                  str(self.pg_num_min))
-            else:
-                raise
-
-        args = ["fs", "new", self.name, self.metadata_pool_name, data_pool_name]
-        if recover:
-            args.append('--recover')
-        if metadata_overlay:
-            args.append('--allow-dangerous-metadata-overlay')
-        if yes_i_really_really_mean_it:
-            args.append('--yes-i-really-really-mean-it')
-        if fs_ops:
-            args.append('set')
-            for key_or_val in fs_ops:
-                args.append(key_or_val)
-        self.run_ceph_cmd(*args)
+        self.create_osd_pool(self.metadata_pool_name, meta_pool=True)
+        self.create_osd_pool(self.data_pool_name)
+        self.run_fs_new_cmd(recover, metadata_overlay, confirm_opt, fs_ops)
 
         if not recover:
             if self.ec_profile and 'disabled' not in self.ec_profile:
-                ec_data_pool_name = data_pool_name + "_ec"
+                ec_data_pool_name = self.data_pool_name + "_ec"
                 log.debug("EC profile is %s", self.ec_profile)
                 cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
                 cmd.extend(self.ec_profile)
@@ -792,7 +827,7 @@ class FilesystemBase(MDSClusterBase):
                 self.run_client_payload(f"setfattr -n ceph.dir.layout.pool -v {ec_data_pool_name} . && getfattr -n ceph.dir.layout .")
 
         self.check_pool_application(self.metadata_pool_name)
-        self.check_pool_application(data_pool_name)
+        self.check_pool_application(self.data_pool_name)
 
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
