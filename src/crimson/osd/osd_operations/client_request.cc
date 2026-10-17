@@ -20,6 +20,18 @@ SET_SUBSYS(osd);
 
 namespace crimson::osd {
 
+namespace {
+/// Every reply carries this reactor's shard map version; a client whose
+/// cached version differs fetches the map (MOSDShardMapGet).
+MURef<MOSDOpReply> stamp_shard_map_version(
+  const Ref<PG> &pg, MURef<MOSDOpReply> &&reply)
+{
+  reply->set_shard_map_version(
+    pg->get_shard_services().get_shard_map_version());
+  return std::move(reply);
+}
+}
+
 
 void ClientRequest::Orderer::requeue(Ref<PG> pg)
 {
@@ -127,7 +139,8 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
   // TODO: gate the crosscore sending
   return interruptor::make_interruptible(
-    get_foreign_connection().send_with_throttling(std::move(reply))
+    get_foreign_connection().send_with_throttling(
+      stamp_shard_map_version(pg, std::move(reply)))
   );
 }
 
@@ -301,7 +314,8 @@ ClientRequest::process_pg_op(
   auto reply = co_await pg->do_pg_ops(m);
   // TODO: gate the crosscore sending
   co_await interruptor::make_interruptible(
-    get_foreign_connection().send_with_throttling(std::move(reply)));
+    get_foreign_connection().send_with_throttling(
+      stamp_shard_map_version(pg, std::move(reply))));
 }
 
 ClientRequest::interruptible_future<>
@@ -389,7 +403,8 @@ ClientRequest::process_op(
     reply->set_reply_versions(completed->version, completed->user_version);
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
-      get_foreign_connection().send_with_throttling(std::move(reply))
+      get_foreign_connection().send_with_throttling(
+      stamp_shard_map_version(pg, std::move(reply)))
     );
     co_return;
   }
@@ -593,7 +608,8 @@ ClientRequest::do_process(
     
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
-      get_foreign_connection().send_with_throttling(std::move(reply)));
+      get_foreign_connection().send_with_throttling(
+      stamp_shard_map_version(pg, std::move(reply))));
   } else {
     int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
     if (op_info.may_read() && result >= 0) {
@@ -629,7 +645,8 @@ ClientRequest::do_process(
 	     *pg, *this, this_instance_id, *m);
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
-      get_foreign_connection().send_with_throttling(std::move(reply))
+      get_foreign_connection().send_with_throttling(
+      stamp_shard_map_version(pg, std::move(reply)))
     );
   }
 }

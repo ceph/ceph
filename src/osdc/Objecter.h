@@ -62,6 +62,7 @@
 #include "mon/MonClient.h"
 
 #include "messages/MOSDOp.h"
+#include "osd/osd_shard_map.h"
 #include "msg/Dispatcher.h"
 
 #include "osd/OSDMap.h"
@@ -2004,7 +2005,10 @@ public:
 
     op_target_t target;
 
-    ConnectionRef con = nullptr;  // for rx buffer only
+    /// connection the op was last sent on; with shard routing its PG is
+    /// pinned there while in flight
+    ConnectionRef con = nullptr;
+    spg_t route_pgid;  ///< pg_routes key the op is counted under
     uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT; // explicitly specified op features
 
     osdc_opvec ops;
@@ -2533,6 +2537,38 @@ public:
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
+    // --- shard routing (objecter_shard_routing), guarded by lock ---
+    osd_shard_map_t shard_map;               ///< empty until fetched
+    bool shard_map_fetching = false;
+    std::vector<ConnectionRef> shard_conns;  ///< index = OSD reactor
+    mutable std::mutex conns_lock;           ///< also taken by readers of shard_conns
+                                             ///< that don't hold lock
+    struct pg_route_t {
+      ConnectionRef con;
+      unsigned inflight = 0;
+    };
+    /// a PG never has ops in flight on two connections (ordering)
+    std::map<spg_t, pg_route_t> pg_routes;
+
+    /// index of c in shard_conns, or -1
+    int shard_conn_index(const Connection *c) const {
+      std::lock_guard l(conns_lock);
+      for (size_t i = 0; i < shard_conns.size(); ++i) {
+        if (shard_conns[i].get() == c) {
+          return static_cast<int>(i);
+        }
+      }
+      return -1;
+    }
+    bool owns_connection(const ConnectionRef& c) const {
+      if (c == con) {
+        return true;
+      }
+      std::lock_guard l(conns_lock);
+      return std::find(shard_conns.begin(), shard_conns.end(), c)
+        != shard_conns.end();
+    }
+
     OSDSession(CephContext *cct, int o) :
       osd(o), incarnation(0), con(NULL),
       num_locks(cct->_conf->objecter_completion_locks_per_session),
@@ -2589,6 +2625,9 @@ public:
 
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
+  bool shard_routing = false;  ///< objecter_shard_routing
+  uint64_t max_shard_conns = 0;  ///< objecter_osd_max_shard_conns, 0 = all
+  bool messenger_can_steer = true;  ///< cleared once connect_to_osd_shard fails
 
   uint64_t min_split_replica_read_size;
 
@@ -2691,6 +2730,21 @@ private:
   void _command_cancel_map_check(CommandOp *op);
 
   void _kick_requests(OSDSession *session, std::map<uint64_t, LingerOp *>& lresend);
+
+  // shard routing; session lock held
+  ConnectionRef _route_op(Op *op);
+  void _unroute_op(OSDSession *s, Op *op);
+  void _maybe_fetch_shard_map(OSDSession *s, uint64_t version);
+  /// size shard_conns for the current map; connections open lazily
+  void _init_shard_slots(OSDSession *s);
+  /// the connection for an idle PG; opens its reactor's connection if
+  /// needed and allowed (rwlock held)
+  ConnectionRef _pick_connection(OSDSession *s, const spg_t& pgid);
+  void _drop_shard_conns(OSDSession *s);   ///< caller resends
+  /// one shard connection reset or idled out: forget it and resend, in tid
+  /// order, only the ops that were on it (rwlock unique)
+  void _retire_shard_conn(OSDSession *s, int index,
+                          std::map<uint64_t, LingerOp *>& lresend);
   void _linger_ops_resend(std::map<uint64_t, LingerOp *>& lresend,
 			  std::unique_lock<ceph::shared_mutex>& ul);
 
@@ -2822,6 +2876,7 @@ private:
 
   void handle_osd_op_reply(class MOSDOpReply *m);
   void handle_osd_backoff(class MOSDBackoff *m);
+  void handle_osd_shard_map(class MOSDShardMap *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map(epoch_t e=0);

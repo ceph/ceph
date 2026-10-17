@@ -561,6 +561,10 @@ public:
     return pg_to_shard_mapping.dump_store_shards(f);
   }
 
+  uint64_t get_shard_map_version() const {
+    return pg_to_shard_mapping.get_shard_map_version();
+  }
+
   auto create_split_pg_mapping(spg_t pgid, core_id_t core, store_index_t store_index) {
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
   }
