@@ -47,6 +47,7 @@
 #include <iosfwd>
 #include <string_view>
 
+#include "common/hobject_fmt.h"
 #include "common/LogClient.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types_fmt.h"

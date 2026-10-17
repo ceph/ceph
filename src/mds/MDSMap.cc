@@ -22,6 +22,8 @@
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
 #include "include/container_ios.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
 #include "mon/health_check.h"
 
 using std::dec;

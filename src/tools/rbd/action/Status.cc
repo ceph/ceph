@@ -7,9 +7,9 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/byte_u_t.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
-#include "include/types.h" // for byte_u_t
 #include "librbd/cache/Types.h"
 #include <iostream>
 #include <boost/program_options.hpp>

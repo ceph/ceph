@@ -54,11 +54,14 @@
 /* CephXServiceTicketInfo: rotating service key */
 #define CEPHX_KEY_USAGE_TICKET_INFO           0x30
 
+#include <fmt/core.h>
+
 #include "auth/Auth.h"
 #include <errno.h>
-#include <sstream>
 
 #include "include/common_fwd.h"
+#include "include/encoding_string.h"
+
 /*
  * Authentication
  */
@@ -672,9 +675,7 @@ void decode_decrypt_enc_bl(CephContext *cct, T& t, const CryptoKey& key,
   decode(struct_v, iter2);
   decode(magic, iter2);
   if (magic != AUTH_ENC_MAGIC) {
-    std::ostringstream oss;
-    oss << "bad magic in decode_decrypt, " << magic << " != " << AUTH_ENC_MAGIC;
-    error = oss.str();
+    error = fmt::format("bad magic in decode_decrypt, {} != {}", magic, AUTH_ENC_MAGIC);
     return;
   }
 

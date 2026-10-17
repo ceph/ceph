@@ -5,6 +5,7 @@
 #include "common/Formatter.h"
 #include "include/ceph_fs_encoder.h"
 #include "include/container_ios.h"
+#include "include/encoding_vector.h"
 #include "include/types.h" // for the ceph_mds_snap_realm encoder
 
 void SnapRealmInfo::encode(ceph::buffer::list& bl) const

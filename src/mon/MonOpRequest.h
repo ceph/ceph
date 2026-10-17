@@ -23,15 +23,17 @@
 
 #include <boost/intrusive_ptr.hpp>
 
-#include "common/Formatter.h"
 #include "common/RefCountedObj.h"
 #include "common/TrackedOp.h"
 #include "include/Context.h"
-#include "mon/Session.h"
 #include "msg/Connection.h"
 #include "msg/Message.h"
 
+namespace ceph { class Formatter; }
+struct MonSession;
+
 struct MonOpRequest : public TrackedOp {
+  
   friend class OpTracker;
 
   void mark_dispatch() {
@@ -48,11 +50,7 @@ struct MonOpRequest : public TrackedOp {
     forwarded_to_leader = true;
   }
 
-  void mark_svc_event(const std::string &service, const std::string &event) {
-    std::string s = service;
-    s.append(":").append(event);
-    mark_event(s);
-  }
+  void mark_svc_event(const std::string &service, const std::string &event);
 
   void mark_logmon_event(const std::string &event) {
     mark_svc_event("logm", event);
@@ -94,65 +92,17 @@ private:
   bool forwarded_to_leader;
   op_type_t op_type;
 
-  MonOpRequest(Message *req, OpTracker *tracker) :
-    TrackedOp(tracker,
-      req->get_recv_stamp().is_zero() ?
-      ceph_clock_now() : req->get_recv_stamp()),
-    request(req),
-    con(NULL),
-    forwarded_to_leader(false),
-    op_type(OP_TYPE_NONE)
-  {
-    if (req) {
-      con = req->get_connection();
-      if (con) {
-        session = con->get_priv();
-      }
-    }
-  }
+  MonOpRequest(Message *req, OpTracker *tracker);
 
-  void _dump(ceph::Formatter *f) const override {
-    {
-      f->open_array_section("events");
-      std::lock_guard l(lock);
-    for (auto i = events.begin(); i != events.end(); ++i) {
-      f->open_object_section("event");
-      f->dump_string("event", i->str);
-      f->dump_stream("time") << i->stamp;
-
-      auto i_next = i + 1;
-
-      if (i_next < events.end()) {
-	f->dump_float("duration", i_next->stamp - i->stamp);
-      } else {
-	f->dump_float("duration", events.rbegin()->stamp - get_initiated());
-      }
-
-      f->close_section();
-    }
-      f->close_section();
-      f->open_object_section("info");
-      f->dump_int("seq", seq);
-      f->dump_bool("src_is_mon", is_src_mon());
-      f->dump_stream("source") << request->get_source_inst();
-      f->dump_bool("forwarded_to_leader", forwarded_to_leader);
-      f->close_section();
-    }
-  }
+  void _dump(ceph::Formatter *f) const override;
 
 protected:
-  void _dump_op_descriptor(std::ostream& stream) const override {
-    get_req()->print(stream);
-  }
+  void _dump_op_descriptor(std::ostream& stream) const override;
 
 public:
-  ~MonOpRequest() override {
-    request->put();
-  }
+  ~MonOpRequest() override;
 
-  MonSession *get_session() const {
-    return static_cast<MonSession*>(session.get());
-  }
+  MonSession *get_session() const;
 
   template<class T>
   T *get_req() const { return static_cast<T*>(request); }
@@ -167,9 +117,7 @@ public:
 
   ConnectionRef get_connection() { return con; }
 
-  void set_session(MonSession *s) {
-    session.reset(s);
-  }
+  void set_session(MonSession *s);
 
   bool is_src_mon() const {
     return (con && con->get_peer_type() & CEPH_ENTITY_TYPE_MON);
@@ -226,16 +174,7 @@ struct C_MonOp : public Context
   explicit C_MonOp(MonOpRequestRef o) :
     op(o) { }
 
-  void finish(int r) override {
-    if (op && r == -ECANCELED) {
-      op->mark_event("callback canceled");
-    } else if (op && r == -EAGAIN) {
-      op->mark_event("callback retry");
-    } else if (op && r == 0) {
-      op->mark_event("callback finished");
-    }
-    _finish(r);
-  }
+  void finish(int r) override;
 
   void mark_op_event(const std::string &event) {
     if (op)

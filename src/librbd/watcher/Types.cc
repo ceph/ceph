@@ -3,6 +3,8 @@
 
 #include "librbd/watcher/Types.h"
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
+#include "include/encoding_vector.h"
 
 namespace librbd {
 namespace watcher {

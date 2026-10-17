@@ -9,15 +9,18 @@
 #include <vector>
 #include <iosfwd>
 
-#include "include/cephfs/types.h" // for mds_rank_t
-#include "include/container_ios.h"
+#include "include/cephfs/rank.h" // for mds_rank_t
 #include "include/denc.h"
 #include "include/ceph_fs_encoder.h"
-#include "include/stringify.h"
+#include "include/denc_map.h"
+#include "include/denc_set.h"
+#include "include/denc_string.h"
+#include "include/denc_vector.h"
 #include "include/utime.h"
-#include "common/Formatter.h"
 
 #include "mgr/Types.h"
+
+namespace ceph { class Formatter; }
 
 typedef std::vector<std::string> MDSPerfMetricSubKey; // array of regex match
 typedef std::vector<MDSPerfMetricSubKey> MDSPerfMetricKey;
@@ -66,10 +69,7 @@ struct MDSPerfMetricSubKeyDescriptor {
     denc(v.regex_str, p);
     DENC_FINISH(p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("type", static_cast<uint8_t>(type));
-    f->dump_string("regex_str", regex_str);
-  }
+  void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_DENC(MDSPerfMetricSubKeyDescriptor)
 
@@ -99,31 +99,7 @@ struct denc_traits<MDSPerfMetricKeyDescriptor> {
     }
   }
   static void decode(MDSPerfMetricKeyDescriptor& v,
-                     ceph::buffer::ptr::const_iterator& p) {
-    unsigned num;
-    denc_varint(num, p);
-    v.clear();
-    v.reserve(num);
-    for (unsigned i=0; i < num; ++i) {
-      MDSPerfMetricSubKeyDescriptor d;
-      denc(d, p);
-      if (!d.is_supported()) {
-        v.clear();
-        return;
-      }
-      try {
-        d.regex = d.regex_str.c_str();
-      } catch (const std::regex_error& e) {
-        v.clear();
-        return;
-      }
-      if (d.regex.mark_count() == 0) {
-        v.clear();
-        return;
-      }
-      v.push_back(std::move(d));
-    }
-  }
+                     ceph::buffer::ptr::const_iterator& p);
 };
 
 enum class MDSPerformanceCounterType : uint8_t {
@@ -210,9 +186,7 @@ struct MDSPerformanceCounterDescriptor {
     denc(v.type, p);
     DENC_FINISH(p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("type", static_cast<uint8_t>(type));
-  }
+  void dump(ceph::Formatter *f) const;
 
   void pack_counter(const PerformanceCounter &c, ceph::buffer::list *bl) const;
   void unpack_counter(ceph::buffer::list::const_iterator& bl, PerformanceCounter *c) const;
@@ -284,10 +258,7 @@ struct MDSPerfMetricLimit {
     denc(v.max_count, p);
     DENC_FINISH(p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_object("order_by", order_by);
-    f->dump_unsigned("max_count", max_count);
-  }
+  void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_DENC(MDSPerfMetricLimit)
 
@@ -354,10 +325,7 @@ struct MDSPerfMetricQuery {
     DENC_FINISH(p);
   }
 
-  void dump(ceph::Formatter *f) const {
-    f->dump_stream("key_descriptor") << key_descriptor;
-    f->dump_stream("performance_counter_descriptors") << performance_counter_descriptors;
-  }
+  void dump(ceph::Formatter *f) const;
 
   void pack_counters(const PerformanceCounters &counters, ceph::buffer::list *bl) const;
 };
@@ -385,15 +353,7 @@ struct MDSPerfMetrics {
     denc(v.group_packed_performance_counters, p);
     DENC_FINISH(p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_stream("performance_counter_descriptors") << performance_counter_descriptors;
-    f->open_array_section("group_packed_performance_counters");
-    for (auto &i : group_packed_performance_counters) {
-      f->dump_stream("key") << i.first;
-      f->dump_stream("value") << i.second;
-    }
-    f->close_section();
-  }
+  void dump(ceph::Formatter *f) const;
 };
 
 struct MDSPerfMetricReport {
@@ -407,26 +367,8 @@ struct MDSPerfMetricReport {
     denc(v.rank_metrics_delayed, p);
     DENC_FINISH(p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->open_array_section("reports");
-    for (auto &i : reports) {
-      f->open_object_section("query");
-      f->dump_object("query",i.first);
-      f->close_section();
-      f->open_object_section("metrics");
-      f->dump_object("metrics",i.second);
-      f->close_section();
-    }
-    f->close_section();
-  }
-  static std::list<MDSPerfMetricReport> generate_test_instances() {
-    std::list<MDSPerfMetricReport> o;
-    o.emplace_back();
-    o.emplace_back();
-    o.back().reports.emplace(MDSPerfMetricQuery(), MDSPerfMetrics());
-    o.back().rank_metrics_delayed.insert(1);
-    return o;
-  }
+  void dump(ceph::Formatter *f) const;
+  static std::list<MDSPerfMetricReport> generate_test_instances();
 };
 
 // all latencies are converted to millisec during the aggregation
@@ -451,26 +393,7 @@ struct AggregatedSubvolumeMetric {
     uint64_t time_window_last_end_sec = 0;
     uint64_t time_window_last_dur_sec = 0;
 
-    void dump(ceph::Formatter* f) const {
-      f->dump_string("subvolume_path", subvolume_path);
-      f->dump_unsigned("read_iops", read_iops);
-      f->dump_unsigned("write_iops", write_iops);
-      f->dump_unsigned("read_tpBs", read_tpBs);
-      f->dump_unsigned("write_tBps", write_tBps);
-      f->dump_unsigned("quota_bytes", quota_bytes);
-      f->dump_unsigned("used_bytes", used_bytes);
-
-      f->dump_unsigned("min_read_latency_ns", min_read_latency);
-      f->dump_unsigned("max_read_latency_ns", max_read_latency);
-      f->dump_unsigned("avg_read_latency_ns", avg_read_latency);
-
-      f->dump_unsigned("min_write_latency_ns", min_write_latency);
-      f->dump_unsigned("max_write_latency_ns", max_write_latency);
-      f->dump_unsigned("avg_write_latency_ns", avg_write_latency);
-
-      f->dump_unsigned("time_window_sec_end", time_window_last_end_sec);
-      f->dump_unsigned("time_window_sec_dur", time_window_last_dur_sec);
-    }
+    void dump(ceph::Formatter* f) const;
 };
 
 using TimePoint = std::chrono::steady_clock::time_point;
