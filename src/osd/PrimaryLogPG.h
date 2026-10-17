@@ -1472,6 +1472,9 @@ protected:
 
   int do_read(OpContext *ctx, OSDOp& osd_op);
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
+  int bounce_ec_direct_read(const hobject_t& soid, OpContext *ctx, int r);
+  /// shard-direct reads of this PG that bounce_ec_direct_read() bounced
+  uint64_t ec_direct_read_bounces = 0;
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
   bool pgls_filter(const PGLSFilter& filter, const hobject_t& sobj);
