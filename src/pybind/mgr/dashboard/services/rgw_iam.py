@@ -4,12 +4,15 @@ from typing import Any, Dict, List, Optional
 
 from .. import mgr
 from ..exceptions import DashboardException
+from .rgw_client import append_rgw_realm_zone
 
 
 class RgwAccounts:
     @classmethod
     def send_rgw_cmd(cls, command: List[str], error_msg: Optional[str] = None,
-                     stdout_as_json: bool = True):
+                     stdout_as_json: bool = True, daemon_name: Optional[str] = None):
+        append_rgw_realm_zone(command, daemon_name=daemon_name)
+
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(
                 command, stdout_as_json=stdout_as_json)
@@ -26,9 +29,9 @@ class RgwAccounts:
             raise DashboardException(e, component='rgw')
 
     @classmethod
-    def get_accounts(cls):
+    def get_accounts(cls, daemon_name: Optional[str] = None):
         get_accounts_cmd = ['account', 'list']
-        return cls.send_rgw_cmd(get_accounts_cmd)
+        return cls.send_rgw_cmd(get_accounts_cmd, daemon_name=daemon_name)
 
     @classmethod
     def get_account_by_name(cls, account_name: str):
