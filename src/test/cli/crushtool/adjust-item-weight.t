@@ -15,3 +15,14 @@
   $ crushtool -i two --update-item 0 3.0 device0 --loc host host0 --loc cluster cluster0 -o three > /dev/null
   $ crushtool -d three -o final
   $ diff final "$TESTDIR/simple.template.adj.three"
+
+#
+# update the weight of device0 in host=host0 to a large value, and check that
+# it propagates up to cluster0.  note that --update-item does not go through
+# the crush compiler, so this does not exercise CRUSH_MAX_DEVICE_WEIGHT; see
+# large-device-weight.t for that.
+#
+
+  $ crushtool -i three --update-item 0 123.0 device0 --loc host host0 --loc cluster cluster0 -o four > /dev/null
+  $ crushtool -d four -o final
+  $ diff final "$TESTDIR/simple.template.adj.four"
