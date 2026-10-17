@@ -1580,7 +1580,19 @@ void MDLog::_replay_thread()
         return;
       }
       logger->inc(l_mdl_replayed);
-      le->replay(mds);
+      try {
+        le->replay(mds);
+      } catch (const buffer::error &e) {
+        // Events may lazily decode part of their payload during replay
+        // (e.g. EMetaBlob dentry bits).  The event envelope passed
+        // decode_event() but the payload is corrupt; mark the MDS damaged
+        // instead of crashing.
+        mds->clog->error() << "corrupt journal event " << std::string(le->get_type_str())
+                           << " at " << pos << "~" << bl.length() << " / "
+                           << journaler->get_write_pos() << ": " << e.what();
+        mds->damaged();
+        ceph_abort();  // Should be unreachable because damaged() calls respawn()
+      }
     }
 
     logger->set(l_mdl_rdpos, pos);
