@@ -1,0 +1,71 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject delay max: 1
+        ms inject delay probability: 0.005
+        ms inject delay type: osd
+        ms inject internal delays: 0.002
+        ms inject socket failures: 2500
+        mon client directed command retry: 5
+tasks:
+- ceph:
+    fs: xfs
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(TOO_FEW_PGS\)
+      - \(OSD_SLOW_PING_TIME
+      - slow request
+- thrashosds:
+    chance_pgnum_grow: 2
+    chance_pgnum_shrink: 2
+    chance_pgpnum_fix: 1
+    timeout: 1200
+- exec:
+    client.0:
+      - sudo ceph osd pool create benchpool 64
+      - sudo ceph osd pool application enable benchpool rados
+      # pool create returns before the new PGs can take IO, and thrashosds
+      # is already running. Block until a client can list the pool.
+      - sudo timeout 180 sh -c 'until rados -p benchpool ls >/dev/null 2>&1; do sleep 2; done'
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      # Cap the write so the rollback can cover every object within
+      # its time limit. The seq read compares each object with this
+      # original payload.
+      time: 600
+      max_objects: 32
+      pool: benchpool
+      create_pool: false
+      cleanup: false
+  - radosbench:
+      clients: [client.0]
+      # Half of the objects are overwritten after snap_0 is taken.
+      # Which half is not recorded, so this run rolls back every
+      # object. It fails if that does not finish within the time limit.
+      time: 600
+      type: rollback
+      rollback_snap: snap_0
+      skip_write: true
+      extra_args: "--mutate-percent=50"
+      pool: benchpool
+      create_pool: false
+  - radosbench:
+      clients: [client.0]
+      time: 600
+      type: seq
+      skip_write: true
+      pool: benchpool
+      create_pool: false
+- exec:
+    client.0:
+      - sudo ceph osd pool rm benchpool benchpool --yes-i-really-really-mean-it
