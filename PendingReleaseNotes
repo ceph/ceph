@@ -29,6 +29,12 @@
 
 * RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
   in Standard mode.
+* RGW: Zonegroups have a new ``admin_endpoints`` setting for system traffic
+  between zonegroups (period push, requests forwarded from other zonegroups,
+  and ``radosgw-admin --remote``). Client redirects keep using ``endpoints``.
+  When ``admin_endpoints`` is not set, system traffic uses the same URLs as
+  before; this fallback is deprecated and will be removed in a future release.
+  Set it with ``radosgw-admin zonegroup modify --admin-endpoints=<list>``.
 
 * RGW: Changing ``rgw_dynamic_resharding`` used to turn queuing buckets
   for reshard on or off while not affecting resharding itself until the
