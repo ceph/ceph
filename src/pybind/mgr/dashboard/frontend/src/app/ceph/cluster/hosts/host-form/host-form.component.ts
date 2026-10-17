@@ -66,6 +66,13 @@ export class HostFormComponent extends CdForm implements OnInit {
       this.hostnames = resp.map((host) => {
         return host['hostname'];
       });
+      // Re-run the uniqueName validator now that hostnames are available.
+      // The validator is synchronous and captures `this.hostnames` by reference at
+      // call-time, so if the user already typed a hostname before this response
+      // arrived the control stays in the stale (valid) state until a new input
+      // event is fired.  Calling updateValueAndValidity() forces Angular to
+      // re-evaluate all validators immediately.
+      this.hostForm.get('hostname').updateValueAndValidity();
       this.loadingReady();
     });
 
