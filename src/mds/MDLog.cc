@@ -62,6 +62,17 @@ MDLog::MDLog(MDSRank* m)
   log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
   minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
   upkeep_thread = std::thread(&MDLog::log_trim_upkeep, this);
+  hard_limit_segments = g_conf().get_val<uint64_t>("mds_log_hard_limit_segments");
+
+  if (hard_limit_segments > 0) {
+    uint64_t min_hard_limit = (uint64_t)(max_segments * log_warn_factor) + 1;
+    if (hard_limit_segments < min_hard_limit) {
+      dout(0) << "mds_log_hard_limit_segments (" << hard_limit_segments
+              << ") is too low. Clamping to " << min_hard_limit
+              << " to prevent freezing before health warnings." << dendl;
+      hard_limit_segments = min_hard_limit;
+    }
+  }
 }
 
 MDLog::~MDLog()
@@ -1678,9 +1689,6 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   if (changed.count("mds_log_max_events")) {
     max_events = g_conf().get_val<int64_t>("mds_log_max_events");
   }
-  if (changed.count("mds_log_max_segments")) {
-    max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
-  }
   if (changed.count("mds_log_pause")) {
     pause = g_conf().get_val<bool>("mds_log_pause");
     if (!pause) {
@@ -1696,10 +1704,26 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   if (changed.count("mds_log_trim_decay_rate")){
     log_trim_counter = DecayCounter(g_conf().get_val<double>("mds_log_trim_decay_rate"));
   }
-  if (changed.count("mds_log_warn_factor")) {
-    log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
-  }
   if (changed.count("mds_log_minor_segments_per_major_segment")) {
     minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
+  }
+  if (changed.count("mds_log_max_segments") ||
+      changed.count("mds_log_warn_factor") ||
+      changed.count("mds_log_hard_limit_segments")) {
+
+    // Refresh dependencies just in case they were updated simultaneously
+    max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
+    log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
+    hard_limit_segments = g_conf().get_val<uint64_t>("mds_log_hard_limit_segments");
+
+    if (hard_limit_segments > 0) {
+      uint64_t min_hard_limit = (uint64_t)(max_segments * log_warn_factor) + 1;
+      if (hard_limit_segments < min_hard_limit) {
+        dout(0) << "mds_log_hard_limit_segments (" << hard_limit_segments
+                << ") is too low. Clamping to " << min_hard_limit
+                << " to prevent freezing before health warnings." << dendl;
+        hard_limit_segments = min_hard_limit;
+      }
+    }
   }
 }

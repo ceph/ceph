@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MDS_TRIM
+      - MDSs behind on trimming
+tasks:
+- cephfs_test_runner:
+    modules:
+    - tasks.cephfs.test_journal_limits
