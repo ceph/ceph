@@ -2870,9 +2870,7 @@ void PeerReplayer::SnapDiffSync::finish_crawl(int ret, double crawl_duration_sec
     auto &entry = m_sync_stack.top();
     if (entry.is_directory()) {
       dout(20) << ": closing local directory=" << entry.epath << dendl;
-      if (ceph_close_snapdiff(&(entry.info)) < 0) {
-        derr << ": failed to close snapdiff directory=" << entry.epath << dendl;
-      }
+      fini_directory(entry);
     }
 
     m_sync_stack.pop();
