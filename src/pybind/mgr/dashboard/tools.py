@@ -388,6 +388,7 @@ class NotificationQueue(threading.Thread):
             except IndexError:
                 pass
             self._notify_listeners(private_buffer)
+            time.sleep(0)
             with self._cond:
                 while self._running and not self._queue:
                     self._cond.wait()
