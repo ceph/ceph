@@ -6800,9 +6800,9 @@ int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
                                                   status));
 }
 
-list<rgw_data_sync_info> rgw_data_sync_info::generate_test_instances()
+vector<rgw_data_sync_info> rgw_data_sync_info::generate_test_instances()
 {
-  list<rgw_data_sync_info> o;
+  vector<rgw_data_sync_info> o;
   rgw_data_sync_info info;
   info.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
   info.num_shards = 8;
@@ -6811,9 +6811,9 @@ list<rgw_data_sync_info> rgw_data_sync_info::generate_test_instances()
   return o;
 }
 
-list<rgw_data_sync_marker> rgw_data_sync_marker::generate_test_instances()
+vector<rgw_data_sync_marker> rgw_data_sync_marker::generate_test_instances()
 {
-  list<rgw_data_sync_marker> o;
+  vector<rgw_data_sync_marker> o;
   rgw_data_sync_marker marker;
   marker.state = rgw_data_sync_marker::IncrementalSync;
   marker.marker = "01234";
@@ -6823,9 +6823,9 @@ list<rgw_data_sync_marker> rgw_data_sync_marker::generate_test_instances()
   return o;
 }
 
-list<rgw_data_sync_status> rgw_data_sync_status::generate_test_instances()
+vector<rgw_data_sync_status> rgw_data_sync_status::generate_test_instances()
 {
-  list<rgw_data_sync_status> o;
+  vector<rgw_data_sync_status> o;
   o.emplace_back();
   return o;
 }

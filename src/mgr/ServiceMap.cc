@@ -58,9 +58,9 @@ void ServiceMap::Daemon::dump(Formatter *f) const
   f->close_section();
 }
 
-auto ServiceMap::Daemon::generate_test_instances() -> std::list<Daemon>
+auto ServiceMap::Daemon::generate_test_instances() -> std::vector<Daemon>
 {
-  std::list<Daemon> ls;
+  std::vector<Daemon> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().gid = 222;
@@ -196,9 +196,9 @@ void ServiceMap::Service::dump(Formatter *f) const
   f->close_section();
 }
 
-auto ServiceMap::Service::generate_test_instances() -> std::list<Service>
+auto ServiceMap::Service::generate_test_instances() -> std::vector<Service>
 {
-  std::list<Service> ls;
+  std::vector<Service> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().daemons["one"].gid = 1;
@@ -237,9 +237,9 @@ void ServiceMap::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<ServiceMap> ServiceMap::generate_test_instances()
+std::vector<ServiceMap> ServiceMap::generate_test_instances()
 {
-  std::list<ServiceMap> ls;
+  std::vector<ServiceMap> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().epoch = 123;

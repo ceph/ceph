@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <list>
+#include <vector>
 #include <map>
 #include <string>
 
@@ -66,8 +67,8 @@ struct ceph_data_stats
     DECODE_FINISH(p);
   }
 
-  static std::list<ceph_data_stats> generate_test_instances() {
-    std::list<ceph_data_stats> ls;
+  static std::vector<ceph_data_stats> generate_test_instances() {
+    std::vector<ceph_data_stats> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().byte_total = 1024*1024;

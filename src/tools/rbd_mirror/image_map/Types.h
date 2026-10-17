@@ -116,7 +116,7 @@ struct PolicyData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<PolicyData> generate_test_instances();
+  static std::vector<PolicyData> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(PolicyData);

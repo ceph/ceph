@@ -1,8 +1,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
-#include <set>
+#include <iterator>
+#include <list>
 #include <map>
+#include <set>
+#include <vector>
 
 #include "gtest/gtest.h"
 
@@ -126,9 +129,24 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
   uint64_t handle;
   WatchNotifyTestCtx ctx;
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  std::list<obj_watch_t> watches;
-  ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
-  ASSERT_EQ(1u, watches.size());
+  obj_watch_t sentinel {};
+  strcpy(sentinel.addr, "sentinel");
+  std::vector<obj_watch_t> watches {sentinel};
+  ASSERT_EQ(0, ioctx.list_watchers("foo", watches));
+  ASSERT_EQ(2u, std::size(watches));
+  ASSERT_STREQ("sentinel", watches.front().addr);
+
+  std::list<obj_watch_t> legacy_watches {sentinel};
+  ASSERT_EQ(0, ioctx.list_watchers("foo", &legacy_watches));
+  ASSERT_EQ(2u, std::size(legacy_watches));
+  ASSERT_STREQ(watches.back().addr, legacy_watches.back().addr);
+  ASSERT_EQ(watches.back().watcher_id, legacy_watches.back().watcher_id);
+  ASSERT_EQ(watches.back().cookie, legacy_watches.back().cookie);
+
+  std::vector<obj_watch_t> failed_watches {sentinel};
+  ASSERT_EQ(-ENOENT, ioctx.list_watchers("missing", failed_watches));
+  ASSERT_EQ(1u, std::size(failed_watches));
+  ASSERT_STREQ("sentinel", failed_watches.front().addr);
   bufferlist bl2;
   for (unsigned i=0; i<10; ++i) {
     int r = ioctx.notify("foo", 0, bl2);
@@ -378,13 +396,12 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
   WatchNotifyTestCtx2TimeOut ctx(this);
   ASSERT_EQ(0, ioctx.watch3(notify_oid, &handle, &ctx, timeout));
   ASSERT_GT(ioctx.watch_check(handle), 0);
-  std::list<obj_watch_t> watches;
-  ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
-  ASSERT_EQ(watches.size(), 1u);
+  std::vector<obj_watch_t> watches;
+  ASSERT_EQ(0, ioctx.list_watchers(notify_oid, watches));
+  ASSERT_EQ(std::size(watches), 1u);
   std::cout << "List watches" << std::endl;
-  for (std::list<obj_watch_t>::iterator it = watches.begin();
-    it != watches.end(); ++it) {
-    ASSERT_EQ(it->timeout_seconds, timeout);
+  for (const auto& watcher : watches) {
+    ASSERT_EQ(watcher.timeout_seconds, timeout);
   }
   bufferlist bl2, bl_reply;
   std::cout << "notify2" << std::endl;

@@ -67,9 +67,9 @@ void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty) {
   }
 }
 
-list<RGWCORSRule> RGWCORSRule::generate_test_instances()
+vector<RGWCORSRule> RGWCORSRule::generate_test_instances()
 {
-  list<RGWCORSRule> o;
+  vector<RGWCORSRule> o;
   o.emplace_back();
   o.emplace_back();
   o.back().id = "test";
