@@ -5,3 +5,7 @@
 ::ng-deep cd-configuration td[cdstabledata].wrap {
   word-break: break-all;
 }
+
+.cd-config-value-toggle {
+  padding-inline: 0;
+}
