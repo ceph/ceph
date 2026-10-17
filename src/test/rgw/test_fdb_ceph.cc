@@ -191,6 +191,22 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
    CHECK(direct == via_serialize);
  }
 
+ SECTION("truncated buffer::list encoding is rejected")
+ {
+   ceph::buffer::list source;
+   source.append("truncated");
+
+   auto encoded = ceph::libfdb::to::convert(source);
+   encoded.pop_back();
+
+   ceph::buffer::list output;
+   output.append("old value");
+
+   CHECK_THROWS_AS(ceph::libfdb::from::convert(encoded, output),
+                   std::system_error);
+   CHECK(0 == output.length());
+ }
+
  SECTION("empty buffer::list round trip through public set/get")
  {
    ceph::buffer::list in;
@@ -259,7 +275,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  SECTION("buffer::ptr")
  {
     string_view in("Hello, World!");
-    ceph::buffer::ptr p(ceph::buffer::copy(in.data(), in.size()));
+    ceph::buffer::ptr p(ceph::buffer::copy(std::data(in), std::size(in)));
 
     CHECK(in == string_view(p.c_str(), p.length()));
 
@@ -272,47 +288,6 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
     CHECK(in == o);
  }
 }
-
-std::iostream& operator<<(ceph::libfdb::select& obj, std::iostream& os)
-{
- os << obj.begin_key;
- os << obj.end_key;
- return os;
-}
-namespace ceph::libfdb {
-
-/* Not very coroutine-friendly, sadly; but will be interesting to benchmark, so I'm leaving
- * it be for now:
-template <typename AssocT = boost::container::flat_map<std::string, std::string>>
-auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select selector)
--> std::generator<AssocT>
-{
- auto plan = detail::plan_range_work(dbh, selector, 4 * 1024 * 1024);
-
- const unsigned local_max_block = 2*2024; // vis-a-vis remote request max
-
- std::transform_reduce(std::begin(plan.ranges), std::end(plan.ranges),
-                      AssocT(),
-
-                      [](auto&& lhs, auto&& rhs) {
-                        return lhs.merge(rhs), lhs;
-                      },
-
-                      [dbh](const ceph::libfdb::select& selector) mutable {
-                        AssocT out;
-                        auto txn = ceph::libfdb::make_transaction(dbh);
-
-                        // ...my libstdc++ lacks std::from_range overloads; the Hard Way(TM) it is:
-                        for(auto&& kvp : ceph::libfdb::scan(txn, selector)) {
-                          out.emplace(kvp);
-                        }
-
-                        return out;                    
-                      });
-}
-*/
-
-} // namespace ceph::libfdb
 
 struct ordered_block final : std::vector<std::pair<std::string, std::string>>
 {
