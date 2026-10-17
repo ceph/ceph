@@ -378,6 +378,44 @@ def test_rgw_frontend_ssl_certificate_parser_error_is_left_unchanged():
     assert spec.ssl_key is None
 
 
+@pytest.mark.parametrize(
+    "enabled, interval, timeout, raise_exception, msg",
+    [
+        (False, 3600, 300, False, ''),
+        (True, 3600, 300, False, ''),
+        (True, 60, 30, False, ''),
+        (True, 30, 300, True, 'metrics_push_interval must be at least 60 seconds'),
+        (True, 3600, 10, True, 'metrics_push_timeout must be at least 30 seconds'),
+    ])
+def test_rgw_metrics_push_validation(enabled, interval, timeout, raise_exception, msg):
+    spec = RGWSpec(service_id='foo',
+                   rgw_realm='realm',
+                   rgw_zone='zone',
+                   metrics_push_enabled=enabled,
+                   metrics_push_interval=interval,
+                   metrics_push_timeout=timeout)
+    if raise_exception:
+        with pytest.raises(SpecValidationError, match=msg):
+            spec.validate()
+    else:
+        spec.validate()
+
+
+def test_rgw_metrics_push_json_roundtrip():
+    spec = RGWSpec(service_id='foo',
+                   rgw_realm='realm',
+                   rgw_zone='zone',
+                   metrics_push_enabled=True,
+                   metrics_push_interval=1800,
+                   metrics_push_timeout=120)
+    spec_json = spec.to_json()
+    restored = ServiceSpec.from_json(spec_json)
+    assert isinstance(restored, RGWSpec)
+    assert restored.metrics_push_enabled is True
+    assert restored.metrics_push_interval == 1800
+    assert restored.metrics_push_timeout == 120
+
+
 def test_osd_unmanaged():
     osd_spec = {"placement": {"host_pattern": "*"},
                 "service_id": "all-available-devices",
