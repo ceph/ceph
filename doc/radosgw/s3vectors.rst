@@ -435,7 +435,11 @@ tenant of its owner when the owner does not belong to an account (empty for a
 user with no tenant). See: `Accounts and Tenants`_.
 
 A vector bucket that is identified by name is looked up in the account, or the
-tenant, of the user sending the request.
+tenant, of the user sending the request. One that is identified by ARN is looked
+up in the account, or the tenant, of the ARN. This is how a vector bucket of
+another account, or tenant, is reached when its policy allows it. An ARN with an
+empty ``<account>`` refers to the account, or the tenant, of the user sending
+the request.
 
 In case that ``CreateIndex``, ``PutVectors`` and ``QueryVectors``,
 encounter errors that are the result of an invalid request, they return  a ``400``
