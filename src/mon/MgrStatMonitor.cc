@@ -550,3 +550,11 @@ void MgrStatMonitor::check_subs()
     check_sub(sub);
   }
 }
+
+void MgrStatMonitor::dump_info(ceph::Formatter *f) const
+{
+  digest.dump(f, &mon.osdmon()->osdmap);
+  f->dump_object("servicemap", get_service_map());
+  f->dump_unsigned("mgrstat_first_committed", get_first_committed());
+  f->dump_unsigned("mgrstat_last_committed", get_last_committed());
+}

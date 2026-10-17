@@ -116,7 +116,7 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void PGMapDigest::dump(ceph::Formatter *f) const
+void PGMapDigest::dump(ceph::Formatter *f, const OSDMap *osdmap) const
 {
   f->dump_unsigned("num_pg", num_pg);
   f->dump_unsigned("num_pg_active", num_pg_active);
@@ -144,13 +144,13 @@ void PGMapDigest::dump(ceph::Formatter *f) const
   f->close_section();
   f->open_array_section("osd_stats");
   int i = 0;
-  // TODO: this isn't really correct since we can dump non-existent OSDs
-  // I dunno what osd_last_seq is set to in that case...
   for (auto& p : osd_last_seq) {
-    f->open_object_section("osd_stat");
-    f->dump_int("osd", i);
-    f->dump_unsigned("seq", p);
-    f->close_section();
+    if (!osdmap || osdmap->exists(i)) {
+      f->open_object_section("osd_stat");
+      f->dump_int("osd", i);
+      f->dump_unsigned("seq", p);
+      f->close_section();
+    }
     ++i;
   }
   f->close_section();
