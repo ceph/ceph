@@ -234,7 +234,10 @@ protected:
     bufferlist data;
     std::tie(rv, data) = rgw_rest_read_all_input(s, max_len);
     if (rv >= 0) {
-      do_aws4_auth_completion();
+      // Enforce the AWSv4 single-chunk payload-hash verdict. Discarding this
+      // return accepts a signed request whose body does not match its claimed
+      // x-amz-content-sha256.
+      rv = do_aws4_auth_completion();
     }
 
     return std::make_tuple(rv, std::move(data));
@@ -245,7 +248,8 @@ protected:
                      uint64_t max_len, bool *empty) {
     int r = rgw_rest_get_json_input(cct, s, out, max_len, empty);
     if (r >= 0) {
-      do_aws4_auth_completion();
+      // Enforce the AWSv4 single-chunk payload-hash verdict; see read_all_input.
+      r = do_aws4_auth_completion();
     }
     return r;
   }
