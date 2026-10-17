@@ -62,15 +62,12 @@ struct entry_prefix final
 inline byte_buffer encode_request(const std::uint32_t maximum, const std::string_view filter,
                                   const std::string_view marker, const bool reshard)
 {
-    detail::checked_count(filter.size());
-    detail::checked_count(marker.size());
     byte_buffer output;
     detail::writer archive {output};
     archive.frame(2, [&] {
         using prefix = detail::request_prefix;
 
-        archive.fields(detail::checked_count(13ull + filter.size() + marker.size()),
-            prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)},
+        archive.fields(prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)},
             datum::binary_fields<&prefix::maximum, &prefix::filter, &prefix::marker, &prefix::reshard> {});
     });
 
@@ -124,14 +121,12 @@ void encode_entry(writer& archive, const EntryT& value,
 {
     const auto& data = datum::member_lens<Payload> {}(value);
     const std::string_view key = datum::member_lens<Key> {}(value);
-    checked_count(key.size());
     const auto length = checked_count(payload_size(data));
     const auto kind = ::cls::rgw::wire::checked_byte(datum::member_lens<Kind> {}(value));
     archive.frame(1, [&] {
         using prefix = entry_prefix;
 
-        archive.fields(checked_count(9ull + key.size()),
-            prefix {kind, key, length},
+        archive.fields(prefix {kind, key, length},
             datum::binary_fields<&prefix::kind, &prefix::key, &prefix::length> {});
         archive.payload(data);
     });

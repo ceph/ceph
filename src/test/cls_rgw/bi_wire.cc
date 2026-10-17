@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <array>
 #include <limits>
 #include <map>
 #include <random>
@@ -16,6 +17,40 @@
 #include <system_error>
 #include <utility>
 #include <vector>
+
+namespace rgw_metadata_test {
+
+struct converted final
+{
+    std::uint64_t local_value;
+    std::uint64_t unused;
+};
+
+struct rejected final {};
+
+} // rgw_metadata_test
+
+namespace ceph::salad::datum {
+
+template <>
+struct binary_field_codec<::rgw_metadata_test::converted>
+{
+    static constexpr auto apply(auto& archive, const auto& value)
+    {
+        return archive(static_cast<std::uint16_t>(value.local_value));
+    }
+};
+
+template <>
+struct binary_field_codec<::rgw_metadata_test::rejected>
+{
+    static constexpr zpp::bits::errc apply(auto&, const auto&)
+    {
+        return std::errc::invalid_argument;
+    }
+};
+
+} // ceph::salad::datum
 
 namespace {
 
@@ -155,6 +190,69 @@ TEST_CASE("RGW field archives preserve successful bytes and report undersized sc
     cursor = truncated.cbegin();
     ::cls::rgw::wire::reader short_input {cursor};
     CHECK_THROWS_AS(short_input.fields<3>(decoded, fields), std::system_error);
+}
+
+TEST_CASE("RGW metadata sizes follow selected order and field conversions", "[rgw][cls][datum]")
+{
+    namespace metadata = ::cls::rgw::wire;
+    struct fixed final
+    {
+        std::uint64_t epoch;
+        std::uint8_t operation;
+    };
+    static_assert(9 == metadata::encoded_size(fixed {},
+        datum::binary_fields<&fixed::operation, &fixed::epoch> {}));
+    static_assert(6 == metadata::encoded_size(metadata::frame_header {}, metadata::header_fields {}));
+    static_assert(2 == metadata::encoded_size(metadata::scalar_record<::rgw_metadata_test::converted> {},
+        datum::binary_fields<&metadata::scalar_record<::rgw_metadata_test::converted>::value> {}));
+
+    struct record final
+    {
+        std::array<std::uint8_t, 5> unselected;
+        std::string text;
+        std::string_view tail;
+        std::uint8_t flag;
+        ::rgw_metadata_test::converted narrow;
+    };
+    const auto fields = datum::binary_fields<&record::narrow, &record::tail, &record::text,
+        &record::tail, &record::flag> {};
+    for (const auto& text : {std::string {"a\0b", 3}, std::string {}}) {
+        const record value {{1, 2, 3, 4, 5}, text, "tail", 7, {0x1234, 0xFFFFFFFF}};
+        byte_buffer expected;
+        ::ceph::encode(std::uint16_t {0x1234}, expected);
+        ::ceph::encode(std::string {value.tail}, expected);
+        ::ceph::encode(value.text, expected);
+        ::ceph::encode(std::string {value.tail}, expected);
+        ::ceph::encode(value.flag, expected);
+
+        CHECK(metadata::encoded_size(value, fields) == expected.length());
+        byte_buffer bytes;
+        metadata::writer output {bytes};
+        output.fields(value, fields);
+        CHECK(bytes.contents_equal(expected));
+    }
+}
+
+TEST_CASE("RGW automatic metadata sizing preserves explicit codecs and rejects errors", "[rgw][cls][datum]")
+{
+    namespace metadata = ::cls::rgw::wire;
+    using explicit_record = metadata::scalar_record<std::array<std::uint8_t, 3>>;
+    const explicit_record value {{1, 2, 3}};
+    byte_buffer bytes;
+    metadata::writer output {bytes};
+    output.fields(3, value, datum::binary_fields<&explicit_record::value> {});
+    CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
+
+    using rejected_record = metadata::scalar_record<::rgw_metadata_test::rejected>;
+    CHECK_THROWS_AS(output.fields(rejected_record {},
+        datum::binary_fields<&rejected_record::value> {}), std::system_error);
+    CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
+    constexpr auto maximum = std::numeric_limits<std::uint32_t>::max();
+    static_assert(maximum == metadata::checked_count(maximum));
+    CHECK_THROWS_AS(metadata::checked_count(std::uint64_t {maximum} + 1), std::length_error);
+    CHECK_THROWS_AS(output.fields(std::uint64_t {maximum} + 1, value,
+        datum::binary_fields<&explicit_record::value> {}), std::length_error);
+    CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
 }
 
 TEST_CASE("BI replies use independent vector row types and preserve native frames", "[rgw][cls][datum]")

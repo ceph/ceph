@@ -605,8 +605,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     archive.frame(7, 5, [&] {
         using prefix = prepare_prefix;
 
-        archive.fields(::cls::rgw::wire::checked_count(10ull + tag.size() + locator.size()),
-            prefix {static_cast<std::uint8_t>(operation), tag, locator, 0},
+        archive.fields(prefix {static_cast<std::uint8_t>(operation), tag, locator, 0},
             datum::binary_fields<&prefix::operation, &prefix::tag, &prefix::locator, &prefix::log> {});
         ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
         archive.scalar(std::uint16_t {0});
@@ -631,7 +630,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     archive.frame(9, 7, [&] {
         using prefix = complete_prefix;
 
-        archive.fields(9, prefix {static_cast<std::uint8_t>(operation), version.epoch},
+        archive.fields(prefix {static_cast<std::uint8_t>(operation), version.epoch},
             datum::binary_fields<&prefix::operation, &prefix::epoch> {});
         archive.native(metadata);
         archive.text(tag);

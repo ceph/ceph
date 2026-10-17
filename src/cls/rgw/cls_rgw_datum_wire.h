@@ -28,7 +28,7 @@ namespace cls::rgw::wire {
 namespace datum = ::ceph::salad::datum;
 using byte_buffer = ::ceph::buffer::list;
 
-inline std::uint32_t checked_count(const std::uint64_t size)
+constexpr std::uint32_t checked_count(const std::uint64_t size)
 {
     if (size > std::numeric_limits<std::uint32_t>::max()) {
         throw std::length_error {"RGW CLS wire length exceeds uint32"};
@@ -78,6 +78,50 @@ using header_fields = datum::binary_fields<&frame_header::version,
     }
 }
 
+// Observe the selected field codecs using the same size4b metadata contract.
+// Other representations can retain the explicit-size writer overload.
+namespace detail {
+
+struct metadata_size final
+{
+    std::uint64_t bytes = 0;
+
+    static constexpr auto kind() { return zpp::bits::kind::out; }
+
+    static constexpr std::uint64_t field_size(const std::unsigned_integral auto& value)
+    {
+        return sizeof(value);
+    }
+
+    template <typename T>
+    requires std::same_as<T, std::string_view> || std::same_as<T, std::string>
+    static constexpr std::uint64_t field_size(const T& value)
+    {
+        return sizeof(std::uint32_t) + static_cast<std::uint64_t>(checked_count(value.size()));
+    }
+
+    constexpr zpp::bits::errc operator()(const auto& ...values)
+    {
+        ((bytes += field_size(values)), ...);
+
+        return {};
+    }
+};
+
+} // detail
+
+template <typename RecordT, auto ...Member>
+constexpr std::uint64_t encoded_size(const RecordT& value, datum::binary_fields<Member...> selected)
+{
+    detail::metadata_size archive;
+    const auto result = datum::serialize_schema(archive, value, selected);
+    if (zpp::bits::failure(result)) {
+        result.or_throw();
+    }
+
+    return archive.bytes;
+}
+
 class writer final
 {
     byte_buffer& output;
@@ -103,13 +147,19 @@ public:
     }
 
     template <typename RecordT, auto ...Member>
-    void fields(const std::size_t size, const RecordT& value, datum::binary_fields<Member...> selected)
+    void fields(const std::uint64_t size, const RecordT& value, datum::binary_fields<Member...> selected)
     {
         ensure(size);
         auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
-        std::span bytes {storage.get_pos_add(size), size};
+        std::span bytes {storage.get_pos_add(size), static_cast<std::size_t>(size)};
         zpp::bits::out archive {bytes, zpp::bits::size4b {}, zpp::bits::endian::little {}};
         throw_if_error(datum::serialize_schema(archive, value, selected));
+    }
+
+    template <typename RecordT, auto ...Member>
+    void fields(const RecordT& value, datum::binary_fields<Member...> selected)
+    {
+        fields(encoded_size(value, selected), value, selected);
     }
 
     template <typename T>
@@ -143,10 +193,9 @@ public:
 
     void text(const std::string_view value)
     {
-        const auto size = checked_count(value.size());
         using record = scalar_record<std::string_view>;
 
-        fields(4ull + size, record {value}, datum::binary_fields<&record::value> {});
+        fields(record {value}, datum::binary_fields<&record::value> {});
     }
 
     // A native byte chain can carry a string without an owning string temporary:
@@ -425,10 +474,8 @@ struct key_fields final
 
 inline void encode_key(writer& archive, const std::string_view name, const std::string_view instance)
 {
-    checked_count(name.size());
-    checked_count(instance.size());
     archive.frame(1, [&] {
-        archive.fields(checked_count(8ull + name.size() + instance.size()), key_fields {name, instance},
+        archive.fields(key_fields {name, instance},
             datum::binary_fields<&key_fields::name, &key_fields::instance> {});
     });
 }

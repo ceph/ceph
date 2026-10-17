@@ -256,6 +256,25 @@ request records; sequence storage and associative insertion remain separate
 bindings. No native record or buffer type is globally enrolled in Datum and no
 Datum core customization is required.
 
+Metadata writers can derive their size from those same selected fields::
+
+    archive.fields(prefix {maximum, filter, marker, reshard},
+        datum::binary_fields<&prefix::maximum, &prefix::filter,
+                             &prefix::marker, &prefix::reshard> {});
+
+The RGW-local size observer invokes the existing Datum field codecs. Fixed
+unsigned scalar widths compile to constants; strings contribute their runtime
+lengths and four-byte prefixes. No payload is encoded or copied while sizing.
+The writer checks the complete metadata size against its remaining message
+capacity before allocating append space.
+The automatic form supports unsigned scalars, ``std::string`` and
+``std::string_view``, including field codecs that purely convert to those
+representations. Such codecs run during both sizing and encoding. Other codecs,
+or codecs for which a separate size observation is undesirable, retain the
+explicit ``archive.fields(size, value, selected)`` form. The wire order is
+specified once; no Datum or zpp core extension is needed. Fixed reader gather
+bounds and frame-version requirements remain explicit protocol constraints.
+
 zpp archives require contiguous storage. RGW's shared adapter writes metadata
 directly into Ceph append space, retains opaque BI payload fragments and gathers
 only fixed metadata when an input field crosses fragments. It does not flatten

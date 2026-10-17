@@ -49,12 +49,10 @@ void encode_event(writer& archive, const EntryT& value,
                   datum::binary_fields<Name, Instance>)
 {
     const std::string_view tag = datum::member_lens<Tag> {}(value);
-    checked_count(tag.size());
     archive.frame(1, [&] {
         using prefix = event_prefix;
 
-        archive.fields(checked_count(13ull + tag.size()),
-            prefix {datum::member_lens<Epoch> {}(value),
+        archive.fields(prefix {datum::member_lens<Epoch> {}(value),
                     ::cls::rgw::wire::checked_byte(datum::member_lens<Operation> {}(value)), tag},
             datum::binary_fields<&prefix::epoch, &prefix::operation, &prefix::tag> {});
         const auto& key = datum::member_lens<Key> {}(value);
@@ -86,15 +84,13 @@ EntryT& decode_event(reader& archive, EntryT& value,
 inline byte_buffer encode_request(const std::string_view name, const std::string_view instance,
                                   const std::uint64_t marker, const std::string_view tag, const bool stales)
 {
-    detail::checked_count(tag.size());
     byte_buffer output;
     detail::writer archive {output};
     archive.frame(2, [&] {
         detail::encode_key(archive, name, instance);
         using tail = detail::request_tail;
 
-        archive.fields(detail::checked_count(13ull + tag.size()),
-            tail {marker, tag, static_cast<std::uint8_t>(stales)},
+        archive.fields(tail {marker, tag, static_cast<std::uint8_t>(stales)},
             datum::binary_fields<&tail::marker, &tail::tag, &tail::stales> {});
     });
 
