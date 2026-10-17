@@ -13,6 +13,7 @@
 #include <random>
 #include <span>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -125,6 +126,35 @@ TEST_CASE("BI requests preserve native bytes and old version defaults", "[rgw][c
         CHECK(client.reshard == (version >= 2));
         CHECK(cursor.end());
     }
+}
+
+TEST_CASE("RGW field archives preserve successful bytes and report undersized schemas", "[rgw][cls][datum]")
+{
+    using record = ::cls::rgw::wire::scalar_record<std::uint32_t>;
+    const record original {0x01020304};
+    const auto fields = datum::binary_fields<&record::value> {};
+    byte_buffer bytes;
+    ::cls::rgw::wire::writer output {bytes};
+    CHECK_NOTHROW(output.fields(4, original, fields));
+    byte_buffer expected;
+    ::ceph::encode(original.value, expected);
+    CHECK(bytes.contents_equal(expected));
+
+    auto cursor = bytes.cbegin();
+    ::cls::rgw::wire::reader input {cursor};
+    record decoded {0};
+    CHECK_NOTHROW(input.fields<4>(decoded, fields));
+    CHECK(decoded.value == original.value);
+    CHECK(cursor.end());
+
+    byte_buffer short_bytes;
+    ::cls::rgw::wire::writer short_output {short_bytes};
+    CHECK_THROWS_AS(short_output.fields(3, original, fields), std::system_error);
+    byte_buffer truncated;
+    truncated.substr_of(bytes, 0, 3);
+    cursor = truncated.cbegin();
+    ::cls::rgw::wire::reader short_input {cursor};
+    CHECK_THROWS_AS(short_input.fields<3>(decoded, fields), std::system_error);
 }
 
 TEST_CASE("BI replies use independent vector row types and preserve native frames", "[rgw][cls][datum]")

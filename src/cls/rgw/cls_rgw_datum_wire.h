@@ -70,6 +70,14 @@ struct frame_header final
 using header_fields = datum::binary_fields<&frame_header::version,
     &frame_header::compatible, &frame_header::length>;
 
+// Keep success local when the archive's throwing helper is outlined.
+[[gnu::always_inline]] inline void throw_if_error(const zpp::bits::errc result)
+{
+    if (zpp::bits::failure(result)) [[unlikely]] {
+        result.or_throw();
+    }
+}
+
 class writer final
 {
     byte_buffer& output;
@@ -101,7 +109,7 @@ public:
         auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
         std::span bytes {storage.get_pos_add(size), size};
         zpp::bits::out archive {bytes, zpp::bits::size4b {}, zpp::bits::endian::little {}};
-        datum::serialize_schema(archive, value, selected).or_throw();
+        throw_if_error(datum::serialize_schema(archive, value, selected));
     }
 
     template <typename T>
@@ -190,7 +198,7 @@ public:
         const frame_header value {version, compatible, output.length() - start};
         std::span bytes {header.c_str(), std::size_t {6}};
         zpp::bits::out archive {bytes, zpp::bits::endian::little {}};
-        datum::serialize_schema(archive, value, header_fields {}).or_throw();
+        throw_if_error(datum::serialize_schema(archive, value, header_fields {}));
     }
 
     template <typename BodyT>
@@ -254,7 +262,7 @@ public:
         }
         std::span view {bytes, Size};
         zpp::bits::in archive {view, zpp::bits::endian::little {}};
-        datum::serialize_schema(archive, value, selected).or_throw();
+        throw_if_error(datum::serialize_schema(archive, value, selected));
     }
 
     template <std::unsigned_integral T>
