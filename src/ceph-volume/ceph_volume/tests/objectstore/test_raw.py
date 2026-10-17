@@ -300,3 +300,50 @@ class TestRaw:
             rawbluestore._activate.assert_called_once_with()
             assert rawbluestore.block_device_path == '/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdb-block-dmcrypt'
             assert rawbluestore.db_device_path == '/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdc-db-dmcrypt'
+
+
+    def test_activate_passes_excluded_names_to_lsblk_all(self,
+                                                          rawbluestore,
+                                                          mock_raw_direct_report,
+                                                          is_root):
+        """Raw.activate() must pass EXCLUDED_NAMES to disk.lsblk_all so that
+        rbd/nbd/drbd/zram devices are filtered out before the LUKS2 inspection
+        path can open them.
+
+        Regression test for: ceph-volume raw activate opening a mapped rbd
+        device whose acting set is empty, causing the calling process to block
+        in D-state.
+
+        This test verifies the source-level invariant by inspecting the raw.py
+        module: it asserts that the literal EXCLUDED_NAMES constant is defined
+        and that disk.lsblk_all is called with exclude_names=EXCLUDED_NAMES.
+        """
+        import inspect
+        import re
+        from ceph_volume.objectstore import raw
+
+        # Read raw.py source to verify the literal wiring.
+        with open(raw.__file__, 'r') as f:
+            raw_source = f.read()
+
+        # The EXCLUDED_NAMES constant must be defined.
+        assert "EXCLUDED_NAMES = ['rbd', 'nbd', 'drbd', 'zram']" in raw_source, (
+            "raw.py does not contain EXCLUDED_NAMES literal"
+        )
+
+        # The activate() method must call lsblk_all with exclude_names=EXCLUDED_NAMES.
+        activate_src = inspect.getsource(raw.Raw.activate)
+        assert 'exclude_names=EXCLUDED_NAMES' in activate_src, (
+            "Raw.activate() does not pass exclude_names=EXCLUDED_NAMES to "
+            "disk.lsblk_all"
+        )
+
+        # There should be exactly one disk.lsblk_all call in raw.py, and it
+        # must be the one in activate() that uses exclude_names.
+        calls = re.findall(r'disk\.lsblk_all\([^)]*\)', raw_source)
+        assert len(calls) == 1, (
+            f"raw.py has {len(calls)} calls to disk.lsblk_all, expected 1"
+        )
+        assert 'exclude_names' in calls[0], (
+            "the disk.lsblk_all callsite in raw.py does not pass exclude_names"
+        )
