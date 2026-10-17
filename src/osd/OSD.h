@@ -249,8 +249,11 @@ public:
 public:
 
   void reply_op_error(OpRequestRef op, int err);
+  /// dup: op is a resend of a write that the PG log has, and err, v, uv
+  /// and op_returns are what the log kept of it
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv,
-		      std::vector<pg_log_op_return_item_t> op_returns);
+		      std::vector<pg_log_op_return_item_t> op_returns,
+		      bool dup);
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
  private:

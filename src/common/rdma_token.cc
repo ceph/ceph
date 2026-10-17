@@ -2,15 +2,22 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/rdma_token.h"
+#include "common/crc64nvme.h"
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 
+#include "common/Formatter.h"
+
 #ifdef WITH_OOB_OFI
 // for its checks that the tokens ofi-rma writes are the ones this code takes
 #include "common/ofi_rma.h"
 #endif
+
+extern "C" {
+#include "common/madler/crc32iscsi.h"
+}
 
 namespace ceph::rdma {
 
@@ -86,6 +93,66 @@ bool is_ofi_token(std::string_view token)
 bool is_cuobj_descriptor(std::string_view token)
 {
   return !is_ofi_token(token) && parse_rdma_token(token).has_value();
+}
+
+namespace {
+
+/// fold the values that get() picks out of ranges sorted by ofs, with
+/// combine(crc_a, crc_b, len_b); nullopt for a gap, an overlap or none
+template <typename T, typename Get, typename Combine>
+std::optional<T> fold_ranges(std::vector<crc_range_t> ranges, Get get,
+			     Combine combine)
+{
+  if (ranges.empty()) {
+    return std::nullopt;
+  }
+  // an empty range (a share past the end of the object) at the offset of
+  // another goes first, whatever order they came in
+  std::sort(ranges.begin(), ranges.end(),
+	    [](const crc_range_t& a, const crc_range_t& b) {
+	      return a.ofs != b.ofs ? a.ofs < b.ofs : a.len < b.len;
+	    });
+  T crc = get(ranges.front());
+  uint64_t next = ranges.front().ofs + ranges.front().len;
+  for (size_t i = 1; i < ranges.size(); ++i) {
+    const auto& r = ranges[i];
+    if (r.ofs != next) {
+      return std::nullopt;  // gap or overlap
+    }
+    crc = combine(crc, get(r), r.len);
+    next += r.len;
+  }
+  return crc;
+}
+
+} // anonymous namespace
+
+std::optional<uint64_t> fold_crc64_ranges(std::vector<crc_range_t> ranges)
+{
+  return fold_ranges<uint64_t>(
+    std::move(ranges), [](const crc_range_t& r) { return r.crc64; },
+    [](uint64_t a, uint64_t b, uint64_t len) {
+      return crc64nvme_combine(a, b, len);
+    });
+}
+
+std::optional<uint32_t> fold_crc32c_ranges(std::vector<crc_range_t> ranges)
+{
+  return fold_ranges<uint32_t>(
+    std::move(ranges), [](const crc_range_t& r) { return r.crc32c; },
+    crc32c_combine);
+}
+
+uint32_t crc32c_canonical(const ceph::buffer::list& bl)
+{
+  // ceph_crc32c() leaves out the final inversion: S3 has both
+  return bl.crc32c(0xffffffff) ^ 0xffffffff;
+}
+
+uint32_t crc32c_combine(uint32_t crc_a, uint32_t crc_b, uint64_t len_b)
+{
+  // madler's, which rgw combines multipart CRC32C checksums with too
+  return crc32iscsi_comb(crc_a, crc_b, len_b);
 }
 
 std::string libfabric_name(std::string_view name)
@@ -176,6 +243,67 @@ oob_transports parse_oob_transports(std::string_view client,
     }
   }
   return t;
+}
+
+void delivery_t::dump(ceph::Formatter* f) const
+{
+  f->dump_string("token", token);
+  f->dump_unsigned("base_offset", base_offset);
+  f->dump_unsigned("flags", flags);
+}
+
+std::list<delivery_t> delivery_t::generate_test_instances()
+{
+  std::list<delivery_t> o;
+  o.emplace_back();
+  o.push_back({"7f0012345000:400000:ofi1:xnet.1:0200805b7f000001:1", 4096,
+	       FLAG_CRC64NVME | FLAG_PULL});
+  return o;
+}
+
+void crc_range_t::dump(ceph::Formatter* f) const
+{
+  f->dump_unsigned("ofs", ofs);
+  f->dump_unsigned("len", len);
+  f->dump_unsigned("crc64", crc64);
+  f->dump_unsigned("crc32c", crc32c);
+}
+
+std::list<crc_range_t> crc_range_t::generate_test_instances()
+{
+  std::list<crc_range_t> o;
+  o.emplace_back();
+  o.push_back({65536, 4096, 0xae8b14860a799888ull, 0xe3069283});
+  return o;
+}
+
+void oob_result_t::dump(ceph::Formatter* f) const
+{
+  f->dump_unsigned("bytes", bytes);
+  f->dump_unsigned("crc64", crc64);
+  f->dump_unsigned("flags", flags);
+  f->open_array_section("ranges");
+  for (const auto& r : ranges) {
+    f->open_object_section("range");
+    r.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->dump_unsigned("crc32c", crc32c);
+}
+
+std::list<oob_result_t> oob_result_t::generate_test_instances()
+{
+  std::list<oob_result_t> o;
+  o.emplace_back();
+  oob_result_t r;
+  r.bytes = 8192;
+  r.crc64 = 0xae8b14860a799888ull;
+  r.flags = FLAG_CRC64NVME | FLAG_RANGES | FLAG_CRC32C;
+  r.ranges = {{0, 4096, 1, 2}, {4096, 4096, 3, 4}};
+  r.crc32c = 0xe3069283;
+  o.push_back(r);
+  return o;
 }
 
 } // namespace ceph::rdma

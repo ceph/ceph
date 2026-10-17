@@ -592,6 +592,26 @@ You may set values for the following keys:
    :Type: Double
    :Default: ``0``
 
+.. _rdma_delivery_lease:
+
+.. describe:: rdma_delivery_lease
+   
+   :Description: Sets how long (in seconds) after receiving an operation that carries an out-of-band RDMA delivery descriptor an OSD may still *initiate* a transfer against that descriptor; a transfer that would start later is delivered inline instead. The value bounds the OSD's side only, and must be visible to both sides, which is why it is a pool option rather than a daemon option. For a read, the lease is also part of how long a client that gave up on the request waits before it reuses its memory window (see ``rdma_delivery_drain``). It is not a bound on how long a client must keep a window registered in general. Setting ``0`` restores the built-in default. The monitor rejects a value above ``6``, a negative value, or one that is not a finite number. It fails the command with ``ERANGE`` and the message ``rdma_delivery_lease must be between 0 and 6 seconds (0 restores the default)``. The monitor also rejects a value under ``0.1`` other than ``0``, with ``EINVAL``: an OSD starts no transfer for a read after the lease, and a shorter lease leaves no time to start one. While an OSD waits on an out-of-band transfer, it holds an op thread and the PG's lock for up to the lease plus the drain. That time must stay well below ``osd_op_thread_timeout`` (15 s). A monitor of this release rejects a value out of these bounds, but such a value can come by another path, such as from a development or downstream build. The OSDs and clients of this release then use the nearest bound, a daemon or client that does not clamp the value uses it as stored, and the monitor raises the ``POOL_RDMA_DELIVERY_OUT_OF_RANGE`` health warning until the value is set within the range.
+
+   :Type: Double
+   :Default: ``5``
+   :Valid Range: ``0``, or ``0.1`` to ``6``
+
+.. _rdma_delivery_drain:
+
+.. describe:: rdma_delivery_drain
+
+   :Description: Sets how long (in seconds) after its delivery lease runs out every out-of-band write that an OSD started for a read has landed or been cut off. An OSD stops waiting for its transfers at receipt plus ``rdma_delivery_lease`` plus this value, and cuts off any transfer that is still in flight. A cut-off can end up to the transport's cut-off tolerance after that time. A client that gave up on a read must not write its memory window again until the lease, this value and that tolerance have passed since the last operation of the request reached its OSD. A librados client that cancelled an operation, or whose operation timed out, sends no attempt of it after that. It counts from then, plus the time an attempt already sent takes to reach the OSD (see ``ObjectReadOperation::set_rdma_delivery()``). Setting ``0`` restores the built-in default. The monitor rejects a value above ``4``, a negative value, or one that is not a finite number with ``ERANGE``, as it does for ``rdma_delivery_lease``. It rejects a value under ``0.5`` other than ``0`` with ``EINVAL``: an OSD cuts off each write that has not landed by the end of the drain, and the transports need time to cut off their writes. The lease plus this value bounds how long an OSD holds an op thread and the PG's lock while it waits on a transfer. A stored value out of the range raises ``POOL_RDMA_DELIVERY_OUT_OF_RANGE``, as for ``rdma_delivery_lease``.
+
+   :Type: Double
+   :Default: ``3``
+   :Valid Range: ``0``, or ``0.5`` to ``4``
+
 .. _recovery_priority:
 
 .. describe:: recovery_priority

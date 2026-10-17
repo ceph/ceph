@@ -193,6 +193,36 @@ function TEST_no_pool_delete() {
     ceph osd pool delete foo foo --yes-i-really-really-mean-it || return 1
 }
 
+function TEST_rdma_delivery_bounds() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd pool create foo 1 || return 1
+    for opt in rdma_delivery_lease rdma_delivery_drain ; do
+        # not a number, or longer than an op thread may wait on a transfer
+        for val in nan inf -1 1e10 ; do
+            ! ceph osd pool set foo $opt $val || return 1
+        done
+        ceph osd pool get foo $opt | grep . && return 1
+        ceph osd pool set foo $opt 2.5 || return 1
+        ceph osd pool get foo $opt | grep "$opt: 2.5" || return 1
+        ceph osd pool set foo $opt 0 || return 1
+        ceph osd pool get foo $opt | grep . && return 1
+    done
+    # lease plus drain stays well below osd_op_thread_timeout
+    ceph osd pool set foo rdma_delivery_lease 6 || return 1
+    ! ceph osd pool set foo rdma_delivery_lease 6.5 || return 1
+    ceph osd pool set foo rdma_delivery_drain 4 || return 1
+    ! ceph osd pool set foo rdma_delivery_drain 4.5 || return 1
+    # and leaves time to start a transfer, and to cut off a write that
+    # missed the drain
+    ceph osd pool set foo rdma_delivery_lease 0.1 || return 1
+    ! ceph osd pool set foo rdma_delivery_lease 0.05 || return 1
+    ceph osd pool set foo rdma_delivery_drain 0.5 || return 1
+    ! ceph osd pool set foo rdma_delivery_drain 0.4 2> $dir/out || return 1
+    grep -q 'must be at least 0.5 seconds' $dir/out || return 1
+    return 0
+}
+
 function TEST_utf8_cli() {
     local dir=$1
     run_mon $dir a || return 1

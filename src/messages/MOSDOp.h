@@ -19,13 +19,16 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
 #include "include/rados_encoder.h"
+#include "common/ceph_releases.h"
 #include "common/hobject.h"
+#include "common/rdma_token.h"
 
 /*
  * OSD op
@@ -70,7 +73,38 @@ private:
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
 
+  /// per-op advisory out-of-band delivery descriptors (see
+  /// common/rdma_token.h): empty when no op requests delivery,
+  /// otherwise aligned with ops (mirroring the reply's oob_results);
+  /// encoded after the v9 fields only when non-empty, and decoded in
+  /// the finish_decode() tail of a v9 request when bytes remain there
+  std::vector<ceph::rdma::delivery_t> rdma_deliveries;
+
 public:
+  /// the require_osd_release from which every OSD decodes the delivery
+  /// descriptors (set_rdma_deliveries()): a client sends them only to a
+  /// cluster at this release or later. An OSD of an earlier release
+  /// skips them, answers a read inline, and fails a pulled write, whose
+  /// payload it never gets. Ceph main has no release after umbrella
+  /// yet: when it opens one, this becomes that release
+  static constexpr ceph_release_t RDMA_DELIVERY_RELEASE =
+    ceph_release_t::umbrella;
+
+  bool has_rdma_delivery() const {
+    return !rdma_deliveries.empty();
+  }
+  /// whether an op of the request carries a pull descriptor
+  /// (delivery_t::is_pull()), whatever its length
+  bool has_pulls() const {
+    return ceph::rdma::any_pull(rdma_deliveries);
+  }
+  const std::vector<ceph::rdma::delivery_t>& get_rdma_deliveries() const {
+    return rdma_deliveries;
+  }
+  void set_rdma_deliveries(std::vector<ceph::rdma::delivery_t>&& v) {
+    rdma_deliveries = std::move(v);
+  }
+
   friend MOSDOpReply;
 
   ceph_tid_t get_client_tid() { return header.tid; }
@@ -429,6 +463,14 @@ struct ceph_osd_request_head {
 
       encode(retry_attempt, payload);
       encode(features, payload);
+
+      if (!rdma_deliveries.empty()) {
+	// the per-op rdma delivery descriptors trail the v9 fields: an
+	// OSD that does not know them stops decoding before them and
+	// serves the request inline, which is always correct as they
+	// are advisory
+	encode(rdma_deliveries, payload);
+      }
     }
   }
 
@@ -576,6 +618,10 @@ struct ceph_osd_request_head {
       // put client_inc in reqid.inc for get_reqid()'s benefit
       if (reqid.name == entity_name_t() && reqid.tid == 0)
 	reqid.inc = client_inc;
+    } else {
+      // a version newer than this one can read: refuse it, not read it as v9
+      throw ceph::buffer::malformed_input(
+	"MOSDOp version " + std::to_string(header.version) + " is unknown");
     }
 
     partial_decode_needed = false;
@@ -607,6 +653,12 @@ struct ceph_osd_request_head {
     decode(retry_attempt, p);
 
     decode(features, p);
+
+    if (header.version == 9 && !p.end()) {
+      // per-op rdma delivery descriptors, present when some op
+      // requests delivery (see encode_payload())
+      decode(rdma_deliveries, p);
+    }
 
     hobj.pool = pgid.pgid.pool();
     hobj.set_key(oloc.key);

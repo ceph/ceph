@@ -2327,6 +2327,20 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | grep 'scrub_min_interval: 123456'
   ceph osd pool set $TEST_POOL_GETSET scrub_min_interval 0
   ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | expect_false grep '.'
+  ceph osd pool get $TEST_POOL_GETSET rdma_delivery_lease | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET rdma_delivery_lease 2.5
+  ceph osd pool get $TEST_POOL_GETSET rdma_delivery_lease | grep 'rdma_delivery_lease: 2.5'
+  expect_false ceph osd pool set $TEST_POOL_GETSET rdma_delivery_lease -1
+  expect_false ceph osd pool set $TEST_POOL_GETSET rdma_delivery_lease 0.05
+  ceph osd pool set $TEST_POOL_GETSET rdma_delivery_lease 0
+  ceph osd pool get $TEST_POOL_GETSET rdma_delivery_lease | expect_false grep '.'
+  ceph osd pool get $TEST_POOL_GETSET rdma_delivery_drain | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET rdma_delivery_drain 1.5
+  ceph osd pool get $TEST_POOL_GETSET rdma_delivery_drain | grep 'rdma_delivery_drain: 1.5'
+  expect_false ceph osd pool set $TEST_POOL_GETSET rdma_delivery_drain -1
+  expect_false ceph osd pool set $TEST_POOL_GETSET rdma_delivery_drain 0.4
+  ceph osd pool set $TEST_POOL_GETSET rdma_delivery_drain 0
+  ceph osd pool get $TEST_POOL_GETSET rdma_delivery_drain | expect_false grep '.'
 
   ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET scrub_max_interval 123456

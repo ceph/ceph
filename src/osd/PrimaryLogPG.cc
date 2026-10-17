@@ -64,6 +64,7 @@
 #include "OpRequest.h"
 #include "PG.h"
 #include "Session.h"
+#include "osd/oob_xfer.h"
 
 // required includes order:
 #include "json_spirit/json_spirit_value.h"
@@ -2325,7 +2326,8 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       dout(3) << __func__ << " dup " << m->get_reqid()
 	      << " version " << version << dendl;
       if (already_complete(version)) {
-	osd->reply_op_error(op, return_code, version, user_version, op_returns);
+	osd->reply_op_error(op, return_code, version, user_version, op_returns,
+			    true);
       } else {
 	dout(10) << " waiting for " << version << " to commit" << dendl;
         // always queue ondisk waiters, so that we can requeue if needed
@@ -2585,6 +2587,15 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   }
 
   op->mark_started();
+
+  if (op->may_write() && m->has_pulls()) {
+    // built without a transport, this osd cannot pull a write's payload:
+    // fail it as an osd whose transports cannot, not for its missing data.
+    // A pulled write of no bytes fails too: as a WRITEFULL, it would
+    // empty the object
+    reply_ctx(ctx, -EOPNOTSUPP);
+    return;
+  }
 
   execute_ctx(ctx);
   utime_t prepare_latency = ceph_clock_now();
@@ -3113,6 +3124,15 @@ void PrimaryLogPG::do_cache_redirect(OpRequestRef op)
                                        flags, false);
   request_redirect_t redir(m->get_object_locator(), pool.info.tier_of);
   reply->set_redirect(redir);
+  if (m->has_rdma_delivery()) {
+    // nothing of the request runs here, as for an error reply: each op
+    // that carries a descriptor is declined, so that the client need not
+    // fence its window before it sends the request to the base pool
+    const auto& deliveries = m->get_rdma_deliveries();
+    std::vector<ceph::rdma::oob_result_t> oob(deliveries.size());
+    ceph::osd::oob::decline_all(deliveries, oob);
+    reply->set_oob_results(std::move(oob));
+  }
   dout(10) << "sending redirect to pool " << pool.info.tier_of << " for op "
 	   << *op->get_req() << dendl;
   m->get_connection()->send_message(reply);
@@ -3415,6 +3435,17 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
 {
   // NOTE: non-const because ProxyWriteOp takes a mutable ref
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  if (m->has_pulls()) {
+    // A proxied write carries the request's ops, but neither the
+    // payloads that this OSD would pull out of client memory nor their
+    // descriptors: the base OSD would run it without its data, and a
+    // WRITEFULL of no bytes would empty the object. Fail it as an OSD
+    // that cannot pull, and the client sends the payloads inline
+    dout(10) << __func__ << " " << *m << ": not proxying a pulled write"
+	     << dendl;
+    osd->reply_op_error(op, -EOPNOTSUPP);
+    return;
+  }
   object_locator_t oloc;
   SnapContext snapc(m->get_snap_seq(), m->get_snaps());
   hobject_t soid;
@@ -9513,6 +9544,15 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
   MOSDOpReply *reply = ctx->reply;
   ctx->reply = nullptr;
 
+  if (m->has_rdma_delivery()) {
+    // this OSD starts no out-of-band transfer: the data goes inline,
+    // and the reply says that each descriptor was declined, so that
+    // the client need not fence its window
+    std::vector<ceph::rdma::oob_result_t> oob(m->ops.size());
+    ceph::osd::oob::decline_all(m->get_rdma_deliveries(), oob);
+    reply->set_oob_results(std::move(oob));
+  }
+
   if (result >= 0) {
     if (!ctx->ignore_log_op_stats) {
       log_op_stats(*ctx->op, ctx->bytes_written, ctx->bytes_read);
@@ -11823,7 +11863,7 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
           return_code = std::get<2>(i);
         }
         osd->reply_op_error(std::get<0>(i), return_code, repop->v,
-                            std::get<1>(i), std::get<3>(i));
+                            std::get<1>(i), std::get<3>(i), true);
       }
       waiting_for_ondisk.erase(it);
     }

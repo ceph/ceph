@@ -71,6 +71,11 @@ TYPE_FEATUREFUL(LogSummary)
 #include "common/SloppyCRCMap.h"
 TYPE(SloppyCRCMap)
 
+#include "common/rdma_token.h"
+TYPE(ceph::rdma::delivery_t)
+TYPE(ceph::rdma::crc_range_t)
+TYPE(ceph::rdma::oob_result_t)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)

@@ -71,6 +71,7 @@
 #ifdef HAVE_LIBFUSE
 #include "os/FuseStore.h"
 #endif
+#include "oob_xfer.h"
 
 #include "PrimaryLogPG.h"
 
@@ -1632,12 +1633,13 @@ OSDMapRef OSDService::try_get_map(epoch_t epoch)
 
 void OSDService::reply_op_error(OpRequestRef op, int err)
 {
-  reply_op_error(op, err, eversion_t(), 0, {});
+  reply_op_error(op, err, eversion_t(), 0, {}, false);
 }
 
 void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
                                 version_t uv,
-				vector<pg_log_op_return_item_t> op_returns)
+				vector<pg_log_op_return_item_t> op_returns,
+				bool dup)
 {
   auto m = op->get_req<MOSDOp>();
   ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
@@ -1648,6 +1650,17 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
 				       !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
   reply->set_reply_versions(v, uv);
   reply->set_op_returns(op_returns);
+  bool report = m->has_rdma_delivery();
+  if (report) {
+    // no transfer starts on this path: an error, or a resend answered
+    // as a dup of a write, declines each descriptor, so that a client
+    // bounced off a laggy replica can retry without fencing its window
+    // (reply_error_results())
+    const auto& deliveries = m->get_rdma_deliveries();
+    std::vector<ceph::rdma::oob_result_t> oob(deliveries.size());
+    ceph::osd::oob::reply_error_results(deliveries, err, dup, oob);
+    reply->set_oob_results(std::move(oob));
+  }
   m->get_connection()->send_message(reply);
 }
 

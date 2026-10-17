@@ -21,7 +21,9 @@
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
 #include "common/ceph_context.h"
+#include "common/crc64nvme.h"
 #include "common/config.h"
+#include "include/crc32c.h"
 #include "gtest/gtest.h"
 
 using ceph::rdma::parse_rdma_token;
@@ -458,6 +460,36 @@ TEST(RdmaToken, LongestOfiTokenFits)
   EXPECT_TRUE(ceph::rdma::is_ofi_token(t));
 }
 
+// crc32c_combine() takes B's length whole, past 4 GiB too, where
+// ceph_crc32c_zeros() runs a GiB at a time
+TEST(RdmaToken, Crc32cCombineLongB)
+{
+  using ceph::rdma::crc32c_canonical;
+  using ceph::rdma::crc32c_combine;
+  // the CRC-32C register, without the final inversion, after n zeros
+  auto zeros = [](uint32_t crc, uint64_t n) {
+    while (n > 0) {
+      const unsigned c =
+	static_cast<unsigned>(std::min<uint64_t>(n, 1u << 30));
+      crc = ceph_crc32c_zeros(crc, c);
+      n -= c;
+    }
+    return crc;
+  };
+  ceph::buffer::list a;
+  a.append("123456789");
+  const uint32_t crc_a = crc32c_canonical(a);
+  const uint32_t reg_a = a.crc32c(0xffffffff);
+  for (uint64_t n : {uint64_t(0), uint64_t(1), uint64_t(1) << 30,
+		     (uint64_t(1) << 32) - 1, uint64_t(1) << 32,
+		     (uint64_t(5) << 30) + 7}) {
+    // B is n zero bytes
+    const uint32_t crc_b = zeros(0xffffffff, n) ^ 0xffffffff;
+    const uint32_t crc_ab = zeros(reg_a, n) ^ 0xffffffff;
+    EXPECT_EQ(crc_ab, crc32c_combine(crc_a, crc_b, n)) << "len_b " << n;
+  }
+}
+
 TEST(OobArena, BuddyBuffers)
 {
   using ceph::oob::Arena;
@@ -568,4 +600,25 @@ TEST(OobArena, ReserveLeavesStaging)
   a->unreserve(w, Arena::MAX);
   EXPECT_EQ(0u, a->stats().reserved);
   EXPECT_EQ(0u, a->stats().in_use);
+}
+
+TEST(RdmaToken, FoldRangesWithAnEmptyRange)
+{
+  // an empty range at the offset where the next range starts, as a share
+  // past the end of an object reports it, folds the same in either order
+  const std::string a(10, 'a'), b(5, 'b');
+  ceph::buffer::list bla, blb, both;
+  bla.append(a);
+  blb.append(b);
+  both.append(a + b);
+  const ceph::rdma::crc_range_t ra{0, 10, ceph::crc64nvme(bla)};
+  const ceph::rdma::crc_range_t rb{10, 5, ceph::crc64nvme(blb)};
+  const ceph::rdma::crc_range_t empty{10, 0, 0};
+  for (const auto& ranges :
+	 {std::vector{ra, rb, empty}, std::vector{ra, empty, rb},
+	  std::vector{empty, rb, ra}}) {
+    const auto crc = ceph::rdma::fold_crc64_ranges(ranges);
+    ASSERT_TRUE(crc);
+    EXPECT_EQ(ceph::crc64nvme(both), *crc);
+  }
 }
