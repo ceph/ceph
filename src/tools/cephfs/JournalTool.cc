@@ -925,46 +925,54 @@ int JournalTool::recover_dentries(
         dout(4) << "dentry " << key << " existed already" << dendl;
         dout(4) << "dentry exists, checking versions..." << dendl;
         bufferlist &old_dentry = read_vals[key];
-        // Decode dentry+inode
-        auto q = old_dentry.cbegin();
+        try {
+          // Decode dentry+inode
+          auto q = old_dentry.cbegin();
 
-        snapid_t dnfirst;
-        decode(dnfirst, q);
-        char dentry_type;
-        decode(dentry_type, q);
+          snapid_t dnfirst;
+          decode(dnfirst, q);
+          char dentry_type;
+          decode(dentry_type, q);
 
-        if (dentry_type == 'L' || dentry_type == 'l') {
-          // leave write_dentry false, we have no version to
-          // compare with in a hardlink, so it's not safe to
-          // squash over it with what's in this fullbit
-          dout(10) << "Existing remote inode in slot to be (maybe) written "
-               << "by a full inode from the journal dn '" << fb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode->version
-               << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode->version;
-        } else if (dentry_type == 'I' || dentry_type == 'i') {
-          // Read out inode version to compare with backing store
-          InodeStore inode;
-          if (dentry_type == 'i') {
-            mempool::mds_co::string alternate_name;
+          if (dentry_type == 'L' || dentry_type == 'l') {
+            // leave write_dentry false, we have no version to
+            // compare with in a hardlink, so it's not safe to
+            // squash over it with what's in this fullbit
+            dout(10) << "Existing remote inode in slot to be (maybe) written "
+                 << "by a full inode from the journal dn '" << fb.dn.c_str()
+                 << "' with lump fnode version " << lump.fnode->version
+                 << "vs existing fnode version " << old_fnode_version << dendl;
+            write_dentry = old_fnode_version < lump.fnode->version;
+          } else if (dentry_type == 'I' || dentry_type == 'i') {
+            // Read out inode version to compare with backing store
+            InodeStore inode;
+            if (dentry_type == 'i') {
+              mempool::mds_co::string alternate_name;
 
-            DECODE_START(2, q);
-            if (struct_v >= 2)
-              decode(alternate_name, q);
-            inode.decode(q);
-            DECODE_FINISH(q);
-	  } else {
-            inode.decode_bare(q);
-	  }
-          dout(4) << "decoded embedded inode version "
-            << inode.inode->version << " vs fullbit version "
-            << fb.inode->version << dendl;
-          if (inode.inode->version < fb.inode->version) {
+              DECODE_START(2, q);
+              if (struct_v >= 2)
+                decode(alternate_name, q);
+              inode.decode(q);
+              DECODE_FINISH(q);
+            } else {
+              inode.decode_bare(q);
+            }
+            dout(4) << "decoded embedded inode version "
+              << inode.inode->version << " vs fullbit version "
+              << fb.inode->version << dendl;
+            if (inode.inode->version < fb.inode->version) {
+              write_dentry = true;
+            }
+          } else {
+            dout(4) << "corrupt dentry in backing store, overwriting from "
+              "journal" << dendl;
             write_dentry = true;
           }
-        } else {
-          dout(4) << "corrupt dentry in backing store, overwriting from "
-            "journal" << dendl;
+        } catch (const buffer::error &err) {
+          // Same policy as corrupt fnode header: do not abort recover_dentries;
+          // overwrite the bad backing-store dentry from the journal fullbit.
+          derr << "corrupt dentry '" << key << "' in " << frag_oid.name
+               << " (" << err.what() << "), overwriting from journal" << dendl;
           write_dentry = true;
         }
       }
@@ -1012,29 +1020,35 @@ int JournalTool::recover_dentries(
         dout(4) << "dentry " << key << " existed already" << dendl;
         dout(4) << "dentry exists, checking versions..." << dendl;
         bufferlist &old_dentry = read_vals[key];
-        // Decode dentry+inode
-        auto q = old_dentry.cbegin();
+        try {
+          // Decode dentry+inode
+          auto q = old_dentry.cbegin();
 
-        snapid_t dnfirst;
-        decode(dnfirst, q);
-        char dentry_type;
-        decode(dentry_type, q);
+          snapid_t dnfirst;
+          decode(dnfirst, q);
+          char dentry_type;
+          decode(dentry_type, q);
 
-        if (dentry_type == 'L' || dentry_type == 'l') {
-          dout(10) << "Existing hardlink inode in slot to be (maybe) written "
-               << "by a remote inode from the journal dn '" << rb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode->version
-               << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode->version;
-        } else if (dentry_type == 'I' || dentry_type == 'i') {
-          dout(10) << "Existing full inode in slot to be (maybe) written "
-               << "by a remote inode from the journal dn '" << rb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode->version
-               << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode->version;
-        } else {
-          dout(4) << "corrupt dentry in backing store, overwriting from "
-            "journal" << dendl;
+          if (dentry_type == 'L' || dentry_type == 'l') {
+            dout(10) << "Existing hardlink inode in slot to be (maybe) written "
+                 << "by a remote inode from the journal dn '" << rb.dn.c_str()
+                 << "' with lump fnode version " << lump.fnode->version
+                 << "vs existing fnode version " << old_fnode_version << dendl;
+            write_dentry = old_fnode_version < lump.fnode->version;
+          } else if (dentry_type == 'I' || dentry_type == 'i') {
+            dout(10) << "Existing full inode in slot to be (maybe) written "
+                 << "by a remote inode from the journal dn '" << rb.dn.c_str()
+                 << "' with lump fnode version " << lump.fnode->version
+                 << "vs existing fnode version " << old_fnode_version << dendl;
+            write_dentry = old_fnode_version < lump.fnode->version;
+          } else {
+            dout(4) << "corrupt dentry in backing store, overwriting from "
+              "journal" << dendl;
+            write_dentry = true;
+          }
+        } catch (const buffer::error &err) {
+          derr << "corrupt dentry '" << key << "' in " << frag_oid.name
+               << " (" << err.what() << "), overwriting from journal" << dendl;
           write_dentry = true;
         }
       }
@@ -1072,32 +1086,38 @@ int JournalTool::recover_dentries(
       if (it != read_vals.end()) {
 	dout(4) << "dentry exists, will remove" << dendl;
 
-	auto q = it->second.cbegin();
-	snapid_t dnfirst;
-	decode(dnfirst, q);
-	char dentry_type;
-	decode(dentry_type, q);
+	try {
+	  auto q = it->second.cbegin();
+	  snapid_t dnfirst;
+	  decode(dnfirst, q);
+	  char dentry_type;
+	  decode(dentry_type, q);
 
-	bool remove_dentry = false;
-	if (dentry_type == 'L' || dentry_type == 'l') {
-	  dout(10) << "Existing hardlink inode in slot to be (maybe) removed "
-	    << "by null journal dn '" << nb.dn.c_str()
-	    << "' with lump fnode version " << lump.fnode->version
-	    << "vs existing fnode version " << old_fnode_version << dendl;
-	  remove_dentry = old_fnode_version < lump.fnode->version;
-	} else if (dentry_type == 'I' || dentry_type == 'i') {
-	  dout(10) << "Existing full inode in slot to be (maybe) removed "
-	    << "by null journal dn '" << nb.dn.c_str()
-	    << "' with lump fnode version " << lump.fnode->version
-	    << "vs existing fnode version " << old_fnode_version << dendl;
-	  remove_dentry = old_fnode_version < lump.fnode->version;
-	} else {
-	  dout(4) << "corrupt dentry in backing store, will remove" << dendl;
-	  remove_dentry = true;
-	}
+	  bool remove_dentry = false;
+	  if (dentry_type == 'L' || dentry_type == 'l') {
+	    dout(10) << "Existing hardlink inode in slot to be (maybe) removed "
+	      << "by null journal dn '" << nb.dn.c_str()
+	      << "' with lump fnode version " << lump.fnode->version
+	      << "vs existing fnode version " << old_fnode_version << dendl;
+	    remove_dentry = old_fnode_version < lump.fnode->version;
+	  } else if (dentry_type == 'I' || dentry_type == 'i') {
+	    dout(10) << "Existing full inode in slot to be (maybe) removed "
+	      << "by null journal dn '" << nb.dn.c_str()
+	      << "' with lump fnode version " << lump.fnode->version
+	      << "vs existing fnode version " << old_fnode_version << dendl;
+	    remove_dentry = old_fnode_version < lump.fnode->version;
+	  } else {
+	    dout(4) << "corrupt dentry in backing store, will remove" << dendl;
+	    remove_dentry = true;
+	  }
 
-	if (remove_dentry)
+	  if (remove_dentry)
+	    null_vals.insert(key);
+	} catch (const buffer::error &err) {
+	  derr << "corrupt dentry '" << key << "' in " << frag_oid.name
+	       << " (" << err.what() << "), will remove" << dendl;
 	  null_vals.insert(key);
+	}
       }
     }
 
@@ -1152,18 +1172,24 @@ int JournalTool::recover_dentries(
       InodeStore old_inode;
       dout(4) << "root exists, will modify (" << old_root_ino_bl.length()
         << ")" << dendl;
-      auto inode_bl_iter = old_root_ino_bl.cbegin(); 
-      std::string magic;
-      decode(magic, inode_bl_iter);
-      if (magic == CEPH_FS_ONDISK_MAGIC) {
-        dout(4) << "magic ok" << dendl;
-        old_inode.decode(inode_bl_iter);
+      auto inode_bl_iter = old_root_ino_bl.cbegin();
+      try {
+        std::string magic;
+        decode(magic, inode_bl_iter);
+        if (magic == CEPH_FS_ONDISK_MAGIC) {
+          dout(4) << "magic ok" << dendl;
+          old_inode.decode(inode_bl_iter);
 
-        if (old_inode.inode->version < fb.inode->version) {
+          if (old_inode.inode->version < fb.inode->version) {
+            write_root_ino = true;
+          }
+        } else {
+          dout(4) << "magic bad: '" << magic << "'" << dendl;
           write_root_ino = true;
         }
-      } else {
-        dout(4) << "magic bad: '" << magic << "'" << dendl;
+      } catch (const buffer::error &err) {
+        derr << "corrupt root inode object " << root_oid.name
+             << " (" << err.what() << "), overwriting from journal" << dendl;
         write_root_ino = true;
       }
     } else {
