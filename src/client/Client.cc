@@ -449,6 +449,12 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     myfeatures = feature_bitset_t(str);
   } else {
     myfeatures = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
+    /*
+     * We cannot do async creates, so we would throw delegated inode numbers
+     * away.  Don't ask for them: the MDS takes them out of the session's
+     * preallocated inode numbers, leaving fewer for our synchronous creates.
+     */
+    myfeatures.erase(CEPHFS_FEATURE_DELEG_INO);
   }
 
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
