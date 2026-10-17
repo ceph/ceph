@@ -91,6 +91,9 @@ bool ECOmapJournal::remove_entry(const hobject_t &hoid, const ECOmapJournalEntry
         ldpp_dout(&dpp, 20) << __func__ << ": hoid=" << hoid
                             << " version=" << entry.version << " found_unprocessed=true" << dendl;
         entry_list.erase(it);
+        if (entry_list.empty()) {
+          entries.erase(it_map);
+        }
         if (const auto header_it = header_map.find(hoid);
           header_it != header_map.end() &&
             header_it->second.version == entry.version) {
@@ -115,6 +118,9 @@ bool ECOmapJournal::remove_entry_by_version(const hobject_t &hoid, const eversio
     for (auto it = entry_list.begin(); it != entry_list.end(); ++it) {
       if (it->version == version) {
         entry_list.erase(it);
+        if (entry_list.empty()) {
+          entries.erase(it_map);
+        }
         if (const auto header_it = header_map.find(hoid);
           header_it != header_map.end() &&
             header_it->second.version == version) {
@@ -143,6 +149,17 @@ void ECOmapJournal::clear_all() {
   removed_ranges_map.clear();
   header_map.clear();
   object_state_map.clear();
+}
+
+void ECOmapJournal::assert_idle() const {
+  ceph_assert(entries.empty());
+  ceph_assert(key_map.empty());
+  ceph_assert(removed_ranges_map.empty());
+  ceph_assert(header_map.empty());
+  // object_state_map is deliberately not checked: it records the versions
+  // of outstanding deletes and is only released by trim_delete() when the
+  // pg log is trimmed, so it is bounded by the pg log rather than by
+  // in-flight I/O.
 }
 
 std::size_t ECOmapJournal::entries_size(const hobject_t &hoid) const {
@@ -395,6 +412,10 @@ bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJo
       }
     }
   }
+  // Do not keep a node per object once nothing is left for it.
+  if (obj_map.empty()) {
+    key_map.erase(hoid);
+  }
 
   // Remove removed ranges if version matches
   if (const auto removed_ranges_it = removed_ranges_map.find(hoid);
@@ -405,6 +426,9 @@ bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJo
         removed_ranges_list.erase(rr_it);
         break;
       }
+    }
+    if (removed_ranges_list.empty()) {
+      removed_ranges_map.erase(removed_ranges_it);
     }
   } else {
     return false;
@@ -430,6 +454,9 @@ bool ECOmapJournal::remove_processed_entry_by_version(const hobject_t &hoid, con
         ++it;
       }
     }
+    if (key_map_it->second.empty()) {
+      key_map.erase(key_map_it);
+    }
   }
 
   // Remove removed ranges if version matches
@@ -441,6 +468,9 @@ bool ECOmapJournal::remove_processed_entry_by_version(const hobject_t &hoid, con
         removed_ranges_list.erase(rr_it);
         break;
       }
+    }
+    if (removed_ranges_list.empty()) {
+      removed_ranges_map.erase(removed_ranges_it);
     }
   } else {
     return false;
