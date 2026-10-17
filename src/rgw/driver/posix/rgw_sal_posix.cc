@@ -2350,6 +2350,10 @@ const std::string& POSIXDriver::get_compression_type(const rgw_placement_rule& r
   return zone.get_rgw_params().get_compression_type(rule);
 }
 
+uint64_t POSIXDriver::get_compression_min_size(const rgw_placement_rule& rule) {
+  return zone.get_rgw_params().get_compression_min_size(rule);
+}
+
 std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* obj,
 			      rgw::sal::Object* src_obj, struct req_state* s,
 			      rgw::notify::EventType event_type, optional_yield y,
@@ -4241,6 +4245,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   mp_obj.upload_info.cksum_type = cksum_type;
   mp_obj.upload_info.cksum_flags = cksum_flags;
+  mp_obj.upload_info.compression_type = compression_type;
 
   if (obj_retention) {
     mp_obj.upload_info.obj_retention_exist = true;
@@ -4553,6 +4558,7 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     /* no te olvides los cksum */
     cksum_type = mp_obj.upload_info.cksum_type;
     cksum_flags = mp_obj.upload_info.cksum_flags;
+    compression_type = mp_obj.upload_info.compression_type;
   }
 
   return 0;

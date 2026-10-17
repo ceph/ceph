@@ -742,6 +742,11 @@ const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& 
   return next->get_compression_type(rule);
 }
 
+uint64_t FilterDriver::get_compression_min_size(const rgw_placement_rule& rule)
+{
+  return next->get_compression_min_size(rule);
+}
+
 bool FilterDriver::valid_placement(const rgw_placement_rule& rule)
 {
   return next->valid_placement(rule);
@@ -1308,6 +1313,7 @@ int FilterMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   next->obj_legal_hold = obj_legal_hold;
   next->obj_retention = obj_retention;
   next->cksum_type = cksum_type;
+  next->compression_type = compression_type;
   return next->init(dpp, y, owner, dest_placement, attrs);
 }
 
@@ -1376,6 +1382,7 @@ int FilterMultipartUpload::get_info(const DoutPrefixProvider *dpp,
   this->obj_legal_hold = next->obj_legal_hold;
   this->obj_retention = next->obj_retention;
   this->cksum_type = next->cksum_type;
+  this->compression_type = next->compression_type;
   return 0;
 }
 

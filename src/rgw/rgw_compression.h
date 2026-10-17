@@ -21,6 +21,12 @@ int rgw_compression_info_from_attrset(const std::map<std::string, bufferlist>& a
                                       bool& need_decompress,
                                       RGWCompressionInfo& cs_info);
 
+// true if an object of the given logical size is below the placement's
+// compression min size, so it should be stored uncompressed. an unknown size
+// is never below it
+bool rgw_compression_below_min_size(uint64_t min_size,
+                                    std::optional<uint64_t> size);
+
 class RGWGetObj_Decompress : public RGWGetObj_Filter
 {
   CephContext* cct;

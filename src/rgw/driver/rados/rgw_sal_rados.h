@@ -429,6 +429,7 @@ class RadosStore : public StoreDriver {
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
+    virtual uint64_t get_compression_min_size(const rgw_placement_rule& rule) override;
     virtual bool valid_placement(const rgw_placement_rule& rule) override;
     int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                             std::unique_ptr<VectorBucket>* bucket, optional_yield y) override;

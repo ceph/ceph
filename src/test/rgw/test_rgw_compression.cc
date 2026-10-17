@@ -4,6 +4,8 @@
 #include "gtest/gtest.h"
 
 #include "rgw_compression.h"
+#include "rgw_zone_types.h"
+#include "common/ceph_json.h"
 
 class ut_get_sink : public RGWGetObj_Filter {
   bufferlist sink;
@@ -184,4 +186,82 @@ TEST(Compress, BillionZeros)
   decompress.handle_data(empty, 0, 0);
 
   ASSERT_EQ(d_sink.get_sink().length() , size*1000);
+}
+
+TEST(Compress, BelowMinSize)
+{
+  EXPECT_TRUE(rgw_compression_below_min_size(65536, 65535));
+  EXPECT_TRUE(rgw_compression_below_min_size(65536, 0));
+  // at or above the min size
+  EXPECT_FALSE(rgw_compression_below_min_size(65536, 65536));
+  EXPECT_FALSE(rgw_compression_below_min_size(65536, 65537));
+  // an unknown size is never below it
+  EXPECT_FALSE(rgw_compression_below_min_size(65536, std::nullopt));
+  // no min size
+  EXPECT_FALSE(rgw_compression_below_min_size(0, 0));
+}
+
+TEST(ZoneStorageClass, DecodeV1LeavesMinSizeUnset)
+{
+  // RGWZoneStorageClass as encoded before compression_min_size (v1)
+  using ceph::encode;
+  bufferlist bl;
+  ENCODE_START(1, 1, bl);
+  encode(boost::optional<rgw_pool>(rgw_pool("pool1")), bl);
+  encode(boost::optional<std::string>("zstd"), bl);
+  ENCODE_FINISH(bl);
+
+  RGWZoneStorageClass sc;
+  sc.compression_min_size = 4096;
+  auto p = bl.cbegin();
+  decode(sc, p);
+  EXPECT_EQ("zstd", sc.compression_type.get_value_or(""));
+  EXPECT_FALSE(sc.compression_min_size);
+}
+
+TEST(ZoneStorageClass, MinSizeJsonRoundTrip)
+{
+  RGWZoneStorageClass in;
+  in.compression_type = "zstd";
+  in.compression_min_size = 65536;
+
+  JSONFormatter f;
+  f.open_object_section("");
+  in.dump(&f);
+  f.close_section();
+  std::stringstream ss;
+  f.flush(ss);
+
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(ss.str().c_str(), ss.str().length()));
+  RGWZoneStorageClass out;
+  out.decode_json(&parser);
+  EXPECT_EQ(65536u, out.compression_min_size.get_value_or(0));
+  EXPECT_EQ("zstd", out.compression_type.get_value_or(""));
+}
+
+TEST(ZoneStorageClasses, ModifyKeepsMinSize)
+{
+  RGWZoneStorageClasses scs;
+  const std::string zstd{"zstd"};
+  const std::string lz4{"lz4"};
+  scs.set_storage_class("STANDARD", nullptr, &zstd);
+  scs.set_compression_min_size("STANDARD", 65536);
+  // changing only the compression type keeps the min size
+  scs.set_storage_class("STANDARD", nullptr, &lz4);
+
+  const RGWZoneStorageClass* sc = nullptr;
+  ASSERT_TRUE(scs.find("STANDARD", &sc));
+  EXPECT_EQ("lz4", sc->compression_type.get_value_or(""));
+  EXPECT_EQ(65536u, sc->compression_min_size.get_value_or(0));
+}
+
+TEST(ZonePlacementInfo, CompressionMinSizeFallbacks)
+{
+  RGWZonePlacementInfo info;
+  info.storage_classes.set_compression_min_size("COLD", 4096);
+  EXPECT_EQ(4096u, info.get_compression_min_size("COLD"));
+  // unset on an existing storage class, and a missing storage class
+  EXPECT_EQ(0u, info.get_compression_min_size("STANDARD"));
+  EXPECT_EQ(0u, info.get_compression_min_size("MISSING"));
 }
