@@ -7,6 +7,7 @@ import {
   TemplateRef,
   ViewChild
 } from '@angular/core';
+import { FormGroupDirective } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { TearsheetStep } from '../../models/tearsheet-step';
 
@@ -23,6 +24,10 @@ export class TearsheetStepComponent implements OnChanges {
   @ContentChild('tearsheetStep')
   stepComponent!: TearsheetStep;
 
+  /** Fallback when the step uses an inline `<form [formGroup]>` without `#tearsheetStep`. */
+  @ContentChild(FormGroupDirective)
+  formGroupDirective?: FormGroupDirective;
+
   @Input() stepValid: boolean | null = null;
 
   readonly validityChange$ = new Subject<boolean>();
@@ -34,7 +39,7 @@ export class TearsheetStepComponent implements OnChanges {
   }
 
   get resolvedFormGroup() {
-    return this.stepComponent?.formGroup ?? null;
+    return this.stepComponent?.formGroup ?? this.formGroupDirective?.form ?? null;
   }
 
   get canProceed(): boolean {

@@ -1,0 +1,31 @@
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [modalHeaderLabel]="modalHeaderLabel"
+  [description]="description"
+  size="md"
+  [isSubmitLoading]="isSubmitLoading"
+  [submitButtonLabel]="'Attach'"
+  [submitButtonLoadingLabel]="'Attaching'"
+  (submitRequested)="onSubmit()"
+  (closeRequested)="closeModal()"
+>
+  <cd-tearsheet-step>
+    <form
+      name="form"
+      #formDir="ngForm"
+      [formGroup]="form"
+      novalidate
+    >
+      <cd-rgw-account-role-policy-fields
+        [formGroup]="form"
+        [formDir]="formDir"
+        [autofocus]="true"
+        namePlaceholder="Enter policy name"
+        docPlaceholder="Provide a valid JSON permission policy."
+        nameHelperText="Unique name to identify this permission policy (e.g. S3FullAccessPolicy)."
+        docHelperText="JSON document defining the permissions policy statement."
+      ></cd-rgw-account-role-policy-fields>
+    </form>
+  </cd-tearsheet-step>
+</cd-tearsheet>
