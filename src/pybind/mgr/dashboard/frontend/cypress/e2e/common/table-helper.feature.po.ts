@@ -24,7 +24,7 @@ When('I click on {string} button from the table actions in the expanded row', (b
 When('I expand the row {string}', (row: string) => {
   cy.contains('[cdstablerow] [cdstabledata]', row)
     .parent('[cdstablerow]')
-    .find('[cdstableexpandbutton] .cds--table-expand__button')
+    .find('.cds--table-expand__button')
     .click();
 });
 
@@ -112,7 +112,7 @@ And('I should see row {string} does not have {string}', (row: string, options: s
   if (options) {
     cy.get('.cds--search-input').first().clear().type(row);
     for (const option of options.split(',')) {
-      cy.contains(`[cdstablerow] [cdstabledata] .tag`, option).should('not.exist');
+      cy.contains(`[cdstablerow] [cdstabledata] cds-tag`, option).should('not.exist');
     }
   }
 });

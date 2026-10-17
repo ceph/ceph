@@ -48,7 +48,7 @@ export class HostsPageHelper extends PageHelper {
 
   checkExist(hostname: string, exist: boolean, shouldReload = false) {
     if (shouldReload) {
-      cy.reload(true, { log: true, timeout: 5 * 1000 });
+      cy.reload(true, { log: true, timeout: 30 * 1000 });
     }
     this.getTableCell(this.columnIndex.hostname, hostname, true)
       .parent()
@@ -150,7 +150,7 @@ export class HostsPageHelper extends PageHelper {
 
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .parent()
-        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .tag`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           expect(status).to.include('maintenance');
