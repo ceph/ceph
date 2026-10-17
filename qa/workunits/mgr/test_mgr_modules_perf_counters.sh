@@ -1,151 +1,128 @@
-#!/bin/bash
-set -e
+#!/bin/bash -e
 
-trap 'echo "[ERROR] Script failed at line $LINENO."' ERR
+# Validate the per-module perf counters (mgr_module_<name>) exposed by the
+# active mgr. Always-on and already enabled modules are checked in place,
+# the rest are enabled, checked and disabled again.
+#
+# Usage: test_mgr_modules_perf_counters.sh [module ...]
+# With no arguments, DEFAULT_MODULES is used.
 
+# Modules that can be enabled on a plain test cluster without extra config,
+# health warnings or side effects (pools, orchestrator backends, ...)
+DEFAULT_MODULES="hello insights iostat mds_autoscaler osd_perf_query osd_support selftest snap_schedule stats"
+
+TIMEOUT=120
 CURRENT_MODULE=""
 
 cleanup() {
     if [[ -n "$CURRENT_MODULE" ]]; then
         echo "[CLEANUP] Disabling '$CURRENT_MODULE' due to unexpected exit" >&2
-        ceph mgr module disable "$CURRENT_MODULE" 2>/dev/null || true
+        ceph mgr module disable "$CURRENT_MODULE" || true
     fi
 }
 trap cleanup EXIT
 
-get_modules() {
-    local RAW_OUTPUT
-    echo "[DEBUG] Fetching module list from mgr" >&2
-    RAW_OUTPUT=$(ceph mgr module ls -f json 2>/dev/null)
+get_active_gid() {
+    ceph mgr dump -f json | jq -r '.active_gid'
+}
 
-    if ! echo "$RAW_OUTPUT" | jq empty > /dev/null 2>&1; then
-        echo "[ERROR] Output is not valid JSON. Output:" >&2
-        echo "$RAW_OUTPUT" >&2
-        exit 1
-    fi
-
-    local MODULES
-    # Skip disabled modules with can_run=false - they can't be enabled (missing deps)
-    MODULES=$(echo "$RAW_OUTPUT" | jq -r '
-        ((.enabled_modules // []) | map(if type == "string" then . else .name end)) +
-        ((.disabled_modules // []) | map(select(.can_run == true) | .name)) |
-        unique | .[]')
-
-    if [[ -z "$MODULES" ]]; then
-        echo "[ERROR] Failed to parse modules. Check JSON output." >&2
-        echo "$RAW_OUTPUT" >&2
-        exit 1
-    fi
-
-    echo "$MODULES"
+# Changing the enabled module set makes the active mgr respawn. Wait for a new
+# active mgr (different gid) that reports itself available.
+wait_for_mgr_respawn() {
+    local OLD_GID=$1
+    local GID AVAILABLE
+    for ((i = 0; i < TIMEOUT; i++)); do
+        read -r GID AVAILABLE < <(ceph mgr dump -f json | jq -r '"\(.active_gid) \(.available)"')
+        if [[ "$GID" != "$OLD_GID" && "$GID" != "0" && "$AVAILABLE" == "true" ]]; then
+            echo "[INFO] mgr is available again (gid $OLD_GID -> $GID)"
+            return 0
+        fi
+        sleep 1
+    done
+    echo "[FAIL] mgr did not come back after $TIMEOUT seconds (old gid $OLD_GID)"
+    return 1
 }
 
 get_enabled_modules() {
-    ceph mgr module ls -f json 2>/dev/null | jq -r '
-        (.enabled_modules // []) | map(if type == "string" then . else .name end) | .[]'
+    ceph mgr module ls -f json | jq -r '
+        ((.always_on_modules // []) - (.force_disabled_modules // [])) +
+        (.enabled_modules // []) | unique | .[]'
 }
 
-is_initially_enabled() {
-    echo "$INITIALLY_ENABLED" | grep -qx "$1"
+get_can_run_modules() {
+    ceph mgr module ls -f json | jq -r '
+        (.disabled_modules // []) | map(select(.can_run == true) | .name) | .[]'
 }
 
+# Only the active mgr loads Python modules, standbys never have
+# mgr_module_* perf keys. "ceph tell mgr" always goes to the active one.
 validate_perf_counters() {
     local MODULE=$1
-    local CMD_OUTPUT
-    local RETRIES=3
-    local DELAY=2
+    local CMD_OUTPUT ALIVE
 
-    # Only the active mgr loads Python modules - standbys run MgrStandby and never
-    # have mgr_module_* perf keys.
-    local ACTIVE_MGR
-    ACTIVE_MGR=$(ceph mgr dump --format json 2>/dev/null | jq -r '.active_name')
-
-    if [[ -z "$ACTIVE_MGR" || "$ACTIVE_MGR" == "null" ]]; then
-        echo "[ERROR] No active mgr daemon found."
-        return 1
-    fi
-
-    echo "[DEBUG] Checking perf counters on mgr.$ACTIVE_MGR"
-
-    local FOUND=0
-    for ((i = 1; i <= RETRIES; i++)); do
-        CMD_OUTPUT=$(ceph daemon mgr.$ACTIVE_MGR perf dump 2>/dev/null)
-        if [[ -z "$CMD_OUTPUT" ]]; then
-            echo "[ERROR] Failed to fetch perf dump from mgr.$ACTIVE_MGR (attempt $i)"
-            sleep $DELAY
-            continue
-        fi
-
-        local KEYS
-        KEYS=$(echo "$CMD_OUTPUT" | jq -r 'keys[]')
-
-        if echo "$KEYS" | grep -qE "^mgr_module_${MODULE}(_|$)"; then
-            local ALIVE
-            ALIVE=$(echo "$CMD_OUTPUT" | jq -r ".\"mgr_module_${MODULE}\".alive // empty")
+    for ((i = 0; i < TIMEOUT; i += 2)); do
+        if CMD_OUTPUT=$(timeout 30 ceph tell mgr perf dump); then
+            ALIVE=$(echo "$CMD_OUTPUT" | jq -r --arg k "mgr_module_${MODULE}" '.[$k].alive // empty')
             if [[ "$ALIVE" == "1" ]]; then
-                echo "[INFO] '$MODULE' is alive"
-            elif [[ "$ALIVE" == "0" ]]; then
-                echo "[WARNING] '$MODULE' is NOT alive (alive=0)"
+                echo "[INFO] Perf counters validated for module '$MODULE', alive=1"
+                return 0
             fi
-            echo "[INFO] Perf counters validated for module '$MODULE' on mgr.$ACTIVE_MGR"
-            FOUND=1
-            break
+            echo "[DEBUG] '$MODULE' alive='$ALIVE', retrying"
         else
-            echo "[DEBUG] Module '$MODULE' not found in perf keys on mgr.$ACTIVE_MGR (attempt $i)"
-            sleep $DELAY
+            echo "[DEBUG] perf dump failed, retrying"
         fi
+        sleep 2
     done
 
-    if [[ $FOUND -eq 0 ]]; then
-        echo "[FAIL] No perf counters found for module '$MODULE' on mgr.$ACTIVE_MGR after $RETRIES attempts"
-        return 1
-    fi
+    echo "[FAIL] Module '$MODULE' has no perf counters or is not alive after $TIMEOUT seconds"
+    echo "$CMD_OUTPUT" | jq -r --arg k "mgr_module_${MODULE}" '.[$k] // "missing"' || true
+    return 1
 }
 
-# Main Script Logic
-echo "Starting Ceph mgr enable/disable test for all modules with perf counter validation"
+echo "Starting Ceph mgr module perf counter test"
 echo "-------------------------------------------"
 
 if [[ $# -gt 0 ]]; then
     MODULES="$*"
-    echo "[DEBUG] Testing specified modules: $MODULES"
 else
-    MODULES=$(get_modules)
-    echo "[DEBUG] List of modules: $MODULES"
+    MODULES="$DEFAULT_MODULES"
 fi
 
-# Snapshot which modules are enabled now so we restore state correctly
 INITIALLY_ENABLED=$(get_enabled_modules)
+CAN_RUN=$(get_can_run_modules)
+echo "[DEBUG] Initially enabled modules: $(echo $INITIALLY_ENABLED)"
+echo "[DEBUG] Modules to cycle: $MODULES"
 
 PASS=0
 FAIL=0
 SKIP=0
 
-for MODULE in $MODULES; do
-    echo "[INFO] Testing module: $MODULE"
+# Modules that are already enabled are validated in place, never disabled
+for MODULE in $INITIALLY_ENABLED; do
+    echo "[INFO] Testing enabled module: $MODULE"
+    if validate_perf_counters "$MODULE"; then
+        PASS=$((PASS+1))
+    else
+        FAIL=$((FAIL+1))
+    fi
+done
 
-    if is_initially_enabled "$MODULE"; then
-        # Module was already enabled before the test - validate in place, don't disable it
-        echo "[DEBUG] '$MODULE' was already enabled, validating without enable/disable cycle"
-        if validate_perf_counters "$MODULE"; then
-            PASS=$((PASS+1))
-        else
-            FAIL=$((FAIL+1))
-        fi
+for MODULE in $MODULES; do
+    if echo "$INITIALLY_ENABLED" | grep -qx "$MODULE"; then
         continue
     fi
-
-    CURRENT_MODULE="$MODULE"
-
-    if ! ceph mgr module enable "$MODULE" 2>/dev/null; then
-        echo "[WARNING] Failed to enable module '$MODULE', skipping."
-        CURRENT_MODULE=""
+    if ! echo "$CAN_RUN" | grep -qx "$MODULE"; then
+        echo "[WARNING] Module '$MODULE' is not available or can't run, skipping"
         SKIP=$((SKIP+1))
         continue
     fi
-    echo "[INFO] Module '$MODULE' enabled successfully."
 
-    sleep 5
+    echo "[INFO] Testing module: $MODULE"
+    CURRENT_MODULE="$MODULE"
+
+    GID=$(get_active_gid)
+    ceph mgr module enable "$MODULE"
+    wait_for_mgr_respawn "$GID"
 
     if validate_perf_counters "$MODULE"; then
         PASS=$((PASS+1))
@@ -153,12 +130,10 @@ for MODULE in $MODULES; do
         FAIL=$((FAIL+1))
     fi
 
-    if ceph mgr module disable "$MODULE" 2>/dev/null; then
-        echo "[INFO] Module '$MODULE' disabled successfully."
-    else
-        echo "[WARNING] Failed to disable module '$MODULE'."
-    fi
+    GID=$(get_active_gid)
+    ceph mgr module disable "$MODULE"
     CURRENT_MODULE=""
+    wait_for_mgr_respawn "$GID"
 done
 
 echo "-------------------------------------------"
