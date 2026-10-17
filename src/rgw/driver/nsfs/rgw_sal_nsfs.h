@@ -34,6 +34,7 @@
 #include "mpu_strategy.h"
 #include "xattr_strategy.h"
 #include "path_strategy.h"
+#include "access_strategy.h"
 #include "bucket_state_strategy.h"
 #include "identity_db.h"
 #include "impersonate.h"
@@ -346,11 +347,41 @@ public:
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false);
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) = 0;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
+  /* `use_fd` >= 0 reads from the caller's descriptor rather than the
+   * entry's, for the same reason write_attrs() takes one:  it was
+   * opened as the gateway and the caller holds the raise.  Reaching
+   * this for *data* needs an access model that says so, and no
+   * configured model does. */
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) = 0;
+  /* A descriptor for this entry opened as the **gateway**, owned by
+   * the caller.
+   *
+   * Not the entry's `fd`, and deliberately:  a descriptor the gateway
+   * obtained must not be reachable from the object, or a data path
+   * finds it already open and serves bytes the filesystem refused
+   * this identity -- measured 2026-10-16, and the reason this exists
+   * rather than a flag on the entry.
+   *
+   * The caller closes it, and holds whatever raise it needs around
+   * both this and the attribute calls it hands the descriptor to:
+   * the open and the `user.*` syscalls are each tested on their own.
+   *
+   * Only the attribute paths want this.  A data path opens as the
+   * requester or not at all. */
+  virtual int open_scratch_as_gateway(const DoutPrefixProvider* dpp,
+				      bool read_only);
+
+  /* `use_fd` >= 0 does the attribute work on that descriptor rather
+   * than opening the entry, and with no identity -- it is the
+   * caller's, obtained above, and the caller holds the raise.  The
+   * default is what every caller has always had. */
   virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
 			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
-			  const std::vector<std::string>* rmattrs = nullptr);
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
+			  const std::vector<std::string>* rmattrs = nullptr,
+			  int use_fd = -1);
+  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
+			 int use_fd = -1);
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) = 0;
@@ -392,7 +423,8 @@ public:
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, const std::string& dst_name);
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
@@ -428,7 +460,8 @@ public:
     int for_each(const DoutPrefixProvider* dpp, const F& func);
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, std::string dst_name);
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<Directory>(*this);
   }
@@ -472,7 +505,8 @@ public:
 
   virtual ObjectType get_type() override { return ObjectType::MULTIPART; };
   virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
@@ -532,11 +566,14 @@ public:
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
+		   int use_fd = -1) override;
   virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
 			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
-			  const std::vector<std::string>* rmattrs = nullptr) override;
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs) override;
+			  const std::vector<std::string>* rmattrs = nullptr,
+			  int use_fd = -1) override;
+  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
+			 int use_fd = -1) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
@@ -756,6 +793,24 @@ protected:
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
   std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
+  /* the access model, beside the format strategies and selected the
+   * same way -- once, at startup, from configuration.
+   *
+   * `live` is what every caller reads, and the `access-model` driver
+   * hint can point it at another one for the length of a test:  an
+   * invariant nothing can break on demand is an invariant nothing
+   * has tested.  The targets are statics, so the swap is a pointer
+   * and no reader can be left holding a freed strategy. */
+  std::unique_ptr<nsfs::AccessStrategy> access_strategy;
+  std::atomic<const nsfs::AccessStrategy*> access_strategy_live{nullptr};
+  /* How many operations the access model let the gateway perform
+   * after the filesystem refused the requester, by class.
+   *
+   * Reported by the `access-model` hint.  Without it a test that
+   * sees a read succeed cannot tell *why*:  because the model
+   * permitted it, or because the filesystem never objected and the
+   * fixture is wrong.  The counts make a success attributable. */
+
   /* When a NooBaa tree is adopted (DECISIONS.md 2026-10-11).
    *
    * Meaningful only when a NooBaa configuration store is configured:
@@ -1478,6 +1533,20 @@ public:
   /* Internal APIs */
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
   nsfs::IdentityDB* get_identity_db() { return userDB.get(); }
+  const nsfs::AccessStrategy* get_access_strategy() const {
+    return access_strategy_live.load(std::memory_order_relaxed);
+  }
+
+  /* How many operations the access model let the gateway perform
+   * after the filesystem refused the requester, by class.
+   *
+   * Reported by the `access-model` hint.  Without it a test that
+   * sees a read succeed cannot tell *why*:  because the model
+   * permitted it, or because the filesystem never objected and the
+   * fixture proves nothing.  The counts make a success
+   * attributable. */
+  std::atomic<uint64_t> cross_account_attrs_served{0};
+  std::atomic<uint64_t> cross_account_data_served{0};
 
   /* The POSIX credentials to serve a request as.
    *
@@ -2339,7 +2408,8 @@ public:
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
-		  const std::vector<std::string>* rmattrs = nullptr);
+		  const std::vector<std::string>* rmattrs = nullptr,
+		  int use_fd = -1);
   int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, bool excl = false);
   std::string gen_temp_fname();
   const std::string get_fname(bool use_version);
@@ -2371,6 +2441,30 @@ public:
    * chown -- and those run as the gateway by design. */
   int pin_identity_for_attrs(const DoutPrefixProvider* dpp,
 			     const rgw_user& who);
+
+  /* Run an attribute operation, and where the filesystem refused the
+   * requester an operation S3 had authorised, run it again as the
+   * gateway with a raise.
+   *
+   * This is the whole of `rgw_nsfs_cross_account_permission`, and it
+   * is off by default.  Off, an attribute write or read must pass
+   * both S3 and the filesystem, which is NooBaa's model:  they
+   * perform every operation as the requesting account, and their IAM
+   * users and roles all carry their account's uid, so S3 and POSIX
+   * cannot disagree inside an account.  Cross-account sharing is then
+   * arranged in the filesystem, with a supplementary group (§6.2).
+   *
+   * On, an S3 grant to another account takes effect on the object's
+   * tags and ACL -- the gateway's own records about the object.  Not
+   * on its bytes:  no value of this setting makes the gateway read
+   * out or overwrite data for an identity the filesystem refuses.
+   *
+   * The retry is the promote's last rung in miniature, and for the
+   * same reason:  attempt as the identity, and raise only where that
+   * is refused, so a tree that needs no raise never pays for one. */
+  int with_cross_account_retry(const DoutPrefixProvider* dpp,
+			       nsfs::AccessClass what,
+			       std::function<int(int use_fd)> fn);
 
  class NSFSFSIOObject : public FSIOObject {
   private:

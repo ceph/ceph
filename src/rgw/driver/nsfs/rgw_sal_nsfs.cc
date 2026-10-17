@@ -2336,13 +2336,58 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
   return 0;
 }
 
-int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
-		       AttrWriteMode mode, const std::vector<std::string>* rmattrs)
+/* A descriptor for this entry, opened as the gateway, owned by the
+ * caller.  See the header for why it is not the entry's own.
+ *
+ * `parent->get_fd()` is right here where it is not right for an
+ * NSFSObject resolving a nested key:  by the time an entry exists,
+ * its chain has been walked and its parent is the directory it
+ * actually sits in. */
+int FSEnt::open_scratch_as_gateway(const DoutPrefixProvider* dpp,
+				   bool read_only)
 {
-  int ret = open(dpp);
-  if (ret < 0) {
-    return ret;
+  if (!parent) {
+    return -EINVAL;
   }
+  int pfd = parent->get_fd();
+  if (pfd < 0) {
+    const int pret = parent->open(dpp);
+    if (pret < 0) {
+      return pret;
+    }
+    pfd = parent->get_fd();
+  }
+  const int flags = (read_only ? O_RDONLY : O_RDWR) | O_NOFOLLOW;
+  const int fd = ::openat(pfd, get_name().c_str(), flags);
+  if (fd < 0) {
+    return -errno;
+  }
+  return fd;
+}
+
+/* An inactive identity to bind a reference to.  `FSIdentity{}` in a
+ * ternary would be a temporary, and the reference would dangle. */
+static const nsfs::FSIdentity& FSIdentity_none()
+{
+  static const nsfs::FSIdentity none;
+  return none;
+}
+
+int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
+		       AttrWriteMode mode, const std::vector<std::string>* rmattrs,
+		       int use_fd)
+{
+  int ret = 0;
+  if (use_fd < 0) {
+    ret = open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  /* the caller's descriptor carries no identity:  it opened it as
+   * the gateway and holds the raise around this call */
+  const int afd = (use_fd >= 0) ? use_fd : get_fd();
+  const FSIdentity& aid = (use_fd >= 0) ? FSIdentity_none() : identity;
 
   need_fsync = true;
 
@@ -2374,7 +2419,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       if (!have_current) {
 	have_current = true;
 	nsfs::xattr_map_t raw;
-	if (fs_strategy->get_xattrs(dpp, get_fd(), raw, identity) >= 0) {
+	if (fs_strategy->get_xattrs(dpp, afd, raw, aid) >= 0) {
 	  current.reserve(raw.size());
 	  for (auto& [n, _] : raw) {
 	    current.emplace_back(n);
@@ -2422,7 +2467,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
     if (mode == AttrWriteMode::REPLACE_ALL) {
       nsfs::xattr_map_t old_raw;
-      fs_strategy->get_xattrs(dpp, fd, old_raw, identity);
+      fs_strategy->get_xattrs(dpp, afd, old_raw, aid);
 
       for (auto& [disk_name, _] : old_raw) {
         /* Facts about the bucket that no attribute write owns.  Each
@@ -2513,25 +2558,26 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     }
 
     if (!to_remove.empty()) {
-      ret = fs_strategy->remove_xattrs(dpp, fd, to_remove, identity);
+      ret = fs_strategy->remove_xattrs(dpp, afd, to_remove, aid);
       if (ret < 0) {
         return ret;
       }
     }
 
-    return fs_strategy->set_xattrs(dpp, fd, to_write, identity);
+    return fs_strategy->set_xattrs(dpp, afd, to_write, aid);
   }
 
   /* per-attr syscalls */
   if (mode == AttrWriteMode::REPLACE_ALL) {
     Attrs old_attrs;
-    ret = get_x_attrs(y, dpp, fd, old_attrs, get_name(), xs,
-		    xf, identity);
+    ret = get_x_attrs(y, dpp, afd, old_attrs, get_name(), xs,
+		    xf, aid);
     if (ret >= 0) {
       for (auto& it : old_attrs) {
         if (attrs.find(it.first) == attrs.end() &&
             (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-          remove_x_attr(dpp, y, fd, it.first, get_name(), xs, xf);
+          remove_x_attr(dpp, y, afd, it.first, get_name(), xs, xf,
+			nullptr, aid);
         }
       }
     }
@@ -2539,7 +2585,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     for (auto& key : *rmattrs) {
       if (attrs.find(key) == attrs.end() &&
           (!extra_attrs || extra_attrs->find(key) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, fd, key, get_name(), xs, xf);
+        remove_x_attr(dpp, y, afd, key, get_name(), xs, xf,
+		      nullptr, aid);
       }
     }
   }
@@ -2571,20 +2618,25 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   return 0;
 }
 
-int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs)
+int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
+		      int use_fd)
 {
-  int ret = open(dpp);
-  if (ret < 0) {
-    return ret;
+  if (use_fd < 0) {
+    const int ret = open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
   }
+  const int afd = (use_fd >= 0) ? use_fd : get_fd();
+  const FSIdentity& aid = (use_fd >= 0) ? FSIdentity_none() : identity;
 
   /* this entry's own names, where it has them;  see own_xattr_strategy */
   if (own_xattr_strategy) {
-    return get_x_attrs(y, dpp, get_fd(), attrs, get_name(),
-		       own_xattr_strategy, nullptr, identity);
+    return get_x_attrs(y, dpp, afd, attrs, get_name(),
+		       own_xattr_strategy, nullptr, aid);
   }
-  return get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy,
-		    xattr_fallback, identity);
+  return get_x_attrs(y, dpp, afd, attrs, get_name(), xattr_strategy,
+		    xattr_fallback, aid);
 }
 
 int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix)
@@ -2893,21 +2945,26 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 }
 
 int File::read(int64_t ofs, int64_t left, bufferlist& bl,
-		      const DoutPrefixProvider* dpp, optional_yield y)
+		      const DoutPrefixProvider* dpp, optional_yield y,
+		      int use_fd)
 {
   /* Open, or say why not.
    *
    * This read the member descriptor without checking it, so a
-   * refused open earlier in the request left `fd` at -1, and the
+   * refused open earlier in the request left `fd` at -1 and the
    * pread that followed returned EBADF -- which reached the client
-   * as a 500 where the filesystem had said EACCES.  A permission the
-   * tree does not grant, reported as a gateway failure. */
-  if (fd < 0) {
+   * as a 500.  The filesystem had said EACCES, which is a 403:  a
+   * permission the tree does not grant, reported as a gateway
+   * failure.  Measured 2026-10-16, eight acl tests, reachable once
+   * the authorisation pass stopped refusing first. */
+  if ((use_fd < 0) && (fd < 0)) {
     const int oret = open(dpp);
     if (oret < 0) {
       return oret;
     }
   }
+  /* the caller's descriptor where it gave one */
+  const int rfd = (use_fd >= 0) ? use_fd : fd;
 
   int64_t read_chunk_size =
     ctx->_conf.get_val<Option::size_t>("rgw_nsfs_read_chunk_size");
@@ -2928,7 +2985,7 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
                            DIRECT_IO_ALIGN) * DIRECT_IO_ALIGN;
 
     bufferptr bp(buffer::create_small_page_aligned(aligned_len));
-    ret = ::pread(fd, bp.c_str(), aligned_len, aligned_ofs);
+    ret = ::pread(rfd, bp.c_str(), aligned_len, aligned_ofs);
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
@@ -2945,16 +3002,16 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
 
   bufferptr bp(len);
   if (ctx->_conf.get_val<uint64_t>("rgw_nsfs_get_iodepth") >= 2) {
-    ret = ::pread(fd, bp.c_str(), len, ofs);
+    ret = ::pread(rfd, bp.c_str(), len, ofs);
   } else {
-    ret = lseek(fd, ofs, SEEK_SET);
+    ret = lseek(rfd, ofs, SEEK_SET);
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
                         << ofs << " :" << cpp_strerror(ret) << dendl;
       return -ret;
     }
-    ret = ::read(fd, bp.c_str(), len);
+    ret = ::read(rfd, bp.c_str(), len);
   }
   if (ret < 0) {
     ret = errno;
@@ -3263,7 +3320,8 @@ int Directory::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 }
 
 int Directory::read(int64_t ofs, int64_t left, bufferlist &bl,
-                    const DoutPrefixProvider *dpp, optional_yield y)
+                    const DoutPrefixProvider *dpp, optional_yield y,
+                    int use_fd)
 {
   return -EINVAL;
 }
@@ -3598,7 +3656,8 @@ int NooBaaDirectoryObject::stat(const DoutPrefixProvider* dpp, bool force)
 }
 
 int NooBaaDirectoryObject::read(int64_t ofs, int64_t left, bufferlist& bl,
-				const DoutPrefixProvider* dpp, optional_yield y)
+				const DoutPrefixProvider* dpp, optional_yield y,
+				int use_fd)
 {
   if (!content) {
     return 0;
@@ -3613,8 +3672,13 @@ int NooBaaDirectoryObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 }
 
 int NooBaaDirectoryObject::read_attrs(const DoutPrefixProvider* dpp,
-				      optional_yield y, Attrs& attrs)
+				      optional_yield y, Attrs& attrs,
+				      int use_fd)
 {
+  /* a sentinel's attributes live on its parent directory, which this
+   * opens itself;  a caller's descriptor is for the object and is not
+   * what this reads */
+  (void) use_fd;
   int ret = parent->open(dpp);
   if (ret < 0) {
     return ret;
@@ -3679,7 +3743,8 @@ int NooBaaDirectoryObject::write(int64_t ofs, bufferlist& bl,
 int NooBaaDirectoryObject::write_attrs(const DoutPrefixProvider* dpp,
 				       optional_yield y, Attrs& attrs,
 				       Attrs* extra_attrs, AttrWriteMode mode,
-				       const std::vector<std::string>* rmattrs)
+				       const std::vector<std::string>* rmattrs,
+				       int use_fd)
 {
   return refuse_noobaa_directory_object_change(dpp, parent->get_name());
 }
@@ -3984,7 +4049,8 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
 }
 
 int MPDirectory::read(int64_t ofs, int64_t left, bufferlist &bl,
-                    const DoutPrefixProvider *dpp, optional_yield y)
+                    const DoutPrefixProvider *dpp, optional_yield y,
+		      int use_fd)
 {
   std::string pname;
   for (auto part : parts) {
@@ -4291,6 +4357,19 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 	<< dendl;
     }
   }
+
+  /* the access model, selected once:  what to do when the filesystem
+   * refuses an operation S3 authorised.  Named in the `fs features`
+   * map, because no request reveals it. */
+  if (cct->_conf.get_val<bool>("rgw_nsfs_cross_account_permission")) {
+    access_strategy = std::make_unique<nsfs::S3MetadataAccess>();
+  } else {
+    access_strategy = std::make_unique<nsfs::PosixStrictAccess>();
+  }
+  access_strategy_live.store(access_strategy.get(),
+			     std::memory_order_relaxed);
+  ldpp_dout(dpp, 1) << "nsfs: access model " << access_strategy->name()
+    << dendl;
 
   nb_xattr_strategy = std::make_unique<nsfs::NooBaaXattrStrategy>();
   nb_path_strategy = std::make_unique<nsfs::NooBaaPathStrategy>();
@@ -11503,21 +11582,55 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   if (ret < 0) {
     return ret;
   }
-  return write_attrs(dpp, y, &rmattrs);
+  return with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
+				  [&](int use_fd) -> int {
+    return write_attrs(dpp, y, &rmattrs, use_fd);
+  });
 }
 
 int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  int ret = open(dpp, false);
-  if (ret < 0) {
-    return ret;
+  /* An attribute read, so it is on the access-model axis:  where the
+   * filesystem refuses an identity S3 authorised, the gateway reads
+   * the attributes if the deployment has said so.  Only the
+   * attributes -- this function never touches the object's bytes. */
+  /* The open *and* the read, inside one retry.
+   *
+   * Scoping it to the open alone does not work, and the way it fails
+   * is quiet:  the open is retried as the gateway and succeeds, the
+   * entry's identity is restored on the way out, and the attribute
+   * read that follows runs as the requester and is refused again --
+   * then swallowed into has_attrs=false, so the caller sees an object
+   * with no ACL rather than an error.  Both halves are the operation. */
+  /* Two failures, and they are not the same answer.
+   *
+   * The object could not be *opened* -- a permission the tree does
+   * not grant -- and that must reach the client, which is a 403.
+   * Or it opened and its attributes could not be read, which has
+   * always left has_attrs false and returned 0, because a caller
+   * decides for itself what a missing attribute means.
+   *
+   * Collapsing the two returned 0 for a refused open, so the caller
+   * saw an object with no etag and answered 400:  "could not open
+   * ... Permission denied" followed by "has no etag after
+   * get_obj_attrs()".  Thirteen acl tests, measured 2026-10-16. */
+  bool open_failed = false;
+  int ret = with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
+				     [&](int use_fd) -> int {
+    if (use_fd < 0) {
+      const int oret = open(dpp, false);
+      if (oret < 0) {
+	open_failed = true;
+	return oret;
+      }
+    }
+    open_failed = false;
+    return ent->read_attrs(dpp, y, state.attrset, use_fd);
+  });
+  state.has_attrs = (ret == 0);
+  if ((ret < 0) && !open_failed) {
+    ret = 0;
   }
-
-  ret = ent->read_attrs(dpp, y, state.attrset);
-  if (ret == 0)
-    state.has_attrs = true;
-  else
-    state.has_attrs = false;
 
   if (state.has_attrs && state.attrset.find(RGW_ATTR_ETAG) == state.attrset.end()) {
     bufferlist bl;
@@ -11563,7 +11676,76 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
       return pret;
     }
   }
-  return write_attrs(dpp, y);
+  return with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
+				  [&](int use_fd) -> int {
+    return write_attrs(dpp, y, nullptr, use_fd);
+  });
+}
+
+/* What a cross-account attribute operation raises:  DAC_OVERRIDE for
+ * the file's mode, FOWNER for the ownership tests a `user.*` write
+ * meets on somebody else's file. */
+static constexpr uint64_t CROSS_ACCOUNT_CAPS =
+  nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
+
+int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
+					 nsfs::AccessClass what,
+					 std::function<int(int use_fd)> fn)
+{
+  /* -1:  the operation on its own terms, as the requester */
+  int ret = fn(-1);
+  if (ret != -EACCES) {
+    return ret;
+  }
+  if (driver->get_access_strategy()->refused(what) !=
+      nsfs::Refused::as_gateway_raised) {
+    return ret;
+  }
+  if (!ent) {
+    return ret;
+  }
+
+  /* The filesystem refused an identity S3 authorised, and this
+   * deployment says S3 decides for this class of operation.  Perform
+   * it on a descriptor of our own, opened as the gateway under a
+   * raise, and close it before returning.
+   *
+   * Nothing is stored on the object.  Earlier versions cleared the
+   * entry's identity, and then the object's, and both were wrong in
+   * the same way:  the entry caches its descriptor, so the one the
+   * gateway opened outlived the operation and a data read found it
+   * already open -- alt could GET another identity's bytes, measured
+   * 2026-10-16 against `acl::check_alt_read`.  A descriptor the
+   * caller owns cannot be found by anything it is not handed to. */
+  int fd = -1;
+  const int rret = nsfs::with_capabilities(dpp, CROSS_ACCOUNT_CAPS,
+					   [&]() -> int {
+    fd = ent->open_scratch_as_gateway(dpp, /*read_only=*/false);
+    if (fd < 0) {
+      return fd;
+    }
+    return fn(fd);
+  });
+  if (fd >= 0) {
+    ::close(fd);
+  }
+
+  if (rret < 0) {
+    ldpp_dout(dpp, 4) << "nsfs: cross-account attribute operation on "
+      << get_name() << " failed even raised: " << cpp_strerror(-rret)
+      << dendl;
+    return rret;
+  }
+  if (what == nsfs::AccessClass::data) {
+    driver->cross_account_data_served.fetch_add(1, std::memory_order_relaxed);
+  } else {
+    driver->cross_account_attrs_served.fetch_add(1, std::memory_order_relaxed);
+  }
+  ldpp_dout(dpp, 10) << "nsfs: " << get_name()
+    << ": the filesystem refused the requester and S3 authorised it,"
+    " so the gateway performed it (access model "
+    << driver->get_access_strategy()->name() << ")" << dendl;
+  return rret;
 }
 
 int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
@@ -11577,8 +11759,11 @@ int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
   if ((pret < 0) && (pret != -ENODATA)) {
     return pret;
   }
-  if (id.active() && ent) {
-    ent->set_identity(id);
+  if (id.active()) {
+    /* on the object, not the entry:  the entry may not exist yet, and
+     * it re-reads this on every open anyway.  read_only false -- an
+     * attribute write needs O_RDWR. */
+    set_access(id, /*ro=*/false);
   }
   return 0;
 }
@@ -11598,11 +11783,10 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   }
   state.attrset.erase(attr_name);
 
-  ret = open(dpp);
-  if (ret < 0) {
-    return ret;
-  }
-  /* after the open, so the entry exists to carry it */
+  /* No open here.  One outside the retry refuses as the requester and
+   * returns before the cross-account path is reached -- which it did,
+   * leaving DeleteObjectTagging a 403 while the same deployment let a
+   * put through.  The retry's own attempt opens, both times. */
   ret = pin_identity_for_attrs(dpp, authenticated_user);
   if (ret < 0) {
     return ret;
@@ -11614,9 +11798,24 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
    * "could not remove attribute user.nsfs.rgw.x-amz-tagging ...
    * Permission denied", a 403 from DeleteObjectTagging.  The
    * parameter has been here all along and no caller passed one. */
-  ret = remove_x_attr(dpp, y, ent->get_fd(), attr_name, get_name(),
-		      xattr_strategy(), xattr_fallback(),
-		      driver->get_fs_strategy(), ent->get_identity());
+  ret = with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
+				 [&](int use_fd) -> int {
+    if (use_fd < 0) {
+      const int oret = open(dpp);
+      if (oret < 0) {
+	return oret;
+      }
+    }
+    /* the caller's descriptor carries no identity;  the entry's
+     * carries the requester's */
+    return remove_x_attr(dpp, y,
+			 (use_fd >= 0) ? use_fd : ent->get_fd(),
+			 attr_name, get_name(),
+			 xattr_strategy(), xattr_fallback(),
+			 driver->get_fs_strategy(),
+			 (use_fd >= 0) ? nsfs::FSIdentity{}
+				       : ent->get_identity());
+  });
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -12292,7 +12491,15 @@ int NSFSObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 {
   if (!ent)
     return -ENOENT;
-  return ent->read(ofs, left, bl, dpp, y);
+  /* Data asks the access model too, and every configured model says
+   * refuse -- so this is the shape of the question rather than a
+   * path anyone can take.  It exists so the answer is *stated*:  a
+   * later change that wants data on S3's word has one place to say
+   * so, and the test that forbids it has something to flip. */
+  return with_cross_account_retry(dpp, nsfs::AccessClass::data,
+				  [&](int use_fd) -> int {
+    return ent->read(ofs, left, bl, dpp, y, use_fd);
+  });
 }
 
 int NSFSObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
@@ -12302,10 +12509,11 @@ int NSFSObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp
 }
 
 int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
-			    const std::vector<std::string>* rmattrs)
+			    const std::vector<std::string>* rmattrs,
+			    int use_fd)
 {
   return ent->write_attrs(dpp, y, state.attrset, nullptr,
-			  AttrWriteMode::MERGE, rmattrs);
+			  AttrWriteMode::MERGE, rmattrs, use_fd);
 }
 
 /* An upload's staging -- its meta object -- is the gateway's, and is
@@ -15669,6 +15877,17 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    * is on, so a successful resolve says nothing about it. */
   features["impersonate"] =
     nsfs::impersonation_enabled() ? "true" : "false";
+  /* Which access model this gateway runs:  whether an S3 grant the
+   * filesystem refuses takes effect on an object's metadata.  A test
+   * cannot infer it -- both models answer the same for every request
+   * where S3 and POSIX agree, which is nearly all of them -- so the
+   * gateway says which it is and the suite asserts accordingly. */
+  /* the model in force, not the one configured:  the `access-model`
+   * hint can point the gateway at another for the length of a test,
+   * and a suite branching on the configured name would then assert
+   * against a model that is not running */
+  features["access_model"] = get_access_strategy()->name();
+  features["access_model_configured"] = access_strategy->name();
 }
 
 /* Set the profile of a bucket that already exists.

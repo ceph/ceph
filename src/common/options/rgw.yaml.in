@@ -4967,6 +4967,25 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_cross_account_permission
+  type: bool
+  level: advanced
+  desc: Let S3 authorise what the filesystem refuses, for object metadata
+  long_desc: Off, the default, an operation must pass both S3 and the
+    filesystem - so an identity S3 grants but POSIX refuses is refused,
+    and cross-identity sharing is arranged in the filesystem with a
+    supplementary group. This matches NooBaa, which performs every
+    operation as the requesting account and whose IAM users and roles
+    all share their account's uid, so S3 and POSIX cannot disagree
+    within an account. On, an object's tags and ACL - the gateway's own
+    records about the object, not its bytes - are read and written by
+    the gateway with a raised capability once S3 has authorised the
+    request, so a grant to another account takes effect. Object data is
+    not affected either way - the gateway never reads out or overwrites
+    bytes for an identity the filesystem refuses.
+  default: false
+  services:
+  - rgw
 - name: rgw_nsfs_impersonate_helper_threads
   type: uint
   level: advanced
