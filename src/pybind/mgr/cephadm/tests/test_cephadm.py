@@ -1,12 +1,14 @@
 import asyncio
 import json
 import logging
+import threading
 
 from contextlib import contextmanager
 
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from ceph.deployment.hostspec import SpecValidationError
 from cephadm.serve import CephadmServe
 from cephadm.inventory import (
     HostCacheStatus,
@@ -1522,22 +1524,132 @@ class TestCephadm(object):
                     assert [d.path for d in saved.journal_devices.paths] == ['/dev/sdz']
                     mock_apply.assert_called_once()
 
-    def test_create_osd_default_spec_preserves_data_crush_device_class(self, cephadm_module):
+    def test_create_osd_default_spec_survives_reload(self, cephadm_module):
         with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
             with mock.patch("cephadm.module.CephadmOrchestrator.apply") as mock_apply:
                 with with_host(cephadm_module, 'test'):
                     dg = DriveGroupSpec(
                         placement=PlacementSpec(host_pattern='test'),
-                        data_devices=DeviceSelection(paths=[
-                            {'path': '/dev/sdb', 'crush_device_class': 'ssd'},
-                        ]),
+                        data_devices=DeviceSelection(paths=['/dev/sdb']),
                         service_id='default',
+                        crush_device_class='hdd',
+                        encrypted=True,
+                        osds_per_device=2,
+                        preview_only=True,
                     )
                     cephadm_module.create_osd_default_spec(dg)
                     saved = cephadm_module.spec_store.all_specs['osd.default']
-                    assert saved.data_devices.paths[0].path == '/dev/sdb'
-                    assert saved.data_devices.paths[0].crush_device_class == 'ssd'
+                    assert saved is not dg
+                    assert not saved.unmanaged
+                    assert not saved.preview_only
+                    # what SpecStore.load() reads back after an mgr restart
+                    loaded = ServiceSpec.from_json(json.loads(json.dumps(saved.to_json())))
+                    assert loaded.to_json() == saved.to_json()
+                    for spec in (saved, loaded):
+                        assert spec.placement.host_pattern.pattern == 'test'
+                        assert [d.path for d in spec.data_devices.paths] == ['/dev/sdb']
+                        assert spec.crush_device_class == 'hdd'
+                        assert spec.encrypted is True
+                        assert spec.osds_per_device == 2
                     mock_apply.assert_called_once()
+
+    @pytest.mark.parametrize('dg_args', [
+        dict(data_devices=DeviceSelection(paths=['/dev/sdb']), filter_logic='xor'),
+        dict(db_devices=DeviceSelection(paths=['/dev/sdc'])),
+    ])
+    def test_create_osds_rejects_invalid_request(self, cephadm_module, dg_args):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
+            with with_host(cephadm_module, 'test'):
+                dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), **dg_args)
+                with mock.patch.object(cephadm_module.osd_service,
+                                       'create_from_spec') as create_from_spec:
+                    with pytest.raises(SpecValidationError):
+                        wait(cephadm_module,
+                             cephadm_module.create_osds(dg, skip_validation=True))
+                create_from_spec.assert_not_called()
+                assert 'osd.default' not in cephadm_module.spec_store.all_specs
+
+    @contextmanager
+    def _osd_create_env(self, cephadm_module, cv_side_effect):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm") as run_cephadm, \
+                mock.patch("cephadm.services.osd.OSDService._run_ceph_volume_command",
+                           side_effect=cv_side_effect):
+            run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+            with with_host(cephadm_module, 'test'):
+                cephadm_module.cache.update_host_devices('test', [
+                    Device('/dev/sdb', available=True),
+                    Device('/dev/sdc', available=True),
+                ])
+                run_cephadm.side_effect = async_side_effect((['{}'], '', 0))
+                yield
+
+    def test_create_osds_defers_serve_loop_on_busy_host(self, cephadm_module):
+        calls = []
+
+        async def run_cv(host, cmd, env_vars=None, creation_cfg=None):
+            calls.append((host, env_vars))
+            if len(calls) == 1:
+                # a serve loop pass while daemon add runs ceph-volume
+                t = threading.Thread(
+                    target=CephadmServe(cephadm_module)._apply_all_services)
+                t.start()
+                t.join()
+            return [], [], 0
+
+        with self._osd_create_env(cephadm_module, run_cv):
+            cephadm_module.spec_store.save(DriveGroupSpec(
+                service_id='all-available-devices',
+                placement=PlacementSpec(host_pattern='*'),
+                data_devices=DeviceSelection(all=True),
+            ))
+            dg = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='test'),
+                data_devices=DeviceSelection(paths=['/dev/sdb']),
+                crush_device_class='hdd',
+            )
+            wait(cephadm_module, cephadm_module.create_osds(dg))
+            assert calls == [('test', ['CEPH_VOLUME_OSDSPEC_AFFINITY=default'])]
+            assert not cephadm_module.osd_service._creating_hosts
+
+            # the deferred spec is applied on the next pass
+            CephadmServe(cephadm_module)._apply_all_services()
+            assert calls[1:] == [
+                ('test', ['CEPH_VOLUME_OSDSPEC_AFFINITY=all-available-devices'])]
+
+    def test_create_osds_failure_releases_host(self, cephadm_module):
+        calls = []
+
+        async def run_cv(host, cmd, env_vars=None, creation_cfg=None):
+            calls.append((host, env_vars))
+            return [], ['boom'], 1
+
+        with self._osd_create_env(cephadm_module, run_cv):
+            dg = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='test'),
+                data_devices=DeviceSelection(paths=['/dev/sdb']),
+            )
+            wait(cephadm_module, cephadm_module.create_osds(dg))
+            assert len(calls) == 1
+            assert not cephadm_module.osd_service._creating_hosts
+
+            # the failed create is retried by the serve loop
+            CephadmServe(cephadm_module)._apply_all_services()
+            assert len(calls) == 2
+            assert not cephadm_module.osd_service._creating_hosts
+
+    def test_reserve_hosts_waits_for_create_in_flight(self, cephadm_module):
+        osd_service = cephadm_module.osd_service
+        cephadm_module.default_cephadm_command_timeout = 0.1
+        with osd_service.reserve_hosts(['test']):
+            assert not osd_service._try_reserve_host('test')
+            with pytest.raises(OrchestratorError, match='timed out'):
+                with osd_service.reserve_hosts(['test', 'other']):
+                    pass
+            with osd_service.reserve_hosts(['other']):
+                pass
+        assert osd_service._try_reserve_host('test')
+        osd_service._release_hosts(['test'])
+        assert not osd_service._creating_hosts
 
     def test_create_osds_skips_default_spec_when_osd_default_exists(self, cephadm_module):
         with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):

@@ -40,7 +40,7 @@ from prettytable import PrettyTable
 
 from ceph.cephadm.images import DefaultImages
 from ceph.deployment import inventory
-from ceph.deployment.drive_group import DriveGroupSpec, OSDType
+from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import normalize_hostname
 from ceph.deployment.service_spec import (
     ServiceSpec,
@@ -3695,48 +3695,14 @@ Then run the following:
         """
         return [self._apply(spec) for spec in specs]
 
-    @staticmethod
-    def device_selection_from_explicit_paths(sel: Optional[DeviceSelection]) -> Optional[DeviceSelection]:
-        """
-        Build a new DeviceSelection from explicit paths, preserving 'per path'
-        crush_device_class. Used when persisting osd.default so all device roles
-        are stored consistently (no shared references with the incoming spec).
-        """
-        if sel is None or not sel.paths:
-            return None
-        path_specs: List[Dict[str, Any]] = []
-        for d in sel.paths:
-            spec: Dict[str, Any] = {"path": d.path}
-            if d.crush_device_class:
-                spec["crush_device_class"] = d.crush_device_class
-            path_specs.append(spec)
-        return DeviceSelection(paths=path_specs)
-
     def create_osd_default_spec(self, drive_group: DriveGroupSpec) -> None:
-        # Create the default osd and attach a valid spec to it.
+        # parse it as SpecStore.load() will, so a bad request fails here
+        osd_default_spec = cast(DriveGroupSpec, ServiceSpec.from_json(drive_group.to_json()))
+        osd_default_spec.unmanaged = False
+        osd_default_spec.preview_only = False
 
-        drive_group.unmanaged = False
-
-        host_pattern_obj = drive_group.placement.host_pattern
-        host = str(host_pattern_obj.pattern)
-        data_devices = self.device_selection_from_explicit_paths(drive_group.data_devices)
-        assert data_devices is not None
-        device_list = [d.path for d in drive_group.data_devices.paths] if drive_group.data_devices else []
-
-        osd_default_spec = DriveGroupSpec(
-            service_id="default",
-            placement=PlacementSpec(host_pattern=host),
-            data_devices=data_devices,
-            db_devices=self.device_selection_from_explicit_paths(drive_group.db_devices),
-            wal_devices=self.device_selection_from_explicit_paths(drive_group.wal_devices),
-            journal_devices=self.device_selection_from_explicit_paths(drive_group.journal_devices),
-            unmanaged=False,
-            method=drive_group.method,
-            objectstore=drive_group.objectstore,
-            osd_type=OSDType(drive_group.osd_type)
-        )
-
-        self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")
+        self.log.info(f'Creating {osd_default_spec.service_name()} with placement '
+                      f'{osd_default_spec.placement.pretty_str()}')
         self.spec_store.save(osd_default_spec)
         self.apply([osd_default_spec])
 
@@ -3851,20 +3817,22 @@ Then run the following:
             if err_msg:
                 return err_msg
 
-        # Only save/apply osd.default after validation passes. Otherwise the serve loop
-        # would still apply the spec and create an OSD while the CLI returns an error.
-        # Spec store keys are full service names (example: "osd.default"), not service_id alone.
-        if drive_group.service_name() not in self.spec_store.all_specs:
-            self.log.info("osd.default does not exist. Creating it now.")
-            self.create_osd_default_spec(drive_group)
-        else:
-            self.log.info(
-                "Service osd.default is already registered; continuing with this "
-                "daemon add (one-shot ceph-volume apply, not a full spec re-apply).")
+        # keep the serve loop off these hosts until this create returns
+        with self.osd_service.reserve_hosts(filtered_hosts):
+            # Only save/apply osd.default after validation passes. Otherwise the serve loop
+            # would still apply the spec and create an OSD while the CLI returns an error.
+            # Spec store keys are full service names (example: "osd.default"), not service_id alone.
+            if drive_group.service_name() not in self.spec_store.all_specs:
+                self.log.info(f"{drive_group.service_name()} does not exist. Creating it now.")
+                self.create_osd_default_spec(drive_group)
+            else:
+                self.log.info(
+                    f"Service {drive_group.service_name()} is already registered; continuing with this "
+                    "daemon add (one-shot ceph-volume apply, not a full spec re-apply).")
 
-        # 'ceph orch daemon add osd' must always run ceph-volume for this request.
-        # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
-        return self.osd_service.create_from_spec(drive_group, force_apply=True)
+            # 'ceph orch daemon add osd' must always run ceph-volume for this request.
+            # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
+            return self.osd_service.create_from_spec(drive_group, force_apply=True)
 
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None
