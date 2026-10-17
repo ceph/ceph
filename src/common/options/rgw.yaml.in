@@ -234,6 +234,7 @@ options:
   level: advanced
   desc: Max number of concurrent RADOS requests when handling bucket shards.
   default: 128
+  min: 1
   services:
   - rgw
   with_legacy: true
