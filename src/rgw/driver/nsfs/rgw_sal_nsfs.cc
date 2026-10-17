@@ -537,23 +537,67 @@ static std::string synthesize_etag(const struct statx& stx)
 }
 
 /* rgw_non_md5_etag on NSFS: use the same mtime-ino string as version ids
- * (filesystem inode from this file's stat), not the generic req-id form. */
-static bool nsfs_apply_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
-                                    const struct statx& stx, Attrs& attrs,
-                                    const nsfs::XattrStrategy* xs)
+ * (filesystem inode from this file's stat), not the generic req-id form.
+ *
+ * Two functions rather than one with a `fd < 0` sentinel.  The value
+ * goes to two places and not every caller wants both:  the multipart
+ * part writer only needs it in the map, because its own write_attrs()
+ * persists that map afterwards, while the atomic writer's map has
+ * already been written by the time it gets here, so for it the
+ * attribute write below is the only thing that reaches disk.  One
+ * function returning "applied" for both could not tell them apart, and
+ * a caller that wanted disk and got the map would be the defect this
+ * pair exists to prevent.
+ *
+ * Returns true when the option is on and `attrs` now carries the etag.
+ * Nothing reaches disk here. */
+static bool nsfs_non_md5_etag_into_attrs(const DoutPrefixProvider* dpp,
+                                         const struct statx& stx,
+                                         Attrs& attrs)
 {
   if (!dpp->get_cct()->_conf->rgw_non_md5_etag) {
     return false;
   }
-  std::string etag = nsfs_version_id_from_statx(stx);
   bufferlist bl;
-  bl.append(etag);
+  bl.append(nsfs_version_id_from_statx(stx));
   attrs[RGW_ATTR_ETAG] = std::move(bl);
-  if (fd >= 0) {
-    std::string xattr = xs->disk_name(RGW_ATTR_ETAG);
-    ::fsetxattr(fd, xattr.c_str(), etag.c_str(), etag.size(), 0);
-  }
   return true;
+}
+
+/* Record that same etag on the object.
+ *
+ * The attribute is the requester's.  A `user.*` attribute needs write
+ * permission tested against the *calling* thread rather than against
+ * whoever opened the descriptor, so the gateway writing through the
+ * requester's fd is refused on a 0660 file it does not own.  `id` is
+ * undefaulted so a new caller cannot become the gateway by leaving it
+ * out.
+ *
+ * A closed descriptor is -EBADF and not a skip:  every caller of this
+ * is one whose attribute map will not be written again. */
+static int nsfs_record_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
+                                    const struct statx& stx,
+                                    const nsfs::XattrStrategy* xs,
+                                    const nsfs::FSIdentity& id,
+                                    bool inject_as_gateway)
+{
+  if (fd < 0) {
+    return -EBADF;
+  }
+  const std::string etag = nsfs_version_id_from_statx(stx);
+  const std::string xattr = xs->disk_name(RGW_ATTR_ETAG);
+  if (unlikely(inject_as_gateway)) {
+    /* inject-etag-as-gateway:  the defect exactly -- the calling
+     * thread writes and nobody looks at what came back */
+    ::fsetxattr(fd, xattr.c_str(), etag.c_str(), etag.size(), 0);
+    return 0;
+  }
+  return nsfs::with_identity(dpp, id, [&]() -> int {
+    if (::fsetxattr(fd, xattr.c_str(), etag.c_str(), etag.size(), 0) < 0) {
+      return -errno;
+    }
+    return 0;
+  });
 }
 
 /* The uid and gid of an open descriptor.
@@ -12414,8 +12458,26 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
     return ret;
   }
 
-  nsfs_apply_non_md5_etag(dpp, ent->get_fd(), ent->get_stx(), get_attrs(),
-			  xattr_strategy());
+  /* The value into the map, then onto the object, and the second one
+   * checked.  complete() writes the attributes before it links
+   * (`write_attrs()` then `link_temp_file()`), and the statx this etag
+   * is derived from does not exist until the link -- so nothing will
+   * persist this map again and the attribute write is the only thing
+   * that reaches disk.  It used to run unchecked, so under
+   * impersonation the object published carrying the opaque etag
+   * RGWPutObj wrote while the client was told the derived one. */
+  if (nsfs_non_md5_etag_into_attrs(dpp, ent->get_stx(), get_attrs())) {
+    const int eret = nsfs_record_non_md5_etag(
+      dpp, ent->get_fd(), ent->get_stx(), xattr_strategy(),
+      ent->get_identity(), driver->etag_as_gateway_injected());
+    if (eret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not record the etag on "
+        << get_name() << ": " << cpp_strerror(-eret)
+        << ";  the object would carry a different etag than the one "
+        << "returned to the client" << dendl;
+      return eret;
+    }
+  }
 
   uint32_t flags = FSEnt::FLAG_NONE;
   const auto& binfo = b->get_info();
@@ -15263,11 +15325,11 @@ int NSFSMultipartWriter::complete(
   std::string part_etag = etag;
   if (part_file) {
     int sret = part_file->stat(dpp, /*force=*/true);
-    /* fd -1: part_file->write_attrs() below persists this same map, so
-     * the helper's own fsetxattr() would only write the etag twice */
-    if (sret == 0 && nsfs_apply_non_md5_etag(dpp, -1,
-                                             part_file->get_stx(), attrs,
-                                             part_file->get_xattr_strategy())) {
+    /* the map only:  part_file->write_attrs() below persists it, so
+     * recording the attribute here would write the etag twice */
+    if (sret == 0 && nsfs_non_md5_etag_into_attrs(dpp,
+                                                  part_file->get_stx(),
+                                                  attrs)) {
       bufferlist bl;
       if (get_attr(attrs, RGW_ATTR_ETAG, bl)) {
         part_etag.assign(bl.c_str(), bl.length());
@@ -15877,6 +15939,12 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    * is on, so a successful resolve says nothing about it. */
   features["impersonate"] =
     nsfs::impersonation_enabled() ? "true" : "false";
+  /* Whether the etag is the mtime-ino string rather than a content
+   * digest.  Off by default and reachable only from a gateway started
+   * for it, so a test of that path has to be told rather than infer it
+   * from the shape of an etag it has no second opinion about. */
+  features["non_md5_etag"] =
+    ctx()->_conf->rgw_non_md5_etag ? "true" : "false";
   /* Which access model this gateway runs:  whether an S3 grant the
    * filesystem refuses takes effect on an object's metadata.  A test
    * cannot infer it -- both models answer the same for every request
@@ -17078,6 +17146,24 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_skip_reclone = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_skip_reclone ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-etag-as-gateway") {
+    /* reproduce the non-md5 etag defect in a running gateway:  the
+     * attribute is written by the calling thread and the result is
+     * discarded, so under impersonation it is refused on a file the
+     * gateway does not own and the object keeps the md5 etag
+     * write_attrs() put there before the link.  The suite asserts both
+     * polarities against one build */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_etag_as_gateway = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_etag_as_gateway ? "true" : "false";
     }
     return 0;
   }

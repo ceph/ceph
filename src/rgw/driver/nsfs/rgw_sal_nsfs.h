@@ -881,6 +881,11 @@ protected:
   ceph::mutex inject_delta_lock =
       ceph::make_mutex("NSFSDriver::inject_delta_lock");
   bool inject_skip_reclone{false};
+  /* write the non-md5 etag the way the defect did -- by the calling
+   * thread, with the result discarded -- so a suite can watch the etag
+   * the client is given diverge from the one recorded on disk, rather
+   * than deleting the fix and rebuilding to prove the test can fail */
+  bool inject_etag_as_gateway{false};
   /* -1 disables;  otherwise fail a rename after this many version entries
    * have moved, so the rollback path is exercised rather than assumed */
   int inject_rename_fail_after{-1};
@@ -1522,6 +1527,7 @@ public:
     }
   }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
+  bool etag_as_gateway_injected() const { return inject_etag_as_gateway; }
   bool no_chown_injected() const { return inject_no_chown; }
   bool create_failure_injected() const { return inject_create_failure; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
