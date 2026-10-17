@@ -706,8 +706,7 @@ class TaskHandler:
                 self.format_image_spec(image_spec)), errno=errno.EINVAL)
 
     def resolve_pool_name(self, pool_id: str) -> str:
-        osd_map = self.module.get('osd_map')
-        for pool in osd_map['pools']:
+        for pool in self.module.get('osd_map_pools')['pools']:
             if pool['pool'] == pool_id:
                 return pool['pool_name']
         return '<unknown>'

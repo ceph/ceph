@@ -43,6 +43,6 @@ def extract_pool_key(pool_spec: Optional[str]) -> PoolKeyT:
 
 
 def get_rbd_pools(module: 'Module') -> Dict[int, str]:
-    osd_map = module.get('osd_map')
-    return {pool['pool']: pool['pool_name'] for pool in osd_map['pools']
+    pools = module.get('osd_map_pools')['pools']
+    return {pool['pool']: pool['pool_name'] for pool in pools
             if 'rbd' in pool.get('application_metadata', {})}
