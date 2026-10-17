@@ -14935,7 +14935,9 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 	auto next_it = it1 + 1;
 	dout(20) << __func__ << ": [next cloneid: " << next_it->cloneid << " snaps: " << next_it->snaps
 		 << " overlap: " << next_it->overlap << "]" << dendl;
-	auto sz = next_it->size;
+	// Include the discarded tail: sparse regrowth can restore the file
+	// size without extending the newer object clone.
+	auto sz = std::max(it1->size, next_it->size);
 	if (sz == 0) {
 	  // this object is a hole in the file.
 	  // TODO: report holes in blockdiff strucuter. that way,
@@ -14966,6 +14968,15 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
   if (r >= 0) {
     r = 0;
     block_diff->scan_idx += scans;
+    // A discarded object tail can extend past the newer snapshot's EOF.
+    // Nothing there is readable; the caller truncates to that size.
+    if (uint64_t size = in2->get_inode()->size; size > 0) {
+      interval_set<uint64_t> in_eof;
+      in_eof.insert(0, size);
+      extents.intersection_of(in_eof);
+    } else {
+      extents.clear();
+    }
     block_diff->blocks = extents;
   }
   on_finish->complete(r);
