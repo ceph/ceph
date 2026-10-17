@@ -31,6 +31,46 @@ static uint64_t calc_reservations_size(
   return total;
 }
 
+// For old queues (below v4), recalculate reserved_size from the reservations
+// to fix historical drift. Must be called by every method that writes the
+// urgent data back, before any reservation is removed.
+static int recalc_reserved_size_if_needed(cls_method_context_t hctx,
+                                          cls_2pc_urgent_data& urgent_data,
+                                          const char* caller)
+{
+  if (urgent_data.decoded_struct_v >= 4) {
+    return 0;
+  }
+  auto reserved_size = calc_reservations_size(urgent_data.reservations);
+
+  if (urgent_data.has_xattrs) {
+    bufferlist bl_xattrs;
+    const auto ret = cls_cxx_getxattr(hctx, CLS_QUEUE_URGENT_DATA_XATTR_NAME,
+                                      &bl_xattrs);
+    if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
+      CLS_LOG(1, "ERROR: %s: failed to read xattrs with: %d", caller, ret);
+      return ret;
+    }
+    if (ret >= 0) {
+      cls_2pc_reservations xattr_reservations;
+      auto iter = bl_xattrs.cbegin();
+      try {
+        decode(xattr_reservations, iter);
+      } catch (ceph::buffer::error& err) {
+        CLS_LOG(1, "ERROR: %s: failed to decode xattrs urgent data map", caller);
+        return -EINVAL;
+      }
+      reserved_size += calc_reservations_size(xattr_reservations);
+    }
+  }
+  CLS_LOG(
+      1, "INFO: %s: re-calculated reserved_size of v%u urgent data: %lu -> %lu",
+      caller, urgent_data.decoded_struct_v, urgent_data.reserved_size,
+      reserved_size);
+  urgent_data.reserved_size = reserved_size;
+  return 0;
+}
+
 static int cls_2pc_queue_init(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   auto in_iter = in->cbegin();
 
@@ -132,42 +172,12 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
     return -EINVAL;
   }
 
-  // For old queues (v1/v2), recalculate reserved_size from actual reservations
-  // to fix any historical drift. Once written back, queue becomes v3.
-  if (urgent_data.decoded_struct_v < 3) {
-    urgent_data.reserved_size =
-        calc_reservations_size(urgent_data.reservations);
-
-    // Also check xattrs if they exist
-    cls_2pc_reservations xattr_reservations;
-    bufferlist bl_xattrs;
-    if (urgent_data.has_xattrs) {
-      ret =
-          cls_cxx_getxattr(hctx, CLS_QUEUE_URGENT_DATA_XATTR_NAME, &bl_xattrs);
-      if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
-        CLS_LOG(1,
-                "ERROR: cls_2pc_queue_reserve: failed to read xattrs with: %d",
-                ret);
-        return ret;
-      }
-      if (ret >= 0) {
-        auto iter = bl_xattrs.cbegin();
-        try {
-          decode(xattr_reservations, iter);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(1,
-                  "ERROR: cls_2pc_queue_reserve: failed to decode xattrs "
-                  "urgent data map");
-          return -EINVAL;
-        }
-        urgent_data.reserved_size += calc_reservations_size(xattr_reservations);
-      }
-    }
-    CLS_LOG(
-        1,
-        "INFO: cls_2pc_queue_reserve: re-calculated urgent_data.reserved_size, reserved_size=%lu",
-        urgent_data.reserved_size);
+  ret = recalc_reserved_size_if_needed(hctx, urgent_data,
+                                       "cls_2pc_queue_reserve");
+  if (ret < 0) {
+    return ret;
   }
+
   const auto overhead = res_op.entries*QUEUE_ENTRY_OVERHEAD;
   const auto remaining_size = (head.tail.offset >= head.front.offset) ?
     (head.queue_size - head.tail.offset) + (head.front.offset - head.max_head_size) :
@@ -290,7 +300,14 @@ static int cls_2pc_queue_commit(cls_method_context_t hctx, bufferlist *in, buffe
     CLS_LOG(1, "ERROR: cls_2pc_queue_commit: failed to decode entry: %s", err.what());
     return -EINVAL;
   }
-  
+
+  // must run before the committed reservation is removed below
+  ret = recalc_reserved_size_if_needed(hctx, urgent_data,
+                                       "cls_2pc_queue_commit");
+  if (ret < 0) {
+    return ret;
+  }
+
   auto it = urgent_data.reservations.find(commit_op.id);
   cls_2pc_reservations xattr_reservations;
   bufferlist bl_xattrs;
@@ -399,7 +416,13 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
     CLS_LOG(1, "ERROR: cls_2pc_queue_abort: failed to decode entry: %s", err.what());
     return -EINVAL;
   }
- 
+
+  // must run before the aborted reservation is removed below
+  ret = recalc_reserved_size_if_needed(hctx, urgent_data, "cls_2pc_queue_abort");
+  if (ret < 0) {
+    return ret;
+  }
+
   auto it = urgent_data.reservations.find(abort_op.id);
   uint64_t reservation_size;
   if (it == urgent_data.reservations.end()) {
@@ -532,7 +555,14 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
     CLS_LOG(1, "ERROR: cls_2pc_queue_expire_reservations: failed to decode entry: %s", err.what());
     return -EINVAL;
   }
-  
+
+  // must run before the stale reservations are removed below
+  ret = recalc_reserved_size_if_needed(hctx, urgent_data,
+                                       "cls_2pc_queue_expire_reservations");
+  if (ret < 0) {
+    return ret;
+  }
+
   CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %lu reservation entries found", urgent_data.reservations.size());
   CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: current reservations: %lu (bytes)", urgent_data.reserved_size);
 
@@ -693,6 +723,11 @@ static int cls_2pc_queue_remove_entries(cls_method_context_t hctx, bufferlist *i
   } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_2pc_queue_remove_entries: failed to decode header of queue: %s", err.what());
     return -EINVAL;
+  }
+  ret = recalc_reserved_size_if_needed(hctx, urgent_data,
+                                       "cls_2pc_queue_remove_entries");
+  if (ret < 0) {
+    return ret;
   }
   urgent_data.committed_entries -= rem_2pc_op.entries_to_remove;
   // write back head
