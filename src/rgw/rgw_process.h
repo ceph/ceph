@@ -146,7 +146,8 @@ extern int process_request(const RGWProcessEnv& penv,
                            rgw::dmclock::Scheduler *scheduler,
                            std::string* user,
                            ceph::coarse_real_clock::duration* latency,
-                           int* http_ret = nullptr);
+                           int* http_ret = nullptr,
+                           uint64_t* rdma_bytes = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
