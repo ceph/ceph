@@ -1,3 +1,4 @@
+pub mod access_model;
 pub mod admin;
 pub mod cleanup;
 pub mod client;

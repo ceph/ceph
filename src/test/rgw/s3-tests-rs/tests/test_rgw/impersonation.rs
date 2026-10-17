@@ -156,6 +156,185 @@ async fn test_impersonation_isolates_identities() {
     unbind_identities().await;
 }
 
+/// The line the access model is drawn on: metadata may follow S3,
+/// **data never does**.
+///
+/// `rgw_nsfs_cross_account_permission` lets the gateway perform an
+/// object's tag and ACL work for an identity S3 authorised and the
+/// filesystem refused.  It must not do the same for the object's
+/// bytes, at any value, and that is asserted here rather than
+/// inferred from whichever tests happen to read data.
+///
+/// It is asserted here because it has already been broken once.  On
+/// 2026-10-16 the first implementation opened the object as the
+/// gateway for an attribute read and left that descriptor cached on
+/// the entry;  the data path found it already open and served bob
+/// bytes the filesystem had refused him.  The guard written for that
+/// case never ran -- it keyed on a flag the real path did not set --
+/// so the only thing that caught it was an unrelated acl test.  This
+/// test exists so that the next person to widen a retry here is told
+/// by name.
+///
+/// Both halves matter.  The metadata half must *succeed* under
+/// `s3-metadata`, or a gateway that simply refuses everything would
+/// pass the data half and look correct.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_the_access_model_never_puts_data_on_s3s_word() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let cfg = get_config();
+    bind_identities(None).await;
+
+    let alice = get_client();
+    let bob = get_alt_client();
+    let bucket = get_new_bucket(Some(&alice)).await;
+    let key = "alices-object";
+    let body = b"alice wrote this";
+
+    alice.put_object()
+        .bucket(&bucket).key(key)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(body))
+        .send().await
+        .expect("alice could not write her own object");
+
+    let tagging = aws_sdk_s3::types::Tagging::builder()
+        .set_tag_set(Some(vec![aws_sdk_s3::types::Tag::builder()
+                               .key("k").value("v").build().unwrap()]))
+        .build().unwrap();
+    alice.put_object_tagging()
+        .bucket(&bucket).key(key).tagging(tagging).send().await
+        .expect("alice could not tag her own object");
+
+    /* S3 grants bob everything;  only the filesystem can still object */
+    let resource = make_arn_resource(&format!("{bucket}/*"));
+    let doc = make_json_policy(
+        "s3:*", &resource,
+        Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
+                                                cfg.alt_user_id)]})),
+        None, None);
+    alice.put_bucket_policy().bucket(&bucket).policy(&doc).send().await
+        .expect("could not grant bob s3:*");
+
+    /* the control: without it, a denial below could just mean the
+     * object is unreadable by anyone */
+    alice.get_object().bucket(&bucket).key(key).send().await
+        .expect("alice could not read her own object");
+
+    let model = s3_tests_rs::features::cross_account_metadata().await;
+
+    /* the metadata half -- succeeds only where the model says so.
+     * Without it a gateway that refused everything would pass the
+     * data half and look correct. */
+    let tags = s3_tests_rs::unless_posix_governs_metadata!(
+        model,
+        bob.get_object_tagging().bucket(&bucket).key(key).send().await);
+    if let Some(t) = tags {
+        assert_eq!(t.tag_set().len(), 1,
+            "bob read the tags but not the ones alice wrote");
+    }
+
+    /* the data half -- the shared invariant, so that adding a data
+     * operation to it covers every test that calls it */
+    let tested = s3_tests_rs::access_model::assert_data_follows_the_filesystem(
+        &alice, &bob, &cfg.alt_user_id, &bucket, key, body, model).await;
+    if !tested {
+        eprintln!("the filesystem permits bob this object;  there is no \
+                   line to test");
+        unbind_identities().await;
+        return;
+    }
+
+    /* A positive control:  the same client, the same call, on an
+     * object bob is entitled to.
+     *
+     * Without it, every refusal above is equally explained by "bob
+     * cannot read anything" -- a broken client, a broken fixture, a
+     * gateway refusing the whole bucket.  A test that only ever sees
+     * denials cannot tell those apart from the thing it means to
+     * assert. */
+    let bobs_key = "bobs-own-object";
+    bob.put_object()
+        .bucket(&bucket).key(bobs_key)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"bob wrote this"))
+        .send().await
+        .expect("bob could not write his own object;  the fixture is wrong, \
+                 not the model");
+    bob.get_object().bucket(&bucket).key(bobs_key).send().await
+        .expect("bob could not read his own object;  a refusal above says \
+                 nothing");
+
+    /* And the omission itself, positively:  flip the only knob that
+     * could put data on S3's word, and confirm it *still* refuses.
+     *
+     * Data is off this axis **by construction** -- no data path
+     * consults the access model at all -- and that is a stronger
+     * guarantee than a verdict, because no configuration, hint or
+     * later enum value can reach a path that does not exist.  This
+     * asserts the construction rather than trusting it:  a future
+     * change that wires a data path to the model fails here, which
+     * is the moment to have the argument.
+     *
+     * Restored before the assertion, so a failure cannot leave the
+     * run measuring a model nobody configured. */
+    /* The negative case, and why it happened.
+     *
+     * Under the configured model the gateway must not have served
+     * any of the data above on the model's say-so.  The count is
+     * what distinguishes "refused" from "never asked". */
+    let before = s3_tests_rs::access_model::served_counts().await;
+    if before.is_none() {
+        eprintln!("no access-model hint;  the counters cannot be checked");
+        unbind_identities().await;
+        return;
+    }
+    let (_, data_before) = before.unwrap();
+
+    /* now permit it, deliberately, and confirm the gateway *does*
+     * serve the bytes -- and says that is why.  An invariant that
+     * cannot be violated on demand is an invariant nothing has
+     * tested:  the first guard written for this line never ran at
+     * all, because it keyed on a flag the real path did not set. */
+    let had = s3_tests_rs::access_model::set_access_model("data-on-s3s-word")
+        .await;
+    assert!(had.is_some(), "the access model could not be switched");
+
+    let permitted = bob.get_object().bucket(&bucket).key(key).send().await;
+    let after = s3_tests_rs::access_model::served_counts().await;
+    s3_tests_rs::access_model::restore_access_model().await;
+
+    assert!(permitted.is_ok(),
+        "a model that puts data on S3's word did not let bob read the \
+         bytes, so the refusals asserted above are not evidence:  they \
+         would hold whatever the model said");
+    let (_, data_after) = after.expect("the counters went away");
+    assert!(data_after > data_before,
+        "bob's read succeeded but the gateway did not record serving it \
+         on the model's say-so ({data_before} -> {data_after});  the \
+         success is not attributable to the model, so the fixture is not \
+         proving what it claims");
+
+    /* and the configured model is back */
+    let after_restore =
+        s3_tests_rs::access_model::verdict_for("data").await;
+    assert_eq!(after_restore.as_deref(), Some("refuse"),
+        "the configured model was not restored;  every later test in this \
+         run is measuring something nobody configured");
+    let refused_again = bob.get_object().bucket(&bucket).key(key).send().await;
+    assert!(refused_again.is_err(),
+        "the restore did not take:  bob can still read alice's bytes");
+
+    unbind_identities().await;
+}
+
 /// A nested key:  its directories are the gateway's, its object the
 /// identity's.
 ///
