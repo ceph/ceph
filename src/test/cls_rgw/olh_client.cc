@@ -14,8 +14,8 @@
 #include <string>
 #include <string_view>
 
-namespace
-{
+namespace {
+
 namespace olh = ::cls::rgw::olh;
 using byte_buffer = ::ceph::buffer::list;
 std::unique_ptr<::librados::ObjectOperationCompletion> pending;

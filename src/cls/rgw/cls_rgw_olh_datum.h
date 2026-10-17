@@ -12,8 +12,8 @@
 #include <string>
 #include <string_view>
 
-namespace cls::rgw::olh_datum
-{
+namespace cls::rgw::olh_datum {
+
 struct request final
 {
     ::cls_rgw_obj_key olh;

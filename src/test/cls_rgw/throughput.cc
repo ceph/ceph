@@ -28,8 +28,8 @@
 #include <time.h>
 #include <unistd.h>
 
-namespace
-{
+namespace {
+
 using bytes = ::ceph::buffer::list;
 using clock_type = std::chrono::steady_clock;
 

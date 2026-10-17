@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-namespace rgw_bi_oracle
-{
+namespace rgw_bi_oracle {
+
 struct row final
 {
     std::uint8_t kind;

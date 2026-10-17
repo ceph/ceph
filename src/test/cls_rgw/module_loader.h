@@ -6,8 +6,8 @@
 
 #include <string_view>
 
-namespace rgw_cls_test
-{
+namespace rgw_cls_test {
+
 struct registered_method final
 {
     ::cls_method_cxx_call_t call;

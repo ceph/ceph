@@ -4,10 +4,10 @@
 
 #include <utility>
 
-namespace rgw_bi_oracle
-{
-namespace
-{
+namespace rgw_bi_oracle {
+
+namespace {
+
 void copy_rows(const std::vector<row>& rows, auto& destination)
 {
     for (const auto& source : rows) {

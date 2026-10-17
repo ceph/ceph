@@ -9,8 +9,8 @@
 
 #include <string>
 
-namespace rgw_olh_oracle
-{
+namespace rgw_olh_oracle {
+
 struct request final
 {
     ::cls::rgw::olh::object_key key;

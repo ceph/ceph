@@ -14,8 +14,8 @@
 #include <string>
 #include <string_view>
 
-namespace
-{
+namespace {
+
 using byte_buffer = ::ceph::buffer::list;
 byte_buffer request_bytes;
 byte_buffer reply_bytes;

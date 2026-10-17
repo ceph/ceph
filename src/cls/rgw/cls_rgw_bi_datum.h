@@ -14,8 +14,8 @@
 #include <string_view>
 #include <vector>
 
-namespace cls::rgw::bi_datum
-{
+namespace cls::rgw::bi_datum {
+
 struct request final
 {
     std::uint32_t max = 0;

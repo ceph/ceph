@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-namespace cls::rgw::olh
-{
+namespace cls::rgw::olh {
+
 enum struct action : std::uint8_t
 {
     unknown = 0,

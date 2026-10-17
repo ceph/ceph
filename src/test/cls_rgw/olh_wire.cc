@@ -15,8 +15,8 @@
 #include <string>
 #include <vector>
 
-namespace
-{
+namespace {
+
 namespace wire = ::cls::rgw::olh_wire;
 namespace native = ::cls::rgw::olh_datum;
 namespace datum = ::ceph::salad::datum;

@@ -2,10 +2,10 @@
 #include "olh_native_oracle.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
-namespace rgw_olh_oracle
-{
-namespace
-{
+namespace rgw_olh_oracle {
+
+namespace {
+
 using byte_buffer = ::ceph::buffer::list;
 
 void encode_key(const ::cls::rgw::olh::object_key& key, byte_buffer& bytes, const bool extensions)

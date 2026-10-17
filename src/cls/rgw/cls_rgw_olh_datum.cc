@@ -7,10 +7,10 @@
 #include <ranges>
 #include <utility>
 
-namespace cls::rgw::olh_datum
-{
-namespace
-{
+namespace cls::rgw::olh_datum {
+
+namespace {
+
 namespace datum = ::ceph::salad::datum;
 using native_entry = ::rgw_bucket_olh_log_entry;
 using native_key = ::cls_rgw_obj_key;

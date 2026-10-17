@@ -9,8 +9,8 @@
 #include <stdexcept>
 #include <string>
 
-namespace
-{
+namespace {
+
 auto& methods()
 {
     static std::map<std::string, ::rgw_cls_test::registered_method, std::less<>> registry;
@@ -55,8 +55,8 @@ int cls_log(int, const char *, ...) { return 0; }
 int cls_register_cxx_filter(cls_handle_t, const std::string&,
                             cls_cxx_filter_factory_t, cls_filter_handle_t *) { return 0; }
 
-namespace detail
-{
+namespace detail {
+
 int cls_register_cxx_method_impl(cls_handle_t, const char *name, const int flags,
                                  cls_method_cxx_call_t call, cls_method_handle_t *handle)
 {

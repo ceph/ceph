@@ -29,8 +29,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-namespace
-{
+namespace {
+
 using byte_buffer = ::ceph::buffer::list;
 
 struct storage final
@@ -598,8 +598,8 @@ TEST_CASE("Single BI put structural errors precede storage effects", "[rgw][cls]
     }
 }
 
-namespace
-{
+namespace {
+
 int invoke_write(storage& state, const auto& request, const std::string_view operation)
 {
     byte_buffer input;
@@ -956,8 +956,8 @@ TEST_CASE("Remaining OLH request rejection and unlink failures preserve native s
     }
 }
 
-namespace
-{
+namespace {
+
 const std::string log_prefix {"\x80" "0_"};
 const std::string instance_prefix {"\x80" "1000_"};
 

@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 namespace {
+
 using bytes = ::ceph::buffer::list;
 bytes canonical(const auto& value)
 {
@@ -108,7 +109,7 @@ bytes set_request(const ::cls_rgw_gc_obj_info& value, const unsigned expiration 
     request.expiration_secs = expiration;
     return canonical(request);
 }
-}
+} // anonymous namespace
 
 int cls_register(const char *name, cls_handle_t *handle)
 {
@@ -118,6 +119,7 @@ int cls_register(const char *name, cls_handle_t *handle)
 }
 int cls_log(int, const char *, ...) { return 0; }
 namespace detail {
+
 int cls_register_cxx_method_impl(cls_handle_t, const char *name, const int flags,
                                 cls_method_cxx_call_t call, cls_method_handle_t *handle)
 {
@@ -125,7 +127,8 @@ int cls_register_cxx_method_impl(cls_handle_t, const char *name, const int flags
     *handle = nullptr;
     return 0;
 }
-}
+} // detail
+
 extern "C" int clock_gettime(clockid_t clock, timespec *value) noexcept
 {
     if (clock == CLOCK_REALTIME || clock == CLOCK_REALTIME_COARSE) {

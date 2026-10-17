@@ -10,6 +10,7 @@
 #include <limits>
 
 namespace {
+
 using bytes = ::ceph::buffer::list;
 bytes request, reply;
 std::string method, class_name;
@@ -21,7 +22,7 @@ bytes canonical(const auto& value)
     encode(value, output);
     return output;
 }
-}
+} // anonymous namespace
 
 void librados::ObjectOperation::exec_impl(const char *cls, const char *name, bytes& input)
 {

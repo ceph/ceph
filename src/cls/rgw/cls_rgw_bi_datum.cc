@@ -15,12 +15,12 @@
 #include <bit>
 #include <utility>
 
-namespace cls::rgw::bi_datum
-{
+namespace cls::rgw::bi_datum {
+
 namespace datum = ::ceph::salad::datum;
 
-namespace
-{
+namespace {
+
 using native_entry = ::rgw_cls_bi_entry;
 constexpr auto native_entry_fields = datum::binary_fields<&native_entry::type, &native_entry::idx, &native_entry::data> {};
 constexpr auto module_entry_fields = datum::binary_fields<&entry::type, &entry::idx, &entry::data> {};

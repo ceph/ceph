@@ -19,8 +19,8 @@
 #include <utility>
 #include <vector>
 
-namespace
-{
+namespace {
+
 using byte_buffer = ::ceph::buffer::list;
 
 struct storage final

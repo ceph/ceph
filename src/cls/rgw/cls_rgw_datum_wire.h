@@ -22,8 +22,8 @@
 #include <string>
 #include <string_view>
 
-namespace cls::rgw::wire
-{
+namespace cls::rgw::wire {
+
 namespace datum = ::ceph::salad::datum;
 using byte_buffer = ::ceph::buffer::list;
 

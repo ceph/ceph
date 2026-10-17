@@ -17,13 +17,13 @@
 #include <string>
 #include <string_view>
 
-namespace cls::rgw::bi_wire
-{
+namespace cls::rgw::bi_wire {
+
 namespace datum = ::ceph::salad::datum;
 using byte_buffer = ::ceph::buffer::list;
 
-namespace detail
-{
+namespace detail {
+
 using ::cls::rgw::wire::checked_count;
 using ::cls::rgw::wire::reader;
 using ::cls::rgw::wire::writer;
@@ -121,8 +121,8 @@ std::uint8_t decode_get_request(byte_buffer::const_iterator& input, KeyT& key,
     });
 }
 
-namespace detail
-{
+namespace detail {
+
 template <typename EntryT, auto Kind, auto Key, auto Payload>
 void encode_entry(writer& archive, const EntryT& value,
                   datum::binary_fields<Kind, Key, Payload>)

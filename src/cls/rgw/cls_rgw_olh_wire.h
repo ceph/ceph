@@ -13,13 +13,13 @@
 #include <string_view>
 #include <type_traits>
 
-namespace cls::rgw::olh_wire
-{
+namespace cls::rgw::olh_wire {
+
 namespace datum = ::ceph::salad::datum;
 using byte_buffer = ::ceph::buffer::list;
 
-namespace detail
-{
+namespace detail {
+
 using ::cls::rgw::wire::checked_count;
 using ::cls::rgw::wire::decode_key;
 using ::cls::rgw::wire::encode_key;

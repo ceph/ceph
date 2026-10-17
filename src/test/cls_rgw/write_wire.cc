@@ -14,8 +14,8 @@
 #include <string>
 #include <vector>
 
-namespace
-{
+namespace {
+
 namespace binding = ::cls::rgw::write_datum;
 using bytes = ::ceph::buffer::list;
 
