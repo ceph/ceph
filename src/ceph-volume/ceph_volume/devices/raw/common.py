@@ -91,4 +91,15 @@ def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
         choices=['classic', 'crimson'],
         type=str,
     )
+    parser.add_argument(
+        '--report',
+        action='store_true',
+        help='Only report on the OSD that would be created and exit',
+    )
+    parser.add_argument(
+        '--format',
+        help='output format, defaults to "pretty"',
+        default='pretty',
+        choices=['json', 'json-pretty', 'pretty'],
+    )
     return parser
