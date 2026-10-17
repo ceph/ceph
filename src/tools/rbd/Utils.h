@@ -8,6 +8,7 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "include/rados.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include <map>
 #include <string>
@@ -228,9 +229,11 @@ int init_and_open_image(const std::string &pool_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
-                        librbd::Image *image);
+                        librbd::Image *image,
+                        uint64_t snap_id = CEPH_NOSNAP);
 
 int snap_set(librbd::Image &image, const std::string &snap_name);
+int snap_set(librbd::Image &image, uint64_t snap_id);
 
 void calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
