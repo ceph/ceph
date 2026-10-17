@@ -1,3 +1,4 @@
+import errno
 import json
 import logging
 from unittest import mock
@@ -19,7 +20,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
-from typing import List, Tuple, Optional
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -1374,3 +1375,160 @@ def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: Ceph
                         assert wait(cephadm_module, cephadm_module.upgrade_start(
                             '', '21.2.0', host_placement='test2')
                         ).startswith('Initiating upgrade')
+
+
+def _osd_need_upgrade_entries(
+        osds_by_host: Dict[str, List[int]],
+        upgraded: Set[int],
+) -> List[Tuple[DaemonDescription, bool]]:
+    return [
+        (DaemonDescription(
+            daemon_type='osd',
+            daemon_id=str(osd_id),
+            hostname=host,
+            container_image_id='old_digest',
+            service_name='osd.all',
+        ), False)
+        for host, osd_ids in osds_by_host.items()
+        for osd_id in osd_ids
+        if osd_id not in upgraded
+    ]
+
+
+def _fake_osd_ok_to_stop(
+        osds_by_host: Dict[str, List[int]],
+        max_stoppable: int = 1000,
+        calls: Optional[List[List[str]]] = None,
+) -> Callable[[Dict[str, Any]], Tuple[int, str, str]]:
+    """
+    Mimic DaemonServer::_maximize_ok_to_stop_set(): check the requested set,
+    then add siblings under the same host in ascending id order (whether or
+    not they are already upgraded) until 'max' is reached. A set larger than
+    *max_stoppable* is not ok to stop.
+    """
+    host_of = {o: h for h, ids in osds_by_host.items() for o in ids}
+
+    def _mon_command(cmd: Dict[str, Any], *args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+        assert cmd['prefix'] == 'osd ok-to-stop'
+        if calls is not None:
+            calls.append(list(cmd['ids']))
+        osds = sorted({int(i) for i in cmd['ids']})
+        if len(osds) > max_stoppable:
+            return (-errno.EBUSY, json.dumps({'ok_to_stop': False, 'osds': osds}),
+                    'unsafe to stop osd(s) at this time')
+        max_osds = max(cmd.get('max', 1), len(osds))
+        for o in sorted(osds_by_host[host_of[osds[0]]]):
+            if len(osds) >= min(max_osds, max_stoppable):
+                break
+            if o not in osds:
+                osds.append(o)
+        return 0, json.dumps({'ok_to_stop': True, 'osds': sorted(osds)}), ''
+
+    return _mon_command
+
+
+def _upgrade_osd_rounds(
+        cephadm_module: CephadmOrchestrator,
+        osds_by_host: Dict[str, List[int]],
+        max_stoppable: int = 1000,
+) -> List[List[int]]:
+    """Run _to_upgrade() pass after pass, marking returned OSDs as upgraded."""
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    upgraded: Set[int] = set()
+    rounds: List[List[int]] = []
+    all_osds = {o for ids in osds_by_host.values() for o in ids}
+    with mock.patch.object(cephadm_module, 'mon_command',
+                           side_effect=_fake_osd_ok_to_stop(osds_by_host, max_stoppable)):
+        while upgraded != all_osds:
+            need_upgrade = _osd_need_upgrade_entries(osds_by_host, upgraded)
+            cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+            assert cont
+            batch = [int(d.daemon_id) for d, _ in to_upgrade]
+            assert batch and not upgraded & set(batch)
+            rounds.append(batch)
+            upgraded |= set(batch)
+            assert len(rounds) <= len(all_osds)
+    return rounds
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_osd_batches_skip_already_upgraded(cephadm_module: CephadmOrchestrator):
+    # 40 OSDs on one host, 16 per batch: osd ok-to-stop used to be seeded
+    # with a single OSD and filled the rest of the batch with osd.0..14,
+    # already upgraded after the first pass, so every later pass upgraded
+    # a single OSD (16 + 24 * 1 = 25 passes).
+    osds_by_host = {'host1': list(range(40))}
+    rounds = _upgrade_osd_rounds(cephadm_module, osds_by_host)
+    assert rounds == [list(range(0, 16)), list(range(16, 32)), list(range(32, 40))]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_osd_batches_respect_max_parallel(cephadm_module: CephadmOrchestrator):
+    osds_by_host = {'host1': list(range(10))}
+    cephadm_module.max_parallel_osd_upgrades = 4
+    try:
+        rounds = _upgrade_osd_rounds(cephadm_module, osds_by_host)
+    finally:
+        cephadm_module.max_parallel_osd_upgrades = 16
+    assert rounds == [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9]]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_osd_batch_shrinks_until_ok_to_stop(cephadm_module: CephadmOrchestrator):
+    # only 3 OSDs can be stopped together: the seed is trimmed down to 3
+    osds_by_host = {'host1': list(range(8))}
+    rounds = _upgrade_osd_rounds(cephadm_module, osds_by_host, max_stoppable=3)
+    assert rounds == [[0, 1, 2], [3, 4, 5], [6, 7]]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_osd_batch_stays_on_host(cephadm_module: CephadmOrchestrator):
+    osds_by_host = {'host1': [0, 2, 4, 6], 'host2': [1, 3, 5, 7]}
+    rounds = _upgrade_osd_rounds(cephadm_module, osds_by_host)
+    assert rounds == [[0, 2, 4, 6], [1, 3, 5, 7]]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_osd_ok_to_stop_peers(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    need_upgrade = _osd_need_upgrade_entries(
+        {'host1': [12, 3, 7, 10], 'host2': [4, 5]}, upgraded={7})
+    # already on the target image name with an unknown image id: skipped by _to_upgrade()
+    need_upgrade.append((DaemonDescription(
+        daemon_type='osd', daemon_id='20', hostname='host1',
+        container_image_name='target_image'), False))
+    need_upgrade.append((DaemonDescription(
+        daemon_type='mon', daemon_id='host1', hostname='host1',
+        container_image_id='old_digest'), False))
+    d = need_upgrade[1][0]
+    assert d.daemon_id == '3'
+    assert cephadm_module.upgrade._osd_ok_to_stop_peers(
+        d, need_upgrade, 'target_image') == ['10', '12']
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_osd_ok_to_stop_batch_shrink(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    calls: List[List[str]] = []
+    d = DaemonDescription(daemon_type='osd', daemon_id='0', hostname='host1')
+    known: List[str] = []
+    with mock.patch.object(cephadm_module, 'mon_command',
+                           side_effect=_fake_osd_ok_to_stop(
+                               {'host1': list(range(6))}, max_stoppable=2, calls=calls)):
+        assert cephadm_module.upgrade._wait_for_ok_to_stop(
+            d, known, peers=['1', '2', '3'])
+    assert calls == [['0', '1', '2', '3'], ['0', '1', '2'], ['0', '1']]
+    assert known == ['osd.0', 'osd.1']
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_osd_ok_to_stop_batch_no_shrink_on_eagain(cephadm_module: CephadmOrchestrator):
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    d = DaemonDescription(daemon_type='osd', daemon_id='0', hostname='host1')
+    with mock.patch.object(cephadm_module, 'mon_command',
+                           return_value=(-errno.EAGAIN,
+                                         json.dumps({'ok_to_stop': False}),
+                                         '1 pgs have unknown state')) as mon_command:
+        r = cephadm_module.upgrade._osd_ok_to_stop_batch(d, ['1', '2'])
+    assert r.retval == -errno.EAGAIN
+    mon_command.assert_called_once()
