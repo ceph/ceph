@@ -51,6 +51,7 @@ import {
   CEPHFS_MIRRORING_PAGE_HEADER,
   URLVerbs
 } from './shared/constants/app.constants';
+import { NFS_PAGE_HEADER } from './ceph/nfs/models/nfs.model';
 import { CrudFormComponent } from './shared/forms/crud-form/crud-form.component';
 import { CRUDTableComponent } from './shared/datatable/crud-table/crud-table.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
@@ -628,10 +629,14 @@ const routes: Routes = [
                 section_info: 'NFS GANESHA',
                 header: 'NFS-Ganesha is not configured'
               },
-              breadcrumbs: 'File/NFS'
+              breadcrumbs: 'File/Network Filesystem'
             },
             children: [
-              { path: '', component: NfsClusterComponent },
+              {
+                path: '',
+                component: NfsClusterComponent,
+                data: { pageHeader: NFS_PAGE_HEADER }
+              },
               {
                 path: `${URLVerbs.CREATE}/:fs_name/:subvolume_group`,
                 component: NfsFormComponent,
