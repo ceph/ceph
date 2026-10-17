@@ -238,8 +238,6 @@ To switch back to the default behaviour, simply set the config key to ``default`
 
    ceph config set mgr mgr/prometheus/standby_behaviour default
 
-.. _prometheus-rbd-io-statistics:
-
 Ceph Health Checks
 ------------------
 
@@ -286,6 +284,8 @@ encountered since the last ``clear`` command was issued:
     PG_DEGRADED               2021/09/17 00:11:59   2021/09/17 00:11:59       1   Yes
     3 health check(s) listed
 
+
+.. _prometheus-rbd-io-statistics:
 
 RBD I/O statistics
 ------------------
