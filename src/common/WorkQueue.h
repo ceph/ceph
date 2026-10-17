@@ -25,9 +25,9 @@ struct ThreadPool {
 
 #else
 
-#include <atomic>
-#include <list>
 #include <set>
+#include <deque>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -134,8 +134,8 @@ public:
   class WorkQueueVal : public WorkQueue_ {
     ceph::mutex _lock = ceph::make_mutex("WorkQueueVal::_lock");
     ThreadPool *pool;
-    std::list<U> to_process;
-    std::list<U> to_finish;
+    std::deque<U> to_process;
+    std::deque<U> to_finish;
     virtual void _enqueue(T) = 0;
     virtual void _enqueue_front(T) = 0;
     bool _empty() override = 0;
@@ -392,7 +392,7 @@ public:
     }
   private:
     ThreadPool *m_pool;
-    std::list<T *> m_items;
+    std::deque<T *> m_items;
     uint32_t m_processing;
   };
 protected:
@@ -412,7 +412,7 @@ protected:
   };
   
   std::set<WorkThread*> _threads;
-  std::list<WorkThread*> _old_threads;  ///< need to be joined
+  std::deque<WorkThread*> _old_threads;  ///< need to be joined
   int processing;
 
   void start_threads();
@@ -494,7 +494,7 @@ public:
 
 class GenContextWQ :
   public ThreadPool::WorkQueueVal<GenContext<ThreadPool::TPHandle&>*> {
-  std::list<GenContext<ThreadPool::TPHandle&>*> _queue;
+  std::deque<GenContext<ThreadPool::TPHandle&>*> _queue;
 public:
   GenContextWQ(const std::string &name, ceph::timespan ti, ThreadPool *tp)
     : ThreadPool::WorkQueueVal<

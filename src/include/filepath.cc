@@ -140,8 +140,8 @@ void filepath::dump(ceph::Formatter *f) const {
   f->dump_string("relative_path", path);
 }
 
-std::list<filepath> filepath::generate_test_instances() {
-  std::list<filepath> o;
+std::vector<filepath> filepath::generate_test_instances() {
+  std::vector<filepath> o;
   o.emplace_back();
   o.push_back(filepath("/usr/bin", 0));
   o.push_back(filepath("/usr/sbin", 1));

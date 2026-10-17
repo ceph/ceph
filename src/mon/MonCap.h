@@ -188,7 +188,7 @@ struct MonCap {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<MonCap> generate_test_instances();
+  static std::vector<MonCap> generate_test_instances();
 
   std::vector<std::string> allowed_fs_names() const {
     std::vector<std::string> ret;

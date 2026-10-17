@@ -61,8 +61,8 @@ void EntityName::dump(ceph::Formatter *f) const {
   f->dump_string("id", id);
 }
 
-std::list<EntityName> EntityName::generate_test_instances() {
-  std::list<EntityName> ls;
+std::vector<EntityName> EntityName::generate_test_instances() {
+  std::vector<EntityName> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().set_type(CEPH_ENTITY_TYPE_OSD);

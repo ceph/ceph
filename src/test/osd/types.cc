@@ -17,6 +17,7 @@
  */
 
 #include "include/types.h"
+#include "osd/osd_internal_types.h"
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
@@ -25,10 +26,146 @@
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
 
-#include <iostream> // for std::cout
 #include <sstream>
+#include <iostream> // for std::cout
+#include <iterator>
+#include <initializer_list>
 
 using namespace std;
+
+TEST(object_context_waiters, wake_after_final_holder)
+{
+  ObjectContext context;
+  OpRequestRef holder;
+
+  ASSERT_TRUE(context.get_write(holder));
+  ASSERT_TRUE(context.get_write(holder));
+
+  OpRequestRef waiter;
+
+  ASSERT_FALSE(context.get_read(waiter));
+  ASSERT_FALSE(context.get_read(waiter));
+  ASSERT_EQ(2, context.rwstate.waiters);
+
+  decltype(context.waiters) ready;
+
+  context.put_write(&ready);
+  EXPECT_TRUE(std::empty(ready));
+  EXPECT_EQ(2, context.rwstate.waiters);
+
+  ready.emplace_back();
+  context.put_write(&ready);
+  EXPECT_EQ(3U, std::size(ready));
+  EXPECT_TRUE(std::empty(context.waiters));
+  EXPECT_EQ(0, context.rwstate.waiters);
+  EXPECT_TRUE(context.rwstate.empty());
+}
+
+TEST(osd_types_wire, pg_ls_response_preserves_legacy_list_encoding)
+{
+  pg_ls_response_t response;
+  response.handle = hobject_t(object_t("handle"), "key", 1, 2, -1, "");
+  response.entries.emplace_back(object_t("one"), "");
+  response.entries.emplace_back(object_t("two"), "twokey");
+
+  bufferlist encoded;
+  response.encode(encoded);
+
+  const std::list<std::pair<object_t, std::string>> legacy_entries {
+    {object_t("one"), ""},
+    {object_t("two"), "twokey"}
+  };
+  bufferlist legacy;
+  encode(__u8 {1}, legacy);
+  encode(response.handle, legacy);
+  encode(legacy_entries, legacy);
+
+  EXPECT_EQ(legacy.to_str(), encoded.to_str());
+
+  pg_ls_response_t decoded;
+  auto p = legacy.cbegin();
+  decoded.decode(p);
+
+  ASSERT_TRUE(p.end());
+  ASSERT_EQ(2, decoded.entries.size());
+  auto entry = std::begin(decoded.entries);
+  EXPECT_EQ(object_t("one"), entry->first);
+  EXPECT_EQ("", entry->second);
+  ++entry;
+  EXPECT_EQ(object_t("two"), entry->first);
+  EXPECT_EQ("twokey", entry->second);
+}
+
+TEST(osd_types_wire, watch_response_preserves_legacy_list_encoding)
+{
+  const auto watchers = watch_item_t::generate_test_instances();
+  const std::list<watch_item_t> legacy_entries(std::begin(watchers), std::end(watchers));
+  obj_list_watch_response_t response;
+  response.entries.assign(std::begin(legacy_entries), std::end(legacy_entries));
+
+  bufferlist encoded;
+  response.encode(encoded, CEPH_FEATURES_ALL);
+
+  bufferlist legacy;
+  ENCODE_START(1, 1, legacy);
+  encode(legacy_entries, legacy, CEPH_FEATURES_ALL);
+  ENCODE_FINISH(legacy);
+
+  EXPECT_EQ(legacy.to_str(), encoded.to_str());
+
+  obj_list_watch_response_t decoded;
+  auto p = legacy.cbegin();
+  decoded.decode(p);
+
+  ASSERT_TRUE(p.end());
+  ASSERT_EQ(legacy_entries.size(), decoded.entries.size());
+  auto expected = std::begin(legacy_entries);
+  for (const auto& actual : decoded.entries) {
+    EXPECT_EQ(expected->name, actual.name);
+    EXPECT_EQ(expected->cookie, actual.cookie);
+    EXPECT_EQ(expected->timeout_seconds, actual.timeout_seconds);
+    EXPECT_EQ(expected->addr, actual.addr);
+    ++expected;
+  }
+}
+
+TEST(osd_types_wire, hit_set_history_preserves_legacy_list_encoding)
+{
+  pg_hit_set_info_t oldest(false);
+  oldest.begin = utime_t(1, 2);
+  oldest.end = utime_t(3, 4);
+  oldest.version = eversion_t(5, 6);
+
+  pg_hit_set_info_t newest;
+  newest.begin = utime_t(7, 8);
+  newest.end = utime_t(9, 10);
+  newest.version = eversion_t(11, 12);
+
+  pg_hit_set_history_t history;
+  history.current_last_update = eversion_t(13, 14);
+  history.history = {oldest, newest};
+
+  bufferlist encoded;
+  encode(history, encoded);
+
+  const std::list<pg_hit_set_info_t> legacy_history {oldest, newest};
+  bufferlist legacy;
+  ENCODE_START(1, 1, legacy);
+  encode(history.current_last_update, legacy);
+  encode(utime_t {}, legacy);
+  encode(pg_hit_set_info_t {}, legacy);
+  encode(legacy_history, legacy);
+  ENCODE_FINISH(legacy);
+
+  EXPECT_EQ(legacy.to_str(), encoded.to_str());
+
+  pg_hit_set_history_t decoded;
+  auto p = legacy.cbegin();
+  decode(decoded, p);
+
+  ASSERT_TRUE(p.end());
+  EXPECT_EQ(history, decoded);
+}
 
 void compare_pg_pool_t(const pg_pool_t l, const pg_pool_t r)
 {
@@ -105,7 +242,7 @@ TEST(pg_pool_t, encodeDecode)
                           CEPH_FEATUREMASK_SERVER_MIMIC |
                           CEPH_FEATUREMASK_SERVER_NAUTILUS;
   {
-    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
+    std::vector<pg_pool_t> pools = pg_pool_t::generate_test_instances();
     for(auto p1 : pools){
       bufferlist bl;
       p1.encode(bl, features);
@@ -119,7 +256,7 @@ TEST(pg_pool_t, encodeDecode)
 
   {
     // test reef
-    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
+    std::vector<pg_pool_t> pools = pg_pool_t::generate_test_instances();
     for(auto p1 : pools){
       bufferlist bl;
       p1.encode(bl, features|CEPH_FEATUREMASK_SERVER_REEF);
@@ -2130,14 +2267,13 @@ using sit = shard_id_t;
 using PI = PastIntervals;
 using pst = pg_shard_t;
 using ival = PastIntervals::pg_interval_t;
-using ivallst = std::list<ival>;
 const int N = 0x7fffffff /* CRUSH_ITEM_NONE, can't import crush.h here */;
 
 struct PITest : ::testing::Test {
   PITest() {}
   void run(
     bool ec_pool,
-    ivallst intervals,
+    std::initializer_list<ival> intervals,
     epoch_t last_epoch_started,
     unsigned min_to_peer,
     vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> osd_states,

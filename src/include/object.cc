@@ -32,8 +32,8 @@ void object_t::dump(ceph::Formatter *f) const {
   f->dump_string("name", name);
 }
 
-std::list<object_t> object_t::generate_test_instances() {
-  std::list<object_t> o;
+std::vector<object_t> object_t::generate_test_instances() {
+  std::vector<object_t> o;
   o.emplace_back();
   o.push_back(object_t{"myobject"});
   return o;
@@ -74,8 +74,8 @@ void sobject_t::dump(ceph::Formatter *f) const {
   f->dump_stream("snap") << snap;
 }
 
-std::list<sobject_t> sobject_t::generate_test_instances() {
-  std::list<sobject_t> o;
+std::vector<sobject_t> sobject_t::generate_test_instances() {
+  std::vector<sobject_t> o;
   o.emplace_back();
   o.push_back(sobject_t{object_t("myobject"), 123});
   return o;
