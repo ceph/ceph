@@ -15,7 +15,7 @@ from mgr_util import test_port_allocation, PortAlreadyInUse
 from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmAgent
+from cephadm.services.agent import CephadmAgent
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 

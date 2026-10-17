@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 
 from orchestrator import OrchestratorError
 
-from cephadm.services.cephadmservice import RgwService
+from cephadm.services.rgw import RgwService
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.module import CephadmOrchestrator
@@ -747,7 +747,7 @@ class TestRGWService:
 
 def test_rgw_dependencies_include_legacy_frontend_certificate_hash():
     from cephadm import utils
-    from cephadm.services.cephadmservice import RgwService
+    from cephadm.services.rgw import RgwService
 
     spec = RGWSpec(
         service_id='foo',

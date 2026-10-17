@@ -11,7 +11,7 @@ import secrets
 from mgr_util import verify_tls_files
 import tempfile
 
-from cephadm.services.cephadmservice import CephExporterService
+from cephadm.services.ceph_exporter import CephExporterService
 from cephadm.services.nvmeof import NvmeofService
 from cephadm.services.service_registry import service_registry
 
