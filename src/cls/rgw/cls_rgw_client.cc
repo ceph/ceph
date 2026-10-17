@@ -8,7 +8,6 @@
 
 #include "common/debug.h"
 
-using std::list;
 using std::map;
 using std::pair;
 using std::string;
@@ -103,7 +102,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
                                 const rgw_bucket_entry_ver& ver,
                                 const cls_rgw_obj_key& key,
                                 const rgw_bucket_dir_entry_meta& dir_meta,
-				const list<cls_rgw_obj_key> *remove_objs, bool log_op,
+				const std::vector<cls_rgw_obj_key>& remove_objs, bool log_op,
                                 uint16_t bilog_flags,
                                 const rgw_zone_set *zones_trace,
 				const std::string& obj_locator)
@@ -119,8 +118,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
   call.meta = dir_meta;
   call.log_op = log_op;
   call.bilog_flags = bilog_flags;
-  if (remove_objs)
-    call.remove_objs = *remove_objs;
+  call.remove_objs = remove_objs;
   if (zones_trace) {
     call.zones_trace = *zones_trace;
   }
@@ -131,7 +129,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
 void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
                                              const rgw_bucket_entry_ver& ver,
                                              const rgw_bucket_dir_entry_meta& dir_meta,
-                                             const std::list<cls_rgw_obj_key>* remove_objs,
+                                             const std::vector<cls_rgw_obj_key>& remove_objs,
                                              const std::string& locator) const {
   cls_rgw_bucket_complete_op(o, op, op_tag, ver, key, dir_meta,
                              remove_objs, log_op, bilog_flags,
@@ -181,7 +179,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
 }
 
-void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
+void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, const vector<string>& keep_attr_prefixes)
 {
   bufferlist in;
   rgw_cls_obj_remove_op call;
@@ -286,11 +284,13 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
 }
 
 /* nb: any entries passed in are replaced with the results of the cls
- * call, so caller does not need to clear entries between calls
+ * call, so the caller does not need to clear them between calls
  */
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
-		    const std::string& name_filter, const std::string& marker, uint32_t max,
-		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog)
+                    const std::string& name_filter,
+                    const std::string& marker, uint32_t max,
+                    std::vector<rgw_cls_bi_entry>& entries,
+                    bool& is_truncated, bool reshardlog)
 {
   bufferlist in, out;
   rgw_cls_bi_list_op call;
@@ -311,9 +311,32 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
     return -EIO;
   }
 
-  entries->swap(op_ret.entries);
-  *is_truncated = op_ret.is_truncated;
+  entries = std::move(op_ret.entries);
+  is_truncated = op_ret.is_truncated;
 
+  return 0;
+}
+
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+                    const std::string& name_filter, const std::string& marker,
+                    uint32_t max, std::list<rgw_cls_bi_entry> *entries,
+                    bool *is_truncated, bool reshardlog)
+{
+  std::vector<rgw_cls_bi_entry> contiguous_entries;
+  bool truncated;
+  const int ret = cls_rgw_bi_list(io_ctx, oid, name_filter, marker, max,
+                                  contiguous_entries, truncated, reshardlog);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::list<rgw_cls_bi_entry> replacement;
+  for (auto& entry : contiguous_entries) {
+    replacement.push_back(std::move(entry));
+  }
+
+  entries->swap(replacement);
+  *is_truncated = truncated;
   return 0;
 }
 
@@ -701,7 +724,7 @@ void cls_rgw_gc_list(ObjectReadOperation& op, const string& marker,
 }
 
 int cls_rgw_gc_list_decode(const bufferlist& out,
-                           std::list<cls_rgw_gc_obj_info>& entries,
+                           std::vector<cls_rgw_gc_obj_info>& entries,
                            bool& truncated, std::string& next_marker)
 {
   cls_rgw_gc_list_ret ret;
@@ -881,7 +904,7 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
 }
 
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
-                         list<cls_rgw_reshard_entry>& entries, bool* is_truncated)
+                         vector<cls_rgw_reshard_entry>& entries, bool* is_truncated)
 {
   bufferlist in, out;
   cls_rgw_reshard_list_op call;

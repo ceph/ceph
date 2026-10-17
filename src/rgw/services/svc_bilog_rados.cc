@@ -13,6 +13,11 @@
 #include "common/async/blocked_completion.h"
 #include "common/async/librados_completion.h"
 
+#include <ranges>
+#include <utility>
+#include <iterator>
+#include <algorithm>
+
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/co_spawn.hpp>
 
@@ -283,7 +288,7 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
     const RGWBucketInfo& bucket_info,
     const rgw::bucket_log_layout_generation& log_layout,
     int shard_id, string& marker, uint32_t max,
-    std::list<rgw_bi_log_entry>& result, bool *truncated)
+    std::vector<rgw_bi_log_entry>& result, bool *truncated)
 {
   ldpp_dout(dpp, 20) << __func__ << ": " << bucket_info.bucket
                      << " marker " << marker << " shard_id=" << shard_id
@@ -308,33 +313,42 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
     return r;
   }
 
-  map<int, list<rgw_bi_log_entry>::iterator> vcurrents;
-  map<int, list<rgw_bi_log_entry>::iterator> vends;
+  using entry_iterator = vector<rgw_bi_log_entry>::iterator;
+  using entry_range = std::ranges::subrange<entry_iterator>;
+
+  map<int, entry_range> shard_entries;
+  std::size_t available_entries = 0;
+
   if (truncated) {
     *truncated = false;
   }
+
   for (auto& [sid, shard_result] : bi_log_lists) {
-    vcurrents[sid] = shard_result.entries.begin();
-    vends[sid] = shard_result.entries.end();
+    shard_entries.emplace(sid, entry_range {shard_result.entries});
+    available_entries += std::min<std::size_t>(
+      max - available_entries, shard_result.entries.size());
     if (truncated) {
       *truncated = (*truncated || shard_result.truncated);
     }
   }
 
-  size_t total = 0;
+  result.reserve(available_entries);
+
+  std::size_t total = 0;
   bool has_more = true;
   while (total < max && has_more) {
     has_more = false;
-    auto viter = vcurrents.begin();
-    auto eiter = vends.begin();
-    for (; total < max && viter != vcurrents.end(); ++viter, ++eiter) {
-      assert(eiter != vends.end());
-      int sid = viter->first;
-      auto& liter = viter->second;
-      if (liter == eiter->second) {
+
+    for (auto& [sid, entries] : shard_entries) {
+      if (total == max) {
+        break;
+      }
+
+      if (entries.empty()) {
         continue;
       }
-      rgw_bi_log_entry& entry = *liter;
+
+      auto& entry = entries.front();
       if (has_shards) {
         char buf[16];
         snprintf(buf, sizeof(buf), "%d", sid);
@@ -342,20 +356,20 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
         build_bucket_index_marker(buf, entry.id, &tmp_id);
         entry.id.swap(tmp_id);
       }
+
       marker_mgr.add(sid, entry.id);
-      result.push_back(entry);
-      total++;
+      result.push_back(std::move(entry));
+      ++total;
       has_more = true;
-      ++liter;
+      entries.advance(1);
     }
   }
 
   if (truncated) {
-    for (auto viter = vcurrents.begin(), eiter = vends.begin();
-         viter != vcurrents.end(); ++viter, ++eiter) {
-      assert(eiter != vends.end());
-      *truncated = (*truncated || (viter->second != eiter->second));
-    }
+    const auto has_unmerged_entries = std::ranges::any_of(
+      shard_entries, [](const auto& shard) { return !shard.second.empty(); });
+
+    *truncated = (*truncated || has_unmerged_entries);
   }
 
   // Refresh marker, if there are multiple shards, the output will look like
@@ -363,8 +377,11 @@ int RGWSI_BILog_RADOS_InIndex::log_list(
   // if there is no sharding, then simply marker (without oid) is returned
   if (has_shards) {
     marker_mgr.to_string(&marker);
-  } else if (!result.empty()) {
-    marker = result.rbegin()->id;
+    return 0;
+  }
+
+  if (!result.empty()) {
+    marker = std::rbegin(result)->id;
   }
 
   return 0;
@@ -685,7 +702,7 @@ int RGWSI_BILog_RADOS_FIFO::log_list(
     const RGWBucketInfo& bucket_info,
     const rgw::bucket_log_layout_generation& log_layout,
     int shard_id, string& marker, uint32_t max,
-    std::list<rgw_bi_log_entry>& result, bool *truncated)
+    std::vector<rgw_bi_log_entry>& result, bool *truncated)
 {
   // read up to `max` bilog entries across all relevant shards starting after
   // `marker`. shards are visited in ascending shard-id order (shard_oids is a
@@ -947,7 +964,7 @@ int RGWSI_BILog_RADOS_BackendDispatcher::log_list(
     const RGWBucketInfo& bucket_info,
     const rgw::bucket_log_layout_generation& log_layout,
     int shard_id, string& marker, uint32_t max,
-    std::list<rgw_bi_log_entry>& result, bool *truncated)
+    std::vector<rgw_bi_log_entry>& result, bool *truncated)
 {
   return get_backend(log_layout).log_list(dpp, y, bucket_info, log_layout,
                                           shard_id, marker, max, result,
@@ -984,4 +1001,3 @@ int RGWSI_BILog_RADOS_BackendDispatcher::remove_log_shards(
 {
   return backend_fifo.remove_log_shards(dpp, bucket_info, log_layout, c);
 }
-

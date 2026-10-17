@@ -3,20 +3,69 @@
 
 #include "include/types.h"
 #include "cls/refcount/cls_refcount_client.h"
+#include "cls/refcount/cls_refcount_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 
 #include <errno.h>
+#include <list>
 #include <string>
 #include <vector>
+#include <iterator>
 
 using namespace std;
 using ceph::test::PoolType;
 using ceph::test::pool_type_name;
 using ceph::test::create_pool_by_type;
 using ceph::test::destroy_pool_by_type;
+
+namespace {
+
+ceph::buffer::list encode_legacy_refs(const std::list<std::string>& refs)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(1, 1, encoded);
+  encode(refs, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+template <typename WIRE_T>
+void expect_ref_wire_compatibility()
+{
+  const std::list<std::string> legacy_refs = {
+    "first",
+    "second",
+    "third"
+  };
+
+  WIRE_T value;
+  value.refs.assign(std::cbegin(legacy_refs), std::cend(legacy_refs));
+
+  ceph::buffer::list current_bytes;
+  encode(value, current_bytes);
+  const auto legacy_bytes = encode_legacy_refs(legacy_refs);
+  ASSERT_TRUE(current_bytes.contents_equal(legacy_bytes));
+
+  WIRE_T decoded;
+  auto cursor = legacy_bytes.cbegin();
+  decode(decoded, cursor);
+
+  ceph::buffer::list decoded_bytes;
+  encode(decoded, decoded_bytes);
+  EXPECT_TRUE(decoded_bytes.contents_equal(legacy_bytes));
+}
+
+} // namespace
+
+TEST(ClsRefcountEncoding, RefSequencesRemainWireCompatible)
+{
+  expect_ref_wire_compatibility<cls_refcount_set_op>();
+  expect_ref_wire_compatibility<cls_refcount_read_ret>();
+}
 
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();
@@ -46,9 +95,9 @@ TEST_P(TestClsRefcount, test_implicit) /* test refcount using implicit referenci
 
   /* read reference, should return a single wildcard entry */
 
-  list<string> refs;
+  vector<string> refs;
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(1, (int)refs.size());
 
   string wildcard_tag;
@@ -61,12 +110,12 @@ TEST_P(TestClsRefcount, test_implicit) /* test refcount using implicit referenci
   cls_refcount_get(*op, newtag, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(2, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   ASSERT_EQ(1, (int)refs_map.count(wildcard_tag));
@@ -80,7 +129,7 @@ TEST_P(TestClsRefcount, test_implicit) /* test refcount using implicit referenci
   cls_refcount_put(*op, oldtag, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(1, (int)refs.size());
 
   tag = refs.front();
@@ -94,7 +143,7 @@ TEST_P(TestClsRefcount, test_implicit) /* test refcount using implicit referenci
   cls_refcount_put(*op, oldtag, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(1, (int)refs.size());
 
   tag = refs.front();
@@ -138,9 +187,9 @@ TEST_P(TestClsRefcount, test_implicit_idempotent) /* test refcount using implici
 
   /* read reference, should return a single wildcard entry */
 
-  list<string> refs;
+  vector<string> refs;
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(1, (int)refs.size());
 
   string wildcard_tag;
@@ -153,12 +202,12 @@ TEST_P(TestClsRefcount, test_implicit_idempotent) /* test refcount using implici
   cls_refcount_get(*op, newtag, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(2, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   ASSERT_EQ(1, (int)refs_map.count(wildcard_tag));
@@ -172,7 +221,7 @@ TEST_P(TestClsRefcount, test_implicit_idempotent) /* test refcount using implici
   cls_refcount_put(*op, newtag, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(1, (int)refs.size());
 
   tag = refs.front();
@@ -186,7 +235,7 @@ TEST_P(TestClsRefcount, test_implicit_idempotent) /* test refcount using implici
   cls_refcount_put(*op, newtag, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs, true));
   ASSERT_EQ(1, (int)refs.size());
 
   tag = refs.front();
@@ -244,9 +293,9 @@ TEST_P(TestClsRefcount, test_explicit) /* test refcount using implicit referenci
 
   /* read reference, should return a single wildcard entry */
 
-  list<string> refs;
+  vector<string> refs;
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs));
   ASSERT_EQ(0, (int)refs.size());
 
 
@@ -258,12 +307,12 @@ TEST_P(TestClsRefcount, test_explicit) /* test refcount using implicit referenci
   cls_refcount_get(*op, newtag);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs));
   ASSERT_EQ(1, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   ASSERT_EQ(1, (int)refs_map.count(newtag));
@@ -278,7 +327,7 @@ TEST_P(TestClsRefcount, test_explicit) /* test refcount using implicit referenci
   cls_refcount_put(*op, nosuchtag);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs));
   ASSERT_EQ(1, (int)refs.size());
 
   string tag = refs.front();
@@ -311,7 +360,7 @@ TEST_P(TestClsRefcount, set) /* test refcount using implicit referencing of newl
 
   /* read reference, should return a single wildcard entry */
 
-  list<string> tag_refs, refs;
+  vector<string> tag_refs, refs;
 
 #define TAGS_NUM 5
   string tags[TAGS_NUM];
@@ -323,7 +372,7 @@ TEST_P(TestClsRefcount, set) /* test refcount using implicit referencing of newl
     tag_refs.push_back(tags[i]);
   }
 
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs));
   ASSERT_EQ(0, (int)refs.size());
 
   /* set reference list, verify */
@@ -333,12 +382,12 @@ TEST_P(TestClsRefcount, set) /* test refcount using implicit referencing of newl
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
   refs.clear();
-  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs));
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, refs));
   ASSERT_EQ(TAGS_NUM, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   for (int i = 0; i < TAGS_NUM; i++) {
@@ -403,8 +452,8 @@ TEST_F(cls_refcount_ec, test_implicit_ec) /* test refcount using implicit refere
   ASSERT_EQ(2, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   ASSERT_EQ(1, (int)refs_map.count(wildcard_tag));
@@ -492,8 +541,8 @@ TEST_F(cls_refcount_ec, test_implicit_idempotent_ec) /* test refcount using impl
   ASSERT_EQ(2, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   ASSERT_EQ(1, (int)refs_map.count(wildcard_tag));
@@ -591,8 +640,8 @@ TEST_F(cls_refcount_ec, test_explicit_ec) /* test refcount using implicit refere
   ASSERT_EQ(1, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   ASSERT_EQ(1, (int)refs_map.count(newtag));
@@ -663,8 +712,8 @@ TEST_F(cls_refcount_ec, set_ec) /* test refcount using implicit referencing of n
   ASSERT_EQ(TAGS_NUM, (int)refs.size());
 
   map<string, bool> refs_map;
-  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-    refs_map[*iter] = true;
+  for (const auto& ref : refs) {
+    refs_map[ref] = true;
   }
 
   for (int i = 0; i < TAGS_NUM; i++) {

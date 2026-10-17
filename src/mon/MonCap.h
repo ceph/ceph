@@ -101,7 +101,7 @@ struct MonCapGrant {
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() (via is_match()) and cached here.
-  mutable std::list<MonCapGrant> profile_grants;
+  mutable std::vector<MonCapGrant> profile_grants;
 
   void expand_profile(const EntityName& name) const;
 
@@ -188,7 +188,7 @@ struct MonCap {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<MonCap> generate_test_instances();
+  static std::vector<MonCap> generate_test_instances();
 
   std::vector<std::string> allowed_fs_names() const {
     std::vector<std::string> ret;

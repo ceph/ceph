@@ -97,7 +97,10 @@ public:
   virtual int pool_create(const std::string &pool_name) = 0;
   virtual int pool_delete(const std::string &pool_name) = 0;
   virtual int pool_get_base_tier(int64_t pool_id, int64_t* base_tier) = 0;
-  virtual int pool_list(std::list<std::pair<int64_t, std::string> >& v) = 0;
+  virtual int pool_list(
+    std::vector<std::pair<int64_t, std::string>>& pools) = 0;
+  virtual int pool_list(
+    std::list<std::pair<int64_t, std::string>>& pools);
   virtual int64_t pool_lookup(const std::string &name) = 0;
   virtual int pool_reverse_lookup(int64_t id, std::string *name) = 0;
 

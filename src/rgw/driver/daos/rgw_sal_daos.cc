@@ -32,7 +32,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using std::list;
 using std::map;
 using std::set;
 using std::string;
@@ -564,10 +563,9 @@ int DaosBucket::trim_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
 
 int DaosBucket::remove_objs_from_index(
     const DoutPrefixProvider* dpp,
-    std::list<rgw_obj_index_key>& objs_to_unlink) {
+    const std::vector<rgw_obj_index_key>& objs_to_unlink) {
   /* XXX: CHECK: Unlike RadosStore, there is no seperate bucket index table.
-   * Delete all the object in the list from the object table of this
-   * bucket
+   * Delete all the objects from the object table of this bucket
    */
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
@@ -1210,7 +1208,7 @@ int DaosObject::DaosDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 }
 
 int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                              uint32_t flags, std::list<rgw_obj_index_key>* remove_objs,
+                              uint32_t flags, std::vector<rgw_obj_index_key>* remove_objs,
                               RGWObjVersionTracker* objv) {
   ldpp_dout(dpp, 20) << "DEBUG: delete_object" << dendl;
   DaosObject::DaosDeleteOp del_op(this);
@@ -1689,7 +1687,7 @@ int DaosMultipartUpload::list_parts(const DoutPrefixProvider* dpp,
 // Heavily copied from rgw_sal_rados.cc
 int DaosMultipartUpload::complete(
     const DoutPrefixProvider* dpp, optional_yield y, CephContext* cct,
-    map<int, string>& part_etags, list<rgw_obj_index_key>& remove_objs,
+    map<int, string>& part_etags, vector<rgw_obj_index_key>& remove_objs,
     uint64_t& accounted_size, bool& compressed, RGWCompressionInfo& cs_info,
     off_t& off, std::string& tag, ACLOwner& owner, uint64_t olh_epoch,
     rgw::sal::Object* target_obj,
@@ -1937,7 +1935,7 @@ int DaosMultipartUpload::complete(
 int DaosMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
     CephContext *cct, optional_yield y,
     const rgw_obj& obj,
-    std::list<rgw_obj_index_key>& remove_objs,
+    std::vector<rgw_obj_index_key>& remove_objs,
     prefix_map_t& processed_prefixes)
 {
   return -ENOTSUP;
@@ -2425,7 +2423,7 @@ int DaosStore::meta_list_keys_init(const DoutPrefixProvider* dpp,
 }
 
 int DaosStore::meta_list_keys_next(const DoutPrefixProvider* dpp, void* handle,
-                                   int max, list<string>& keys,
+                                   int max, vector<string>& keys,
                                    bool* truncated) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }

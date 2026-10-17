@@ -357,6 +357,36 @@ public:
   }
 }; // class PGLogTest
 
+TEST_F(PGLogTest, indexed_storage_keeps_element_identity)
+{
+  PGLog::IndexedLog indexed;
+  const auto client = entity_name_t::CLIENT(777);
+  const auto first_reqid = osd_reqid_t(client, 1, 1);
+  const auto first = mk_ple_mod(
+    mk_obj(1), mk_evt(1, 1), eversion_t(), first_reqid);
+
+  indexed.add(first);
+  indexed.dups.emplace_back(indexed.log.front());
+  indexed.index();
+
+  const auto *const first_entry = &indexed.log.front();
+  const auto *const first_dup = &indexed.dups.front();
+  indexed.complete_to = indexed.log.begin();
+
+  for (unsigned i = 2; i != 130; ++i) {
+    const auto reqid = osd_reqid_t(client, 1, i);
+    indexed.add(mk_ple_mod(
+      mk_obj(i), mk_evt(1, i), mk_evt(1, i - 1), reqid));
+    indexed.dups.emplace_back(indexed.log.back());
+    indexed.index(indexed.dups.back());
+  }
+
+  EXPECT_EQ(first_entry, indexed.objects.at(first.soid));
+  EXPECT_EQ(first_entry, indexed.caller_ops.at(first_reqid));
+  EXPECT_EQ(first_dup, indexed.dup_index.at(first_reqid));
+  EXPECT_EQ(first.version, indexed.complete_to->version);
+}
+
 struct TestHandler : public PGLog::LogEntryHandler {
   list<hobject_t> &removed;
   explicit TestHandler(list<hobject_t> &removed) : removed(removed) {}

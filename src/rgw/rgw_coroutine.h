@@ -26,7 +26,11 @@
 
 #include <boost/asio/coroutine.hpp>
 
+#include <span>
+#include <deque>
 #include <atomic>
+#include <vector>
+#include <cstddef>
 
 #define RGW_ASYNC_OPS_MGR_WINDOW 100
 
@@ -43,7 +47,7 @@ class RGWCompletionManager : public RefCountedObject {
     rgw_io_id io_id;
     void *user_info;
   };
-  std::list<io_completion> complete_reqs;
+  std::deque<io_completion> complete_reqs;
   std::set<rgw_io_id> complete_reqs_set;
   using NotifierRef = boost::intrusive_ptr<RGWAioCompletionNotifier>;
   std::set<NotifierRef> cns;
@@ -151,7 +155,7 @@ public:
 struct RGWCoroutinesEnv {
   uint64_t run_context;
   RGWCoroutinesManager *manager;
-  std::list<RGWCoroutinesStack *> *scheduled_stacks;
+  std::deque<RGWCoroutinesStack *> *scheduled_stacks;
   RGWCoroutinesStack *stack;
 
   RGWCoroutinesEnv() : run_context(0), manager(NULL), scheduled_stacks(NULL), stack(NULL) {}
@@ -388,7 +392,7 @@ do {                            \
 
 template <class T>
 class RGWConsumerCR : public RGWCoroutine {
-  std::list<T> product;
+  std::deque<T> product;
 
 public:
   explicit RGWConsumerCR(CephContext *_cct) : RGWCoroutine(_cct) {}
@@ -407,13 +411,12 @@ public:
     if (product.empty()) {
       return false;
     }
-    *p = product.front();
+    *p = std::move(product.front());
     product.pop_front();
     return true;
   }
 
   void receive(const T& p, bool wakeup = true);
-  void receive(std::list<T>& l, bool wakeup = true);
 };
 
 class RGWCoroutinesStack : public RefCountedObject {
@@ -426,8 +429,8 @@ class RGWCoroutinesStack : public RefCountedObject {
 
   RGWCoroutinesManager *ops_mgr;
 
-  std::list<RGWCoroutine *> ops;
-  std::list<RGWCoroutine *>::iterator pos;
+  std::vector<RGWCoroutine *> ops;
+  std::size_t current_op_index = 0;
 
   rgw_spawned_stacks spawned;
 
@@ -569,16 +572,6 @@ public:
 };
 
 template <class T>
-void RGWConsumerCR<T>::receive(std::list<T>& l, bool wakeup)
-{
-  product.splice(product.end(), l);
-  if (wakeup) {
-    set_sleeping(false);
-  }
-}
-
-
-template <class T>
 void RGWConsumerCR<T>::receive(const T& p, bool wakeup)
 {
   product.push_back(p);
@@ -628,7 +621,7 @@ class RGWCoroutinesManager {
 
   RGWIOIDProvider io_id_provider;
 
-  void handle_unblocked_stack(std::set<RGWCoroutinesStack *>& context_stacks, std::list<RGWCoroutinesStack *>& scheduled_stacks,
+  void handle_unblocked_stack(std::set<RGWCoroutinesStack *>& context_stacks, std::deque<RGWCoroutinesStack *>& scheduled_stacks,
                               RGWCompletionManager::io_completion& io, int *waiting_count, int *interval_wait_count);
 protected:
   RGWCompletionManager *completion_mgr;
@@ -649,7 +642,7 @@ public:
   }
   virtual ~RGWCoroutinesManager();
 
-  int run(const DoutPrefixProvider *dpp, std::list<RGWCoroutinesStack *>& ops);
+  int run(const DoutPrefixProvider *dpp, std::span<RGWCoroutinesStack *const> stacks);
   int run(const DoutPrefixProvider *dpp, RGWCoroutine *op);
   void stop() {
     bool expected = false;
