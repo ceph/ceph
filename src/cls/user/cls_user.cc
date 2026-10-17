@@ -9,6 +9,9 @@
 #include "objclass/objclass.h"
 
 #include "cls_user_ops.h"
+#ifdef WITH_RGW_CLS_DATUM
+ #include "cls_user_datum.h"
+#endif
 #include "rgw/rgw_string.h"
 
 using std::map;
@@ -123,7 +126,11 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 {
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::bulk_request op;
+#else
   cls_user_set_buckets_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -207,7 +214,11 @@ static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *i
 {
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::time_request op;
+#else
   cls_user_complete_stats_sync_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -240,7 +251,11 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
 {
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::bucket_request op;
+#else
   cls_user_remove_bucket_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -292,7 +307,11 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
 {
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::bucket_list_request op;
+#else
   cls_user_list_buckets_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -312,7 +331,11 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     max_entries = MAX_ENTRIES;
 
   string match_prefix;
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::bucket_list_reply ret;
+#else
   cls_user_list_buckets_ret ret;
+#endif
 
   int rc = cls_cxx_map_get_vals(hctx, from_index, match_prefix, max_entries, &keys, &ret.truncated);
   if (rc < 0)
@@ -342,7 +365,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     try {
       cls_user_bucket_entry e;
       decode(e, biter);
-      entries.push_back(e);
+      entries.push_back(std::move(e));
     } catch (ceph::buffer::error& err) {
       CLS_LOG(0, "ERROR: cls_user_list: could not decode entry, index=%s", index.c_str());
     }
@@ -361,7 +384,11 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
 {
   auto in_iter = in->cbegin();
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::empty_request op;
+#else
   cls_user_get_header_op op;
+#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -369,7 +396,11 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::header_reply op_ret;
+#else
   cls_user_get_header_ret op_ret;
+#endif
 
   int ret = read_header(hctx, &op_ret.header);
   if (ret < 0)
@@ -387,7 +418,11 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
 static int cls_user_reset_stats(cls_method_context_t hctx,
 				bufferlist *in, bufferlist *out /*ignore*/)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::time_request op;
+#else
   cls_user_reset_stats_op op;
+#endif
 
   try {
     auto bliter = in->cbegin();
@@ -414,7 +449,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
     for (const auto& kv : keys) {
       cls_user_bucket_entry e;
       try {
-	auto bl = kv.second;
+	const auto& bl = kv.second;
 	auto bliter = bl.cbegin();
 	decode(e, bliter);
       } catch (ceph::buffer::error& err) {
@@ -444,7 +479,11 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 static int cls_user_reset_stats2(cls_method_context_t hctx,
 				 buffer::list *in, buffer::list *out)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::reset_request op;
+#else
   cls_user_reset_stats2_op op;
+#endif
 
   try {
     auto bliter = in->cbegin();
@@ -456,7 +495,11 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
 
   cls_user_header header;
   string from_index{op.marker}, prefix;
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::reset_reply ret;
+#else
   cls_user_reset_stats2_ret ret;
+#endif
 
   map<string, buffer::list> keys;
   int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
@@ -520,7 +563,11 @@ static std::string resource_key(std::string_view name)
 static int cls_account_resource_add(cls_method_context_t hctx,
                                     buffer::list *in, buffer::list *out)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::resource_add_request op;
+#else
   cls_user_account_resource_add_op op;
+#endif
   try {
     auto bliter = in->cbegin();
     decode(op, bliter);
@@ -581,7 +628,11 @@ static int cls_account_resource_add(cls_method_context_t hctx,
 static int cls_account_resource_get(cls_method_context_t hctx,
                                     bufferlist *in, bufferlist *out)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::name_request op;
+#else
   cls_user_account_resource_get_op op;
+#endif
   try {
     auto p = in->cbegin();
     decode(op, p);
@@ -600,7 +651,11 @@ static int cls_account_resource_get(cls_method_context_t hctx,
     return r;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::resource_reply ret;
+#else
   cls_user_account_resource_get_ret ret;
+#endif
   try {
     auto iter = bl.cbegin();
     decode(ret.entry, iter);
@@ -616,7 +671,11 @@ static int cls_account_resource_get(cls_method_context_t hctx,
 static int cls_account_resource_rm(cls_method_context_t hctx,
                                    buffer::list *in, buffer::list *out)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::name_request op;
+#else
   cls_user_account_resource_rm_op op;
+#endif
   try {
     auto bliter = in->cbegin();
     decode(op, bliter);
@@ -663,7 +722,11 @@ static int cls_account_resource_rm(cls_method_context_t hctx,
 static int cls_account_resource_list(cls_method_context_t hctx,
                                      bufferlist *in, bufferlist *out)
 {
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::resource_list_request op;
+#else
   cls_user_account_resource_list_op op;
+#endif
   try {
     auto p = in->cbegin();
     decode(op, p);
@@ -685,7 +748,11 @@ static int cls_account_resource_list(cls_method_context_t hctx,
     return rc;
   }
 
+#ifdef WITH_RGW_CLS_DATUM
+  ::cls::rgw::user_datum::resource_list_reply ret;
+#else
   cls_user_account_resource_list_ret ret;
+#endif
 
   // copy matching decoded omap values into a vector
   for (auto& [key, bl] : entries) {
