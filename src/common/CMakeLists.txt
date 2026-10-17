@@ -1,5 +1,14 @@
 add_library(common_buffer_obj OBJECT
   buffer.cc)
+# Every encode() in the tree ends up in buffer.cc's small helpers, such as
+# ptr::unused_tail_length() and ptr::append().  They are exported, so under
+# -fPIC GCC will not inline them even into each other, in case one is
+# interposed at run time; nothing interposes them.
+check_cxx_compiler_flag(-fno-semantic-interposition
+  HAVE_NO_SEMANTIC_INTERPOSITION)
+if(HAVE_NO_SEMANTIC_INTERPOSITION)
+  target_compile_options(common_buffer_obj PRIVATE -fno-semantic-interposition)
+endif()
 
 add_library(common_texttable_obj OBJECT
   TextTable.cc)
