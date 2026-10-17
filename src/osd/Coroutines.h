@@ -33,3 +33,17 @@ struct CoroHandles {
   yield_token_t& yield;
   std::weak_ptr<resume_token_t> resume;
 };
+
+/*
+ * Create a coroutine owned by resumer and run it until it first yields or
+ * completes. The coroutine body may reset resumer when it completes: the
+ * local reference keeps the coroutine from being destroyed while it is
+ * still running on its own stack, which would leak the stack.
+ */
+template <typename... Args>
+void start_coroutine(std::shared_ptr<resume_token_t>& resumer, Args&&... args)
+{
+  resumer = std::make_shared<resume_token_t>(std::forward<Args>(args)...);
+  auto running = resumer;
+  (*running)();
+}
