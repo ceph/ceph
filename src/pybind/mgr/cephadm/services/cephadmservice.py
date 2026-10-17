@@ -1739,20 +1739,33 @@ class RgwService(CephService):
 
         keyring = self.get_keyring(rgw_id)
 
-        if daemon_spec.ports:
-            port = daemon_spec.ports[0]
+        # Prefer per-daemon ports when provided on the deploy spec. daemon_spec.ports is
+        # expected to be an ordered list: [primary, secondary, ...].
+        port = None
+        secondary_port = None
+        if getattr(daemon_spec, "ports", None):
+            try:
+                port = int(daemon_spec.ports[0]) if len(daemon_spec.ports) > 0 else None
+            except Exception:
+                port = None
+            try:
+                secondary_port = int(daemon_spec.ports[1]) if len(daemon_spec.ports) > 1 else None
+            except Exception:
+                secondary_port = None
         else:
-            # this is a redeploy of older instance that doesn't have an explicitly
-            # assigned port, in which case we can assume there is only 1 per host
-            # and it matches the spec.
-            ports = spec.get_port()
-            if spec.ssl:
-                port = ports[1] if len(ports) > 1 else ports[0]
-            else:
-                port = ports[0]
+            port = int(spec.rgw_frontend_port) if getattr(spec, "rgw_frontend_port", None) is not None else None
+            secondary_port = int(spec.rgw_frontend_secondary_port) if getattr(spec, "rgw_frontend_secondary_port", None) is not None else None
+
+        logger.debug(
+            "RGW prepare_create: daemon=%s daemon_spec.ports=%r chosen primary=%r secondary=%r extra_args=%r",
+            daemon_spec.name(),
+            getattr(daemon_spec, "ports", None),
+            port,
+            secondary_port,
+            spec.rgw_frontend_extra_args,
+        )
 
         if spec.ssl:
-
             legacy_pem = spec.rgw_frontend_ssl_certificate
             if legacy_pem and not spec.ssl_cert:
                 if isinstance(legacy_pem, list):
@@ -1797,6 +1810,8 @@ class RgwService(CephService):
                 # back to 0.0.0.0 and can false-conflict with listeners on
                 # other addresses.
                 daemon_spec.port_ips.update({str(port): ip_to_bind_to})
+                if secondary_port is not None:
+                    daemon_spec.port_ips.update({str(secondary_port): ip_to_bind_to})
             else:
                 logger.warning(
                     f'Failed to find ip in {spec.networks} for host {daemon_spec.host}. '
@@ -1813,8 +1828,13 @@ class RgwService(CephService):
                 if ip_to_bind_to:
                     args.append(
                         f"ssl_endpoint={build_url(host=ip_to_bind_to, port=port).lstrip('/')}")
+                    if secondary_port is not None:
+                        args.append(
+                            f"endpoint={build_url(host=ip_to_bind_to, port=secondary_port).lstrip('/')}")
                 else:
                     args.append(f"ssl_port={port}")
+                    if secondary_port is not None:
+                        args.append(f"port={secondary_port}")
                 if spec.generate_cert:
                     args.append(f"ssl_certificate=config://rgw/cert/{daemon_spec.name()}")
                 elif not extra_ssl_cert_provided:
@@ -1829,8 +1849,12 @@ class RgwService(CephService):
                 if ip_to_bind_to:
                     # note the 's' suffix on port
                     args.append(f"port={build_url(host=ip_to_bind_to, port=port).lstrip('/')}s")
+                    if secondary_port is not None:
+                        args.append(f"port={build_url(host=ip_to_bind_to, port=secondary_port).lstrip('/')}")
                 else:
                     args.append(f"port={port}s")  # note the 's' suffix on port
+                    if secondary_port is not None:
+                        args.append(f"port={secondary_port}")
                 if spec.generate_cert:
                     args.append(f"ssl_certificate=config://rgw/cert/{daemon_spec.name()}")
                 elif not extra_ssl_cert_provided:
@@ -2095,10 +2119,23 @@ class RgwService(CephService):
 
     def _extract_ports_from_frontend(self, frontend_str: str) -> set[int]:
 
+        ssl_port_match_patterns = [
+            r"(?:ssl_)?port=(\d+)",
+            r"(?:ssl_)?endpoint=\S+:(\d+)",
+        ]
+        port_match_patterns = [
+            r"(?<!ssl_)port=(\d+)",
+            r"(?<!ssl_)endpoint=\S+:(\d+)",
+        ]
         ports = set()
-        for val in frontend_str.split():
-            if val.startswith("port="):
-                ports.add(int(val.split("=")[1]))
+
+        for pattern in ssl_port_match_patterns:
+            for port_str in re.findall(pattern, frontend_str):
+                ports.add(int(port_str))
+
+        for pattern in port_match_patterns:
+            for port_str in re.findall(pattern, frontend_str):
+                ports.add(int(port_str))
 
         return ports
 

@@ -1,5 +1,6 @@
 
 import pytest
+import re
 from unittest.mock import patch, MagicMock
 
 from orchestrator import OrchestratorError
@@ -11,6 +12,7 @@ from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import RGWSpec, CertificateSource, PlacementSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm
 from cephadm.tlsobject_types import TLSCredentials
+from orchestrator._interface import DaemonDescription
 
 
 cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\nmZbKSphWfh0qipoqxqhfkw==\n-----END CERTIFICATE-----\n"""
@@ -744,6 +746,60 @@ class TestRGWService:
                             'custom_sans': ['s3.example.com', '*.s3.example.com'],
                         }
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_count_per_host_two_daemons_one_uses_defined_ports_other_has_different_ports(
+            self, cephadm_module: CephadmOrchestrator):
+        """
+        Create an RGW service with count_per_host = 2 and explicit
+        rgw_frontend_port / rgw_frontend_secondary_port. Assert one daemon
+        exposes the configured ports and the other daemon uses distinct ports.
+        """
+        # explicit ports we want the "primary" daemon to use
+        primary_port = 443
+        secondary_port = 8080
+
+        spec = RGWSpec(
+            service_id="default",
+            placement=PlacementSpec(count_per_host=2,hosts=['host1']),
+            rgw_frontend_type='beast',
+            rgw_frontend_port=primary_port,
+            rgw_frontend_secondary_port=secondary_port,
+            ssl=True,
+        )
+
+        with with_host(cephadm_module, 'host1'):
+            with with_service(cephadm_module, spec) as deployed_daemons:
+                # fetch the actual daemon descriptions (they contain ports)
+                dds = cephadm_module.cache.get_daemons_by_service(spec.service_name())
+                # Sanity check: two daemons expected
+                assert len(deployed_daemons) == 2, f"expected 2 daemons, got: {deployed_daemons!r}"
+
+                # convert to sets of ports (defensive for None)
+                daemon_ports = [set(dd.ports or []) for dd in dds]
+
+                # Ensure at least one daemon advertises the configured primary ports
+                found_primary = any({primary_port, secondary_port}.issubset(p) for p in daemon_ports)
+                assert found_primary, (
+                    f"None of the deployed daemons advertise both configured ports "
+                    f"{primary_port},{secondary_port}. extracted: {daemon_ports}"
+                )
+
+                # Identify which daemon has the primary ports
+                primary_idx = next(i for i, p in enumerate(daemon_ports)
+                                   if {primary_port, secondary_port}.issubset(p))
+                other_idx = 1 - primary_idx
+
+                # Ensure the other daemon does not reuse those ports
+                assert ({primary_port, secondary_port} & daemon_ports[other_idx]) == set(), (
+                    f"Port collision: other daemon shares primary ports: "
+                    f"{daemon_ports[other_idx]} & {{{primary_port},{secondary_port}}}"
+                )
+
+                # Ensure the two daemons don't share any port at all
+                assert daemon_ports[0].isdisjoint(daemon_ports[1]), (
+                    f"Daemons share ports (collision): {daemon_ports[0] & daemon_ports[1]}"
+
+                )
 
 def test_rgw_dependencies_include_legacy_frontend_certificate_hash():
     from cephadm import utils
