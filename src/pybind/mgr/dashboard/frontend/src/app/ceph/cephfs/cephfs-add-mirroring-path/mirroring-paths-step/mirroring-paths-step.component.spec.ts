@@ -39,19 +39,35 @@ describe('MirroringPathsStepComponent', () => {
     });
   }
 
+  function emitOptions(pathIndex = 0, levelIndex = 0): string[] {
+    let options: string[] = [];
+    const level = component.paths[pathIndex]?.levels[levelIndex];
+    expect(level).toBeTruthy();
+    level.options$.subscribe((value) => {
+      options = value;
+    });
+    tick();
+    return options;
+  }
+
+  function initPaths(): void {
+    component.ngOnInit();
+    emitOptions();
+  }
+
   function selectVolumesG1Sv1(): void {
     component.onLevelChange(0, 0, 'volumes');
-    tick();
+    emitOptions(0, 1);
     component.onLevelChange(0, 1, 'g1');
-    tick();
+    emitOptions(0, 2);
     component.onLevelChange(0, 2, 'sv1');
   }
 
   function selectVolumesG1Sv2(): void {
     component.onLevelChange(0, 0, 'volumes');
-    tick();
+    emitOptions(0, 1);
     component.onLevelChange(0, 1, 'g1');
-    tick();
+    emitOptions(0, 2);
     component.onLevelChange(0, 2, 'sv2');
   }
 
@@ -98,15 +114,13 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     component.onLevelChange(0, 0, 'volumes');
-    tick();
+    emitOptions(0, 1);
     component.onLevelChange(0, 1, 'g1');
-    tick();
 
-    expect(component.paths[0].levels[2].options).toEqual(['sv2']);
+    expect(emitOptions(0, 2)).toEqual(['sv2']);
   }));
 
   it('should expose inline validation when only already mirrored paths are selected', fakeAsync(() => {
@@ -115,8 +129,7 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     selectVolumesG1Sv1();
     component.pathsControl.markAsTouched();
@@ -138,16 +151,11 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     expect(cephfsServiceMock.lsDir).toHaveBeenCalledWith(1, '/', 1);
     expect(cephfsServiceMock.listMirrorDirectories).toHaveBeenCalledWith('testfs');
-    expect(component.paths[0].levels[0].options).toEqual([
-      FS_ROOT_PATH_SENTINEL,
-      'mirror',
-      'volumes'
-    ]);
+    expect(emitOptions()).toEqual([FS_ROOT_PATH_SENTINEL, 'mirror', 'volumes']);
   }));
 
   it('should resolve fsId from cephfsService when fsId input is not set', fakeAsync(() => {
@@ -155,8 +163,7 @@ describe('MirroringPathsStepComponent', () => {
     cephfsServiceMock.list.mockReturnValue(of([{ id: 5, mdsmap: { fs_name: 'testfs' } }]));
 
     component.fsName = 'testfs';
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     expect(cephfsServiceMock.list).toHaveBeenCalled();
     expect(component.fsId).toBe(5);
@@ -167,11 +174,10 @@ describe('MirroringPathsStepComponent', () => {
     mockLsDirTree();
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     component.addPath();
-    tick();
+    emitOptions(1, 0);
     expect(component.paths.length).toBe(2);
 
     component.removePath(1);
@@ -192,8 +198,7 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     selectVolumesG1Sv2();
 
@@ -209,8 +214,7 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     selectVolumesG1Sv1();
     expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv1']);
@@ -233,26 +237,18 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     selectVolumesG1Sv1();
-    tick();
 
     component.addPath();
-    tick();
 
-    expect(component.paths[1].levels[0].options).toEqual([
-      FS_ROOT_PATH_SENTINEL,
-      'mirror',
-      'volumes'
-    ]);
+    expect(emitOptions(1, 0)).toEqual([FS_ROOT_PATH_SENTINEL, 'mirror', 'volumes']);
 
     component.onLevelChange(1, 0, 'volumes');
-    tick();
+    emitOptions(1, 1);
     component.onLevelChange(1, 1, 'g1');
-    tick();
-    expect(component.paths[1].levels[2].options).toEqual(['sv2']);
+    expect(emitOptions(1, 2)).toEqual(['sv2']);
     component.onLevelChange(1, 2, 'sv2');
 
     expect(component.getSubmitPaths()).toEqual({
@@ -267,8 +263,7 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     component.onLevelChange(0, 0, 'mirror');
     expect(component.getSubmitPaths().toAdd).toEqual(['/mirror']);
@@ -278,8 +273,7 @@ describe('MirroringPathsStepComponent', () => {
     mockLsDirTree();
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     component.onLevelChange(0, 0, FS_ROOT_PATH_SENTINEL);
 
@@ -292,8 +286,7 @@ describe('MirroringPathsStepComponent', () => {
 
     component.fsName = 'testfs';
     component.fsId = 1;
-    component.ngOnInit();
-    tick();
+    initPaths();
 
     selectVolumesG1Sv2();
     expect(component.getSubmitPaths().toAdd).toEqual(['/volumes/g1/sv2']);

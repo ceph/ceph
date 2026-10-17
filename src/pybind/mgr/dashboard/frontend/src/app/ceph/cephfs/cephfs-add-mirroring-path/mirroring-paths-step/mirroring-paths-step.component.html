@@ -64,6 +64,7 @@
     <div
       class="cds--tile cds-mb-5"
       [class.cds-pb-5]="entry.expanded && !entry.levels.length"
+      data-testid="mirroring-path-entry"
     >
       <div
         class="cds--row"
@@ -135,43 +136,32 @@
           >
             @for (level of entry.levels; track $index; let lvl = $index) {
               @if (lvl > 0) {
-                <span class="cds--type-body-compact-01 path-separator">/</span>
+                <span class="cds--type-body-compact-01">/</span>
               }
-              @if (isLevelLoading(i, lvl) && !level.options.length) {
-                <cds-loading
-                  [isActive]="true"
-                  [overlay]="false"
-                  size="sm"
-                >
-                </cds-loading>
-              } @else {
+              <div>
                 <cds-select
                   [label]="''"
+                  [skeleton]="level.loading"
                   [value]="level.selected"
                   (valueChange)="onLevelChange(i, lvl, $event)"
+                  [class.path-level-select-skeleton]="level.loading"
+                  [attr.data-testid]="
+                    level.loading ? 'path-level-select-skeleton' : 'path-level-select'
+                  "
                 >
-                  <option
-                    value=""
-                    i18n
-                  >
-                    -- Select --
-                  </option>
-                  @for (opt of level.options; track opt) {
-                    <option [value]="opt">{{ formatLevelOption(opt) }}</option>
+                  @if (!level.loading) {
+                    <option
+                      value=""
+                      i18n
+                    >
+                      -- Select --
+                    </option>
+                    @for (opt of level.options; track opt) {
+                      <option [value]="opt">{{ formatLevelOption(opt) }}</option>
+                    }
                   }
                 </cds-select>
-              }
-            }
-            @if (isLevelLoading(i, entry.levels.length)) {
-              @if (entry.levels.length) {
-                <span class="cds--type-body-compact-01 path-separator">/</span>
-              }
-              <cds-loading
-                [isActive]="true"
-                [overlay]="false"
-                size="sm"
-              >
-              </cds-loading>
+              </div>
             }
           </div>
         </div>
