@@ -628,6 +628,42 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   ASSERT_EQ(0, aio_comp_ctx.wait());
 }
 
+TEST_F(TestMockIoImageRequest, AioFlushInternalWrites) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  expect_op_work_queue(mock_image_ctx);
+
+  // an older read in flight
+  C_SaferCond read_ctx;
+  AioCompletion *read_comp = AioCompletion::create_and_start(
+    &read_ctx, ictx, AIO_TYPE_READ);
+
+  InSequence seq;
+  expect_object_request_send(mock_image_ctx, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_FLUSH);
+  MockImageFlushRequest mock_aio_image_flush(mock_image_ctx, aio_comp,
+                                             FLUSH_SOURCE_INTERNAL_WRITES, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_flush.send();
+  }
+  int r = aio_comp_ctx.wait_for(10);
+
+  read_comp->set_request_count(1);
+  (new C_AioRequest(read_comp))->complete(0);
+  ASSERT_EQ(0, read_ctx.wait());
+  aio_comp_ctx.wait();
+
+  // the flush does not wait for the older read
+  ASSERT_EQ(0, r);
+}
+
 TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
