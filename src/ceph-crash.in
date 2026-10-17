@@ -8,6 +8,7 @@ import grp
 import logging
 import os
 import pwd
+import re
 import signal
 import socket
 import subprocess
@@ -17,9 +18,18 @@ import time
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('ceph-crash')
 
+# ceph's own log lines on stderr start with a timestamp
+LOG_LINE = re.compile(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d')
+
+# seconds to reach the cluster, well under the 30 of timeout(1)
+CONNECT_TIMEOUT = 5
+
 auth_names = ['client.crash.%s' % socket.gethostname(),
               'client.crash',
               'client.admin']
+
+# the name that worked last, tried first
+last_good_name = None
 
 
 def parse_args():
@@ -42,32 +52,55 @@ def parse_args():
     return parser.parse_args()
 
 
-def post_crash(path):
-    rc = 0
-    for n in auth_names:
+def command_error(stderr):
+    """stderr without ceph's log lines"""
+    lines = [line for line in stderr.splitlines() if not LOG_LINE.match(line)]
+    return '\n'.join(lines).strip()
+
+
+def names_to_try():
+    if last_good_name is None:
+        return auth_names
+    return [last_good_name] + [n for n in auth_names if n != last_good_name]
+
+
+def run_ceph(what, args, input=None):
+    global last_good_name
+    # a failure with one name says nothing about the next, so try them all
+    errors = []
+    for n in names_to_try():
         pr = subprocess.Popen(
             args=['timeout', '30', 'ceph',
-                  '-n', n,
-                  'crash', 'post', '-i', '-'],
+                  '--connect-timeout', str(CONNECT_TIMEOUT),
+                  '--log-stderr-prefix=',
+                  '-n', n] + args,
             stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-        f = open(os.path.join(path, 'meta'), 'rb')
-        (_, stderr) = pr.communicate(input=f.read())
-        stderr = stderr.decode()
-        rc = pr.wait()
-        f.close()
-        if rc == 0 and stderr == "":
+        (_, stderr) = pr.communicate(input=input)
+        stderr = stderr.decode(errors='replace').strip()
+        rc = pr.returncode
+        if rc == 0 and command_error(stderr) == '':
+            last_good_name = n
+            return 0
+        log.debug('%s as %s failed: %s' % (what, n, stderr))
+        errors.append('%s: %s' % (n, stderr or 'exit code %d' % rc))
+        if rc == 0:
+            # exited 0 but failed, don't let it pass as posted
+            rc = 1
             break
-        if rc == errno.EACCES:
-            log.debug('post %s as %s failed: %s' % (path, n, stderr))
-        else:
-            log.warning('post %s as %s failed: %s' % (path, n, stderr))
+        if rc == errno.EINVAL:
+            # the cluster rejected what we sent
             break
-    else:
-        log.warning('post %s failed: unable to authenticate as %s: %s'
-                    % (path, ', '.join(auth_names), stderr))
+    log.warning('%s failed as %s' % (what, '; '.join(errors)))
     return rc
+
+
+def post_crash(path):
+    with open(os.path.join(path, 'meta'), 'rb') as f:
+        meta = f.read()
+    return run_ceph('post %s' % path, ['crash', 'post', '-i', '-'], meta)
 
 
 def scrape_path(path):
@@ -136,8 +169,7 @@ def main():
         time.sleep(30)
 
     log.info("pinging cluster to exercise our key")
-    pr = subprocess.Popen(args=['timeout', '30', 'ceph', '-s'])
-    pr.wait()
+    run_ceph('ping', ['-s'])
 
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:
