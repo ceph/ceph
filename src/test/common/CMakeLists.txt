@@ -268,6 +268,20 @@ add_executable(unittest_crc64nvme
 add_ceph_unittest(unittest_crc64nvme)
 target_link_libraries(unittest_crc64nvme ceph-common)
 
+# unittest_rdma_token
+add_executable(unittest_rdma_token
+  test_rdma_token.cc
+  )
+add_ceph_unittest(unittest_rdma_token)
+target_link_libraries(unittest_rdma_token ceph-common)
+
+# unittest_oob_gid
+add_executable(unittest_oob_gid
+  test_oob_gid.cc
+  )
+add_ceph_unittest(unittest_oob_gid)
+target_link_libraries(unittest_oob_gid ceph-common)
+
 # unittest_interval_map
 add_executable(unittest_interval_map
   test_interval_map.cc

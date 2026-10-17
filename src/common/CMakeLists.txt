@@ -110,6 +110,7 @@ set(common_srcs
   madler/crc64nvme.c
   crc64nvme.cc
   random_string.cc
+  rdma_token.cc
   reverse.c
   run_cmd.cc
   scrub_types.cc
@@ -130,6 +131,14 @@ set(common_srcs
 if(WITH_CPUTRACE)
   list(APPEND common_srcs
     cputrace.cc)
+endif()
+
+if(NOT WIN32)
+  # where the daemons run their out-of-band transports, and the memory
+  # they register: the Windows build has no daemons
+  list(APPEND common_srcs
+    oob_arena.cc
+    oob_config.cc)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
