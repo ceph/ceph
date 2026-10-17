@@ -231,7 +231,11 @@ Files: src/common/*s390x*
 Copyright: 2024 IBM <contact@ibm.com>
 License: Apache License, version 2.0
 
-Files: src/rgw/madler/*
+Files: src/common/spdk/*
+Copyright: Copyright (C) 2023 Intel Corporation. All rights reserved.
+License: BSD 3-clause
+
+Files: src/common/madler/*
 License:
   Copyright (C) 2014-2025 Mark Adler
 

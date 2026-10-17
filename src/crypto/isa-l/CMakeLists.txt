@@ -1,6 +1,4 @@
 # build isa-l_crypto from its makefile and expose as target ISAL::Crypto
-set(CEPH_HAVE_ISAL, TRUE)
-
 include(BuildISALCrypto)
 build_isal_crypto()
 

@@ -259,6 +259,15 @@ add_executable(unittest_bit_vector
 add_ceph_unittest(unittest_bit_vector)
 target_link_libraries(unittest_bit_vector ceph-common)
 
+# unittest_crc64nvme
+add_executable(unittest_crc64nvme
+  test_crc64nvme.cc
+  # spdk's table routine, a reference that ceph-common does not ship
+  ${CMAKE_SOURCE_DIR}/src/common/spdk/crc64.c
+  )
+add_ceph_unittest(unittest_crc64nvme)
+target_link_libraries(unittest_crc64nvme ceph-common)
+
 # unittest_interval_map
 add_executable(unittest_interval_map
   test_interval_map.cc

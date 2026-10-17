@@ -105,6 +105,10 @@ set(common_srcs
   perf_histogram.cc
   pick_address.cc
   prime.cc
+  madler/crc32iscsi.c
+  madler/crc32iso_hdlc.c
+  madler/crc64nvme.c
+  crc64nvme.cc
   random_string.cc
   reverse.c
   run_cmd.cc
@@ -247,9 +251,13 @@ if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
   if(HAVE_NASM_X64)
-    list(APPEND crc32_asm_flags "-i${PROJECT_SOURCE_DIR}/src/isa-l/include/")
+    list(APPEND crc32_asm_flags
+      "-i${PROJECT_SOURCE_DIR}/src/isa-l/include/"
+      "-i${PROJECT_SOURCE_DIR}/src/isa-l/crc/")
+    # ISA-L's CRC-64 kernel for ceph::crc64nvme() (crc64nvme.cc)
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_01.asm
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc64_rocksoft_refl_by8.asm
       crc32c_intel_fast_zero_asm.s)
   endif(HAVE_NASM_X64)
   if(HAVE_NASM_X64_AVX512_VPCLMUL)
@@ -258,7 +266,8 @@ if(HAVE_INTEL)
       "-i${PROJECT_SOURCE_DIR}/src/isa-l/crc/")
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc_const.asm
-      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm)
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc64_rocksoft_refl_by16_10.asm)
   endif(HAVE_NASM_X64_AVX512_VPCLMUL)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs

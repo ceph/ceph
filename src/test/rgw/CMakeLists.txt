@@ -374,7 +374,10 @@ target_link_libraries(unittest_rgw_lc
   rgw_common ${rgw_libs} ${EXPAT_LIBRARIES})
 
 # unittest_rgw_cksum
-add_executable(unittest_rgw_cksum test_rgw_cksum.cc)
+# spdk's table routine is the CRC-64/NVME reference that the test checks
+# rgw's digests against, and ceph-common does not ship it
+add_executable(unittest_rgw_cksum test_rgw_cksum.cc
+  ${CMAKE_SOURCE_DIR}/src/common/spdk/crc64.c)
 add_ceph_unittest(unittest_rgw_cksum)
 target_include_directories(unittest_rgw_cksum
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
