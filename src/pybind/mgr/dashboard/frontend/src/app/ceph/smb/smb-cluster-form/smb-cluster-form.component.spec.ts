@@ -12,6 +12,7 @@ import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.co
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
 import { USER } from '~/app/shared/constants/app.constants';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 describe('SmbClusterFormComponent', () => {
   let component: SmbClusterFormComponent;
@@ -30,7 +31,8 @@ describe('SmbClusterFormComponent', () => {
         SelectModule,
         ComboBoxModule
       ],
-      declarations: [SmbClusterFormComponent]
+      declarations: [SmbClusterFormComponent],
+      providers: [{ provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbClusterFormComponent);

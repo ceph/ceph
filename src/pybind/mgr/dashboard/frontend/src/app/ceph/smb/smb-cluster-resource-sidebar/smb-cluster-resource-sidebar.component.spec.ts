@@ -4,6 +4,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { BehaviorSubject, of } from 'rxjs';
 
 import { SmbClusterResourceSidebarComponent } from './smb-cluster-resource-sidebar.component';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
 import { SMBCluster } from '../smb.model';
 
@@ -29,6 +30,7 @@ describe('SmbClusterResourceSidebarComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [SmbClusterResourceSidebarComponent],
       providers: [
+        { provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT },
         {
           provide: ActivatedRoute,
           useValue: {
