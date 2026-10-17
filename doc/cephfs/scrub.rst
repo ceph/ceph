@@ -154,6 +154,28 @@ removed from the damage table.
 .. note:: A scrub invoked with the ``repair`` option can identify a damaged hard link but not repair it.
 
 
+Directory Fragment Byte Totals
+==============================
+
+Each directory fragment records the total size of its entries, which the MDS
+uses to split directories on ``mds_bal_split_bytes`` (see
+:doc:`/cephfs/dirfrags`). Scrub compares this total with the sizes of the
+fragment's entries as the MDS tracks them. A mismatch is not damage and is
+not added to the damage table. With the ``repair`` option, scrub sets the
+total to the sum of the entry sizes, for example::
+
+    ceph tell mds.<fsname>:0 scrub start /path recursive,repair
+
+This also sets totals that are unknown, such as those of directories written
+by an older version of Ceph or by the offline recovery tools. Scrub does not
+repair a total while the MDS is read-only or stopping.
+
+The repaired total can still be higher than what the fragment's object in
+the metadata pool holds, because the sizes the MDS tracks for entries are
+not lowered when it drops snapshot data from them. A higher total is safe:
+it can only make a directory split earlier.
+
+
 Evaluate Strays Using Recursive Scrub
 =====================================
 

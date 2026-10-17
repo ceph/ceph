@@ -2371,6 +2371,7 @@ int MetadataDriver::find_or_create_dirfrag(
     blank_fnode.fragstat.nfiles = 1;
     blank_fnode.accounted_fragstat = blank_fnode.fragstat;
     blank_fnode.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS);
+    blank_fnode.frag_bytes = -1;
     blank_fnode.encode(fnode_bl);
 
 
@@ -2435,7 +2436,18 @@ int MetadataDriver::inject_linkage(
   // Write out
   std::map<std::string, bufferlist> vals;
   vals[key] = dentry_bl;
-  int r = metadata_io.omap_set(frag_oid.name, vals);
+  librados::ObjectWriteOperation op;
+  fnode_t fnode;
+  uint64_t read_version = 0;
+  if (read_fnode(dir_ino, fragment, &fnode, &read_version) == 0 &&
+      fnode.frag_bytes >= 0) {
+    fnode.frag_bytes = -1;
+    bufferlist fnode_bl;
+    fnode.encode(fnode_bl);
+    op.omap_set_header(fnode_bl);
+  }
+  op.omap_set(vals);
+  int r = metadata_io.operate(frag_oid.name, &op);
   if (r != 0) {
     derr << "Error writing dentry " << dir_ino << "/" << dname << ": " << cpp_strerror(r) << dendl;
     return r;

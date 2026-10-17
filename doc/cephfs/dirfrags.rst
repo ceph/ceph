@@ -68,6 +68,45 @@ than ``mds_bal_merge_size``.  There is no merge equivalent of the
 creating oversized directory fragments, there is no equivalent issue
 to avoid when merging.  The default merge size is 50 directory entries.
 
+Size thresholds in bytes
+------------------------
+
+A directory fragment is also eligible for splitting when the omap values of
+its object in the metadata pool add up to more than ``mds_bal_split_bytes``
+(default 512 MiB), however few entries it has.  Snapshots are the usual
+cause: after a snapshot, each change to a directory, or to a file with hard
+links, keeps a copy of its previous inode, including its extended
+attributes, in its existing entry.  The entries grow with every snapshot
+while their number stays the same.  Without this threshold, the fragment's
+object can grow past ``osd_deep_scrub_large_omap_object_value_sum_threshold``
+(default 1 GiB) and raise the ``LARGE_OMAP_OBJECTS`` health warning, so keep
+``mds_bal_split_bytes`` below that threshold.  As with entries, a fragment
+over ``mds_bal_fragment_fast_factor`` times ``mds_bal_split_bytes`` is split
+immediately.  Setting ``mds_bal_split_bytes`` to 0 disables the check.
+
+When ``mds_bal_split_bytes`` is set, a merge must also not produce a fragment
+that holds more than ``mds_bal_split_bytes`` divided by two to the power
+``mds_bal_split_bits`` (64 MiB by default), which is about what each new
+fragment holds after a split on bytes.  A larger merged fragment would undo
+the split.
+
+The MDS keeps each fragment's total in the fragment's header, and updates it
+as changes are journaled.  The total can be higher than what the fragment's
+object holds: for example, when the MDS writes an entry back after the
+snapshots it was keeping copies for are removed, it drops those copies
+without lowering the total.  A higher total can only make a split happen
+earlier.
+
+The total can also be unknown: for fragments written by an older version of
+Ceph, and for fragments that the offline recovery tools
+(``cephfs-data-scan``, ``cephfs-journal-tool``) write to.  A fragment whose
+total is unknown is not split on bytes, and not merged at all, until a scrub
+with ``repair`` sets its total (see :ref:`mds-scrub`).  After upgrading,
+run a recursive scrub with ``repair`` so that existing directories get their
+totals::
+
+    ceph tell mds.<fsname>:0 scrub start / recursive,repair
+
 Activity thresholds
 ===================
 

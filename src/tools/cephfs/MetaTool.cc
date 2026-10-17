@@ -392,7 +392,29 @@ int MetaTool::_amend_meta(string& k, inode_meta_t& inode_meta, const string& fn,
     frag = item->second->get_meta()->pick_dirfrag(bp.dname);
   }
   string oid = obj_name(bp.dirino, frag);
-  int ret = io_meta.omap_set(oid, to_set);
+  librados::ObjectWriteOperation wop;
+  // the amended value isn't counted in the dirfrag's frag_bytes, so the total
+  // becomes unknown until a scrub with repair sets it
+  bufferlist header_bl;
+  if (io_meta.omap_get_header(oid, &header_bl) == 0) {
+    fnode_t fnode;
+    try {
+      auto p = header_bl.cbegin();
+      fnode.decode(p);
+      if (fnode.frag_bytes >= 0) {
+        fnode.frag_bytes = -1;
+        bufferlist fnode_bl;
+        fnode.encode(fnode_bl);
+        wop.omap_set_header(fnode_bl);
+      }
+    } catch (const buffer::error &err) {
+      cerr << "corrupt fnode header in " << oid
+           << ": " << err.what() << std::endl;
+      return -1;
+    }
+  }
+  wop.omap_set(to_set);
+  int ret = io_meta.operate(oid, &wop);
   to_set.clear();
   return ret;
 }

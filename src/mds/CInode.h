@@ -153,12 +153,22 @@ public:
 
   void reset_old_inodes(old_inode_map_const_ptr&& ptr) {
     old_inodes = std::move(ptr);
+    // an absent or empty map encodes __u32 with value 0. old_inodes map's
+    // length is unknown until get_old_inodes_len() computes it
+    old_inodes_len = (!old_inodes || old_inodes->empty()) ?
+      static_cast<int64_t>(sizeof(__u32)) : -1;
   }
 
   void encode_xattrs(bufferlist &bl) const;
   void decode_xattrs(bufferlist::const_iterator &p);
+  static uint64_t get_encoded_xattrs_len(const mempool_xattr_map *xattrs);
   void encode_old_inodes(bufferlist &bl, uint64_t features) const;
   void decode_old_inodes(bufferlist::const_iterator &p);
+  // length of encode_old_inodes() output. encodes the old_inodes map only
+  // when the length is not already known
+  uint64_t get_old_inodes_len(uint64_t features);
+  // this is what one entry of (snapid_t -> mempool_old_inode)'s length adds to encode_old_inodes() output
+  static uint64_t get_old_inode_entry_len(snapid_t last, const mempool_old_inode& old, uint64_t features);
 
   /* Helpers */
   static object_t get_object_name(inodeno_t ino, frag_t fg, std::string_view suffix);
@@ -196,6 +206,11 @@ protected:
   inode_const_ptr		inode = empty_inode;
   xattr_map_const_ptr		xattrs;
   old_inode_map_const_ptr	old_inodes;   // key = last, value.first = first
+
+  // encoded length of old_inodes and the features it was computed with.
+  // -1 = unknown.
+  int64_t old_inodes_len = sizeof(__u32);
+  uint64_t old_inodes_len_features = 0;
 };
 
 inline void decode_noshare(InodeStoreBase::mempool_xattr_map& xattrs,
