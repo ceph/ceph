@@ -41,6 +41,9 @@ CrashT = Dict[str, Union[str, List[str]]]
 
 class Module(MgrModule):
     CLICommand = CrashCLICommand
+    SHARED_STORE = [
+        {'prefix': 'crash/', 'readers': ['telemetry']},
+    ]
     MODULE_OPTIONS = [
         Option(
             name='warn_recent_interval',

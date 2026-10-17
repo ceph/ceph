@@ -165,6 +165,15 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
 
   if (std::string(type) == "mon") {
 
+    // Skips the OSDMap wait below too: nothing changed on the mon.
+    int cached_r = 0;
+    if (self->py_modules->try_get_cached_config_key_get(
+          {cmd_json}, &cached_r, &command_c->outbl)) {
+      self->py_modules->cmd_finisher.queue(command_c, cached_r);
+      PyEval_RestoreThread(tstate);
+      Py_RETURN_NONE;
+    }
+
     // Wait for the latest OSDMap after each command we send to
     // the mons.  This is a heavy-handed hack to make life simpler
     // for python module authors, so that they know whenever they
@@ -534,6 +543,39 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
   Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_store_get_ex(BaseMgrModule *self, PyObject *args)
+{
+  char *owner = nullptr;
+  char *key = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_store_get_ex", &owner, &key)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  const std::string &reader = self->this_module->get_name();
+  std::string value;
+  int r = self->py_modules->get_store_ex(reader, owner, key, &value);
+  switch (r) {
+  case 0:
+    return PyUnicode_FromString(value.c_str());
+  case -ENOENT:
+    Py_RETURN_NONE;
+  case -ENODEV:
+    PyErr_Format(PyExc_ImportError, "Module '%s' not found", owner);
+    return nullptr;
+  case -EACCES:
+    PyErr_Format(PyExc_PermissionError,
+                 "Module '%s' does not share '%s' with module '%s'",
+                 owner, key, reader.c_str());
+    return nullptr;
+  default:
+    PyErr_Format(PyExc_RuntimeError, "get_store_ex failed: %s",
+                 cpp_strerror(r).c_str());
+    return nullptr;
+  }
 }
 
 static PyObject*
@@ -1650,6 +1692,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
    "Get a stored field"},
+
+  {"_ceph_get_store_ex", (PyCFunction)ceph_store_get_ex, METH_VARARGS,
+   "Get a stored field that another module shares with this module"},
 
   {"_ceph_set_store", (PyCFunction)ceph_store_set, METH_VARARGS,
    "Set a stored field"},
