@@ -61,6 +61,13 @@ add_executable(unittest_osd_types
 add_ceph_unittest(unittest_osd_types)
 target_link_libraries(unittest_osd_types global)
 
+# unittest_purged_snaps
+add_executable(unittest_purged_snaps
+  test_purged_snaps.cc
+  )
+add_ceph_unittest(unittest_purged_snaps)
+target_link_libraries(unittest_purged_snaps global)
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc
