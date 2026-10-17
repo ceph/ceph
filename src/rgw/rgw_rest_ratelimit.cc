@@ -2,10 +2,12 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_rest_ratelimit.h"
+
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
-#include "rgw_process_env.h"
 #include "rgw_op.h"
+#include "rgw_process_env.h"
+#include "rgw_zone.h"
 
 class RGWOp_Ratelimit_Info : public RGWRESTOp {
 int check_caps(const RGWUserCaps& caps) override {
@@ -118,6 +120,7 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
     encode_json("bucket_ratelimit", period_config.bucket_ratelimit, s->formatter);
     encode_json("user_ratelimit", period_config.user_ratelimit, s->formatter);
     encode_json("anonymous_ratelimit", period_config.anon_ratelimit, s->formatter);
+    encode_json("account_ratelimit", period_config.account_ratelimit, s->formatter);
     s->formatter->close_section();
     flusher.flush();
     return;
@@ -378,6 +381,16 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
                          have_max_list_ops, max_list_ops, have_max_delete_ops, max_delete_ops,
                          have_enabled, enabled, ratelimit_configured, ratelimit_info);
       period_config.user_ratelimit = ratelimit_info;
+      op_ret = cfgstore->write_period_config(s, y, false, realm_id, period_config);
+      return;
+    }
+    if (ratelimit_scope == "account") {
+      ratelimit_info = period_config.account_ratelimit;
+      set_ratelimit_info(have_max_read_ops, max_read_ops, have_max_write_ops, max_write_ops,
+                         have_max_read_bytes, max_read_bytes, have_max_write_bytes, max_write_bytes,
+                         have_max_list_ops, max_list_ops, have_max_delete_ops, max_delete_ops,
+                         have_enabled, enabled, ratelimit_configured, ratelimit_info);
+      period_config.account_ratelimit = ratelimit_info;
       op_ret = cfgstore->write_period_config(s, y, false, realm_id, period_config);
       return;
     }
