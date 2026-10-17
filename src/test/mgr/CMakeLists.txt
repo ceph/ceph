@@ -89,3 +89,14 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
 
   add_ceph_test(mgr-dashboard-smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/mgr-dashboard-smoke.sh)
 endif(WITH_MGR_DASHBOARD_FRONTEND)
+
+# ceph_test_mgr_fake_osd
+add_executable(ceph_test_mgr_fake_osd
+  test_mgr_fake_osd.cc
+  )
+target_link_libraries(ceph_test_mgr_fake_osd
+  ceph-common
+  global
+  ${EXTRALIBS}
+  ${CMAKE_DL_LIBS}
+  )
