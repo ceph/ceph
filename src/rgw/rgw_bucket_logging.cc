@@ -3,6 +3,7 @@
 
 #include <time.h>
 #include <random>
+#include <fmt/chrono.h>
 #include "common/ceph_time.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_bucket_logging_types.h"
