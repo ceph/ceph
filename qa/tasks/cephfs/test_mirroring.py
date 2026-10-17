@@ -1358,6 +1358,81 @@ class TestMirroring(CephFSTestCase):
 
         self._teardown_mirroring(dir_path, peer_spec)
 
+    @retry_assert(timeout=120, interval=5)
+    def _assert_checkpoints_reset(self, dir_path, created_at_by_snap):
+        """Checkpoints remain listed, but replicated state is back to created."""
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        by_name = {cp['snap_name']: cp for cp in res['checkpoints']}
+        self.assertEqual(set(by_name), set(created_at_by_snap))
+        for snap_name, created_at in created_at_by_snap.items():
+            cp = by_name[snap_name]
+            self.assertEqual(cp['status'], 'created',
+                             f'{snap_name} status is {cp["status"]}')
+            self.assertEqual(cp['created_at'], created_at)
+            self.assertEqual(cp['updated_at'], created_at)
+            self.assertNotIn('error_msg', cp)
+
+    def test_checkpoint_reset_on_peer_remove(self):
+        """peer_remove drops replicated checkpoint state.
+
+        A new peer must not keep reporting complete before its snapshots are
+        synced. Re-adding a peer that already has the snapshots becomes
+        complete again.
+        """
+        dir_path = '/cp_peer_remove'
+        snap_names = ['snap0', 'snap1']
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = dir_path.lstrip('/')
+
+        self._setup_mirrored_directory(dir_path, peer_spec=peer_spec, mount_b=True)
+        for snap_name in snap_names:
+            self._add_checkpoint_snapshot(dir_path, snap_name)
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_names[-1], len(snap_names))
+        self.verify_snapshot(dir_name, snap_names[-1])
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, snap_names, 'complete')
+
+        res = self.checkpoint_list(self.primary_fs_name, dir_path)
+        created_at_by_snap = {
+            cp['snap_name']: cp['created_at'] for cp in res['checkpoints']}
+
+        # Directory stays mirrored, so skip the dir_count == 0 check.
+        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                         verify_dircount=False)
+        self._assert_checkpoints_reset(dir_path, created_at_by_snap)
+
+        # Same peer, snapshots still present: status follows the remote again.
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, snap_names, 'complete')
+
+        self.peer_remove(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                         verify_dircount=False)
+        self._assert_checkpoints_reset(dir_path, created_at_by_snap)
+
+        # Fresh target: drop remote snapshots while nothing is syncing, then
+        # add the peer. complete must not come back until the daemon syncs.
+        self.stop_mirror_daemon()
+        for snap_name in snap_names:
+            self.mount_b.run_shell(["rmdir", f"{dir_name}/.snap/{snap_name}"])
+        self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_add",
+                          self.primary_fs_name, peer_spec, self.secondary_fs_name)
+        self._assert_checkpoints_reset(dir_path, created_at_by_snap)
+        for snap_name in snap_names:
+            self.assert_snapshot_not_synced(dir_name, snap_name)
+
+        self.start_mirror_daemon()
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_names[-1], len(snap_names))
+        self.verify_snapshot(dir_name, snap_names[-1])
+        self.check_checkpoint_statuses(
+            self.primary_fs_name, dir_path, snap_names, 'complete')
+
+        self._teardown_mirroring(dir_path, peer_spec)
+
     def test_checkpoint_deleted_snapshot_not_listed(self):
         """Deleted checkpointed snapshots must not appear in checkpoint ls."""
         dir_path = '/cp_del'
