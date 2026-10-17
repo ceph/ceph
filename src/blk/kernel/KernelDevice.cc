@@ -353,9 +353,13 @@ int KernelDevice::refresh_size()
 	    << block_size << " anyway" << dendl;
   }
 
-  // logic taken from open() for block vs file
-  int64_t new_size;
-  if (S_ISBLK(st.st_mode)) {
+  int64_t new_size = 0;
+
+  // Devices report st_size == 0: Linux block devices, and on FreeBSD
+  // every disk is a character device (GEOM providers, including
+  // zvols). BlkDev::get_size() uses BLKGETSIZE64 on Linux and
+  // DIOCGMEDIASIZE on FreeBSD.
+  if (S_ISBLK(st.st_mode) || S_ISCHR(st.st_mode)) {
     BlkDev blkdev(fd_directs[WRITE_LIFE_NOT_SET]);
     r = blkdev.get_size(&new_size);
     if (r < 0) {
@@ -366,9 +370,22 @@ int KernelDevice::refresh_size()
     new_size = st.st_size;
   }
 
+  // Fallback to configuration if size detection returned 0 on any platform
+  if (new_size == 0) {
+    new_size = g_conf().get_val<uint64_t>("bluestore_block_size");
+    derr << __func__ << " size detection returned 0, falling back to "
+	 << "bluestore_block_size " << new_size << dendl;
+  }
+
   // round size down to an even block
   size = p2align(new_size, int64_t(block_size));
+  if (size <= 0) {
+    derr << __func__ << " backing device/file has no usable size ("
+         << new_size << " bytes)" << dendl;
+    return -EINVAL;
+  }
   return 0;
+
 }
 
 void KernelDevice::close()
