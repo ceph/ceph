@@ -1,0 +1,10 @@
+{
+  "version": 10,
+  "configurePresets": [
+    {
+      "name": "_host",
+      "hidden": true,
+      "cacheVariables": {}
+    }
+  ]
+}
