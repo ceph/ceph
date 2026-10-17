@@ -17119,6 +17119,71 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  /* `access-model` -- read, and briefly change, what the gateway does
+   * when the filesystem refuses something S3 authorised.
+   *
+   *   model=<name>        the model in force
+   *   data=<verdict>      what it does for object *bytes*
+   *   object_attrs=<...>  and for an object's tags and ACL
+   *
+   * `set=` points it at another model for the rest of the process:
+   * `posix-strict`, `s3-metadata`, `default` (whatever was
+   * configured), or `data-on-s3s-word`, which is **wrong on purpose**
+   * so the invariant test can watch itself fail.  Proving a test can
+   * fail by editing the source and rebuilding is what this project
+   * does not do;  a runtime control that asserts both polarities is
+   * what it does instead.
+   *
+   * The suite must put it back.  A model left switched would make
+   * every later test in the run meaningless, so a test that sets it
+   * restores it in the same call sequence. */
+  if (hint == "access-model") {
+    static const nsfs::PosixStrictAccess strict;
+    static const nsfs::S3MetadataAccess metadata;
+    static const nsfs::DataOnS3sWordAccess wrong_on_purpose;
+
+    if (auto it = params.find("set"); it != params.end()) {
+      const nsfs::AccessStrategy* want = nullptr;
+      if (it->second == "posix-strict") {
+	want = &strict;
+      } else if (it->second == "s3-metadata") {
+	want = &metadata;
+      } else if (it->second == "data-on-s3s-word") {
+	want = &wrong_on_purpose;
+      } else if (it->second == "default") {
+	want = access_strategy.get();
+      } else {
+	return -EINVAL;
+      }
+      const auto* had = get_access_strategy();
+      access_strategy_live.store(want, std::memory_order_relaxed);
+      ldpp_dout(dpp, 1) << "nsfs: access model " << had->name() << " -> "
+	<< want->name() << " by driver hint" << dendl;
+      if (out) {
+	(*out)["had"] = had->name();
+      }
+    }
+
+    const auto* m = get_access_strategy();
+    if (out) {
+      (*out)["model"] = m->name();
+      (*out)["configured"] = access_strategy->name();
+      (*out)["data"] =
+	(m->refused(nsfs::AccessClass::data) == nsfs::Refused::refuse)
+	  ? "refuse" : "as_gateway_raised";
+      (*out)["object_attrs"] =
+	(m->refused(nsfs::AccessClass::object_attrs) == nsfs::Refused::refuse)
+	  ? "refuse" : "as_gateway_raised";
+      /* why, not just whether:  how many operations the gateway has
+       * performed on the model's say-so, by class */
+      (*out)["attrs_served"] = std::to_string(
+	cross_account_attrs_served.load(std::memory_order_relaxed));
+      (*out)["data_served"] = std::to_string(
+	cross_account_data_served.load(std::memory_order_relaxed));
+    }
+    return 0;
+  }
+
   /* `raise` -- the raise primitive, which no test can reach from S3
    * because the only site that uses it is the promote's residue, and
    * reaching that needs a version file owned by a uid no identity row
