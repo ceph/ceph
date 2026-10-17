@@ -1,0 +1,30 @@
+# Generated at runtime by kvrgw_write_nginx_conf() in kvrgw-common.sh.
+# Reference template — do not use directly; start_lb.sh writes .run/nginx/nginx.conf.
+#
+# Placeholders: @NGINX_DIR@ @ROOT@ @GW_PORT@ @UPSTREAM_SERVERS@
+#
+pid @NGINX_DIR@/nginx.pid;
+error_log @ROOT@/.logs/nginx-error.log;
+events { worker_connections 1024; }
+http {
+  client_body_temp_path @NGINX_DIR@/tmp;
+  proxy_temp_path @NGINX_DIR@/tmp;
+  fastcgi_temp_path @NGINX_DIR@/tmp;
+  uwsgi_temp_path @NGINX_DIR@/tmp;
+  scgi_temp_path @NGINX_DIR@/tmp;
+  access_log @ROOT@/.logs/nginx-access.log;
+  upstream kvrgw_frontends {
+@UPSTREAM_SERVERS@
+  }
+  server {
+    listen @GW_PORT@;
+    location / {
+      proxy_pass http://kvrgw_frontends;
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header Connection "";
+      proxy_request_buffering off;
+      client_max_body_size 0;
+    }
+  }
+}
