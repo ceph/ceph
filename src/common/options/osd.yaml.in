@@ -71,6 +71,11 @@ options:
     work (e.g., replicating degraded objects).
   default: 0
   with_legacy: true
+- name: osd_space_aware_backfill_priority
+  type: bool
+  level: advanced
+  desc: add space-usage based priority boost to backfill priority
+  default: false
 - name: osd_backfill_retry_interval
   type: float
   level: advanced
