@@ -91,20 +91,53 @@ else()
   set(USING_MOLD_LINKER FALSE CACHE INTERNAL "")
 endif()
 
-option(WITH_CCACHE "Build with ccache.")
+option(WITH_PCH "Build with precompiled headers" OFF)
+option(WITH_CCACHE "Build with ccache." OFF)
+option(WITH_SCCACHE "Build with sccache." OFF)
+
+# Clang only.  With GCC, ccache and sccache can serve a stale PCH after a
+# header in it changed, and without them GCC gains little for about five times
+# the space.  Other compilers are untested.
+if(WITH_PCH AND NOT CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  message(FATAL_ERROR "WITH_PCH is supported only with Clang, not "
+    "${CMAKE_CXX_COMPILER_ID}.")
+endif()
+
 if(WITH_CCACHE)
   if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
     message(WARNING "Compiler launcher already set. stop configuring ccache")
+    if(WITH_PCH)
+      # With a launcher already set, the sloppiness below is not applied.
+      message(WARNING "WITH_PCH needs pch_defines and time_macros in "
+        "CCACHE_SLOPPINESS (environment or ccache.conf), or objects built "
+        "against a precompiled header are never cached.")
+    endif()
   else()
     find_program(CCACHE_EXECUTABLE ccache
       REQUIRED)
     message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
     set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
+    set(cxx_launcher ${CCACHE_EXECUTABLE})
+    if(WITH_PCH)
+      # Without pch_defines and time_macros, objects built against a PCH
+      # never hit the cache.
+      # Only the C++ launcher gets it, as only C++ sources use the PCH.
+
+      # CCACHE_SLOPPINESS replaces the ccache.conf value, so start from it.
+      execute_process(
+        COMMAND ${CCACHE_EXECUTABLE} --get-config sloppiness
+        OUTPUT_VARIABLE ccache_sloppiness
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+
+      # Append; ccache drops duplicates, empty entries and whitespace.
+      list(PREPEND cxx_launcher ${CMAKE_COMMAND} -E env
+        "CCACHE_SLOPPINESS=${ccache_sloppiness},pch_defines,time_macros")
+    endif()
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${cxx_launcher})
   endif()
 endif(WITH_CCACHE)
 
-option(WITH_SCCACHE "Build with sccache.")
 if(WITH_SCCACHE)
   find_program(SCCACHE_EXECUTABLE sccache
     REQUIRED)
