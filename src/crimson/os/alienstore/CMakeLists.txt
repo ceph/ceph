@@ -64,10 +64,7 @@ set(alien_store_srcs
 
 # Merge alienstore + alien-common into a single archive.  The common sources
 # are compiled without WITH_CRIMSON and duplicate symbols in crimson-common.
-# ld.bfd resolves these by archive order; Mold treats them as errors.
-# After building, localize the duplicate symbols so they resolve internally
-# within this archive (for the alien/bluestore thread) while crimson-osd's
-# own references resolve from crimson-common (for seastar threads).
+# ld.bfd resolves these by archive order; lld and mold treat them as errors.
 add_library(crimson-alienstore STATIC
   ${alien_store_srcs}
   ${crimson_alien_common_srcs})
@@ -88,6 +85,6 @@ target_link_libraries(crimson-alienstore
     ${UDEV_LIBRARIES}
     blk)
 
-# Mold duplicate-symbol handling is done at the crimson-osd link step
+# lld/mold duplicate-symbol handling is done at the crimson-osd link step
 # (see src/crimson/osd/CMakeLists.txt) by ordering crimson-alienstore
 # before crimson-common with --allow-multiple-definition.
