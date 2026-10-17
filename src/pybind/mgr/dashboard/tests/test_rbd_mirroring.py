@@ -13,7 +13,7 @@ from .. import mgr
 from ..controllers.orchestrator import Orchestrator
 from ..controllers.rbd_mirroring import RbdMirroring, \
     RbdMirroringPoolBootstrap, RbdMirroringStatus, RbdMirroringSummary, \
-    get_daemons, get_pools
+    get_daemons, get_pools, _is_rbd_capable_pool
 from ..controllers.summary import Summary
 from ..services import progress
 from ..tests import ControllerTestCase
@@ -169,6 +169,24 @@ class GetDaemonAndPoolsTest(unittest.TestCase):
             ),
         ]
         return test_cases
+
+
+class IsRbdCapablePoolTest(unittest.TestCase):
+    def test_replicated_pool(self):
+        self.assertTrue(_is_rbd_capable_pool({'type': 1}))
+
+    def test_replicated_pool_default(self):
+        self.assertTrue(_is_rbd_capable_pool({}))
+
+    def test_ec_pool_without_omap(self):
+        self.assertFalse(_is_rbd_capable_pool({'type': 3, 'flags_names': 'ec_overwrites'}))
+
+    def test_ec_pool_with_omap(self):
+        self.assertTrue(_is_rbd_capable_pool(
+            {'type': 3, 'flags_names': 'ec_overwrites,supports_omap'}))
+
+    def test_ec_pool_no_flags(self):
+        self.assertFalse(_is_rbd_capable_pool({'type': 3}))
 
 
 class RbdMirroringControllerTest(ControllerTestCase):
