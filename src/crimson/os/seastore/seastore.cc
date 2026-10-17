@@ -426,11 +426,26 @@ seastar::future<> SeaStore::shard_stores_stop()
   return shard_stores.stop();
 }
 
+// seastore_spdk_transport_id names a single NVMe namespace and the device
+// factories ignore the device path while it is set, so every device would be
+// opened on that same namespace. Refuse a second device rather than let it
+// alias, and overwrite, the first one.
+static void check_spdk_single_device(std::size_t existing_devices)
+{
+  if (existing_devices > 0 &&
+      !get_conf<std::string>("seastore_spdk_transport_id").empty()) {
+    throw std::invalid_argument(
+      "seastore_spdk_transport_id is set: SPDK supports a single device, "
+      "secondary devices are not supported");
+  }
+}
+
 seastar::future<> SeaStore::create_cache_device(
   std::string &cache_dev_path,
   device_type_t dtype,
   backend_type_t btype)
 {
+  check_spdk_single_device(cache_devices.size() + data_devices.size());
   co_await seastar::make_directory(cache_dev_path);
   std::string path = fmt::format("{}/block", cache_dev_path);
   DeviceRef cache_dev = co_await Device::make_device(path, dtype, btype, 0);
@@ -468,6 +483,7 @@ seastar::future<> SeaStore::start_cache_devices()
       }
       device_id_t id = *p;
       std::string path = fmt::format("{}/{}", cache_dev_path, entry.name);
+      check_spdk_single_device(cache_devices.size() + data_devices.size());
       DeviceRef cache_dev = co_await Device::make_device(
         path, dtype, btype, id);
       ceph_assert(cache_dev);
@@ -493,6 +509,7 @@ seastar::future<> SeaStore::create_data_device(
   backend_type_t btype)
 {
   std::string path = fmt::format("{}/block", root);
+  check_spdk_single_device(cache_devices.size() + data_devices.size());
   DeviceRef data_dev = co_await Device::make_device(
     path, dtype, btype, cache_devices.size());
   ceph_assert(data_dev);
@@ -531,6 +548,7 @@ seastar::future<> SeaStore::start_data_devices()
       continue;
     }
     device_id_t id = *p;
+    check_spdk_single_device(cache_devices.size() + data_devices.size());
     DeviceRef data_dev = co_await Device::make_device(
       path, dtype, btype, id);
     ceph_assert(data_dev);
