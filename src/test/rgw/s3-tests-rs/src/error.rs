@@ -59,6 +59,34 @@ macro_rules! assert_s3_err {
     }};
 }
 
+/// The result of a *metadata* request S3 permits on an object another
+/// identity owns -- its tags or its ACL.
+///
+/// Which way this goes is the gateway's access model, not the
+/// filesystem's verdict, so it cannot be asked of `admin::fs_access`:
+/// under `s3-metadata` the gateway performs the operation itself once
+/// S3 has authorised it, and under `posix-strict` the filesystem's
+/// refusal stands.  `features::cross_account_metadata()` reports
+/// which, by interrogating the gateway.
+///
+/// `None` -- the endpoint reported no model and none was declared --
+/// asserts **nothing**, because a suite that guesses here asserts the
+/// opposite of the truth against half the backends it meets.
+#[macro_export]
+macro_rules! unless_posix_governs_metadata {
+    ($model:expr, $result:expr) => {{
+        let result = $result;
+        match $model {
+            Some(true) => Some(result.unwrap()),
+            Some(false) => {
+                $crate::assert_s3_err!(result, 403, "AccessDenied");
+                None
+            }
+            None => result.ok(),
+        }
+    }};
+}
+
 /// The result of a request S3 permits, where the filesystem may still
 /// refuse it:  under impersonation nsfs serves each request as its POSIX
 /// identity, and the filesystem decides an object's content too

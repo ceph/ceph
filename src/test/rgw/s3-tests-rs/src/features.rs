@@ -112,3 +112,48 @@ pub async fn features() -> Option<&'static Features> {
 pub async fn feature_bool(name: &str) -> Option<bool> {
     features().await.and_then(|f| f.get_bool(name))
 }
+
+/// Which access model the gateway runs: what it does when the
+/// filesystem refuses an operation S3 authorised.
+///
+/// `"posix-strict"` -- both must allow, which is NooBaa's model.
+/// `"s3-metadata"` -- S3 decides for an object's tags and ACL, never
+/// for its bytes.
+///
+/// **Asked of the gateway first, and that is the point.**  A
+/// deployment cannot be wrong about its own configuration, while a
+/// declaration passed to the suite drifts the moment somebody changes
+/// the gateway and not the invocation.  No request reveals the model
+/// on its own: every model answers alike wherever S3 and POSIX agree,
+/// which is nearly always.
+///
+/// `S3TEST_ACCESS_MODEL` is the fallback and only that -- for an
+/// endpoint that reports no features at all, which is AWS and any
+/// vendor gateway. It is consulted when the map is silent, never over
+/// it.
+///
+/// `None` means unknown, as everywhere in this module, and a test
+/// that cannot tell must assert nothing about the model rather than
+/// guess one.
+pub async fn access_model() -> Option<String> {
+    if let Some(m) = features().await.and_then(|f| f.get_str("access_model")) {
+        return Some(m.to_string());
+    }
+    std::env::var("S3TEST_ACCESS_MODEL").ok().filter(|v| !v.is_empty())
+}
+
+/// Whether an S3 grant reaches another identity's object *metadata* --
+/// its tags and ACL -- on a backend where the filesystem would refuse.
+///
+/// The question nearly every affected test actually asks.  `None` is
+/// unknown; `Some(false)` is a backend that reported a model which
+/// does not do this.
+pub async fn cross_account_metadata() -> Option<bool> {
+    match access_model().await.as_deref() {
+        Some("s3-metadata") => Some(true),
+        Some("posix-strict") => Some(false),
+        /* a model this suite has not heard of: unknown, not false */
+        Some(_) => None,
+        None => None,
+    }
+}

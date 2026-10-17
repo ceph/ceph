@@ -8,6 +8,7 @@
 //! The fixture ids come from that same option:  group `rgwfix`
 //! (70010), `rgwalice` (70101) in it, `rgwbob` (70102) not.
 
+use s3_tests_rs::admin::fs_access;
 use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity,
                          SavedIdentities};
 use s3_tests_rs::client::{get_alt_client, get_client};
