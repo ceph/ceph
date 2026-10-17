@@ -1397,6 +1397,39 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_readdir_keep_complete_interval
+  type: secs
+  level: advanced
+  desc: How long trimming spares a dirfrag that a readdir is walking (0 to disable)
+  long_desc: A readdir can only be served from a dirfrag that is complete, and
+    trimming any one dentry of a dirfrag leaves it incomplete. A large directory
+    is read over many pages, and under cache pressure the entries not yet sent
+    are the first to be trimmed, so the rest of the walk has to fetch the whole
+    dirfrag again, possibly more than once. For this long after a readdir page
+    that was not the last, trimming to relieve cache pressure leaves the
+    dirfrag's dentries alone, unless the cache is over mds_cache_memory_limit.
+  default: 10
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_readdir_withhold_caps_over_limit
+  type: bool
+  level: advanced
+  desc: Issue no new caps in readdir replies while the cache is over its limit
+  long_desc: Every cap a client holds pins an inode in the MDS cache, and a client
+    walking a large tree acquires caps on every inode it is sent, faster than the
+    per-session cap acquisition throttle reacts, so a few walkers can push the
+    cache past mds_cache_memory_limit. With this set, while the cache is over
+    mds_cache_memory_limit, a readdir reply still carries the entries and their
+    dentry leases, but no cap on an inode the client does not already hold, and
+    such inodes can be trimmed. A client that then stats one of them needs an
+    extra getattr round trip.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_verify_backtrace
   type: uint
   level: dev

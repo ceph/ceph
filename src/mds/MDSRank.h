@@ -59,6 +59,8 @@ enum {
   l_mds_dir_fetch_complete,
   l_mds_dir_fetch_keys,
   l_mds_dir_fetch_background,
+  l_mds_dir_readdir_refetch,
+  l_mds_dir_trim_spared,
   l_mds_dir_commit,
   l_mds_dir_split,
   l_mds_dir_merge,
