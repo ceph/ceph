@@ -12,6 +12,10 @@
 namespace cephfs {
 namespace mirror {
 
+const std::string SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY("mirroring_failed");
+const std::string SERVICE_DAEMON_FAILED_DIR_COUNT_KEY = "failure_count";
+const std::string SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY = "recovery_count";
+
 class ServiceDaemon {
 public:
   ServiceDaemon(CephContext *cct, RadosRef rados);
@@ -51,9 +55,13 @@ private:
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::service_daemon");
   Context *m_timer_ctx = nullptr;
   std::map<fs_cluster_id_t, Filesystem> m_filesystems;
+  Context *m_health_timer_ctx = nullptr;
 
   void schedule_update_status();
   void update_status();
+  std::vector<DaemonHealthMetric> get_health_metrics();
+  void schedule_health_tick();
+  void health_tick();
 };
 
 } // namespace mirror
