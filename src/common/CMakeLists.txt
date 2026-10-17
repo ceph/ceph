@@ -102,7 +102,6 @@ set(common_srcs
   scrub_types.cc
   signal.cc
   snap_types.cc
-  str_list.cc
   str_map.cc
   strtol.cc
   types.cc
