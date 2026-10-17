@@ -1833,6 +1833,20 @@ public:
                      std::list<librados::AioCompletion *>& handles, bool keep_index_consistent,
                      optional_yield y);
 
+  /**
+   * An index completion found its pending op gone: a bucket listing
+   * dropped it as expired, and may have repaired the entry from the head
+   * as it was before the write. Run a fresh index transaction for the
+   * key: prepare, read the head, and complete from the head as it is now.
+   */
+  int relink_index_entry(const DoutPrefixProvider *dpp, rgw_obj& obj,
+                         RGWModifyOp op, const rgw_bucket_entry_ver& ver,
+                         const cls_rgw_obj_key& key,
+                         const rgw_bucket_dir_entry_meta& dir_meta,
+                         std::list<cls_rgw_obj_key> *remove_objs,
+                         bool log_op, uint16_t bilog_op,
+                         rgw_zone_set *zones_trace);
+
  private:
   /**
    * Check the actual on-disk state of the object specified
@@ -1856,6 +1870,11 @@ public:
                        bufferlist& suggested_updates,
                        optional_yield y,
                        bool log_op = true);
+
+  // fill in an index entry's meta from the object's head
+  void head_dir_meta(const DoutPrefixProvider *dpp, const rgw_obj& obj,
+                     RGWObjState *astate, rgw_bucket_dir_entry_meta *meta);
+
 
   /**
    * Init pool iteration
