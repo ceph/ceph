@@ -2191,7 +2191,11 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     }
     olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, dest_key,
                    obj.is_delete_marker(), now_epoch);
-    return olh.write(header);
+    ret = olh.write(header);
+    if (ret < 0) {
+      return ret;
+    }
+    return write_header_while_logrecord(hctx, header);
   }
 
   if (!olh_found) {
