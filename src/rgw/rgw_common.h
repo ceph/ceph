@@ -1700,6 +1700,13 @@ bool rgw_set_amz_meta_header(
   const std::string& v, rgw_set_action_if_set f);
 
 extern std::string rgw_string_unquote(const std::string& s);
+/// Whether an If-Match or If-None-Match header names the entity tag etag.
+/// The header is a comma-separated list of entity tags, quoted or not
+/// (RFC 7232, section 3); the caller handles "*". A weak tag (W/"...")
+/// matches only under weak comparison, which If-None-Match uses and
+/// If-Match does not.
+extern bool rgw_etag_matches(std::string_view header, std::string_view etag,
+                             bool weak);
 extern void parse_csv_string(const std::string& ival, std::vector<std::string>& ovals);
 extern int parse_key_value(const std::string& in_str, std::string& key, std::string& val);
 extern int parse_key_value(const std::string& in_str, const char *delim, std::string& key, std::string& val);
