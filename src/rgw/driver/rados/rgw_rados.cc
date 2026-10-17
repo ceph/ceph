@@ -12289,6 +12289,14 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
 
       if (loc.key.ns == RGW_OBJ_NS_MULTIPART) {
 	ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << " removing manifest part from index loc=" << loc << dendl_bitx;
+	// The multipart writer indexes each part under the upload's object name
+	// (MultipartObjectProcessor::prepare_head sets head_obj.index_hash_source
+	// = target_obj.key.name), so the part's index entry lives on the head
+	// object's shard. raw_obj_to_obj() above leaves index_hash_source empty,
+	// which would hash the part's own name and send the removal to the wrong
+	// shard; point it at the head object so the delete reaches the shard that
+	// actually holds the entry. See https://tracker.ceph.com/issues/81121
+	loc.index_hash_source = manifest->get_obj().key.name;
 	r = delete_obj_index(loc, astate->mtime, dpp, y);
 	if (r < 0) {
 	  ldout_bitx(bitx, dpp, 0) <<
