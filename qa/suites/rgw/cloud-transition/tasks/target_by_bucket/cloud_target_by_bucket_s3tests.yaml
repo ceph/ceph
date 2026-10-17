@@ -2,6 +2,7 @@ tasks:
 - install:
 - ceph:
 - rgw:
+    compression type: zstd
     client.0:
       port: 8000
     client.1:
@@ -31,3 +32,7 @@ tasks:
       rgw_restore_processor_period: 10
       lifecycle_tests: True
       cloudtier_tests: True
+- workunit:
+    clients:
+      client.0:
+        - rgw/run-cloud-restore-recompress.sh
