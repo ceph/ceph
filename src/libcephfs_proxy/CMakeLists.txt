@@ -6,6 +6,7 @@ add_executable(libcephfsd ${libcephfsd_srcs})
 add_library(cephfs_proxy ${CEPH_SHARED} ${libcephfs_proxy_srcs})
 
 target_link_libraries(libcephfsd cephfs ${CRYPTO_LIBS})
+target_link_libraries(cephfs_proxy ${CRYPTO_LIBS})
 
 if(ENABLE_SHARED)
   set_target_properties(cephfs_proxy PROPERTIES
