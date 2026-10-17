@@ -571,3 +571,39 @@ TEST(LibCephFS, RmsnapSubvolumeSnapshotVisibility) {
   ASSERT_EQ(0, ceph_rmdir(cmount, subvol_path));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, AlternateName) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_xattr_file[NAME_MAX];
+  sprintf(test_xattr_file, "test_fscrypt_%d", getpid());
+  int fd = ceph_open(cmount, test_xattr_file, O_RDWR|O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  // check to ensure this fails as we do not have proper configs set to enter this mode
+  ASSERT_EQ(-EPERM, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_CREATE));
+
+  // set proper confs
+  ASSERT_EQ(ceph_conf_set(cmount, "client_fscrypt_as", "false"), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_alternate_name_visible", "true"), 0);
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_CREATE));
+
+  char buf[64];
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  fd = ceph_open(cmount, test_xattr_file, O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, test_xattr_file));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}

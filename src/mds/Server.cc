@@ -5355,6 +5355,7 @@ public:
 
     int snap_op = (in->snaprealm ? CEPH_SNAP_OP_UPDATE : CEPH_SNAP_OP_SPLIT);
 
+    in->mark_dirty_parent(mdr->ls, true);
     // apply
     mdr->apply();
 
@@ -6358,6 +6359,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
            << " bytes on " << *cur
            << dendl;
 
+  CDentry *dn = 0;
   CInode::mempool_inode *pip = nullptr;
   string rest;
 
@@ -6944,6 +6946,47 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       c.set_encoding(c.get_default_encoding());
     }
     dout(20) << "set encoding: " << c << dendl;
+  } else if (name == "ceph.alternate_name"sv) {
+    if (value == ""sv) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    if (!mdr->dn[0].empty()) {
+      dn = mdr->dn[0].back();
+    } else {
+      dn = cur->get_projected_parent_dn();
+    }
+
+    if (!dn)
+      return;
+
+    MutationImpl::LockOpVec lov;
+    lov.add_xlock(&dn->lock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    if (req->get_alternate_name().size() > alternate_name_max) {
+      dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
+      respond_to_request(mdr, -ENAMETOOLONG);
+      return;
+    }
+
+    if (dn->get_alternate_name() == value) {
+      // name is already set with same value, this is a noop.
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    if (dn->get_alternate_name().size()) {
+      respond_to_request(mdr, -EPERM);
+      return;
+    }
+
+    auto pi = cur->project_inode(mdr);
+    pip = pi.inode.get();
+
+    dn->set_alternate_name(value);
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);
@@ -6962,11 +7005,15 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "set vxattr layout");
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
-  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
+  CDir *dn_dir = 0;
+  if (dn)
+    dn_dir = dn->get_dir();
+
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, dn_dir, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
   auto* c = new C_MDS_inode_update_finish(this, mdr, cur, false, false, adjust_realm);
-  journal_and_reply(mdr, cur, 0, le, c);
+  journal_and_reply(mdr, cur, dn, le, c);
   return;
 }
 
