@@ -67,13 +67,8 @@ void encode_get_reply(const entry& value, ::ceph::buffer::list& output)
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    auto cursor = input;
-    auto candidate = ::cls::rgw::bi_wire::decode_request(cursor,
-        [](const std::uint32_t maximum, std::string&& filter, std::string&& marker, const bool reshard) {
-            return request {maximum, std::move(filter), std::move(marker), reshard};
-        });
-    value = std::move(candidate);
-    input = cursor;
+    ::cls::rgw::bi_wire::decode_request(input, value,
+        datum::binary_fields<&request::max, &request::name_filter, &request::marker, &request::reshardlog> {});
 }
 
 void decode(entry& value, ::ceph::buffer::list::const_iterator& input)

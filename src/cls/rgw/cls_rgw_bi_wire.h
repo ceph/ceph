@@ -12,7 +12,6 @@
 #include <type_traits>
 #include <utility>
 
-#include <functional>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -78,19 +77,15 @@ inline byte_buffer encode_request(const std::uint32_t maximum, const std::string
     return output;
 }
 
-template <typename FactoryT>
-auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
+template <typename RequestT, auto Maximum, auto Filter, auto Marker, auto Reshard>
+void decode_request(byte_buffer::const_iterator& input, RequestT& value,
+                    datum::binary_fields<Maximum, Filter, Marker, Reshard>)
 {
-    detail::reader archive {input};
-
-    return archive.frame(2, [&](auto& fields, const std::uint8_t version) {
-        const auto maximum = fields.template scalar<std::uint32_t>();
-        auto filter = fields.text();
-        auto marker = fields.text();
-        const bool reshard = version >= 2 && 0 != fields.template scalar<std::uint8_t>();
-
-        return std::invoke(std::forward<FactoryT>(factory), maximum,
-                           std::move(filter), std::move(marker), reshard);
+    ::cls::rgw::wire::decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+        candidate.*Maximum = fields.template scalar<std::uint32_t>();
+        fields.text(candidate.*Filter);
+        fields.text(candidate.*Marker);
+        candidate.*Reshard = version >= 2 && 0 != fields.template scalar<std::uint8_t>();
     });
 }
 

@@ -63,6 +63,17 @@ struct client_row
 
 constexpr auto client_row_fields = datum::binary_fields<&client_row::tag, &client_row::name, &client_row::contents> {};
 
+struct client_request final
+{
+    std::string marker;
+    std::string prefix;
+    std::uint64_t maximum = 0;
+    bool reshard = true;
+};
+
+constexpr auto client_request_fields = datum::binary_fields<&client_request::maximum, &client_request::prefix,
+    &client_request::marker, &client_request::reshard> {};
+
 struct counted_row final : client_row
 {
     inline static unsigned constructions = 0;
@@ -103,6 +114,15 @@ TEST_CASE("BI requests preserve native bytes and old version defaults", "[rgw][c
         CHECK(value.name_filter == expected.filter);
         CHECK(value.marker == expected.marker);
         CHECK(value.reshardlog == (version >= 2));
+        CHECK(cursor.end());
+
+        client_request client;
+        cursor = input.cbegin();
+        wire::decode_request(cursor, client, client_request_fields);
+        CHECK(client.maximum == expected.maximum);
+        CHECK(client.prefix == expected.filter);
+        CHECK(client.marker == expected.marker);
+        CHECK(client.reshard == (version >= 2));
         CHECK(cursor.end());
     }
 }
@@ -249,8 +269,10 @@ TEST_CASE("BI native bridge keeps entry and request cursors on failure", "[rgw][
         native::request value {1, "preserve", "cursor", false};
         CHECK_THROWS(native::decode(value, cursor));
         CHECK(cursor.get_off() == 6);
+        CHECK(value.max == 1);
         CHECK(value.name_filter == "preserve");
         CHECK(value.marker == "cursor");
+        CHECK_FALSE(value.reshardlog);
     }
     native::reply empty;
     byte_buffer bytes;
