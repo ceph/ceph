@@ -7423,7 +7423,8 @@ int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
 int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                                  RGWBucketInfo& bucket_info, const rgw_obj& obj,
                                  RGWObjStateManifest** psm, bool follow_olh,
-                                 optional_yield y, bool assume_noent)
+                                 optional_yield y, bool assume_noent,
+                                 const rgw_placement_rule *placement_rule)
 {
   if (obj.empty()) {
     return -EINVAL;
@@ -7445,7 +7446,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   s->obj = obj;
 
   rgw_raw_obj raw_obj;
-  obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
+  // use the caller's placement rule if given (e.g. a multipart part's tail placement)
+  obj_to_raw(placement_rule ? *placement_rule : bucket_info.placement_rule, obj, &raw_obj);
 
   int r = -ENOENT;
 
@@ -7622,13 +7624,14 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
 int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                             RGWBucketInfo& bucket_info, const rgw_obj& obj,
                             RGWObjStateManifest** psm, bool follow_olh,
-                            optional_yield y, bool assume_noent)
+                            optional_yield y, bool assume_noent,
+                            const rgw_placement_rule *placement_rule)
 {
   int ret;
 
   do {
     ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
-                             follow_olh, y, assume_noent);
+                             follow_olh, y, assume_noent, placement_rule);
   } while (ret == -EAGAIN);
 
   return ret;
@@ -8247,11 +8250,27 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
   }
   RGWObjStateManifest* sm = nullptr;
   constexpr bool follow_olh = false; // parts aren't versioned
+  // for backward compatibility:
+  //   Looking in the bucket's default pool first keeps parts written before #49128 (v16.2.8)
+  //   readable as their head attrs are in a zero-size object in the bucket's default pool
   int r = store->get_obj_state(dpp, rctx, bucket_info, *head_obj,
                                &sm, follow_olh, y);
   if (r < 0) {
     return r;
   }
+
+  const rgw_placement_rule& part_placement = manifest->get_tail_placement().placement_rule;
+  if (!sm->state.exists && part_placement != bucket_info.placement_rule) {
+    rctx->invalidate(*head_obj);
+    constexpr bool assume_noent = false;
+    // if the part wasn't found in the bucket's default pool, try the tail placement's pool
+    r = store->get_obj_state(dpp, rctx, bucket_info, *head_obj,
+                             &sm, follow_olh, y, assume_noent, &part_placement);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   *pstate = &sm->state;
 
   // if the part has its own manifest, use it directly
