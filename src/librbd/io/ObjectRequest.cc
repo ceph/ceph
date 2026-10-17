@@ -66,6 +66,25 @@ void convert_snap_set(const S& src_snap_set,
   }
 }
 
+template <typename I>
+asio::ContextWQ::Channel resolve_completion_channel(I *ictx,
+                                                    Context *completion) {
+  // Prefer the AioCompletion pin from API entry (survives omap/msgr hops).
+  if (auto *req = dynamic_cast<C_AioRequest*>(completion)) {
+    auto channel = req->get_completion_channel();
+    if (channel != nullptr) {
+      return channel;
+    }
+  } else if (auto *req =
+               dynamic_cast<ReadResult::C_ObjectReadRequest*>(completion)) {
+    auto channel = req->aio_completion->get_completion_channel();
+    if (channel != nullptr) {
+      return channel;
+    }
+  }
+  return ictx->asio_engine->get_work_queue()->current_channel();
+}
+
 } // anonymous namespace
 
 template <typename I>
@@ -123,7 +142,8 @@ ObjectRequest<I>::ObjectRequest(
     const char *trace_name, const ZTracer::Trace &trace, Context *completion)
   : m_ictx(ictx), m_object_no(objectno), m_io_context(io_context),
     m_completion(completion),
-    m_trace(create_trace(*ictx, "", trace)) {
+    m_trace(create_trace(*ictx, "", trace)),
+    m_channel(resolve_completion_channel(ictx, completion)) {
   ceph_assert(m_ictx->data_ctx.is_valid());
   if (m_trace.valid()) {
     m_trace.copy_name(trace_name + std::string(" ") +
@@ -187,7 +207,8 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
 template <typename I>
 void ObjectRequest<I>::async_finish(int r) {
   ldout(m_ictx->cct, 20) << "r=" << r << dendl;
-  m_ictx->asio_engine->post([this, r]() { finish(r); });
+  m_ictx->asio_engine->post_channel(
+    m_channel, [this, r]() { finish(r); });
 }
 
 template <typename I>
@@ -228,7 +249,8 @@ void ObjectReadRequest<I>::read_object() {
   if (read_snap_id == image_ctx->snap_id &&
       image_ctx->object_map != nullptr &&
       !image_ctx->object_map->object_may_exist(this->m_object_no)) {
-    image_ctx->asio_engine->post([this]() { read_parent(); });
+    image_ctx->asio_engine->post_channel(
+      this->m_channel, [this]() { read_parent(); });
     return;
   }
   image_locker.unlock();
@@ -250,9 +272,12 @@ void ObjectReadRequest<I>::read_object() {
   image_ctx->rados_api.execute(
     {data_object_name(this->m_ictx, this->m_object_no)},
     *this->m_io_context, std::move(read_op), nullptr,
-    librbd::asio::util::get_callback_adapter(
-      [this](int r) { handle_read_object(r); }), m_version,
-      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+    librbd::asio::util::get_completion_token(
+      *image_ctx->asio_engine,
+      [this](int r) { handle_read_object(r); },
+      this->m_channel),
+    m_version,
+    (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
 }
 
 template <typename I>
@@ -513,9 +538,12 @@ void AbstractObjectWriteRequest<I>::write_object() {
   image_ctx->rados_api.execute(
     {data_object_name(this->m_ictx, this->m_object_no)},
     *this->m_io_context, std::move(write_op),
-    librbd::asio::util::get_callback_adapter(
-      [this](int r) { handle_write_object(r); }), nullptr,
-      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+    librbd::asio::util::get_completion_token(
+      *image_ctx->asio_engine,
+      [this](int r) { handle_write_object(r); },
+      this->m_channel),
+    nullptr,
+    (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
 }
 
 template <typename I>
@@ -769,9 +797,12 @@ void ObjectListSnapsRequest<I>::list_snaps() {
   image_ctx->rados_api.execute(
     {data_object_name(this->m_ictx, this->m_object_no)},
     *this->m_io_context, std::move(read_op), nullptr,
-    librbd::asio::util::get_callback_adapter(
-      [this](int r) { handle_list_snaps(r); }), nullptr,
-      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+    librbd::asio::util::get_completion_token(
+      *image_ctx->asio_engine,
+      [this](int r) { handle_list_snaps(r); },
+      this->m_channel),
+    nullptr,
+    (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
 }
 
 template <typename I>
