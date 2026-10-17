@@ -318,22 +318,30 @@ as follows:
   List all zones set on this cluster.
 
 :command:`metadata sync status`
-  Get metadata sync status.
+  Report how far this zone's metadata sync has progressed toward the metadata
+  master zone. Only meaningful on secondary zones; on the metadata master zone
+  use :command:`mdlog status` instead. Does not accept ``--source-zone``.
 
 :command:`metadata sync init`
-  Init metadata sync.
+  Init metadata sync on a secondary zone toward the metadata master. Does not
+  accept ``--source-zone``.
 
 :command:`metadata sync run`
-  Run metadata sync.
+  Run metadata sync on a secondary zone toward the metadata master. Does not
+  accept ``--source-zone``.
 
 :command:`data sync status`
-  Get data sync status of the specified source zone.
-  
+  Report how far this zone's data sync has progressed for a remote source zone.
+  Requires ``--source-zone`` or ``--source-zone-id``; the source zone must not
+  be the local zone.
+
 :command:`data sync init`
-  Init data sync for the specified source zone.
+  Init data sync for a remote source zone. Requires ``--source-zone`` or
+  ``--source-zone-id``; the source zone must not be the local zone.
 
 :command:`data sync run`
-  Run data sync for the specified source zone.
+  Run data sync for a remote source zone. Requires ``--source-zone`` or
+  ``--source-zone-id``; the source zone must not be the local zone.
 
 :command:`sync error list`
   List sync errors.
@@ -757,7 +765,8 @@ Options
 
 .. option:: --source-zone
 
-   The source zone for data sync.
+   Remote source zone for data sync and bucket sync commands. Not used by
+   metadata sync commands.
 
 .. option:: --default
 
