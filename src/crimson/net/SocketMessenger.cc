@@ -38,11 +38,13 @@ namespace crimson::net {
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce,
-                                 bool dispatch_only_on_this_shard)
+                                 bool dispatch_only_on_this_shard,
+                                 bool export_metrics)
   : sid{seastar::this_shard_id()},
     logic_name{logic_name},
     nonce{nonce},
     dispatch_only_on_sid{dispatch_only_on_this_shard},
+    export_metrics{export_metrics},
     my_name{myname}
 {}
 
@@ -227,7 +229,10 @@ seastar::future<> SocketMessenger::start(
   assert(seastar::this_shard_id() == sid);
 
   dispatchers.assign(_dispatchers);
-  if (listener) {
+  return stats.start(logic_name, export_metrics).then([this] {
+    if (!listener) {
+      return seastar::now();
+    }
     // make sure we have already bound to a valid address
     ceph_assert(get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
@@ -244,8 +249,7 @@ seastar::future<> SocketMessenger::start(
         });
       }
     });
-  }
-  return seastar::now();
+  });
 }
 
 crimson::net::ConnectionRef
@@ -297,6 +301,8 @@ seastar::future<> SocketMessenger::shutdown()
     });
   }).then([this] {
     ceph_assert(connections.empty());
+    return stats.stop();
+  }).then([this] {
     shutdown_promise.set_value();
   });
 }

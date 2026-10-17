@@ -5,8 +5,7 @@
 #
 # Start the cluster with the crimson Prometheus endpoint enabled, for example:
 #
-#   MON=1 MGR=1 OSD=3 ../src/vstart.sh -n --crimson \
-#       -o 'crimson_prometheus_port_base = 9400'
+#   MON=1 MGR=1 OSD=3 ../src/vstart.sh -n --crimson --crimson-prometheus-port 9400
 #
 # then, from the same build directory:
 #

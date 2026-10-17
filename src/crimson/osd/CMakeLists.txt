@@ -13,6 +13,7 @@ add_executable(crimson-osd
   pg_meta.cc
   replicated_backend.cc
   shard_services.cc
+  op_stage_stats.cc
   pg_shard_manager.cc
   object_context.cc
   object_context_loader.cc

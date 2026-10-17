@@ -13,6 +13,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/object_context_loader.h"
+#include "crimson/osd/op_stage_stats.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_activation_blocker.h"
@@ -40,6 +41,7 @@ class ClientRequest final
   seastar::promise<> on_complete;
   unsigned instance_id = 0;
   std::chrono::time_point<std::chrono::steady_clock> begin_time;
+  op_stage_stats_t::timer_t<client_write_stage_t> write_timer;
 
 public:
   epoch_t get_epoch_sent_at() const {

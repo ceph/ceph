@@ -137,6 +137,7 @@ ReplicatedBackend::submit_transaction(
   std::vector<pg_shard_t> to_push_clone;
   std::vector<pg_shard_t> to_push_delete;
   auto sends = std::make_unique<std::vector<seastar::future<>>>();
+  pending_txn->second.sent = seastar::lowres_clock::now();
   for (auto &pg_shard : pg_shards) {
     if (pg_shard == whoami) {
       continue;
@@ -192,6 +193,9 @@ ReplicatedBackend::submit_transaction(
       ERRORDPP("peers is null, this should be impossible", dpp);
       assert(0 == "impossible");
     }
+    peers->local_committed = seastar::lowres_clock::now();
+    shard_services.get_op_stage_stats().add(
+      repl_lat_t::LOCAL_COMMIT, peers->local_committed - peers->sent);
     if (--peers->pending == 0) {
       // no peers other than me, replication size is 1
       pg.complete_write(peers->at_version, peers->last_complete);
@@ -205,6 +209,12 @@ ReplicatedBackend::submit_transaction(
 			to_push_delete=std::move(to_push_delete),
 			to_push_clone=std::move(to_push_clone)] {
     auto acked_peers = std::move(pending_txn->second.acked_peers);
+    if (!acked_peers.empty()) {
+      shard_services.get_op_stage_stats().add(
+        repl_lat_t::WAIT_PEERS,
+        seastar::lowres_clock::now() -
+          pending_txn->second.local_committed);
+    }
     pending_trans.erase(pending_txn);
     if (_new_clone && !to_push_clone.empty()) {
       pg.enqueue_push_for_backfill(
@@ -246,6 +256,8 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
   auto& peers = found->second;
   for (auto& peer : peers.acked_peers) {
     if (peer.shard == reply.from) {
+      shard_services.get_op_stage_stats().add(
+        repl_lat_t::REPOP_RTT, seastar::lowres_clock::now() - peers.sent);
       peer.last_complete_ondisk = reply.get_last_complete_ondisk();
       pg.update_peer_last_complete_ondisk(
 	peer.shard, peer.last_complete_ondisk);
