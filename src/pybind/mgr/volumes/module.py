@@ -296,8 +296,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume earmark set '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=group_name,type=CephString,req=false '
-                   'name=earmark,type=CephString ',
+                   'name=earmark,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
             'desc': "Set earmark for a subvolume",
             'perm': 'rw'
         },
@@ -321,8 +321,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume enctag set '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=group_name,type=CephString,req=false '
-                   'name=enctag,type=CephString ',
+                   'name=enctag,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
             'desc': "Set encryption tag for a subvolume",
             'perm': 'rw'
         },
@@ -964,8 +964,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_subvolume_earmark_set(self, inbuf, cmd):
         return self.vc.set_earmark(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None),
-                                      earmark=cmd['earmark'])
+                                      earmark=cmd['earmark'],
+                                      group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_earmark_rm(self, inbuf, cmd):
@@ -983,8 +983,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_subvolume_enctag_set(self, inbuf, cmd):
         return self.vc.set_enctag(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
-                                      group_name=cmd.get('group_name', None),
-                                      enctag=cmd['enctag'])
+                                      enctag=cmd['enctag'],
+                                      group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_enctag_rm(self, inbuf, cmd):
