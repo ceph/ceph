@@ -23,6 +23,7 @@ set(mgr_modules
   alerts
   balancer
   cephadm
+  ceph_secrets
   cli_api
   crash
   # dashboard (optional)
