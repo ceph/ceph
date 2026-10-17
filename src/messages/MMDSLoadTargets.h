@@ -21,10 +21,8 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 #include "messages/PaxosServiceMessage.h"
+#include "include/encoding_set.h"
 #include "include/types.h"
-
-#include <map>
-using std::map;
 
 class MMDSLoadTargets final : public PaxosServiceMessage {
 public:
