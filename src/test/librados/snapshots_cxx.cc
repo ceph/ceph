@@ -557,39 +557,41 @@ TEST(LibRadosPoolIsInSelfmanagedSnapsMode, FreshInstance) {
   librados::Rados cluster1;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster1));
+
+  // A fresh instance gets its first osdmap from the monitor it connects
+  // to, which may not have applied the latest commit yet.
+  auto fresh_instance_mode = [&pool_name](int expected) {
+    int r = -EINVAL;
+    for (int tries = 0; tries < 30 && r != expected; ++tries) {
+      if (tries > 0) {
+        sleep(1);
+      }
+      librados::Rados cluster2;
+      if (!connect_cluster_pp(cluster2).empty()) {
+        return -ENOTCONN;
+      }
+      r = cluster2.pool_is_in_selfmanaged_snaps_mode(pool_name);
+    }
+    return r;
+  };
+
   EXPECT_EQ(0, cluster1.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  {
-    librados::Rados cluster2;
-    ASSERT_EQ("", connect_cluster_pp(cluster2));
-    EXPECT_EQ(0, cluster2.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  }
+  EXPECT_EQ(0, fresh_instance_mode(0));
 
   librados::IoCtx ioctx;
   cluster1.ioctx_create(pool_name.c_str(), ioctx);
   uint64_t snap_id;
   ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&snap_id));
   EXPECT_EQ(1, cluster1.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  {
-    librados::Rados cluster2;
-    ASSERT_EQ("", connect_cluster_pp(cluster2));
-    EXPECT_EQ(1, cluster2.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  }
+  EXPECT_EQ(1, fresh_instance_mode(1));
 
   ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(snap_id));
   EXPECT_EQ(1, cluster1.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  {
-    librados::Rados cluster2;
-    ASSERT_EQ("", connect_cluster_pp(cluster2));
-    EXPECT_EQ(1, cluster2.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  }
+  EXPECT_EQ(1, fresh_instance_mode(1));
 
   ASSERT_EQ(0, cluster1.pool_delete(pool_name.c_str()));
   EXPECT_EQ(-ENOENT, cluster1.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  {
-    librados::Rados cluster2;
-    ASSERT_EQ("", connect_cluster_pp(cluster2));
-    EXPECT_EQ(-ENOENT, cluster2.pool_is_in_selfmanaged_snaps_mode(pool_name));
-  }
+  EXPECT_EQ(-ENOENT, fresh_instance_mode(-ENOENT));
 }
 
 // EC testing
