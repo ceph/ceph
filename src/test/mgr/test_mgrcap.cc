@@ -16,6 +16,8 @@
 #include <iostream>
 
 #include "gtest/gtest.h"
+#include "include/buffer.h"
+#include "include/encoding.h"
 #include "include/stringify.h"
 #include "mgr/MgrCap.h"
 
@@ -398,6 +400,29 @@ TEST(MgrCap, PermissionsWithNoCapability)
   // Asking for write when only read is granted
   ASSERT_FALSE(
       cap.is_capable(nullptr, {}, "", "", "", {}, false, true, false, {}));
+}
+
+TEST(MgrCap, DecodeMalformedCap)
+{
+  // Encode a cap string that fails profile evaluation (unknown profile),
+  // using the DECODE_START(4) framing MgrCap::decode() expects.
+  const std::string bad_cap = "profile does-not-exist";
+  bufferlist bl;
+  ENCODE_START(4, 4, bl);
+  encode(bad_cap, bl);
+  ENCODE_FINISH(bl);
+
+  MgrCap cap;
+  auto p = bl.cbegin();
+  cap.decode(p);
+
+  EXPECT_TRUE(cap.grants.empty())
+      << "malformed cap left grants populated after decode";
+  EXPECT_TRUE(stringify(cap).empty())
+      << "malformed cap left non-empty text after decode: '" << stringify(cap) << "'";
+  EXPECT_FALSE(
+      cap.is_capable(nullptr, {}, "", "", "", {}, true, true, true, {}))
+      << "malformed cap granted capabilities after decode";
 }
 
 /* End Negative Tests */
