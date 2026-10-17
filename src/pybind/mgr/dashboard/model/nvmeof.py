@@ -103,7 +103,7 @@ class Subsystem(NamedTuple):
     has_dhchap_key: bool
     allow_any_host: bool
     created_without_key: bool = False
-    network_mask: Annotated[List[str], CliFieldTransformer(lambda v: "\n".join(v))] = []
+    network_mask: Annotated[List[str], CliFieldTransformer("\n".join)] = []
 
 
 class SubsystemList(NamedTuple):
