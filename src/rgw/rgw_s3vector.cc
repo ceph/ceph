@@ -994,7 +994,7 @@ namespace rgw::s3vector {
   int create_index(const create_index_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "CreateIndex", configuration);
     CreateIndexCtx ctx{&configuration, driver, &ns, dpp, &errors, 0};
-    lancedb_run_on_stack(create_index_impl, &ctx, 256*1024, 1024*1024);
+    create_index_impl(&ctx);
     return ctx.result;
   }
 
@@ -1386,7 +1386,7 @@ namespace rgw::s3vector {
   int remove_indexes(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
       const bucket_namespace_t& ns, const std::string& vector_bucket_name, bool delete_indexes, optional_yield y) {
     RemoveIndexesCtx ctx{&vector_bucket_name, driver, &ns, dpp, delete_indexes, 0};
-    lancedb_run_on_stack(remove_indexes_impl, &ctx, 256*1024, 1024*1024);
+    remove_indexes_impl(&ctx);
     return ctx.result;
   }
 
@@ -1469,7 +1469,7 @@ namespace rgw::s3vector {
   int create_vector_bucket(const create_vector_bucket_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y) {
     log_configuration(dpp, "CreateVectorBucket", configuration);
     CreateVectorBucketCtx ctx{&configuration, driver, &ns, dpp, 0};
-    lancedb_run_on_stack(create_vector_bucket_impl, &ctx, 256*1024, 1024*1024);
+    create_vector_bucket_impl(&ctx);
     return ctx.result;
   }
 
@@ -2027,7 +2027,7 @@ namespace rgw::s3vector {
       return -EINVAL;
     }
     PutVectorsCtx ctx{&configuration, driver, &ns, dpp, &errors, 0};
-    lancedb_run_on_stack(put_vectors_impl, &ctx, 256*1024, 1024*1024);
+    put_vectors_impl(&ctx);
     return ctx.result;
   }
 
