@@ -321,7 +321,7 @@ int DiffIterate<I>::execute() {
 
   int r;
   bool fast_diff_enabled = false;
-  uint64_t start_object_no, end_object_no;
+  uint64_t start_object_no = 0, end_object_no = 0;
   BitVector<2> object_diff_state;
   interval_set<uint64_t> parent_diff;
   if (m_whole_object) {

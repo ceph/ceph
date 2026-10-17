@@ -577,7 +577,7 @@ Node::try_merge_adjacent(
     Ref<Node> left_for_merge;
     Ref<Node> right_for_merge;
     Ref<Node>* p_this_ref;
-    bool is_left;
+    bool is_left = false; // read only when left_for_merge is set below
     if (!lnode && !rnode) {
       // XXX: this is possible before node rebalance is implemented,
       // when its parent cannot merge with its peers and has only one child
