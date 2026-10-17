@@ -55,7 +55,14 @@ int main(int argc, const char **argv)
   }
 
   std::map<std::string,std::string> defaults = {
-    { "keyring", "$mgr_data/keyring" }
+    { "keyring", "$mgr_data/keyring" },
+    // Modules open their librados handle while the mgr is coming up, which is
+    // exactly when the monitors may still be (re)forming quorum. A module that
+    // throws out of __init__ is never reconstructed, so let connect() ride out
+    // a transient failure instead of leaving the module permanently failed.
+    // This is only a default, so an operator who wants the historical
+    // fail-immediately behaviour can still set rados_connect_retries = 0.
+    { "rados_connect_retries", "5" }
   };
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_MGR,
 			 CODE_ENVIRONMENT_DAEMON, 0);
