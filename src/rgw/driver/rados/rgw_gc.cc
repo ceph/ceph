@@ -4,7 +4,6 @@
 #include "rgw_gc.h"
 
 #include "rgw_tools.h"
-#include "common/Clock.h" // for ceph_clock_now()
 #include "include/scope_guard.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
@@ -13,11 +12,20 @@
 #include "cls/version/cls_version_client.h"
 #include "rgw_perf_counters.h"
 #include "cls/lock/cls_lock_client.h"
+#include "common/async/lease.h"
+#include "common/async/lock_rados.h"
+#include "common/async/spawn_throttle.h"
+#include "common/error_code.h"
 #include "include/random.h"
 #include "rgw_gc_log.h"
 
+#include <algorithm>
 #include <list> // XXX
 #include <sstream>
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
 #include "xxhash.h"
 
 #define dout_context g_ceph_context
@@ -139,28 +147,6 @@ int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optiona
   return store->gc_operate(this, obj_names[i], std::move(set_entry_op), y);
 }
 
-int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc, optional_yield y)
-{
-  ObjectWriteOperation op;
-  cls_rgw_gc_remove(op, tags);
-
-  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
-  int ret = store->gc_aio_operate(obj_names[index], c.get(), &op);
-  if (ret >= 0) {
-    *pc = c.get();
-    c.release();
-  }
-  return ret;
-}
-
-int RGWGC::remove(int index, int num_entries, optional_yield y)
-{
-  ObjectWriteOperation op;
-  cls_rgw_gc_queue_remove_entries(op, num_entries);
-
-  return store->gc_operate(this, obj_names[index], std::move(op), y);
-}
-
 static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::IoCtx& io_ctx,
                    std::string& oid, std::string& marker, uint32_t max, bool expired_only,
                    std::list<cls_rgw_gc_obj_info>& entries, bool& truncated, std::string& next_marker)
@@ -273,441 +259,488 @@ int RGWGC::list(int& index, string& marker, uint32_t max, bool expired_only, std
   return 0;
 }
 
-class RGWGCIOManager {
-  const DoutPrefixProvider* dpp;
-  CephContext *cct;
-  RGWGC *gc;
-
-  struct IO {
-    enum Type {
-      UnknownIO = 0,
-      TailIO = 1,
-      IndexIO = 2,
-    } type{UnknownIO};
-    librados::AioCompletion *c{nullptr};
-    string oid;
-    int index{-1};
-    string tag;
-  };
-
-  deque<IO> ios;
-  vector<std::vector<string> > remove_tags;
-  /* tracks the number of remaining shadow objects for a given tag in order to
-   * only remove the tag once all shadow objects have themselves been removed
-   */
-  vector<map<string, size_t> > tag_io_size;
-
-#define MAX_AIO_DEFAULT 10
-  size_t max_aio{MAX_AIO_DEFAULT};
-
-public:
-  RGWGCIOManager(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp),
-                                                                                  cct(_cct),
-                                                                                  gc(_gc) {
-    max_aio = cct->_conf->rgw_gc_max_concurrent_io;
-    // must match obj_names[] / transitioned_objects_cache sized in initialize()
-    remove_tags.resize(gc->get_max_objs());
-    tag_io_size.resize(gc->get_max_objs());
+// an op cut short by cancellation is shutdown, not an osd error
+static void throw_if_op_cancelled(int r, const boost::asio::yield_context& y)
+{
+  if (r == -ECANCELED && y.cancelled() != boost::asio::cancellation_type::none) {
+    throw boost::system::system_error(boost::asio::error::operation_aborted);
   }
+}
 
-  ~RGWGCIOManager() {
-    for (auto io : ios) {
-      io.c->release();
-    }
+int RGWGC::list_shard(int index, std::string& marker, uint32_t max,
+                      std::list<cls_rgw_gc_obj_info>& entries, bool& truncated,
+                      boost::asio::yield_context y)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  // removal counts unexpired entries too, so list them all
+  cls_rgw_gc_queue_list_entries(op, marker, max, false, bl);
+  int ret = store->gc_operate(this, obj_names[index], std::move(op), nullptr, y);
+  throw_if_op_cancelled(ret, y);
+  std::string next_marker;
+  if (ret >= 0) {
+    ret = cls_rgw_gc_queue_list_entries_decode(bl, entries, truncated, next_marker);
   }
-
-  int schedule_io(IoCtx *ioctx, const string& oid, ObjectWriteOperation *op,
-		  int index, const string& tag) {
-    while (ios.size() > max_aio) {
-      if (gc->going_down()) {
-        return 0;
-      }
-      auto ret = handle_next_completion();
-      //Return error if we are using queue, else ignore it
-      if (gc->transitioned_objects_cache[index] && ret < 0) {
-        return ret;
-      }
-    }
-
-    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
-    int ret = ioctx->aio_operate(oid, c.get(), op);
-    if (ret < 0) {
-      return ret;
-    }
-    ios.push_back(IO{IO::TailIO, c.get(), oid, index, tag});
-    c.release();
-
-    return 0;
-  }
-
-  int handle_next_completion() {
-    ceph_assert(!ios.empty());
-    IO& io = ios.front();
-    io.c->wait_for_complete();
-    int ret = io.c->get_return_value();
-    io.c->release();
-
-    if (ret == -ENOENT) {
-      ret = 0;
-    }
-
-    if (io.type == IO::IndexIO && ! gc->transitioned_objects_cache[io.index]) {
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "WARNING: gc cleanup of tags on gc shard index=" <<
-	  io.index << " returned error, ret=" << ret << dendl;
-      }
-      goto done;
-    }
-
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: gc could not remove oid=" << io.oid <<
-	", ret=" << ret << dendl;
-      goto done;
-    }
-
-    if (! gc->transitioned_objects_cache[io.index]) {
-      schedule_tag_removal(io.index, io.tag);
-    }
-
-  done:
-    ios.pop_front();
+  ldpp_dout(this, 20) <<
+    "RGWGC::process cls_rgw_gc_queue_list_entries returned with return value:" << ret <<
+    ", entries.size=" << entries.size() << ", truncated=" << truncated <<
+    ", next_marker='" << next_marker << "'" << dendl;
+  if (ret < 0) {
     return ret;
   }
+  marker = std::move(next_marker);
+  return 0;
+}
 
-  /* This is a request to schedule a tag removal. It will be called once when
-   * there are no shadow objects. But it will also be called for every shadow
-   * object when there are any. Since we do not want the tag to be removed
-   * until all shadow objects have been successfully removed, the scheduling
-   * will not happen until the shadow object count goes down to zero
-   */
-  void schedule_tag_removal(int index, string tag) {
-    auto& ts = tag_io_size[index];
-    auto ts_it = ts.find(tag);
-    if (ts_it != ts.end()) {
-      auto& size = ts_it->second;
-      --size;
-      // wait all shadow obj delete return
-      if (size != 0)
-        return;
-
-      ts.erase(ts_it);
-    }
-
-    auto& rt = remove_tags[index];
-
-    rt.push_back(tag);
-    if (rt.size() >= (size_t)cct->_conf->rgw_gc_max_trim_chunk) {
-      flush_remove_tags(index, rt);
-    }
+// apply a removal of count entries that asserts the shard lock
+int RGWGC::trim_shard(int index, librados::ObjectWriteOperation&& op, size_t count,
+                      boost::asio::yield_context y)
+{
+  int ret = store->gc_operate(this, obj_names[index], std::move(op), y);
+  throw_if_op_cancelled(ret, y);
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to trim gc shard index=" << index <<
+      " ret=" << ret << dendl;
+    return ret;
   }
-
-  void add_tag_io_size(int index, string tag, size_t size) {
-    auto& ts = tag_io_size[index];
-    ts.emplace(tag, size);
+  if (perfcounter) {
+    /* log the count of tags retired for rate estimation */
+    perfcounter->inc(l_rgw_gc_retire, count);
   }
+  return 0;
+}
 
-  int drain_ios() {
-    int ret_val = 0;
-    while (!ios.empty()) {
-      if (gc->going_down()) {
-        return -EAGAIN;
-      }
-      auto ret = handle_next_completion();
-      if (ret < 0) {
-        ret_val = ret;
-      }
-    }
-    return ret_val;
+int RGWGC::list_shard_omap(int index, std::string& marker, uint32_t max, bool expired_only,
+                           std::list<cls_rgw_gc_obj_info>& entries, bool& truncated,
+                           boost::asio::yield_context y)
+{
+  std::string next_marker;
+  int ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, max,
+                    expired_only, entries, truncated, next_marker);
+  throw_if_op_cancelled(ret, y);
+  ldpp_dout(this, 20) <<
+    "RGWGC::process cls_rgw_gc_list returned with returned:" << ret <<
+    ", entries.size=" << entries.size() << ", truncated=" << truncated <<
+    ", next_marker='" << next_marker << "'" << dendl;
+  if (ret == -ENOENT) {
+    truncated = false;
+  } else if (ret < 0) {
+    return ret;
   }
+  marker = std::move(next_marker);
+  return 0;
+}
 
-  void drain() {
-    drain_ios();
-    flush_remove_tags();
-    /* the tags draining might have generated more ios, drain those too */
-    drain_ios();
-  }
-
-  void flush_remove_tags(int index, vector<string>& rt) {
-    IO index_io;
-    index_io.type = IO::IndexIO;
-    index_io.index = index;
-
-    ldpp_dout(dpp, 20) << __func__ <<
-      " removing entries from gc log shard index=" << index << ", size=" <<
-      rt.size() << ", entries=" << rt << dendl;
-
-    auto rt_guard = make_scope_guard(
-      [&]
-	{
-	  rt.clear();
-	}
-      );
-
-    int ret = gc->remove(index, rt, &index_io.c, null_yield);
+int RGWGC::delete_object(pool_ctx_map& pool_ctxs, const cls_rgw_obj& obj,
+                         const std::string& tag, boost::asio::yield_context y)
+{
+  auto p = pool_ctxs.find(obj.pool);
+  if (p == pool_ctxs.end()) {
+    // a missing pool waits for the latest osdmap, so look up each pool once
+    librados::IoCtx ioctx;
+    int ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, ioctx);
     if (ret < 0) {
-      /* we already cleared list of tags, this prevents us from
-       * ballooning in case of a persistent problem
-       */
-      ldpp_dout(dpp, 0) << "WARNING: failed to remove tags on gc shard index=" <<
-	index << " ret=" << ret << dendl;
-      return;
-    }
-    if (perfcounter) {
-      /* log the count of tags retired for rate estimation */
-      perfcounter->inc(l_rgw_gc_retire, rt.size());
-    }
-    ios.push_back(index_io);
-  }
-
-  void flush_remove_tags() {
-    int index = 0;
-    for (auto& rt : remove_tags) {
-      if (! gc->transitioned_objects_cache[index]) {
-        flush_remove_tags(index, rt);
+      ldpp_dout(this, 0) << "ERROR: failed to create ioctx pool=" <<
+        obj.pool << dendl;
+      if (ret != -ENOENT) {
+        return ret;
       }
-      ++index;
+      p = pool_ctxs.emplace(obj.pool, std::nullopt).first;
+    } else {
+      ioctx.set_pool_full_try(); // allow deletion at pool quota limit
+      p = pool_ctxs.emplace(obj.pool, std::move(ioctx)).first;
     }
   }
+  if (!p->second) {
+    return 0; // the pool is gone
+  }
 
-  int remove_queue_entries(int index, int num_entries, optional_yield y) {
-    int ret = gc->remove(index, num_entries, null_yield);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to remove queue entries on index=" <<
-	    index << " ret=" << ret << dendl;
-      return ret;
-    }
-    if (perfcounter) {
-      /* log the count of tags retired for rate estimation */
-      perfcounter->inc(l_rgw_gc_retire, num_entries);
-    }
+  // dup() so concurrent children don't share the locator key
+  librados::IoCtx ioctx;
+  ioctx.dup(*p->second);
+  ioctx.locator_set_key(obj.loc);
+
+  const string& oid = obj.key.name; /* just stored raw oid there */
+
+  ldpp_dout(this, 5) << "RGWGC::process removing " << obj.pool <<
+    ":" << obj.key.name << dendl;
+  librados::ObjectWriteOperation op;
+  cls_refcount_put(op, tag, true);
+  int ret = rgw_rados_operate(this, ioctx, oid, std::move(op), y);
+  throw_if_op_cancelled(ret, y);
+  if (ret == -ENOENT) {
     return 0;
   }
-}; // class RGWGCIOManger
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "WARNING: gc could not remove oid=" << oid <<
+      ", ret=" << ret << dendl;
+  }
+  return ret;
+}
 
-int RGWGC::process(int index, int max_secs, bool expired_only,
-                   RGWGCIOManager& io_manager, optional_yield y)
+using Clock = ceph::coarse_mono_clock;
+
+static constexpr uint32_t list_max = 100;
+
+// run f with a workpool. if f throws, cancel the children and wait for all
+// of them outside the handler before rethrowing. a second cancellation can
+// cut a wait short, so keep waiting until none remain
+template <typename F>
+static auto with_workpool(CephContext* cct, boost::asio::yield_context yield, F&& f)
+{
+  // clamp signed first: a negative value would wrap to a huge size_t
+  const auto limit = std::max<int64_t>(1, cct->_conf->rgw_gc_max_concurrent_io);
+  ceph::async::spawn_throttle workpool{yield, static_cast<size_t>(limit)};
+  std::exception_ptr eptr;
+  try {
+    return f(workpool);
+  } catch (const std::exception&) {
+    eptr = std::current_exception();
+  }
+  const bool armed = yield.throw_if_cancelled();
+  yield.throw_if_cancelled(false);
+  workpool.cancel();
+  for (bool joined = false; !joined; ) {
+    try {
+      workpool.wait();
+      joined = true;
+    } catch (const std::exception&) {
+      // eptr already holds the first error
+    }
+  }
+  yield.throw_if_cancelled(armed);
+  std::rethrow_exception(eptr);
+}
+
+// position of the first failed entry, or failed.size() if none failed
+static size_t first_failed(const std::vector<bool>& failed)
+{
+  return std::find(failed.begin(), failed.end(), true) - failed.begin();
+}
+
+// spawn a child per tail object; may wait for a slot. failed[i] is set
+// once any object of the i-th admitted entry fails
+void RGWGC::admit_entry(ceph::async::spawn_throttle& workpool,
+                        std::vector<bool>& failed, pool_ctx_map& pool_ctxs,
+                        const cls_rgw_gc_obj_info& info)
+{
+  ldpp_dout(this, 20) << "RGWGC::process iterating over entry tag='" <<
+    info.tag << "', time=" << info.time << ", chain.objs.size()=" <<
+    info.chain.objs.size() << dendl;
+  const size_t pos = failed.size();
+  failed.push_back(false);
+  for (const auto& obj : info.chain.objs) {
+    workpool.spawn([this, &pool_ctxs, &failed, pos, obj, tag = info.tag]
+                   (boost::asio::yield_context cy) {
+        cy.throw_if_cancelled(true);
+        auto disarm = make_scope_guard([&] { cy.throw_if_cancelled(false); });
+        if (delete_object(pool_ctxs, obj, tag, cy) < 0) {
+          failed[pos] = true;
+        }
+      });
+  }
+}
+
+// returns true once the omap log is empty and the shard may use the queue
+bool RGWGC::process_omap(int index, Clock::time_point deadline, bool expired_only,
+                         rados::cls::lock::Lock& l, pool_ctx_map& pool_ctxs,
+                         boost::asio::yield_context yield)
+{
+  const size_t trim_chunk = static_cast<size_t>(
+      std::max<int64_t>(1, cct->_conf->rgw_gc_max_trim_chunk));
+  // the children use these, so they outlive the workpool
+  std::vector<bool> failed; // per admitted entry of the batch
+  std::vector<std::string> tags;
+  bool trim_failed = false;
+
+  // remove the collected tags once at least min are ready
+  auto flush = [&] (size_t min) {
+    if (trim_failed || tags.empty() || tags.size() < min) {
+      return;
+    }
+    ldpp_dout(this, 20) << "RGWGC::process removing entries from gc log shard index=" <<
+      index << ", size=" << tags.size() << ", entries=" << tags << dendl;
+    librados::ObjectWriteOperation op;
+    l.assert_locked_exclusive(&op);
+    cls_rgw_gc_remove(op, tags);
+    // a failed removal may have applied, so stop trimming in this lease
+    trim_failed = trim_shard(index, std::move(op), tags.size(), yield) < 0;
+    tags.clear();
+  };
+
+  return with_workpool(cct, yield, [&] (ceph::async::spawn_throttle& workpool) {
+      std::string marker;
+      bool truncated = true;
+      bool stop = false;
+      while (!stop && !trim_failed && truncated) {
+        std::list<cls_rgw_gc_obj_info> entries;
+        if (list_shard_omap(index, marker, list_max, expired_only, entries, truncated,
+                            yield) < 0) {
+          stop = true;
+          break;
+        }
+        failed.clear();
+        for (const auto& info : entries) {
+          if (Clock::now() >= deadline) {
+            stop = true;
+            break;
+          }
+          admit_entry(workpool, failed, pool_ctxs, info);
+        }
+        workpool.wait();
+        // a failed entry keeps its tag for the next cycle
+        auto entry = entries.begin();
+        for (const bool f : failed) {
+          if (!f) {
+            tags.push_back(entry->tag);
+            flush(trim_chunk);
+          }
+          ++entry;
+        }
+      }
+      flush(1);
+
+      bool drained = false;
+      if (!stop && !trim_failed) {
+        // listed out; the shard must be ready for the queue with nothing left.
+        // an unreadable version stays 0
+        obj_version objv;
+        librados::ObjectReadOperation op;
+        cls_version_read(op, &objv);
+        throw_if_op_cancelled(store->gc_operate(this, obj_names[index], std::move(op),
+                                                nullptr, yield), yield);
+        std::string probe_marker;
+        std::list<cls_rgw_gc_obj_info> left;
+        drained = objv.ver == 1 &&
+            list_shard_omap(index, probe_marker, 1, false, left, truncated, yield) == 0 &&
+            left.empty();
+      }
+      return drained;
+    });
+}
+
+void RGWGC::process_queue(int index, Clock::time_point deadline, bool expired_only,
+                          rados::cls::lock::Lock& l, pool_ctx_map& pool_ctxs,
+                          boost::asio::yield_context yield)
+{
+  // the children use this, so it outlives the workpool
+  std::vector<bool> failed; // per admitted entry of the batch
+
+  with_workpool(cct, yield, [&] (ceph::async::spawn_throttle& workpool) {
+      std::string marker;
+      bool truncated = true;
+      bool stop = false;
+      while (!stop && truncated) {
+        const auto now_real = ceph::real_clock::now();
+        std::list<cls_rgw_gc_obj_info> entries;
+        if (list_shard(index, marker, list_max, entries, truncated, yield) < 0 ||
+            entries.empty()) {
+          break;
+        }
+        failed.clear();
+        for (const auto& info : entries) {
+          // stop admitting at the deadline, a failed delete or the first unexpired entry
+          if (Clock::now() >= deadline || first_failed(failed) < failed.size() ||
+              (expired_only && info.time > now_real)) {
+            stop = true;
+            break;
+          }
+          admit_entry(workpool, failed, pool_ctxs, info);
+        }
+        workpool.wait();
+        // trim the finished prefix; stop after a failed delete or removal
+        const size_t count = first_failed(failed);
+        if (count > 0) {
+          librados::ObjectWriteOperation op;
+          l.assert_locked_exclusive(&op);
+          cls_rgw_gc_queue_remove_entries(op, count);
+          if (trim_shard(index, std::move(op), count, yield) < 0) {
+            break;
+          }
+        }
+        if (count < failed.size()) {
+          break;
+        }
+      }
+    });
+}
+
+void RGWGC::process_locked(int index, int max_secs, bool expired_only,
+                           rados::cls::lock::Lock& l, boost::asio::yield_context yield)
+{
+  yield.throw_if_cancelled(true);
+  auto disarm = make_scope_guard([&] { yield.throw_if_cancelled(false); });
+
+  const auto deadline = Clock::now() + std::chrono::seconds(max_secs);
+  // each phase joins its children before returning, so this outlives them
+  pool_ctx_map pool_ctxs;
+  if (!transitioned_objects_cache[index]) {
+    if (!process_omap(index, deadline, expired_only, l, pool_ctxs, yield)) {
+      return;
+    }
+    transitioned_objects_cache[index] = true;
+    ldpp_dout(this, 20) << "RGWGC::process cls_rgw_gc_list returned NO non expired "
+      "entries, so setting cache entry to TRUE" << dendl;
+  }
+  process_queue(index, deadline, expired_only, l, pool_ctxs, yield);
+}
+
+int RGWGC::process_shard(int index, bool expired_only, boost::asio::yield_context yield)
 {
   ldpp_dout(this, 20) << "RGWGC::process entered with GC index_shard=" <<
-    index << ", max_secs=" << max_secs << ", expired_only=" <<
-    expired_only << dendl;
-
-  rados::cls::lock::Lock l(gc_index_lock_name);
-  utime_t end = ceph_clock_now();
+    index << ", expired_only=" << expired_only << dendl;
 
   /* max_secs should be greater than zero. We don't want a zero max_secs
    * to be translated as no timeout, since we'd then need to break the
    * lock and that would require a manual intervention. In this case
    * we can just wait it out. */
-  if (max_secs <= 0)
+  const int max_secs = cct->_conf->rgw_gc_processor_max_time;
+  if (max_secs <= 0) {
     return -EAGAIN;
-
-  end += max_secs;
-  utime_t time(max_secs, 0);
-  l.set_duration(time);
-
-  int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
-  if (ret == -EBUSY) { /* already locked by another gc processor */
-    ldpp_dout(this, 10) << "RGWGC::process failed to acquire lock on " <<
-      obj_names[index] << dendl;
-    return 0;
   }
-  if (ret < 0)
-    return ret;
 
-  string marker;
-  string next_marker;
-  bool truncated = false;
-  IoCtx *ctx = new IoCtx;
-  do {
-    int max = 100;
-    std::list<cls_rgw_gc_obj_info> entries;
+  rados::cls::lock::Lock l(gc_index_lock_name);
+  l.set_cookie(gen_rand_alphanumeric(cct, 16));
+  ceph::async::RadosLockClient client{yield.get_executor(), store->gc_pool_ctx,
+                                      obj_names[index], l, false};
+  std::exception_ptr eptr;
+  try {
+    ceph::async::with_lease(client, ceph::make_timespan(max_secs), yield,
+        [&] (boost::asio::yield_context ly) {
+          process_locked(index, max_secs, expired_only, l, ly);
+        });
+    return 0;
+  } catch (const std::exception&) {
+    eptr = std::current_exception();
+  }
 
-    int ret = 0;
+  if (yield.cancelled() != boost::asio::cancellation_type::none) {
+    // with_lease() keeps the lock on cancellation; release it so the next
+    // gc processor doesn't wait out the lease
+    const bool armed = yield.throw_if_cancelled();
+    yield.throw_if_cancelled(false);
+    boost::system::error_code ec;
+    client.async_release(yield[ec]);
+    yield.throw_if_cancelled(armed);
+    throw boost::system::system_error(boost::asio::error::operation_aborted);
+  }
 
-    if (! transitioned_objects_cache[index]) {
-      ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
-      ldpp_dout(this, 20) <<
-      "RGWGC::process cls_rgw_gc_list returned with returned:" << ret <<
-      ", entries.size=" << entries.size() << ", truncated=" << truncated <<
-      ", next_marker='" << next_marker << "'" << dendl;
-      obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
-      if ((objv.ver == 1) && entries.size() == 0) {
-        std::list<cls_rgw_gc_obj_info> non_expired_entries;
-        ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, truncated, next_marker);
-        if (non_expired_entries.size() == 0) {
-          transitioned_objects_cache[index] = true;
-          marker.clear();
-          ldpp_dout(this, 20) << "RGWGC::process cls_rgw_gc_list returned NO non expired entries, so setting cache entry to TRUE" << dendl;
-        } else {
-          ret = 0;
-          goto done;
-        }
-      }
-      if ((objv.ver == 0) && (ret == -ENOENT || entries.size() == 0)) {
-        ret = 0;
-        goto done;
-      }
+  try {
+    std::rethrow_exception(eptr);
+  } catch (const ceph::async::lease_aborted& e) {
+    ldpp_dout(this, 0) << "RGWGC::process lost the lock on " << obj_names[index] <<
+      ": " << e.code().message() << dendl;
+  } catch (const boost::system::system_error& e) {
+    const int ret = ceph::from_error_code(e.code());
+    if (ret == -EBUSY || ret == -EEXIST) { /* already locked by another gc processor */
+      ldpp_dout(this, 10) << "RGWGC::process failed to acquire lock on " <<
+        obj_names[index] << dendl;
+    } else {
+      ldpp_dout(this, 0) << "ERROR: RGWGC::process failed on " << obj_names[index] <<
+        " ret=" << ret << dendl;
     }
-
-    if (transitioned_objects_cache[index]) {
-      ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
-      ldpp_dout(this, 20) <<
-      "RGWGC::process cls_rgw_gc_queue_list_entries returned with return value:" << ret <<
-      ", entries.size=" << entries.size() << ", truncated=" << truncated <<
-      ", next_marker='" << next_marker << "'" << dendl;
-      if (entries.size() == 0) {
-        ret = 0;
-        goto done;
-      }
-    }
-
-    if (ret < 0)
-      goto done;
-
-    marker = next_marker;
-
-    string last_pool;
-    std::list<cls_rgw_gc_obj_info>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      cls_rgw_gc_obj_info& info = *iter;
-
-      ldpp_dout(this, 20) << "RGWGC::process iterating over entry tag='" <<
-	info.tag << "', time=" << info.time << ", chain.objs.size()=" <<
-	info.chain.objs.size() << dendl;
-
-      cls_rgw_obj_chain& chain = info.chain;
-
-      utime_t now = ceph_clock_now();
-      if (now >= end) {
-        goto done;
-      }
-      if (! transitioned_objects_cache[index]) {
-        if (chain.objs.empty()) {
-          io_manager.schedule_tag_removal(index, info.tag);
-        } else {
-          io_manager.add_tag_io_size(index, info.tag, chain.objs.size());
-        }
-      }
-      if (! chain.objs.empty()) {
-	for (const auto& obj : chain.objs) {
-	  if (obj.pool != last_pool) {
-	    delete ctx;
-	    ctx = new IoCtx;
-	    ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, *ctx);
-	    if (ret < 0) {
-	      if (ret != -ENOENT && transitioned_objects_cache[index]) {
-		goto done;
-	      }
-	      last_pool = "";
-	      ldpp_dout(this, 0) << "ERROR: failed to create ioctx pool=" <<
-		obj.pool << dendl;
-	      continue;
-	    }
-	    last_pool = obj.pool;
-	  }
-
-	  ctx->locator_set_key(obj.loc);
-	  ctx->set_pool_full_try(); // allow deletion at pool quota limit
-
-	  const string& oid = obj.key.name; /* just stored raw oid there */
-
-	  ldpp_dout(this, 5) << "RGWGC::process removing " << obj.pool <<
-	    ":" << obj.key.name << dendl;
-	  ObjectWriteOperation op;
-	  cls_refcount_put(op, info.tag, true);
-
-	  ret = io_manager.schedule_io(ctx, oid, &op, index, info.tag);
-	  if (ret < 0) {
-	    ldpp_dout(this, 0) <<
-	      "WARNING: failed to schedule deletion for oid=" << oid << dendl;
-      if (transitioned_objects_cache[index]) {
-        //If deleting oid failed for any of them, we will not delete queue entries
-        goto done;
-      }
-	  }
-	  if (going_down()) {
-	    // leave early, even if tag isn't removed, it's ok since it
-	    // will be picked up next time around
-	    goto done;
-	  }
-	} // chains loop
-      } // else -- chains not empty
-    } // entries loop
-    if (transitioned_objects_cache[index] && entries.size() > 0) {
-      ret = io_manager.drain_ios();
-      if (ret < 0) {
-        goto done;
-      }
-      //Remove the entries from the queue
-      ldpp_dout(this, 5) << "RGWGC::process removing entries, marker: " << marker << dendl;
-      ret = io_manager.remove_queue_entries(index, entries.size(), null_yield);
-      if (ret < 0) {
-        ldpp_dout(this, 0) <<
-          "WARNING: failed to remove queue entries" << dendl;
-        goto done;
-      }
-    }
-  } while (truncated);
-
-done:
-  /* we don't drain here, because if we're going down we don't want to
-   * hold the system if backend is unresponsive
-   */
-  l.unlock(&store->gc_pool_ctx, obj_names[index]);
-  delete ctx;
-
+  } catch (const std::exception& e) {
+    ldpp_dout(this, 0) << "ERROR: RGWGC::process unexpected exception on " <<
+      obj_names[index] << ": " << e.what() << dendl;
+    return -EIO;
+  }
   return 0;
 }
 
-int RGWGC::process(bool expired_only, optional_yield y, std::optional<int> shard_id)
+int RGWGC::process(bool expired_only, std::optional<int> shard_id,
+                   boost::asio::yield_context yield)
 {
-  int max_secs = cct->_conf->rgw_gc_processor_max_time;
-
-  RGWGCIOManager io_manager(this, store->ctx(), this);
-
   if (shard_id.has_value()) {
     // Process only the specified shard
-    int ret = process(shard_id.value(), max_secs, expired_only, io_manager, y);
-    if (ret < 0)
+    return process_shard(shard_id.value(), expired_only, yield);
+  }
+  // Process all shards with random start; a busy shard returns 0
+  const int start = ceph::util::generate_random_number(0, max_objs - 1);
+  for (int i = 0; i < max_objs; i++) {
+    int index = (i + start) % max_objs;
+    int ret = process_shard(index, expired_only, yield);
+    if (ret < 0) {
       return ret;
-  } else {
-    // Process all shards with random start
-    const int start = ceph::util::generate_random_number(0, max_objs - 1);
-    for (int i = 0; i < max_objs; i++) {
-      int index = (i + start) % max_objs;
-      int ret = process(index, max_secs, expired_only, io_manager, y);
-      if (ret < 0)
-        return ret;
     }
   }
-  if (!going_down()) {
-    io_manager.drain();
-  }
-
   return 0;
 }
 
-bool RGWGC::going_down()
+int RGWGC::process(bool expired_only, std::optional<int> shard_id)
 {
-  return down_flag;
+  boost::asio::io_context context;
+  auto result = boost::asio::spawn(context,
+      [this, expired_only, shard_id] (boost::asio::yield_context yield) {
+        return process(expired_only, shard_id, yield);
+      }, boost::asio::use_future);
+  context.run();
+  return result.get();
 }
 
-void RGWGC::start_processor()
+void RGWGC::process_cycles(boost::asio::yield_context yield)
 {
-  worker = new GCWorker(this, cct, this);
-  worker->create("rgw_gc");
+  // spawn() reports completion by suspending one last time, so a pending
+  // cancellation would make throw_if_cancelled() throw past the coroutine
+  // frame and terminate the process. disarm it before the coroutine exits
+  yield.throw_if_cancelled(true);
+  auto disarm = make_scope_guard([&] { yield.throw_if_cancelled(false); });
+
+  boost::asio::basic_waitable_timer<Clock> timer{yield.get_executor()};
+  while (yield.cancelled() == boost::asio::cancellation_type::none) {
+    const auto start = Clock::now();
+    ldpp_dout(this, 2) << "garbage collection: start" << dendl;
+    // shard errors come back as return codes; cancellation propagates
+    int r = process(true, std::nullopt, yield);
+    if (r < 0) {
+      ldpp_dout(this, 0) << "ERROR: garbage collection process() returned error r="
+                         << r << dendl;
+    }
+    ldpp_dout(this, 2) << "garbage collection: stop" << dendl;
+
+    // start-to-start period: a deadline already in the past fires immediately
+    timer.expires_at(start + std::chrono::seconds(cct->_conf->rgw_gc_processor_period));
+    boost::system::error_code ec;
+    timer.async_wait(yield[ec]); // cancellation ends the loop
+  }
+}
+
+RGWGC::~RGWGC()
+{
+  if (proc_future.valid()) {
+    ldpp_dout(this, -1) << "ERROR: RGWGC destructed without stop_processor" << dendl;
+  }
+  finalize();
+}
+
+void RGWGC::start_processor(boost::asio::io_context& context)
+{
+  // strand: process_locked's children share its state without a lock
+  proc_strand.emplace(context.get_executor());
+  proc_future = boost::asio::spawn(*proc_strand,
+      [this] (boost::asio::yield_context yield) { process_cycles(yield); },
+      boost::asio::bind_cancellation_slot(proc_signal.slot(),
+                                          boost::asio::use_future));
 }
 
 void RGWGC::stop_processor()
 {
-  down_flag = true;
-  if (worker) {
-    worker->stop();
-    worker->join();
+  if (!proc_future.valid()) {
+    return;
   }
-  delete worker;
-  worker = NULL;
+  // cancellation_signal isn't thread-safe; emit it on the strand
+  boost::asio::post(*proc_strand,
+      [this] { proc_signal.emit(boost::asio::cancellation_type::terminal); });
+  try {
+    proc_future.get();
+  } catch (const boost::system::system_error& e) {
+    if (e.code() != boost::asio::error::operation_aborted) {
+      ldpp_dout(this, -1) << "ERROR: gc processor coroutine exited: "
+                          << e.what() << dendl;
+    }
+  } catch (const std::exception& e) {
+    ldpp_dout(this, -1) << "ERROR: gc processor coroutine exited: "
+                        << e.what() << dendl;
+  }
 }
 
 unsigned RGWGC::get_subsys() const
@@ -718,39 +751,4 @@ unsigned RGWGC::get_subsys() const
 std::ostream& RGWGC::gen_prefix(std::ostream& out) const
 {
   return out << "garbage collection: ";
-}
-
-void *RGWGC::GCWorker::entry() {
-  do {
-    utime_t start = ceph_clock_now();
-    ldpp_dout(dpp, 2) << "garbage collection: start" << dendl;
-    int r = gc->process(true, null_yield);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: garbage collection process() returned error r=" << r << dendl;
-    }
-    ldpp_dout(dpp, 2) << "garbage collection: stop" << dendl;
-
-    if (gc->going_down())
-      break;
-
-    utime_t end = ceph_clock_now();
-    end -= start;
-    int secs = cct->_conf->rgw_gc_processor_period;
-
-    if (secs <= end.sec())
-      continue; // next round
-
-    secs -= end.sec();
-
-    std::unique_lock locker{lock};
-    cond.wait_for(locker, std::chrono::seconds(secs));
-  } while (!gc->going_down());
-
-  return NULL;
-}
-
-void RGWGC::GCWorker::stop()
-{
-  std::lock_guard l{lock};
-  cond.notify_all();
 }
