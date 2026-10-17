@@ -6,6 +6,7 @@ from textwrap import dedent
 from ceph_volume import terminal, decorators
 from ceph_volume.util import device, disk, prompt_bool, arg_validators, templates
 from ceph_volume.util import prepare
+from ceph_volume.util.nvme import fcm_dedup_info
 from . import common
 from .create import Create
 from .prepare import Prepare
@@ -371,6 +372,16 @@ class Batch(object):
         if self.args.data_slots and self.args.osds_per_device:
             if self.args.data_slots < self.args.osds_per_device:
                 raise ValueError('data_slots is smaller then osds_per_device')
+
+        if (getattr(self.args, 'osds_per_device', None) and self.args.osds_per_device > 1) or \
+           (getattr(self.args, 'data_slots', None) and self.args.data_slots > 1):
+            for d in getattr(self.args, 'devices', []):
+                dev_path = getattr(d, 'path', str(d))
+                if fcm_dedup_info(dev_path).supported:
+                    raise RuntimeError(
+                        f'Cannot use --osds-per-device > 1 or --data-slots > 1 on FCM dedup device ({dev_path}). '
+                        f'FCM drives require 1 OSD per physical device.'
+                    )
 
     def _sort_rotational_disks(self) -> None:
         '''

@@ -9,7 +9,9 @@ import uuid
 from math import floor
 from ceph_volume import process, util, conf
 from ceph_volume.exceptions import SizeAllocationError
-from typing import Any, Dict, Optional, List, Union, Set
+from ceph_volume.util import disk
+from ceph_volume.util.nvme import fcm_dedup_info, fcm_compute_reservation
+from typing import Any, Dict, Optional, List, Union, Set, Tuple
 
 
 logger = logging.getLogger(__name__)
@@ -1001,7 +1003,7 @@ def create_lv(name_prefix: str,
               slots: Optional[int] = None,
               extents: Optional[int] = None,
               size: Optional[int] = None,
-              tags: Optional[Dict[str, str]] = None) -> Optional[Volume]:
+              tags: Optional[Dict[str, str]] = None) -> Tuple[Optional[Volume], Optional[Dict[str, int]]]:
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
@@ -1025,8 +1027,12 @@ def create_lv(name_prefix: str,
                             resulting LV might be smaller depending on extent
                             size of the underlying VG
     :param tags: optional, a dict of lvm tags to set on the LV
+    :returns: tuple of (lv, fcm_reservation) where fcm_reservation is None for
+              non-FCM devices, or a dict with 'total_bytes', 'lba_size_bytes',
+              'slot_size_bytes' for FCM devices
     """
     name = '{}-{}'.format(name_prefix, uuid)
+    fcm_reservation = None
     if not vg:
         if not device:
             raise RuntimeError("Must either specify vg or device, none given")
@@ -1039,12 +1045,48 @@ def create_lv(name_prefix: str,
             vg = create_vg(device, name_prefix='ceph')
     assert(vg)
 
-    if size:
-        extents = vg.bytes_to_extents(size)
-        logger.debug('size was passed: {} -> {}'.format(size, extents))
-    elif slots and not extents:
-        extents = vg.slots_to_extents(slots)
-        logger.debug('slots was passed: {} -> {}'.format(slots, extents))
+    # Check for FCM dedup capability
+    probe_dev = device or (vg.pv[0].pv_name if getattr(vg, 'pv', None) and vg.pv else None)
+    fcm_info = fcm_dedup_info(probe_dev) if probe_dev else None
+
+    if fcm_info and fcm_info.supported:
+        # FCM drives require 1 OSD per physical device
+        if (slots and slots > 1) or (extents and extents < vg.vg_extent_count):
+            raise RuntimeError(
+                f'FCM dedup device {probe_dev} does not support multiple OSDs/partitions per device '
+                f'(requested slots={slots}, extents={extents}). '
+                f'FCM drives require 1 OSD per physical device.'
+            )
+
+        # Compute reservation from the full device/requested size
+        device_bytes = int(getattr(size, 'b', size)) if size else int(vg.size)
+        reservation = fcm_compute_reservation(device_bytes, fcm_info.slot_size_bytes)
+        logger.debug('FCM dedup reservation for %s: total=%d S=%d M=%d FP=%d E=%d',
+                    probe_dev, reservation['total_bytes'],
+                    reservation['regions']['S'], reservation['regions']['M'],
+                    reservation['regions']['FP'], reservation['regions']['E'])
+
+        # Subtract reservation before converting to extents
+        adjusted_bytes = device_bytes - reservation['total_bytes']
+        extents = vg.bytes_to_extents(adjusted_bytes)
+
+        # Store reservation metadata for later use
+        fcm_reservation = {
+            'total_bytes': reservation['total_bytes'],
+            'lba_size_bytes': fcm_info.lba_size_bytes,
+            'slot_size_bytes': fcm_info.slot_size_bytes,
+            'lv_size_bytes': device_bytes
+        }
+        logger.info('FCM dedup enabled: reserved %d bytes, adjusted LV extents to %s',
+                   reservation['total_bytes'], extents)
+    else:
+        # Standard non-FCM path
+        if size:
+            extents = vg.bytes_to_extents(size)
+            logger.debug('size was passed: {} -> {}'.format(size, extents))
+        elif slots and not extents:
+            extents = vg.slots_to_extents(slots)
+            logger.debug('slots was passed: {} -> {}'.format(slots, extents))
 
     if extents:
         command = [
@@ -1092,7 +1134,7 @@ def create_lv(name_prefix: str,
     if isinstance(lv, Volume):
         lv.set_tags(tags)
 
-    return lv
+    return (lv, fcm_reservation)
 
 
 def create_lvs(volume_group: VolumeGroup, parts: int = 1, size: Optional[int] = None, name_prefix: str = 'ceph-lv') -> List[Optional[Volume]]:
@@ -1129,9 +1171,8 @@ def create_lvs(volume_group: VolumeGroup, parts: int = 1, size: Optional[int] = 
     for part in range(0, sizing['parts']):
         size = sizing['sizes']
         extents = sizing['extents']
-        lvs.append(
-            create_lv(name_prefix, str(uuid.uuid4()), vg=volume_group, extents=extents, tags=tags)
-        )
+        lv, _ = create_lv(name_prefix, str(uuid.uuid4()), vg=volume_group, extents=extents, tags=tags)
+        lvs.append(lv)
     return lvs
 
 
