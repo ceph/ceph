@@ -17,6 +17,7 @@
       @if (infoMessage) {
         <cd-alert-panel
           type="info"
+          [showTitle]="showInfoTitle"
           spacingClass="cds-mb-3"
           i18n
         >
@@ -60,89 +61,100 @@
         <ng-container
           *ngTemplateOutlet="childFormGroupTemplate; context: { form: deletionForm }"
         ></ng-container>
-        <div class="form-item">
-          @if (impact == impactEnum.medium) {
-            <cds-checkbox
-              id="confirmation"
-              formControlName="confirmation"
-              autofocus
-              [required]="true"
-              modal-primary-focus
-              ariaLabel="confirmation"
-              i18n
-              >Yes, I am sure.</cds-checkbox
-            >
-          } @else {
-            <p class="cds--type-body-01">
-              @if (bodyContext?.deletionMessage) {
-                <span [innerHTML]="bodyContext.deletionMessage"></span>
-              } @else if (hasAssociatedResources) {
-                <ng-container i18n>
-                  Deleting <strong>{{ itemNames[0] }}</strong> will remove all associated
-                  {{ itemDescription }}. This action cannot be undone.
-                </ng-container>
-              } @else {
-                <ng-container i18n>
-                  Deleting <strong>{{ itemNames[0] }}</strong> permanently deletes the pool. This
-                  action cannot be undone.
-                </ng-container>
-              }
-            </p>
-            <ng-template #labelTemplate>
-              <span
-                i18n
-                class="cds--type-label-01"
-                >Type <strong>{{ itemNames[0] }}</strong> to confirm (required)</span
-              >
-            </ng-template>
-            <cds-text-label
-              [labelTemplate]="labelTemplate"
-              labelInputID="resource_name"
-              [cdRequiredField]="'Type ' + itemNames[0] + ' to confirm'"
-              [invalid]="
-                !deletionForm.controls.confirmInput.valid &&
-                deletionForm.controls.confirmInput.touched
-              "
-              [invalidText]="ResourceError"
-              [disabled]="deletionForm.controls.confirmInput.disabled"
-            >
-              <input
-                cdsText
-                type="text"
-                [placeholder]="'Name of resource'"
-                id="resource_name"
-                formControlName="confirmInput"
-                [attr.disabled]="deletionForm.controls.confirmInput.disabled ? true : null"
-                i18n-placeholder
+        @if (!hideConfirmationCheckbox) {
+          <div class="form-item">
+            @if (impact == impactEnum.medium) {
+              <cds-checkbox
+                id="confirmation"
+                formControlName="confirmation"
                 autofocus
-              />
-            </cds-text-label>
-            <ng-template #ResourceError>
-              @if (deletionForm.controls.confirmInput.hasError('required')) {
-                <span class="invalid-feedback">
-                  <ng-container i18n>This field is required.</ng-container>
-                </span>
-              }
-              @if (deletionForm.controls.confirmInput.hasError('matchResource')) {
-                <span class="invalid-feedback">
-                  <ng-container i18n>Enter the correct resource name.</ng-container>
-                </span>
-              }
-            </ng-template>
-            @if (bodyContext?.forceDeleteAcknowledgementMessage) {
-              <div class="form-item cds-mt-3">
+                [required]="true"
+                modal-primary-focus
+                ariaLabel="confirmation"
+                i18n
+                >Yes, I am sure.</cds-checkbox
+              >
+              @if (extraCheckboxText) {
                 <cds-checkbox
-                  id="force_delete_ack"
-                  formControlName="forceDeleteAck"
-                  [required]="true"
-                  ariaLabel="Forced delete acknowledgement"
+                  id="extraCheckbox"
+                  formControlName="extraCheckbox"
+                  ariaLabel="extraCheckbox"
+                  class="cds-mt-2"
+                  >{{ extraCheckboxText }}</cds-checkbox
                 >
-                  {{ bodyContext.forceDeleteAcknowledgementMessage }}
-                </cds-checkbox>
-              </div>
+              }
+            } @else {
+              <p class="cds--type-body-01">
+                @if (bodyContext?.deletionMessage) {
+                  <span [innerHTML]="bodyContext.deletionMessage"></span>
+                } @else if (hasAssociatedResources) {
+                  <ng-container i18n>
+                    Deleting <strong>{{ itemNames[0] }}</strong> will remove all associated
+                    {{ itemDescription }}. This action cannot be undone.
+                  </ng-container>
+                } @else {
+                  <ng-container i18n>
+                    Deleting <strong>{{ itemNames[0] }}</strong> permanently deletes the pool. This
+                    action cannot be undone.
+                  </ng-container>
+                }
+              </p>
+              <ng-template #labelTemplate>
+                <span
+                  i18n
+                  class="cds--type-label-01"
+                  >Type <strong>{{ itemNames[0] }}</strong> to confirm (required)</span
+                >
+              </ng-template>
+              <cds-text-label
+                [labelTemplate]="labelTemplate"
+                labelInputID="resource_name"
+                [cdRequiredField]="'Type ' + itemNames[0] + ' to confirm'"
+                [invalid]="
+                  !deletionForm.controls.confirmInput.valid &&
+                  deletionForm.controls.confirmInput.touched
+                "
+                [invalidText]="ResourceError"
+                [disabled]="deletionForm.controls.confirmInput.disabled"
+              >
+                <input
+                  cdsText
+                  type="text"
+                  [placeholder]="'Name of resource'"
+                  id="resource_name"
+                  formControlName="confirmInput"
+                  [attr.disabled]="deletionForm.controls.confirmInput.disabled ? true : null"
+                  i18n-placeholder
+                  autofocus
+                />
+              </cds-text-label>
+              <ng-template #ResourceError>
+                @if (deletionForm.controls.confirmInput.hasError('required')) {
+                  <span class="invalid-feedback">
+                    <ng-container i18n>This field is required.</ng-container>
+                  </span>
+                }
+                @if (deletionForm.controls.confirmInput.hasError('matchResource')) {
+                  <span class="invalid-feedback">
+                    <ng-container i18n>Enter the correct resource name.</ng-container>
+                  </span>
+                }
+              </ng-template>
+              @if (bodyContext?.forceDeleteAcknowledgementMessage) {
+                <div class="form-item cds-mt-3">
+                  <cds-checkbox
+                    id="force_delete_ack"
+                    formControlName="forceDeleteAck"
+                    [required]="true"
+                    ariaLabel="Forced delete acknowledgement"
+                  >
+                    {{ bodyContext.forceDeleteAcknowledgementMessage }}
+                  </cds-checkbox>
+                </div>
+              }
             }
-          }
-        </div>
+          </div>
+        }
       </div>
     </form>
   </section>

@@ -25,9 +25,10 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { ConfigOptionRestartModalComponent } from './config-option-restart-modal/config-option-restart-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DataGatewayService } from '~/app/shared/services/data-gateway.service';
-const RGW = 'rgw';
+
 interface ClientEntityItem {
   content: string;
   name: string;
@@ -172,7 +173,7 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
         this.configForm.get('values')?.get(value.section)?.setValue(sectionValue);
       });
     }
-    this.forceUpdate = !this.response.can_update_at_runtime && response.name.includes(RGW);
+    this.forceUpdate = !this.response.can_update_at_runtime;
     this.availSections.forEach((section) => {
       if (validators) {
         this.configForm.get('values')?.get(section)?.setValidators(validators);
@@ -403,16 +404,41 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
     return null;
   }
 
+  getRestartWarningMessage(): string {
+    const services: string[] =
+      this.configForm.getValue('services') || this.response?.services || [];
+    if (services.length > 0) {
+      const servicesStr = services.join(', ');
+      return $localize`Restarting affected service(s) is required for changes to take effect. Updating this configuration requires restarting: ${servicesStr}.`;
+    }
+    return $localize`Restarting affected service(s) or daemon(s) is required for changes to take effect.`;
+  }
+
   openCriticalConfirmModal() {
+    const services: string[] =
+      this.configForm.getValue('services') || this.response?.services || [];
+    const serviceListStr = services.length > 0 ? services.join(', ') : '';
+    const infoMessage =
+      services.length > 0
+        ? $localize`Restarting affected service(s) is required for changes to take effect. Updating this configuration requires restarting: ${serviceListStr}.`
+        : $localize`Restarting affected service(s) or daemon(s) is required for changes to take effect.`;
+
     this.modalService.show(DeleteConfirmationModalComponent, {
       buttonText: $localize`Force Edit`,
       actionDescription: $localize`force edit`,
       itemDescription: $localize`configuration`,
-      infoMessage: 'Updating this configuration might require restarting the client',
+      infoMessage: infoMessage,
       submitAction: () => {
         this.modalService.dismissAll();
         this.submit();
       }
+    });
+  }
+
+  openPostUpdateRestartModal(services: string[], configName: string) {
+    this.modalService.show(ConfigOptionRestartModalComponent, {
+      configName: configName,
+      services: services
     });
   }
 
@@ -422,17 +448,24 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
     if (request) {
       this.configService.create(request).subscribe({
         next: () => {
-          this.notificationService.show(
-            NotificationType.success,
-            $localize`Updated config option ${request.name}`
-          );
+          const services: string[] =
+            this.configForm.getValue('services') || this.response?.services || [];
           this.router.navigate(['/configuration']);
+          if (this.forceUpdate) {
+            this.openPostUpdateRestartModal(services, request.name);
+          } else {
+            this.notificationService.show(
+              NotificationType.success,
+              $localize`Updated config option ${request.name}`
+            );
+          }
         },
         error: () => {
           this.configForm.setErrors({ cdSubmitButton: true });
         }
       });
     } else {
+      this.configForm.setErrors({ cdSubmitButton: true });
       this.router.navigate(['/configuration']);
     }
   }

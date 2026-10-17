@@ -1,0 +1,30 @@
+.service-restart-list {
+  background-color: var(--cds-layer-01, #f4f4f4);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+}
+
+.service-restart-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.service-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  .service-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--cds-text-01, #161616);
+  }
+}
