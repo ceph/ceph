@@ -15,6 +15,7 @@
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <concepts>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -373,6 +374,12 @@ namespace rgw { namespace cksum {
 
   std::optional<Cksum>
   combine_crc_cksum(const Cksum& ck1, const Cksum& ck2, uintmax_t len2);
+
+  /* a stored CRC holds the big-endian bytes of the CRC, as Final()
+   * lays them out: swap between that and the CRC on little-endian
+   * hosts only. For uint32_t and uint64_t */
+  template <std::integral T>
+  T stored_crc_order(T value);
 
   /* wrap combine/digest checksums */
   class Combiner

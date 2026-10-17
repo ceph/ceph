@@ -140,6 +140,10 @@ int with_net_raw(const std::function<void()>& fn, std::string* err);
  */
 bool osd_keeps_net_raw(CephContext* cct);
 
+/// public_addr's address, for a daemon without a messenger of its own,
+/// or empty
+std::string public_ip(CephContext* cct);
+
 /// the two transport options, parsed
 ceph::rdma::oob_transports read_transports(CephContext* cct);
 

@@ -82,7 +82,10 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
+#include "common/oob_config.h"
 #ifdef WITH_RADOSGW_CUOBJ
+#include <algorithm>
+#include "common/rdma_token.h"
 #include "rgw_cuobj.h"
 #endif
 #include "rgw_lua_background.h"
@@ -603,15 +606,16 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   ratelimiter.reset(new ActiveRateLimiter{dpp->get_cct()});
   ratelimiter->start();
 
-#ifdef WITH_RADOSGW_CUOBJ
-  if (g_conf().get_val<bool>("rgw_cuobj_enabled")) {
-    int cuobj_r = RGWCuObjServer::init(dpp->get_cct());
-    if (cuobj_r < 0) {
-      derr << "WARNING: cuObj RDMA server init failed: " << cuobj_r
-           << " (RDMA acceleration disabled)" << dendl;
+  // the cuObject server takes its buffers from this arena
+  if (const auto oob = ceph::oob::read_transports(dpp->get_cct());
+      oob.client_cuobj()) {
+    std::string err;
+    oob_arena = ceph::oob::Arena::create(
+      ceph::oob::memory(dpp->get_cct()), &err);
+    if (!oob_arena) {
+      derr << "WARNING: " << err << " (S3 over RDMA disabled)" << dendl;
     }
   }
-#endif
 
   // initialize RGWProcessEnv
   env.rest = &rest;
@@ -683,6 +687,26 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 
     fes.push_back(fe);
   }
+
+#ifdef WITH_RADOSGW_CUOBJ
+  // after the frontends dropped privileges: the kernel takes an rdma_cm
+  // or legacy verbs write() only from a thread with the credentials that
+  // opened the file. This thread keeps the ones it opens the server with,
+  // for its later calls into the server (shutdown()), and the threads the
+  // library starts share them. The frontend threads started before the
+  // switch, which gave each its own, so such a write() that the library
+  // makes on a frontend thread during a transfer is still refused; not
+  // tested. Until the server is up, a request with a cuObject descriptor
+  // moves its data over HTTP, as it does when the server fails to start
+  if (oob_arena &&
+      ceph::oob::read_transports(dpp->get_cct()).client_cuobj()) {
+    int cuobj_r = RGWCuObjServer::init(dpp->get_cct(), oob_arena.get());
+    if (cuobj_r < 0) {
+      derr << "WARNING: cuObj RDMA server init failed: " << cuobj_r
+           << " (RDMA acceleration disabled)" << dendl;
+    }
+  }
+#endif
 
   std::string fe_name = get_frontend_name();
   r = env.driver->register_to_service_map(dpp, fe_name, service_map_meta);
@@ -887,6 +911,8 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 #ifdef WITH_RADOSGW_CUOBJ
   RGWCuObjServer::shutdown();
 #endif
+  // after the cuObject server, which registered it
+  oob_arena.reset();
 
   rgw_tools_cleanup();
   rgw_shutdown_resolver();

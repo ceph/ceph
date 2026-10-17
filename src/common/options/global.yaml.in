@@ -220,11 +220,13 @@ options:
   long_desc: A comma-separated list. A libfabric provider (for example
     verbs_ofi_rxm or uet) serves libfabric tokens. tcp is for tests only,
     because closing a socket does not discard the writes that the kernel
-    queued, so a write that the OSD cuts off can still land later. An OSD opens one libfabric endpoint. Write a layered
+    queued, so a write that the OSD cuts off can still land after the
+    gateway's fence. An OSD opens one libfabric endpoint. Write a layered
     provider with an underscore, as in verbs_ofi_rxm, since a semicolon
     starts a comment in a configuration file; libfabric's spelling,
     verbs;ofi_rxm, works too. "cuobj" serves
-    cuObject descriptors, through the cuObject executor of each OSD. Empty turns out-of-band transfers with clients off.
+    cuObject descriptors, through the cuObject executor of each OSD and the
+    cuObject server of the gateway. Empty turns out-of-band transfers with clients off.
   services:
   - osd
   - rgw

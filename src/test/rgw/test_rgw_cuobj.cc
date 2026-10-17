@@ -14,6 +14,7 @@
 #include <cuobjserver.h>
 #include <gtest/gtest.h>
 
+#include "common/oob_arena.h"
 #include "global/global_context.h"
 #include "rgw_cuobj.h"
 
@@ -66,37 +67,53 @@ TEST(CuObjDescriptorSize, RejectsOverflowAndMissingSeparators)
 }
 } // anonymous namespace
 
-// Construct only pool metadata. The production parser, acquisition, release,
-// and transfer helpers run without constructing a cuObjServer or registering memory.
+// Construct only the server's metadata, with an arena to stage in and a
+// channel cached for the thread. The production parser, acquisition,
+// release, and transfer helpers run without constructing a cuObjServer
+// or registering memory.
+//
+// Changed since the pool of fixed-size buffers that these tests were
+// written for: the gateway now stages each transfer in a buffer of its
+// out-of-band arena (common/oob_arena.h), a buddy allocator that hands
+// out powers of two from Arena::MIN to Arena::MAX, and a thread takes a
+// buffer only when it has a cuObject channel. The pool tests below keep
+// their intent (a buffer has one owner, is reused once released, and is
+// at least the size asked for) with the arena's sizes.
 class RGWCuObjServerTest : public ::testing::Test {
 protected:
+  using Arena = ceph::oob::Arena;
   std::unique_ptr<RGWCuObjServer> server;
+  std::shared_ptr<Arena> arena;
+
+  /// give the calling thread a cuObject channel, which acquire_buffer()
+  /// asks for
+  static void set_channel(uint16_t id) {
+    RGWCuObjServer::tls_channel_valid = true;
+    RGWCuObjServer::tls_channel_id = id;
+  }
 
   void SetUp() override {
     server.reset(new RGWCuObjServer);
     server->m_cct = g_ceph_context;
+    set_channel(0);
   }
   void TearDown() override {
     RGWCuObjServer::tls_channel_valid = false;
     RGWCuObjServer::tls_channel_id = 0;
     server.reset();
+    arena.reset();
   }
-  void set_pool(const std::vector<size_t>& sizes) {
-    server->m_buf_count = sizes.size();
-    server->m_buffer_pool =
-        std::make_unique<RGWCuObjServer::RDMABufEntry[]>(sizes.size());
-    for (size_t i = 0; i < sizes.size(); ++i) {
-      entry(i).size = sizes[i];
-    }
-  }
-  RGWCuObjServer::RDMABufEntry& entry(size_t index) {
-    return server->m_buffer_pool[index];
+  /// an arena of blocks blocks of Arena::MAX bytes to stage in
+  void set_arena(uint64_t blocks) {
+    std::string err;
+    arena = Arena::create(blocks * Arena::MAX, &err);
+    ASSERT_TRUE(arena) << err;
+    server->m_arena = arena.get();
   }
 
   ssize_t transfer(const std::string& token, bool write) {
     // A cached channel and a zero-length transfer exercise address validation
     // without calling the SDK, even if a malformed address is wrongly accepted.
-    RGWCuObjServer::tls_channel_valid = true;
     RGWCuObjServer::RDMABufEntry buffer;
     if (write) {
       return server->rdma_write_to_client("test", &buffer, 0, 0, token);
@@ -138,69 +155,101 @@ TEST_F(RGWCuObjServerTest, RejectsAddressOverflowAndMissingSeparator)
   }
 }
 
-TEST_F(RGWCuObjServerTest, EmptyPoolHasNoBuffers)
+TEST_F(RGWCuObjServerTest, FullArenaHasNoBuffers)
 {
+  // was EmptyPoolHasNoBuffers: an arena always has a block, so it is the
+  // arena whose block is taken that has none to give
+  set_arena(1);
+  auto* whole = server->acquire_buffer(Arena::MAX);
+  ASSERT_NE(whole, nullptr);
   EXPECT_EQ(server->acquire_buffer(1), nullptr);
+  server->release_buffer(whole);
   server->release_buffer(nullptr);
 }
 
 TEST_F(RGWCuObjServerTest, SingleBufferIsExclusiveAndReusable)
 {
-  set_pool({16});
-  auto* buffer = server->acquire_buffer(16);
-  ASSERT_EQ(buffer, &entry(0));
-  EXPECT_TRUE(buffer->in_use.load());
+  set_arena(1);
+  auto* buffer = server->acquire_buffer(Arena::MAX);
+  ASSERT_NE(buffer, nullptr);
+  EXPECT_EQ(buffer->ptr, arena->base());
+  EXPECT_EQ(buffer->size, Arena::MAX);
   EXPECT_EQ(server->acquire_buffer(1), nullptr);
   server->release_buffer(buffer);
-  EXPECT_FALSE(buffer->in_use.load());
-  EXPECT_EQ(server->acquire_buffer(16), buffer);
+  buffer = server->acquire_buffer(Arena::MAX);
+  ASSERT_NE(buffer, nullptr);
+  EXPECT_EQ(buffer->ptr, arena->base());
   server->release_buffer(buffer);
-  EXPECT_EQ(server->acquire_buffer(17), nullptr);
+  // nothing larger than a block
+  EXPECT_EQ(server->acquire_buffer(Arena::MAX + 1), nullptr);
+  EXPECT_EQ(0u, arena->stats().in_use);
 }
 
-TEST_F(RGWCuObjServerTest, SkipsUndersizedBuffers)
+TEST_F(RGWCuObjServerTest, BuffersAreAtLeastTheSizeAskedFor)
 {
-  set_pool({4, 8, 16, 32});
-  auto* first = server->acquire_buffer(16);
-  auto* second = server->acquire_buffer(16);
-  ASSERT_NE(first, nullptr);
-  ASSERT_NE(second, nullptr);
-  EXPECT_NE(first, second);
-  EXPECT_GE(first->size, 16);
-  EXPECT_GE(second->size, 16);
-  EXPECT_EQ(server->acquire_buffer(16), nullptr);
-  EXPECT_FALSE(entry(0).in_use.load());
-  EXPECT_FALSE(entry(1).in_use.load());
-  server->release_buffer(first);
-  server->release_buffer(second);
+  // was SkipsUndersizedBuffers: the arena has no buffers of fixed sizes
+  // to skip, and rounds each one up to a power of two of at least MIN
+  set_arena(1);
+  auto* small = server->acquire_buffer(16);
+  auto* odd = server->acquire_buffer(3 * Arena::MIN);
+  ASSERT_NE(small, nullptr);
+  ASSERT_NE(odd, nullptr);
+  EXPECT_EQ(small->size, Arena::MIN);
+  EXPECT_EQ(odd->size, 4 * Arena::MIN);
+  // apart from each other, inside the arena
+  const auto* a = static_cast<const char*>(small->ptr);
+  const auto* b = static_cast<const char*>(odd->ptr);
+  EXPECT_TRUE(a + small->size <= b || b + odd->size <= a);
+  EXPECT_LE(b + odd->size, arena->base() + arena->size());
+  server->release_buffer(small);
+  server->release_buffer(odd);
+  EXPECT_EQ(0u, arena->stats().in_use);
 }
 
-TEST_F(RGWCuObjServerTest, FindsTheOnlyFreeBufferAcrossTheWholePool)
+TEST_F(RGWCuObjServerTest, FindsTheOnlyFreeBufferAcrossTheWholeArena)
 {
-  set_pool(std::vector<size_t>(7, 16));
-  for (size_t free_index = 0; free_index < 7; ++free_index) {
+  // was ...AcrossTheWholePool: every MIN buffer of a block taken but one
+  set_arena(1);
+  constexpr size_t count = Arena::MAX / Arena::MIN;
+  std::vector<RGWCuObjServer::RDMABufEntry*> buffers;
+  for (size_t i = 0; i < count; ++i) {
+    buffers.push_back(server->acquire_buffer(Arena::MIN));
+    ASSERT_NE(buffers.back(), nullptr);
+  }
+  EXPECT_EQ(server->acquire_buffer(Arena::MIN), nullptr);
+  for (size_t free_index : {size_t(0), count / 2, count - 1}) {
     SCOPED_TRACE(free_index);
-    for (size_t i = 0; i < 7; ++i) {
-      entry(i).in_use.store(i != free_index);
-    }
-    // The result must be the same for every randomly chosen starting point.
-    for (unsigned attempt = 0; attempt < 32; ++attempt) {
-      auto* buffer = server->acquire_buffer(16);
-      ASSERT_EQ(buffer, &entry(free_index));
-      server->release_buffer(buffer);
+    void* const free_ptr = buffers[free_index]->ptr;
+    server->release_buffer(buffers[free_index]);
+    for (unsigned attempt = 0; attempt < 4; ++attempt) {
+      auto* buffer = server->acquire_buffer(Arena::MIN);
+      ASSERT_NE(buffer, nullptr);
+      EXPECT_EQ(buffer->ptr, free_ptr);
+      if (attempt < 3) {
+        server->release_buffer(buffer);
+      } else {
+        buffers[free_index] = buffer;
+      }
     }
   }
+  for (auto* buffer : buffers) {
+    server->release_buffer(buffer);
+  }
+  EXPECT_EQ(0u, arena->stats().in_use);
 }
 
-class CuObjConcurrentPool : public RGWCuObjServerTest,
-                           public ::testing::WithParamInterface<size_t> {};
+class CuObjConcurrentArena : public RGWCuObjServerTest,
+                            public ::testing::WithParamInterface<size_t> {};
 
-TEST_P(CuObjConcurrentPool, ClaimsAllAvailableBuffersWithoutDoubleOwnership)
+TEST_P(CuObjConcurrentArena, ClaimsAllAvailableBuffersWithoutDoubleOwnership)
 {
+  // was CuObjConcurrentPool: count buffers that fill one block of the
+  // arena between them, so that count of them can be held at once
   constexpr size_t threads = 16;
   constexpr size_t rounds = 64;
   const size_t count = GetParam();
-  set_pool(std::vector<size_t>(count, 16));
+  const uint64_t size = Arena::MAX / count;
+  set_arena(1);
   std::vector<std::atomic<unsigned>> owners(count);
   std::vector<std::atomic<unsigned>> successes(rounds);
   std::atomic<unsigned> violations{0};
@@ -208,13 +257,16 @@ TEST_P(CuObjConcurrentPool, ClaimsAllAvailableBuffersWithoutDoubleOwnership)
   std::vector<std::thread> workers;
   for (size_t thread = 0; thread < threads; ++thread) {
     workers.emplace_back([&, thread] {
+      // every thread of the gateway has a channel of its own
+      set_channel(thread);
       for (size_t round = 0; round < rounds; ++round) {
         phase.arrive_and_wait();
-        auto* buffer = server->acquire_buffer(16);
+        auto* buffer = server->acquire_buffer(size);
         size_t index = 0;
         if (buffer) {
-          index = buffer - &entry(0);
-          if (owners[index].exchange(thread + 1) != 0) {
+          index = (static_cast<char*>(buffer->ptr) - arena->base()) / size;
+          if (buffer->size != size || index >= count ||
+              owners[index].exchange(thread + 1) != 0) {
             ++violations;
           }
           ++successes[round];
@@ -236,10 +288,10 @@ TEST_P(CuObjConcurrentPool, ClaimsAllAvailableBuffersWithoutDoubleOwnership)
   for (const auto& successful : successes) {
     EXPECT_EQ(successful.load(), std::min(count, threads));
   }
-  for (size_t i = 0; i < count; ++i) {
-    EXPECT_FALSE(entry(i).in_use.load());
-  }
+  EXPECT_EQ(0u, arena->stats().in_use);
 }
 
-INSTANTIATE_TEST_SUITE_P(PoolSizes, CuObjConcurrentPool,
-                        ::testing::Values(1, 7, 16, 33));
+// the arena's buffers are powers of two: 1, 4, 16 and 64 of them fill a
+// block, as 1, 7, 16 and 33 buffers made up the pools before
+INSTANTIATE_TEST_SUITE_P(BufferCounts, CuObjConcurrentArena,
+                        ::testing::Values(1, 4, 16, 64));

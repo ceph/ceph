@@ -220,7 +220,7 @@ void Transfers::dispatch(xfer_job& job)
   debug_sleep(delays->post);
   const auto start = ceph::mono_clock::now();
   if (start > job.post_by()) {
-    // an op answered inline costs its client the out-of-band transfer:
+    // one inline stripe makes the gateway fall back for the whole GET:
     // a job waits while it can still start, and only then answers
     // without its transfer
     dout(10) << "job " << &job << " expired "

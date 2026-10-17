@@ -107,6 +107,7 @@ Other
    Data Layout in RADOS <layout>
    Data Caching and CDN <rgw-cache>
    S3 RDMA with cuObject <s3rdma>
+   S3 over RDMA <s3-rdma>
    D3N Data Cache <d3n_datacache>
    Export over NFS <nfs>
    Share over SMB <smb>

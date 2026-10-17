@@ -1274,9 +1274,23 @@ int FilterObject::FilterReadOp::get_attr(const DoutPrefixProvider* dpp, const ch
 int FilterObject::FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
+  /* the rdma passthrough params are set after prepare(), so forward
+   * them here rather than relying on prepare()'s params copy. The CRC
+   * out-pointers go on too: a null one asks the OSDs for no CRC */
+  next->params.rdma_token = params.rdma_token;
+  next->params.rdma_bytes = params.rdma_bytes;
+  next->params.rdma_crc64 = params.rdma_crc64;
+  next->params.rdma_crc32c = params.rdma_crc32c;
+
   int ret = next->iterate(dpp, ofs, end, cb, y);
-  if (ret < 0)
+  if (ret < 0) {
+    /* a failed passthrough read is retried in a fallback mode, which
+     * needs to know whether descriptor-bearing ops reached the OSDs and
+     * whether to fence the window */
+    params.rdma_submitted = next->params.rdma_submitted;
+    params.rdma_fence_needed = next->params.rdma_fence_needed;
     return ret;
+  }
 
   /* Copy params out of next */
   params = next->params;
@@ -1528,6 +1542,18 @@ int FilterNotification::publish_commit(const DoutPrefixProvider* dpp, uint64_t s
 int FilterWriter::process(bufferlist&& data, uint64_t offset)
 {
   return next->process(std::move(data), offset);
+}
+
+bool FilterWriter::set_pulled()
+{
+  return next->set_pulled();
+}
+
+int FilterWriter::process_pulled(uint64_t len, const std::string& token,
+                                 uint32_t want,
+                                 std::vector<PulledStripe>* stripes)
+{
+  return next->process_pulled(len, token, want, stripes);
 }
 
 int FilterWriter::complete(size_t accounted_size, const std::string& etag,

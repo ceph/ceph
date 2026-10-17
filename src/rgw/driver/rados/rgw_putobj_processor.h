@@ -44,6 +44,8 @@ class HeadObjectProcessor : public rgw::sal::ObjectProcessor {
   uint64_t data_offset = 0; // maximum offset of data written (ie compressed)
  protected:
   uint64_t get_actual_size() const { return data_offset; }
+  /// the size of an object whose bytes did not pass through process()
+  void set_actual_size(uint64_t size) { data_offset = size; }
 
   // process the first chunk of data and return a processor for the rest
   virtual int process_first_chunk(bufferlist&& data,
@@ -66,6 +68,9 @@ using RawObjSet = std::set<rgw_raw_obj>;
 class RadosWriter : public rgw::sal::DataProcessor {
   Aio *const aio;
   RGWRados *const store;
+  // the window of aio, the most a pulled stripe costs against it: a
+  // larger cost would never fit (see process_pulled())
+  const uint64_t pull_window;
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   rgw_obj head_obj;
@@ -79,10 +84,7 @@ class RadosWriter : public rgw::sal::DataProcessor {
   RadosWriter(Aio *aio, RGWRados *store,
               const RGWBucketInfo& bucket_info,
               RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
-              const DoutPrefixProvider *dpp, optional_yield y, jspan_context& _trace)
-    : aio(aio), store(store), bucket_info(bucket_info),
-      obj_ctx(obj_ctx), head_obj(_head_obj), dpp(dpp), y(y), trace(_trace)
-  {}
+              const DoutPrefixProvider *dpp, optional_yield y, jspan_context& _trace);
   ~RadosWriter();
 
   // add alloc hint to osd
@@ -99,6 +101,14 @@ class RadosWriter : public rgw::sal::DataProcessor {
 
   // write the data as an exclusive create and wait for it to complete
   int write_exclusive(const bufferlist& data);
+
+  /// write len bytes to the current stripe object, which its primary
+  /// OSD pulls out of the client window token names, at client_ofs; the
+  /// OSD's report, with the CRCs that want asks for, lands in *result
+  /// once the write completed (drain())
+  int process_pulled(uint64_t len, const std::string& token,
+                     uint64_t client_ofs, uint32_t want,
+                     librados::ObjectOperation::rdma_delivery_result* result);
 
   int drain();
 
@@ -171,6 +181,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   const std::optional<uint64_t> olh_epoch;
   const std::string unique_tag;
   bufferlist first_chunk; // written with the head in complete()
+  bool pulled = false;    // see set_pulled()
 
   int process_first_chunk(bufferlist&& data, rgw::sal::DataProcessor **processor) override;
  public:
@@ -188,6 +199,15 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   {}
 
   // prepare a trivial manifest
+  /// before prepare(): an OSD-direct PUT, whose bytes the OSDs pull out
+  /// of client memory. The head holds none of them, so that complete()
+  /// writes it last, with the attributes that only the pulls produce.
+  void set_pulled() { pulled = true; }
+  /// after prepare(): write len bytes, a stripe at a time, each pulled
+  /// by its primary OSD; see rgw::sal::Writer::process_pulled()
+  int process_pulled(uint64_t len, const std::string& token, uint32_t want,
+                     std::vector<rgw::sal::PulledStripe>* stripes);
+
   int prepare(optional_yield y) override;
   // write the head object atomically in a bucket index transaction
   int complete(size_t accounted_size, const std::string& etag,

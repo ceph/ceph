@@ -314,6 +314,15 @@ int RGWGetObj_ObjStore_S3Website::send_response_data_error(optional_yield y)
   return RGWGetObj_ObjStore_S3::send_response_data_error(y);
 }
 
+/// whether the request may use x-amz-rdma-token: the token names the
+/// endpoint that the OSDs or the gateway connect to, so an anonymous one
+/// only with rgw_rdma_token_allow_anonymous
+static bool rdma_token_allowed(const req_state* s)
+{
+  return !s->auth.identity || !s->auth.identity->is_anonymous() ||
+    s->cct->_conf.get_val<bool>("rgw_rdma_token_allow_anonymous");
+}
+
 int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
 {
   // for multisite sync requests, only read the slo manifest itself, rather than
@@ -350,18 +359,49 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     }
   }
 
-#ifdef WITH_RADOSGW_CUOBJ
-  if (auto* cuobj = RGWCuObjServer::get_instance();
-      cuobj && cuobj->is_available()) {
-    auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
-    if (rdma_token) {
-      rdma_descriptor = *rdma_token;
-      rdma_active = true;
+  // a HEAD moves no data, and ignores the token
+  if (auto rdma_hdr = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+      rdma_hdr && get_data) {
+    // opaque cuObject descriptor; RGWGetObj::execute() decides between
+    // OSD passthrough, staged RDMA and plain-HTTP fallback
+    rdma_token = *rdma_hdr;
+    // the CRC of the delivered bytes the response reports
+    if (int r = rgw::rdma::parse_checksum_header(s, &rdma_cksum_asked);
+        r < 0) {
+      return r;
     }
   }
-#endif
 
   return RGWGetObj_ObjStore::get_params(y);
+}
+
+bool RGWGetObj_ObjStore_S3::rdma_eligible()
+{
+  // GetObject only: SelectObjectContent, a POST, takes the data through
+  // send_response_data() into its query engine
+  if (s->op != OP_GET) {
+    return false;
+  }
+  // and the website endpoint answers a GET of an object that redirects
+  // with a 301 in place of its data (RGWGetObj_ObjStore_S3Website)
+  if ((s->prot_flags & RGW_REST_WEBSITE) &&
+      attrs.count(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION)) {
+    return false;
+  }
+  // nor an ErrorDocument, which goes out with the 403 or 404 of the
+  // error it answers: a client that reads only its window would take
+  // the page for the object
+  if (custom_http_ret) {
+    return false;
+  }
+  // nor an anonymous GET, unless the gateway allows it: the body goes
+  // over HTTP, with x-amz-rdma-reply: 501
+  if (!rdma_token_allowed(s)) {
+    ldpp_dout(this, 4) << "S3 over RDMA: ignoring the token of an "
+                       << "anonymous GET" << dendl;
+    return false;
+  }
+  return true;
 }
 
 RGWGetObj_ObjStore_S3::~RGWGetObj_ObjStore_S3()
@@ -373,23 +413,6 @@ RGWGetObj_ObjStore_S3::~RGWGetObj_ObjStore_S3()
       cuobj->release_buffer(static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf));
     }
     rdma_buf = nullptr;
-  }
-#endif
-}
-
-void RGWGetObj_ObjStore_S3::send_response()
-{
-#ifdef WITH_RADOSGW_CUOBJ
-  if (rdma_active && get_data && !sent_header) {
-    // complete() runs after all reads and filters, including manifest GETs
-    // that do not send an explicit EOF callback.
-    rdma_complete = true;
-    bufferlist bl;
-    const int ret = send_response_data(bl, 0, 0);
-    if (ret < 0) {
-      op_ret = ret;
-      send_response_data_error(s->yield);
-    }
   }
 #endif
 }
@@ -453,69 +476,6 @@ static std::string content_encoding_without_aws_chunked(std::string_view value)
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
-#ifdef WITH_RADOSGW_CUOBJ
-  if (rdma_active && get_data && !sent_header && !op_ret) {
-    if (!rdma_complete) {
-      // A zero-length callback is not necessarily the end of the operation:
-      // filters and manifest parts may still fail. Defer success to complete().
-      if (bl_len > 0) {
-        if (rdma_buf_offset > total_len ||
-            static_cast<uint64_t>(bl_len) > total_len - rdma_buf_offset) {
-          return -EIO;
-        }
-        auto* cuobj = RGWCuObjServer::get_instance();
-        if (!cuobj) {
-          return -EIO;
-        }
-        if (!rdma_buf) {
-          // A range only needs space for the response, not the whole object.
-          rdma_buf = cuobj->acquire_buffer(total_len);
-          if (!rdma_buf) {
-            return -EBUSY;
-          }
-        }
-        auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
-        if (rdma_buf_offset > entry->size ||
-            static_cast<uint64_t>(bl_len) > entry->size - rdma_buf_offset) {
-          return -EIO;
-        }
-        bl.begin(bl_ofs).copy(bl_len,
-            static_cast<char*>(entry->ptr) + rdma_buf_offset);
-        rdma_buf_offset += bl_len;
-      }
-      return 0;
-    }
-
-    if (rdma_buf_offset != total_len) {
-      return -EIO;
-    }
-    if (rdma_buf) {
-      auto* cuobj = RGWCuObjServer::get_instance();
-      if (!cuobj) {
-        return -EIO;
-      }
-      auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
-      const ssize_t ret = cuobj->rdma_write_to_client(
-          s->object->get_name(), entry, 0, rdma_buf_offset, rdma_descriptor);
-      cuobj->release_buffer(entry);
-      rdma_buf = nullptr;
-      if (ret < 0) {
-        ldpp_dout(this, 0) << "rgw_cuobj: ERROR: failed to write to client via RDMA: "
-                          << cpp_strerror(ret) << dendl;
-        return ret;
-      }
-      s->rdma_bytes_transferred = ret;
-      if (static_cast<size_t>(ret) != rdma_buf_offset) {
-        ldpp_dout(this, 0) << "rgw_cuobj: ERROR: short RDMA write: " << ret
-                          << " of " << rdma_buf_offset << " bytes" << dendl;
-        return -EIO;
-      }
-    }
-    // The synchronous RDMA write has completed. Only now may HTTP success
-    // allow the client to consume or reuse its registered buffer.
-  }
-#endif
-
   const char *content_type = NULL;
   string content_type_str;
   map<string, string> response_attrs;
@@ -617,16 +577,23 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   for (auto &it : crypt_http_responses)
     dump_header(s, it.first, it.second);
 
-#ifdef WITH_RADOSGW_CUOBJ
-  if (rdma_active && get_data) {
+  // the x-amz-rdma-* reply headers answer a request for the data: a HEAD
+  // with a token gets none, and the length of the object
+  if (get_data && rdma_mode != RdmaMode::NONE) {
     dump_content_length(s, 0);
     // Match the HTTP status for ordinary and ranged GET responses.
     dump_header(s, "x-amz-rdma-reply",
                 (partial_content && !custom_http_ret) ? "206" : "200");
-    dump_header(s, "x-amz-rdma-bytes-transferred", s->rdma_bytes_transferred);
-  } else
-#endif
-  {
+    dump_header(s, "x-amz-rdma-bytes-transferred", rdma_reply_bytes());
+    // the OSDs' CRCs of exactly the delivered bytes, folded, a range's
+    // too: what the client can check its own buffer against
+    rgw::rdma::dump_checksums(s, rdma_crc64, rdma_crc32c);
+  } else {
+    if (get_data && !rdma_token.empty()) {
+      // token sent but RDMA is unavailable: valid fallback per the
+      // cuObject protocol, the client reads the body instead
+      dump_header(s, "x-amz-rdma-reply", "501");
+    }
     dump_content_length(s, total_len);
   }
   dump_last_modified(s, lastmod);
@@ -914,11 +881,26 @@ done:
 
 send_data:
   if (get_data && !op_ret) {
-#ifdef WITH_RADOSGW_CUOBJ
-    if (rdma_active) {
+    if (rdma_mode == RdmaMode::PASSTHROUGH) {
+      // the OSDs deliver all data; a store streaming bytes here would
+      // violate the passthrough contract
+      if (bl_len > 0) {
+        ldpp_dout(this, 0) << "ERROR: unexpected inline data in RDMA "
+                           << "passthrough GET" << dendl;
+        return -EIO;
+      }
       return 0;
     }
-#endif
+    if (rdma_mode == RdmaMode::STAGED) {
+      // RGWGetObj stages the data, and wrote it into the client's window
+      // before this response went out (rdma_write_staged())
+      if (bl_len > 0) {
+        ldpp_dout(this, 0) << "ERROR: unexpected inline data in RDMA "
+                           << "staged GET" << dendl;
+        return -EIO;
+      }
+      return 0;
+    }
     int r = dump_body(s, bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
@@ -3011,15 +2993,6 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
-#ifdef WITH_RADOSGW_CUOBJ
-  if (auto* cuobj = RGWCuObjServer::get_instance();
-      cuobj && cuobj->is_available()) {
-    if (s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
-      rdma_active = true;
-    }
-  }
-#endif
-
   if (!s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0) {
@@ -3128,6 +3101,18 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
     position = uint64_t(pos_tmp);
   }
 
+  // S3 over RDMA: the window of the client's memory that holds the object
+  if (auto token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+      token) {
+    if (rdma_token_allowed(s)) {
+      rdma_token = *token;
+    } else {
+      // execute() declines the PUT when it has no body: the client then
+      // sends the body, which an anonymous PUT stores
+      rdma_token_refusal = "anonymous requests cannot use x-amz-rdma-token";
+    }
+  }
+
   return RGWPutObj_ObjStore::get_params(y);
 }
 
@@ -3155,11 +3140,29 @@ static int get_success_retcode(int code)
   return 0;
 }
 
+void RGWPutObj_ObjStore_S3::dump_stored_headers()
+{
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+  dump_header_if_nonempty(s, "x-amz-expiration",
+			  get_s3_expiration_header(s, mtime));
+  if (cksum && cksum->aws()) {
+    dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
+    dump_header(s, cksum->header_name(), cksum->to_armor());
+  }
+}
+
 void RGWPutObj_ObjStore_S3::send_response()
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
     dump_errno(s);
+    if (rdma_put_declined) {
+      // the object was not taken out of the client's memory, and nothing
+      // was stored: the client sends the body instead
+      dump_header(s, "x-amz-rdma-reply", "501");
+    }
   } else {
     if (s->cct->_conf->rgw_s3_success_create_obj_status) {
       op_ret = get_success_retcode(
@@ -3167,35 +3170,30 @@ void RGWPutObj_ObjStore_S3::send_response()
       set_req_state_err(s, op_ret);
     }
 
-    string expires = get_s3_expiration_header(s, mtime);
-
-    for (auto &it : crypt_http_responses)
-      dump_header(s, it.first, it.second);
-
     if (copy_source.empty()) {
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
 #ifdef WITH_RADOSGW_CUOBJ
-      if (rdma_active) {
+      // only when execute() staged the body: with a libfabric token, or
+      // no cuObject server by then, the body came over HTTP
+      if (rdma_staged) {
         dump_header(s, "x-amz-rdma-reply", "200");
         dump_header(s, "x-amz-rdma-bytes-transferred", s->obj_size);
       }
 #endif
-      dump_header_if_nonempty(s, "x-amz-version-id", version_id);
-      dump_header_if_nonempty(s, "x-amz-expiration", expires);
-      if (cksum && cksum->aws()) {
-	dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
-	dump_header(s, cksum->header_name(), cksum->to_armor());
+      if (rdma_pulled) {
+        // the OSDs pulled every byte out of the client's memory; the
+        // checksums are theirs, folded, and the object's stored one is
+        // also in x-amz-checksum-<algorithm> below
+        dump_header(s, "x-amz-rdma-reply", "200");
+        dump_header(s, "x-amz-rdma-bytes-transferred", s->obj_size);
+        rgw::rdma::dump_checksums(s, rdma_pulled_crc64, rdma_pulled_crc32c);
       }
+      dump_stored_headers();
     } else {
       dump_errno(s);
-      dump_header_if_nonempty(s, "x-amz-version-id", version_id);
-      dump_header_if_nonempty(s, "x-amz-expiration", expires);
-      if (cksum && cksum->aws()) {
-	dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
-	dump_header(s, cksum->header_name(), cksum->to_armor());
-      }
+      dump_stored_headers();
       end_header(s, this, to_mime_type(s->format));
       dump_start(s);
       struct tm tmp;

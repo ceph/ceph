@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <map>
@@ -24,10 +25,21 @@
 #include "rgw_zone.h"
 #include "driver/rados/rgw_sal_rados.h"
 
+/*
+ * A gateway-staged PUT (cuObject) through RGWPutObj::execute().
+ *
+ * Changed since these tests were written: the staging buffers are
+ * buffers of the gateway's out-of-band arena, without an in_use flag, so
+ * the fake server below tracks who holds its one buffer. And the request
+ * is charged for the bytes that a read took out of the client's memory,
+ * a short read's too (see RejectsInvalidCompletionsBeforeStorage).
+ */
+
 namespace {
 struct FakeRdma {
   std::array<char, 16> data{'a', 'b', 'c', 'd'};
   RGWCuObjServer::RDMABufEntry buffer;
+  bool in_use = false;
   size_t descriptor_size = 4;
   ssize_t result = 4;
   bool available = true;
@@ -39,6 +51,7 @@ struct FakeRdma {
   unsigned prepares = 0;
   unsigned processes = 0;
   unsigned completes = 0;
+  unsigned archives = 0;
   std::string stored;
   std::vector<std::string> events;
 
@@ -47,11 +60,12 @@ struct FakeRdma {
     available = true;
     process_error = complete_error = 0;
     acquisitions = reads = releases = prepares = processes = completes = 0;
+    archives = 0;
     stored.clear();
     events.clear();
     buffer.ptr = data.data();
     buffer.size = data.size();
-    buffer.in_use = false;
+    in_use = false;
   }
 } rdma;
 
@@ -123,8 +137,12 @@ class FakeObject : public rgw::sal::RadosObject {
 public:
   explicit FakeObject(rgw::sal::Bucket* bucket)
     : RadosObject(nullptr, rgw_obj_key("test-object"), bucket) {}
+  std::unique_ptr<rgw::sal::Object> clone() override {
+    return std::make_unique<FakeObject>(*this);
+  }
   int swift_versioning_copy(const ACLOwner&, const rgw_user&,
                             const DoutPrefixProvider*, optional_yield) override {
+    ++rdma.archives;
     return 0;
   }
 };
@@ -179,7 +197,7 @@ protected:
 
   void SetUp() override {
     rdma.reset();
-    ASSERT_EQ(0, RGWCuObjServer::init(g_ceph_context));
+    ASSERT_EQ(0, RGWCuObjServer::init(g_ceph_context, nullptr));
     penv.driver = &driver;
     penv.site = site.get();
     ASSERT_EQ(0, client.init(g_ceph_context));
@@ -224,7 +242,7 @@ protected:
         << client.body;
     EXPECT_EQ(client.headers.count("x-amz-rdma-reply"), 0);
     EXPECT_EQ(client.headers.count("x-amz-rdma-bytes-transferred"), 0);
-    EXPECT_FALSE(rdma.buffer.in_use.load());
+    EXPECT_FALSE(rdma.in_use);
   }
 };
 
@@ -245,7 +263,10 @@ TEST_P(CuObjPutReadFailure, RejectsInvalidCompletionsBeforeStorage)
   EXPECT_EQ(rdma.processes, 0);
   EXPECT_EQ(rdma.completes, 0);
   EXPECT_EQ(state->obj_size, 0);
-  EXPECT_EQ(state->rdma_bytes_transferred, 0);
+  // changed: what a read took out of the client's memory is charged, a
+  // short read's too, where nothing was. But no more than the 4 bytes of
+  // the window
+  EXPECT_EQ(state->rdma_bytes_transferred, std::clamp<ssize_t>(GetParam(), 0, 4));
 }
 
 INSTANTIATE_TEST_SUITE_P(CompletionCounts, CuObjPutReadFailure,
@@ -263,13 +284,43 @@ TEST_F(CuObjPut, CompleteReadCommitsThePayloadBeforeSuccess)
   EXPECT_EQ(rdma.stored, "abcd");
   EXPECT_EQ(state->obj_size, 4);
   EXPECT_EQ(state->rdma_bytes_transferred, 4);
-  EXPECT_FALSE(rdma.buffer.in_use.load());
+  EXPECT_FALSE(rdma.in_use);
   op->complete();
   EXPECT_EQ(client.statuses, std::vector<int>({200}));
   EXPECT_EQ(client.headers.at("x-amz-rdma-reply"), "200");
   EXPECT_EQ(client.headers.at("x-amz-rdma-bytes-transferred"), "4");
   EXPECT_EQ(rdma.events, std::vector<std::string>(
       {"rdma_complete", "storage_complete", "http_status"}));
+}
+
+TEST_F(CuObjPut, ABodylessPutArchivesOnceItsObjectIsRead)
+{
+  // without a body, the object is the window. A read of it that fails
+  // leaves no archived version behind for the PUT that the client sends
+  // again; one that succeeds archives once
+  auto bodyless = [this] {
+    state->length = "0";
+    state->content_length = 0;
+    op = std::make_unique<TestPut>();
+    op->init(&driver, state.get(), nullptr);
+    ASSERT_EQ(0, op->get_params(null_yield));
+  };
+  bodyless();
+  rdma.result = -EIO;
+  op->execute(null_yield);
+  EXPECT_EQ(op->get_ret(), -EIO);
+  EXPECT_EQ(rdma.reads, 1);
+  EXPECT_EQ(rdma.archives, 0);
+  EXPECT_EQ(rdma.completes, 0);
+
+  rdma.reset();
+  bodyless();
+  op->execute(null_yield);
+  ASSERT_EQ(op->get_ret(), 0);
+  EXPECT_EQ(rdma.reads, 1);
+  EXPECT_EQ(rdma.archives, 1);
+  EXPECT_EQ(rdma.completes, 1);
+  EXPECT_EQ(rdma.stored, "abcd");
 }
 
 TEST_F(CuObjPut, InvalidDescriptorSizeReturnsInvalidArgument)
@@ -331,25 +382,29 @@ TEST_F(CuObjPut, StorageFailureDoesNotReturnRdmaSuccess)
 
 // Link-time fake: the real PUT operation runs with a controlled RDMA result.
 // Descriptor parsing itself is covered against production code in test_rgw_cuobj.cc.
-std::unique_ptr<RGWCuObjServer> RGWCuObjServer::s_instance;
+std::atomic<RGWCuObjServer*> RGWCuObjServer::s_instance{nullptr};
 RGWCuObjServer::~RGWCuObjServer() = default;
-int RGWCuObjServer::init(CephContext* cct) {
-  s_instance.reset(new RGWCuObjServer);
-  s_instance->m_cct = cct;
+int RGWCuObjServer::init(CephContext* cct, ceph::oob::Arena*) {
+  auto* srv = new RGWCuObjServer;
+  srv->m_cct = cct;
+  s_instance.store(srv);
   return 0;
 }
-void RGWCuObjServer::shutdown() { s_instance.reset(); }
-RGWCuObjServer* RGWCuObjServer::get_instance() { return s_instance.get(); }
-bool RGWCuObjServer::is_available() const { return true; }
+void RGWCuObjServer::shutdown() { delete s_instance.exchange(nullptr); }
+RGWCuObjServer* RGWCuObjServer::get_instance() { return s_instance.load(); }
+bool RGWCuObjServer::is_available() { return true; }
 RGWCuObjServer::RDMABufEntry* RGWCuObjServer::acquire_buffer(size_t size) {
   ++rdma.acquisitions;
-  if (!rdma.available || size > rdma.buffer.size || rdma.buffer.in_use.exchange(true)) {
+  if (!rdma.available || size > rdma.buffer.size || rdma.in_use) {
     return nullptr;
   }
+  rdma.in_use = true;
   return &rdma.buffer;
 }
 void RGWCuObjServer::release_buffer(RDMABufEntry* buffer) {
-  EXPECT_TRUE(buffer->in_use.exchange(false));
+  EXPECT_EQ(buffer, &rdma.buffer);
+  EXPECT_TRUE(rdma.in_use);
+  rdma.in_use = false;
   ++rdma.releases;
 }
 size_t RGWCuObjServer::parse_rdma_descriptor_size(const std::string&) {

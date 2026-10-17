@@ -4867,6 +4867,61 @@ options:
   - debug
   flags:
   - startup
+# S3 over RDMA options
+- name: rgw_rdma_checksum
+  type: bool
+  level: advanced
+  desc: Compute checksums of out-of-band transfers
+  long_desc: For OSD passthrough, the gateway asks the OSDs for the CRC-64/NVME
+    or the CRC-32C of each stripe they deliver, as the client asks with
+    x-amz-rdma-checksum-algorithm, and for the type of the object's stored
+    full-object checksum. It combines the values, reports them in
+    x-amz-rdma-checksum-crc64nvme or x-amz-rdma-checksum-crc32c, which lets
+    the client test its own buffer, and compares whole-object GETs with the
+    stored checksum before it responds. An OSD-direct PUT always asks the
+    OSDs for checksums, whatever this option says.
+  default: true
+  services:
+  - rgw
+- name: rgw_rdma_osd_direct
+  type: bool
+  level: advanced
+  desc: Have the OSDs move object data straight to and from client memory
+  long_desc: For a token of a transport in oob_client_transports, the
+    gateway forwards the token to the OSDs in a delivery descriptor on each
+    stripe operation. The OSDs write the data of a GET into the client's
+    window. They pull the object of a body-less PUT
+    out of client memory. The object bypasses the gateway. A stripe that an
+    OSD returns inline restarts a GET in gateway-staged mode or over plain
+    HTTP, and a PUT that the OSDs cannot pull is declined with 501. Only
+    plain objects qualify; compressed or encrypted objects always take the
+    fallback.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - oob_client_transports
+- name: rgw_rdma_token_allow_anonymous
+  type: bool
+  level: advanced
+  desc: Let anonymous requests use x-amz-rdma-token
+  long_desc: A token names the endpoint that the OSDs, or the gateway's
+    cuObject server, connect to, and the memory they write into or read
+    from. Only the object's ACL and the bucket policy guard a request, so
+    with true an anonymous reader of a public bucket can make the OSDs
+    connect to any endpoint that a token names. With false, the gateway
+    ignores the token of an anonymous request. It serves an anonymous GET
+    over HTTP with x-amz-rdma-reply 501, reads the body of an anonymous PUT
+    over HTTP, and declines an anonymous PUT without a body that carries a
+    token with 501 and x-amz-rdma-reply 501, so that the client sends the
+    body.
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_rdma_osd_direct
+  flags:
+  - runtime
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced

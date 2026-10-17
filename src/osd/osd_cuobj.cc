@@ -653,8 +653,8 @@ ssize_t OSDCuObj::run_plan(bool pull, const std::string& key,
       if (started) {
 	*started = true;
       }
-      // handlePutObject reads the client's bytes into the buffer;
-      // handleGetObject writes them out
+      // handlePutObject reads the client's bytes into the buffer, as the
+      // gateway's staged PUT does; handleGetObject writes them out
       ssize_t r = pull ?
 	m_server->handlePutObject(
 	  key, buf->handle, window->addr + w.remote_ofs, w.len, token, channel,

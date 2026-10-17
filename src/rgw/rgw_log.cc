@@ -192,6 +192,20 @@ void rgw_log_usage_finalize()
   usage_logger = NULL;
 }
 
+// the bytes a request moved: those that crossed the HTTP socket, and
+// the out-of-band RDMA ones toward the direction the object data
+// moved. The op gives the direction
+static void bytes_moved(req_state *s, uint64_t *sent, uint64_t *received)
+{
+  *sent = ACCOUNTING_IO(s)->get_bytes_sent();
+  *received = ACCOUNTING_IO(s)->get_bytes_received();
+  if (s->op_type == RGW_OP_GET_OBJ) {
+    *sent += s->rdma_bytes_transferred;
+  } else if (s->op_type == RGW_OP_PUT_OBJ) {
+    *received += s->rdma_bytes_transferred;
+  }
+}
+
 static void log_usage(req_state *s, const string& op_name)
 {
   if (s->system_request) /* don't log system user operations */
@@ -226,8 +240,8 @@ static void log_usage(req_state *s, const string& op_name)
 
   rgw_usage_log_entry entry(user, payer, bucket_name);
 
-  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
-  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
+  uint64_t bytes_sent, bytes_received;
+  bytes_moved(s, &bytes_sent, &bytes_received);
 
   rgw_usage_data data(bytes_sent, bytes_received);
 
@@ -662,13 +676,8 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
   entry.object_owner = s->object_acl.get_owner().id;
   entry.bucket_owner = s->bucket_owner.id;
 
-  uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
-  uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
-  if (s->op_type == RGW_OP_GET_OBJ) {
-    bytes_sent += s->rdma_bytes_transferred;
-  } else if (s->op_type == RGW_OP_PUT_OBJ) {
-    bytes_received += s->rdma_bytes_transferred;
-  }
+  uint64_t bytes_sent, bytes_received;
+  bytes_moved(s, &bytes_sent, &bytes_received);
 
   entry.time = s->time;
   entry.total_time = s->time_elapsed();

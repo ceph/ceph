@@ -841,9 +841,10 @@ TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
   // without an executor for the token (no transport in
   // oob_client_transports, or built without one): the read must succeed
   // with the data returned INLINE, zero bytes reported as delivered out
-  // of band, and the result marked declined, since no transfer started,
-  // so that a caller need not fence the window. An OSD that predates the
-  // result field would report no flags at all
+  // of band, and the result marked declined, since no transfer started -
+  // the transparent degradation the RGW passthrough fallback keys on, and
+  // the bit that lets it skip the fence. An OSD that predates the result
+  // field would report no flags at all
   const std::string payload = "0123456789";
   bufferlist write_bl;
   write_bl.append(payload);

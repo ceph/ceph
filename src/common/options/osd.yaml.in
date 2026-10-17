@@ -1792,13 +1792,14 @@ options:
     cut off. A cut-off that ends after the budget by no more than this, and
     that itself took no longer, is counted and raises the OOB_CUTOFF_LATE
     health warning. It is usually a scheduling delay on a loaded host.
-    Clients that receive a response wait for
+    Clients that receive a response, and the gateway's fallback, wait for
     the OSD's reply, which follows the cut-off, so they are not affected. A
     client that gives a request up must allow this much beyond the lease and
     the drain. A quick cut-off that ends later than this started late,
     because the OSD's threads did not run. osd_oob_cutoff_policy says what
     happens then. A cut-off that itself takes longer than this fails. The
-    cuObject executor does not use this option.
+    cuObject executor does not use this option. The gateway's fence counts
+    the largest value, 2000 ms, whatever the OSDs set.
   default: 1000
   min: 0
   max: 2000

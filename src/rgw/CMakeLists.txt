@@ -340,6 +340,9 @@ if(WITH_RADOSGW_CUOBJ)
   list(APPEND rgw_common_libs ${CUOBJSERVER_LIBRARY})
 endif()
 
+# the checksums of out-of-band transfers, of every transport
+list(APPEND librgw_common_srcs rgw_rdma_cksum.cc)
+
 add_library(rgw_common STATIC
   ${librgw_common_srcs}
   ${librgw_driver_srcs})
