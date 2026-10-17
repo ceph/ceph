@@ -1080,6 +1080,11 @@ public:
                  std::list<rgw_obj_index_key> *remove_objs,
                  optional_yield y,
                  bool log_op = true);
+      // remove the remove_objs entries, and leave this op pending
+      int complete_remove_objs(const DoutPrefixProvider *dpp,
+                               std::list<rgw_obj_index_key> *remove_objs,
+                               optional_yield y,
+                               bool log_op = true);
 
       const std::string *get_optag() { return &optag; }
 
