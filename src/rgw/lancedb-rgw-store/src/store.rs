@@ -90,6 +90,9 @@ pub struct RGWObjectStore {
     /// 1:1 bucket-to-db mapping, kept for debug/logging only)
     prefix: String,
     chunk_size: u64,
+    /// resolve the bucket in the vector-bucket namespace (true) or the S3
+    /// bucket namespace (false). fixed for the store's lifetime
+    use_vector_bucket: bool,
 }
 
 // Safety: The raw pointers reference RGW driver and DoutPrefixProvider which
@@ -126,6 +129,7 @@ impl RGWObjectStore {
         bucket: &str,
         tenant: &str,
         prefix: &str,
+        use_vector_bucket: bool,
     ) -> Self {
         let chunk_size = ffi::rgw_get_max_chunk_size(driver);
         Self {
@@ -139,6 +143,7 @@ impl RGWObjectStore {
             } else {
                 DEFAULT_CHUNK_SIZE
             },
+            use_vector_bucket,
         }
     }
 
@@ -153,13 +158,13 @@ impl RGWObjectStore {
     }
 
     /// Build an CRgwBucket from pre-constructed CStrings
-    fn make_bucket(bucket_c: &CString, tenant_c: &CString) -> CRgwBucket {
+    fn make_bucket(bucket_c: &CString, tenant_c: &CString, is_vector_bucket: bool) -> CRgwBucket {
         let tenant_ptr = if tenant_c.as_bytes().is_empty() {
             std::ptr::null()
         } else {
             tenant_c.as_ptr()
         };
-        CRgwBucket::new(bucket_c.as_ptr(), tenant_ptr)
+        CRgwBucket::new(bucket_c.as_ptr(), tenant_ptr, is_vector_bucket)
     }
 
 
@@ -411,7 +416,7 @@ impl ObjectStore for RGWObjectStore {
     ) -> ObjectStoreResult<PutResult> {
         let bucket = self.bucket_cstr()?;
         let tenant = self.tenant_cstr()?;
-        let rgw_bucket = Self::make_bucket(&bucket, &tenant);
+        let rgw_bucket = Self::make_bucket(&bucket, &tenant, self.use_vector_bucket);
         let key = self.path_to_cstr(location)?;
         let obj = Self::make_obj(&key);
         let bytes: Bytes = payload.into();
@@ -583,11 +588,7 @@ impl ObjectStore for RGWObjectStore {
             || opts.if_modified_since.is_some()
             || opts.if_unmodified_since.is_some();
 
-        let if_match_c = opts
-            .if_match
-            .as_deref()
-            .map(str_to_cstring)
-            .transpose()?;
+        let if_match_c = opts.if_match.as_deref().map(str_to_cstring).transpose()?;
         let if_nomatch_c = opts
             .if_none_match
             .as_deref()
@@ -644,7 +645,7 @@ impl ObjectStore for RGWObjectStore {
         if total_len <= self.chunk_size {
             let bucket = self.bucket_cstr()?;
             let tenant = self.tenant_cstr()?;
-            let rgw_bucket = Self::make_bucket(&bucket, &tenant);
+            let rgw_bucket = Self::make_bucket(&bucket, &tenant, self.use_vector_bucket);
             let key = self.path_to_cstr(location)?;
             let obj = Self::make_obj(&key);
 
@@ -709,6 +710,7 @@ impl ObjectStore for RGWObjectStore {
         let driver = SendPtr::new(self.driver);
         let dpp = SendConstPtr::new(self.dpp);
         let chunk_size = self.chunk_size;
+        let use_vector_bucket = self.use_vector_bucket;
 
         let chunk_stream = stream::unfold(range_start, move |offset| {
             let bucket_name = bucket_name.clone();
@@ -757,7 +759,8 @@ impl ObjectStore for RGWObjectStore {
                         ))
                     }
                 };
-                let rgw_bucket = RGWObjectStore::make_bucket(&bucket_c, &tenant_c);
+                let rgw_bucket =
+                    RGWObjectStore::make_bucket(&bucket_c, &tenant_c, use_vector_bucket);
                 let obj = CRgwObject::from_key(key_c.as_ptr());
 
                 let mut buffer = ffi::CRgwBuffer::default();
@@ -829,6 +832,7 @@ impl ObjectStore for RGWObjectStore {
         let dpp = SendConstPtr::new(self.dpp);
         let bucket = self.bucket.clone();
         let tenant = self.tenant.clone();
+        let use_vector_bucket = self.use_vector_bucket;
 
         locations
             .map(move |location_result| {
@@ -838,7 +842,7 @@ impl ObjectStore for RGWObjectStore {
                     let location = location_result?;
                     let bucket_c = str_to_cstring(&bucket)?;
                     let tenant_c = str_to_cstring(&tenant)?;
-                    let rgw_bucket = Self::make_bucket(&bucket_c, &tenant_c);
+                    let rgw_bucket = Self::make_bucket(&bucket_c, &tenant_c, use_vector_bucket);
                     let key_c = str_to_cstring(location.as_ref())?;
                     let obj = CRgwObject::from_key(key_c.as_ptr());
 
@@ -886,6 +890,7 @@ impl ObjectStore for RGWObjectStore {
         let tenant = self.tenant.clone();
         let driver = SendPtr::new(self.driver);
         let dpp = SendConstPtr::new(self.dpp);
+        let use_vector_bucket = self.use_vector_bucket;
 
         stream::unfold((String::new(), false), move |(marker, done)| {
             let bucket = bucket.clone();
@@ -916,7 +921,8 @@ impl ObjectStore for RGWObjectStore {
 
                 let bucket_c = try_cstring!(bucket.as_str());
                 let tenant_c = try_cstring!(tenant.as_str());
-                let rgw_bucket = RGWObjectStore::make_bucket(&bucket_c, &tenant_c);
+                let rgw_bucket =
+                    RGWObjectStore::make_bucket(&bucket_c, &tenant_c, use_vector_bucket);
                 let prefix_c = try_cstring!(prefix_str.as_str());
                 let marker_c = try_cstring!(marker.as_str());
                 let delimiter_c = try_cstring!("");
@@ -1011,7 +1017,7 @@ impl ObjectStore for RGWObjectStore {
         loop {
             let bucket_c = self.bucket_cstr()?;
             let tenant_c = self.tenant_cstr()?;
-            let rgw_bucket = Self::make_bucket(&bucket_c, &tenant_c);
+            let rgw_bucket = Self::make_bucket(&bucket_c, &tenant_c, self.use_vector_bucket);
             let prefix_c = str_to_cstring(&prefix_str)?;
             let marker_c = str_to_cstring(&marker)?;
             let delimiter_c = str_to_cstring("/")?;
@@ -1104,7 +1110,7 @@ impl ObjectStore for RGWObjectStore {
     ) -> ObjectStoreResult<()> {
         let bucket = self.bucket_cstr()?;
         let tenant = self.tenant_cstr()?;
-        let rgw_bucket = Self::make_bucket(&bucket, &tenant);
+        let rgw_bucket = Self::make_bucket(&bucket, &tenant, self.use_vector_bucket);
         let from_key = self.path_to_cstr(from)?;
         let to_key = self.path_to_cstr(to)?;
         let src_obj = Self::make_obj(&from_key);
@@ -1172,7 +1178,7 @@ impl ObjectStore for RGWObjectStore {
     ) -> ObjectStoreResult<Box<dyn MultipartUpload>> {
         let bucket = self.bucket_cstr()?;
         let tenant = self.tenant_cstr()?;
-        let rgw_bucket = Self::make_bucket(&bucket, &tenant);
+        let rgw_bucket = Self::make_bucket(&bucket, &tenant, self.use_vector_bucket);
         let key = self.path_to_cstr(location)?;
         let obj = Self::make_obj(&key);
 
@@ -1216,6 +1222,7 @@ impl ObjectStore for RGWObjectStore {
             key: location.as_ref().to_string(),
             upload_id: upload_id_str,
             parts: Arc::new(Mutex::new(Vec::new())),
+            use_vector_bucket: self.use_vector_bucket,
         }))
     }
 }
@@ -1297,7 +1304,7 @@ impl RGWObjectStore {
     async fn head_opts(&self, location: &Path) -> ObjectStoreResult<(ObjectMeta, Attributes)> {
         let bucket = self.bucket_cstr()?;
         let tenant = self.tenant_cstr()?;
-        let rgw_bucket = Self::make_bucket(&bucket, &tenant);
+        let rgw_bucket = Self::make_bucket(&bucket, &tenant, self.use_vector_bucket);
         let key = self.path_to_cstr(location)?;
         let obj = Self::make_obj(&key);
 
@@ -1363,18 +1370,19 @@ struct RGWMultipartUpload {
     key: String,
     upload_id: String,
     parts: Arc<Mutex<Vec<String>>>,
+    use_vector_bucket: bool,
 }
 
 unsafe impl Send for RGWMultipartUpload {}
 
 impl RGWMultipartUpload {
-    fn make_bucket(bucket_c: &CString, tenant_c: &CString) -> CRgwBucket {
+    fn make_bucket(bucket_c: &CString, tenant_c: &CString, is_vector_bucket: bool) -> CRgwBucket {
         let tenant_ptr = if tenant_c.as_bytes().is_empty() {
             std::ptr::null()
         } else {
             tenant_c.as_ptr()
         };
-        CRgwBucket::new(bucket_c.as_ptr(), tenant_ptr)
+        CRgwBucket::new(bucket_c.as_ptr(), tenant_ptr, is_vector_bucket)
     }
 }
 
@@ -1388,6 +1396,7 @@ impl MultipartUpload for RGWMultipartUpload {
         let key = self.key.clone();
         let upload_id = self.upload_id.clone();
         let parts = self.parts.clone();
+        let use_vector_bucket = self.use_vector_bucket;
 
         let part_index = {
             let mut parts_guard = parts.lock().unwrap();
@@ -1399,7 +1408,7 @@ impl MultipartUpload for RGWMultipartUpload {
         Box::pin(async move {
             let bucket_c = str_to_cstring(&bucket)?;
             let tenant_c = str_to_cstring(&tenant)?;
-            let rgw_bucket = Self::make_bucket(&bucket_c, &tenant_c);
+            let rgw_bucket = Self::make_bucket(&bucket_c, &tenant_c, use_vector_bucket);
             let key_c = str_to_cstring(&key)?;
             let obj = CRgwObject::from_key(key_c.as_ptr());
             let upload_id_c = str_to_cstring(&upload_id)?;
@@ -1444,7 +1453,8 @@ impl MultipartUpload for RGWMultipartUpload {
     async fn complete(&mut self) -> ObjectStoreResult<PutResult> {
         let bucket_c = str_to_cstring(&self.bucket)?;
         let tenant_c = str_to_cstring(&self.tenant)?;
-        let rgw_bucket = RGWMultipartUpload::make_bucket(&bucket_c, &tenant_c);
+        let rgw_bucket =
+            RGWMultipartUpload::make_bucket(&bucket_c, &tenant_c, self.use_vector_bucket);
         let key_c = str_to_cstring(&self.key)?;
         let obj = CRgwObject::from_key(key_c.as_ptr());
         let upload_id_c = str_to_cstring(&self.upload_id)?;
@@ -1494,7 +1504,8 @@ impl MultipartUpload for RGWMultipartUpload {
     async fn abort(&mut self) -> ObjectStoreResult<()> {
         let bucket_c = str_to_cstring(&self.bucket)?;
         let tenant_c = str_to_cstring(&self.tenant)?;
-        let rgw_bucket = RGWMultipartUpload::make_bucket(&bucket_c, &tenant_c);
+        let rgw_bucket =
+            RGWMultipartUpload::make_bucket(&bucket_c, &tenant_c, self.use_vector_bucket);
         let key_c = str_to_cstring(&self.key)?;
         let obj = CRgwObject::from_key(key_c.as_ptr());
         let upload_id_c = str_to_cstring(&self.upload_id)?;
@@ -1534,6 +1545,7 @@ mod tests {
                 "test-bucket",
                 "",
                 "my-prefix/",
+                true,
             )
         };
         assert_eq!(

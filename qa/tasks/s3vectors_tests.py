@@ -374,7 +374,10 @@ def task(ctx,config):
 
     s3vtests_conf = {}
 
-    s3vector_backend = ctx.config.get('overrides', {}).get('ceph', {}).get('conf', {}).get('client', {}).get('rgw_s3vector_backend', 'rgw')
+    ceph_overrides = ctx.config.get('overrides', {}).get('ceph', {})
+    rgw_config = ceph_overrides.get('conf', {}).get('client', {})
+    s3vector_backend = rgw_config.get('rgw_s3vector_backend', 'rgw')
+    s3vector_data_s3_bucket = rgw_config.get('rgw_s3vector_data_s3_bucket', False)
 
     # some "radosgw-admin" commands are allowed only on the master zone. note that
     # the client of its RGW is assumed to be the same as the one of the tested zone
@@ -403,6 +406,7 @@ def task(ctx,config):
                 'host':endpoint.dns_name,
                 'zonegroup':ctx.rgw.zonegroup,
                 's3vector_backend':s3vector_backend,
+                's3vector_data_s3_bucket':s3vector_data_s3_bucket,
                 'cluster':cluster_name,
                 'rgw_client':daemon_type + '.' + client_id,
                 },

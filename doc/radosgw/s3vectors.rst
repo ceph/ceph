@@ -56,21 +56,29 @@ The ``local`` backend is configured with:
 Backing Buckets
 ~~~~~~~~~~~~~~~
 
-With the ``rgw`` backend, LanceDB stores its files inside a regular S3 bucket.
-The name of that bucket is identical to the name of the vector bucket.
-**This bucket is not created automatically**: it must be created before
-``CreateVectorBucket`` is called.
+With the ``rgw`` backend, LanceDB stores its files inside the vector bucket
+by default. No separate S3 bucket is required, and the raw files are accessible
+only through RGW's internal object operations, not through the S3 object API.
 
-For example, to create a vector bucket named ``my-vectors``, first create a
-regular S3 bucket named ``my-vectors`` at the RGW endpoint, and only then call
-``CreateVectorBucket``.
+.. confval:: rgw_s3vector_data_s3_bucket
+
+When this option is ``true``, LanceDB instead stores its files in an S3 bucket
+with the same name as the vector bucket. **This S3 bucket must be created before
+calling CreateVectorBucket**. It is not created automatically.
+
+The option defaults to ``false``. Its value is recorded when the vector bucket
+is created and remains fixed for that bucket. Changing the option affects only
+new vector buckets. It has no effect on the ``local`` backend.
 
 .. note:: S3 buckets are kept in separate namespaces, and a name may be used by both
    at the same time. Listing S3 buckets does not show vector buckets,
    and listing vector buckets does not show S3 buckets.
 
+
 Ownership
 `````````
+
+The following applies when ``rgw_s3vector_data_s3_bucket`` is ``true``.
 
 Since the credentials used for the S3 bucket are the same as the credentials
 used in the S3 vectors request, it is advised that the same user will be owner of both.
@@ -82,10 +90,11 @@ passing through the S3 Vectors API and its permission checks. Write access to th
 backing bucket should therefore be restricted to its owner, or to the users
 performing the vector bucket operations.
 
-Recommended Bucket Configuration
-````````````````````````````````
+Recommended S3 Bucket Configuration
+```````````````````````````````````
 
-The following is recommended for any bucket that backs a vector bucket:
+The following is recommended for a separate S3 backing bucket. Vector buckets
+that store their own data are created with sync disabled.
 
 - **Disable sync on the bucket.** In a multisite configuration, each zone
   maintains its own copy of the vector data (see `Multisite`_ below).
@@ -118,12 +127,18 @@ The account, or the tenant, is not part of the name of the vector bucket. It is
 implied by the credentials of the request, and it is the ``<account>`` part of
 the ARN of the vector bucket and of its indexes. See: `S3 Vectors REST API`_.
 
+With the ``rgw`` backend and the default ``rgw_s3vector_data_s3_bucket=false``,
+each account's vector bucket holds its own data. Vector buckets with the same
+name in different accounts, and a regular S3 bucket of that name, have separate
+storage.
+
 .. note:: The name of a regular S3 bucket is always unique within its tenant,
    whether or not the bucket is owned by an account. So, while two accounts of
    the same tenant may each have a vector bucket of the same name, they cannot
-   each have a regular S3 bucket of that name. With the ``rgw`` backend, such
-   accounts share the backing bucket of these vector buckets, which only one of
-   them owns. The other accounts must be allowed to access it by its policy.
+   each have a regular S3 bucket of that name. With the ``rgw`` backend and
+   ``rgw_s3vector_data_s3_bucket=true``, such accounts share the backing bucket
+   of these vector buckets, which only one of them owns. The other accounts
+   must be allowed to access it by its policy.
    See: `Ownership`_.
    The LanceDB files of a vector bucket that is owned by an account are stored
    in the backing bucket under a prefix, which is the ID of the account.
@@ -139,8 +154,9 @@ Each zone has its own vector buckets, and a vector bucket has to be created in
 every zone in which it is needed. A vector bucket of the same name may exist in
 more than one zone, holding different indexes and vectors.
 
-The backing bucket of a vector bucket is a regular S3 bucket, and its own sync
-configuration applies to it. It should not be synced. See:
+Vector buckets that store their own data have sync disabled. When a separate
+S3 backing bucket is used, its own sync configuration applies to it, and sync
+should be disabled. See:
 `Recommended Bucket Configuration`_.
 
 Metadata Filtering
@@ -487,7 +503,8 @@ Create Vector Bucket
 ````````````````````
 
 Creates a new vector bucket. The bucket name must be between 3 and 63
-characters long. With the ``rgw`` backend, a regular S3 bucket with the same
+characters long. No separate bucket is needed by default. With the ``rgw``
+backend and ``rgw_s3vector_data_s3_bucket`` set to ``true``, an S3 bucket with the same
 name must already exist. See: `Backing Buckets`_.
 
 ::
@@ -590,8 +607,8 @@ deleted before the vector bucket itself can be deleted.
    bucket nor its indexes are modified. Use `Delete Index`_ on each of the
    indexes of the bucket, and then delete the bucket.
 
-.. note:: The backing S3 bucket itself is not deleted, and should be removed
-   separately if it is no longer needed.
+.. note:: If a separate S3 backing bucket is used, it is not deleted and should
+   be removed separately if it is no longer needed.
 
 Vector Bucket Policy
 ````````````````````

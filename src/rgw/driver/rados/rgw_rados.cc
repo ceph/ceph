@@ -2655,6 +2655,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             const rgw_bucket& bucket,
                             const rgw_owner& owner,
                             const std::string& zonegroup_id,
+                            const RGWZonePlacementInfo* zone_placement,
                             const rgw_placement_rule& placement_rule,
                             const std::map<std::string, bufferlist>& attrs,
                             const std::optional<RGWQuotaInfo>& quota,
@@ -2664,7 +2665,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             obj_version* pep_objv,
                             RGWBucketInfo& info)
 {
-  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucke called" << dendl;
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucket called" << dendl;
   int ret = 0;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
@@ -2683,11 +2684,23 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     info.zonegroup = zonegroup_id;
     info.placement_rule = placement_rule;
 
-    // vector buckets have no bucket index, so no index is initialized here.
-    // the layout still needs to be filled in, otherwise it defaults to a
-    // Normal index layout that does not exist
+    if (zone_placement) {
+      if (!index_type) {
+        index_type = zone_placement->index_type;
+      }
+    } else {
+      index_type = rgw::BucketIndexType::Indexless;
+    }
     init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
                                index_type, index_shards);
+    info.flags |= BUCKET_VECTOR | BUCKET_DATASYNC_DISABLED;
+
+    if (zone_placement) {
+      ret = svc.bi->init_index(dpp, y, info, info.layout.current_index);
+      if (ret < 0) {
+        return ret;
+      }
+    }
 
     if (creation_time) {
       info.creation_time = *creation_time;
@@ -2716,7 +2729,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
       }
 
       /* only remove it if it's a different bucket instance */
-      if (orig_info.bucket.bucket_id != bucket.bucket_id) {
+      if (orig_info.bucket.bucket_id != info.bucket.bucket_id) {
         r = ctl.vector_bucket->remove_bucket_instance_info(info.bucket, info, y, dpp);
         if (r < 0) {
           ldpp_dout(dpp, 0) << "WARNING: " << __func__ << "(): failed to remove s3vector bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;
@@ -2724,6 +2737,9 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
         }
       }
 
+      if (orig_info.bucket.bucket_id != info.bucket.bucket_id && zone_placement) {
+        std::ignore = svc.bi->clean_index(dpp, y, info, info.layout.current_index);
+      }
       info = std::move(orig_info);
       /* ret == -EEXIST here */
     }
@@ -6597,6 +6613,10 @@ int RGWRados::delete_vector_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTrac
   r = ctl.vector_bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
   if (r < 0) {
     return r;
+  }
+
+  if (bucket_info.layout.current_index.layout.type != rgw::BucketIndexType::Indexless) {
+    std::ignore = svc.bi->clean_index(dpp, y, bucket_info, bucket_info.layout.current_index);
   }
 
   return 0;
@@ -12428,6 +12448,10 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
 				  uint64_t num_objs,
                                   const DoutPrefixProvider* dpp, optional_yield y)
 {
+  // The reshard queue resolves names through the S3 entrypoint namespace.
+  if (bucket_info.is_vector()) {
+    return 0;
+  }
   if (! cct->_conf.get_val<bool>("rgw_dynamic_resharding")) {
     return 0;
   }

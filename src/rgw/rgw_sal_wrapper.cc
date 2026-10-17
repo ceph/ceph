@@ -86,11 +86,30 @@ static int load_bucket( rgw::sal::Driver* driver, const DoutPrefixProvider* dpp,
     bucket_id.tenant = bucket->tenant;
   }
 
-  int ret = driver->load_bucket(dpp, bucket_id, &bucket_out, y);
+  // Select the entrypoint namespace before using the shared object operations.
+  int ret = bucket->is_vector_bucket
+      ? driver->load_vector_bucket(dpp, bucket_id, &bucket_out, y)
+      : driver->load_bucket(dpp, bucket_id, &bucket_out, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: load_bucket failed for '"
-                      << bucket->name << "' ret=" << ret << dendl;
+                      << bucket->name << "' (vector=" << bucket->is_vector_bucket
+                      << ") ret=" << ret << dendl;
     return ret;
+  }
+
+  // Writers take their owner from the bucket ACL. Loading metadata through SAL
+  // does not populate the in-memory ACL as the S3 frontend normally does.
+  auto& acl = bucket_out->get_acl();
+  const auto& attrs = bucket_out->get_attrs();
+  if (auto it = attrs.find(RGW_ATTR_ACL); it != attrs.end()) {
+    try {
+      auto p = it->second.cbegin();
+      acl.decode(p);
+    } catch (const buffer::error&) {
+      return -EIO;
+    }
+  } else {
+    acl.create_default(bucket_out->get_info().owner, "");
   }
 
   return 0;

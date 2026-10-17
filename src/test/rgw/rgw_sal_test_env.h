@@ -65,8 +65,18 @@ const char* rgw_test_env_backend(void);
 int rgw_test_env_create_bucket(const char* name, const char* tenant);
 
 /*
- * Remove a bucket (and its contents) and stop tracking it.  Any bucket left
- * behind by a failing test is cleaned up at exit instead.
+ * Create a vector bucket with native object storage and remember it for teardown.
+ * Behaves like rgw_test_env_create_bucket() otherwise. tenant may be NULL.
+ *
+ * Returns 0 on success, negative errno otherwise.
+ */
+int rgw_test_env_create_vector_bucket(const char* name, const char* tenant);
+
+/*
+ * Remove a bucket (and its contents) and stop tracking it.  Works for both
+ * S3 and vector buckets: the type recorded at creation selects the
+ * entrypoint namespace.  Any bucket left behind by a failing test is cleaned up
+ * at exit instead.
  *
  * Returns 0 on success, negative errno otherwise.
  */

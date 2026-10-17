@@ -4,6 +4,7 @@
 #include "gtest/gtest.h"
 #include "rgw_s3vector.h"
 #include "rgw_s3vector_filter.h"
+#include "rgw_sal_filter.h"
 #include "common/ceph_json.h"
 #include "common/dout.h"
 #include "lancedb.h"
@@ -11,10 +12,287 @@
 #include "common/ceph_argparse.h"
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/spawn.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace rgw::s3vector;
+
+class S3VectorConnectionTest : public ::testing::Test {
+protected:
+  class Driver : public rgw::sal::FilterDriver {
+  public:
+    bool expect_yield = false;
+    int reads = 0;
+    int resumed = 0;
+
+    Driver() : FilterDriver(nullptr) {}
+
+    int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+        std::unique_ptr<rgw::sal::VectorBucket>* bucket, optional_yield y) override {
+      ++reads;
+      EXPECT_EQ(expect_yield, bool(y));
+      EXPECT_EQ("connection-test", b.name);
+      EXPECT_EQ("tenant", b.tenant);
+      if (y) {
+        auto& yield = y.get_yield_context();
+        boost::asio::post(yield.get_executor(), yield);
+        ++resumed;
+      }
+      return -EACCES;
+    }
+  } driver;
+
+  NoDoutPrefix dpp{g_ceph_context, dout_subsys};
+  const bucket_namespace_t ns{"tenant", ""};
+  std::string old_backend;
+  std::string old_local_path;
+
+  void SetUp() override {
+    old_backend = g_ceph_context->_conf.get_val<std::string>("rgw_s3vector_backend");
+    old_local_path = g_ceph_context->_conf.get_val<std::string>("rgw_s3vector_local_path");
+    ASSERT_EQ(0, g_ceph_context->_conf.set_val("rgw_s3vector_backend", "rgw"));
+    ASSERT_EQ(0, g_ceph_context->_conf.set_val("rgw_s3vector_local_path", ""));
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+
+  void TearDown() override {
+    g_ceph_context->_conf.set_val("rgw_s3vector_backend", old_backend.c_str());
+    g_ceph_context->_conf.set_val("rgw_s3vector_local_path", old_local_path.c_str());
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+
+  template<typename RestConfig>
+  VectorBucketConfig<RestConfig> config() {
+    VectorBucketConfig<RestConfig> value{};
+    value.rest_config.vector_bucket_name = "connection-test";
+    return value;
+  }
+
+};
+
+// Yield coverage belongs to the shared metadata lookup and administrative
+// cleanup path. REST execution consumes already resolved backend settings.
+class S3VectorYieldTest : public S3VectorConnectionTest,
+                          public ::testing::WithParamInterface<bool> {
+protected:
+  void SetUp() override {
+    S3VectorConnectionTest::SetUp();
+    driver.expect_yield = GetParam();
+  }
+
+  template<typename Operation>
+  void check_operation(int expected_result, int expected_reads, Operation operation) {
+    if (GetParam()) {
+      boost::asio::io_context io;
+      std::exception_ptr exception;
+      boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+        EXPECT_EQ(expected_result, operation(optional_yield{yield}));
+      }, [&](std::exception_ptr e) { exception = e; });
+      io.run();
+      EXPECT_FALSE(exception);
+      EXPECT_EQ(expected_reads, driver.resumed);
+    } else {
+      EXPECT_EQ(expected_result, operation(null_yield));
+    }
+    EXPECT_EQ(expected_reads, driver.reads);
+  }
+};
+
+TEST_F(S3VectorConnectionTest, GetIndexRequiresResolvedBackend) {
+  auto configuration = config<get_index_t>();
+  get_index_reply_t reply;
+  EXPECT_EQ(-EINVAL, get_index(configuration, "region", &driver, ns,
+                     &dpp, null_yield, reply));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_F(S3VectorConnectionTest, GetVectorsWithoutCachedSessionRequiresResolvedBackend) {
+  auto configuration = config<get_vectors_t>();
+  get_vectors_reply_t reply;
+  EXPECT_EQ(-EINVAL, get_vectors(configuration, &driver, ns, &dpp, null_yield, reply));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_F(S3VectorConnectionTest, CreateIndexRequiresResolvedBackend) {
+  auto configuration = config<create_index_t>();
+  std::vector<validation_error_t> errors;
+  EXPECT_EQ(-EINVAL, create_index(configuration, &driver, ns, &dpp, null_yield, errors));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_F(S3VectorConnectionTest, CreateVectorBucketRequiresResolvedBackend) {
+  auto configuration = config<create_vector_bucket_t>();
+  EXPECT_EQ(-EINVAL, create_vector_bucket(configuration, &driver, ns, &dpp, null_yield));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_P(S3VectorYieldTest, RemoveIndexes) {
+  check_operation(-EACCES, 1, [&](optional_yield y) {
+    return remove_indexes(&dpp, &driver, ns, "connection-test", true, y);
+  });
+}
+
+TEST_F(S3VectorConnectionTest, PutVectorsRequiresResolvedBackend) {
+  auto configuration = config<put_vectors_t>();
+  std::vector<validation_error_t> errors;
+  EXPECT_EQ(-EINVAL, put_vectors(configuration, &driver, ns, &dpp, null_yield, errors));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_P(S3VectorYieldTest, StorageModeLookupPropagatesYieldAndError) {
+  StorageMode mode;
+  check_operation(-EACCES, 1, [&](optional_yield y) {
+    return get_bucket_storage_mode(&dpp, &driver, ns,
+                                   "connection-test", mode, y);
+  });
+}
+
+// A resolved local backend must be honored even though the current global
+// setting says RGW. An empty local path fails before any FFI I/O or bucket read.
+TEST_F(S3VectorConnectionTest, GetIndexUsesResolvedBackend) {
+  auto configuration = config<get_index_t>();
+  configuration.backend_config = BackendConfig{BackendType::LOCAL, StorageMode::VECTOR_BUCKET};
+  get_index_reply_t reply;
+  EXPECT_EQ(-EIO, get_index(configuration, "region", &driver, ns,
+                     &dpp, null_yield, reply));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_F(S3VectorConnectionTest, GetVectorsUsesResolvedBackend) {
+  auto configuration = config<get_vectors_t>();
+  configuration.backend_config = BackendConfig{BackendType::LOCAL, StorageMode::VECTOR_BUCKET};
+  get_vectors_reply_t reply;
+  EXPECT_EQ(-EIO, get_vectors(configuration, &driver, ns, &dpp, null_yield, reply));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_F(S3VectorConnectionTest, ListVectorsUsesResolvedBackend) {
+  auto configuration = config<list_vectors_t>();
+  configuration.backend_config = BackendConfig{BackendType::LOCAL, StorageMode::VECTOR_BUCKET};
+  list_vectors_reply_t reply;
+  EXPECT_EQ(-EIO, list_vectors(configuration, &driver, ns, &dpp, null_yield, reply));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_F(S3VectorConnectionTest, CreateVectorBucketUsesResolvedBackend) {
+  auto configuration = config<create_vector_bucket_t>();
+  configuration.backend_config = BackendConfig{BackendType::LOCAL, StorageMode::VECTOR_BUCKET};
+  EXPECT_EQ(-EIO, create_vector_bucket(configuration, &driver, ns, &dpp, null_yield));
+  EXPECT_EQ(0, driver.reads);
+}
+
+TEST_F(S3VectorConnectionTest, PutVectorsUsesResolvedBackend) {
+  auto configuration = config<put_vectors_t>();
+  configuration.backend_config = BackendConfig{BackendType::LOCAL, StorageMode::VECTOR_BUCKET};
+  std::vector<validation_error_t> errors;
+  EXPECT_EQ(-EIO, put_vectors(configuration, &driver, ns, &dpp, null_yield, errors));
+  EXPECT_EQ(0, driver.reads);
+}
+
+INSTANTIATE_TEST_SUITE_P(YieldingAndBlocking, S3VectorYieldTest,
+                        ::testing::Bool());
+
+class S3VectorStorageModeTest : public ::testing::TestWithParam<bool> {
+protected:
+  class Bucket : public rgw::sal::FilterBucket {
+  public:
+    rgw::sal::Attrs attrs;
+    Bucket() : FilterBucket(nullptr) {}
+    rgw::sal::Attrs& get_attrs() override { return attrs; }
+  } bucket;
+  NoDoutPrefix dpp{g_ceph_context, dout_subsys};
+  bool old_default;
+
+  void SetUp() override {
+    old_default = g_ceph_context->_conf.get_val<bool>("rgw_s3vector_data_s3_bucket");
+    ASSERT_EQ(0, g_ceph_context->_conf.set_val("rgw_s3vector_data_s3_bucket",
+                                            GetParam() ? "true" : "false"));
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+
+  void TearDown() override {
+    g_ceph_context->_conf.set_val("rgw_s3vector_data_s3_bucket",
+                                old_default ? "true" : "false");
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+};
+
+TEST_P(S3VectorStorageModeTest, PersistedModeOverridesCreationDefault) {
+  for (auto persisted : {StorageMode::VECTOR_BUCKET, StorageMode::S3_BUCKET}) {
+    bufferlist value;
+    value.append(to_string(persisted));
+    bucket.attrs[RGW_ATTR_S3VECTOR_STORAGE] = std::move(value);
+    StorageMode mode;
+    ASSERT_EQ(0, get_bucket_storage_mode(&dpp, &bucket, mode));
+    EXPECT_EQ(persisted, mode);
+  }
+}
+
+TEST_P(S3VectorStorageModeTest, MissingBucketUsesCreationDefault) {
+  StorageMode mode;
+  ASSERT_EQ(0, get_bucket_storage_mode(&dpp, nullptr, mode));
+  EXPECT_EQ(GetParam() ? StorageMode::S3_BUCKET : StorageMode::VECTOR_BUCKET,
+            mode);
+}
+
+TEST_P(S3VectorStorageModeTest, MissingOrInvalidAttributeDoesNotUseDefault) {
+  StorageMode mode;
+  EXPECT_EQ(-EINVAL, get_bucket_storage_mode(&dpp, &bucket, mode));
+  bucket.attrs[RGW_ATTR_S3VECTOR_STORAGE].append("invalid");
+  EXPECT_EQ(-EINVAL, get_bucket_storage_mode(&dpp, &bucket, mode));
+}
+
+INSTANTIATE_TEST_SUITE_P(CreationDefaults, S3VectorStorageModeTest,
+                        ::testing::Bool());
+
+template<typename Configuration>
+class S3VectorConfigurationTest : public ::testing::Test {};
+using S3VectorConfigurations = ::testing::Types<
+    create_index_t, create_vector_bucket_t, delete_index_t,
+    delete_vector_bucket_t, put_vectors_t, get_vectors_t, list_vectors_t,
+    get_index_t, list_indexes_t, delete_vectors_t, query_vectors_t,
+    delete_vector_bucket_policy_t, list_vector_buckets_t, get_vector_bucket_t,
+    put_vector_bucket_policy_t, get_vector_bucket_policy_t>;
+TYPED_TEST_SUITE(S3VectorConfigurationTest, S3VectorConfigurations);
+
+TYPED_TEST(S3VectorConfigurationTest, BackendSettingsAreSeparateFromRequest) {
+  static_assert(!requires(TypeParam request) { request.storage_mode; });
+  static_assert(!requires(TypeParam request) { request.backend_type; });
+  static_assert(!requires(VectorBucketConfig<TypeParam> config, JSONObj* obj) {
+    config.decode_json(obj);
+  });
+  // Client fields cannot supply or override the separately resolved backend.
+  const std::string json = R"({
+    "vectorBucketName": "configuration-test", "indexName": "index",
+    "dataType": "float32", "dimension": 1, "distanceMetric": "cosine",
+    "keys": ["key"], "vectors": [{"key": "key", "data": {"float32": [1]}}],
+    "queryVector": {"float32": [1]}, "topK": 1, "policy": "{}",
+    "storageMode": "s3_bucket", "storage_mode": "s3_bucket",
+    "backend_type": "local",
+    "backend_config": {"backend_type": "local", "storage_mode": "s3_bucket"}
+  })";
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(json.c_str(), json.size()));
+  VectorBucketConfig<TypeParam> configuration{};
+  ASSERT_NO_THROW(decode_json_obj(configuration.rest_config, &parser));
+  EXPECT_FALSE(configuration.backend_config.storage_mode);
+  configuration.backend_config = BackendConfig{BackendType::RGW, StorageMode::VECTOR_BUCKET};
+  ASSERT_NO_THROW(decode_json_obj(configuration.rest_config, &parser));
+  ASSERT_TRUE(configuration.backend_config.storage_mode);
+  EXPECT_EQ(BackendType::RGW, configuration.backend_config.backend_type);
+  EXPECT_EQ(StorageMode::VECTOR_BUCKET, *configuration.backend_config.storage_mode);
+
+  JSONFormatter formatter;
+  configuration.rest_config.dump(&formatter);
+  std::ostringstream output;
+  formatter.flush(output);
+  EXPECT_EQ(std::string::npos, output.str().find("storageMode"));
+  EXPECT_EQ(std::string::npos, output.str().find("storage_mode"));
+  EXPECT_EQ(std::string::npos, output.str().find("backend"));
+}
 
 class S3VectorFilterTest : public ::testing::Test {
 protected:

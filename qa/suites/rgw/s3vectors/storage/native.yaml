@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw_s3vector_backend: rgw
+        rgw_s3vector_data_s3_bucket: false
