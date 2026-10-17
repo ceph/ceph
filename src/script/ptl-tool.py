@@ -879,7 +879,16 @@ class CommitParityCheck(BaseAuditCheck):
                             pr_mapping[pr_name] = []
 
                             for o_commit_sha in orig_pr_commits:
-                                o_summary = G.commit(o_commit_sha).summary
+                                o_commit = G.commit(o_commit_sha)
+                                if len(o_commit.parents) > 1:
+                                    # merge commits inside the source PR (e.g. a merge
+                                    # of main done for conflict resolution) are never
+                                    # cherry-picked into a backport; demanding parity
+                                    # for them flags every such backport as missing a
+                                    # commit
+                                    log.debug(f"Skipping source PR merge commit {o_commit_sha} in parity check")
+                                    continue
+                                o_summary = o_commit.summary
                                 bp_match = next((c for c, o_sha in bp_cherry_picks if o_commit_sha.startswith(o_sha)), None)
 
                                 pr_mapping[pr_name].append({
