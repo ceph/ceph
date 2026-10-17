@@ -32,16 +32,33 @@ const fillAuth = () => {
 };
 
 Cypress.Commands.add('login', (username, password) => {
-  cy.session([username, password], () => {
-    requestAuth(username, password).then((resp) => {
-      auth = resp.body;
-      auth.permissions = JSON.stringify(new Permissions(auth.permissions));
-      auth.pwdExpirationDate = String(auth.pwdExpirationDate);
-      auth.pwdUpdateRequired = String(auth.pwdUpdateRequired);
-      auth.sso = String(auth.sso);
-      fillAuth();
-    });
-  });
+  cy.session(
+    [username, password],
+    () => {
+      requestAuth(username, password).then((resp) => {
+        expect(resp.status, 'auth status').to.be.oneOf([200, 201]);
+        expect(resp.body?.permissions, 'auth permissions').to.exist;
+
+        auth = resp.body;
+        auth.permissions = JSON.stringify(new Permissions(auth.permissions));
+        auth.pwdExpirationDate = String(auth.pwdExpirationDate);
+        auth.pwdUpdateRequired = String(auth.pwdUpdateRequired);
+        auth.sso = String(auth.sso);
+
+        // Visit after auth so localStorage is written on the app origin.
+        cy.visit('/', { failOnStatusCode: false }).then(() => {
+          fillAuth();
+        });
+      });
+    },
+    {
+      validate() {
+        cy.window().then((win) => {
+          expect(win.localStorage.getItem(LocalStorage.DASHBOARD_USERNAME)).to.exist;
+        });
+      }
+    }
+  );
 });
 
 Cypress.Commands.add('ceph2Login', (username, password) => {
@@ -84,7 +101,9 @@ function requestAuth(username: string, password: string, url = '') {
     method: 'POST',
     url: !url ? 'api/auth' : `${url}api/auth`,
     headers: { Accept: CdHelperClass.cdVersionHeader('1', '0') },
-    body: { username: username, password: password }
+    body: { username: username, password: password },
+    // Avoid following mgr redirects to "/" which yield HTML 200 without permissions.
+    followRedirect: false
   });
 }
 
