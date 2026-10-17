@@ -73,6 +73,21 @@ target_link_libraries(unittest_mgr_servicemap
   ceph-common
 )
 
+# unittest_mgr_threadmonitor
+# Target mirrors the block added by ceph/ceph PR #71237 (pending its merge),
+# adapted to this branch's per-target source layout; reconcile when PR #71237
+# lands (shared with trackers #81336 and #81337).
+add_executable(unittest_mgr_threadmonitor
+  test_threadmonitor.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ThreadMonitor.cc
+)
+add_ceph_unittest(unittest_mgr_threadmonitor)
+target_link_libraries(unittest_mgr_threadmonitor
+  ceph-common
+  global
+  Python3::Python
+)
+
 # unittest_mgr_map_cache
 add_executable(unittest_mgr_map_cache
   test_mgrmapcache.cc
