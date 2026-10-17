@@ -3,6 +3,9 @@ overrides:
     crush_tunables: jewel
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
+    conf:
+      global:
+        rados_replica_read_policy: default
 tasks:
 - rados:
     clients: [client.0]

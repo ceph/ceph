@@ -74,7 +74,7 @@ def task(ctx, config):
                                   This mean data don't access in the near future.
                                   Let osd backend don't keep data in cache.
           pct_update_delay: delay before primary propogates pct on write pause,
-                            defaults to 5s if balance_reads is set
+                            defaults to 5s when balanced reads are in use
 
     For example::
 
@@ -179,6 +179,8 @@ def task(ctx, config):
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
     pct_update_delay = None
+    cluster = config.get('cluster', 'ceph')
+    cluster_conf = ctx.ceph[cluster].conf.get('global', {})
     args = [
         'adjust-ulimits',
         'ceph-coverage',
@@ -209,6 +211,8 @@ def task(ctx, config):
         args.extend(['--pool-snaps'])
     if config.get('balance_reads', False):
         args.extend(['--balance-reads'])
+    if config.get('balance_reads', False) or cluster_conf.get(
+            'rados_replica_read_policy', 'balance') == 'balance':
         pct_update_delay = config.get('pct_update_delay', 5)
     if config.get('osd_min_split_replica_read_size', None) is not None:
         args.extend(['--min-split-size',
@@ -295,8 +299,6 @@ def task(ctx, config):
         else:
             profile_name = None
             crush_name = None
-
-        cluster = config.get("cluster", "ceph")
 
         for i in range(int(config.get('runs', '1'))):
             log.info("starting run %s out of %s", str(i), config.get('runs', '1'))
