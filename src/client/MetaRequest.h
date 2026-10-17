@@ -5,9 +5,11 @@
 #define CEPH_CLIENT_METAREQUEST_H
 
 
+#include <variant>
+
 #include "include/types.h"
 #include "include/xlist.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "mds/mdstypes.h"
 #include "DentryRef.h"
 #include "InodeRef.h"
@@ -21,16 +23,19 @@ class dir_result_t;
 
 struct MetaRequest {
 private:
+  using SecondaryArg = std::variant<std::monostate, filepath, std::string>;
+
   InodeRef _inode, _old_inode, _other_inode;
   DentryRef _dentry;     //associated with path
   DentryRef _old_dentry; //associated with path2
+  SecondaryArg arg2;
   int abort_rc = 0;
 public:
   ceph::coarse_mono_time created = ceph::coarse_mono_clock::zero();
   uint64_t tid = 0;
   utime_t  op_stamp;
   ceph_mds_request_head head;
-  filepath path, path2;
+  filepath path;
   std::string alternate_name;
   std::vector<uint8_t>	fscrypt_auth;
   std::vector<uint8_t>	fscrypt_file;
@@ -171,10 +176,20 @@ public:
   void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.ext_num_fwd = head.ext_num_fwd + 1; }
   void set_retry_attempt(int a) { head.ext_num_retry = a; }
+
   void set_filepath(const filepath& fp) { path = fp; }
-  void set_filepath2(const filepath& fp) { path2 = fp; }
-  void set_alternate_name(std::string an) { alternate_name = an; }
-  void set_string2(const char *s) { path2.set_path(std::string_view(s), 0); }
+  void set_filepath2(const filepath& fp) { arg2 = fp; }
+  void set_alternate_name(std::string an) { alternate_name = std::move(an); }
+  void set_string2(std::string_view s) { arg2 = std::string(s); }
+
+  bool holds_filepath2() const { return std::holds_alternative<filepath>(arg2); }
+  bool holds_string2() const { return std::holds_alternative<std::string>(arg2); }
+  std::string const& get_string2() const {
+    return std::get<std::string>(arg2);
+  }
+  filepath const& get_filepath2() const {
+    return std::get<filepath>(arg2);
+  }
   void set_caller_perms(const UserPerm& _perms) {
     perms = _perms;
     head.caller_uid = perms.uid();
@@ -189,7 +204,6 @@ public:
   int get_op() { return head.op; }
   ceph_tid_t get_tid() { return tid; }
   filepath& get_filepath() { return path; }
-  filepath& get_filepath2() { return path2; }
 
   bool is_write() {
     return

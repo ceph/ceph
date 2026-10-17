@@ -15,7 +15,19 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_unsigned("tid", tid);
   f->dump_string("op", ceph_mds_op_name(head.op));
   f->dump_stream("path") << path;
-  f->dump_stream("path2") << path2;
+  f->dump_object("path_obj", path);
+  if (std::holds_alternative<filepath>(arg2)) {
+    auto&& fp = get_filepath2();
+    f->dump_string("path2", fp.get_path());
+    f->dump_object("path2_obj", fp);
+  } else if (std::holds_alternative<std::string>(arg2)) {
+    auto&& s = get_string2();
+    f->dump_string("path2", s);
+    f->dump_null("path2_obj");
+  } else {
+    f->dump_string("path2", "");
+    f->dump_null("path2_obj");
+  }
   if (_inode)
     f->dump_stream("ino") << _inode->ino;
   if (_old_inode)
