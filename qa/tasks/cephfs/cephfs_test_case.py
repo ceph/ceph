@@ -121,6 +121,10 @@ class CephFSTestCase(CephTestCase):
     def setUp(self):
         super(CephFSTestCase, self).setUp()
 
+        assert type(self.mounts) is list and len(self.mounts) > 0
+        # dummy statement to indicate type to prevent unnecessary linter warning
+        self.mounts = self.mounts if self.mounts else []
+
         self.config_set('mon', 'mon_allow_pool_delete', True)
 
         if len(self.mds_cluster.mds_ids) < self.MDSS_REQUIRED:
