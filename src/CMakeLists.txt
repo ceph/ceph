@@ -450,6 +450,10 @@ else()
   set(fmt_VERSION "${FMT_VERSION}")
 endif()
 
+if(WITH_DATUM)
+  add_subdirectory(rgw/datum)
+endif()
+
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
 # is now 21 which exceeds the default value of BOOST_MPL_LIMIT_VECTOR_SIZE, which
 # is 20. so we need to override it. see
