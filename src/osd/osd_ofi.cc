@@ -281,6 +281,11 @@ void OSDOfi::check_past_tolerance()
   }
 }
 
+bool OSDOfi::stages_from_arena() const
+{
+  return arena && is_available();
+}
+
 bool OSDOfi::handles(const std::string& token) const
 {
   if (!is_available()) {
@@ -291,6 +296,111 @@ bool OSDOfi::handles(const std::string& token) const
   auto t = ceph::ofi::parse_token(token);
   return t && t->wire == ep->wire();
 }
+
+namespace {
+
+/// a shared buffer of the arena that a plan writes from in place, with
+/// the ranges that read from it
+struct staged_buf_t {
+  ceph::oob::Arena::slice_t s;
+  std::vector<ceph::ofi::Endpoint::write_t> writes;
+};
+
+/**
+ * Map the ranges of writes, whose src_ofs count in data, onto the shared
+ * buffers of the arena that hold data's bytes: one entry per buffer,
+ * holding one reference of it, with the ranges that read from it, their
+ * src_ofs counting from the buffer's start. A range that continues the
+ * last one of its buffer, in the buffer and in the window, joins it.
+ * False, holding nothing, when a byte of data lies outside the shared
+ * buffers, or a range outside data.
+ */
+bool arena_slices(ceph::oob::Arena& arena, const ceph::buffer::list& data,
+		  const std::vector<ceph::ofi::Endpoint::write_t>& writes,
+		  std::vector<staged_buf_t>* out)
+{
+  struct seg_t {
+    const char* p;
+    uint64_t len;
+    uint64_t ofs;  ///< in data
+    size_t buf;    ///< in *out
+  };
+  auto drop = [&] {
+    for (auto& b : *out) {
+      arena.free(b.s);
+    }
+    out->clear();
+    return false;
+  };
+  std::vector<seg_t> segs;
+  uint64_t ofs = 0;
+  for (const auto& b : data.buffers()) {
+    if (!b.length()) {
+      continue;
+    }
+    const char* p = b.c_str();
+    size_t k = 0;
+    for (; k < out->size(); k++) {
+      const char* base = arena.ptr((*out)[k].s);
+      if (p >= base && p + b.length() <= base + (*out)[k].s.len) {
+	break;
+      }
+    }
+    if (k == out->size()) {
+      ceph::oob::Arena::slice_t s;
+      if (!arena.hold(p, b.length(), &s)) {
+	return drop();
+      }
+      out->push_back({s, {}});
+    }
+    segs.push_back({p, b.length(), ofs, k});
+    ofs += b.length();
+  }
+  for (const auto& w : writes) {
+    uint64_t src = w.src_ofs, dst = w.dst_ofs, left = w.len;
+    auto it = std::upper_bound(
+      segs.begin(), segs.end(), src,
+      [](uint64_t v, const seg_t& sg) { return v < sg.ofs; });
+    if (it == segs.begin()) {
+      return drop();
+    }
+    --it;
+    while (left) {
+      if (it == segs.end() || src >= it->ofs + it->len) {
+	return drop();
+      }
+      const uint64_t in = src - it->ofs;
+      const uint64_t n = std::min(left, it->len - in);
+      auto& b = (*out)[it->buf];
+      const uint64_t sofs = static_cast<uint64_t>(it->p - arena.ptr(b.s)) + in;
+      if (!b.writes.empty() &&
+	  b.writes.back().src_ofs + b.writes.back().len == sofs &&
+	  b.writes.back().dst_ofs + b.writes.back().len == dst) {
+	b.writes.back().len += n;
+      } else {
+	b.writes.push_back({sofs, n, dst});
+      }
+      src += n;
+      dst += n;
+      left -= n;
+      if (src >= it->ofs + it->len) {
+	++it;
+      }
+    }
+  }
+  // a buffer that no range reads from goes back
+  for (auto i = out->begin(); i != out->end(); ) {
+    if (i->writes.empty()) {
+      arena.free(i->s);
+      i = out->erase(i);
+    } else {
+      ++i;
+    }
+  }
+  return !out->empty() || writes.empty();
+}
+
+} // anonymous namespace
 
 ssize_t OSDOfi::execute_plan(const std::string& key,
 			     const std::string& token,
@@ -313,14 +423,53 @@ ssize_t OSDOfi::execute_plan(const std::string& key,
   }
   plans_started++;
   int r = 0;
-  std::vector<struct iovec> iov;
-  iov.reserve(data.get_num_buffers());
-  for (const auto& b : data.buffers()) {
-    if (b.length()) {
-      iov.push_back({const_cast<char*>(b.c_str()), b.length()});
+  bool staged = false;
+  // data that lies in shared buffers of the arena - read there straight
+  // from disk, or taken there from a gather window (osd_oob_direct_read)
+  // - is written from where it is, with no copy into staging: one
+  // write_staged() per buffer, with the ranges of the plan that read
+  // from it. Each write takes a reference of its own, which the endpoint
+  // gives back once nothing can touch the buffer any more.
+  std::vector<staged_buf_t> bufs;
+  if (arena && data.length() && arena_slices(*arena, data, writes, &bufs)) {
+    staged = true;
+    for (size_t i = 0; i < bufs.size(); i++) {
+      bool st = false;
+      r = ep->write_staged(*t, bufs[i].s.offset, bufs[i].s.len,
+			   bufs[i].writes, budget, &st);
+      if (started && st) {
+	*started = true;
+      }
+      if (r == -EOPNOTSUPP || r == -EFAULT) {
+	// refused without taking the buffer
+	arena->free(bufs[i].s);
+	if (i == 0) {
+	  // nothing went out: copy all of it, as any other data
+	  for (size_t j = 1; j < bufs.size(); j++) {
+	    arena->free(bufs[j].s);
+	  }
+	  staged = false;
+	  break;
+	}
+      }
+      if (r < 0) {
+	for (size_t j = i + 1; j < bufs.size(); j++) {
+	  arena->free(bufs[j].s);
+	}
+	break;
+      }
     }
   }
-  r = ep->write(*t, iov.data(), iov.size(), writes, budget, started);
+  if (!staged) {
+    std::vector<struct iovec> iov;
+    iov.reserve(data.get_num_buffers());
+    for (const auto& b : data.buffers()) {
+      if (b.length()) {
+	iov.push_back({const_cast<char*>(b.c_str()), b.length()});
+      }
+    }
+    r = ep->write(*t, iov.data(), iov.size(), writes, budget, started);
+  }
   if (r == -ENOTRECOVERABLE || ep->unsafe()) {
     check_unsafe();
   } else if (r == -ETIMEDOUT) {
@@ -340,6 +489,10 @@ ssize_t OSDOfi::execute_plan(const std::string& key,
   const uint64_t placed = ceph::osd::oob::plan_bytes(plan);
   plans_completed++;
   bytes_pushed += placed;
+  if (staged) {
+    plans_staged++;
+    bytes_staged += placed;
+  }
   dout(20) << "placed " << placed << " bytes of " << key << " in "
 	   << plan.size() << " range(s)" << dendl;
   return static_cast<ssize_t>(placed);
@@ -469,6 +622,8 @@ void OSDOfi::dump_stats(ceph::Formatter* f) const
   f->dump_unsigned("plans_completed", plans_completed);
   f->dump_unsigned("plans_failed", plans_failed);
   f->dump_unsigned("bytes_pushed", bytes_pushed);
+  f->dump_unsigned("plans_staged", plans_staged);
+  f->dump_unsigned("bytes_staged", bytes_staged);
   f->dump_bool("pulls", ep->reads());
   f->dump_unsigned("pulls_started", pulls_started);
   f->dump_unsigned("pulls_completed", pulls_completed);

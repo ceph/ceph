@@ -3,20 +3,22 @@
 
 /*
  * Reads and pulled writes with out-of-band delivery over the libfabric
- * tcp provider, for qa/standalone/osd/osd-oob-async.sh.
+ * tcp provider, for qa/standalone/osd/osd-oob-async.sh and
+ * osd-oob-copies.sh.
  *
  *   ceph_test_osd_oob_read [-c conf] write <pool> <size> <oid>...
  *     writes each object: size bytes of a pattern its name picks
  *   ceph_test_osd_oob_read [-c conf] get <pool> <size> [--others N]
- *     [--write-behind] [--balance] <oid>...
- *     reads size bytes of each object at once, each with a delivery
- *     descriptor for a window of its own on 127.0.0.1, asking for its
- *     CRC-64/NVME. With --write-behind it then writes 4 KiB at the start
- *     of the first object, before the reads are back: the read of that
- *     object still gets the object as it was before. While the reads are
- *     out it runs N writes, stats and reads of 4 KiB, one after another,
- *     on other objects named after the first one (which, in a pool of
- *     one PG, share its PG). Prints one line for each read:
+ *     [--write-behind] [--balance] [--offset N] <oid>...
+ *     reads size bytes of each object, from offset N (0 by default), at
+ *     once, each with a delivery descriptor for a window of its own on
+ *     127.0.0.1, asking for its CRC-64/NVME. With --write-behind it then
+ *     writes 4 KiB at the start of the first object, before the reads are
+ *     back: the read of that object still gets the object as it was
+ *     before. While the reads are out it runs N writes, stats and reads of
+ *     4 KiB, one after another, on other objects named after the first
+ *     one (which, in a pool of one PG, share its PG). Prints one line for
+ *     each read:
  *
  *       get <oid>: r=0 bytes=N inline=N flags=0x10 data=ok crc=ok ms=N
  *
@@ -98,7 +100,7 @@ void usage()
 	       "usage: ceph_test_osd_oob_read [-c conf] write <pool> <size> "
 	       "<oid>...\n"
 	       "       ceph_test_osd_oob_read [-c conf] get <pool> <size> "
-	       "[--others N] [--write-behind] [--balance] <oid>...\n"
+	       "[--others N] [--write-behind] [--balance] [--offset N] <oid>...\n"
 	       "       ceph_test_osd_oob_read [-c conf] put <pool> <size> "
 	       "[--others N] [--then-write] [--call] [--wait-file F] "
 	       "<oid>...\n");
@@ -198,8 +200,8 @@ int do_write(librados::IoCtx& io, size_t size,
   return 0;
 }
 
-int do_get(librados::IoCtx& io, size_t size, unsigned others,
-	   bool write_behind, bool balance,
+int do_get(librados::IoCtx& io, size_t size, uint64_t offset,
+	   unsigned others, bool write_behind, bool balance,
 	   const std::vector<std::string>& oids)
 {
   const size_t slot = (std::max<size_t>(size, 1) + 4095) & ~size_t(4095);
@@ -236,9 +238,9 @@ int do_get(librados::IoCtx& io, size_t size, unsigned others,
     auto rd = std::make_unique<read_t>();
     rd->oid = oids[i];
     // what write wrote there: its pattern is the same for any size
-    rd->expect = pattern(oids[i], size);
+    rd->expect = pattern(oids[i], offset + size).substr(offset);
     rd->base = i * slot;
-    rd->op.read(0, size, &rd->bl, &rd->rval);
+    rd->op.read(offset, size, &rd->bl, &rd->rval);
     rd->op.set_rdma_delivery(token, rd->base,
 			     ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64,
 			     &rd->res);
@@ -561,6 +563,7 @@ int main(int argc, char** argv)
   const std::string pool = args[1];
   const size_t size = std::strtoull(args[2].c_str(), nullptr, 10);
   unsigned others = 0;
+  uint64_t offset = 0;
   bool write_behind = false;
   bool balance = false;
   put_opts po;
@@ -572,6 +575,8 @@ int main(int argc, char** argv)
       write_behind = true;
     } else if (args[i] == "--balance") {
       balance = true;
+    } else if (args[i] == "--offset" && i + 1 < args.size()) {
+      offset = std::strtoull(args[++i].c_str(), nullptr, 10);
     } else if (args[i] == "--then-write") {
       po.then_write = true;
     } else if (args[i] == "--call") {
@@ -612,7 +617,7 @@ int main(int argc, char** argv)
   if (cmd == "write") {
     ret = do_write(io, size, oids);
   } else if (cmd == "get") {
-    ret = do_get(io, size, others, write_behind, balance, oids);
+    ret = do_get(io, size, offset, others, write_behind, balance, oids);
   } else {
     ret = do_put(rados, io, size, po, oids);
   }

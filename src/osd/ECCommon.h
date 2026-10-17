@@ -388,6 +388,10 @@ struct ECCommon {
     /// once enough shards replied, and the windows of those that had
     /// not would stay out of use for the quarantine
     bool lends_windows = false;
+    /// the result goes out of band, written from the OSD's arena with no
+    /// copy (osd_oob_direct_read): the primary reads its own shard into
+    /// the arena, and takes what peers push into its windows into it
+    bool into_arena = false;
 
     ReadOp(
         int priority,
@@ -424,11 +428,14 @@ struct ECCommon {
   };
 
   struct ReadPipeline {
+    /// into_arena: the result goes out of band from the OSD's arena
+    /// (ReadOp::into_arena)
     void objects_read_and_reconstruct(
         const std::map<hobject_t, std::list<ec_align_t>> &reads,
         bool fast_read,
         uint64_t object_size,
-        GenContextURef<ec_extents_t&&> &&func);
+        GenContextURef<ec_extents_t&&> &&func,
+        bool into_arena = false);
 
     void objects_read_and_reconstruct_for_rmw(
         std::map<hobject_t, read_request_t> &&to_read,
@@ -455,7 +462,8 @@ struct ECCommon {
         bool do_redundant_reads,
         bool for_recovery,
         std::unique_ptr<ReadCompleter> on_complete,
-        bool lend_windows = false);
+        bool lend_windows = false,
+        bool into_arena = false);
 
     void do_read_op(ReadOp &rop);
 

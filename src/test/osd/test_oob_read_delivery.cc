@@ -18,6 +18,8 @@
  */
 
 #include "osd/oob_read_delivery.h"
+#include "osd/oob_direct_read.h"
+#include "osd/oob_direct_read_cacher.h"
 
 #include <algorithm>
 #include <atomic>
@@ -37,6 +39,7 @@
 #include "common/TrackedOp.h"
 #include "common/ceph_context.h"
 #include "common/crc64nvme.h"
+#include "common/oob_arena.h"
 #include "common/rdma_token.h"
 #include "global/global_context.h"
 #include "include/scope_guard.h"
@@ -52,6 +55,7 @@
 
 using namespace ceph::osd::oob;
 using namespace std::chrono_literals;
+using ceph::oob::Arena;
 using ceph::rdma::delivery_t;
 using ceph::rdma::oob_result_t;
 
@@ -1539,7 +1543,55 @@ TEST(OobReadDelivery, LeaseAndDeliveryWindow)
     now, 5.0, 3.0, std::optional<ceph::signedspan>(mnow - 1ms), mnow)));
 }
 
-// what plan_read_push() decides before the op reads
+// osd_oob_direct_read reaches the read path through a config observer,
+// as the config changes, so that a read does not take the config's lock
+TEST(OobDirectRead, ModeFollowsTheConfig)
+{
+  auto& conf = g_ceph_context->_conf;
+  const auto was = conf.get_val<std::string>("osd_oob_direct_read");
+  auto restore = make_scope_guard([&] {
+    conf.set_val_or_die("osd_oob_direct_read", was);
+    conf.apply_changes(nullptr);
+  });
+  conf.set_val_or_die("osd_oob_direct_read", "off");
+  conf.apply_changes(nullptr);
+  direct_read_cacher_t mode(conf);
+  EXPECT_EQ(direct_read_t::off, mode.get());
+  const std::vector<std::pair<std::string, direct_read_t>> values{
+    {"cached", direct_read_t::cached},
+    {"nocache", direct_read_t::nocache},
+    {"off", direct_read_t::off},
+  };
+  for (const auto& [v, m] : values) {
+    conf.set_val_or_die("osd_oob_direct_read", v);
+    conf.apply_changes(nullptr);
+    EXPECT_EQ(m, mode.get()) << v;
+  }
+  // a cacher made later starts from the value as it is
+  conf.set_val_or_die("osd_oob_direct_read", "nocache");
+  conf.apply_changes(nullptr);
+  direct_read_cacher_t later(conf);
+  EXPECT_EQ(direct_read_t::nocache, later.get());
+}
+
+// with nocache the store keeps no copy of what it reads into the arena,
+// even when the client asked it to keep one (FADVISE_WILLNEED, which
+// BlueStore checks before NOCACHE); with cached, the op's flags go to
+// the store as they are
+TEST(OobDirectRead, NocacheKeepsNoCopy)
+{
+  const uint32_t will = CEPH_OSD_OP_FLAG_FADVISE_WILLNEED;
+  const uint32_t none = CEPH_OSD_OP_FLAG_FADVISE_NOCACHE;
+  const uint32_t seq = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
+  EXPECT_EQ(none, direct_read_flags(direct_read_t::nocache, 0));
+  EXPECT_EQ(none | seq, direct_read_flags(direct_read_t::nocache, will | seq));
+  EXPECT_EQ(will | seq, direct_read_flags(direct_read_t::cached, will | seq));
+  EXPECT_EQ(will, direct_read_flags(direct_read_t::off, will));
+}
+
+// what plan_read_push() decides before the op reads, which the PG asks
+// before it takes an arena buffer for the read: an op it would keep
+// inline whatever it read gets no buffer
 TEST(OobReadDelivery, ReadPushPossible)
 {
   const auto d = descriptor(0);
@@ -1695,6 +1747,109 @@ TEST(OobReadDelivery, PerfStatsTakeTheQueriesOfAReport)
   EXPECT_TRUE(counted(fresh, q).empty());
 }
 
+// the reads of an EC sub-read, laid out once: each lies inside the
+// buffer that the layout sized, apart from the others, in their order,
+// at its place for the store's block size, so that nothing works the
+// places out again from a block size that may differ
+TEST(OobDirectRead, ArenaLayoutKeepsEveryReadInTheBuffer)
+{
+  const std::vector<std::pair<uint64_t, uint64_t>> extents{
+    {0, 5000}, {8192, 65536}, {70000, 0}, {100, 1}, {4096 * 9 + 17, 12345},
+  };
+  for (uint64_t align : {0, 512, 4096, 65536}) {
+    SCOPED_TRACE("align " + std::to_string(align));
+    std::vector<arena_read_t> reads;
+    for (auto [off, len] : extents) {
+      reads.push_back({.off = off, .len = len});
+    }
+    const uint64_t total = arena_layout(reads, align, Arena::round);
+    uint64_t end = 0;
+    for (const auto& r : reads) {
+      SCOPED_TRACE(std::to_string(r.off) + "~" + std::to_string(r.len));
+      EXPECT_GE(r.pos, end);
+      EXPECT_LE(r.pos + r.read_len, total);
+      // the data asked for, inside what the store reads
+      EXPECT_LE(r.read_off, r.off);
+      EXPECT_EQ(r.off - r.read_off, r.pad);
+      EXPECT_LE(r.pad + r.len, r.read_len);
+      if (align && r.len) {
+        // whole blocks of the store, on a block of the buffer: the
+        // store sees no part of a block
+        EXPECT_EQ(0u, r.read_off % align);
+        EXPECT_EQ(0u, r.read_len % align);
+        EXPECT_EQ(0u, r.pos % align);
+        EXPECT_LT(r.pad, align);
+        EXPECT_LT(r.read_len - r.pad - r.len, align);
+      } else {
+        // just the data
+        EXPECT_EQ(r.off, r.read_off);
+        EXPECT_EQ(r.len, r.read_len);
+      }
+      end = r.pos + r.read_len;
+    }
+    EXPECT_EQ(end, total);
+  }
+}
+
+// a range read that starts and ends inside blocks: the store reads the
+// blocks around it, and the data comes out of them, cut where the
+// object ends
+TEST(OobDirectRead, ArenaReadHandsOutTheDataAskedFor)
+{
+  arena_read_t r{.off = 1000, .len = 10000};
+  EXPECT_EQ(12288u, arena_layout({&r, 1}, 4096, Arena::round));
+  EXPECT_EQ(0u, r.read_off);
+  EXPECT_EQ(12288u, r.read_len);
+  EXPECT_EQ(1000u, r.pad);
+  EXPECT_EQ(10000u, r.data_len(12288));
+  // the object ends inside the range, or before it starts
+  EXPECT_EQ(5000u, r.data_len(6000));
+  EXPECT_EQ(0u, r.data_len(1000));
+  EXPECT_EQ(0u, r.data_len(0));
+  // a range of whole blocks reads just itself
+  arena_read_t w{.off = 8192, .len = 65536};
+  EXPECT_EQ(65536u, arena_layout({&w, 1}, 4096, Arena::round));
+  EXPECT_EQ(8192u, w.read_off);
+  EXPECT_EQ(0u, w.pad);
+}
+
+// the blocks never take a bigger buffer than the data needs: a read of
+// a power of two bytes from inside a block reads just its data, so that
+// it does not hold a buffer twice its size, and a read of Arena::MAX
+// bytes still gets one
+TEST(OobDirectRead, ArenaLayoutKeepsTheBufferSize)
+{
+  const uint64_t MiB = 1ull << 20;
+  arena_read_t r{.off = 1000, .len = 4 * MiB};
+  EXPECT_EQ(4 * MiB, arena_layout({&r, 1}, 4096, Arena::round));
+  EXPECT_EQ(1000u, r.read_off);
+  EXPECT_EQ(4 * MiB, r.read_len);
+  EXPECT_EQ(0u, r.pad);
+  arena_read_t m{.off = 1000, .len = Arena::MAX};
+  const uint64_t t = arena_layout({&m, 1}, 4096, Arena::round);
+  EXPECT_EQ(Arena::MAX, t);
+  EXPECT_EQ(Arena::MAX, Arena::round(t));
+  EXPECT_EQ(0u, m.pad);
+  // less than that fits in the same buffer with its blocks
+  arena_read_t f{.off = 1000, .len = 4 * MiB - 8192};
+  EXPECT_EQ(4 * MiB - 4096, arena_layout({&f, 1}, 4096, Arena::round));
+  EXPECT_EQ(0u, f.read_off);
+  EXPECT_EQ(1000u, f.pad);
+  // the extents of a sub-read: all with their blocks, or none
+  std::vector<arena_read_t> sub{{.off = 1000, .len = 2 * MiB},
+                                {.off = 5000, .len = 2 * MiB}};
+  EXPECT_EQ(4 * MiB, arena_layout(sub, 4096, Arena::round));
+  for (const auto& e : sub) {
+    EXPECT_EQ(e.off, e.read_off);
+    EXPECT_EQ(0u, e.pad);
+  }
+  EXPECT_EQ(2 * MiB, sub[1].pos);
+  std::vector<arena_read_t> fits{{.off = 1000, .len = MiB - 8192},
+                                 {.off = 5000, .len = MiB - 8192}};
+  EXPECT_EQ(2 * MiB - 8192, arena_layout(fits, 4096, Arena::round));
+  EXPECT_EQ(0u, fits[0].read_off);
+  EXPECT_EQ(4096u, fits[1].read_off);
+}
 
 namespace {
 

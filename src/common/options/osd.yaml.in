@@ -1885,6 +1885,43 @@ options:
   - osd_oob_cuobj_transfer_threads
   flags:
   - startup
+- name: osd_oob_direct_read
+  type: str
+  level: advanced
+  desc: Read the data of a read that goes out of band straight from disk
+    into the memory the transport writes it from
+  long_desc: A read that a client asked to have placed in its memory
+    (OSD-direct) is usually read into the object store's buffers, and the
+    transport then copies it into the memory it registered (oob_memory)
+    before it writes it to the client. With cached or nocache, the OSD
+    reads such a read straight into a buffer of that memory, when the
+    transport can write from there (libfabric delivery), and nothing
+    copies the data on the way out. The OSD reads the whole blocks of the
+    object store that hold the data, so that a range read that starts or
+    ends inside a block is read straight into the buffer too, unless those
+    blocks would need a buffer twice as big as the data does. BlueStore
+    reads what the device holds straight into the buffer, and copies only
+    what it has in its cache and what is compressed. With cached,
+    BlueStore keeps a copy of what it read in its cache, as it does for
+    any read. With nocache, it does not, so that a cold read is not copied
+    at all. Replicated pools, and the shard reads of erasure-coded pools
+    that clients read directly. With oob_cluster_transport, an
+    erasure-coded primary also reads its own shard into such a buffer,
+    and copies what its peers push into its gather windows into it once.
+    An erasure-coded PG reads this way only with the optimized EC code. A
+    PG of a pool that gets allow_ec_optimizations after its creation keeps
+    the legacy code, and copies, until its next interval change.
+  default: 'off'
+  enum_values:
+  - 'off'
+  - cached
+  - nocache
+  services:
+  - osd
+  see_also:
+  - oob_memory
+  flags:
+  - runtime
 - name: osd_oob_transfer_queue_max
   type: uint
   level: advanced

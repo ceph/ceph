@@ -3,6 +3,7 @@
 
 #include "common/oob_arena.h"
 #include "common/Formatter.h"
+#include "common/deleter.h"
 
 #include <algorithm>
 #include <bit>
@@ -112,10 +113,59 @@ void Arena::free(uint64_t offset, uint64_t len)
 {
   uint64_t size = round(len);
   std::lock_guard l(mtx);
+  if (auto it = shared_.find(offset); it != shared_.end()) {
+    if (--it->second.refs > 0) {
+      return;
+    }
+    size = it->second.len;
+    shared_.erase(it);
+  }
   if (size == 0) {
     return;
   }
   free_locked(offset, size);
+}
+
+Arena::slice_t Arena::alloc_shared(uint64_t len)
+{
+  const auto s = alloc(len);
+  if (s) {
+    std::lock_guard l(mtx);
+    shared_[s.offset] = shared_t{s.len, 1};
+  }
+  return s;
+}
+
+ceph::buffer::ptr Arena::alloc_shared_ptr(uint64_t len)
+{
+  const auto s = alloc_shared(len);
+  if (!s) {
+    return {};
+  }
+  return ceph::buffer::ptr(ceph::buffer::claim_buffer(
+    len, ptr(s), make_deleter([self = shared_from_this(), s] {
+      self->free(s);
+    })));
+}
+
+bool Arena::hold(const char* p, uint64_t n, slice_t* s)
+{
+  if (p < base_ || p >= base_ + size_) {
+    return false;
+  }
+  const uint64_t ofs = static_cast<uint64_t>(p - base_);
+  std::lock_guard l(mtx);
+  auto it = shared_.upper_bound(ofs);
+  if (it == shared_.begin()) {
+    return false;
+  }
+  --it;
+  if (ofs + n > it->first + it->second.len) {
+    return false;
+  }
+  it->second.refs++;
+  *s = slice_t{it->first, it->second.len};
+  return true;
 }
 
 void Arena::free_locked(uint64_t offset, uint64_t size)

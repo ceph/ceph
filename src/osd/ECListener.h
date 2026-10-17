@@ -22,6 +22,7 @@
 #include "common/WorkQueue.h"
 #include "PGLog.h"
 #include "messages/MOSDPGPush.h"
+#include "osd/oob_direct_read.h"
 
 // ECListener -- an interface decoupling the pipelines from
 // particular implementation of ECBackendL (crimson vs cassical).
@@ -29,6 +30,9 @@
 class OSDOobExecutor;
 namespace ceph::osd::oob {
 struct xfer_job;
+}
+namespace ceph::oob {
+class Arena;
 }
 
 struct ECListener {
@@ -57,6 +61,15 @@ struct ECListener {
   /// primary gathers shard reads out of band; null otherwise
   virtual OSDOobExecutor* oob_gather_executor() {
     return nullptr;
+  }
+  /// the memory that the OSD's transports write from without a copy
+  /// (osd_oob_direct_read); null when the OSD has none
+  virtual ceph::oob::Arena* oob_arena() {
+    return nullptr;
+  }
+  /// osd_oob_direct_read, as the OSD has it now
+  virtual ceph::osd::oob::direct_read_t oob_direct_read() const {
+    return ceph::osd::oob::direct_read_t::off;
   }
 
   virtual const OSDMapRef& pgb_get_osdmap() const = 0;

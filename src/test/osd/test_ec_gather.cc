@@ -162,6 +162,72 @@ TEST(ECGather, AppendsToWhatIsThere)
   EXPECT_EQ("k", flatten(out, "d"));
 }
 
+// A read whose result goes out of band takes each extent into a buffer
+// that make() hands out, one of the OSD's arena, and into the heap when
+// make() has none to give
+TEST(ECGather, TakesIntoTheBuffersMakeHandsOut)
+{
+  auto p = two_objects();
+  std::vector<char> win(64 << 10);
+  std::memcpy(win.data(), p.data.data(), p.data.size());
+  std::vector<const char*> handed;
+  int calls = 0;
+  auto make = [&](uint64_t len) {
+    if (++calls == 2) {
+      return ceph::buffer::ptr();
+    }
+    ceph::buffer::ptr bp(ceph::buffer::create(len));
+    handed.push_back(bp.c_str());
+    return bp;
+  };
+  out_t out;
+  auto t = take_pushed(win.data(), win.size(), p.pushed, p.crc, out, make);
+  ASSERT_TRUE(t.ok());
+  // in reply order: a at 0, a at 65536 (none handed out), c at 4096
+  EXPECT_EQ(3, calls);
+  ASSERT_EQ(2u, handed.size());
+  EXPECT_EQ(handed[0], out.at("a").front().second.front().c_str());
+  EXPECT_NE(handed[1], out.at("a").back().second.front().c_str());
+  EXPECT_EQ(handed[1], out.at("c").front().second.front().c_str());
+  EXPECT_EQ(pattern('a', 8192) + pattern('b', 4096), flatten(out, "a"));
+  EXPECT_EQ(pattern('c', 12288), flatten(out, "c"));
+
+  // a window that is not the push is still refused, whatever make() gave
+  auto stray = win;
+  stray[9000] ^= 0x40;
+  out_t none;
+  EXPECT_TRUE(take_pushed(stray.data(), stray.size(), p.pushed, p.crc, none,
+			  make).mismatch);
+  EXPECT_TRUE(none.empty());
+}
+
+// a buffer that make() rounds up holds the extent, and no more: the
+// extent's bufferlist is its length
+TEST(ECGather, TrimsTheBuffersMakeRoundsUp)
+{
+  auto p = two_objects();
+  std::vector<char> win(64 << 10);
+  std::memcpy(win.data(), p.data.data(), p.data.size());
+  std::vector<const char*> handed;
+  auto make = [&](uint64_t len) {
+    ceph::buffer::ptr bp(ceph::buffer::create(len + 4096));
+    handed.push_back(bp.c_str());
+    return bp;
+  };
+  out_t out;
+  auto t = take_pushed(win.data(), win.size(), p.pushed, p.crc, out, make);
+  ASSERT_TRUE(t.ok());
+  ASSERT_EQ(3u, handed.size());
+  const auto& a = out.at("a");
+  ASSERT_EQ(2u, a.size());
+  EXPECT_EQ(8192u, a.front().second.length());
+  EXPECT_EQ(4096u, a.back().second.length());
+  EXPECT_EQ(handed[0], a.front().second.front().c_str());
+  EXPECT_EQ(12288u, out.at("c").front().second.length());
+  EXPECT_EQ(pattern('a', 8192) + pattern('b', 4096), flatten(out, "a"));
+  EXPECT_EQ(pattern('c', 12288), flatten(out, "c"));
+}
+
 TEST(ECGather, TakesExtentsOfManySlices)
 {
   // an extent is copied and checked a slice at a time: one that ends

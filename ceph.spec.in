@@ -2975,6 +2975,7 @@ fi
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
+%{_libdir}/ceph/libceph_test_copycount.so
 %if 0%{with lancedb}
 %{_libdir}/libceph_rgw_sal_test_env.so
 %endif

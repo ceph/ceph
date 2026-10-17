@@ -270,6 +270,9 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
   monc(osd->monc),
   osd_max_object_size(cct->_conf, "osd_max_object_size"),
   osd_skip_data_digest(cct->_conf, "osd_skip_data_digest"),
+#ifdef HAVE_OSD_OOB_DELIVERY
+  oob_direct_read(cct->_conf),
+#endif
   publish_lock{ceph::make_mutex("OSDService::publish_lock")},
   pre_publish_lock{ceph::make_mutex("OSDService::pre_publish_lock")},
   m_osd_scrub{cct, *this, cct->_conf},

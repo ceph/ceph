@@ -193,6 +193,14 @@ public:
    uint32_t op_flags,
    ceph::buffer::list *bl) override;
 
+  int objects_read_local_into(
+   const hobject_t &hoid,
+   uint64_t off,
+   uint64_t len,
+   uint32_t op_flags,
+   const struct iovec *iov,
+   int iovcnt) override;
+
   int objects_readv_sync(
     const hobject_t &hoid,
     std::map<uint64_t, uint64_t>& m,
@@ -205,7 +213,8 @@ public:
     const std::list<std::pair<ec_align_t,
 	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
                Context *on_complete,
-               bool fast_read = false) override;
+               bool fast_read = false,
+               bool into_arena = false) override;
   bool get_ec_supports_crc_encode_decode() const override;
   ECUtil::stripe_info_t ec_get_sinfo() const override;
   bool ec_can_decode(const shard_id_set &available_shards) const override;

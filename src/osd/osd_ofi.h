@@ -75,6 +75,7 @@ public:
 	   bool lend_windows, ceph::oob::Arena* arena);
 
   bool is_available() const override;
+  bool stages_from_arena() const override;
   bool handles(const std::string& token) const override;
   // A provider that offers only FI_THREAD_DOMAIN stops the endpoint
   // while it adds a new client's address, for seconds perhaps. The op
@@ -138,6 +139,10 @@ private:
   std::atomic<uint64_t> plans_completed{0};
   std::atomic<uint64_t> plans_failed{0};
   std::atomic<uint64_t> bytes_pushed{0};
+  /// plans written from a shared buffer of the arena with no copy, and
+  /// their bytes
+  std::atomic<uint64_t> plans_staged{0};
+  std::atomic<uint64_t> bytes_staged{0};
   std::atomic<uint64_t> pulls_started{0};
   std::atomic<uint64_t> pulls_completed{0};
   std::atomic<uint64_t> pulls_failed{0};

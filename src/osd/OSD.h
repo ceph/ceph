@@ -54,6 +54,9 @@
 #include "messages/MOSDOp.h"
 #include "common/EventTrace.h"
 #include "osd/osd_perf_counters.h"
+#ifdef HAVE_OSD_OOB_DELIVERY
+#include "osd/oob_direct_read_cacher.h"
+#endif
 #include "common/Finisher.h"
 #include "scrubber/osd_scrub.h"
 
@@ -126,6 +129,11 @@ public:
 
   md_config_cacher_t<Option::size_t> osd_max_object_size;
   md_config_cacher_t<bool> osd_skip_data_digest;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  /// osd_oob_direct_read, without the config's lock
+  ceph::osd::oob::direct_read_cacher_t oob_direct_read;
+#endif
+
 #ifdef WITH_RADOSGW_CUOBJ
   /// the cuObject executor, one of oob_executors, for oob_runs_inline();
   /// null unless an out-of-band transport option names "cuobj" and the

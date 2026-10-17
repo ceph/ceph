@@ -65,6 +65,7 @@
 #include "PG.h"
 #include "Session.h"
 #ifdef HAVE_OSD_OOB_DELIVERY
+#include "common/oob_arena.h"
 #include "oob_executor.h"
 #include "osd/oob_placement.h"
 #include "osd/oob_pull.h"
@@ -315,11 +316,15 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
       },
       std::move(ctx_pair));
   }
+  bool into_arena = false;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  into_arena = pg->oob_async_reads_into_arena(this);
+#endif
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
     obc->obs.oi.size,
     in_native,
-    new OnReadComplete(pg, this), pg->get_pool().fast_read);
+    new OnReadComplete(pg, this), pg->get_pool().fast_read, into_arena);
 }
 void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
 {
@@ -6186,8 +6191,16 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       maybe_crc = oi.data_digest;
 
     if (ctx->op->ec_direct_read()) {
-      int r = pgbackend->objects_read_local(
-        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      int r = -EOPNOTSUPP;
+#ifdef HAVE_OSD_OOB_DELIVERY
+      // this shard's part of an out-of-band read: straight into the
+      // memory the transport writes it from (osd_oob_direct_read)
+      r = oob_read_into_arena(ctx, osd_op, &osd_op.outdata);
+#endif
+      if (r == -EOPNOTSUPP) {
+        r = pgbackend->objects_read_local(
+          soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      }
       if (r == -EIO) {
         // this shard cannot be read; the primary can rebuild it
         r = bounce_ec_direct_read(soid, ctx, r);
@@ -6223,9 +6236,17 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       bytes_read = op.extent.length;
     }
   } else {
-    int r = pgbackend->objects_read_sync(
-      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
-      oi.size, ctx->op->coro_handles);
+    int r = -EOPNOTSUPP;
+#ifdef HAVE_OSD_OOB_DELIVERY
+    // an out-of-band read: straight into the memory the transport writes
+    // it from (osd_oob_direct_read)
+    r = oob_read_into_arena(ctx, osd_op, &osd_op.outdata);
+#endif
+    if (r == -EOPNOTSUPP) {
+      r = pgbackend->objects_read_sync(
+	soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
+	oi.size, ctx->op->coro_handles);
+    }
     // whole object?  can we verify the checksum?
     if (r >= 0 && op.extent.offset == 0 &&
         (uint64_t)r == oi.size && oi.is_data_digest()) {
@@ -9679,6 +9700,165 @@ void PrimaryLogPG::apply_stats(
 }
 
 #ifdef HAVE_OSD_OOB_DELIVERY
+ceph::buffer::ptr PrimaryLogPG::oob_direct_read_buffer(
+  OpContext *ctx, const OSDOp& osd_op, uint32_t* op_flags,
+  ceph::osd::oob::arena_read_t* rd)
+{
+  if (osd_op.op.extent.length == 0 || !ctx->op ||
+      ctx->op->get_req()->get_type() != CEPH_MSG_OSD_OP) {
+    return {};
+  }
+  // the reads that plan_read_push() delivers whole: a SPARSE_READ's data
+  // goes in a reply of its own shape
+  switch (osd_op.op.op) {
+  case CEPH_OSD_OP_READ:
+  case CEPH_OSD_OP_SYNC_READ:
+    break;
+  default:
+    return {};
+  }
+  auto m = ctx->op->get_req<MOSDOp>();
+  if (!m->has_rdma_delivery() || !ctx->ops) {
+    return {};
+  }
+  const auto mode = oob_direct_read();
+  if (mode == ceph::osd::oob::direct_read_t::off) {
+    return {};
+  }
+  // only an op of the request itself: a CHECKSUM, say, reads through a
+  // temporary op of its own. Its address, not an order of pointers that
+  // may point into different arrays
+  const auto& ops = *ctx->ops;
+  size_t idx = 0;
+  while (idx < ops.size() && &ops[idx] != &osd_op) {
+    idx++;
+  }
+  if (idx == ops.size()) {
+    return {};
+  }
+  const auto& deliveries = m->get_rdma_deliveries();
+  if (deliveries.size() != ops.size() || deliveries[idx].empty()) {
+    return {};
+  }
+  // no buffer for a read that deliver_oob_prepare() keeps inline
+  // whatever it reads. It asks again after the read, which can end
+  // after the lease does: only the geometry it builds is not asked for
+  // here
+  const bool ec_direct = ctx->op->ec_direct_read();
+  if (!ceph::osd::oob::read_push_possible(
+	osd_op.op.op, deliveries[idx], ec_direct,
+	oob_ec_direct_possible(ec_direct)) ||
+      oob_read_declined(ctx, __func__)) {
+    return {};
+  }
+  ceph::oob::Arena* arena = osd->oob_arena.get();
+  OSDOobExecutor* exec = osd->oob_executor_for(deliveries[idx].token);
+  if (!arena || !exec || !exec->stages_from_arena()) {
+    return {};
+  }
+  // what the store reads: this shard's part, for an EC shard-direct
+  // read (the geometry above says the backend has one)
+  uint64_t off = osd_op.op.extent.offset;
+  uint64_t len = osd_op.op.extent.length;
+  if (ec_direct) {
+    std::tie(off, len) = pgbackend->extent_to_shard_extent(off, len);
+    if (len == 0) {
+      return {};
+    }
+  }
+  // the store reads the whole blocks that hold it, so that it reads
+  // all of it straight into the buffer: its block size, which is fixed
+  // while it is mounted. Not when they would take a bigger buffer
+  *rd = ceph::osd::oob::arena_read_t{.off = off, .len = len};
+  const uint64_t total = ceph::osd::oob::arena_layout(
+    {rd, 1}, osd->store->get_read_into_block_size(),
+    ceph::oob::Arena::round);
+  // none free, or more than one buffer can hold: read as usual. A
+  // buffer is at least Arena::MIN bytes, as the staging buffer of any
+  // transfer is
+  auto buf = arena->alloc_shared_ptr(total);
+  if (!buf.length()) {
+    return {};
+  }
+  *op_flags = ceph::osd::oob::direct_read_flags(mode, *op_flags);
+  dout(20) << __func__ << " " << len << " bytes of op " << idx
+	   << " into arena buffer at 0x" << std::hex
+	   << (buf.c_str() - arena->base()) << ", read 0x" << rd->read_off
+	   << "~0x" << rd->read_len << " for 0x" << off << "~0x" << len
+	   << std::dec << dendl;
+  return buf;
+}
+
+int PrimaryLogPG::oob_read_into_arena(
+  OpContext *ctx, const OSDOp& osd_op, ceph::buffer::list *out)
+{
+  const auto& op = osd_op.op;
+  uint32_t flags = op.flags;
+  ceph::osd::oob::arena_read_t rd;
+  auto buf = oob_direct_read_buffer(ctx, osd_op, &flags, &rd);
+  if (!buf.length()) {
+    return -EOPNOTSUPP;
+  }
+  // the whole blocks around the data, and from them the data
+  struct iovec iov{buf.c_str() + rd.pos, rd.read_len};
+  int r = pgbackend->objects_read_local_into(
+    ctx->new_obs.oi.soid, rd.read_off, rd.read_len, flags, &iov, 1);
+  if (r >= 0) {
+    r = rd.data_len(r);
+    out->clear();
+    if (r > 0) {
+      // not a piece of no bytes: it would hold the whole buffer
+      out->append(buf, rd.pos + rd.pad, r);
+    }
+  }
+  return r;
+}
+
+bool PrimaryLogPG::oob_async_reads_into_arena(const OpContext *ctx)
+{
+  // the EC primary reads its own shard, and takes the shards that peers
+  // push into its gather windows, straight into the arena, when the
+  // result goes out of band from there (osd_oob_direct_read)
+  if (!osd->oob_arena || !ctx->op ||
+      ctx->op->get_req()->get_type() != CEPH_MSG_OSD_OP) {
+    return false;
+  }
+  auto m = ctx->op->get_req<MOSDOp>();
+  if (!m->has_rdma_delivery() || !ctx->ops ||
+      oob_direct_read() == ceph::osd::oob::direct_read_t::off) {
+    return false;
+  }
+  // not for a request that deliver_oob_prepare() keeps inline whatever
+  // it reads
+  const auto& deliveries = m->get_rdma_deliveries();
+  const auto& ops = *ctx->ops;
+  if (deliveries.size() != ops.size() || oob_read_declined(ctx, __func__)) {
+    return false;
+  }
+  for (size_t i = 0; i < ops.size(); i++) {
+    const auto& d = deliveries[i];
+    if (d.empty() ||
+	!ceph::osd::oob::read_push_possible(ops[i].op.op, d, false, false)) {
+      continue;
+    }
+    if (OSDOobExecutor* e = osd->oob_executor_for(d.token);
+	e && e->stages_from_arena()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ceph::oob::Arena* PrimaryLogPG::oob_arena()
+{
+  return osd->oob_arena.get();
+}
+
+ceph::osd::oob::direct_read_t PrimaryLogPG::oob_direct_read() const
+{
+  return osd->oob_direct_read.get();
+}
+
 std::vector<ceph::osd::oob::read_push> PrimaryLogPG::deliver_oob_prepare(
   OpContext *ctx, const std::vector<OSDOp>& rops,
   std::vector<ceph::rdma::oob_result_t>& oob)

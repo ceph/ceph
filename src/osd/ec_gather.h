@@ -51,13 +51,19 @@ inline constexpr uint64_t pushed_slice = 256 << 10;
  *
  * On success the extents are appended to out; on failure out is left
  * as it was.
+ *
+ * Each extent is copied into make(len) when make returns a buffer of at
+ * least len bytes, such as one of the OSD's arena that a transport then
+ * writes from without another copy, and trimmed to len; into a new
+ * buffer of the heap otherwise.
  */
 template <typename Key>
 pushed_take_t take_pushed(
   const char* win, uint64_t size,
   const std::map<Key, std::list<std::pair<uint64_t, uint64_t>>>& pushed,
   uint32_t want_crc,
-  std::map<Key, std::list<std::pair<uint64_t, ceph::buffer::list>>>& out)
+  std::map<Key, std::list<std::pair<uint64_t, ceph::buffer::list>>>& out,
+  const std::function<ceph::buffer::ptr(uint64_t)>& make = {})
 {
   pushed_take_t t;
   t.crc = static_cast<uint32_t>(-1);
@@ -71,7 +77,16 @@ pushed_take_t take_pushed(
       }
       ceph::buffer::list bl;
       if (len) {
-	ceph::buffer::ptr bp = ceph::buffer::create(len);
+	ceph::buffer::ptr bp;
+	if (make) {
+	  bp = make(len);
+	}
+	if (bp.length() < len) {
+	  bp = ceph::buffer::create(len);
+	} else if (bp.length() > len) {
+	  // a buffer rounded up: the extent is len bytes
+	  bp.set_length(len);
+	}
 	for (uint64_t o = 0; o < len; o += pushed_slice) {
 	  const uint64_t n = std::min(pushed_slice, len - o);
 	  char* c = bp.c_str() + o;

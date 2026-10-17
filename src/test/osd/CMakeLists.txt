@@ -137,6 +137,20 @@ if(WITH_OOB_OFI)
   add_dependencies(tests ceph_test_osd_oob_read)
 endif()
 
+if(LINUX)
+  # libceph_test_copycount: an LD_PRELOAD library that counts the bytes a
+  # process copies, for qa/standalone/osd/osd-oob-copies.sh. Its copy
+  # loops must stay loops, not calls to memcpy. The ceph-test package
+  # ships it, for qa.
+  add_library(ceph_test_copycount SHARED copycount.c)
+  target_compile_options(ceph_test_copycount PRIVATE
+    -fno-builtin -fno-tree-loop-distribute-patterns)
+  target_link_libraries(ceph_test_copycount ${CMAKE_DL_LIBS} Threads::Threads)
+  install(TARGETS ceph_test_copycount
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
+  add_dependencies(tests ceph_test_copycount)
+endif()
+
 # unittest_ecbackend_l (legacy EC)
 add_executable(unittest_ecbackend_l
   TestECBackendL.cc

@@ -758,6 +758,18 @@ The OSD waits at most until the deadline that
 `Fencing a window before reuse`_ describes. It cuts off the writes that
 are still in flight then, and delivers the read inline.
 
+With ``osd_oob_direct_read`` set to ``cached`` or ``nocache``, the OSD
+reads the data of a read that the libfabric executor delivers straight
+into a buffer of its arena (``oob_memory``), and the executor writes it
+from there with no copy. BlueStore copies only what it has in its cache
+and what is compressed. With ``cached``, it keeps a copy of what it read
+in its cache. With ``nocache``, it does not, so a cold read is not
+copied at all. An erasure-coded primary that gathers over
+``oob_cluster_transport`` reads its own shard the same way, and copies
+the shards that its peers push into its gather windows into the buffer
+once. An erasure-coded PG reads this way only with the optimized EC
+code.
+
 Before an OSD starts a transfer, it reads its PG read lease
 (``readable_until``) again. The readability test at dispatch does not
 cover a read that stalled after dispatch. An OSD whose lease lapsed,
@@ -2176,6 +2188,15 @@ See `Transfer threads`_.
   false, which keeps them on the op threads. With true, the OSD also
   creates a DC initiator for each transfer thread. See `cuObject`_.
 
+``osd_oob_direct_read``
+  How the OSD reads the data of a read that its libfabric executor
+  delivers: ``off``, ``cached`` or ``nocache``. With ``off``, the
+  default, the OSD reads into the object store's buffers, and copies the
+  data into a staging buffer. With ``cached`` or ``nocache``, it reads
+  the data straight into a buffer of its arena. With ``nocache``,
+  BlueStore keeps no copy of it in its cache. A change takes effect at
+  once. See `Placement plans`_.
+
 Operations
 ==========
 
@@ -2470,6 +2491,19 @@ Testing
   The ``put`` mode of ``ceph_test_osd_oob_read`` sends the pulled
   writes. With ``--call``, it prints ``crc=declined`` for a write whose
   resend the OSD answered as a duplicate.
+* ``qa/standalone/osd/osd-oob-copies.sh`` counts the copies that
+  out-of-band transfers make in the OSDs. The OSDs run with
+  ``libceph_test_copycount`` preloaded, which counts the bytes that a
+  process copies with ``memcpy`` and ``memmove``. Each test moves one
+  object out of band over the ``tcp`` provider, and checks what the OSDs
+  copied against the budget of its path. A read into the arena
+  (``osd_oob_direct_read``) of a replicated pool, or of an erasure-coded
+  pool with balanced reads, copies nothing, also for a range. An
+  erasure-coded gather copies the gathered shard once. A read with
+  ``osd_oob_direct_read`` off copies the whole object, and a pulled write
+  copies the whole object on top of what a plain write copies. A test
+  that fails prints the places that copied. The ``ceph-test`` package
+  ships the library.
 * ``unittest_rgw_rdma_fence`` tests when the gateway fences, and how it
   reads each stripe's reply.
 * ``unittest_rgw_rdma_get`` tests, against fakes of the store, how the
@@ -2537,8 +2571,8 @@ Limitations
   transfers. After a transfer on it times out, the thread delivers its
   reads inline until the transfer's writes complete or the DC transport
   gives up on them, for up to the DC retry budget.
-* An OSD copies each read into a staging buffer. It does not register
-  the read's own buffers.
+* Unless ``osd_oob_direct_read`` is on, an OSD copies each read into a
+  staging buffer. It does not register the read's own buffers.
 * An OSD runs one libfabric endpoint, so ``oob_cluster_transport`` and
   ``oob_client_transports`` can name one libfabric provider between
   them. See `Choosing transports`_.

@@ -71,6 +71,12 @@ public:
   /// window's memory before execute_plan() returned
   virtual bool delivery_complete() const { return false; }
 
+  /// true when execute_plan() writes data that lies in one shared buffer
+  /// of the OSD's arena (Arena::alloc_shared()) from where it is, with no
+  /// copy: the PG can then read an op's data straight into such a buffer
+  /// (osd_oob_direct_read)
+  virtual bool stages_from_arena() const { return false; }
+
   /// true when this executor can pull from the token's window: see
   /// execute_pull()
   virtual bool pulls(const std::string& token) const { return false; }

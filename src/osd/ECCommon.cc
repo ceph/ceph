@@ -484,7 +484,8 @@ void ECCommon::ReadPipeline::start_read_op(
     const bool do_redundant_reads,
     const bool for_recovery,
     std::unique_ptr<ReadCompleter> on_complete,
-    const bool lend_windows) {
+    const bool lend_windows,
+    const bool into_arena) {
   ceph_tid_t tid = get_parent()->get_tid();
   ceph_assert(!tid_to_read_map.contains(tid));
   auto &op = tid_to_read_map.emplace(
@@ -497,6 +498,7 @@ void ECCommon::ReadPipeline::start_read_op(
       std::move(on_complete),
       std::move(to_read))).first->second;
   op.lends_windows = lend_windows;
+  op.into_arena = into_arena;
   dout(10) << __func__ << ": starting " << op << dendl;
   if (op.op) {
 #ifndef WITH_CRIMSON
@@ -794,7 +796,8 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     const map<hobject_t, std::list<ec_align_t>> &reads,
     const bool fast_read,
     const uint64_t object_size,
-    GenContextURef<ec_extents_t&&> &&func) {
+    GenContextURef<ec_extents_t&&> &&func,
+    const bool into_arena) {
   in_progress_client_reads.emplace_back(reads.size(), std::move(func));
   if (!reads.size()) {
     kick_reads();
@@ -835,7 +838,8 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     false,
     std::make_unique<ClientReadCompleter>(
       *this, &(in_progress_client_reads.back())),
-    !fast_read);
+    !fast_read,
+    into_arena);
 }
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(

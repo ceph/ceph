@@ -15,6 +15,7 @@
 
 #include "ECBackend.h"
 #include "osd/ec_gather.h"
+#include "common/oob_arena.h"
 #include "osd/oob_placement.h"
 #include "osd/oob_read_delivery.h"
 #include "osd/oob_xfer.h"
@@ -563,14 +564,46 @@ void ECBackend::handle_sub_read(
   const ZTracer::Trace &trace) {
   trace.event("handle sub read");
   shard_id_t shard = get_parent()->whoami_shard().shard;
+  // the extents of a sub-read whose data goes out of band go into one
+  // buffer of the arena, which the transport writes from, each read as
+  // sub_read_arena_buffer() laid it out
+  auto arena_mode = ceph::osd::oob::direct_read_t::off;
+  std::vector<ceph::osd::oob::arena_read_t> arena_reads;
+  ceph::buffer::ptr arena_buf =
+    sub_read_arena_buffer(from, op, &arena_mode, &arena_reads);
+  size_t next_arena_read = 0;  // of the first extent of hoid
   for (auto &&[hoid, to_read]: op.to_read) {
     int r = 0;
+    size_t arena_i = next_arena_read;
+    next_arena_read += to_read.size();
     for (auto &&[offset, len, flags]: to_read) {
       bufferlist bl;
-      r = switcher->store->read(
-        switcher->ch,
-        ghobject_t(hoid, ghobject_t::NO_GEN, shard),
-        offset, len, bl, flags); // Allow EIO return
+      r = -EOPNOTSUPP;
+      if (arena_buf.length() && arena_reads[arena_i].read_len) {
+        const auto& a = arena_reads[arena_i];
+        struct iovec iov{arena_buf.c_str() + a.pos, a.read_len};
+        r = switcher->store->read_into(
+          switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+          a.read_off, a.read_len, &iov, 1,
+          ceph::osd::oob::direct_read_flags(arena_mode, flags));
+        if (r >= 0) {
+          r = a.data_len(r);
+          if (r > 0) {
+            bl.append(ceph::buffer::ptr(arena_buf, a.pos + a.pad, r));
+          }
+        } else if (r == -EOPNOTSUPP) {
+          // this store reads into its own buffers only
+          arena_buf = ceph::buffer::ptr();
+        }
+      }
+      arena_i++;
+      if (r == -EOPNOTSUPP) {
+        r = switcher->store->read(
+          switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+          offset, len, bl, flags); // Allow EIO return
+      }
 
       if (r < 0) {
         // if we are doing fast reads, it's possible for one of the shard
@@ -754,6 +787,65 @@ void ECBackend::handle_sub_read(
   reply->tid = op.tid;
 }
 
+ceph::buffer::ptr ECBackend::sub_read_arena_buffer(
+  pg_shard_t from, const ECSubRead &op, ceph::osd::oob::direct_read_t *mode,
+  std::vector<ceph::osd::oob::arena_read_t> *reads)
+{
+  const bool push = !op.push_token.empty();
+  if (!push && from != get_parent()->whoami_shard()) {
+    // neither a push nor our own shard: nothing writes it from the arena
+    return {};
+  }
+  auto *l = get_parent()->get_eclistener();
+  const auto m = l->oob_direct_read();
+  if (m == ceph::osd::oob::direct_read_t::off) {
+    return {};
+  }
+  if (push) {
+    // a push into the primary's gather window, written from the arena
+    // when the executor that serves the window can
+    OSDOobExecutor *exec = l->oob_executor_for(op.push_token);
+    if (!exec || !exec->stages_from_arena()) {
+      return {};
+    }
+  } else {
+    // our own shard of a read whose result goes out of band
+    auto it = read_pipeline.tid_to_read_map.find(op.tid);
+    if (it == read_pipeline.tid_to_read_map.end() || !it->second.into_arena) {
+      return {};
+    }
+  }
+  // every extent, in the order handle_sub_read() reads them, laid out
+  // once for the store's block size, which is fixed while it is mounted
+  ceph::oob::Arena *arena = l->oob_arena();
+  if (!arena) {
+    return {};
+  }
+  std::vector<ceph::osd::oob::arena_read_t> layout;
+  uint64_t bytes = 0;
+  for (auto &&[hoid, to_read] : op.to_read) {
+    for (auto &&[offset, len, f] : to_read) {
+      layout.push_back({.off = offset, .len = len});
+      bytes += len;
+    }
+  }
+  if (bytes == 0) {
+    return {};
+  }
+  const uint64_t total = ceph::osd::oob::arena_layout(
+    layout, switcher->store->get_read_into_block_size(),
+    ceph::oob::Arena::round);
+  auto buf = arena->alloc_shared_ptr(total);
+  if (buf.length()) {
+    *mode = m;
+    *reads = std::move(layout);
+    dout(20) << __func__ << ": " << total << " bytes of sub-read " << op.tid
+	     << (op.push_token.empty() ? " (our own shard)" : " (a push)")
+	     << " into the arena" << dendl;
+  }
+  return buf;
+}
+
 std::optional<ceph::osd::oob::sub_read_push> ECBackend::prepare_sub_read_push(
   const ECSubRead &op, ECSubReadReply *reply,
   ceph::mono_clock::time_point received)
@@ -907,8 +999,15 @@ void ECBackend::handle_sub_read_reply(
       // reply would have carried, in the order it placed them, and check
       // them against the shard's checksum of what it placed
       rop.gather.exec->window_sync();
+      // a read whose result goes out of band takes the data into the
+      // arena, which the transport then writes it from
+      ceph::oob::Arena *arena =
+	rop.into_arena ? get_parent()->get_eclistener()->oob_arena() : nullptr;
       const auto t = ceph::osd::oob::take_pushed(
-	w->ptr, w->size, op.pushed, op.pushed_crc, op.buffers_read);
+	w->ptr, w->size, op.pushed, op.pushed_crc, op.buffers_read,
+	[arena](uint64_t len) {
+	  return arena ? arena->alloc_shared_ptr(len) : ceph::buffer::ptr();
+	});
       dout(20) << __func__ << ": " << t.bytes << " bytes from shard "
 	       << from << " arrived out of band" << dendl;
       if (t.mismatch) {
@@ -1470,6 +1569,23 @@ int ECBackend::objects_read_local(
           shard_len, *bl, op_flags);
 }
 
+int ECBackend::objects_read_local_into(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    const struct iovec *iov,
+    int iovcnt) {
+  if (!sinfo.supports_direct_reads()) {
+    return -EOPNOTSUPP;
+  }
+  ceph_assert(!get_parent()->get_local_missing().is_missing(hoid));
+  // off~len is this shard's range already (extent_to_shard_extent())
+  return switcher->store->read_into(switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+          off, len, iov, iovcnt, op_flags);
+}
+
 std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len) {
   // sync reads are supported for sub-chunk reads where no reconstruct is
   // required.
@@ -1535,7 +1651,8 @@ void ECBackend::objects_read_async(
     const list<pair<ec_align_t,
                     pair<bufferlist*, Context*>>> &to_read,
     Context *on_complete,
-    bool fast_read) {
+    bool fast_read,
+    bool into_arena) {
   map<hobject_t, std::list<ec_align_t>> reads;
 
   uint32_t flags = 0;
@@ -1639,7 +1756,7 @@ void ECBackend::objects_read_async(
       to_read.clear();
     }
   };
-  objects_read_and_reconstruct(
+  read_pipeline.objects_read_and_reconstruct(
     reads,
     fast_read,
     object_size,
@@ -1649,7 +1766,8 @@ void ECBackend::objects_read_async(
          hoid,
          to_read,
          on_complete,
-         cct)));
+         cct)),
+    into_arena);
 }
 
 bool ECBackend::ec_can_decode(const shard_id_set &available_shards) const {

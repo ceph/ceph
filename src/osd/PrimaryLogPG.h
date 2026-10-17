@@ -1386,6 +1386,34 @@ protected:
   std::optional<ceph::osd::oob::ec_direct_geometry> oob_ec_direct_geometry(
     bool ec_direct);
   /**
+   * A shared buffer of the OSD's arena to read osd_op's extent straight
+   * into, when osd_oob_direct_read asks for it and the op is a READ or
+   * SYNC_READ of the request that carries a delivery descriptor whose
+   * executor writes from the arena in place; an empty ptr otherwise, or
+   * when no buffer is free. *rd gets the read of the extent into the
+   * buffer, as ceph::osd::oob::arena_layout() lays it out for the
+   * store's block size: of this shard's part, for an EC shard-direct
+   * read. The ptr holds one reference: whatever holds the data holds
+   * the buffer. *op_flags gets the flags to read with
+   * (ceph::osd::oob::direct_read_flags()).
+   */
+  ceph::buffer::ptr oob_direct_read_buffer(
+    OpContext *ctx, const OSDOp& osd_op, uint32_t* op_flags,
+    ceph::osd::oob::arena_read_t* rd);
+  /**
+   * do_read()'s read of osd_op's extent into such a buffer, through
+   * PGBackend::objects_read_local_into(): the bytes read, with *out
+   * holding them, or a negative errno; -EOPNOTSUPP when the op gets no
+   * buffer or the backend cannot read into one, and the read goes as
+   * usual.
+   */
+  int oob_read_into_arena(
+    OpContext *ctx, const OSDOp& osd_op, ceph::buffer::list *out);
+  /// whether an EC read that ctx starts reads into the arena, for a
+  /// result that goes out of band (osd_oob_direct_read): the primary's
+  /// own shard, and the shards that peers push into its gather windows
+  bool oob_async_reads_into_arena(const OpContext *ctx);
+  /**
    * Run the pushes deliver_oob_prepare() returned, send the reply, with
    * rops and oob back in it, once every push is over, and close ctx. A
    * push that placed its op's data strips it from the op, and each
@@ -2176,6 +2204,8 @@ public:
   int oob_submit(std::unique_ptr<ceph::osd::oob::xfer_job>& j) override;
   bool oob_runs_inline(const OSDOobExecutor* e) const override;
   OSDOobExecutor* oob_gather_executor() override;
+  ceph::oob::Arena* oob_arena() override;
+  ceph::osd::oob::direct_read_t oob_direct_read() const override;
 #endif
   const pg_missing_const_i * maybe_get_shard_missing(
     pg_shard_t peer) const {
