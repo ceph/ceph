@@ -133,10 +133,14 @@ void MgrCapGrant::parse_network() {
 }
 
 void MgrCapGrant::expand_profile(std::ostream *err) const {
-  // only generate this list once
-  if (!profile_grants.empty()) {
+  // only generate this list once; several valid profiles (e.g. "osd"/"mds",
+  // or "rbd" when an argument key is rejected) expand to zero grants, so
+  // profile_grants staying empty cannot be used to detect prior expansion.
+  // Track completion explicitly so those profiles are memoized too.
+  if (profile_grants_expansions > 0) {
     return;
   }
+  ++profile_grants_expansions;
 
   if (profile == "read-only") {
     // grants READ-ONLY caps MGR-wide

@@ -106,6 +106,12 @@ struct MgrCapGrant {
   // needed by expand_profile() (via is_match()) and cached here.
   mutable std::list<MgrCapGrant> profile_grants;
 
+  // number of times expand_profile() has actually expanded this grant.
+  // some valid profiles (e.g. "osd"/"mds") legitimately expand to zero
+  // grants, so an empty profile_grants cannot signal "already expanded";
+  // track completion explicitly so expansion runs at most once.
+  mutable unsigned profile_grants_expansions = 0;
+
   void expand_profile(std::ostream *err=nullptr) const;
 
   MgrCapGrant() : allow(0) {}
