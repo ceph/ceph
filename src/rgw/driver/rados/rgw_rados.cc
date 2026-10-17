@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <string_view>
 
 #include <boost/container/flat_set.hpp>
@@ -9083,6 +9084,23 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
     return;
   }
 
+  // for testing: hold the rollback, to reproduce a race with a concurrent
+  // overwrite of the head
+  if (cct->_conf->rgw_inject_delay_sec > 0 &&
+      std::string_view(cct->_conf->rgw_inject_delay_pattern) == "delay_olh_cancel_modification") {
+    ldpp_dout(dpp, 0) << __func__ << ": injecting delay of " << cct->_conf->rgw_inject_delay_sec
+                      << "s for " << olh_obj << dendl;
+    const auto delay = ceph::make_timespan(cct->_conf->rgw_inject_delay_sec);
+    if (y) {
+      auto yield = y.get_yield_context();
+      boost::asio::steady_timer timer{yield.get_executor(), delay};
+      boost::system::error_code ec;
+      timer.async_wait(yield[ec]);
+    } else {
+      std::this_thread::sleep_for(delay);
+    }
+  }
+
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, olh_obj, &ref);
   if (r < 0) {
@@ -9093,10 +9111,44 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
   attr_name.append(op_tag);
 
   // first remove the relevant pending prefix
-  ObjectWriteOperation op;
-  bucket_index_guard_olh_op(dpp, state, op);
-  op.rmxattr(attr_name.c_str());
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+  auto remove_pending = [&] (const real_time* mtime, const bufferlist& obj_tag) {
+    ObjectWriteOperation op;
+    bucket_index_guard_olh_op(dpp, state, op);
+    if (mtime) {
+      // pin mtime only if object hasn't been over-written in the meantime
+      // if RGW_ATTR_ID_TAG changed, the head object's data was overwritten
+      op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, obj_tag);
+      struct timespec mtime_ts = real_clock::to_timespec(*mtime);
+      op.mtime2(&mtime_ts);
+    }
+    op.rmxattr(attr_name.c_str());
+    return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+  };
+
+  if (!state.exists) {
+    r = remove_pending(nullptr, {});
+  } else {
+    // try to preserve the head object's original mtime
+    r = remove_pending(&state.mtime, state.obj_tag);
+#define MAX_OLH_CANCEL_RETRY 3
+    // if received -ECANCELED, the head may have been overwritten
+    // then try to preserve its current mtime instead
+    for (int i = 0; r == -ECANCELED && i < MAX_OLH_CANCEL_RETRY; i++) {
+      real_time mtime;
+      map<string, bufferlist> attrs;
+      r = raw_obj_stat(dpp, ref.obj, nullptr, &mtime, nullptr, &attrs, nullptr, nullptr, y);
+      if (r < 0) {
+        break;
+      }
+      if (!attrs[RGW_ATTR_OLH_ID_TAG].contents_equal(state.olh_tag)) {
+        // olh itself removed/re-created, no need to retry anymore
+        r = -ECANCELED;
+        break;
+      }
+      r = remove_pending(&mtime, attrs[RGW_ATTR_ID_TAG]);
+    }
+  }
+
   if (r < 0) {
     if (r != -ENOENT && r != -ECANCELED) {
       ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " rmxattr rgw_rados_operate() returned " << r << dendl;
