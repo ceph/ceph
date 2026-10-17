@@ -48,6 +48,27 @@ class TestPgRecoveryEvent(object):
         assert self.test_event._progress == 1.0
 
 
+class TestRemoteEvent(object):
+
+    def setup_method(self):
+        module._module = mock.Mock()  # just so Event._refresh() works
+        self.test_event = module.RemoteEvent('ev', 'remote event', [], False)
+
+    @pytest.mark.parametrize('progress,expected', [
+        (-0.5, 0.0),
+        (0.5, 0.5),
+        (1e9, 1.0),
+        (float('-inf'), 0.0),
+        (float('inf'), 1.0),
+        (float('nan'), 0.0),
+    ])
+    def test_set_progress_clamps(self, progress, expected):
+        self.test_event.set_progress(progress)
+
+        assert self.test_event.progress == expected
+        assert len(self.test_event._progress_str(30)) == 30
+
+
 class OSDMap: 
     
     # This is an artificial class to help
