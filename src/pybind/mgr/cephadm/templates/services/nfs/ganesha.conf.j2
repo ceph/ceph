@@ -64,10 +64,11 @@ RGW {
         name = "client.{{ rgw_user }}";
 }
 
-{% if use_old_nodeid or enable_client_object_cache %}
 CEPH {
+        register_service = true;
+        nodeid = "{{ ceph_nodeid }}";
 {% if use_old_nodeid %}
-	Use_old_uuid = true;
+        Use_old_uuid = true;
 {% endif %}
 {% if enable_client_object_cache or client_object_cache_size is not none or client_object_cache_max_dirty is not none %}
         client_oc = {{ enable_client_object_cache | lower }};
@@ -80,7 +81,6 @@ CEPH {
 {% endif %}
 }
 
-{% endif %}
 {% if tls_add %}
 TLS_CONFIG{
         Enable_TLS = {{ tls_add }};
