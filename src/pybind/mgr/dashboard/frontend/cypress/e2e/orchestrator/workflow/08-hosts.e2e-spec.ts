@@ -27,18 +27,17 @@ describe('Host Page', () => {
 
   // rgw is needed for testing the force maintenance
   it('should create rgw services', () => {
+    services.navigateTo();
     services.navigateTo('create');
     services.addService('rgw', false, 4);
-    services.navigateTo('index');
     services.checkExist('rgw.foo', true);
   });
 
   it('should check if rgw daemon is running on all hosts', () => {
     for (const hostname of hostnames) {
-      hosts.clickTab('cd-host-details', hostname, 'Daemons');
-      cy.get('cd-host-details').within(() => {
-        services.checkServiceStatus('rgw');
-      });
+      hosts.clickHostTab(hostname, 'Service instances');
+      services.checkServiceStatus('rgw');
+      hosts.navigateTo();
     }
   });
 
