@@ -12628,9 +12628,9 @@ int RGWRados::delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj,
   return ret;
 } // delete_obj_aio
 
-list<objexp_hint_entry> objexp_hint_entry::generate_test_instances()
+vector<objexp_hint_entry> objexp_hint_entry::generate_test_instances()
 {
-  list<objexp_hint_entry> o;
+  vector<objexp_hint_entry> o;
   objexp_hint_entry it;
   it.tenant = "tenant1";
   it.bucket_name = "bucket1";
@@ -12653,9 +12653,9 @@ void objexp_hint_entry::dump(Formatter *f) const
   f->close_section();
 }
 
-list<RGWOLHInfo> RGWOLHInfo::generate_test_instances()
+vector<RGWOLHInfo> RGWOLHInfo::generate_test_instances()
 {
-  list<RGWOLHInfo> o;
+  vector<RGWOLHInfo> o;
   RGWOLHInfo olh;
   olh.removed = false;
   o.push_back(olh);
@@ -12675,9 +12675,9 @@ void RGWOLHPendingInfo::dump(Formatter *f) const
   encode_json("time", ut, f);
 }
 
-list<RGWOLHPendingInfo> RGWOLHPendingInfo::generate_test_instances()
+vector<RGWOLHPendingInfo> RGWOLHPendingInfo::generate_test_instances()
 {
-  list<RGWOLHPendingInfo> o;
+  vector<RGWOLHPendingInfo> o;
   RGWOLHPendingInfo it;
   it.time = ceph::real_clock::zero();
   o.push_back(std::move(it));

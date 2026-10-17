@@ -21,6 +21,10 @@
 #include "common/Formatter.h"
 #include "common/OpQueue.h"
 
+#include <deque>
+#include <vector>
+#include <iterator>
+
 /**
  * Manages queue for normal and strict priority items
  *
@@ -47,11 +51,11 @@ class PrioritizedQueue : public OpQueue <T, K> {
   int64_t max_tokens_per_subqueue;
   int64_t min_cost;
 
-  typedef std::list<std::pair<unsigned, T> > ListPairs;
+  using ItemQueue = std::deque<std::pair<unsigned, T>>;
 
   struct SubQueue {
   private:
-    typedef std::map<K, ListPairs> Classes;
+    typedef std::map<K, ItemQueue> Classes;
     Classes q;
     unsigned tokens, max_tokens;
     int64_t size;
@@ -129,7 +133,7 @@ class PrioritizedQueue : public OpQueue <T, K> {
     bool empty() const {
       return q.empty();
     }
-    void remove_by_class(K k, std::list<T> *out) {
+    void remove_by_class(K k, std::vector<T>& removed) {
       typename Classes::iterator i = q.find(k);
       if (i == q.end()) {
 	return;
@@ -138,14 +142,11 @@ class PrioritizedQueue : public OpQueue <T, K> {
       if (i == cur) {
 	++cur;
       }
-      if (out) {
-	for (typename ListPairs::reverse_iterator j =
-	       i->second.rbegin();
-	     j != i->second.rend();
-	     ++j) {
-	  out->push_front(std::move(j->second));
-	}
+
+      for (auto& item : i->second) {
+	removed.emplace_back(std::move(item.second));
       }
+
       q.erase(i);
       if (cur == q.end()) {
 	cur = q.begin();
@@ -220,29 +221,36 @@ public:
     return total;
   }
 
-  void remove_by_class(K k, std::list<T> *out = 0) final {
-    for (typename SubQueues::iterator i = queue.begin();
-	 i != queue.end();
-	 ) {
-      i->second.remove_by_class(k, out);
-      if (i->second.empty()) {
-	unsigned priority = i->first;
+  std::vector<T> remove_by_class(K k) final {
+    std::vector<T> removed;
+
+    for (auto i = std::rbegin(high_queue); i != std::rend(high_queue);) {
+      auto current = std::prev(i.base());
+      current->second.remove_by_class(k, removed);
+
+      if (!std::empty(current->second)) {
 	++i;
-	remove_queue(priority);
-      } else {
-	++i;
+	continue;
       }
+
+      i = std::make_reverse_iterator(high_queue.erase(current));
     }
-    for (typename SubQueues::iterator i = high_queue.begin();
-	 i != high_queue.end();
-	 ) {
-      i->second.remove_by_class(k, out);
-      if (i->second.empty()) {
-	high_queue.erase(i++);
-      } else {
+
+    for (auto i = std::rbegin(queue); i != std::rend(queue);) {
+      auto current = std::prev(i.base());
+      current->second.remove_by_class(k, removed);
+
+      if (!std::empty(current->second)) {
 	++i;
+	continue;
       }
+
+      total_priority -= current->first;
+      ceph_assert(total_priority >= 0);
+      i = std::make_reverse_iterator(queue.erase(current));
     }
+
+    return removed;
   }
 
   void enqueue_strict(K cl, unsigned priority, T&& item) final {

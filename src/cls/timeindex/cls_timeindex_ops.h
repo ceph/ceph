@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_TIMEINDEX_OPS_H
 #define CEPH_CLS_TIMEINDEX_OPS_H
 
+#include <vector>
 #include "common/ceph_json.h"
 #include "cls_timeindex_types.h"
 #include "include/rados/cls_traits.hpp"
@@ -65,8 +66,8 @@ struct cls_timeindex_list_op {
     f->dump_int("max_entries", max_entries);
   }
 
-  static std::list<cls_timeindex_list_op> generate_test_instances() {
-    std::list<cls_timeindex_list_op> o;
+  static std::vector<cls_timeindex_list_op> generate_test_instances() {
+    std::vector<cls_timeindex_list_op> o;
     o.emplace_back();
     o.emplace_back();
     o.back().from_time = utime_t(1, 2);
@@ -107,8 +108,8 @@ struct cls_timeindex_list_ret {
     f->dump_bool("truncated", truncated);
   }
 
-  static std::list<cls_timeindex_list_ret> generate_test_instances() {
-    std::list<cls_timeindex_list_ret> o;
+  static std::vector<cls_timeindex_list_ret> generate_test_instances() {
+    std::vector<cls_timeindex_list_ret> o;
     o.emplace_back();
     o.emplace_back();
     o.back().entries.push_back(cls_timeindex_entry());

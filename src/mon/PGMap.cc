@@ -201,9 +201,9 @@ void PGMapDigest::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-list<PGMapDigest> PGMapDigest::generate_test_instances()
+vector<PGMapDigest> PGMapDigest::generate_test_instances()
 {
-  list<PGMapDigest> ls;
+  vector<PGMapDigest> ls;
   ls.emplace_back();
   return ls;
 }
@@ -1129,9 +1129,9 @@ void PGMap::Incremental::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-list<PGMap::Incremental> PGMap::Incremental::generate_test_instances()
+vector<PGMap::Incremental> PGMap::Incremental::generate_test_instances()
 {
-  list<PGMap::Incremental> o;
+  vector<PGMap::Incremental> o;
   o.emplace_back();
   o.emplace_back();
   o.back().version = 1;
@@ -2285,18 +2285,19 @@ void PGMap::clear_delta()
   stamp_delta = utime_t();
 }
 
-list<PGMap> PGMap::generate_test_instances()
+vector<PGMap> PGMap::generate_test_instances()
 {
-  list<PGMap> o;
+  vector<PGMap> o;
   o.emplace_back();
-  list<Incremental> inc = Incremental::generate_test_instances();
-  inc.pop_front();
-  while (!inc.empty()) {
+
+  const auto inc = Incremental::generate_test_instances();
+
+  for (std::size_t i = 1; i < std::size(inc); ++i) {
     PGMap pmp = o.back();
     o.push_back(pmp);
-    o.back().apply_incremental(nullptr, inc.front());
-    inc.pop_front();
+    o.back().apply_incremental(nullptr, inc[i]);
   }
+
   return o;
 }
 
