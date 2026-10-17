@@ -1568,7 +1568,7 @@ public:
     }
 
     instance_entry.versioned_epoch = epoch;
-    return write_entries(flags, 0, header);
+    return write_entries(flags, rgw_bucket_dir_entry::FLAG_CURRENT, header);
   }
 
   int demote_current(rgw_bucket_dir_header& header) {
@@ -1868,6 +1868,22 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+  // op.olh_epoch is provided by a remote zone during multisite sync.
+  const uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+  encode(candidate_epoch, *out);
+
+  // An older LINK may still name the current instance. Preserve it before
+  // rewriting its flags or replacing the other NULL variant.
+  if (olh_found && olh.exists() && olh.get_entry().key == op.key &&
+      candidate_epoch < olh.get_epoch()) {
+    olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, op.key, op.delete_marker,
+                   now_epoch);
+    ret = olh.write(header);
+    if (ret < 0) {
+      return ret;
+    }
+    return write_header_while_logrecord(hctx, header);
+  }
 
   if (existed && !real_clock::is_zero(op.unmod_since)) {
     timespec mtime = ceph::real_clock::to_timespec(obj.mtime());
@@ -1928,10 +1944,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   const uint64_t prev_epoch = olh.get_epoch();
 
-  // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
-  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
-
-  encode(candidate_epoch, *out);
   CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
           __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
   if (olh.start_modify(candidate_epoch)) {
