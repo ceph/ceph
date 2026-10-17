@@ -6,6 +6,7 @@ import logging
 import random
 import string
 from copy import deepcopy
+from io import StringIO
 from tasks.util.rgw import rgwadmin, wait_for_radosgw
 from tasks.util.rados import create_ec_pool, create_replicated_pool
 from tasks.rgw_multi import multisite
@@ -204,6 +205,16 @@ class Cluster(multisite.Cluster):
         """ ceph command """
         cluster_manager = self.ctx.managers[self.name]
         return cluster_manager.raw_cluster_cmd(*args, **kwargs)
+
+    def rados(self, args=None, **kwargs):
+        """Run rados through this cluster's remote manager, without output logging."""
+        check_retcode = kwargs.pop('check_retcode', True)
+        output = StringIO()
+        errors = StringIO()
+        proc = self.ctx.managers[self.name].do_rados(
+            list(args or []), stdout=output, stderr=errors,
+            check_status=check_retcode, **kwargs)
+        return output.getvalue(), proc.exitstatus
 
 class Gateway(multisite.Gateway):
     """ Controls a radosgw instance using its daemon """
