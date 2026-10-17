@@ -73,6 +73,10 @@ public:
     auto p = dir->dentries.find(name);
     ceph_assert(p != dir->dentries.end());
     dir->dentries.erase(p);
+    auto& cache = dir->readdir_cache;
+    auto it = std::find(cache.begin(), cache.end(), this);
+    if (it != cache.end())
+      cache.erase(it);
     dir->num_null_dentries--;
     dir = nullptr;
   }
