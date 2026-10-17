@@ -21,6 +21,8 @@ protected:
   bufferlist in_data;
   std::vector<rgw::s3vector::validation_error_t> validation_errors;
   rgw::s3vector::bucket_namespace_t bucket_ns;
+  /* set by verify_s3_bucket_permission when the backing S3 bucket is missing */
+  bool backing_bucket_missing = false;
 public:
   explicit RGWS3VectorBase(bufferlist&& data) : in_data(std::move(data)) {}
 protected:
@@ -78,6 +80,14 @@ protected:
     std::unique_ptr<rgw::sal::Bucket> s3_bucket;
     int ret = driver->load_bucket(this,
         rgw_bucket(s->bucket_tenant, bucket_name), &s3_bucket, y);
+    if (ret == -ENOENT) {
+      /* the backing bucket is missing: remember it, so that operations
+       * failing with -ENOENT below report it instead of a bare NoSuchKey.
+       * the state is sampled here, once per request, consistently with the
+       * way ordinary S3 operations treat concurrent bucket deletion */
+      backing_bucket_missing = true;
+      return 0;
+    }
     if (ret < 0) {
       return 0;
     }
@@ -106,10 +116,47 @@ protected:
       if (!verify_bucket_permission(this, s, arn,
           s->user_acl, bucket_acl, bucket_policy,
           s->iam_identity_policies, s->session_policies, s3_op)) {
+        s->err.http_ret = 403;
+        s->err.err_code = "VectorBucketBackendAccessDenied";
+        s->err.message = fmt::format("access to backing S3 bucket '{}' is denied;"
+            " grant access via its bucket policy", bucket_name);
         return -EACCES;
       }
     }
     return 0;
+  }
+
+  /* a missing vector bucket is reported as NotFoundException, distinct from
+   * the errors of the operations that need its backing bucket */
+  void set_missing_vector_bucket_error(const std::string& vector_bucket_name) {
+    s->err.http_ret = 404;
+    s->err.err_code = "NotFoundException";
+    s->err.message = fmt::format("vector bucket '{}' does not exist", vector_bucket_name);
+  }
+
+  /* map a backend "not found" failure to a dedicated error:
+   * - backing S3 bucket missing -> VectorBucketBackendNotFound, with the
+   *   recovery action in the message
+   * - backing S3 bucket present -> the missing resource is the index, reported
+   *   as NotFoundException, like the AWS s3vectors API */
+  int check_backing_bucket(int r, const std::string& vector_bucket_name) {
+    if (r != -ENOENT) {
+      return r;
+    }
+    if (backing_bucket_missing) {
+      ldpp_dout(this, 1) << "ERROR: s3vector backing bucket '" << vector_bucket_name
+                         << "' does not exist, vector operations on it are unavailable" << dendl;
+      s->err.message = fmt::format("backing S3 bucket '{}' does not exist;"
+          " recreate it via the S3 API", vector_bucket_name);
+      return -ERR_S3VECTOR_BACKEND_MISSING;
+    }
+    ldpp_dout(this, 1) << "ERROR: s3vector index does not exist in vector bucket '"
+                       << vector_bucket_name << "'" << dendl;
+    s->err.http_ret = 404;
+    s->err.err_code = "NotFoundException";
+    s->err.message = fmt::format("index does not exist in vector bucket '{}'",
+        vector_bucket_name);
+    return -ERR_S3VECTOR_INDEX_MISSING;
   }
 
   void send_validation_error_response() {
@@ -171,11 +218,12 @@ private:
     if (op_ret < 0) {
       if(op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::create_index(configuration, driver, bucket_ns, this, y, validation_errors);
+    op_ret = check_backing_bucket(rgw::s3vector::create_index(configuration, driver, bucket_ns, this, y, validation_errors), configuration.vector_bucket_name);
   }
 
   void send_response() override {
@@ -262,7 +310,7 @@ private:
 
     // the backend is verified before the metadata of the bucket is created, so that a
     // failed request does not leave a bucket behind
-    op_ret = rgw::s3vector::create_vector_bucket(configuration, driver, bucket_ns, this, y);
+    op_ret = check_backing_bucket(rgw::s3vector::create_vector_bucket(configuration, driver, bucket_ns, this, y), configuration.vector_bucket_name);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to initialize the backend of s3vector bucket " << bucket_id <<
         ". error: " << op_ret << dendl;
@@ -361,11 +409,12 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_index(configuration, driver, bucket_ns, this, y);
+    op_ret = check_backing_bucket(rgw::s3vector::delete_index(configuration, driver, bucket_ns, this, y), configuration.vector_bucket_name);
   }
 };
 
@@ -421,6 +470,7 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -462,6 +512,7 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -501,11 +552,12 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::put_vectors(configuration, driver, bucket_ns, this, y, validation_errors);
+    op_ret = check_backing_bucket(rgw::s3vector::put_vectors(configuration, driver, bucket_ns, this, y, validation_errors), configuration.vector_bucket_name);
   }
 
   void send_response() override {
@@ -553,11 +605,12 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_vectors(configuration, driver, bucket_ns, this, y, reply);
+    op_ret = check_backing_bucket(rgw::s3vector::get_vectors(configuration, driver, bucket_ns, this, y, reply), configuration.vector_bucket_name);
   }
 
   void send_response() override {
@@ -611,11 +664,12 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::list_vectors(configuration, driver, bucket_ns, this, y, reply);
+    op_ret = check_backing_bucket(rgw::s3vector::list_vectors(configuration, driver, bucket_ns, this, y, reply), configuration.vector_bucket_name);
   }
 
   void send_response() override {
@@ -821,6 +875,7 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
     }
@@ -885,11 +940,12 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, driver, bucket_ns, this, y, reply);
+    op_ret = check_backing_bucket(rgw::s3vector::get_index(configuration, s->zonegroup_name, driver, bucket_ns, this, y, reply), configuration.vector_bucket_name);
   }
 
   void send_response() override {
@@ -943,6 +999,7 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1014,6 +1071,7 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1052,6 +1110,7 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1091,11 +1150,12 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_vectors(configuration, driver, bucket_ns, this, y);
+    op_ret = check_backing_bucket(rgw::s3vector::delete_vectors(configuration, driver, bucket_ns, this, y), configuration.vector_bucket_name);
   }
 };
 
@@ -1143,11 +1203,12 @@ private:
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         rgw::s3vector::notify_session_delete(this, bucket_ns, bucket_id.name);
+        set_missing_vector_bucket_error(configuration.vector_bucket_name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, driver, bucket_ns, this, y, reply, validation_errors);
+    op_ret = check_backing_bucket(rgw::s3vector::query_vectors(configuration, filter_parser, driver, bucket_ns, this, y, reply, validation_errors), configuration.vector_bucket_name);
   }
 
   void send_response() override {

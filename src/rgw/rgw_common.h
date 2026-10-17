@@ -379,6 +379,12 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_RESTORE_ALREADY_IN_PROGRESS 2500
 #define ERR_EXPIRED_TOKEN 2501
 
+/* the backing S3 bucket of a vector bucket is missing or inaccessible */
+#define ERR_S3VECTOR_BACKEND_MISSING 2600
+
+/* the index of a vector bucket is missing */
+#define ERR_S3VECTOR_INDEX_MISSING 2601
+
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif

@@ -5140,3 +5140,61 @@ def test_tenant_account_vector_buckets():
         assert not _vector_bucket_exists(conn, bucket_name)
     finally:
         _cleanup_vector_bucket(conn, bucket_name, conn.s3)
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_missing_backing_bucket():
+    """vector operations on a vector bucket whose backing S3 bucket is missing
+    return VectorBucketBackendNotFound, an actionable error, instead of a bare
+    NoSuchKey that is indistinguishable from a missing vector bucket"""
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    if not has_backing_bucket():
+        pytest.skip("the backing bucket is only relevant with the rgw backend")
+
+    try:
+        # creating a vector bucket without its backing S3 bucket fails with an
+        # actionable error
+        with pytest.raises(conn.exceptions.ClientError) as err:
+            conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert err.value.response['Error']['Code'] == 'VectorBucketBackendNotFound'
+
+        # create the vector bucket properly, then delete its backing bucket
+        _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+                                   dataType='float32', dimension=2,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx',
+                                  vectors=[{'key': 'k1', 'data': {'float32': [1.0, 2.0]}}])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # a missing index on an existing backing bucket reports
+        # NotFoundException, distinct from the backing bucket error below
+        with pytest.raises(conn.exceptions.ClientError) as err:
+            conn.get_vectors(vectorBucketName=bucket_name, indexName='no-such-index',
+                             keys=['k1'])
+        assert err.value.response['Error']['Code'] == 'NotFoundException'
+
+        # simulate the backing bucket being deleted behind our back
+        _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn)
+
+        # the vector bucket is still listed, but backend operations fail with
+        # the actionable error instead of a bare NoSuchKey
+        result = conn.list_vector_buckets()
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+        assert bucket_name in vector_bucket_names
+        with pytest.raises(conn.exceptions.ClientError) as err:
+            conn.put_vectors(vectorBucketName=bucket_name, indexName='idx',
+                             vectors=[{'key': 'k2', 'data': {'float32': [3.0, 4.0]}}])
+        assert err.value.response['Error']['Code'] == 'VectorBucketBackendNotFound'
+        with pytest.raises(conn.exceptions.ClientError) as err:
+            conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+                               queryVector={'float32': [1.0, 2.0]}, topK=1)
+        assert err.value.response['Error']['Code'] == 'VectorBucketBackendNotFound'
+    finally:
+        # the vector bucket can still be deleted: its metadata does not depend
+        # on the backing bucket
+        _cleanup_vector_bucket(conn, bucket_name)
