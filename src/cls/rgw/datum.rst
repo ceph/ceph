@@ -86,11 +86,13 @@ Native leaf codecs, account key ordering and shared storage helpers stay unchang
 
 Native callers remain C++23. RGW CLS requires ``WITH_DATUM`` and
 ``DATUM_ENABLE_ZPP``. Three private object targets provide four
-C++26 translation units: bucket-index and OLH bindings in ``cls_rgw_datum``,
+C++26 translation units: general RGW bindings and OLH log bindings in ``cls_rgw_datum``,
 GC bindings in ``cls_rgw_datum_gc``, and user bindings in ``cls_user_datum``.
 Their language requirements and Datum headers do not propagate through the
 client libraries' public interfaces. Datum supplies the RGW-owned CLS wire
 bindings; there is no alternate native implementation switch.
+The general implementation is ``cls_rgw_datum.cc``, with its existing
+per-family namespace sections in one translation unit.
 
 The C++23 adapter declarations provide selected compiled record and container
 bindings. Their template declarations do not make arbitrary instantiations

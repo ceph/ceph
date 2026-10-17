@@ -1,4 +1,4 @@
-// RGW CLS: Bind native client/module records to the same BI wire profile.
+// RGW CLS: Bind independent client/module records to established wire profiles.
 // Opaque payloads retain native backing storage; only metadata uses zpp spans.
 // Native types and completion ownership never enter Datum's pure mechanisms.
 #include "cls_rgw_bi_datum.h"
