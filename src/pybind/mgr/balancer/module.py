@@ -62,11 +62,11 @@ class Mode(enum.Enum):
 
 
 class Plan(object):
-    def __init__(self, name, mode, osdmap, pools):
+    def __init__(self, name, mode, osdmap, pools, osdmap_dump=None):
         self.name = name
         self.mode = mode
         self.osdmap = osdmap
-        self.osdmap_dump = osdmap.dump()
+        self.osdmap_dump = osdmap.dump() if osdmap_dump is None else osdmap_dump
         self.pools = pools
         self.osd_weights = {}
         self.compat_ws = {}
@@ -785,7 +785,11 @@ class Module(MgrModule):
             # this way we could effectively eliminate the usage of a
             # complete pg_stats, which can become horribly inefficient
             # as pg_num grows..
-            plan = Plan(name, mode, osdmap, pools)
+            # the cache may already hold a newer osdmap
+            dump = self.get('osd_map')
+            if dump.get('epoch') != osdmap.get_epoch():
+                dump = None
+            plan = Plan(name, mode, osdmap, pools, dump)
         else:
             plan = MsPlan(name,
                           mode,
