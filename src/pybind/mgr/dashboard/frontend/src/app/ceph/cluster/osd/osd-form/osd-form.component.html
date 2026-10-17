@@ -3,15 +3,16 @@
 }
 
 <cd-tearsheet
+  type="wide"
   [steps]="steps"
   [title]="!hideTitle ? (action | titlecase) + ' ' + (resource | upperFirst) : ''"
+  headerTestId="osd-create-tearsheet-header"
   (submitRequested)="submit()"
   (closeRequested)="onCancel()"
   (stepChanged)="populateReviewData()"
   [isSubmitLoading]="isSubmitLoading"
   [submitButtonLabel]="createOsdsLabel"
 >
-  type="wide">
   <!-- [submitButtonLabel]="simpleDeployment ? createOsdsLabel : actionLabels.PREVIEW" -->
   <cd-tearsheet-step>
     <div class="osd-tearsheet-content">
