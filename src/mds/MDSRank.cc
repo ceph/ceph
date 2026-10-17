@@ -527,6 +527,9 @@ MDSRank::MDSRank(
 
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
+#ifdef WITH_MDS_NOTIFY
+  change_notifier = new ChangeNotifier(cct, whoami);
+#endif
 
   quiesce_db_manager.reset(new QuiesceDbManager());
 
@@ -561,6 +564,9 @@ MDSRank::~MDSRank()
 
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
+#ifdef WITH_MDS_NOTIFY
+  if (change_notifier) { delete change_notifier; change_notifier = nullptr; }
+#endif
   if (mds_dmclock_scheduler) { delete mds_dmclock_scheduler; mds_dmclock_scheduler = 0; }
 
   if (logger) {
@@ -3022,6 +3028,15 @@ void MDSRankDispatcher::handle_asok_command(
       goto out;
     }
     command_export_dir(f, path, (mds_rank_t)rank);
+#ifdef WITH_MDS_NOTIFY
+  } else if (command == "notify status") {
+    change_notifier->dump_status(f);
+  } else if (command == "notify enable" || command == "notify disable") {
+    if (!change_notifier->set_enabled(command == "notify enable", *css)) {
+      r = -EINVAL;
+      goto out;
+    }
+#endif
   } else if (command == "dump cache") {
     std::lock_guard l(mds_lock);
     int64_t timeout = 0;
@@ -4289,6 +4304,12 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   if (changed.count("mds_inject_journal_corrupt_dentry_first")) {
     inject_journal_corrupt_dentry_first = g_conf().get_val<double>("mds_inject_journal_corrupt_dentry_first");
   }
+#ifdef WITH_MDS_NOTIFY
+  if (change_notifier &&
+      (changed.count("mds_notify_enable") || changed.count("mds_notify_root"))) {
+    change_notifier->handle_conf_change(conf, changed);
+  }
+#endif
 
   finisher->queue(new LambdaContext([this, changed](int) {
     std::scoped_lock lock(mds_lock);

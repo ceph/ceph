@@ -28,6 +28,9 @@
 
 #include "msg/Connection.h" // for ConnectionRef
 
+#ifdef WITH_MDS_NOTIFY
+#include "ChangeNotifier.h"
+#endif
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
@@ -433,6 +436,9 @@ class MDSRank {
     MDLog *mdlog = nullptr;
     MDBalancer *balancer = nullptr;
     ScrubStack *scrubstack = nullptr;
+#ifdef WITH_MDS_NOTIFY
+    ChangeNotifier *change_notifier = nullptr;
+#endif
     DamageTable damage_table;
 
     InoTable *inotable = nullptr;

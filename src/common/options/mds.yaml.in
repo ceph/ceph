@@ -1883,3 +1883,175 @@ options:
   - mds
   flags:
   - runtime
+
+- name: mds_notify_enable
+  type: bool
+  level: advanced
+  desc: Enable CephFS change notification from this MDS rank. Requires an
+    endpoint to be configured (mds_notify_file, or mds_notify_kafka_brokers
+    and mds_notify_kafka_topic).
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_notify_root
+  type: str
+  level: advanced
+  desc: Watch root for CephFS change notification. Emitted event paths are
+    relative to this directory, and events for paths outside it are not
+    reported.
+  default: /
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_notify_queue_size
+  type: size
+  level: advanced
+  desc: Maximum number of CephFS change notification events queued in the MDS.
+    When the queue is full new events are dropped, never delayed; drops are
+    reported by the "notify status" admin socket command.
+  default: 8192
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_file
+  type: str
+  level: dev
+  desc: Debug/test file endpoint for CephFS change notification. Events are
+    appended to this file as one JSON object per line. Takes precedence over
+    the Kafka endpoint when set.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_brokers
+  type: str
+  level: advanced
+  desc: Comma-separated list of Kafka bootstrap brokers for CephFS change
+    notification. Empty disables the Kafka endpoint.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_topic
+  type: str
+  level: advanced
+  desc: Kafka topic that CephFS change notification events are published to.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_message_timeout
+  type: uint
+  level: advanced
+  desc: librdkafka message.timeout.ms for CephFS change notification events -
+    how long the producer keeps retrying delivery of an event internally
+    before giving up on it.
+  default: 5000
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_max_queue
+  type: uint
+  level: advanced
+  desc: Bound on the number of change notification events librdkafka buffers
+    internally (queue.buffering.max.messages). 0 keeps the librdkafka default.
+    When the bound is reached events are dropped, never delayed; drops are
+    reported by the "notify status" admin socket command.
+  default: 0
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_security_protocol
+  type: str
+  level: advanced
+  desc: librdkafka security.protocol for the CephFS change notification
+    Kafka endpoint - PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL.
+  default: PLAINTEXT
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_ssl_ca_location
+  type: str
+  level: advanced
+  desc: Path to the CA certificate (PEM) used to verify the Kafka broker when
+    mds_notify_kafka_security_protocol is SSL or SASL_SSL. Empty uses the
+    system CA bundle.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_ssl_certificate_location
+  type: str
+  level: advanced
+  desc: Path to the client certificate (PEM) for mutual TLS to the Kafka
+    broker. Optional.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_ssl_key_location
+  type: str
+  level: advanced
+  desc: Path to the private key (PEM) for mds_notify_kafka_ssl_certificate_location.
+    The key file itself is never read into the config store or logged.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_ssl_key_password_file
+  type: str
+  level: advanced
+  desc: Path to a file holding the passphrase for an encrypted
+    mds_notify_kafka_ssl_key_location. The passphrase is read at startup and
+    is never stored in the config store, logged or reported.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_ssl_verify
+  type: bool
+  level: advanced
+  desc: Verify the Kafka broker certificate when TLS is in use
+    (librdkafka enable.ssl.certificate.verification). Only turn this off in a
+    test environment.
+  default: true
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_sasl_mechanism
+  type: str
+  level: advanced
+  desc: librdkafka sasl.mechanism for the CephFS change notification Kafka
+    endpoint (for example SCRAM-SHA-512 or PLAIN). Empty uses the librdkafka
+    default. GSSAPI (Kerberos) is not supported by this endpoint.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_sasl_username
+  type: str
+  level: advanced
+  desc: SASL username for the CephFS change notification Kafka endpoint.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_sasl_password_file
+  type: str
+  level: advanced
+  desc: Path to a file holding the SASL password (one line, trailing newline
+    ignored) for the CephFS change notification Kafka endpoint. The password
+    is read at startup and is never stored in the config store, logged or
+    reported; only the path appears in "notify status".
+  services:
+  - mds
+  flags:
+  - startup
