@@ -101,7 +101,7 @@ char *resolve_addrs(const char *orig_str)
     hint.ai_protocol = IPPROTO_TCP;
 
     r = getaddrinfo(tok, port_str, &hint, &res);
-    if (r < 0) {
+    if (r != 0) {
       printf("server name not found: %s (%s)\n", tok,
 	     gai_strerror(r));
       free(new_str);
