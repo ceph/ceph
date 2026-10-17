@@ -2609,15 +2609,36 @@ void CDir::_omap_commit(int op_prio)
   if (op_prio < 0)
     op_prio = CEPH_MSG_PRIO_DEFAULT;
 
-  // snap purge?
+  /*
+   * Snap purge.
+   *
+   * A snapped dentry and an inode's old_inodes are two encodings of the same
+   * thing - which one a cow produces depends only on CInode::is_multiversion()
+   * (MDCache::journal_cow_dentry()) - and both are minted under one and the
+   * same guard, realm->has_snaps_in_range().  try_trim_snap_dentry() and
+   * CInode::purge_stale_snap_data() then test the identical predicate: no live
+   * snapshot anywhere in the range.  So sweep both, or neither.
+   *
+   * snap_purged_thru is deliberately neither consulted nor advanced here.
+   * Gating on it makes the sweep wait for a snapshot to be destroyed, which is
+   * the right trigger for anything minted under the guard above but not for
+   * the old_inodes an older MDS could mint already stale.  Advancing it would
+   * be wrong either way: _omap_commit() writes only the dirty dentries, so
+   * marking the whole dirfrag purged would claim the clean ones had been swept
+   * too.
+   *
+   * Skipped while the snaptable is not synced - sweeping against an
+   * under-reported snap set would drop live snapshot data.
+   */
   const set<snapid_t> *snaps = NULL;
   SnapRealm *realm = inode->find_snaprealm();
-  if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
+  if (mdcache->mds->snapclient->is_synced()) {
     snaps = &realm->get_snaps();
     dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
-	     << " < " << realm->get_last_destroyed()
+	     << ", last_destroyed " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    // fnode.snap_purged_thru = realm->get_last_destroyed();
+  } else {
+    dout(10) << " snaptable not synced, skipping snap purge" << dendl;
   }
 
   size_t items_count = 0;

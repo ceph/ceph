@@ -1,0 +1,15 @@
+overrides:
+  check-counter:
+    dry_run: true
+  ceph:
+    conf:
+      mds:
+        # one snapshot should mean one rstat propagation attempt, so that an
+        # ancestor reading 0 old_inodes means the CoW was skipped rather than
+        # the ancestor never having been reached
+        mds dirstat min interval: 0
+
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephfs.test_snap_cow
