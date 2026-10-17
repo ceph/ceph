@@ -1423,7 +1423,7 @@ ceph::bufferptr Cache::maybe_page_aligned_bptr(
 #ifdef CRIMSON_DETAILED_SAMPLING
   ++copy_counter;
 #endif
-  auto nbp = ceph::bufferptr(buffer::create_page_aligned(length));
+  auto nbp = create_extent_ptr_rand(length);
   src.copy_out(offset, length, nbp.c_str());
   return nbp;
 }
