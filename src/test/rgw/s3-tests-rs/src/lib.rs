@@ -7,6 +7,7 @@ pub mod corpus;
 pub mod error;
 pub mod features;
 pub mod fixtures;
+pub mod hints;
 pub mod http;
 pub mod policy;
 pub mod random;

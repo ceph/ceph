@@ -18,6 +18,10 @@ sha2 = "0.10"
 # against content;  RustCrypto sibling of sha2 above
 md-5 = "0.10"
 tokio = { version = "1", features = ["full"] }
+# FutureExt::catch_unwind, so a driver hint is cleared on the
+# panicking path as well (src/hints.rs);  already in the lock
+# graph by way of the aws sdk
+futures-util = "0.3"
 configparser = "3"
 once_cell = "1"
 rand = "0.8"

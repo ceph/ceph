@@ -2236,6 +2236,7 @@ dependencies = [
  "base64",
  "chrono",
  "configparser",
+ "futures-util",
  "hmac 0.12.1",
  "libc",
  "md-5 0.10.6",
