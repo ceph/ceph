@@ -1,0 +1,18 @@
+# The guests run Ubuntu 26.04 (0-distro), for its libfabric 2.1 and for
+# rdma-core 61 with its ionic provider. The ernic task checks the guests'
+# ionic NICs, and that libfabric's verbs provider has an RDM endpoint on
+# each NIC's RDMA device. It builds nothing.
+tasks:
+- install:
+    extra_system_packages:
+      deb: ['jq', 'curl']
+      rpm: ['jq', 'curl']
+- ernic:
+    provider: verbs
+- ceph:
+- rgw:
+    client.0:
+# the S3 client runs on its own VM, so it needs the gateway's URL
+- ernic.rgw_endpoint:
+    rgw: client.0
+    clients: [client.1]

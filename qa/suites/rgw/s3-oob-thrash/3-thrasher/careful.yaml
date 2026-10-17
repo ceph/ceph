@@ -1,0 +1,19 @@
+# fewer and slower changes, and backfills refused at random
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd debug reject backfill probability: .3
+        osd max backfills: 2
+tasks:
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgnum_shrink: 1
+    chance_pgpnum_fix: 1
+    op_delay: 30
+    min_in: 6
+    min_live: 6
+    aggressive_pg_num_changes: false
+    chance_test_min_size: 0
+    ceph_objectstore_tool: false

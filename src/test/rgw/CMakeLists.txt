@@ -134,6 +134,13 @@ if(WITH_OOB_OFI)
   install(TARGETS ceph_test_rgw_ofi_get ceph_test_rgw_ofi_put
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_dependencies(tests ceph_test_rgw_ofi_get ceph_test_rgw_ofi_put)
+  # soak client: out-of-band GETs for a set time, each window checked for
+  # stray and late writes
+  add_executable(ceph_test_rgw_ofi_soak ofi/ofi_s3_soak.cc)
+  target_link_libraries(ceph_test_rgw_ofi_soak ofi_rma ${CURL_LIBRARIES}
+    ${CRYPTO_LIBS})
+  install(TARGETS ceph_test_rgw_ofi_soak DESTINATION ${CMAKE_INSTALL_BINDIR})
+  add_dependencies(tests ceph_test_rgw_ofi_soak)
   # unittest_rgw_ofi_sigv4: the clients' SigV4 signing
   add_executable(unittest_rgw_ofi_sigv4 ofi/test_ofi_s3_sigv4.cc)
   add_ceph_unittest(unittest_rgw_ofi_sigv4)

@@ -1,0 +1,29 @@
+# The guests run Ubuntu 26.04 (0-distro). Its libfabric is 2.1: a Ceph
+# built with WITH_OOB_OFI needs 1.20 or later, which Ubuntu 24.04 does not
+# have (1.17), and the uet provider links the same libfabric. It also has
+# what the rocm-ernic guest image needs: a kernel of 6.18 or later, with
+# the ionic RDMA driver, and rdma-core 61, with its ionic provider. The
+# ernic task checks the libfabric version.
+tasks:
+- install:
+    extra_system_packages:
+      deb: ['jq', 'curl']
+      rpm: ['jq', 'curl']
+# Check the guests' ionic NICs, and build and install the uet provider over
+# libuet_ernic in each. libuet_ernic is not published yet: it is not on
+# ROCm/rocm-ernic's develop branch, and these refs are development
+# branches of forks. Pin both refs to commits once they are published.
+- ernic:
+    rocm_ernic:
+      repo: https://github.com/mmgaggle/rocm-ernic.git
+      ref: wip-uet-perf
+    uet_prov:
+      repo: https://github.com/mmgaggle/uet-ref-prov.git
+      ref: wip-uet-hold
+- ceph:
+- rgw:
+    client.0:
+# the S3 client runs on its own VM, so it needs the gateway's URL
+- ernic.rgw_endpoint:
+    rgw: client.0
+    clients: [client.1]

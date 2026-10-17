@@ -1,0 +1,10 @@
+# Out-of-band GETs of whole objects and ranges for half an hour, with
+# every window checked for stray and late writes (ceph_test_rgw_ofi_soak).
+tasks:
+- workunit:
+    clients:
+      client.1:
+      - rgw/run-s3-oob-soak.sh
+    env:
+      SOAK_DURATION: '1800'
+    timeout: 1h

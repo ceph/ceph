@@ -1,0 +1,10 @@
+# libfabric's tcp provider between the clients and the OSDs. The OSDs bind
+# it to their public address; the gathers of erasure-coded reads stay on
+# the messenger.
+overrides:
+  ceph:
+    conf:
+      global:
+        oob client transports: tcp
+  oob_check:
+    transport: provider tcp

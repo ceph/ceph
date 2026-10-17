@@ -1,0 +1,22 @@
+# The nodes run CentOS 9 Stream (0-distro), whose libfabric is 1.20 or
+# later, as a Ceph built with WITH_OOB_OFI needs. uet_host builds the uet
+# provider over the reference provider's software core on each node,
+# installs it where libfabric finds it, and points the OOB transports at
+# the interface that carries each node's address. The provider sends UET
+# frames over a raw socket on that interface: the OSDs start as root and
+# keep CAP_NET_RAW, and uet_host gives it to the client tools.
+tasks:
+- install:
+    extra_packages: ['ceph-test']
+    extra_system_packages:
+      deb: ['libfabric1', 'libfabric-bin', 'iproute2', 'jq', 'curl']
+      rpm: ['libfabric', 'iproute', 'jq', 'curl']
+- uet_host:
+- ceph:
+- rgw:
+    client.0:
+# the S3 client runs on its own node, so it needs the gateway's URL
+- ernic.rgw_endpoint:
+    rgw: client.0
+    clients: [client.1]
+- oob_check:

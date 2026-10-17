@@ -1,0 +1,15 @@
+# S3 over RDMA: the build must have WITH_OOB_OFI, so that the OSDs and the
+# gateway run the libfabric transport and ceph-test ships the
+# out-of-band clients (ceph_test_rgw_ofi_get, _put and _soak, and
+# ceph_test_osd_oob_read). The hosts need libfabric 1.20 or later, which
+# Ubuntu 24.04 does not have (1.17), and for soft-RoCE the rdma_rxe module,
+# rdma-core and the ibverbs utilities: distro/ picks CentOS 9 Stream for
+# that. The rdma_rxe task installs the module's package
+# (kernel-modules-extra) for the running kernel: named here, the package
+# of the newest kernel in the repositories would come instead.
+tasks:
+- install:
+    extra_packages: ['ceph-test']
+    extra_system_packages:
+      deb: ['libfabric1', 'libfabric-bin', 'rdma-core', 'ibverbs-utils', 'iproute2', 'jq']
+      rpm: ['libfabric', 'rdma-core', 'libibverbs-utils', 'iproute', 'jq']

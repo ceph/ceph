@@ -2952,6 +2952,120 @@ Testing
     writes only, so that the OSDs cannot read it and the gateway
     declines.
 
+* ``ceph_test_rgw_ofi_soak`` is a soak client for OSD-direct GETs over
+  libfabric. Its ``put`` command writes a set of objects over HTTP. Each
+  8-byte word of an object names the object and the word's offset, so
+  any byte found in a window shows where it came from. Its ``run``
+  command then sends GETs for a set time, whole and ranged, from several
+  threads, each into a window of its memory. Each window holds a poison
+  pattern. After a GET, the bytes that the GET asked for must hold the
+  object's data, the rest of the token's range and a guard band around
+  it must still hold the poison, and the OSDs' CRC must match. Before a
+  GET, the client poisons the bytes of the window's last GET again, and
+  checks the range that the GET's checks cover. It checks the whole
+  window before a quarantine and at the end of the run, so a stray write
+  anywhere in it is found. The window stays out of use for the
+  quarantine, and a byte that changes meanwhile is a late write. For a
+  GET that failed without a response, a write may land until the fence
+  after the GET ended, but not after it. The fence is the lease plus the
+  drain plus the late tolerance, and where a thrasher stops OSDs, the
+  longest stop too. The client prints each violation, and exits with 3
+  when it found any::
+
+    ceph_test_rgw_ofi_soak put <endpoint> <bucket> <access key> <secret> \
+      <manifest> [--crc] [--big]
+    ceph_test_rgw_ofi_soak run <provider> <domain|-> <node|-> <endpoint> \
+      <bucket> <access key> <secret> <manifest> [--duration S] \
+      [--threads N] [--windows N] [--fence-ms MS] [...]
+
+* ``qa/workunits/rgw/run-s3-oob.sh`` sends GETs and PUTs with
+  ``ceph_test_rgw_ofi_get`` and ``ceph_test_rgw_ofi_put``.
+  ``qa/workunits/rgw/run-s3-oob-soak.sh`` puts the soak client's objects,
+  and runs it for ``SOAK_DURATION`` seconds. It starts a client that was
+  killed again. ``qa/workunits/rgw/run-s3-oob-elbencho.sh`` builds
+  ofi-rma and elbencho on its node, and runs elbencho with ``--s3ofi`` as
+  a load generator. Several threads PUT and GET objects of three sizes
+  out of band, and elbencho checks every byte and every CRC. The OSDs
+  must count a pull for each PUT and a push for each GET. The three S3
+  workunits take the client's provider from ``oob_client_transports``,
+  and the domain from the RDMA device of the client's address.
+  ``qa/workunits/rados/test_oob_read.sh`` sends reads
+  and pulled writes from librados with ``ceph_test_osd_oob_read``, to
+  pools on the OSDs of its own host. It always uses the ``tcp`` provider
+  on 127.0.0.1, and skips when the OSDs of its host do not serve ``tcp``
+  to clients. The header of each workunit shows how to run it against a
+  vstart cluster.
+* The teuthology suite ``rgw/s3-oob`` runs the three workunits, the soak
+  for five minutes, and s3tests over HTTP, over ``tcp`` and over
+  ``verbs_ofi_rxm`` on soft-RoCE, each with and without the cluster
+  transport, on a replicated and an erasure-coded data pool, with each
+  read policy, and with ``osd_oob_direct_read`` at random. There, every
+  transfer of the get and put clients must go out of band, and no GET of
+  the soak may fail. ``rgw/s3-oob-thrash`` runs
+  s3tests and then the soak workunit while OSDs are thrashed, with
+  delivery faults or network faults at random, and kills radosgw and the
+  clients during the soak. ``rgw/s3-oob-standalone`` runs
+  ``qa/standalone/osd/osd-oob-async.sh`` and ``osd-oob-copies.sh`` with
+  ``CEPH_OOB_REQUIRED=1``, so that they fail rather than skip on a build
+  without ``WITH_OOB_OFI``. ``rgw/s3-oob-uet-ernic`` runs
+  ``run-s3-oob.sh``, for GETs or for PUTs, and the soak over the ``uet``
+  provider on five rocm-ernic VMs. It runs with the transport security
+  sublayer off or in cluster mode, and over RUDI or RUD.
+  ``rgw/s3-oob-verbs-ernic`` runs the same workloads on the same VMs over
+  the ``verbs`` provider, through the ionic RDMA driver of the emulated
+  NIC, for the clients and between the OSDs. Both ernic suites need the
+  ernic machine type and its provisioner, which upstream teuthology does
+  not have yet. ``rgw/s3-oob-rnic`` runs the jobs of ``rgw/s3-oob`` over
+  ``verbs_ofi_rxm`` on the RDMA NIC of each host. Such a NIC is a
+  ConnectX RoCE port, for example, and the suite uses no soft-RoCE.
+  Schedule it on a machine type whose
+  nodes have an RDMA NIC on the interface of their address, such as
+  mako. Each of its jobs also runs the elbencho workunit. ``rgw/s3-oob-uet-host`` runs the workloads of the ernic suites
+  on five bare-metal nodes, such as mako nodes. It uses the software
+  core of the ``uet`` provider, and needs no UET NIC. It runs over RUDI or RUD,
+  with no fault, or with the provider's packet hold, which makes UET
+  packets arrive late (``UET_PKT_HOLD_*``). Its workloads are GETs, PUTs,
+  the soak and elbencho. These qa tasks support the
+  suites:
+
+  * ``rdma_rxe`` adds a soft-RoCE link on the interface of each host's
+    address, checks it with ``ibv_devinfo`` and ``fi_info -p verbs``, and
+    deletes it at the end. With ``hardware: true`` it uses the RDMA NIC
+    of that interface, and fails a host that has none.
+  * ``oob_check`` waits until the transport of every OSD is up. At the
+    end, it checks that no OSD is unsafe, that ``gather_crc_mismatch``
+    and ``cutoffs_failed`` are 0, that no OSD log reports a gather window
+    whose data did not match, and that the cluster does not raise
+    ``OOB_DELIVERY_UNSAFE``. It saves each OSD's ``ofi status`` and
+    ``oob_xfer`` counters in the job's archive.
+  * ``rgw_thrash`` kills radosgw and starts it again, and kills the
+    clients.
+  * ``thrashosds`` with ``chance_sigstop`` stops OSDs with ``SIGSTOP``
+    for longer than ``osd_oob_cutoff_late_tolerance``, and ``netem``
+    with ``loss``, ``duplicate``, ``reorder`` and ``corrupt`` damages the
+    packets between two hosts. Both are off unless a job asks for them.
+  * ``ceph`` with ``daemon_env``, and ``rgw`` with ``env``, give the
+    daemons environment variables, such as ``FI_UNIVERSE_SIZE`` for
+    soft-RoCE.
+  * ``ernic`` checks the emulated ionic NIC of each rocm-ernic guest and
+    that libfabric is 1.20 or later. It builds the ``uet`` provider over
+    libuet_ernic, installs ``libuet-fi.so`` where libfabric finds it, and
+    sets ``oob_network`` and the PDS environment of the daemons and the
+    workunits. With ``provider: verbs`` it builds nothing, and checks that
+    the ``verbs`` provider has an RDM endpoint on each NIC's RDMA device.
+  * ``ernic.rgw_endpoint`` writes the gateway's URL into ``url_file`` on
+    the nodes of other clients, for the workunits that run there.
+  * ``uet_host`` builds the ``uet`` provider over the software core of
+    the reference provider on each node, and installs it where libfabric
+    finds it. It sets ``oob_network``, the PDS mode, the packet hold and
+    the workunits' ``OOB_DOMAIN``. It drops the UET frames that reach the
+    kernel's IP stack, so that the kernel does not answer them with ICMP
+    errors. It also gives the S3 client tools ``cap_net_raw``.
+
+  ``tox`` in ``qa`` runs the unit tests of these tasks,
+  ``qa/tasks/tests/test_oob_tasks.py``, ``test_ernic.py`` and
+  ``test_uet_host.py``.
+
 Limitations
 ===========
 

@@ -1,0 +1,18 @@
+# soft-RoCE, with the verbs provider between the clients and the OSDs, and
+# between the OSDs: an erasure-coded primary lends gather windows to its
+# shards. See rxe.yaml.
+overrides:
+  ceph:
+    daemon_env:
+      FI_UNIVERSE_SIZE: 16
+    conf:
+      global:
+        oob client transports: verbs_ofi_rxm
+        oob cluster transport: verbs_ofi_rxm
+  rgw:
+    env:
+      FI_UNIVERSE_SIZE: 16
+  oob_check:
+    transport: provider verbs
+tasks:
+- rdma_rxe:

@@ -1,0 +1,14 @@
+# As rnic.yaml, and the OSDs also push EC shard reads into their primary's
+# gather windows over the RDMA NIC.
+overrides:
+  ceph:
+    conf:
+      global:
+        oob client transports: verbs_ofi_rxm
+        oob cluster transport: verbs_ofi_rxm
+  oob_check:
+    transport: provider verbs
+  rdma_rxe:
+    hardware: true
+tasks:
+- rdma_rxe:

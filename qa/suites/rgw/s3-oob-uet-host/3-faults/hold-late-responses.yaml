@@ -1,0 +1,12 @@
+# Each process holds every 10th response or acknowledgment it sends for
+# 600 ms: the peer retransmits, completes the transfer on the response to
+# the retransmit, and the held response arrives late. A late response
+# must complete nothing, and change nothing.
+overrides:
+  uet_host:
+    hold:
+      ms: 600
+      dir: tx
+      types: [rudi_resp, rudi_data, ack]
+      every: 10
+      log: /var/log/ceph/uet-hold.log
