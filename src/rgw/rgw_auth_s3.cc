@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <algorithm>
+#include <charconv>
 #include <boost/algorithm/string/predicate.hpp>
 #include <map>
 #include <iterator>
@@ -1141,13 +1142,35 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
 
   ldout(cct, 20) << "AWSv4ComplMulti::create_next() old.cnt: " << old.cnt << dendl;
 
-  char* data_field_end;
-  /* strtoull ignores the "\r\n" sequence after each non-first chunk. */
-  const size_t data_length = std::strtoull(metabuf, &data_field_end, 16);
-  if (data_length == 0 && data_field_end == metabuf) {
+  /* Parse the chunk-size token strictly. For a non-first chunk metabuf begins
+   * with the CRLF that terminated the previous chunk's data; strtoull used to
+   * skip it as leading whitespace, but it would equally skip a sign and other
+   * whitespace and saturate on overflow, so a size of "-1" or of more than 16
+   * hex digits wrapped data_length to ~2^64 and the dechunker swallowed the
+   * next chunk's framing as data (tracker #81123). Accept only an optional
+   * leading CRLF, then 1..16 hex digits (16 is the widest a 64-bit size can
+   * be), and require the size to end at a chunk extension (';', which also
+   * introduces ";chunk-signature=") or at the CRLF of an unsigned chunk's size
+   * line; reject anything else with EINVAL (400). */
+  const char* size_begin = metabuf;
+  const char* const meta_end = metabuf + metabuf_len;
+  if (meta_end - size_begin >= 2 &&
+      size_begin[0] == '\r' && size_begin[1] == '\n') {
+    size_begin += sarrlen("\r\n");
+  }
+  size_t data_length = 0;
+  const auto [size_end, ec] =
+      std::from_chars(size_begin, meta_end, data_length, 16);
+  const size_t size_ndigits = size_end - size_begin;
+  const bool size_boundary_ok =
+      size_end < meta_end &&
+      (*size_end == ';' ||
+       (*size_end == '\r' && size_end + 1 < meta_end && size_end[1] == '\n'));
+  if (ec != std::errc{} || size_ndigits < 1 || size_ndigits > 16 ||
+      !size_boundary_ok) {
     ldout(cct, 20) << "AWSv4ComplMulti: cannot parse the data size"
                    << dendl;
-    /* this case is no longer treated as an exception */
+    throw rgw::io::Exception(EINVAL, std::system_category());
   }
 
   if (expect_chunk_signature) {
