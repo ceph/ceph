@@ -110,4 +110,26 @@ describe('ModuleStatusGuardService', () => {
   it('should skip backend check for user without config-opt permission', fakeAsync(() => {
     testCanActivate({ available: true, message: 'foo' }, true, '/', 'rook', false);
   }));
+
+  it('should not call the status endpoint when the orchestrator config check fails', fakeAsync(() => {
+    // Simulate getConfig failure (e.g. permission error or network error)
+    spyOn(authStorageService, 'getPermissions').and.returnValue({
+      configOpt: { read: true }
+    } as any);
+    spyOn(mgrModuleService, 'getConfig').and.returnValue(throwError({}));
+    const statusSpy = spyOn(httpClient, 'get');
+
+    let result: boolean;
+    ngZone.run(() => {
+      service.canActivateChild(route).subscribe((resp) => {
+        result = resp;
+      });
+    });
+
+    tick();
+    // EMPTY from catchError stops switchMap; defaultIfEmpty(false) unblocks the guard
+    expect(statusSpy).not.toHaveBeenCalled();
+    expect(result).toBe(false);
+    expect(router.url).toBe('/foo');
+  }));
 });
