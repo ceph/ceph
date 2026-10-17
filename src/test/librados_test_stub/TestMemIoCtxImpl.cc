@@ -92,6 +92,9 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
   auto off = file->data.length();
   ensure_minimum_length(off + bl.length(), &file->data);
   file->data.begin(off).copy_in(bl.length(), bl);
+  if (bl.length() > 0) {
+    file->allocated_extents.union_insert(off, bl.length());
+  }
   return 0;
 }
 
@@ -547,19 +550,32 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
 
   std::shared_lock l{file->lock};
   len = clip_io(off, len, file->data.length());
-  // TODO support sparse read
+  interval_set<uint64_t> mapped_extents;
   if (m != NULL) {
     m->clear();
     if (len > 0) {
-      (*m)[off] = len;
+      mapped_extents.insert(off, len);
+      mapped_extents.intersection_of(file->allocated_extents);
+      for (interval_set<uint64_t>::const_iterator it = mapped_extents.begin();
+           it != mapped_extents.end(); ++it) {
+        (*m)[it.get_start()] = it.get_len();
+      }
     }
   }
   if (data_bl != NULL && len > 0) {
-    bufferlist bit;
-    bit.substr_of(file->data, off, len);
-    append_clone(bit, data_bl);
+    if (m != NULL) {
+      for (auto [extent_off, extent_len] : mapped_extents) {
+        bufferlist bit;
+        bit.substr_of(file->data, extent_off, extent_len);
+        append_clone(bit, data_bl);
+      }
+    } else {
+      bufferlist bit;
+      bit.substr_of(file->data, off, len);
+      append_clone(bit, data_bl);
+    }
   }
-  return len > 0 ? 1 : 0;
+  return m != NULL ? m->size() : (len > 0 ? 1 : 0);
 }
 
 int TestMemIoCtxImpl::stat(const std::string& oid, uint64_t *psize,
@@ -613,9 +629,13 @@ int TestMemIoCtxImpl::truncate(const std::string& oid, uint64_t size,
 
     bl.substr_of(file->data, 0, size);
     file->data.swap(bl);
+    interval_set<uint64_t> allocated_extents = is;
+    allocated_extents.intersection_of(file->allocated_extents);
+    file->allocated_extents.subtract(allocated_extents);
   } else if (file->data.length() != size) {
     if (size == 0) {
       bl.clear();
+      file->allocated_extents.clear();
     } else {
       is.insert(0, size);
 
@@ -656,6 +676,9 @@ int TestMemIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
 
   ensure_minimum_length(off + len, &file->data);
   file->data.begin(off).copy_in(len, bl);
+  if (len > 0) {
+    file->allocated_extents.union_insert(off, len);
+  }
   return 0;
 }
 
@@ -688,8 +711,12 @@ int TestMemIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
   }
 
   file->data.clear();
+  file->allocated_extents.clear();
   ensure_minimum_length(bl.length(), &file->data);
   file->data.begin().copy_in(bl.length(), bl);
+  if (bl.length() > 0) {
+    file->allocated_extents.union_insert(0, bl.length());
+  }
   return 0;
 }
 
@@ -721,10 +748,15 @@ int TestMemIoCtxImpl::writesame(const std::string& oid, bufferlist& bl,
   }
 
   ensure_minimum_length(off + len, &file->data);
+  uint64_t allocated_off = off;
+  uint64_t allocated_len = len;
   while (len > 0) {
     file->data.begin(off).copy_in(bl.length(), bl);
     off += bl.length();
     len -= bl.length();
+  }
+  if (allocated_len > 0) {
+    file->allocated_extents.union_insert(allocated_off, allocated_len);
   }
   return 0;
 }
@@ -815,9 +847,27 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
     return truncate(oid, off, snapc);
   }
 
-  bufferlist bl;
-  bl.append_zero(len);
-  return write(oid, bl, len, off, snapc);
+  {
+    std::unique_lock l{file->lock};
+    bufferlist bl;
+    bl.append_zero(len);
+    ensure_minimum_length(off + len, &file->data);
+    file->data.begin(off).copy_in(len, bl);
+
+    if (len > 0) {
+      interval_set<uint64_t> zeroed_extents;
+      zeroed_extents.insert(off, len);
+
+      interval_set<uint64_t> overlap_extents = zeroed_extents;
+      overlap_extents.intersection_of(file->snap_overlap);
+      file->snap_overlap.subtract(overlap_extents);
+
+      interval_set<uint64_t> allocated_extents = zeroed_extents;
+      allocated_extents.intersection_of(file->allocated_extents);
+      file->allocated_extents.subtract(allocated_extents);
+    }
+  }
+  return 0;
 }
 
 void TestMemIoCtxImpl::append_clone(bufferlist& src, bufferlist* dest) {
