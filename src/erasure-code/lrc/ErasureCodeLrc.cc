@@ -703,33 +703,40 @@ int ErasureCodeLrc::_minimum_to_decode(const set<int> &want_to_read,
 	erasures_total.insert(i);
     }
 
-    for (vector<Layer>::reverse_iterator i = layers.rbegin();
-	 i != layers.rend();
-	 ++i) {
-      set<int> layer_erasures;
-      set_intersection(i->chunks_as_set.begin(), i->chunks_as_set.end(),
-		       erasures_total.begin(), erasures_total.end(),
-		       inserter(layer_erasures, layer_erasures.end()));
-      //
-      // If this layer has no erasure, skip it
-      //
-      if (layer_erasures.empty())
-	continue;
+    //
+    // Repeat until no layer recovers anything.
+    //
+    bool progress;
+    do {
+      progress = false;
+      for (vector<Layer>::reverse_iterator i = layers.rbegin();
+	   i != layers.rend();
+	   ++i) {
+	set<int> layer_erasures;
+	set_intersection(i->chunks_as_set.begin(), i->chunks_as_set.end(),
+			 erasures_total.begin(), erasures_total.end(),
+			 inserter(layer_erasures, layer_erasures.end()));
+	//
+	// If this layer has no erasure, skip it
+	//
+	if (layer_erasures.empty())
+	  continue;
 
-      if (layer_erasures.size() > 0 &&
-	  layer_erasures.size() <= i->erasure_code->get_coding_chunk_count()) {
-	//
-	// chunks recovered by this layer are removed from the list of
-	// erasures so that upper levels know they can rely on their
-	// availability
-	//
-	for (set<int>::const_iterator j = layer_erasures.begin();
-	     j != layer_erasures.end();
-	     ++j) {
-	  erasures_total.erase(*j);
+	if (layer_erasures.size() <= i->erasure_code->get_coding_chunk_count()) {
+	  //
+	  // chunks recovered by this layer are removed from the list of
+	  // erasures so that upper levels know they can rely on their
+	  // availability
+	  //
+	  for (set<int>::const_iterator j = layer_erasures.begin();
+	       j != layer_erasures.end();
+	       ++j) {
+	    erasures_total.erase(*j);
+	  }
+	  progress = true;
 	}
       }
-    }
+    } while (progress && !erasures_total.empty());
     if (erasures_total.empty()) {
       //
       // Do not try to be smart about what chunks are necessary to
@@ -865,30 +872,37 @@ int ErasureCodeLrc::_minimum_to_decode(const shard_id_set &want_to_read,
 	erasures_total.insert(i);
     }
 
-    for (vector<Layer>::reverse_iterator i = layers.rbegin();
-	 i != layers.rend();
-	 ++i) {
-      shard_id_set layer_erasures = shard_id_set::intersection(i->chunks_as_shard_set, erasures_total);
+    //
+    // Repeat until no layer recovers anything.
+    //
+    bool progress;
+    do {
+      progress = false;
+      for (vector<Layer>::reverse_iterator i = layers.rbegin();
+	   i != layers.rend();
+	   ++i) {
+	shard_id_set layer_erasures = shard_id_set::intersection(i->chunks_as_shard_set, erasures_total);
 
-      // If this layer has no erasure, skip it
-      //
-      if (layer_erasures.empty())
-	continue;
+	// If this layer has no erasure, skip it
+	//
+	if (layer_erasures.empty())
+	  continue;
 
-      if (layer_erasures.size() > 0 &&
-	  layer_erasures.size() <= i->erasure_code->get_coding_chunk_count()) {
-	//
-	// chunks recovered by this layer are removed from the list of
-	// erasures so that upper levels know they can rely on their
-	// availability
-	//
-	for (shard_id_set::const_iterator j = layer_erasures.begin();
-	     j != layer_erasures.end();
-	     ++j) {
-	  erasures_total.erase(*j);
+	if (layer_erasures.size() <= i->erasure_code->get_coding_chunk_count()) {
+	  //
+	  // chunks recovered by this layer are removed from the list of
+	  // erasures so that upper levels know they can rely on their
+	  // availability
+	  //
+	  for (shard_id_set::const_iterator j = layer_erasures.begin();
+	       j != layer_erasures.end();
+	       ++j) {
+	    erasures_total.erase(*j);
+	  }
+	  progress = true;
 	}
       }
-    }
+    } while (progress && !erasures_total.empty());
     if (erasures_total.empty()) {
       //
       // Do not try to be smart about what chunks are necessary to
@@ -1018,10 +1032,12 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
   }
 
   set<int> want_to_read_erasures;
+  set_intersection(erasures.begin(), erasures.end(),
+		   want_to_read.begin(), want_to_read.end(),
+		   inserter(want_to_read_erasures, want_to_read_erasures.end()));
 
-  for (vector<Layer>::reverse_iterator layer = layers.rbegin();
-       layer != layers.rend();
-       ++layer) {
+  vector<Layer>::reverse_iterator layer = layers.rbegin();
+  while (layer != layers.rend()) {
     set<int> layer_erasures;
     set_intersection(layer->chunks_as_set.begin(), layer->chunks_as_set.end(),
 		     erasures.begin(), erasures.end(),
@@ -1076,7 +1092,11 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
 		       inserter(want_to_read_erasures, want_to_read_erasures.end()));
       if (want_to_read_erasures.size() == 0)
 	break;
+      // a skipped layer may now recover
+      layer = layers.rbegin();
+      continue;
     }
+    ++layer;
   }
 
   if (want_to_read_erasures.size() > 0) {
@@ -1110,14 +1130,31 @@ int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
     } else {
       ceph_assert(chunk_size == ptr.length());
     }
-    erasures.insert(shard);
   }
 
-  shard_id_set want_to_read_erasures;
+  // A layer may need a missing chunk that is not in *out*; decode
+  // those into scratch buffers.
+  shard_id_map<bufferptr> scratch(get_chunk_count());
+  for (shard_id_t i; i < get_chunk_count(); ++i) {
+    if (available_chunks.contains(i))
+      continue;
+    erasures.insert(i);
+    if (!out.contains(i))
+      scratch[i] = buffer::create_page_aligned(chunk_size);
+  }
+  auto chunk = [&](shard_id_t s) -> bufferptr& {
+    if (in.contains(s))
+      return in[s];
+    if (out.contains(s))
+      return out[s];
+    return scratch[s];
+  };
 
-  for (vector<Layer>::reverse_iterator layer = layers.rbegin();
-       layer != layers.rend();
-       ++layer) {
+  shard_id_set want_to_read_erasures =
+    shard_id_set::intersection(erasures, want_to_read);
+
+  vector<Layer>::reverse_iterator layer = layers.rbegin();
+  while (layer != layers.rend()) {
     shard_id_set layer_erasures = shard_id_set::intersection(layer->chunks_as_shard_set, erasures);
 
     if (layer_erasures.size() >
@@ -1136,13 +1173,9 @@ int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
       {
         shard_id_t cs(*c);
         if (!erasures.contains(cs)) {
-          if (in.contains(cs)) {
-            layer_in[j] = in[cs];
-          } else {
-            layer_in[j] = out[cs];
-          }
+          layer_in[j] = chunk(cs);
         } else {
-          layer_out[j] = out[cs];
+          layer_out[j] = chunk(cs);
         }
         ++j;
       }
@@ -1163,7 +1196,11 @@ int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
       want_to_read_erasures = shard_id_set::intersection(erasures, want_to_read);
       if (want_to_read_erasures.size() == 0)
 	break;
+      // a skipped layer may now recover
+      layer = layers.rbegin();
+      continue;
     }
+    ++layer;
   }
 
   if (want_to_read_erasures.size() > 0) {
