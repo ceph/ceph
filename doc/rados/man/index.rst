@@ -24,6 +24,7 @@
    ../../man/8/monmaptool.rst
    ../../man/8/osdmaptool.rst
    ../../man/8/rados.rst
+   ../../man/8/radostrace.rst
 
 
 .. toctree::
