@@ -196,6 +196,7 @@ private:
 
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
+  bool corrupt_read = false; ///< an object-data read found the copy corrupt
 
   SnapContext snapc; // writer snap context
   struct CloningContext {
@@ -447,6 +448,12 @@ public:
 
   bool has_seen_write() const {
     return num_write > 0;
+  }
+
+  /// true once an object-data read op returned object_corrupted (EILSEQ),
+  /// including a read issued from inside a class method; see tracker #77070
+  bool has_seen_corrupt_read() const {
+    return corrupt_read;
   }
 
   object_stat_sum_t& get_stats(){
