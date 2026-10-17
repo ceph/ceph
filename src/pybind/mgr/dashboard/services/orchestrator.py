@@ -204,6 +204,14 @@ class UpgradeManager(ResourceManager):
 class HardwareManager(ResourceManager):
 
     @wait_api_result
+    def list_hosts(self) -> List[str]:
+        return self.api.node_proxy_list_hosts()
+
+    @wait_api_result
+    def fullreport(self, hostname: str) -> Dict[str, Any]:
+        return self.api.node_proxy_fullreport(hostname=hostname)
+
+    @wait_api_result
     def common(self, category: str, hostname: Optional[List[str]] = None) -> str:
         return self.api.node_proxy_common(category, hostname=hostname)
 

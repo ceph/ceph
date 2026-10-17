@@ -1901,6 +1901,10 @@ class NodeProxyCache:
             )
         return [hostname]
 
+    def list_hosts(self) -> List[str]:
+        # Returns hosts with node-proxy data — no blobs loaded.
+        return list(self.data.keys())
+
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves the full report for the specified hostname.
