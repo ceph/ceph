@@ -440,6 +440,7 @@ BuildRequires:	xmlsec1-nss
 BuildRequires:	xmlsec1-openssl
 BuildRequires:	python3dist(scipy)
 BuildRequires:	python3dist(pyopenssl)
+BuildRequires:	krb5-devel
 %endif
 %if 0%{?openruyi}
 BuildRequires:	/usr/bin/promtool
