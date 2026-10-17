@@ -99,9 +99,16 @@ configuration across the entire cluster. Conversely, opt for a stretch pool
 when you need only a particular pool to be replicated across more than two data centers,
 providing a more granular level of control.
 
+Individual stretch pools and stretch mode cannot be combined. While stretch
+mode is enabled, it manages the stretch values of every pool itself, and
+``ceph osd pool stretch set`` and ``ceph osd pool stretch unset`` fail.
+
 
 Limitations
 -----------
+
+Individual stretch pools must be replicated pools:
+``ceph osd pool stretch set`` refuses erasure-coded pools.
 
 Individual stretch pools do not support I/O operations during a netsplit
 scenario between two or more zones. While the cluster remains accessible for
@@ -457,6 +464,11 @@ happen or you want to enable recovery mode early, run the following command:
 
    ceph osd force_recovery_stretch_mode --yes-i-really-mean-it
 
+This command fails if the cluster is not in degraded mode or is already in
+recovery mode. It also fails while every Monitor of a data center, or the
+tiebreaker Monitor, is down: recovery mode can start before the OSDs of the
+disconnected data center are back, but not before one of its Monitors is.
+
 
 Forcing Normal Stretch Mode
 ---------------------------
@@ -472,4 +484,4 @@ recovered), run the following command:
    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
 
 This command can be used to to remove the ``HEALTH_WARN`` state, which recovery
-mode raises.
+mode raises. It fails if the cluster is not in recovery mode.
