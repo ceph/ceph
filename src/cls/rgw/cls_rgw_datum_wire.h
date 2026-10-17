@@ -77,7 +77,7 @@ class writer final
     void copy_payload(const byte_buffer& value, const unsigned offset, const unsigned size)
     {
         ensure(size);
-        auto storage = output.get_contiguous_appender(size);
+        auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
         auto first = value.cbegin(offset);
         first.copy(size, storage.get_pos_add(size));
     }
@@ -98,7 +98,7 @@ public:
     void fields(const std::size_t size, const RecordT& value, datum::binary_fields<Member...> selected)
     {
         ensure(size);
-        auto storage = output.get_contiguous_appender(size);
+        auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
         std::span bytes {storage.get_pos_add(size), size};
         zpp::bits::out archive {bytes, zpp::bits::size4b {}, zpp::bits::endian::little {}};
         datum::serialize_schema(archive, value, selected).or_throw();
@@ -146,7 +146,7 @@ public:
     {
         scalar(static_cast<std::uint32_t>(value.length()));
         ensure(value.length());
-        auto storage = output.get_contiguous_appender(value.length());
+        auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(value.length());
         auto target = storage.get_pos_add(value.length());
         for (const auto& fragment : value.buffers()) {
             const auto size = fragment.length();
