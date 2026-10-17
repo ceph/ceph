@@ -883,6 +883,36 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 {
   ldpp_dout(dpp, 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
+  if (create_delete_marker && store->get_zone()->get_tier_type() != "archive") {
+    // A queued marker replay must not recreate heads after bucket deletion.
+    // Use the instance identity, never the entrypoint of a replacement bucket.
+    const auto &expected = bucket->get_info();
+    if (expected.bucket.bucket_id.empty()) {
+      return -EINVAL;
+    }
+    if (expected.bucket_deleted()) {
+      return -ENOENT;
+    }
+    RGWBucketInfo current;
+    // Consult current metadata instead of the retained sync-pipe snapshot.
+    int ret = store->ctl()->bucket->read_bucket_instance_info(
+        expected.bucket, &current, null_yield, dpp,
+        RGWBucketCtl::BucketInstance::GetParams());
+    if (ret < 0) {
+      return ret;
+    }
+    if (current.bucket_deleted() ||
+        current.bucket.bucket_id != expected.bucket.bucket_id ||
+        current.bucket.name != expected.bucket.name ||
+        current.bucket.tenant != expected.bucket.tenant ||
+        current.bucket.marker != expected.bucket.marker) {
+      ldpp_dout(dpp, 20)
+          << "skipping marker creation for deleted or replaced bucket "
+          << expected.bucket << dendl;
+      return -ENOENT;
+    }
+  }
+
   obj->set_atomic(true);
 
   const bool null_verid = obj->get_instance() == "null";
