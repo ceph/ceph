@@ -15,6 +15,7 @@ use s3_tests_rs::client::{get_alt_client, get_client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
 use s3_tests_rs::fixtures::{get_new_bucket, TestGuard};
+use s3_tests_rs::hints::{clear_hint, with_hint};
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
 
 const GID_SHARED: &str = "70010";
@@ -884,4 +885,116 @@ async fn test_nested_run_as_refuses_a_different_identity() {
                "a nested run_as for another identity must be refused with \
                 -EDEADLK, not run as the outer one:  outer={outer} \
                 inner={inner} results={m:?}");
+}
+
+/// Is the gateway producing mtime-ino etags rather than digests?
+///
+/// Asked of the gateway, not inferred:  `rgw_non_md5_etag` is off by
+/// default, and an etag's shape is not something a client has a
+/// second opinion about.
+async fn non_md5_etag() -> bool {
+    match features().await {
+        Some(f) => f.get_bool("non_md5_etag").unwrap_or(false),
+        None => false,
+    }
+}
+
+
+/// The non-md5 etag is *recorded on the object*, not just reported.
+///
+/// Under `rgw_non_md5_etag` the etag is the mtime-ino string, which
+/// cannot be known until the file has been linked and stat'ed -- so
+/// it is written after `NSFSAtomicWriter::complete()` has already
+/// persisted the attribute map, by an `fsetxattr` of its own inside
+/// `NSFSObject::link_temp_file()`.  That write used to run on the
+/// calling thread with its result discarded, so under impersonation
+/// the kernel refused it on a 0660 file the gateway does not own.
+/// What the object then keeps is not a digest -- with this option on
+/// nothing computes one -- but `RGWPutObj::execute()`'s opaque
+/// `mtime-<ns>-req-<id>` form, which nsfs is supposed to replace.
+/// The client is handed the mtime-ino one regardless, because
+/// `RGWPutObj` reads the etag back out of the map the writer returns
+/// and the writer puts it there whether or not the disk write took.
+///
+/// A PUT and a HEAD are therefore the whole test:  the two etags must
+/// agree.  Nothing else in the suite can see this -- the option is
+/// off in every other run -- which is why `--with-non-md5-etag`
+/// exists.
+///
+/// **Both polarities, against one build.**  `inject-etag-as-gateway`
+/// reproduces the defect in the running gateway, so the test can be
+/// watched failing without deleting the fix and rebuilding.
+/// Asserting only that the etags agree
+/// would pass just as well against a gateway that had stopped
+/// synthesizing them at all.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
+    const INJECT: &str = "inject-etag-as-gateway";
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    if !non_md5_etag().await {
+        eprintln!("rgw_non_md5_etag is off;  start with \
+                   --with-non-md5-etag");
+        return;
+    }
+    bind_identities(None).await;
+
+    let alice = get_client();
+    let bucket = get_new_bucket(Some(&alice)).await;
+
+    async fn put_then_head(c: &aws_sdk_s3::Client, bucket: &str, key: &str)
+        -> Result<(String, String), String>
+    {
+        let put = c.put_object()
+            .bucket(bucket).key(key)
+            .body(aws_sdk_s3::primitives::ByteStream::from_static(b"bytes"))
+            .send().await
+            .map_err(|e| format!("put {key} failed: {e:?}"))?;
+        let head = c.head_object()
+            .bucket(bucket).key(key)
+            .send().await
+            .map_err(|e| format!("head {key} failed: {e:?}"))?;
+        Ok((put.e_tag().unwrap_or_default().to_string(),
+            head.e_tag().unwrap_or_default().to_string()))
+    }
+
+    /* On the way in, because a hint is gateway-wide:  one left behind
+     * by a test the harness killed would otherwise decide this one's
+     * result.  `with_hint` covers the panicking path;  nothing covers
+     * a process that dies without unwinding. */
+    clear_hint(INJECT).await;
+    let fixed = put_then_head(&alice, &bucket, "recorded").await;
+
+    let injected = with_hint(INJECT, &[("enable", "true")],
+                             put_then_head(&alice, &bucket, "diverged")).await;
+
+    unbind_identities().await;
+
+    let (put_etag, head_etag) = fixed.unwrap_or_else(|e| panic!("{e}"));
+    let (bad_put, bad_head) = injected.unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(!put_etag.is_empty(),
+            "the PUT returned no etag at all");
+    assert_eq!(put_etag, head_etag,
+               "the etag the client was given is not the one recorded on \
+                the object:  PUT said {put_etag}, HEAD says {head_etag}");
+
+    assert!(!bad_head.is_empty(),
+            "the HEAD under injection returned no etag at all, so the \
+             comparison below would hold for the wrong reason");
+    assert_ne!(bad_put, bad_head,
+               "with inject-etag-as-gateway on, the attribute write should \
+                be refused and the object should keep the opaque etag \
+                RGWPutObj wrote -- \
+                the two agreeing means this test cannot fail:  PUT said \
+                {bad_put}, HEAD says {bad_head}");
 }
