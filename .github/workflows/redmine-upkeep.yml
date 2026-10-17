@@ -75,6 +75,7 @@ jobs:
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
              --git-dir=./ceph/
+             ${{ inputs.issue != '' && format('--issue={0}', inputs.issue) || '' }}
              ${{ inputs.debug && '--debug' || '' }}
              ${{ inputs.filter != '' && format('--filter="{0}"', inputs.filter) || '' }}
              ${{ format('--limit={0}', inputs.limit) }}
