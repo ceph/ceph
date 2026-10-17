@@ -123,8 +123,18 @@ namespace PriorityCache
     uint64_t mapped = 0;
 
     ceph_heap_release_free_memory();
-    ceph_heap_get_numeric_property("generic.heap_size", &heap_size);
-    ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped);
+#ifdef HAVE_GOOGLE_TCMALLOC
+    // Google's generic.heap_size already excludes unmapped memory.
+    constexpr auto heap_property = "generic.virtual_memory_used";
+#else
+    constexpr auto heap_property = "generic.heap_size";
+#endif
+    if (ceph_using_tcmalloc() &&
+        (!ceph_heap_get_numeric_property(heap_property, &heap_size) ||
+         !ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped) ||
+         heap_size < unmapped)) {
+      return;
+    }
     mapped = heap_size - unmapped;
 
     uint64_t new_size = tuned_mem;
