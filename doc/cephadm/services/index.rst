@@ -35,16 +35,17 @@ the following:
 #. Print the status of the service.
 
 The following command prints a list of services known to the orchestrator. To
-limit the output to services only on a specified host, use the optional
-``--host`` parameter. To limit the output to services of only a particular
-type, use the optional ``--type`` parameter
-(``mon``, ``osd``, ``mgr``, ``mds``, ``rgw``):
+limit the output to services of one type, use the optional ``--service_type``
+parameter (for example ``mon``, ``osd``, ``mgr``, ``mds`` or ``rgw``). To limit
+the output to one service, use the optional ``--service_name`` parameter. The
+command has no option that filters by host. To list the daemons on one host,
+see `Daemon Status`_.
 
 .. prompt:: bash #
 
     ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
 
-Discover the status of a particular service or daemon:
+Discover the status of a particular service:
 
 .. prompt:: bash #
 
@@ -79,18 +80,27 @@ First, print a list of all daemons known to the orchestrator:
 
     ceph orch ps [--hostname host] [--daemon_type type] [--service_name name] [--daemon_id id] [--format f] [--refresh]
 
-Then query the status of a particular service instance (``mon``, ``osd``, ``mds``, ``rgw``).
-For OSDs the ``id`` is the numeric OSD ID. For MDS services the ``id`` is the file
-system name:
+Then query the status of a particular daemon. For OSDs the ``id`` is the
+numeric OSD ID:
 
 .. prompt:: bash #
 
     ceph orch ps --daemon_type osd --daemon_id 0
 
+For MDS daemons the ``id`` is the service ID (normally the file system name),
+the short host name and a random suffix joined by dots, for example
+``myfs.host1.ozkelu``. To list all MDS daemons of one file system, filter by
+service name:
+
+.. prompt:: bash #
+
+    ceph orch ps --service_name mds.<fs_name>
+
 .. note::
    The output of the command ``ceph orch ps`` may not reflect the current
    status of the daemons. By default, the status is updated every 10 minutes.
-   This interval can be shortened by modifying the :confval:`mgr/cephadm/daemon_cache_timeout`
+   This interval can be shortened by modifying the
+   ``mgr/cephadm/daemon_cache_timeout``
    configuration variable (in seconds) e.g: ``ceph config set mgr
    mgr/cephadm/daemon_cache_timeout 60`` would reduce the refresh interval to
    one minute. The ``--refresh`` option can be used to trigger
@@ -106,13 +116,26 @@ Service Specification
 
 A *service specification* is a data structure that is used to specify the
 deployment of services. In addition to parameters such as ``placement`` or
-``networks``, the user can set initial values of service configuration parameters
-by means of the ``config`` section. For each parameter/value configuration pair,
-cephadm calls the following command to set its value:
+``networks``, the user can set Ceph configuration options for the service by
+means of the ``config`` section. Each time cephadm reconciles a managed
+service, it compares each option in ``config`` with the current value and, if
+they differ, runs a command of the following form:
 
 .. prompt:: bash #
 
-    ceph config set <service-name> <param> <value>
+    ceph config set <who> <option> <value>
+
+``<who>`` depends on the service type:
+
+* For ``mon``, ``mgr``, ``mds`` and ``osd`` services, it is the service name,
+  for example ``mon`` or ``mds.myfs``.
+* For ``rgw``, ``nfs``, ``iscsi``, ``nvmeof``, ``smb``, ``rbd-mirror``,
+  ``crash`` and ``ceph-exporter`` services, it is ``client.`` followed by the
+  service name, for example ``client.rgw.realm.zone``.
+* For all other service types, it is ``mon``.
+
+When the service is removed, cephadm removes these options with
+``ceph config rm``.
 
 Cephadm raises health warnings in case invalid configuration parameters are
 found in the spec (``CEPHADM_INVALID_CONFIG_OPTION``) or if an error occurs while
@@ -130,14 +153,16 @@ Here is an example of a service specification in YAML:
         - host2
         - host3
     config:
-      param_1: val_1
-      ...
-      param_N: val_N
+      rgw_enable_usage_log: "true"
     unmanaged: false
     networks:
-    - 192.169.142.0/24
+    - 192.168.142.0/24
     spec:
-      # Additional service-specific attributes.
+      rgw_frontend_port: 8080
+
+Service-specific attributes go under ``spec``. Do not leave the ``spec`` key
+empty: ``ceph orch apply`` rejects a specification whose ``spec`` key has no
+value.
 
 In this example, the properties of this service specification are:
 
@@ -254,13 +279,11 @@ arguments or in a YAML files.
       ceph orch apply mon host2
       ceph orch apply mon host3
 
-   This results in only one host having a monitor applied to it: ``host3``.
+   This leaves the ``mon`` service specification with only one host: ``host3``.
 
-   (The first command creates a monitor on ``host1``. Then the second command
-   clobbers the monitor on host1 and creates a monitor on ``host2``. Then the
-   third command clobbers the monitor on ``host2`` and creates a monitor
-   on ``host3``. In this scenario, at this point, there is a monitor **only**
-   on ``host3``.)
+   (Each command replaces the placement that the command before it set. Cephadm
+   then deploys a Monitor on ``host3``. It removes the Monitors on the other
+   hosts only if the remaining Monitors can keep quorum.)
 
    To make certain that a monitor is applied to each of these three hosts,
    run a command like this:
@@ -309,7 +332,8 @@ Or in YAML:
         - host2
         - host3
 
-Monitors and other services may require some enhanced network specifications:
+For Monitors, a host entry can also carry the network address and the name of
+the daemon:
 
 .. prompt:: bash #
 
@@ -346,14 +370,15 @@ For example:
     ceph orch host label add host3 mylabel
     ceph orch host ls
 
-.. code-block:: bash
+.. code-block:: console
 
-    HOST   ADDR   LABELS  STATUS
-    host1         mylabel
-    host2         mylabel
-    host3         mylabel
-    host4
-    host5
+    HOST   ADDR       LABELS   STATUS
+    host1  10.1.2.11  mylabel
+    host2  10.1.2.12  mylabel
+    host3  10.1.2.13  mylabel
+    host4  10.1.2.14
+    host5  10.1.2.15
+    5 hosts in cluster
 
 Now, tell cephadm to deploy daemons based on the label by running
 this command:
@@ -446,13 +471,19 @@ To deploy *daemons* on a subset of hosts, specify the count and host names or
 
     ceph orch apply prometheus --placement="2 host1 host2 host3"
 
-If the count is bigger than the amount of hosts, cephadm deploys one per host:
+If the count is bigger than the number of hosts, the result depends on the
+service type. For a service type that does not allow more than one daemon on
+a host, such as ``prometheus``, cephadm deploys one daemon per host:
 
 .. prompt:: bash #
 
     ceph orch apply prometheus --placement="3 host1 host2"
 
 The command immediately above results in two Prometheus daemons.
+
+For ``mds``, ``rgw``, ``nfs`` and ``rbd-mirror`` services, and for ``mgr`` when
+``mgr_standby_modules`` is ``false``, cephadm places more than one daemon on a
+host to reach the count. See :ref:`cephadm_co_location`.
 
 YAML can also be used to specify limits, in the following way:
 
@@ -485,6 +516,7 @@ Cephadm supports the deployment of multiple daemons on the same host:
 .. code-block:: yaml
 
     service_type: rgw
+    service_id: myrgw
     placement:
       label: rgw
       count_per_host: 2
@@ -496,8 +528,6 @@ See also:
 
 * :ref:`cephadm_mgr_co_location`.
 * :ref:`cephadm-rgw-designated_gateways`.
-
-This feature was introduced in Pacific.
 
 
 Algorithm Description
@@ -529,7 +559,7 @@ Consider the following service specification:
 .. code-block:: yaml
 
     service_type: mds
-    service_name: myfs
+    service_id: myfs
     placement:
       count: 3
       label: myfs
@@ -627,7 +657,7 @@ false. Examples:
         - tiebreaker
     extra_container_args:
       # No spaces, always treated as a single argument
-      - argument: "--timout=3000"
+      - argument: "--cpus=2"
       # Splitting explicitly disabled, one single argument
       - argument: "--annotation=com.example.name=my favorite mon"
         split: false
@@ -644,9 +674,7 @@ Mounting Files with Extra Container Arguments
 ---------------------------------------------
 
 A common use case for extra container arguments is to mount additional
-files within the container. Older versions of Ceph did not support spaces
-in arguments and therefore the examples below apply to the widest range
-of Ceph versions.
+files within the container:
 
 .. code-block:: yaml
 
@@ -725,7 +753,7 @@ false. Examples:
         - host1
     extra_entrypoint_args:
       # No spaces, always treated as a single argument
-      - argument: "--timout=30m"
+      - argument: "--timeout=30m"
       # Splitting explicitly disabled, one single argument
       - argument: "--import=/mnt/usb/My Documents"
         split: false
@@ -746,12 +774,17 @@ applying a YAML spec with custom config files specified and having cephadm
 redeploy the daemons for which the config files are specified, these files will
 be mounted within the daemon's container at the specified location.
 
+Cephadm writes each custom config file on the host to
+``/var/lib/ceph/<cluster-fsid>/custom_config_files/<daemon-name>/``, under the
+base name of ``mount_path``, and mounts that file at ``mount_path`` in the
+container. Give each entry of one service a different base name.
+
 .. note::
 
    If the chosen ``mount_path`` lies inside a directory that cephadm already
    deploys as a whole-directory bind mount for that service (for example,
    ``/etc/ganesha/`` for the ``nfs`` service), the custom config file will be
-   silently masked: the file is written to the daemon directory on the host,
+   silently masked: the file is written on the host,
    but the service's directory mount covers it inside the container. Choose a
    ``mount_path`` outside the service's auto-managed directories (for
    example, ``/etc/ganesha-override.conf`` rather than
@@ -804,8 +837,7 @@ For example:
 Removing a Service
 ==================
 
-In order to remove a service including the removal of all daemons of that
-service, run a command of the following form:
+To remove a service and its daemons, run a command of the following form:
 
 .. prompt:: bash #
 
@@ -816,6 +848,10 @@ For example:
 .. prompt:: bash #
 
     ceph orch rm rgw.myrgw
+
+The ``mon`` and ``mgr`` services cannot be removed. Removing an ``osd`` service
+removes only the service specification: the OSD daemons remain, and cephadm
+asks for ``--force`` when the service still has OSDs.
 
 The same command accepts ``--force`` and ``--force-delete-data``. Use
 ``ceph orch rm <service-name> --force --force-delete-data`` when you want
@@ -939,7 +975,7 @@ For example :
 
 .. prompt:: bash #
 
-    ceph orch daemon add mgr --placement=my_host
+    ceph orch daemon add mgr --placement=host1
 
 .. note::
 
@@ -962,7 +998,7 @@ For example:
 
 .. prompt:: bash #
 
-    ceph orch daemon rm mgr.my_host.xyzxyz
+    ceph orch daemon rm mgr.host1.xyzxyz
 
 .. note::
 
