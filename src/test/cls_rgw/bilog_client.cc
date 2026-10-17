@@ -153,13 +153,10 @@ TEST_CASE("Bilog completion retains transport errors and contains malformed repl
         schedule(output, &status);
         complete(0, prefix);
         CHECK(status == -EIO);
-#ifdef TEST_RGW_CLS_DATUM
         CHECK(canonical(output).contents_equal(preserved));
-#endif
     }
 }
 
-#ifdef TEST_RGW_CLS_DATUM
 TEST_CASE("Bilog Datum completion preserves output on allocation failure", "[rgw][cls][datum][bilog]")
 {
     auto output = response();
@@ -170,7 +167,6 @@ TEST_CASE("Bilog Datum completion preserves output on allocation failure", "[rgw
     CHECK(status == -ENOMEM);
     CHECK(canonical(output).contents_equal(preserved));
 }
-#endif
 
 namespace {
 
@@ -240,16 +236,12 @@ TEST_CASE("Bucket list completion contains malformed replies", "[rgw][cls][bucke
         prefix.substr_of(full, 0, size);
         schedule_bucket(output);
         complete(0, prefix);
-#ifdef TEST_RGW_CLS_DATUM
         CHECK(canonical(output).contents_equal(preserved));
-#endif
     }
-#ifdef TEST_RGW_CLS_DATUM
     output = bucket_response();
     schedule_bucket(output);
     complete(0, full, true);
     CHECK(canonical(output).contents_equal(preserved));
-#endif
 }
 
 TEST_CASE("Index stat and timeout clients encode borrowed native arguments", "[rgw][cls][stats]")
@@ -301,11 +293,8 @@ TEST_CASE("Index check client preserves synchronous decode and candidate error c
         bytes prefix;
         prefix.substr_of(full, 0, size);
         CHECK_THROWS_AS(::cls_rgw_bucket_check_index_decode(prefix, output), ::ceph::buffer::error);
-#ifdef TEST_RGW_CLS_DATUM
         CHECK(canonical(output).contents_equal(full));
-#endif
     }
-#ifdef TEST_RGW_CLS_DATUM
     output = expected;
     bool failed = false;
     fail_allocation = true;
@@ -317,7 +306,6 @@ TEST_CASE("Index check client preserves synchronous decode and candidate error c
     fail_allocation = false;
     CHECK(failed);
     CHECK(canonical(output).contents_equal(full));
-#endif
 }
 
 TEST_CASE("Object client builders retain native wire bytes after borrowed inputs change", "[rgw][cls][object]")

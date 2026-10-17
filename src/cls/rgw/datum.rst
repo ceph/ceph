@@ -84,13 +84,18 @@ candidate-publication guarantee. Reset-statistics borrows the incoming buffer
 and retains native handling of the accumulated header and update ordering.
 Native leaf codecs, account key ordering and shared storage helpers stay unchanged.
 
-Native callers remain C++23. With ``WITH_DATUM``, ``DATUM_ENABLE_ZPP`` and
-``WITH_RGW_CLS_DATUM`` enabled, three private object targets provide four
+Native callers remain C++23. RGW CLS requires ``WITH_DATUM`` and
+``DATUM_ENABLE_ZPP``. Three private object targets provide four
 C++26 translation units: bucket-index and OLH bindings in ``cls_rgw_datum``,
 GC bindings in ``cls_rgw_datum_gc``, and user bindings in ``cls_user_datum``.
 Their language requirements and Datum headers do not propagate through the
-client libraries' public interfaces. Disabling the RGW option retains the
-public result interfaces using native codecs.
+client libraries' public interfaces. Datum supplies the RGW-owned CLS wire
+bindings; there is no alternate native implementation switch.
+
+The C++23 adapter declarations provide selected compiled record and container
+bindings. Their template declarations do not make arbitrary instantiations
+available: BI list results provide native-entry list and vector bindings, while
+the lower-level wire profiles also accept independently selected record fields.
 
 Independent client results
 --------------------------

@@ -4,9 +4,7 @@
 #include <errno.h>
 
 #include "cls/user/cls_user_client.h"
-#ifdef WITH_RGW_CLS_DATUM
- #include "cls/user/cls_user_datum.h"
-#endif
+#include "cls/user/cls_user_datum.h"
 #include "include/rados/librados.hpp"
 
 using std::list;
@@ -22,42 +20,19 @@ using namespace cls::user;
 
 void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries, bool add)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto in = ::cls::rgw::user_datum::encode_bulk(entries, add, real_clock::now());
-#else
-  bufferlist in;
-  cls_user_set_buckets_op call;
-  call.entries = entries;
-  call.add = add;
-  call.time = real_clock::now();
-  encode(call, in);
-#endif
   op.exec(method::set_buckets_info, in);
 }
 
 void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto in = ::cls::rgw::user_datum::encode_time(real_clock::now());
-#else
-  bufferlist in;
-  cls_user_complete_stats_sync_op call;
-  call.time = real_clock::now();
-  encode(call, in);
-#endif
   op.exec(method::complete_stats_sync, in);
 }
 
 void cls_user_remove_bucket(librados::ObjectWriteOperation& op, const cls_user_bucket& bucket)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto in = ::cls::rgw::user_datum::encode_bucket(bucket);
-#else
-  bufferlist in;
-  cls_user_remove_bucket_op call;
-  call.bucket = bucket;
-  encode(call, in);
-#endif
   op.exec(method::remove_bucket, in);
 }
 
@@ -100,17 +75,7 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
                           bool *truncated,
                           int *pret)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto inbl = ::cls::rgw::user_datum::encode_bucket_list(in_marker, end_marker, max_entries);
-#else
-  bufferlist inbl;
-  cls_user_list_buckets_op call;
-  call.marker = in_marker;
-  call.end_marker = end_marker;
-  call.max_entries = max_entries;
-
-  encode(call, inbl);
-#endif
 
   op.exec(method::list_buckets, inbl, new ClsUserListCtx(&entries, out_marker, truncated, pret));
 }
@@ -150,40 +115,20 @@ public:
 void cls_user_get_header(librados::ObjectReadOperation& op,
                        cls_user_header *header, int *pret)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto inbl = ::cls::rgw::user_datum::encode_get_header();
-#else
-  bufferlist inbl;
-  cls_user_get_header_op call;
-
-  encode(call, inbl);
-#endif
 
   op.exec(method::get_header, inbl, new ClsUserGetHeaderCtx(header, NULL, pret));
 }
 
 void cls_user_reset_stats(librados::ObjectWriteOperation &op)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto inbl = ::cls::rgw::user_datum::encode_time(real_clock::now());
-#else
-  bufferlist inbl;
-  cls_user_reset_stats_op call;
-  call.time = real_clock::now();
-  encode(call, inbl);
-#endif
   op.exec(method::reset_user_stats, inbl);
 }
 
 int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *ctx)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto in = ::cls::rgw::user_datum::encode_get_header();
-#else
-  bufferlist in, out;
-  cls_user_get_header_op call;
-  encode(call, in);
-#endif
   ObjectReadOperation op;
   op.exec(method::get_header, in, new ClsUserGetHeaderCtx(NULL, ctx, NULL)); /* no need to pass pret, as we'll call ctx->handle_response() with correct error */
   auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
@@ -200,17 +145,7 @@ void cls_user_account_resource_add(librados::ObjectWriteOperation& op,
                                    const cls_user_account_resource& entry,
                                    bool exclusive, uint32_t limit)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto inbl = ::cls::rgw::user_datum::encode_resource_add(entry, exclusive, limit);
-#else
-  cls_user_account_resource_add_op call;
-  call.entry = entry;
-  call.exclusive = exclusive;
-  call.limit = limit;
-
-  bufferlist inbl;
-  encode(call, inbl);
-#endif
   op.exec(method::account_resource_add, inbl);
 }
 
@@ -245,15 +180,7 @@ void cls_user_account_resource_get(librados::ObjectReadOperation& op,
                                    cls_user_account_resource& entry,
                                    int* pret)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto inbl = ::cls::rgw::user_datum::encode_name(name);
-#else
-  cls_user_account_resource_get_op call;
-  call.name = name;
-
-  bufferlist inbl;
-  encode(call, inbl);
-#endif
   op.exec(method::account_resource_get, inbl,
           new ResourceGetCB(&entry, pret));
 }
@@ -261,15 +188,7 @@ void cls_user_account_resource_get(librados::ObjectReadOperation& op,
 void cls_user_account_resource_rm(librados::ObjectWriteOperation& op,
                                   std::string_view name)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto inbl = ::cls::rgw::user_datum::encode_name(name);
-#else
-  cls_user_account_resource_rm_op call;
-  call.name = name;
-
-  bufferlist inbl;
-  encode(call, inbl);
-#endif
   op.exec(method::account_resource_rm, inbl);
 }
 
@@ -317,17 +236,7 @@ void cls_user_account_resource_list(librados::ObjectReadOperation& op,
                                     bool* truncated, std::string* next_marker,
                                     int* pret)
 {
-#ifdef WITH_RGW_CLS_DATUM
   auto inbl = ::cls::rgw::user_datum::encode_resource_list(marker, path_prefix, max_entries);
-#else
-  cls_user_account_resource_list_op call;
-  call.marker = marker;
-  call.path_prefix = path_prefix;
-  call.max_entries = max_entries;
-
-  bufferlist inbl;
-  encode(call, inbl);
-#endif
   op.exec(method::account_resource_list, inbl,
           new ResourceListCB(&entries, truncated, next_marker, pret));
 }

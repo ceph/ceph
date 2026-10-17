@@ -28,17 +28,15 @@ target_include_directories(cls_rgw_olh_native_oracle PRIVATE
   "${CMAKE_CURRENT_LIST_DIR}/../../rgw")
 set_target_properties(cls_rgw_olh_native_oracle PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
-if(TARGET cls_rgw_datum)
-  add_executable(unittest_cls_rgw_olh_wire olh_wire.cc bi_wire_main.cc
-    $<TARGET_OBJECTS:cls_rgw_olh_native_oracle>
-    $<TARGET_OBJECTS:cls_rgw_datum>)
-  target_link_libraries(unittest_cls_rgw_olh_wire PRIVATE
-    cls_rgw_client datum::zpp Catch2::Catch2 ceph-common ${FMT_LIB})
-  target_include_directories(unittest_cls_rgw_olh_wire PRIVATE
-    "${CMAKE_CURRENT_LIST_DIR}/../../rgw")
-  set_target_properties(unittest_cls_rgw_olh_wire PROPERTIES CXX_SCAN_FOR_MODULES OFF)
-  add_test(NAME cls_rgw_olh_wire COMMAND unittest_cls_rgw_olh_wire)
-endif()
+add_executable(unittest_cls_rgw_olh_wire olh_wire.cc bi_wire_main.cc
+  $<TARGET_OBJECTS:cls_rgw_olh_native_oracle>
+  $<TARGET_OBJECTS:cls_rgw_datum>)
+target_link_libraries(unittest_cls_rgw_olh_wire PRIVATE
+  cls_rgw_client datum::zpp Catch2::Catch2 ceph-common ${FMT_LIB})
+target_include_directories(unittest_cls_rgw_olh_wire PRIVATE
+  "${CMAKE_CURRENT_LIST_DIR}/../../rgw")
+set_target_properties(unittest_cls_rgw_olh_wire PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+add_test(NAME cls_rgw_olh_wire COMMAND unittest_cls_rgw_olh_wire)
 
 add_executable(unittest_cls_rgw_olh_client olh_client.cc bi_wire_main.cc
   $<TARGET_OBJECTS:cls_rgw_olh_native_oracle>)

@@ -20,19 +20,17 @@
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_const.h"
-#ifdef WITH_RGW_CLS_DATUM
- #include "cls/rgw/cls_rgw_bi_datum.h"
- #include "cls/rgw/cls_rgw_bilog_datum.h"
- #include "cls/rgw/cls_rgw_bucket_datum.h"
- #include "cls/rgw/cls_rgw_gc_datum.h"
- #include "cls/rgw/cls_rgw_lc_datum.h"
- #include "cls/rgw/cls_rgw_multipart_datum.h"
- #include "cls/rgw/cls_rgw_object_datum.h"
- #include "cls/rgw/cls_rgw_olh_datum.h"
- #include "cls/rgw/cls_rgw_reshard_datum.h"
- #include "cls/rgw/cls_rgw_usage_datum.h"
- #include "cls/rgw/cls_rgw_write_datum.h"
-#endif
+#include "cls/rgw/cls_rgw_bi_datum.h"
+#include "cls/rgw/cls_rgw_bilog_datum.h"
+#include "cls/rgw/cls_rgw_bucket_datum.h"
+#include "cls/rgw/cls_rgw_gc_datum.h"
+#include "cls/rgw/cls_rgw_lc_datum.h"
+#include "cls/rgw/cls_rgw_multipart_datum.h"
+#include "cls/rgw/cls_rgw_object_datum.h"
+#include "cls/rgw/cls_rgw_olh_datum.h"
+#include "cls/rgw/cls_rgw_reshard_datum.h"
+#include "cls/rgw/cls_rgw_usage_datum.h"
+#include "cls/rgw/cls_rgw_write_datum.h"
 #include "common/strtol.h"
 #include "common/escape.h"
 #include "osd/osd_types.h"
@@ -571,11 +569,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   auto iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bucket_datum::request op;
-#else
-  rgw_cls_list_op op;
-#endif
   try {
     decode(op, iter);
   } catch (ceph::buffer::error& err) {
@@ -587,11 +581,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
           __func__, op.start_obj.to_string().c_str(), op.num_entries,
           op.filter_prefix.c_str(), op.delimiter.c_str(), (int)op.list_versions);
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bucket_datum::reply ret;
-#else
-  rgw_cls_list_ret ret;
-#endif
   auto& new_dir = ret.dir;
   auto& name_entry_map = new_dir.m; // map of keys to entries
 
@@ -826,11 +816,7 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bucket_datum::stats_request op;
-#else
-  rgw_cls_bucket_update_stats_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -903,11 +889,7 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bucket_datum::timeout_request op;
-#else
-  rgw_cls_tag_timeout_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -977,11 +959,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::write_datum::prepare_request op;
-#else
-  rgw_cls_obj_prepare_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -1200,11 +1178,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::write_datum::complete_request op;
-#else
-  rgw_cls_obj_complete_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -1860,11 +1834,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   string instance_idx;
 
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::write_datum::link_request op;
-#else
-  rgw_cls_link_olh_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2112,11 +2082,7 @@ static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in
 {
   CLS_LOG(10, "entered %s", __func__);
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::write_datum::refresh_request op;
-#else
-  rgw_cls_refresh_instance_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2186,11 +2152,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   string instance_idx;
 
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::write_datum::unlink_request op;
-#else
-  rgw_cls_unlink_instance_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2379,11 +2341,7 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 try {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::olh_datum::request op;
-#else
-  rgw_cls_read_olh_log_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2400,7 +2358,6 @@ try {
   rgw_bucket_olh_entry olh_data_entry;
   string olh_data_key;
   encode_olh_data_key(op.olh, &olh_data_key);
-#ifdef WITH_RGW_CLS_DATUM
   ::ceph::buffer::list encoded;
   int ret = cls_cxx_map_get_val(hctx, olh_data_key, &encoded);
   if (0 == ret) {
@@ -2417,9 +2374,6 @@ try {
       log_entry("read_index_entry", "existing entry", &olh_data_entry);
     }
   }
-#else
-  int ret = read_index_entry(hctx, olh_data_key, &olh_data_entry);
-#endif
   if (ret < 0 && ret != -ENOENT) {
     CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
     return ret;
@@ -2443,28 +2397,7 @@ try {
     return std::ranges::subrange {lower, upper, static_cast<std::size_t>(count)};
   }();
   const bool truncated = page.end() != log.end();
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::olh_datum::encode_reply(page, op.get_stales, truncated, *out);
-#else
-  rgw_cls_read_olh_log_ret op_ret;
-  op_ret.log.insert(page.begin(), page.end());
-  op_ret.is_truncated = truncated;
-
-  // this is for backward compatibility
-  if (!op.get_stales) {
-    auto iter = op_ret.log.begin();
-    while (iter != op_ret.log.end()) {
-      std::erase_if(iter->second, [](const auto& e) { return e.op == CLS_RGW_OLH_OP_STALE; });
-      if (iter->second.empty()) {
-        iter = op_ret.log.erase(iter);
-      } else {
-        ++iter;
-      }
-    }
-  }
-
-  encode(op_ret, *out);
-#endif
 
   return 0;
 } catch (const std::bad_alloc&) {
@@ -2478,11 +2411,7 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::write_datum::trim_request op;
-#else
-  rgw_cls_trim_olh_log_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2546,11 +2475,7 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::write_datum::clear_request op;
-#else
-  rgw_cls_bucket_clear_olh_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2849,11 +2774,7 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::object_datum::remove_request op;
-#else
-  rgw_cls_obj_remove_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2927,11 +2848,7 @@ static int rgw_obj_store_pg_ver(cls_method_context_t hctx, bufferlist *in, buffe
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::object_datum::version_request op;
-#else
-  rgw_cls_obj_store_pg_ver_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -2956,11 +2873,7 @@ static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in,
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::object_datum::prefix_request op;
-#else
-  rgw_cls_obj_check_attrs_prefix op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3004,11 +2917,7 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::object_datum::mtime_request op;
-#else
-  rgw_cls_obj_check_mtime op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3072,11 +2981,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::get_request op;
-#else
-  rgw_cls_bi_get_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3103,12 +3008,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       return -EINVAL;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::entry entry;
-#else
-  rgw_cls_bi_get_ret op_ret;
-  auto& entry = op_ret.entry;
-#endif
 
   entry.type = op.type;
   entry.idx = idx;
@@ -3119,11 +3019,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       return r;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::encode_get_reply(entry, *out);
-#else
-  encode(op_ret, *out);
-#endif
 
   return 0;
 }
@@ -3132,11 +3028,7 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::entry_put_request op;
-#else
-  rgw_cls_bi_put_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3145,11 +3037,7 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
     return -EINVAL;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   auto& entry = op.item;
-#else
-  auto& entry = op.entry;
-#endif
   if (entry.type == BIIndexType::ReshardDeleted) {
     int r = cls_cxx_map_remove_key(hctx, entry.idx);
     if (r < 0) {
@@ -3167,11 +3055,7 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
 static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::put_request op;
-#else
-  rgw_cls_bi_put_entries_op op;
-#endif
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -3728,11 +3612,7 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
 int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bucket_datum::check_reply ret;
-#else
-  rgw_cls_check_index_ret ret;
-#endif
   int rc = read_bucket_header(hctx, &ret.existing_header);
   if (rc < 0) {
     CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
@@ -3777,11 +3657,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 try {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::request op;
-#else
-  rgw_cls_bi_list_op op;
-#endif
   auto iter = in->cbegin();
   try {
     decode(op, iter);
@@ -3800,11 +3676,7 @@ try {
 	  op.max, max, op.reshardlog);
 
   int ret;
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bi_datum::reply op_ret;
-#else
-  rgw_cls_bi_list_ret op_ret;
-#endif
 
   if (op.reshardlog) {
     ret = reshard_log_list_entries(hctx, op.marker, max,
@@ -4016,11 +3888,7 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bilog_datum::list_request op;
-#else
-  cls_rgw_bi_log_list_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4028,11 +3896,7 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bilog_datum::reply op_ret;
-#else
-  cls_rgw_bi_log_list_ret op_ret;
-#endif
   int ret = bi_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.truncated);
   if (ret < 0)
     return ret;
@@ -4047,11 +3911,7 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::bilog_datum::trim_request op;
-#else
-  cls_rgw_bi_log_trim_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4293,11 +4153,7 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
   CLS_LOG(10, "entered %s", __func__);
 
   auto in_iter = in->cbegin();
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::usage_datum::add_request op;
-#else
-  rgw_cls_usage_log_add_op op;
-#endif
 
   try {
     decode(op, in_iter);
@@ -4533,11 +4389,7 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   CLS_LOG(10, "entered %s", __func__);
 
   auto in_iter = in->cbegin();
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::usage_datum::read_request op;
-#else
-  rgw_cls_usage_log_read_op op;
-#endif
 
   try {
     decode(op, in_iter);
@@ -4546,11 +4398,7 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
     return -EINVAL;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::usage_datum::reply ret_info;
-#else
-  rgw_cls_usage_log_read_ret ret_info;
-#endif
   map<rgw_user_bucket, rgw_usage_log_entry> *usage = &ret_info.usage;
   string iter = op.iter;
 #define MAX_ENTRIES 1000
@@ -4611,11 +4459,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
     return ret;
 
   auto in_iter = in->cbegin();
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::usage_datum::trim_request op;
-#else
-  rgw_cls_usage_log_trim_op op;
-#endif
 
   try {
     decode(op, in_iter);
@@ -4805,11 +4649,7 @@ static int rgw_cls_gc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::set_request op;
-#else
-  cls_rgw_gc_set_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4825,11 +4665,7 @@ static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, buf
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::defer_request op;
-#else
-  cls_rgw_gc_defer_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4927,11 +4763,7 @@ static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::list_request op;
-#else
-  cls_rgw_gc_list_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -4939,11 +4771,7 @@ static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::reply op_ret;
-#else
-  cls_rgw_gc_list_ret op_ret;
-#endif
 #define GC_LIST_ENTRIES_DEFAULT 128
   int ret = gc_list_entries(hctx, op.marker, (op.max ? op.max : GC_LIST_ENTRIES_DEFAULT), op.expired_only,
    op_ret.entries, &op_ret.truncated, op_ret.next_marker);
@@ -4991,11 +4819,7 @@ static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferli
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::remove_request op;
-#else
-  cls_rgw_gc_remove_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5011,11 +4835,7 @@ static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, buffe
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::marker_request op;
-#else
-  cls_rgw_lc_get_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5028,11 +4848,7 @@ static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, buffe
   if (ret < 0)
     return ret;
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::entry_message op_ret {std::move(lc_entry)};
-#else
-  cls_rgw_lc_get_entry_ret op_ret(std::move(lc_entry));
-#endif
   encode(op_ret, *out);
   return 0;
 }
@@ -5043,11 +4859,7 @@ static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::entry_message op;
-#else
-  cls_rgw_lc_set_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5067,11 +4879,7 @@ static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, buffer
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::entry_message op;
-#else
-  cls_rgw_lc_rm_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5087,16 +4895,8 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
 {
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::entry_message op_ret;
-#else
-  cls_rgw_lc_get_next_entry_ret op_ret;
-#endif
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::marker_request op;
-#else
-  cls_rgw_lc_get_next_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5130,11 +4930,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
 				   bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::list_request op;
-#else
-  cls_rgw_lc_list_entries_op op;
-#endif
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
@@ -5143,11 +4939,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::list_reply op_ret {.compat_v = op.compat_v};
-#else
-  cls_rgw_lc_list_entries_ret op_ret(op.compat_v);
-#endif
   map<string, bufferlist> vals;
   string filter_prefix;
   int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, op.max_entries,
@@ -5184,11 +4976,7 @@ static int rgw_cls_lc_put_head(cls_method_context_t hctx, bufferlist *in, buffer
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::head_message op;
-#else
-  cls_rgw_lc_put_head_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5222,11 +5010,7 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
     head.start_date = 0;
     head.marker.clear();
   }
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::lc_datum::head_message op_ret;
-#else
-  cls_rgw_lc_get_head_ret op_ret;
-#endif
   op_ret.head = std::move(head);
   encode(op_ret, *out);
   return 0;
@@ -5235,11 +5019,7 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
 static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::multipart_datum::update_request op;
-#else
-  cls_rgw_mp_upload_part_info_update_op op;
-#endif
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
@@ -5284,11 +5064,7 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::add_request op;
-#else
-  cls_rgw_reshard_add_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5330,11 +5106,7 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::list_request op;
-#else
-  cls_rgw_reshard_list_op op;
-#endif
   auto in_iter = in->cbegin();
   try {
     decode(op, in_iter);
@@ -5342,11 +5114,7 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
     CLS_LOG(1, "ERROR: rgw_cls_reshard_list(): failed to decode entry\n");
     return -EINVAL;
   }
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::reply op_ret;
-#else
-  cls_rgw_reshard_list_ret op_ret;
-#endif
   map<string, bufferlist> vals;
   string filter_prefix;
 #define MAX_RESHARD_LIST_ENTRIES 1000
@@ -5355,11 +5123,9 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, max, &vals, &op_ret.is_truncated);
   if (ret < 0)
     return ret;
-#ifdef WITH_RGW_CLS_DATUM
   if (0 < static_cast<int>(op.max)) {
     op_ret.entries.reserve(vals.size());
   }
-#endif
   int i = 0;
   for (auto it = vals.begin(); i < (int)op.max && it != vals.end(); ++it, ++i) {
     auto& entry = op_ret.entries.emplace_back();
@@ -5380,11 +5146,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::entry_message op;
-#else
-  cls_rgw_reshard_get_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5400,11 +5162,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
     return ret;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::entry_message op_ret;
-#else
-  cls_rgw_reshard_get_ret op_ret;
-#endif
   op_ret.entry = std::move(entry);
   encode(op_ret, *out);
   return 0;
@@ -5415,11 +5173,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   CLS_LOG(10, "entered %s", __func__);
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::remove_request op;
-#else
-  cls_rgw_reshard_remove_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -5451,11 +5205,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
 static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::instance_message op;
-#else
-  cls_rgw_set_bucket_resharding_op op;
-#endif
 
   auto in_iter = in->cbegin();
   try {
@@ -5480,11 +5230,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::empty_request op;
-#else
-  cls_rgw_clear_bucket_resharding_op op;
-#endif
 
   auto in_iter = in->cbegin();
   try {
@@ -5509,11 +5255,7 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
 {
   CLS_LOG(10, "entered %s", __func__);
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::guard_request op;
-#else
-  cls_rgw_guard_bucket_resharding_op op;
-#endif
   try {
     auto in_iter = in->cbegin();
     decode(op, in_iter);
@@ -5536,11 +5278,7 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
 				     bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::empty_request op;
-#else
-  cls_rgw_get_bucket_resharding_op op;
-#endif
 
   auto in_iter = in->cbegin();
   try {
@@ -5557,16 +5295,8 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
     return rc;
   }
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::reshard_datum::instance_message op_ret;
-#else
-  cls_rgw_get_bucket_resharding_ret op_ret;
-#endif
-#ifdef WITH_RGW_CLS_DATUM
   op_ret.entry = header.new_instance;
-#else
-  op_ret.new_instance = header.new_instance;
-#endif
 
   encode(op_ret, *out);
 

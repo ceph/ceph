@@ -14,13 +14,11 @@ target_compile_definitions(unittest_cls_user_module PRIVATE TEST_CLS_RGW_MODULE=
 target_link_libraries(unittest_cls_user_module PRIVATE ${CMAKE_DL_LIBS})
 set_target_properties(unittest_cls_user_module PROPERTIES ENABLE_EXPORTS ON)
 add_dependencies(unittest_cls_user_module cls_user)
-if(TARGET cls_user_datum)
-  add_executable(unittest_cls_user_wire
-    "${user_test_dir}/datum_wire.cc"
-    "${user_test_dir}/../cls_rgw/bi_wire_main.cc")
-  target_link_libraries(unittest_cls_user_wire PRIVATE
-    cls_user_client Catch2::Catch2 ceph-common ${FMT_LIB})
-  set_target_properties(unittest_cls_user_wire PROPERTIES
-    CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
-  add_test(NAME cls_user_wire COMMAND unittest_cls_user_wire)
-endif()
+add_executable(unittest_cls_user_wire
+  "${user_test_dir}/datum_wire.cc"
+  "${user_test_dir}/../cls_rgw/bi_wire_main.cc")
+target_link_libraries(unittest_cls_user_wire PRIVATE
+  cls_user_client Catch2::Catch2 ceph-common ${FMT_LIB})
+set_target_properties(unittest_cls_user_wire PROPERTIES
+  CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+add_test(NAME cls_user_wire COMMAND unittest_cls_user_wire)

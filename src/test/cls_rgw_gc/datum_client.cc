@@ -2,9 +2,7 @@
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 #include "cls/rgw_gc/cls_rgw_gc_ops.h"
 #include "cls/rgw/cls_rgw_ops.h"
-#ifdef TEST_RGW_CLS_DATUM
- #include "cls/rgw_gc/cls_rgw_gc_datum.h"
-#endif
+#include "cls/rgw_gc/cls_rgw_gc_datum.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cerrno>
 #include <limits>
@@ -130,7 +128,6 @@ TEST_CASE("Queued GC capacity continues to use shared queue class and codec", "[
     CHECK(capacity == 8192);
 }
 
-#ifdef TEST_RGW_CLS_DATUM
 TEST_CASE("Queued GC scalar profiles preserve old future frames and reject every prefix atomically", "[rgw][cls][queued-gc]")
 {
     namespace binding = ::cls::rgw::queued_gc_datum;
@@ -178,4 +175,3 @@ TEST_CASE("Queued GC scalar profiles preserve old future frames and reject every
         CHECK(value.num_entries == remove.num_entries);
     }
 }
-#endif

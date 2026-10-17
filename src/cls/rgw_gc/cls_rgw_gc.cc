@@ -14,9 +14,7 @@
 #include "cls/rgw_gc/cls_rgw_gc_const.h"
 #include "cls/queue/cls_queue_src.h"
 
-#ifdef WITH_RGW_CLS_DATUM
- #include "cls_rgw_gc_datum.h"
-#endif
+#include "cls_rgw_gc_datum.h"
 
 #define GC_LIST_DEFAULT_MAX 128
 
@@ -35,11 +33,7 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
 {
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::queued_gc_datum::init_request op;
-#else
-  cls_rgw_gc_queue_init_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -64,11 +58,7 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
 static int cls_rgw_gc_queue_enqueue(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::set_request op;
-#else
-  cls_rgw_gc_set_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -105,11 +95,7 @@ static int cls_rgw_gc_queue_enqueue(cls_method_context_t hctx, bufferlist *in, b
 static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::list_request op;
-#else
-  cls_rgw_gc_list_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -142,11 +128,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   list_op.max = op.max;
   list_op.start_marker = op.marker;
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::reply list_ret;
-#else
-  cls_rgw_gc_list_ret list_ret;
-#endif
   uint32_t num_entries = 0; //Entries excluding the deferred ones
   bool is_truncated = true;
   string next_marker;
@@ -244,11 +226,7 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
 {
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::queued_gc_datum::remove_request op;
-#else
-  cls_rgw_gc_queue_remove_entries_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
@@ -399,11 +377,7 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
   int ret = 0;
   auto in_iter = in->cbegin();
 
-#ifdef WITH_RGW_CLS_DATUM
   ::cls::rgw::gc_datum::set_request op;
-#else
-  cls_rgw_gc_queue_defer_entry_op op;
-#endif
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
