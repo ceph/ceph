@@ -82,27 +82,50 @@ Cephadm continuously monitors the status of all managed certificates, both self-
   configured ``mgr/cephadm/certificate_renewal_threshold_days``, Cephadm issues a
   health warning.
 
-Self-signed certificates are automatically renewed by Cephadm if automation is enabled, but
-user-provided certificates cannot be renewed automatically. In either case, Cephadm alerts
-administrators so they can take timely action. This proactive monitoring helps ensure
+Cephadm renews cephadm-signed certificates itself when automated rotation is
+enabled, and it does not raise a health check for them. It cannot renew
+user-provided certificates. For those, and for cephadm-signed certificates when
+automated rotation is disabled, it raises ``CEPHADM_CERT_WARNING`` when a
+certificate is inside the renewal threshold and ``CEPHADM_CERT_ERROR`` when a
+certificate is invalid or has expired. This proactive monitoring helps ensure
 uninterrupted service operation while giving users control over their certificate policies.
 
 Spec Fields for SSL Configuration
 =================================
 
-All service specs that support SSL/TLS may optionally define the following fields:
+Service specs that support SSL/TLS can define the following fields:
 
 - ``ssl``: Boolean to enable/disable SSL.
-- ``ssl_cert``: Certificate content (for ``inline``) or name (for ``reference``).
-- ``ssl_key``: Key content (for ``inline``) or name (for ``reference``).
-- ``certificate_source``: One of ``inline``, ``reference``, or ``cephadm_signed``.
+- ``ssl_cert``: Certificate content. Used when ``certificate_source`` is
+  ``inline``.
+- ``ssl_key``: Key content. Used when ``certificate_source`` is ``inline``.
+- ``certificate_source``: One of ``inline``, ``reference``, or
+  ``cephadm-signed``. If ``ssl`` is ``true`` and this field is not set,
+  cephadm uses ``inline`` when the spec contains both ``ssl_cert`` and
+  ``ssl_key``, and ``cephadm-signed`` otherwise.
 
-If ``certificate_source`` is ``reference`` and the certificate is missing, users will need
-to upload the certificate by using the following ``certmgr`` command:
+With ``reference``, leave ``ssl_cert`` and ``ssl_key`` out. Cephadm reads the
+certificate and key stored in certmgr under the names
+``<service_type>_ssl_cert`` and ``<service_type>_ssl_key``, with hyphens in the
+service type replaced by underscores, for example ``rgw_ssl_cert`` and
+``mgmt_gateway_ssl_cert``.
+
+The specs of ``grafana``, ``prometheus``, ``alertmanager``, ``node-exporter``
+and ``ceph-exporter`` accept ``ssl`` and ``certificate_source`` only. They
+reject ``ssl_cert`` and ``ssl_key``. Of these, only ``grafana`` can use
+``reference``.
+
+If ``certificate_source`` is ``reference`` and the certificate is missing,
+upload the certificate and its private key with the following ``certmgr``
+command:
 
 .. prompt:: bash #
 
-   ceph orch certmgr cert set --cert-name <cert-name> --service-name <service-name> -i <cert-key-pem-file>
+   ceph orch certmgr cert-key set <service-type> --service-name <service-name> -i <cert-key-pem-file>
+
+For a certificate with host scope, use ``--hostname <host-fqdn>`` in place of
+``--service-name <service-name>``. If the service type has more than one
+certificate, name the certificate with ``--cert-name``.
 
 
 Certificate Scopes
@@ -169,13 +192,15 @@ the certificates/keys managed by certmgr.
 Checking Certificate Status
 ===========================
 
-To check the status and validity of a specific certificate:
+To check the status and validity of all managed certificates:
 
 .. prompt:: bash #
 
    ceph orch certmgr cert check
 
-This command verifies the integrity and expiration status of all managed certificates.
+The command takes no certificate name. It prints one line for each certificate
+that needs manual action, or
+``All certificates are valid. No issues detected.``
 
 Listing Certificate Keys
 ========================
@@ -184,10 +209,12 @@ To list all private keys associated with managed certificates:
 
 .. prompt:: bash #
 
-   ceph orch certmgr key ls [--include-cephadm-signed]
+   ceph orch certmgr key ls [--include-cephadm-generated-keys]
 
 This command shows which keys are currently managed by cephadm. By default, this command omits
-Cephadm-signed keys. To include them, pass the ``--include-cephadm-signed`` argument.
+the keys of cephadm-signed certificates. To include them, pass the
+``--include-cephadm-generated-keys`` argument. The key of the cephadm root CA
+is never listed.
 
 Retrieving a Certificate
 ========================
@@ -198,8 +225,11 @@ To retrieve the content of a specific certificate:
 
    ceph orch certmgr cert get <certificate_name> [--service_name <value>] [--hostname <value>] [--no-exception-when-missing]
 
-Use ``<service-name>`` as listed by ``ceph orch certmgr bindings ls``. For certificates with host or service scope,
+For ``--service_name``, use the service name shown by ``ceph orch ls``, for
+example ``rgw.myzone``. For certificates with host or service scope,
 include the ``--hostname`` or ``--service_name`` arguments as needed.
+``ceph orch certmgr cert ls`` shows the service names and hosts that have a
+certificate stored.
 
 Retrieving a Certificate Key
 ============================
@@ -210,7 +240,7 @@ To retrieve the private key associated with a specific certificate:
 
    ceph orch certmgr key get <key_name> [--service_name <value>] [--hostname <value>] [--no-exception-when-missing]
 
-Replace ``<key-name>`` with the actual certificate name from ``ceph orch certmgr key ls``.
+Replace ``<key_name>`` with a key name from ``ceph orch certmgr key ls``.
 For certificates with host or service scope, include
 the ``--hostname`` or ``--service_name`` arguments as needed.
 
@@ -233,9 +263,10 @@ Supported private key PEM blocks are:
 For ``cert-key set``, the input must contain one unencrypted private key and at
 least one certificate.
 
-Encrypted private keys, multiple private keys in the same input, unsupported
-private key PEM block types, inputs without any ``CERTIFICATE`` block, and
-non-PEM input are rejected.
+``cert-key set`` and ``cert set`` reject encrypted private keys, multiple
+private keys in the same input, unsupported private key PEM block types, inputs
+without any ``CERTIFICATE`` block, and non-PEM input. ``key set`` stores its
+input without checking it.
 
 ``cert set`` accepts certificate PEM only. If the input contains private key
 material, use ``cert-key set`` instead.
@@ -247,10 +278,13 @@ To associate a certificate with a private key:
 
 .. prompt:: bash #
 
-   ceph orch certmgr cert-key set <service-type> [--cert <value>] [--key <value>] [--service_name <value>] [--hostname <value>] [-i <cert-key-path>] [--force]
+   ceph orch certmgr cert-key set <service-type> [--cert <value>] [--key <value>] [--cert-name <value>] [--service_name <value>] [--hostname <value>] [-i <cert-key-path>] [--force]
 
 Use this command to upload or replace an existing certificate/key pair for a certain service.
-Replace ``<service-type>`` with the actual certificate name from ``ceph orch certmgr bindings ls``.
+Replace ``<service-type>`` with a consumer name from
+``ceph orch certmgr bindings ls``, for example ``rgw`` or ``grafana``. If the
+consumer has more than one certificate, name the certificate with
+``--cert-name``.
 The ``-i`` option can be used to specify a PEM file containing one unencrypted
 private key and one or more certificates.
 
@@ -279,6 +313,12 @@ This command allows administrators to provide new private keys for services.
 Removing a Certificate
 ======================
 
+.. warning::
+
+   Cephadm does not check whether a service still uses the certificate. A
+   service that uses it through ``certificate_source: reference`` gets no
+   certificate the next time cephadm deploys or reconfigures it.
+
 To remove an existing certificate:
 
 .. prompt:: bash #
@@ -291,6 +331,12 @@ To remove an existing certificate:
 
 Removing a Private Key
 ======================
+
+.. warning::
+
+   Cephadm does not check whether a service still uses the key. A service that
+   uses it through ``certificate_source: reference`` gets no certificate or key
+   the next time cephadm deploys or reconfigures it.
 
 To remove an existing private key:
 
