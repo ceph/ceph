@@ -64,7 +64,14 @@ function test_ceph_kvstore_tool()
 
   current_kv_nums=`ceph-kvstore-tool  bluestore-kv ${TEMP_DIR} list 2>/dev/null | wc -l`
   test ${origin_kv_nums} -eq ${current_kv_nums}
-} 
+
+  # store-copy cannot create a bluestore-kv store, so it needs a store type
+  expect_false ceph-kvstore-tool bluestore-kv ${TEMP_DIR} store-copy ${TEMP_DIR}/copy-notype 2> ${TEMP_DIR}/store-copy.err
+  grep "cannot create a store of type 'bluestore-kv'" ${TEMP_DIR}/store-copy.err
+  ceph-kvstore-tool bluestore-kv ${TEMP_DIR} store-copy ${TEMP_DIR}/copy 128 rocksdb
+  copied_kv_nums=`ceph-kvstore-tool rocksdb ${TEMP_DIR}/copy list 2>/dev/null | wc -l`
+  test ${origin_kv_nums} -eq ${copied_kv_nums}
+}
 
 test_ceph_kvstore_tool
 
