@@ -341,8 +341,8 @@ TEST(OobPlacement, ChecksumPlanRanges)
 
 TEST(OobPlacement, ChecksumPlanKeepsTheCrc32cCache)
 {
-  // checksumming a plan leaves the CRC-32C of each of the payload's
-  // buffers cached, for a later digest of the same payload
+  // a write's data digest, taken after the pull checksummed its payload,
+  // finds the CRC-32C of each of its buffers cached
   std::mt19937_64 rng(3);
   const auto payload = random_payload(1 << 20, 100000, rng);
   ASSERT_LT(1u, payload.get_num_buffers());

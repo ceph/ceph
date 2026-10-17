@@ -3785,6 +3785,15 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
   if (!honor_pool_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
+  if (MOSDOp::wants_pull_records(op->ops, op->rdma_delivery)) {
+    // the primary keeps what it pulled for a write in the op's return
+    // data, which the reply then carries too. The PG log keeps it with
+    // the write either way, and the reply to a resend it answers as a
+    // dup reports the pull from it. Not when another op returns
+    // anything, which the flag would change
+    flags |= CEPH_OSD_FLAG_RETURNVEC;
+  }
+
   op->target.paused = false;
   op->stamp = ceph::coarse_mono_clock::now();
 

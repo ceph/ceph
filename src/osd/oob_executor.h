@@ -71,6 +71,38 @@ public:
   /// window's memory before execute_plan() returned
   virtual bool delivery_complete() const { return false; }
 
+  /// true when this executor can pull from the token's window: see
+  /// execute_pull()
+  virtual bool pulls(const std::string& token) const { return false; }
+
+  /**
+   * Execute the plan the other way: read every triple's bytes out of
+   * the token's window, at the token's base plus triple.client_ofs,
+   * into a buffer of total bytes at triple.local_ofs, and hand that
+   * buffer to *out. The plan must cover the buffer exactly. All or
+   * nothing: returns total only if every triple completed, and *out is
+   * untouched otherwise. Blocks until the transfer completes, or until
+   * the budget runs out. A read still in flight then can only land in
+   * the executor's own memory, which it does not reuse until the read
+   * completes.
+   *
+   * This is how an OSD takes the payload of a write out of client
+   * memory (delivery_t::FLAG_PULL). *started says whether any read was
+   * handed to the transport.
+   */
+  virtual ssize_t execute_pull(const std::string& key,
+			       const std::string& token,
+			       const ceph::osd::oob::placement_plan& plan,
+			       uint64_t total,
+			       ceph::buffer::list* out,
+			       std::chrono::milliseconds budget,
+			       bool* started) {
+    if (started) {
+      *started = false;
+    }
+    return -EOPNOTSUPP;
+  }
+
   /// a transfer thread with nothing to run: reclaim what timed-out plans
   /// left on resources this thread owns (cuObject: its channel)
   virtual void idle() {}

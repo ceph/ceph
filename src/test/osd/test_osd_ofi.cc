@@ -136,7 +136,8 @@ TEST(OSDOfi, RegistersWindowsOnlyWhenLending)
 
 namespace {
 
-/// a client that lends a window of its memory to the executor
+/// a client that lends a window of data that peers may read, as an
+/// OSD-direct PUT's client does
 struct client_t {
   std::unique_ptr<ceph::ofi::Endpoint> ep;
   std::vector<char> mem;
@@ -151,6 +152,7 @@ client_t lend(size_t n, unsigned access, bool progress = true)
   cfg.provider = "tcp";
   cfg.node = "127.0.0.1";
   cfg.progress_thread = progress;  // tcp serves remote reads only when polled
+  cfg.reads = true;
   std::string err;
   c.ep = ceph::ofi::Endpoint::open(cfg, &err);
   if (!c.ep) {
@@ -192,6 +194,69 @@ client_t stalled(OSDOfi& ofi, size_t n)
 }
 
 } // anonymous namespace
+
+// An OSD-direct PUT: the primary pulls a write's payload out of the
+// client's window, through its staging, into a buffer of its own.
+TEST(OSDOfi, PullsAWritePayload)
+{
+  if (!tcp_available()) {
+    GTEST_SKIP() << "tcp is not available";
+  }
+  auto a = arena(1);
+  OSDOfi ofi(g_ceph_context, nullptr);
+  ASSERT_EQ(0, ofi.init("tcp", loopback(), false, a.get()));
+  auto c = lend(WINDOW, ceph::ofi::Endpoint::remote_read);
+  ASSERT_TRUE(c.ep);
+  ASSERT_FALSE(c.token.empty()) << c.ep->last_error();
+  ASSERT_TRUE(ofi.pulls(c.token));
+
+  // the second half of the window, as a stripe at offset WINDOW / 2
+  const uint64_t n = WINDOW / 2;
+  const auto plan = ceph::osd::oob::linear_plan(WINDOW / 2, n);
+  ceph::buffer::list out;
+  bool started = false;
+  ASSERT_EQ(ssize_t(n), ofi.execute_pull("obj", c.token, plan, n, &out,
+					 std::chrono::seconds(5), &started));
+  EXPECT_TRUE(started);
+  ASSERT_EQ(n, out.length());
+  EXPECT_EQ(0, memcmp(out.c_str(), c.mem.data() + WINDOW / 2, n));
+
+  // a window lent for writes only cannot be read, and a failed pull
+  // hands nothing out
+  auto wo = lend(WINDOW, ceph::ofi::Endpoint::remote_write);
+  ASSERT_FALSE(wo.token.empty());
+  ceph::buffer::list none;
+  none.append("untouched");
+  EXPECT_LT(ofi.execute_pull("obj", wo.token, ceph::osd::oob::linear_plan(0, n),
+			     n, &none, std::chrono::seconds(2), nullptr), 0);
+  EXPECT_EQ("untouched", none.to_str());
+  // the endpoint is whole, and the executor goes on
+  EXPECT_TRUE(ofi.is_available());
+
+  // the staging buffer went back to the arena
+  EXPECT_EQ(0u, a->stats().in_use);
+
+  // a payload larger than the arena's largest buffer is not one it can
+  // pull
+  const size_t over = ceph::oob::Arena::MAX + 4096;
+  auto large = lend(over, ceph::ofi::Endpoint::remote_read);
+  ASSERT_FALSE(large.token.empty());
+  ceph::buffer::list big;
+  EXPECT_EQ(-E2BIG, ofi.execute_pull(
+	      "obj", large.token, ceph::osd::oob::linear_plan(0, over),
+	      over, &big, std::chrono::seconds(2), nullptr));
+
+  // nor is one larger than a buffer can hold: it is refused before any
+  // buffer is taken or any read is sent, whatever the window
+  const uint64_t huge = (1ull << 32) + 4096;
+  bool started_huge = true;
+  EXPECT_EQ(-E2BIG, ofi.execute_pull(
+	      "obj", c.token, ceph::osd::oob::linear_plan(0, huge),
+	      huge, &big, std::chrono::seconds(2), &started_huge));
+  EXPECT_FALSE(started_huge);
+  EXPECT_EQ(0u, big.length());
+  EXPECT_TRUE(ofi.is_available());
+}
 
 // The executor reports the bytes its plan placed, not the length of the
 // data it was handed: the caller counts an op placed only when the two

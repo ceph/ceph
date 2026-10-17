@@ -58,6 +58,7 @@ struct fake_job : xfer_job {
   mono_clock::time_point post;
   uint64_t bytes;
   std::function<void()> body;
+  bool pull = false;
   bool here = false;
   /// runs as the job is destroyed, before it is counted
   std::function<void()> on_destroy;
@@ -74,6 +75,7 @@ struct fake_job : xfer_job {
 
   uint64_t pinned_bytes() const override { return bytes; }
   mono_clock::time_point post_by() const override { return post; }
+  bool pulls() const override { return pull; }
   bool inline_only() const override { return here; }
   void run() override {
     t->ran_on = std::this_thread::get_id();
@@ -741,12 +743,12 @@ TEST(OobXfer, DebugDelays)
   x->stop();
 }
 
-// dump_oob_transfers lists the running jobs with their ages, and the
-// service times each push
+// dump_oob_transfers lists the running jobs with their ages; a pull is
+// timed apart from a push
 TEST(OobXfer, DumpAndLatencies)
 {
   gate_t gate;
-  tally_t tg;
+  tally_t tg, tp;
   auto x = service(1);
   auto g = job(&tg, 10s, 4096, gate.body());
   ASSERT_EQ(0, x->submit(g));
@@ -774,8 +776,14 @@ TEST(OobXfer, DumpAndLatencies)
     EXPECT_EQ("4096", jp.find_obj("pinned_bytes")->get_data());
   }
   gate.open();
+  auto p = std::make_unique<fake_job>(&tp, mono_clock::now() + 10s);
+  p->pull = true;
+  std::unique_ptr<xfer_job> pj = std::move(p);
+  ASSERT_EQ(0, x->submit(pj));
+  wait_done(tp);
   x->stop();
   EXPECT_EQ(1u, x->get_logger()->get_tavg_ns(l_oob_xfer_push_lat).second);
+  EXPECT_EQ(1u, x->get_logger()->get_tavg_ns(l_oob_xfer_pull_lat).second);
 }
 
 namespace {

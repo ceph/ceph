@@ -81,6 +81,7 @@ class Arena;
 }
 namespace ceph::osd::oob {
 class Transfers;
+class pulls_out;
 }
 class OSDMap;
 class MLog;
@@ -154,11 +155,19 @@ public:
   published_oob_executors() const;
   /// the executor that serves a delivery token's transport, or null
   OSDOobExecutor* oob_executor_for(const std::string& token) const;
+  /// the executor that can pull a write's payload out of a token's
+  /// window (delivery_t::FLAG_PULL), or null
+  OSDOobExecutor* oob_puller_for(const std::string& token) const;
   /// true when any out-of-band transport is up
   bool has_oob_executor() const;
   /// the executor lending windows for EC gathers (oob_cluster_transport),
   /// or null
   OSDOobExecutor* oob_gather_executor() const;
+  /// the pulled writes whose pulls run on a transfer thread, by request,
+  /// for every PG: an attempt of a request that a PG dropped may still
+  /// pull, and a later one waits for it. Before oob_xfer, whose jobs
+  /// leave it as they settle
+  std::unique_ptr<ceph::osd::oob::pulls_out> oob_pulls_out;
   /// the threads that run the executors' transfers instead of the op
   /// threads (osd_oob_transfer_threads), built with the executors; null
   /// when none started
@@ -182,6 +191,17 @@ public:
   /// registered. shutdown() ends them here; fast_shutdown() does not,
   /// since the process exits right after
   void shutdown_oob();
+  /// the pulls of reqid, a pulled write, settled, and a hold of head in
+  /// PG pgid waits for them (the request's, or a later attempt's of it):
+  /// queue the kick that runs the hold's ops again (PGOobPullKick), from
+  /// the transfer thread that settled them, at the request's scheduler
+  /// cost, for owner, its client. The kick holds no reference to the
+  /// request, so that a request the OSD drops goes away meanwhile, and
+  /// abandons its pulls (OpRequest::_unregistered()). Nothing once
+  /// stopping, since the PGs drop their holds then
+  void queue_oob_pull_kick(spg_t pgid, epoch_t epoch,
+			   const osd_reqid_t& reqid, int cost, uint64_t owner,
+			   const hobject_t& head);
   /// the reply of a read of head in PG pgid, whose pushes a transfer
   /// thread ran, left, and the PG fenced head with it: queue the kick that
   /// runs the ops that wait in the fence again (PGOobReadKick), from the

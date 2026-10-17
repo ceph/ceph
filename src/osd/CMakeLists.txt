@@ -72,6 +72,10 @@ endif()
 if(WITH_OOB_OFI)
   list(APPEND osd_srcs osd_ofi.cc)
 endif()
+if(WITH_RADOSGW_CUOBJ OR WITH_OOB_OFI)
+  # the pulled write, which only an OSD with a transport serves
+  list(APPEND osd_srcs oob_pull.cc)
+endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL

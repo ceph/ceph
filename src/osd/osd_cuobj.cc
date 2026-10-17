@@ -457,6 +457,23 @@ ssize_t OSDCuObj::execute_plan(const std::string& key,
 		  budget, started);
 }
 
+bool OSDCuObj::pulls(const std::string& token) const
+{
+  return handles(token);
+}
+
+ssize_t OSDCuObj::execute_pull(const std::string& key,
+			       const std::string& token,
+			       const ceph::osd::oob::placement_plan& plan,
+			       uint64_t total,
+			       ceph::buffer::list* out,
+			       std::chrono::milliseconds budget,
+			       bool* started)
+{
+  return run_plan(true, key, token, nullptr, total, plan, out, budget,
+		  started);
+}
+
 ssize_t OSDCuObj::run_plan(bool pull, const std::string& key,
 			   const std::string& token,
 			   const ceph::buffer::list* data, uint64_t local_len,

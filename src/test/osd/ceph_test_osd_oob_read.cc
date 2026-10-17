@@ -2,8 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
- * Reads with out-of-band delivery over the libfabric tcp provider, for
- * qa/standalone/osd/osd-oob-async.sh.
+ * Reads and pulled writes with out-of-band delivery over the libfabric
+ * tcp provider, for qa/standalone/osd/osd-oob-async.sh.
  *
  *   ceph_test_osd_oob_read [-c conf] write <pool> <size> <oid>...
  *     writes each object: size bytes of a pattern its name picks
@@ -32,10 +32,37 @@
  *       others: n=N failed=N max_ms=N total_ms=N before_reads=1
  *
  *     before_reads is 1 when the others were done before any read was.
+ *   ceph_test_osd_oob_read [-c conf] put <pool> <size> [--others N]
+ *     [--then-write] [--call] [--wait-file F] <oid>...
+ *     writes each object at once, each a write_full of size bytes of its
+ *     pattern that the primary pulls out of a window of its own on
+ *     127.0.0.1 (OSD-direct PUT), asking for their CRC-64/NVME (another
+ *     pattern than write's); --call
+ *     puts a CALL of hello.say_hello ahead of each. With --then-write it
+ *     then writes 4 KiB inline at the start of the first object, and
+ *     reads it whole, ordered after the writes; with --wait-file it
+ *     prints "pulls sent" and waits for F to exist first. --others as
+ *     for get, while the writes are out. Prints its address, and one line
+ *     for each write:
+ *
+ *       client <addr>
+ *       put <oid>: r=0 bytes=N flags=0x0 crc=ok ver=N prev_ver=N ms=N
+ *       write <oid>: r=0 ms=N
+ *       read <oid>: r=0 data=ok ms=N
+ *       check <oid>: data=ok
+ *
+ *     ver is the object's version the write made, prev_ver the one
+ *     before it (0 when there was none); check reads every object back
+ *     once all is done. A write that the client resent, and whose resend
+ *     found it done, reads bytes=0 flags=0x0 crc=dup when the PG log
+ *     kept no record of its pull (one larger than
+ *     osd_max_write_op_reply_len): the OSD answered the resend as a dup,
+ *     and pulled nothing for it.
  *
  * Ceph options come from CEPH_ARGS, and the conf from -c or CEPH_CONF.
- * Exits 0 when every read returned its object, and every other op
- * succeeded, the write behind included.
+ * Exits 0 when every read returned its object, every write was pulled
+ * or found done, and every other op succeeded, the write behind a read
+ * included.
  */
 
 #include <algorithm>
@@ -48,13 +75,18 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include <sys/stat.h>
+
 #include "include/rados/librados.hpp"
+#include "cls/hello/cls_hello_ops.h"
 #include "common/crc64nvme.h"
 #include "common/ofi_rma.h"
 
 using librados::ObjectReadOperation;
+using librados::ObjectWriteOperation;
 using res_t = ObjectReadOperation::rdma_delivery_result;
 using clock_type = std::chrono::steady_clock;
 
@@ -66,7 +98,10 @@ void usage()
 	       "usage: ceph_test_osd_oob_read [-c conf] write <pool> <size> "
 	       "<oid>...\n"
 	       "       ceph_test_osd_oob_read [-c conf] get <pool> <size> "
-	       "[--others N] [--write-behind] [--balance] <oid>...\n");
+	       "[--others N] [--write-behind] [--balance] <oid>...\n"
+	       "       ceph_test_osd_oob_read [-c conf] put <pool> <size> "
+	       "[--others N] [--then-write] [--call] [--wait-file F] "
+	       "<oid>...\n");
 }
 
 /// size bytes that only oid's name picks
@@ -305,6 +340,209 @@ int do_get(librados::IoCtx& io, size_t size, unsigned others,
   return ok ? 0 : 1;
 }
 
+struct put_t {
+  std::string oid;
+  std::string expect;
+  uint64_t base = 0;  ///< its window's offset
+  ObjectWriteOperation op;
+  res_t res;
+  librados::AioCompletion* c = nullptr;
+  uint64_t prev_ver = 0;
+  long ms = 0;
+};
+
+struct put_opts {
+  unsigned others = 0;
+  bool then_write = false;
+  bool call = false;
+  std::string wait_file;
+};
+
+int do_put(librados::Rados& rados, librados::IoCtx& io, size_t size,
+	   const put_opts& o, const std::vector<std::string>& oids)
+{
+  std::printf("client %s\n", rados.get_addrs().c_str());
+  std::fflush(stdout);
+  const size_t slot = (std::max<size_t>(size, 1) + 4095) & ~size_t(4095);
+  const size_t len = slot * oids.size();
+  void* mem = nullptr;
+  if (posix_memalign(&mem, 4096, len)) {
+    return 1;
+  }
+  // freed after the endpoint closed
+  std::unique_ptr<char, decltype(&std::free)> window(
+    static_cast<char*>(mem), &std::free);
+  std::memset(window.get(), 0, len);
+  ofi_rma::config_t cfg;
+  cfg.provider = "tcp";
+  cfg.node = "127.0.0.1";
+  // the primaries read the window while this thread waits; tcp serves
+  // remote reads only when polled
+  cfg.progress_thread = true;
+  cfg.reads = true;
+  std::string err;
+  auto ep = ofi_rma::Endpoint::open(cfg, &err);
+  if (!ep) {
+    std::fprintf(stderr, "endpoint: %s\n", err.c_str());
+    return 1;
+  }
+  std::vector<std::unique_ptr<put_t>> puts;
+  for (size_t i = 0; i < oids.size(); i++) {
+    auto pt = std::make_unique<put_t>();
+    pt->oid = oids[i];
+    // not what a write of the object wrote
+    pt->expect = pattern("put:" + oids[i], size);
+    pt->base = i * slot;
+    std::memcpy(window.get() + pt->base, pt->expect.data(), size);
+    // the version before the write, if the object is there
+    uint64_t psize;
+    time_t mtime;
+    if (io.stat(pt->oid, &psize, &mtime) == 0) {
+      pt->prev_ver = io.get_last_version();
+    }
+    puts.push_back(std::move(pt));
+  }
+  ofi_rma::Endpoint::window_t w;
+  if (ep->register_window(window.get(), len, ofi_rma::memory_t{},
+			  ofi_rma::Endpoint::remote_read, &w) != 0) {
+    std::fprintf(stderr, "register: %s\n", ep->last_error().c_str());
+    return 1;
+  }
+  const std::string token = ep->window_token(w, 0, len);
+
+  const auto start = clock_type::now();
+  for (auto& pt : puts) {
+    if (o.call) {
+      // an erasure-coded pool with EC optimizations runs a request with
+      // a CALL in a coroutine
+      librados::bufferlist in;
+      in.append("pull");
+      pt->op.exec(cls::hello::method::say_hello, in);
+    }
+    pt->op.write_full_pulled(size, token, pt->base,
+			     ObjectWriteOperation::RDMA_DELIVERY_WANT_CRC64,
+			     &pt->res);
+    pt->c = librados::Rados::aio_create_completion();
+    if (int r = io.aio_operate(pt->oid, pt->c, &pt->op); r < 0) {
+      std::fprintf(stderr, "aio_operate %s: %s\n", pt->oid.c_str(),
+		   strerror(-r));
+      return 1;
+    }
+  }
+  if (!o.wait_file.empty()) {
+    std::printf("pulls sent\n");
+    std::fflush(stdout);
+    struct stat st;
+    while (::stat(o.wait_file.c_str(), &st) != 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+  }
+
+  // a write inline and a read, ordered after the writes, of the first
+  // object: each waits for the pulled write before it
+  const std::string& first = puts[0]->oid;
+  librados::bufferlist small;
+  small.append(pattern("small", 4096));
+  librados::AioCompletion* wc = nullptr;
+  librados::AioCompletion* rc = nullptr;
+  ObjectReadOperation rop;
+  librados::bufferlist rbl;
+  int rval = 0;
+  if (o.then_write) {
+    wc = librados::Rados::aio_create_completion();
+    if (int r = io.aio_write(first, wc, small, small.length(), 0); r < 0) {
+      std::fprintf(stderr, "aio_write %s: %s\n", first.c_str(), strerror(-r));
+      return 1;
+    }
+    rop.read(0, size, &rbl, &rval);
+    rc = librados::Rados::aio_create_completion();
+    if (int r = io.aio_operate(first, rc, &rop,
+			       librados::OPERATION_ORDER_READS_WRITES,
+			       nullptr); r < 0) {
+      std::fprintf(stderr, "aio_operate %s: %s\n", first.c_str(),
+		   strerror(-r));
+      return 1;
+    }
+  }
+
+  // other ops of the same PG, while the writes are out
+  unsigned failed = 0;
+  long max_ms = 0;
+  bool before_puts = true;
+  if (o.others) {
+    run_others(io, first, o.others, &failed, &max_ms);
+    for (const auto& pt : puts) {
+      if (pt->c->is_complete()) {
+	before_puts = false;
+      }
+    }
+  }
+  const long others_ms = ms_since(start);
+
+  bool ok = failed == 0;
+  for (auto& pt : puts) {
+    pt->c->wait_for_complete();
+    pt->ms = ms_since(start);
+  }
+  for (auto& pt : puts) {
+    const int r = pt->c->get_return_value();
+    const uint64_t ver = pt->c->get_version64();
+    pt->c->release();
+    // a resend that finds the write done is answered as a dup: without
+    // the record of the earlier pull, no bytes, and not declined, since
+    // that pull read the window; the check below reads the data
+    const bool dup = r == 0 && pt->res.bytes == 0 && pt->res.flags == 0;
+    bool crc = r == 0 && pt->res.bytes == size;
+    if (crc && (pt->res.flags &
+		ObjectWriteOperation::rdma_delivery_result::CRC64_VALID)) {
+      crc = pt->res.crc64 ==
+	ceph::crc64nvme(0, pt->expect.data(), pt->expect.size());
+    }
+    ok = ok && r == 0 && (crc || dup);
+    std::printf("put %s: r=%d bytes=%llu flags=0x%x crc=%s ver=%llu "
+		"prev_ver=%llu ms=%ld\n",
+		pt->oid.c_str(), r, (unsigned long long)pt->res.bytes,
+		pt->res.flags, crc ? "ok" : dup ? "dup" : "MISMATCH",
+		(unsigned long long)ver, (unsigned long long)pt->prev_ver,
+		pt->ms);
+  }
+  std::string want_first = puts[0]->expect;
+  if (o.then_write) {
+    wc->wait_for_complete();
+    const int wr = wc->get_return_value();
+    wc->release();
+    std::printf("write %s: r=%d ms=%ld\n", first.c_str(), wr,
+		ms_since(start));
+    rc->wait_for_complete();
+    const int rr = rc->get_return_value();
+    rc->release();
+    // the read follows both writes: the pulled object, with the start
+    // the inline write wrote
+    want_first.replace(0, std::min<size_t>(4096, size),
+		       small.to_str().substr(0, std::min<size_t>(4096, size)));
+    const bool data = rr == 0 && rval == 0 && rbl.to_str() == want_first;
+    std::printf("read %s: r=%d data=%s ms=%ld\n", first.c_str(), rr,
+		data ? "ok" : "MISMATCH", ms_since(start));
+    ok = ok && wr == 0 && data;
+  }
+  for (auto& pt : puts) {
+    librados::bufferlist bl;
+    const int r = io.read(pt->oid, bl, size, 0);
+    const std::string& want = &pt == &puts[0] ? want_first : pt->expect;
+    const bool data = r == int(size) && bl.to_str() == want;
+    std::printf("check %s: data=%s\n", pt->oid.c_str(),
+		data ? "ok" : "MISMATCH");
+    ok = ok && data;
+  }
+  if (o.others) {
+    std::printf("others: n=%u failed=%u max_ms=%ld total_ms=%ld "
+		"before_puts=%d\n",
+		o.others, failed, max_ms, others_ms, before_puts ? 1 : 0);
+  }
+  std::fflush(stdout);
+  return ok ? 0 : 1;
+}
+
 } // anonymous namespace
 
 int main(int argc, char** argv)
@@ -325,6 +563,7 @@ int main(int argc, char** argv)
   unsigned others = 0;
   bool write_behind = false;
   bool balance = false;
+  put_opts po;
   std::vector<std::string> oids;
   for (size_t i = 3; i < args.size(); i++) {
     if (args[i] == "--others" && i + 1 < args.size()) {
@@ -333,11 +572,18 @@ int main(int argc, char** argv)
       write_behind = true;
     } else if (args[i] == "--balance") {
       balance = true;
+    } else if (args[i] == "--then-write") {
+      po.then_write = true;
+    } else if (args[i] == "--call") {
+      po.call = true;
+    } else if (args[i] == "--wait-file" && i + 1 < args.size()) {
+      po.wait_file = args[++i];
     } else {
       oids.push_back(args[i]);
     }
   }
-  if (oids.empty() || (cmd != "write" && cmd != "get")) {
+  po.others = others;
+  if (oids.empty() || (cmd != "write" && cmd != "get" && cmd != "put")) {
     usage();
     return 2;
   }
@@ -365,8 +611,10 @@ int main(int argc, char** argv)
   int ret;
   if (cmd == "write") {
     ret = do_write(io, size, oids);
-  } else {
+  } else if (cmd == "get") {
     ret = do_get(io, size, others, write_behind, balance, oids);
+  } else {
+    ret = do_put(rados, io, size, po, oids);
   }
   io.close();
   rados.shutdown();

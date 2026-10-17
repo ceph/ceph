@@ -17,8 +17,10 @@ namespace ceph::rdma { struct oob_result_t; }
  *
  * A plan is a correspondence, not a direction: each triple says
  * "local bytes [local_ofs, +len) correspond to client window offset
- * client_ofs". A push (execute_plan()) RDMA-writes local reply data
- * into the client window. Direction belongs to the executor, not to
+ * client_ofs". The executors consume plans in both directions: a push
+ * (execute_plan()) RDMA-writes local reply data into the client
+ * window, and a pull (execute_pull()) RDMA-reads a write's payload out
+ * of it into local memory. Direction belongs to the executor, not to
  * the plan.
  *
  * The builders are pure functions so the interleave math can be
@@ -37,8 +39,8 @@ struct placement_triple {
 
 using placement_plan = std::vector<placement_triple>;
 
-/// the bytes a plan moves: the sum of its triples' lengths. A push is
-/// placed only when this is its payload's length
+/// the bytes a plan moves: the sum of its triples' lengths. A push or a
+/// pull is placed only when this is its payload's length
 uint64_t plan_bytes(const placement_plan& plan);
 
 /// The whole local extent corresponds to one contiguous range
@@ -107,7 +109,7 @@ placement_plan sparse_plan(uint64_t base_offset, uint64_t ro_off,
  * payload order; with the flags that say so. A plan of one triple is
  * one contiguous logical extent, and its result is FLAG_COMBINABLE too.
  * Nothing when neither is wanted. The read push reports the checksums
- * of what it placed so.
+ * of what it placed so, and the pull those of what it took.
  */
 void checksum_plan(const ceph::buffer::list& payload,
 		   const placement_plan& plan, bool want64, bool want32c,

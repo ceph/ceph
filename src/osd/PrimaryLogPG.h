@@ -1344,6 +1344,14 @@ protected:
     );
 
   int prepare_transaction(OpContext *ctx);
+  /// the snap context that a write of m runs with (execute_ctx()): the
+  /// pool's in pool snaps mode, unless m enforces its own
+  SnapContext write_snapc(const MOSDOp *m);
+  /// what becomes of the write of ctx when it adds an object or bytes to
+  /// a full pool (prepare_transaction()): 0 to go on (an MDS, or
+  /// FULL_FORCE), -EDQUOT or -ENOSPC to fail it (FULL_TRY), or -EAGAIN
+  /// to drop it, as the client should not have sent it
+  int write_to_full_pool(const OpContext *ctx);
   std::list<std::pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
 #ifdef HAVE_OSD_OOB_DELIVERY
@@ -1394,6 +1402,85 @@ protected:
 		   std::vector<OSDOp>&& rops,
 		   std::vector<ceph::rdma::oob_result_t>&& oob,
 		   std::vector<ceph::osd::oob::read_push>&& pushes);
+  /**
+   * Take the payload of each write that carries a pull descriptor
+   * (delivery_t::FLAG_PULL) out of the client's window, into the op's
+   * indata, before the request runs. The write then runs as if the
+   * client had sent the bytes: an erasure-coded one is encoded, and its
+   * shards go to their OSDs. Records what was pulled in the request
+   * (OpRequest::oob_pulled), for the reply. Every pull of the request
+   * is checked before any starts, and a run of the request after they
+   * started pulls nothing (ceph::osd::oob::pull_payloads()). Returns 0,
+   * or a negative errno that fails the whole request, with nothing
+   * written, or ceph::osd::oob::PULLS_PARKED when the pulls run on a
+   * transfer thread: the caller then parks the request
+   * (park_for_oob_pull()).
+   */
+  int pull_oob_payloads(OpContext *ctx);
+  /**
+   * Before the first run of a request pulls anything: the checks that
+   * execute_ctx() and prepare_transaction() would fail the request in,
+   * whatever its payloads, so that a request bound to fail reads nothing
+   * of client memory. 0 to go on, a negative errno to fail it with, or
+   * -EAGAIN to drop it, as prepare_transaction() drops a write to a full
+   * pool. The errno is the one the request would fail with, except for
+   * a write that an erasure-coded pool refuses as no append: -EINVAL,
+   * not the -EOPNOTSUPP on which the client of a pull sends its payloads
+   * inline. Those that depend on the ops of the request run only for a
+   * request of creates, allocation hints and writes, whose effects it
+   * can tell in advance, and stop at the first op whose failure the
+   * request allows (CEPH_OSD_OP_FLAG_FAILOK); the request runs every
+   * check again after its pull. When an op of the request fails,
+   * *failed_op says which.
+   */
+  int check_pulled_write(OpContext *ctx, std::optional<size_t> *failed_op);
+  /// fail the request of ctx with r, which check_pulled_write() found
+  /// that op failed_op of it fails with, as execute_ctx() fails a write
+  /// whose op failed (record_write_error()), its descriptors declined
+  void fail_pulled_write(OpContext *ctx, size_t failed_op, int r);
+
+  /**
+   * A pulled write that waits for its pulls on a transfer thread, and
+   * the client ops on its object that came after it: each waits here
+   * until the pulls settled and the transfer thread kicked the PG
+   * (oob_pull_kick()). A hold has ops and the pulls they wait for only:
+   * no object context, no lock of the object and no OpContext, so that
+   * nothing of it outlives an interval change, which requeues or drops
+   * its ops as it does the other ops that wait.
+   */
+  struct oob_pull_hold {
+    OpRequestRef owner;  ///< the pulled write
+    /// what the owner waits for: its pulls, or those of an earlier
+    /// attempt of its request that a PG of the OSD dropped
+    std::shared_ptr<ceph::osd::oob::pull_set> pulls;
+    std::list<OpRequestRef> waiters;
+    utime_t since;  ///< when the owner parked
+  };
+  /// the holds, by the head of their object
+  std::map<hobject_t, oob_pull_hold> oob_pull_holds;
+  /**
+   * The checks at the top of do_op(), before every list an op can wait
+   * in and every check that can answer it. A run of a pulled write whose
+   * pulls are still out waits for them: until they settled its client
+   * may not reuse the window, so nothing may answer it. So does a pulled
+   * write while the pulls of an earlier attempt of its request are out
+   * on this OSD (pulls_out). Any other client op on an object a pulled
+   * write waits on waits behind it, so that it reaches every later list
+   * behind it too. Returns true when op waits.
+   */
+  bool maybe_wait_for_oob_pull(OpRequestRef& op);
+  /// op waits for pulls in the hold of head: its owner, or one of the
+  /// ops behind it when another op holds the object
+  void hold_for_oob_pull(OpRequestRef op, const hobject_t& head,
+			 std::shared_ptr<ceph::osd::oob::pull_set> pulls);
+  /// the pull step parked ctx's request: hold its object, and let go of
+  /// the object's lock and of ctx
+  void park_for_oob_pull(OpContext *ctx, const hobject_t& head);
+  /// requeue (is_primary) or drop the ops of every hold, and clear them;
+  /// a dropped request's pulls that did not start never will, once it
+  /// goes away (OpRequest::_unregistered())
+  void release_oob_pull_holds(bool requeue);
+  void dump_oob_holds(ceph::Formatter *f) const;
   /**
    * The objects whose reads handed their pushes off, and the client ops
    * that wait for the replies of those reads
@@ -1672,6 +1759,10 @@ public:
   void stop_coroutine();
   void do_op_impl(OpRequestRef op);
   void do_op(OpRequestRef& op);
+#ifdef HAVE_OSD_OOB_DELIVERY
+  void oob_pull_kick(const osd_reqid_t& reqid,
+		     const hobject_t& head) override;
+#endif
   void on_coroutine_complete();
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r,

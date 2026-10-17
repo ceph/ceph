@@ -196,6 +196,16 @@ void PGRecoveryContext::run(
 }
 
 #ifdef HAVE_OSD_OOB_DELIVERY
+void PGOobPullKick::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->oob_pull_kick(reqid, head);
+  pg->unlock();
+}
+
 void PGOobReadKick::run(
   OSD *osd,
   OSDShard *sdata,

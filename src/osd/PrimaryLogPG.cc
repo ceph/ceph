@@ -67,6 +67,7 @@
 #ifdef HAVE_OSD_OOB_DELIVERY
 #include "oob_executor.h"
 #include "osd/oob_placement.h"
+#include "osd/oob_pull.h"
 #include "osd/oob_read_delivery.h"
 #endif
 #include "osd/oob_xfer.h"
@@ -1093,6 +1094,7 @@ void PrimaryLogPG::do_command(
     f->close_section();
 
 #ifdef HAVE_OSD_OOB_DELIVERY
+    dump_oob_holds(f.get());
     dump_oob_read_fences(f.get());
 #endif
 
@@ -1956,12 +1958,7 @@ void PrimaryLogPG::do_request(
     }
     switch (msg_type) {
     case CEPH_MSG_OSD_OP:
-      // verify client features
-      if ((pool.info.has_tiers() || pool.info.is_tier()) &&
-	  !op->has_feature(CEPH_FEATURE_OSD_CACHEPOOL)) {
-	osd->reply_op_error(op, -EOPNOTSUPP);
-	return;
-      }
+      // do_op() verifies the client's features
       do_op(op);
       break;
     case CEPH_MSG_OSD_BACKOFF:
@@ -2224,12 +2221,29 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       return;
     }
 
+    // the message counts the bytes its writes pull (get_pulled_len())
+    // only when the request is flagged as a write, as every client flags
+    // one that writes. A request that is not cannot pull, or the checks
+    // of its pulled bytes would not hold it
+    if (m->has_pulls() && !m->has_flag(CEPH_OSD_FLAG_WRITE)) {
+      dout(4) << __func__ << ": pulled writes in a request not flagged as "
+	      << "a write " << *m << dendl;
+      osd->reply_op_error(op, -EINVAL);
+      return;
+    }
+
     // too big?
+    // a payload the primary pulls out of client memory counts as if it
+    // came inline
+    const uint64_t max_write = cct->_conf->osd_max_write_size << 20;
+    const uint64_t pulled = m->get_pulled_len();
     if (cct->_conf->osd_max_write_size &&
-        m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
+        (m->get_data_len() > max_write ||
+         pulled > max_write - m->get_data_len())) {
       // journal can't hold commit!
       derr << "do_op msg data len " << m->get_data_len()
-           << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
+           << " pulled " << pulled
+           << " > osd_max_write_size " << max_write
            << " on " << *m << dendl;
       osd->reply_op_error(op, -OSD_WRITETOOBIG);
       return;
@@ -2602,6 +2616,45 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   op->mark_started();
 
+#ifdef HAVE_OSD_OOB_DELIVERY
+  if (m->has_rdma_delivery() && op->may_write() && !op->oob_pull &&
+      m->has_pulls()) {
+    // a request bound to fail whatever its payloads fails before it
+    // reads any of them
+    std::optional<size_t> failed_op;
+    if (const int r = check_pulled_write(ctx, &failed_op); r == -EAGAIN) {
+      dout(20) << __func__ << " full, dropping a pulled write (bad client)"
+	       << dendl;
+      close_op_ctx(ctx);
+      return;
+    } else if (r < 0 && failed_op) {
+      dout(10) << __func__ << " " << *m << " would fail with "
+	       << cpp_strerror(r) << " in op " << *failed_op
+	       << ", pulling nothing" << dendl;
+      fail_pulled_write(ctx, *failed_op, r);
+      return;
+    } else if (r < 0) {
+      dout(10) << __func__ << " " << *m << " would fail with "
+	       << cpp_strerror(r) << ", pulling nothing" << dendl;
+      reply_ctx(ctx, r);
+      return;
+    }
+  }
+  if (m->has_rdma_delivery() && op->may_write()) {
+    // a write whose payload is in client memory: take it now, holding
+    // the object's lock, so that the request runs with its data
+    const int r = pull_oob_payloads(ctx);
+    if (r == ceph::osd::oob::PULLS_PARKED) {
+      // or wait for it, holding nothing of the object but its hold
+      park_for_oob_pull(ctx, head);
+      return;
+    }
+    if (r < 0) {
+      reply_ctx(ctx, r);
+      return;
+    }
+  }
+#else
   if (op->may_write() && m->has_pulls()) {
     // built without a transport, this osd cannot pull a write's payload:
     // fail it as an osd whose transports cannot, not for its missing data.
@@ -2610,6 +2663,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     reply_ctx(ctx, -EOPNOTSUPP);
     return;
   }
+#endif
 
   execute_ctx(ctx);
   utime_t prepare_latency = ceph_clock_now();
@@ -2643,12 +2697,22 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
 #ifdef HAVE_OSD_OOB_DELIVERY
   // Before anything else that can make the op wait or answer it: an op
-  // checked later could enter a list ahead of the op it should follow
-  // (maybe_wait_for_oob_reads())
-  if (maybe_wait_for_oob_reads(op)) {
+  // checked later could enter a list ahead of the pulled write it should
+  // follow, or answer a request whose pulls still read its window
+  // (maybe_wait_for_oob_pull()), or enter one ahead of an op that waits
+  // for the replies of the reads before it (maybe_wait_for_oob_reads())
+  if (maybe_wait_for_oob_pull(op) || maybe_wait_for_oob_reads(op)) {
     return;
   }
 #endif
+
+  // verify client features; after the wait above, since no reply may
+  // leave while a pull of the request still reads the client's window
+  if ((pool.info.has_tiers() || pool.info.is_tier()) &&
+      !op->has_feature(CEPH_FEATURE_OSD_CACHEPOOL)) {
+    osd->reply_op_error(op, -EOPNOTSUPP);
+    return;
+  }
 
   if (coro_op_in_flight) {
     dout(20) << __func__ << ": coroutine op in flight, queuing " << op << dendl;
@@ -3150,10 +3214,16 @@ void PrimaryLogPG::do_cache_redirect(OpRequestRef op)
   if (m->has_rdma_delivery()) {
     // nothing of the request runs here, as for an error reply: each op
     // that carries a descriptor is declined, so that the client need not
-    // fence its window before it sends the request to the base pool
+    // fence its window before it sends the request to the base pool. A
+    // pull that an earlier run of the request started is not
     const auto& deliveries = m->get_rdma_deliveries();
     std::vector<ceph::rdma::oob_result_t> oob(deliveries.size());
+#ifdef HAVE_OSD_OOB_DELIVERY
+    ceph::osd::oob::op_error_results(deliveries, {}, -ENOENT, false,
+				     op->oob_pull.get(), oob);
+#else
     ceph::osd::oob::decline_all(deliveries, oob);
+#endif
     reply->set_oob_results(std::move(oob));
   }
   dout(10) << "sending redirect to pool " << pool.info.tier_of << " for op "
@@ -3461,9 +3531,11 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
   if (m->has_pulls()) {
     // A proxied write carries the request's ops, but neither the
     // payloads that this OSD would pull out of client memory nor their
-    // descriptors: the base OSD would run it without its data, and a
-    // WRITEFULL of no bytes would empty the object. Fail it as an OSD
-    // that cannot pull, and the client sends the payloads inline
+    // descriptors: the base OSD would fail it for its missing data. The
+    // cache tier and the manifest come before the pull step, so nothing
+    // was pulled, unless an earlier run of the request did, which the
+    // reply then says (reply_op_error()): fail it as an OSD that cannot
+    // pull, and the client sends the payloads inline
     dout(10) << __func__ << " " << *m << ": not proxying a pulled write"
 	     << dendl;
     osd->reply_op_error(op, -EOPNOTSUPP);
@@ -4411,16 +4483,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 
   if (op->may_write() || op->may_cache()) {
     // snap
-    if (!(m->has_flag(CEPH_OSD_FLAG_ENFORCE_SNAPC)) &&
-	pool.info.is_pool_snaps_mode()) {
-      // use pool's snapc
-      ctx->snapc = pool.snapc;
-    } else {
-      // client specified snapc
-      ctx->snapc.seq = m->get_snap_seq();
-      ctx->snapc.snaps = m->get_snaps();
-      filter_snapc(ctx->snapc.snaps);
-    }
+    ctx->snapc = write_snapc(m);
     if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
 	ctx->snapc.seq < obc->ssc->snapset.seq) {
       dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
@@ -4515,6 +4578,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 			       ignore_out_data);
   dout(20) << __func__ << " alloc reply " << ctx->reply
 	   << " result " << result << dendl;
+#ifdef HAVE_OSD_OOB_DELIVERY
+  if (result >= 0 && !op->oob_pulled.empty()) {
+    // what the primary pulled for the writes: byte counts and checksums
+    auto pulled = op->oob_pulled;
+    ctx->reply->set_oob_results(std::move(pulled));
+  }
+#endif
 
   // read or error?
   if ((ctx->op_t->empty() || result < 0) && !ctx->update_log_only) {
@@ -9346,6 +9416,41 @@ hobject_t PrimaryLogPG::get_temp_recovery_object(
   return hoid;
 }
 
+SnapContext PrimaryLogPG::write_snapc(const MOSDOp *m)
+{
+  SnapContext snapc;
+  if (!(m->has_flag(CEPH_OSD_FLAG_ENFORCE_SNAPC)) &&
+      pool.info.is_pool_snaps_mode()) {
+    // use pool's snapc
+    snapc = pool.snapc;
+  } else {
+    // client specified snapc
+    snapc.seq = m->get_snap_seq();
+    snapc.snaps = m->get_snaps();
+    filter_snapc(snapc.snaps);
+  }
+  return snapc;
+}
+
+int PrimaryLogPG::write_to_full_pool(const OpContext *ctx)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
+      m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
+    dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
+	     << dendl;
+    return 0;
+  }
+  if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+    // they tried, they failed.
+    dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
+    return pool.info.has_flag(pg_pool_t::FLAG_FULL_QUOTA) ? -EDQUOT : -ENOSPC;
+  }
+  // drop request
+  dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
+  return -EAGAIN;
+}
+
 int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 {
   ceph_assert(!ctx->ops->empty());
@@ -9395,19 +9500,8 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   if ((ctx->delta_stats.num_bytes > 0 ||
        ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
       pool.info.has_flag(pg_pool_t::FLAG_FULL)) {
-    auto m = ctx->op->get_req<MOSDOp>();
-    if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
-	m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
-      dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
-	       << dendl;
-    } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
-      // they tried, they failed.
-      dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
-      return pool.info.has_flag(pg_pool_t::FLAG_FULL_QUOTA) ? -EDQUOT : -ENOSPC;
-    } else {
-      // drop request
-      dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
-      return -EAGAIN;
+    if (const int r = write_to_full_pool(ctx); r < 0) {
+      return r;
     }
   }
 
@@ -9517,6 +9611,18 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
     dout(20) << __func__ << " op_returns " << ctx->log.back().op_returns
 	     << dendl;
   }
+#ifdef HAVE_OSD_OOB_DELIVERY
+  else if (ctx->op && ctx->op->oob_pull) {
+    // no return data for a request without RETURNVEC, but the records of
+    // its pulls, from which the reply to a resend that the PG answers as
+    // a dup reports them
+    ceph::osd::oob::keep_pull_records(
+      ctx->op->get_req<MOSDOp>()->get_rdma_deliveries(), *ctx->ops,
+      ctx->log.back().op_returns);
+    dout(20) << __func__ << " pull records " << ctx->log.back().op_returns
+	     << dendl;
+  }
+#endif
 
   ctx->log.back().clean_regions = ctx->clean_regions;
   dout(20) << __func__ << " object " << soid <<  " marks clean_regions " << ctx->log.back().clean_regions << dendl;
@@ -9849,6 +9955,370 @@ void PrimaryLogPG::dump_oob_read_fences(ceph::Formatter *f) const
 }
 #endif // HAVE_OSD_OOB_DELIVERY
 
+#ifdef HAVE_OSD_OOB_DELIVERY
+int PrimaryLogPG::pull_oob_payloads(OpContext *ctx)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  ceph::osd::oob::pull_env env;
+  env.cct = cct;
+  env.xfer = osd->oob_transfers();
+  env.puller_for = [osd = osd](const std::string& token) {
+    return osd->oob_puller_for(token);
+  };
+  env.client_throttle = [m] {
+    const auto& con = m->get_connection();
+    return con->get_messenger()->get_policy(
+      con->get_peer_type()).throttler_bytes;
+  };
+  env.max_reply = cct->_conf->osd_max_write_op_reply_len;
+  env.lease = pool.info.get_rdma_delivery_lease();
+  env.drain = pool.info.get_rdma_delivery_drain();
+  env.runs_inline = [osd = osd](const OSDOobExecutor* e) {
+    return osd->oob_runs_inline(e);
+  };
+  // a coroutine's request does not park: it runs its pulls on its op
+  // thread, and the coroutine holds the PG meanwhile
+  env.here = coro_op_in_flight && ctx->op == active_coro_op;
+  env.target.pgid = info.pgid;
+  env.target.head = m->get_hobj().get_head();
+  env.target.epoch = get_osdmap_epoch();
+  // the kick holds nothing of the request, so that a request that the
+  // OSD drops while its pulls run goes away, and abandons those that
+  // did not start (OpRequest::_unregistered())
+  env.kick = [osd = osd, reqid = m->get_reqid(), cost = m->get_cost(),
+	      owner = m->get_source().num()](
+    const ceph::osd::oob::kick_target& t) {
+    osd->queue_oob_pull_kick(t.pgid, t.epoch, reqid, cost, owner, t.head);
+  };
+  env.out = osd->oob_pulls_out.get();
+  return ceph::osd::oob::pull_payloads(env, *ctx->op, *ctx->ops);
+}
+
+int PrimaryLogPG::check_pulled_write(OpContext *ctx,
+				     std::optional<size_t> *failed_op)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  const ObjectState& obs = ctx->obc->obs;
+  // the snap context execute_ctx() takes, and its checks
+  const SnapContext snapc = write_snapc(m);
+  if (m->has_flag(CEPH_OSD_FLAG_ORDERSNAP) &&
+      snapc.seq < ctx->obc->ssc->snapset.seq) {
+    return -EOLDSNAPC;
+  }
+  if (!snapc.is_valid()) {
+    return -EINVAL;
+  }
+  // What the ops would do, in order, as do_osd_ops() runs them: the
+  // first that fails decides the errno. Only for ops whose effects are
+  // known before they run; with any other, a truncate sequence that
+  // could cut a write short, or an op whose failure the request allows,
+  // nothing more is checked here
+  if (obs.oi.is_whiteout() || obs.oi.truncate_seq) {
+    return 0;
+  }
+  const auto& deliveries = m->get_rdma_deliveries();
+  const uint64_t max_size = *osd->osd_max_object_size;
+  bool exists = obs.exists;
+  uint64_t size = exists ? obs.oi.size : 0;
+  for (size_t i = 0; i < m->ops.size(); i++) {
+    const ceph_osd_op& op = m->ops[i].op;
+    const bool pulled = i < deliveries.size() && deliveries[i].is_pull();
+    const uint64_t off = op.extent.offset;
+    const uint64_t len = op.extent.length;
+    // the op fails, as do_osd_ops() would fail it
+    auto op_fails = [&](int r) {
+      *failed_op = i;
+      return r;
+    };
+    if (op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
+      // do_osd_ops() goes on past a failure of this op, and the request
+      // can succeed whatever it does: neither its effects nor those of
+      // the ops after it are known in advance
+      return 0;
+    }
+    switch (op.op) {
+    case CEPH_OSD_OP_CREATE:
+      if (m->ops[i].indata.length() ||
+	  (exists && (op.flags & CEPH_OSD_OP_FLAG_EXCL))) {
+	return 0;
+      }
+      exists = true;
+      break;
+    case CEPH_OSD_OP_SETALLOCHINT:
+      exists = true;
+      break;
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
+      if (op.extent.truncate_seq &&
+	  !(op.extent.truncate_seq == 1 &&
+	    op.extent.truncate_size == (-1ULL))) {
+	return 0;
+      }
+      if (!pulled && len != m->ops[i].indata.length()) {
+	return 0;
+      }
+      if (op.op == CEPH_OSD_OP_WRITEFULL) {
+	if (int r = check_offset_and_length(0, len, max_size, get_dpp());
+	    r < 0) {
+	  return op_fails(r);
+	}
+	size = len;
+      } else {
+	if (pool.info.requires_aligned_append() &&
+	    (off % pool.info.required_alignment() != 0 || off != size)) {
+	  // An erasure-coded pool without overwrites only appends. The op
+	  // fails with EOPNOTSUPP when it runs, but from a request that
+	  // pulls, EOPNOTSUPP tells the client that the OSD could not pull,
+	  // and to send the payloads inline, only for the write to fail the
+	  // same way again: EINVAL says that the request itself is wrong,
+	  // as for a pulled op that is no write (ceph::osd::oob)
+	  return op_fails(-EINVAL);
+	}
+	if (int r = check_offset_and_length(off, len, max_size, get_dpp());
+	    r < 0) {
+	  return op_fails(r);
+	}
+	if (len || off > size) {
+	  size = std::max(size, off + len);
+	}
+      }
+      exists = true;
+      break;
+    default:
+      return 0;
+    }
+  }
+  // as prepare_transaction() checks for full, once the ops succeeded
+  const bool grows = (exists && !obs.exists) ||
+    size > (obs.exists ? obs.oi.size : 0);
+  if (grows && pool.info.has_flag(pg_pool_t::FLAG_FULL)) {
+    return write_to_full_pool(ctx);
+  }
+  return 0;
+}
+
+void PrimaryLogPG::fail_pulled_write(OpContext *ctx, size_t failed_op, int r)
+{
+  OpRequestRef op = ctx->op;
+  auto m = op->get_req<MOSDOp>();
+  // as execute_ctx() answers a write whose ops failed: the op's result,
+  // and an error entry in the PG log, so that a resend finds the result
+  // as a dup, and the reply once that entry committed, behind the
+  // entries before it
+  (*ctx->ops)[failed_op].rval = r;
+  MOSDOpReply *reply = new MOSDOpReply(m, r, get_osdmap_epoch(), 0, false);
+  reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+  // nothing of the request read the client's windows
+  std::vector<ceph::rdma::oob_result_t> oob(m->get_rdma_deliveries().size());
+  ceph::osd::oob::decline_all(m->get_rdma_deliveries(), oob);
+  reply->set_oob_results(std::move(oob));
+  record_write_error(op, ctx->obc->obs.oi.soid, reply, r, ctx);
+  close_op_ctx(ctx);
+}
+
+bool PrimaryLogPG::maybe_wait_for_oob_pull(OpRequestRef& op)
+{
+  auto m = op->get_req<MOSDOp>();
+  // every client op comes here: one that has no pulls, of its own or of
+  // an earlier attempt, on a PG without holds, goes on at once
+  const bool own = op->oob_pull && !op->oob_pull->consumed();
+  const bool pulls = !op->oob_pull && m->has_pulls();
+  if (!own && !pulls && oob_pull_holds.empty()) {
+    return false;
+  }
+  const hobject_t head = m->get_hobj().get_head();
+  auto target = [&] {
+    ceph::osd::oob::kick_target t;
+    t.pgid = info.pgid;
+    t.head = head;
+    t.epoch = get_osdmap_epoch();
+    return t;
+  };
+  if (own) {
+    const auto& set = op->oob_pull;
+    // A run of a pulled write after its pulls started: the kick ran it
+    // again, or an interval change did. Until they settled, a read of
+    // the client's window may still be posted, and any check further on
+    // may answer the request, after which the client may reuse the
+    // window. So it waits for them, before any such check. A run whose
+    // pulls settled goes on, as the oldest op on its object
+    if (!set->park(op.get(), target())) {
+      return false;
+    }
+    hold_for_oob_pull(op, head, set);
+    if (const auto& hold = oob_pull_holds[head]; hold.owner == op) {
+      dout(10) << __func__ << " " << *m << " waits for its pulls" << dendl;
+    } else {
+      dout(10) << __func__ << " " << *m << " waits for its pulls, behind "
+	       << *hold.owner->get_req() << dendl;
+    }
+    return true;
+  }
+  if (pulls) {
+    // A pulled write that has not pulled, while the pulls of an earlier
+    // attempt of its request still run on a transfer thread of the OSD.
+    // That attempt waits for them in a hold, or a PG dropped it (an
+    // interval change, a split, a reset session) while its reads of the
+    // client's window may still be posted. This attempt waits for them
+    // too: until they settled nothing pulls the window again, nor
+    // answers the request. Then it pulls the window itself, unless it
+    // finds the write done
+    if (auto earlier = osd->oob_pulls_out->find(op->get_reqid());
+	earlier && ceph::osd::oob::wait_for_earlier(*op, earlier, target())) {
+      hold_for_oob_pull(op, head, std::move(earlier));
+      if (const auto& hold = oob_pull_holds[head]; hold.owner == op) {
+	dout(10) << __func__ << " " << *m << " waits for the pulls of an "
+		 << "earlier attempt" << dendl;
+      } else {
+	dout(10) << __func__ << " " << *m << " waits for the pulls of an "
+		 << "earlier attempt, behind " << *hold.owner->get_req()
+		 << dendl;
+      }
+      return true;
+    }
+  }
+  // Two kinds pass, as they pass the object's other blocks: the ops of a
+  // cache tier's flush, which deliver nothing out of band, and pg ops,
+  // which do_pg_op() runs whatever object they name. A pg op is told by
+  // its ops, as do_op_impl() routes it, not by the flag the client sets:
+  // a pulled write that passed would park in a hold that is not its own
+  if (oob_pull_holds.empty() ||
+      (m->has_flag(CEPH_OSD_FLAG_FLUSH) && !m->has_rdma_delivery()) ||
+      std::any_of(m->ops.begin(), m->ops.end(), [](const OSDOp& o) {
+	return ceph_osd_op_type_pg(o.op.op);
+      })) {
+    return false;
+  }
+  // Any other op on an object a pulled write waits on waits behind it,
+  // whatever it is. Checked here, it reaches every later list behind the
+  // pulled write too: a list it entered first, the scrub's or the one of
+  // degraded objects (which scrub and backfill can start on the object
+  // while the write holds no lock of it), would let it run first
+  auto p = oob_pull_holds.find(head);
+  if (p == oob_pull_holds.end() || p->second.owner == op) {
+    return false;
+  }
+  dout(20) << __func__ << " " << *m << " waits behind "
+	   << *p->second.owner->get_req() << dendl;
+  p->second.waiters.push_back(op);
+  op->mark_delayed("waiting for oob pull");
+  return true;
+}
+
+void PrimaryLogPG::hold_for_oob_pull(
+  OpRequestRef op, const hobject_t& head,
+  std::shared_ptr<ceph::osd::oob::pull_set> pulls)
+{
+  auto [p, created] = oob_pull_holds.try_emplace(head);
+  if (created) {
+    p->second.owner = op;
+    p->second.pulls = std::move(pulls);
+    p->second.since = ceph_clock_now();
+  } else {
+    // another pulled write waits on the object: behind it, and it
+    // kicks this one with its waiters; the kick of what this one waits
+    // for, if that settles first, finds the hold waiting for more. An op
+    // in a hold does not run, so it never finds its own
+    ceph_assert(p->second.owner != op);
+    p->second.waiters.push_back(op);
+  }
+  op->mark_delayed("waiting for oob pull");
+}
+
+void PrimaryLogPG::park_for_oob_pull(OpContext *ctx, const hobject_t& head)
+{
+  OpRequestRef op = ctx->op;
+  // a client op on the object waits at the top of do_op() while a hold
+  // is here, so this run normally found none; if it did, it waits behind
+  // the write that holds the object, as it would have there
+  hold_for_oob_pull(op, head, op->oob_pull);
+  if (const auto& hold = oob_pull_holds[head]; hold.owner == op) {
+    dout(10) << __func__ << " " << *op->get_req()
+	     << " waits for its pulls on a transfer thread" << dendl;
+  } else {
+    dout(10) << __func__ << " " << *op->get_req()
+	     << " waits for its pulls on a transfer thread, behind "
+	     << *hold.owner->get_req() << dendl;
+  }
+  // the ops this one's lock held run again, and wait in the hold
+  close_op_ctx(ctx);
+}
+
+void PrimaryLogPG::oob_pull_kick(const osd_reqid_t& reqid,
+				 const hobject_t& head)
+{
+  // reqid names the pulls that settled; whose they are does not matter:
+  // a hold whose pulls settled ends, whichever kick finds it first
+  auto p = oob_pull_holds.find(head);
+  if (p == oob_pull_holds.end() || !p->second.pulls->settled()) {
+    // an interval change requeued or dropped the hold since, and a
+    // requeued op went on, or waits again with its own kick to come; or
+    // the hold waits for other pulls, whose kick is to come
+    dout(10) << __func__ << " " << reqid << ": no hold of " << head
+	     << " waits for pulls that settled, ignoring" << dendl;
+    return;
+  }
+  // the op ahead of the ops that waited behind it, in one call, which
+  // keeps their order whether they go back to the queue or wait for
+  // the PG to become readable
+  const bool own = p->second.pulls == p->second.owner->oob_pull;
+  std::list<OpRequestRef> ls;
+  ls.push_back(std::move(p->second.owner));
+  ls.splice(ls.end(), p->second.waiters);
+  dout(10) << __func__ << " " << *ls.front()->get_req()
+	   << (own ? " pulled" : " waited for an earlier attempt's pulls")
+	   << ", requeuing it and " << (ls.size() - 1)
+	   << " ops behind it after "
+	   << (ceph_clock_now() - p->second.since) << dendl;
+  oob_pull_holds.erase(p);
+  requeue_ops(ls);
+}
+
+void PrimaryLogPG::release_oob_pull_holds(bool requeue)
+{
+  for (auto& [head, hold] : oob_pull_holds) {
+    std::list<OpRequestRef> ls;
+    ls.push_back(std::move(hold.owner));
+    ls.splice(ls.end(), hold.waiters);
+    dout(10) << __func__ << " " << head << ": "
+	     << (requeue ? "requeuing " : "dropping ") << ls.size()
+	     << " ops" << dendl;
+    if (requeue) {
+      // an op whose pulls are still out waits for them again, at the
+      // top of do_op(), and its kick goes where it waits then
+      requeue_ops(ls);
+    }
+    // else no run will answer them: the client sends them again, to the
+    // PG's primary. Each request that goes away with them abandons its
+    // own pulls (OpRequest::_unregistered()), and leaves those of
+    // another attempt of its request that it waits for, which may still
+    // serve a PG of this OSD
+  }
+  oob_pull_holds.clear();
+}
+
+void PrimaryLogPG::dump_oob_holds(ceph::Formatter *f) const
+{
+  const utime_t now = ceph_clock_now();
+  f->open_array_section("oob_pull_holds");
+  for (const auto& [head, hold] : oob_pull_holds) {
+    f->open_object_section("hold");
+    f->dump_stream("object") << head;
+    f->dump_stream("owner") << hold.owner->get_reqid();
+    f->dump_bool("own_pulls", hold.pulls == hold.owner->oob_pull);
+    f->dump_bool("settled", hold.pulls->settled());
+    f->dump_float("age", now - hold.since);
+    f->open_array_section("waiters");
+    for (const auto& w : hold.waiters) {
+      f->dump_stream("reqid") << w->get_reqid();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+}
+#endif // HAVE_OSD_OOB_DELIVERY
+
 void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 {
   auto m = ctx->op->get_req<MOSDOp>();
@@ -9898,6 +10368,13 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
       // a failed read, or an OSD without a transport (or built without
       // one), starts no transfer
       ceph::osd::oob::decline_all(m->get_rdma_deliveries(), oob);
+#ifdef HAVE_OSD_OOB_DELIVERY
+      if (ctx->op->oob_pull) {
+	// but a write may fail after its pull read the client's window: an
+	// invalid snap context, or a FULL_TRY write to a full pool
+	ctx->op->oob_pull->clear_declined(oob);
+      }
+#endif
     }
   }
 #ifdef HAVE_OSD_OOB_DELIVERY
@@ -13752,6 +14229,16 @@ void PrimaryLogPG::on_flushed()
     while (object_contexts.get_next(i.first, &i)) {
       derr << __func__ << ": object " << i.first << " obc still alive" << dendl;
     }
+#ifdef HAVE_OSD_OOB_DELIVERY
+    // on_change() let go of them, and no client op ran since
+    for (const auto& [head, hold] : oob_pull_holds) {
+      derr << __func__ << ": object " << head << " oob pull hold still held"
+	   << dendl;
+    }
+#ifndef NDEBUG
+    ceph_assert(oob_pull_holds.empty());
+#endif
+#endif
     ceph_assert(object_contexts.empty());
   }
 }
@@ -13823,6 +14310,7 @@ void PrimaryLogPG::on_shutdown()
 
   clear_async_reads();
 #ifdef HAVE_OSD_OOB_DELIVERY
+  release_oob_pull_holds(false);
   // no op runs here again; a kick that comes finds no fence
   oob_read_fences->clear();
 #endif
@@ -14016,11 +14504,14 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   objects_blocked_on_cache_full.clear();
 
 #ifdef HAVE_OSD_OOB_DELIVERY
+  // the pulled writes that wait for their pulls, and the ops behind them;
+  // the reads in progress came before them
+  release_oob_pull_holds(is_primary());
   // the ops that wait for the replies of reads whose pushes may still run;
-  // the reads in progress came before them. A primary keeps the fences,
-  // and an op that runs again waits again while such a reply is out. Any
-  // other drops them with their ops, which the client sends again to the
-  // primary, after the reads it sent before them
+  // the reads in progress came before them too. A primary keeps the
+  // fences, and an op that runs again waits again while such a reply is
+  // out. Any other drops them with their ops, which the client sends
+  // again to the primary, after the reads it sent before them
   if (is_primary()) {
     auto ls = oob_read_fences->take_waiters();
     requeue_ops(ls);

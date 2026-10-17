@@ -42,6 +42,11 @@ struct location_t;
  * meant for an earlier gather, a provider's late duplicate included,
  * lands in it once it is lent again.
  *
+ * The endpoint also asks the provider for RMA reads, and the executor
+ * pulls the payload of a write out of the client's window (an
+ * OSD-direct PUT): see OSDOobExecutor::execute_pull(). A provider
+ * without them serves deliveries only.
+ *
  * When a cut-off fails, writes may land in a client's window after the
  * client was told they would not (see ceph::ofi::Endpoint::write()). The
  * executor then stops: it serves no token and lends no window, logs to
@@ -87,6 +92,16 @@ public:
 		       const ceph::osd::oob::placement_plan& plan,
 		       std::chrono::milliseconds budget,
 		       bool* started) override;
+  /// with a provider that reads: the payload of a write, pulled out of
+  /// the client's window through a staging buffer
+  bool pulls(const std::string& token) const override;
+  ssize_t execute_pull(const std::string& key,
+		       const std::string& token,
+		       const ceph::osd::oob::placement_plan& plan,
+		       uint64_t total,
+		       ceph::buffer::list* out,
+		       std::chrono::milliseconds budget,
+		       bool* started) override;
   void dump_stats(ceph::Formatter* f) const override;
   std::string_view name() const override { return "ofi"; }
   std::string_view status_help() const override {
@@ -123,5 +138,9 @@ private:
   std::atomic<uint64_t> plans_completed{0};
   std::atomic<uint64_t> plans_failed{0};
   std::atomic<uint64_t> bytes_pushed{0};
+  std::atomic<uint64_t> pulls_started{0};
+  std::atomic<uint64_t> pulls_completed{0};
+  std::atomic<uint64_t> pulls_failed{0};
+  std::atomic<uint64_t> bytes_pulled{0};
 
 };

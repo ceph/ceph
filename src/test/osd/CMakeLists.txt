@@ -105,6 +105,16 @@ add_executable(unittest_ec_gather
 add_ceph_unittest(unittest_ec_gather)
 target_link_libraries(unittest_ec_gather osd global)
 
+if(WITH_OOB_OFI OR WITH_RADOSGW_CUOBJ)
+  # unittest_oob_pull: the pulled write, through a fake executor, and
+  # what it charges to the client message throttle
+  add_executable(unittest_oob_pull
+    test_oob_pull.cc
+    )
+  add_ceph_unittest(unittest_oob_pull)
+  target_link_libraries(unittest_oob_pull osd global)
+endif()
+
 if(WITH_OOB_OFI)
   # unittest_osd_ofi: the libfabric executor over the tcp provider, which
   # needs no special hardware
@@ -114,8 +124,8 @@ if(WITH_OOB_OFI)
     )
   add_ceph_unittest(unittest_osd_ofi)
   target_link_libraries(unittest_osd_ofi osd global)
-  # ceph_test_osd_oob_read: reads with out-of-band delivery over the tcp
-  # provider, for qa/standalone/osd/osd-oob-async.sh
+  # ceph_test_osd_oob_read: reads and pulled writes with out-of-band
+  # delivery over the tcp provider, for qa/standalone/osd/osd-oob-async.sh
   add_executable(ceph_test_osd_oob_read
     ceph_test_osd_oob_read.cc
     )

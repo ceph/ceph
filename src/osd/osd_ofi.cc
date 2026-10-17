@@ -104,6 +104,9 @@ int OSDOfi::init(const std::string& provider,
   };
   // windows only fill while someone polls a manual-progress provider
   cfg.progress_thread = lend_windows;
+  // the payloads of OSD-direct PUTs: a provider without reads still opens,
+  // for delivery only
+  cfg.reads = true;
   cfg.late_tolerance =
     conf.get_val<std::chrono::milliseconds>("osd_oob_cutoff_late_tolerance");
   // a startup option: the endpoint judges late cut-offs by it from here
@@ -342,6 +345,69 @@ ssize_t OSDOfi::execute_plan(const std::string& key,
   return static_cast<ssize_t>(placed);
 }
 
+bool OSDOfi::pulls(const std::string& token) const
+{
+  return ep && ep->reads() && handles(token);
+}
+
+ssize_t OSDOfi::execute_pull(const std::string& key,
+			     const std::string& token,
+			     const ceph::osd::oob::placement_plan& plan,
+			     uint64_t total,
+			     ceph::buffer::list* out,
+			     std::chrono::milliseconds budget,
+			     bool* started)
+{
+  if (started) {
+    *started = false;
+  }
+  auto t = ceph::ofi::parse_token(token);
+  if (!ep || !t) {
+    return -EINVAL;
+  }
+  if (!ep->reads()) {
+    return -EOPNOTSUPP;
+  }
+  if (total > ceph::oob::Arena::MAX) {
+    // larger than a staging buffer, which ofi-rma refuses too: take no
+    // buffer of its size for nothing
+    return -E2BIG;
+  }
+  std::vector<ceph::ofi::Endpoint::read_t> reads;
+  reads.reserve(plan.size());
+  for (const auto& tr : plan) {
+    reads.push_back({tr.client_ofs, tr.len, tr.local_ofs});
+  }
+  // ofi-rma reads into its staging and copies into this buffer only once
+  // every read completed, so a failed pull leaves it untouched
+  ceph::buffer::ptr bp = ceph::buffer::create_page_aligned(total);
+  struct iovec iov{bp.c_str(), total};
+  pulls_started++;
+  const int r = ep->read(*t, &iov, 1, reads, budget, started);
+  if (r == -ENOTRECOVERABLE || ep->unsafe()) {
+    check_unsafe();
+  } else if (r == -ETIMEDOUT) {
+    check_past_tolerance();
+  }
+  if (r < 0) {
+    pulls_failed++;
+    dout(5) << "pull for " << key << " failed: " << cpp_strerror(r)
+	    << (r == -EIO || r == -ETIMEDOUT || r == -ECANCELED ||
+		r == -ENOTRECOVERABLE || r == -EACCES ?
+		" (" + ep->last_error() + ")" :
+		std::string{}) << dendl;
+    stop_if_broken(cct, clog, *ep, stopped);
+    return r;
+  }
+  pulls_completed++;
+  bytes_pulled += total;
+  out->clear();
+  out->append(std::move(bp));
+  dout(20) << "pulled " << total << " bytes of " << key << " in "
+	   << plan.size() << " range(s)" << dendl;
+  return static_cast<ssize_t>(total);
+}
+
 std::optional<OSDOobExecutor::window_t> OSDOfi::acquire_window(size_t size)
 {
   if (!windows || !is_available()) {
@@ -403,9 +469,16 @@ void OSDOfi::dump_stats(ceph::Formatter* f) const
   f->dump_unsigned("plans_completed", plans_completed);
   f->dump_unsigned("plans_failed", plans_failed);
   f->dump_unsigned("bytes_pushed", bytes_pushed);
+  f->dump_bool("pulls", ep->reads());
+  f->dump_unsigned("pulls_started", pulls_started);
+  f->dump_unsigned("pulls_completed", pulls_completed);
+  f->dump_unsigned("pulls_failed", pulls_failed);
+  f->dump_unsigned("bytes_pulled", bytes_pulled);
   const auto s = ep->stats();
   f->dump_unsigned("writes_posted", s.writes_posted);
   f->dump_unsigned("writes_failed", s.writes_failed);
+  f->dump_unsigned("reads_posted", s.reads_posted);
+  f->dump_unsigned("reads_failed", s.reads_failed);
   f->dump_unsigned("peers_inserted", s.peers_inserted);
   f->dump_unsigned("staging_busy", s.staging_busy);
   f->dump_unsigned("staging_leaked", staging_leaked);

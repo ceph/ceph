@@ -82,6 +82,7 @@
 #include "common/oob_arena.h"
 #include "common/rdma_token.h"
 #include "oob_executor.h"
+#include "oob_pull.h"
 #endif
 #include "oob_xfer.h"
 
@@ -311,6 +312,9 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
   boot_epoch(0), up_epoch(0), bind_epoch(0)
 {
   objecter->init();
+#ifdef HAVE_OSD_OOB_DELIVERY
+  oob_pulls_out = std::make_unique<ceph::osd::oob::pulls_out>();
+#endif
 
   for (int i = 0; i < m_objecter_finishers; i++) {
     ostringstream str;
@@ -573,6 +577,16 @@ OSDOobExecutor* OSDService::oob_executor_for(const std::string& token) const
   return nullptr;
 }
 
+OSDOobExecutor* OSDService::oob_puller_for(const std::string& token) const
+{
+  for (const auto& e : published_oob_executors()) {
+    if (e->pulls(token)) {
+      return e.get();
+    }
+  }
+  return nullptr;
+}
+
 void OSDService::add_oob_executor(std::unique_ptr<OSDOobExecutor> e,
 				  bool lends)
 {
@@ -650,6 +664,29 @@ void OSDService::shutdown_oob()
   oob_executors.clear();
   // after the executors, which registered it
   oob_arena.reset();
+}
+
+void OSDService::queue_oob_pull_kick(spg_t pgid, epoch_t epoch,
+				     const osd_reqid_t& reqid, int cost,
+				     uint64_t owner, const hobject_t& head)
+{
+  if (is_stopping()) {
+    // the PGs dropped their holds, or are about to (on_shutdown())
+    return;
+  }
+  dout(20) << __func__ << " " << pgid << " " << reqid << " " << head
+	   << dendl;
+  // the immediate class, ahead of the client ops of the PG: the ops in
+  // the hold wait for nothing else
+  enqueue_back(
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(
+	new PGOobPullKick(pgid, reqid, head)),
+      cost,
+      CEPH_MSG_PRIO_HIGH,
+      ceph_clock_now(),
+      owner,
+      epoch));
 }
 
 void OSDService::queue_oob_read_kick(spg_t pgid, epoch_t epoch, int cost,
@@ -1796,7 +1833,13 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags,
 				       !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
   reply->set_reply_versions(v, uv);
-  reply->set_op_returns(op_returns);
+  if (err < 0 || m->has_flag(CEPH_OSD_FLAG_RETURNVEC)) {
+    // A write without RETURNVEC that succeeded got no return data in its
+    // reply, nor does a dup of it. Its PG log entry keeps only the
+    // records of its pulls, for the results below
+    // (ceph::osd::oob::keep_pull_records())
+    reply->set_op_returns(op_returns);
+  }
   bool report = m->has_rdma_delivery();
 #ifdef HAVE_OSD_OOB_DELIVERY
   if (op->oob_push_started) {
@@ -1813,12 +1856,19 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
     // an op that fails here never reached complete_read_ctx, the only
     // place a push starts: an error says so, so that a client bounced
     // off a laggy replica can retry without fencing its window. A
-    // resend answered as a dup of a write says so too: the attempt that
-    // did the write pushed nothing, as no logged write reaches
-    // complete_read_ctx (reply_error_results())
+    // resend answered as a dup of a write says so too, but for its
+    // pulled ops: the attempt that did the write pushed nothing, as no
+    // logged write reaches complete_read_ctx, but it may have pulled. A
+    // dup reports what the pulls of that attempt reported, as the PG log
+    // kept it (op_error_results())
     const auto& deliveries = m->get_rdma_deliveries();
     std::vector<ceph::rdma::oob_result_t> oob(deliveries.size());
+#ifdef HAVE_OSD_OOB_DELIVERY
+    ceph::osd::oob::op_error_results(deliveries, op_returns, err, dup,
+				     op->oob_pull.get(), oob);
+#else
     ceph::osd::oob::reply_error_results(deliveries, err, dup, oob);
+#endif
     reply->set_oob_results(std::move(oob));
   }
   m->get_connection()->send_message(reply);

@@ -25,8 +25,8 @@ namespace ceph { class Formatter; }
 
 /**
  * The OSD's out-of-band transfer service: threads of its own that run
- * the transfers of read pushes and EC shard pushes, so that no op
- * worker thread, and no PG lock, waits on the fabric.
+ * the transfers of read pushes, EC shard pushes and pulled writes, so
+ * that no op worker thread, and no PG lock, waits on the fabric.
  *
  * The op thread does the checks and the plan under the PG lock, fixes
  * the transfer's bounds, and submits a job. A transfer thread calls the
@@ -58,9 +58,11 @@ inline void decline_all(const std::vector<ceph::rdma::delivery_t>& deliveries,
  * starts from this reply path, so an error declines each op that
  * carries a descriptor. A dup does too, whatever its result: the attempt
  * that did the write pushed nothing, as only a request that writes
- * nothing pushes (PrimaryLogPG::complete_read_ctx()). The rule of a
- * build with a transport and of one without it. oob is aligned with
- * deliveries.
+ * nothing pushes (PrimaryLogPG::complete_read_ctx()). That attempt may
+ * have pulled, though, so a dup declines no pulled op, which reports no
+ * bytes unless the caller fills in what the PG log kept of its pull
+ * (oob_pull.h, dup_pull_results()). The rule of a build with a
+ * transport and of one without it. oob is aligned with deliveries.
  */
 inline void reply_error_results(
   const std::vector<ceph::rdma::delivery_t>& deliveries, int r, bool dup,
@@ -68,6 +70,13 @@ inline void reply_error_results(
 {
   if (r < 0 || dup) {
     decline_all(deliveries, oob);
+  }
+  if (dup) {
+    for (size_t i = 0; i < oob.size() && i < deliveries.size(); i++) {
+      if (deliveries[i].is_pull()) {
+	oob[i] = ceph::rdma::oob_result_t{};
+      }
+    }
   }
 }
 
@@ -85,7 +94,8 @@ struct bounds_t {
  * is receipt plus the lease plus the drain. received is on the
  * monotonic clock (OpRequest::get_mono_recv_stamp()), so that no step
  * of the wall clock since receipt moves them; readable_until and mnow
- * are OSDService::get_mnow() spans.
+ * are OSDService::get_mnow() spans. A pulled write keeps to the same
+ * bounds, from its receipt, without a readable_until.
  */
 bounds_t make_bounds(ceph::mono_clock::time_point received, double lease,
 		     double drain,
@@ -107,8 +117,8 @@ inline ceph::timespan delivery_window(double lease, double drain)
 /// b may start any more
 bool lease_expired(const bounds_t& b);
 
-/// the remaining budget at the moment of the call, for execute_plan();
-/// never negative
+/// the remaining budget at the moment of the call, for
+/// execute_plan()/execute_pull(); never negative
 std::chrono::milliseconds budget_left(const bounds_t& b);
 
 /// the debug delays a service reads as they change (oob_xfer.cc)
@@ -119,7 +129,7 @@ struct debug_delays_t;
  * called for each job that submit() accepted, and the service then
  * destroys it.
  *
- * pinned_bytes(), post_by() and dump() read only what was
+ * pinned_bytes(), post_by(), pulls() and dump() read only what was
  * fixed before submit(): dump_oob_transfers calls them while the job
  * runs.
  */
@@ -129,6 +139,8 @@ struct xfer_job {
   virtual uint64_t pinned_bytes() const = 0;
   /// the job is not started after this
   virtual ceph::mono_clock::time_point post_by() const = 0;
+  /// a pull (oob_xfer.pull_lat) rather than a push (push_lat)
+  virtual bool pulls() const { return false; }
   /// run on the thread that submits it even when the service has
   /// threads: its executor keeps state that only op threads have
   /// (cuObject without osd_oob_cuobj_transfer_threads)
@@ -162,6 +174,7 @@ enum {
   l_oob_xfer_shed,
   l_oob_xfer_queue_lat,
   l_oob_xfer_push_lat,
+  l_oob_xfer_pull_lat,
   l_oob_xfer_last,
 };
 

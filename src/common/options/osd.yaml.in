@@ -1861,17 +1861,19 @@ options:
   desc: Threads that run an OSD's out-of-band transfers, so that its op
     threads do not wait on the fabric
   long_desc: With 0, each out-of-band transfer (a read pushed into a
-    client's memory, or a shard read pushed into a gather window) runs on
-    the op thread that served the request, while that thread holds the PG
-    lock. With more, the op thread hands the transfer to one of these
-    threads and goes on with other requests. The reply still leaves only
-    once the transfer completed or was cut off. Until the reply of a read
-    leaves, a client op that can change the object waits, and so do the
-    ops on the object behind it. So the replies leave in the order of the
-    ops. cuObject transfers stay on
-    the op threads unless osd_oob_cuobj_transfer_threads is set. An OSD
-    that runs no transport whose transfers go to these threads (only
-    cuObject, without osd_oob_cuobj_transfer_threads) starts none of them.
+    client's memory, a shard read pushed into a gather window, the payload
+    of a write pulled out of a client's memory) runs on the op thread that
+    served the request, while that thread holds the PG lock. With more, the
+    op thread hands the transfer to one of these threads and goes on with
+    other requests. The reply still leaves only once the transfer completed
+    or was cut off. A pulled write waits for its pull, and the later client
+    ops on its object wait behind it. Until the reply of a read leaves, a
+    client op that can change the object waits, and so do the ops on the
+    object behind it. So the replies leave in the order of the ops.
+    cuObject transfers stay on the op threads unless
+    osd_oob_cuobj_transfer_threads is set. An OSD that runs no transport
+    whose transfers go to these threads (only cuObject, without
+    osd_oob_cuobj_transfer_threads) starts none of them.
   default: 0
   services:
   - osd
@@ -1889,11 +1891,12 @@ options:
     threads
   long_desc: Past this many, a transfer is refused, and the request is
     served without it, as when a transfer fails before it starts. A read
-    or a shard read is then delivered inline. A queued push that cannot
-    start before its pool's delivery lease runs out, counted from receipt
-    of the request, is served the same way. Used only when the OSD starts
-    transfer threads (see osd_oob_transfer_threads). The transfers that
-    stay on the op threads do not count.
+    or a shard read is then delivered inline, and a pulled write fails with
+    EOPNOTSUPP, so that the client sends the payload inline. A queued push
+    or pull that cannot start before its pool's delivery lease runs out,
+    counted from receipt of the request, is served the same way. Used only
+    when the OSD starts transfer threads (see osd_oob_transfer_threads).
+    The transfers that stay on the op threads do not count.
   default: 64
   services:
   - osd

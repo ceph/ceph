@@ -392,6 +392,213 @@ TEST(RdmaDelivery, NewerRequestVersionIsRejected)
   }
 }
 
+// The OSD queues a request, and charges its scheduler the request's
+// cost, before the op thread decodes its ops and descriptors
+// (finish_decode()). A look at the rest of a received write finds the
+// payloads its writes pull, which then cost as if the message carried
+// them, as PrimaryLogPG counts them for osd_max_write_size.
+TEST(RdmaDelivery, PulledBytesCountInTheCost)
+{
+  using ceph::rdma::delivery_t;
+  using ClientMOSDOp = _mosdop::MOSDOp<osdc_opvec>;
+  // a namespace, so that the locator the look skips is not empty
+  const hobject_t hobj(object_t("obj"), "", CEPH_NOSNAP, 0x1234, 1,
+                       "a-namespace");
+  spg_t pgid(pg_t(0x1234, 1));
+  const delivery_t pull{"aa:bb:opaque", 4096,
+                        delivery_t::FLAG_PULL | delivery_t::FLAG_CRC64NVME};
+  const delivery_t push{"aa:bb:opaque", 0, delivery_t::FLAG_CRC64NVME};
+  struct sent_t {
+    int flags = CEPH_OSD_FLAG_WRITE;
+    std::vector<delivery_t> deliveries;
+    uint64_t first_len = 4 << 20;
+    bool cut = false;  ///< the payload's last byte lost
+  };
+  // a create, two writes to pull and one carrying 4 bytes, sent and
+  // received as the messenger hands it to the OSD
+  auto received = [&](const sent_t& s) {
+    auto m = ceph::make_message<ClientMOSDOp>(
+      1, 42, hobj, pgid, 10, s.flags, CEPH_FEATURES_ALL);
+    m->set_snaps({3, 2, 1});
+    m->ops.resize(4);
+    m->ops[0].op.op = CEPH_OSD_OP_CREATE;
+    m->ops[1].op.op = CEPH_OSD_OP_WRITEFULL;
+    m->ops[1].op.extent.length = s.first_len;
+    m->ops[2].op.op = CEPH_OSD_OP_WRITE;
+    m->ops[2].op.extent.offset = 1 << 20;
+    m->ops[2].op.extent.length = 1 << 20;
+    m->ops[3].op.op = CEPH_OSD_OP_WRITE;
+    m->ops[3].op.extent.length = 4;
+    m->ops[3].indata.append("data");
+    if (!s.deliveries.empty()) {
+      m->set_rdma_deliveries(std::vector(s.deliveries));
+    }
+    m->encode_payload(CEPH_FEATURES_ALL);
+    bufferlist payload;
+    payload.substr_of(m->get_payload(), 0,
+                      m->get_payload().length() - (s.cut ? 1 : 0));
+    auto r = ceph::make_message<MOSDOp>();
+    r->set_header(m->get_header());
+    r->set_payload(payload);
+    bufferlist data = m->get_data();
+    r->set_data(data);
+    r->decode_payload();
+    return r;
+  };
+  const std::vector<delivery_t> pulls = {{}, pull, pull, {}};
+  const int both = (4 << 20) + (1 << 20) + 4;
+
+  auto m = received({.deliveries = pulls});
+  EXPECT_EQ(both, m->get_cost());
+  // the pulled bytes alone, which PrimaryLogPG holds to
+  // osd_max_write_size
+  EXPECT_EQ(uint64_t((4 << 20) + (1 << 20)), m->get_pulled_len());
+  // the same once the op thread decoded the rest
+  ASSERT_TRUE(m->finish_decode());
+  EXPECT_EQ(both, m->get_cost());
+  EXPECT_EQ(uint64_t((4 << 20) + (1 << 20)), m->get_pulled_len());
+  EXPECT_EQ(pulls.size(), m->get_rdma_deliveries().size());
+  EXPECT_TRUE(m->has_pulls());
+
+  // a pull too large to count saturates
+  EXPECT_EQ(std::numeric_limits<int>::max(),
+            received({.deliveries = pulls,
+                      .first_len = 1ull << 40})->get_cost());
+  // only the data: no descriptors, none that pulls, or descriptors that
+  // do not mirror the ops, which PrimaryLogPG pulls nothing for
+  EXPECT_EQ(4, received({})->get_cost());
+  EXPECT_EQ(4, received({.deliveries = {{}, push, push, {}}})->get_cost());
+  EXPECT_EQ(4, received({.deliveries = {pull, pull}})->get_cost());
+  // nor for a request that is no write, which PrimaryLogPG refuses when
+  // it pulls all the same
+  auto unflagged = received({.flags = CEPH_OSD_FLAG_READ,
+                             .deliveries = pulls});
+  EXPECT_EQ(4, unflagged->get_cost());
+  EXPECT_EQ(0u, unflagged->get_pulled_len());
+  ASSERT_TRUE(unflagged->finish_decode());
+  EXPECT_TRUE(unflagged->has_pulls());
+  // a pull of no bytes costs nothing, and still pulls
+  auto empty = received({.deliveries = {{}, pull, {}, {}},
+                         .first_len = 0});
+  EXPECT_EQ(0u, empty->get_pulled_len());
+  ASSERT_TRUE(empty->finish_decode());
+  EXPECT_TRUE(empty->has_pulls());
+  auto pushes = received({.deliveries = {{}, push, push, {}}});
+  ASSERT_TRUE(pushes->finish_decode());
+  EXPECT_FALSE(pushes->has_pulls());
+  // nor for a payload cut short, which finish_decode() fails
+  EXPECT_EQ(4, received({.deliveries = pulls, .cut = true})->get_cost());
+}
+
+// finish_decode() takes an object locator of struct_v 1 or 2, which has
+// no length to skip it by, as a client that encodes its request by hand
+// may send. The look decodes such a locator, and counts the pulls of the
+// request as it counts any other's: counted as 0, they would pass the
+// osd_max_write_size check of PrimaryLogPG and reach the OSD's throttle
+// with any length.
+TEST(RdmaDelivery, PulledBytesCountWithALegacyLocator)
+{
+  using ceph::rdma::delivery_t;
+  using ClientMOSDOp = _mosdop::MOSDOp<osdc_opvec>;
+  const hobject_t hobj(object_t("obj"), "", CEPH_NOSNAP, 0x1234, 1,
+                       "a-namespace");
+  spg_t pgid(pg_t(0x1234, 1));
+  const delivery_t pull{"aa:bb:opaque", 0, delivery_t::FLAG_PULL};
+  auto m = ceph::make_message<ClientMOSDOp>(
+    1, 42, hobj, pgid, 10, CEPH_OSD_FLAG_WRITE, CEPH_FEATURES_ALL);
+  m->ops.resize(2);
+  m->ops[0].op.op = CEPH_OSD_OP_WRITEFULL;
+  m->ops[0].op.extent.length = 1ull << 63;
+  m->ops[1].op.op = CEPH_OSD_OP_WRITE;
+  m->ops[1].op.extent.length = 1 << 20;
+  m->set_rdma_deliveries({pull, pull});
+  m->encode_payload(CEPH_FEATURES_ALL);
+  const uint64_t pulled = (1ull << 63) + (1 << 20);
+
+  // the locator as the client encoded it, found once in the payload
+  bufferlist oloc;
+  encode(m->get_object_locator(), oloc);
+  const std::string payload = m->get_payload().to_str();
+  const auto at = payload.find(oloc.to_str());
+  ASSERT_NE(std::string::npos, at);
+  ASSERT_EQ(std::string::npos, payload.find(oloc.to_str(), at + 1));
+
+  // the same request with the locator encoded as struct_v v
+  auto received = [&](__u8 v) {
+    bufferlist legacy;
+    encode(v, legacy);
+    if (v < 2) {
+      encode(int32_t(1), legacy);   // pool
+      encode(int16_t(-1), legacy);  // preferred
+    } else {
+      encode(int64_t(1), legacy);
+      encode(int32_t(-1), legacy);
+    }
+    encode(std::string(), legacy);  // key
+    bufferlist bl;
+    bl.append(payload.substr(0, at));
+    bl.append(legacy);
+    bl.append(payload.substr(at + oloc.length()));
+    auto r = ceph::make_message<MOSDOp>();
+    r->set_header(m->get_header());
+    r->set_payload(bl);
+    r->decode_payload();
+    return r;
+  };
+  for (__u8 v : {__u8(1), __u8(2)}) {
+    SCOPED_TRACE(int(v));
+    auto r = received(v);
+    EXPECT_EQ(pulled, r->get_pulled_len());
+    EXPECT_EQ(std::numeric_limits<int>::max(), r->get_cost());
+    // the op thread reads the same request, and its pulls
+    ASSERT_TRUE(r->finish_decode());
+    ASSERT_EQ(2u, r->ops.size());
+    EXPECT_EQ(1ull << 63, r->ops[0].op.extent.length);
+    EXPECT_EQ(2u, r->get_rdma_deliveries().size());
+    EXPECT_TRUE(r->has_pulls());
+    EXPECT_EQ(pulled, r->get_pulled_len());
+  }
+}
+
+// The client asks for the return data of a request that pulls
+// (RETURNVEC), for the PG log to keep the record of each pull, only when
+// no other op of it returns anything that the flag changes: with it, a
+// write returns the data and the result of a CALL or a read, and fails
+// when one returns more than osd_max_write_op_reply_len.
+TEST(RdmaDelivery, PullRecordsOnlyWhenNothingElseReturns)
+{
+  using ceph::rdma::delivery_t;
+  using ClientMOSDOp = _mosdop::MOSDOp<osdc_opvec>;
+  const delivery_t pull{"aa:bb:opaque", 0, delivery_t::FLAG_PULL};
+  const delivery_t push{"aa:bb:opaque", 0, delivery_t::FLAG_CRC64NVME};
+  auto wants = [](std::initializer_list<int> codes,
+                  const std::vector<delivery_t>& deliveries) {
+    osdc_opvec ops(codes.size());
+    size_t i = 0;
+    for (const int c : codes) {
+      ops[i++].op.op = c;
+    }
+    return ClientMOSDOp::wants_pull_records(ops, deliveries);
+  };
+  // the gateway's stripe write: an allocation hint, and the pull
+  EXPECT_TRUE(wants({CEPH_OSD_OP_SETALLOCHINT, CEPH_OSD_OP_WRITEFULL},
+                    {{}, pull}));
+  EXPECT_TRUE(wants({CEPH_OSD_OP_WRITE}, {pull}));
+  EXPECT_TRUE(wants({CEPH_OSD_OP_CREATE, CEPH_OSD_OP_WRITE,
+                     CEPH_OSD_OP_SETXATTR, CEPH_OSD_OP_OMAPSETVALS},
+                    {{}, pull, {}, {}}));
+  // nothing pulled: no descriptors, or none that pulls
+  EXPECT_FALSE(wants({CEPH_OSD_OP_WRITEFULL}, {}));
+  EXPECT_FALSE(wants({CEPH_OSD_OP_WRITEFULL}, {{}}));
+  EXPECT_FALSE(wants({CEPH_OSD_OP_READ}, {push}));
+  // another op returns data, or a result of its own
+  EXPECT_FALSE(wants({CEPH_OSD_OP_CALL, CEPH_OSD_OP_WRITEFULL},
+                     {{}, pull}));
+  EXPECT_FALSE(wants({CEPH_OSD_OP_WRITEFULL, CEPH_OSD_OP_STAT},
+                     {pull, {}}));
+  EXPECT_FALSE(wants({CEPH_OSD_OP_WRITE, CEPH_OSD_OP_READ}, {pull, push}));
+}
+
 TEST(RdmaDelivery, Crc64ValidityIsSeparateFromCombinability)
 {
   // distinct bits: a scattered placement reports a checksum of the
@@ -716,7 +923,8 @@ TEST(RdmaDelivery, PullWithoutATokenIsMalformed)
   EXPECT_TRUE(ceph::rdma::any_pull(
     std::vector<D>{{}, {"t", 0, D::FLAG_PULL}}));
 
-  // what an OSD reads of a request whose pull has no token: no pull
+  // what an OSD reads of a request whose pull has no token: no pull, as
+  // the look at its payload counts none
   const hobject_t hobj(object_t("obj"), "", CEPH_NOSNAP, 0x1234, 1, "");
   spg_t pgid(pg_t(0x1234, 1));
   using ClientMOSDOp = _mosdop::MOSDOp<osdc_opvec>;
@@ -733,8 +941,10 @@ TEST(RdmaDelivery, PullWithoutATokenIsMalformed)
   bufferlist bl = sent->get_payload();
   m->set_payload(bl);
   m->decode_payload();
+  EXPECT_EQ(0u, m->get_pulled_len());
   ASSERT_TRUE(m->finish_decode());
   EXPECT_FALSE(m->has_pulls());
+  EXPECT_FALSE(MOSDOp::wants_pull_records(m->ops, m->get_rdma_deliveries()));
 
   // the client library's write of no window, of any length
   const auto old_release = ceph_release_t::tentacle;
@@ -1062,11 +1272,14 @@ TEST(RdmaDelivery, ReplyErrorResults)
   for (const int r : {0, -EIO}) {
     SCOPED_TRACE(r);
     std::vector<R> oob(3);
-    // a dup declines each descriptor, the pull's too
+    // what the caller had for the pulled op is dropped
+    oob[2].bytes = 4096;
+    oob[2].flags = R::FLAG_CRC64NVME;
     reply_error_results(deliveries, r, true, oob);
     EXPECT_EQ(R::FLAG_DECLINED, oob[0].flags);
     EXPECT_EQ(0u, oob[1].flags);
-    EXPECT_EQ(R::FLAG_DECLINED, oob[2].flags);
+    EXPECT_EQ(0u, oob[2].flags);
+    EXPECT_EQ(0u, oob[2].bytes);
   }
   {
     SCOPED_TRACE("a result of 0, not a dup");

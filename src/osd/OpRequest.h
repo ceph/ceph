@@ -20,6 +20,11 @@
 #include "common/TrackedOp.h"
 #include "common/tracer.h"
 #include "osd/Coroutines.h"
+#ifdef HAVE_OSD_OOB_DELIVERY
+#include "common/rdma_token.h"
+class Throttle;
+namespace ceph::osd::oob { class pull_set; }
+#endif
 
 /**
  * The OpRequest takes in a Message* and takes over a single reference
@@ -34,6 +39,24 @@ private:
 public:
   std::optional<CoroHandles> coro_handles = std::nullopt;
 #ifdef HAVE_OSD_OOB_DELIVERY
+  /// what the primary pulled out of client memory for the request's
+  /// writes (delivery_t::FLAG_PULL), aligned with its ops; the payload
+  /// itself went into the ops' indata. Kept with the request, so that an
+  /// op that waits and runs again does not lose what it reports.
+  std::vector<ceph::rdma::oob_result_t> oob_pulled;
+  /// the pulls of the request's writes and what they did (oob_pull.h):
+  /// created when a run of the request starts them, and never replaced,
+  /// so that a later run neither pulls nor charges the throttle again
+  std::shared_ptr<ceph::osd::oob::pull_set> oob_pull;
+  /// the pulls of an earlier attempt of the request that this one waits
+  /// for, or waited for (ceph::osd::oob::wait_for_earlier()): it leaves
+  /// them when it goes away (_unregistered())
+  std::weak_ptr<ceph::osd::oob::pull_set> oob_pull_waits;
+  /// the throttle the pulled payloads are charged to, and how much; the
+  /// request gives it back when it is done, with the ops' data that holds
+  /// them (_unregistered())
+  Throttle* oob_throttle = nullptr;
+  uint64_t oob_throttled = 0;
   /// the reply to the request's reads was handed to their pushes, which
   /// may write the client's windows until the pool's lease plus drain
   /// after receipt: no other reply to the request may say that no
@@ -41,6 +64,11 @@ public:
   /// under the PG lock before the first push is submitted, and never
   /// cleared.
   bool oob_push_started = false;
+  /// reserve len bytes of t, the throttle of the client's messages, for
+  /// a payload about to be pulled: false, with nothing reserved, when t
+  /// has no room for them, as the messenger would not read a message of
+  /// that size now
+  bool reserve_pulled(Throttle* t, uint64_t len);
 #endif
 
   int maybe_init_op_info(const OSDMap &osdmap);

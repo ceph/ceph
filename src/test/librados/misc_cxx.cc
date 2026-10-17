@@ -1091,6 +1091,42 @@ TEST_P(LibRadosMiscPP, RdmaPulledWriteWithoutATokenPP) {
   ASSERT_TRUE(read_bl.contents_equal(expected));
 }
 
+TEST_P(LibRadosMiscPP, RdmaPulledWriteFailOkPP) {
+  // A pulled write past osd_max_object_size is bound to fail: an OSD
+  // that pulls fails it before its pull, with EFBIG, and its descriptor
+  // declined. With FAILOK it is not: do_osd_ops() goes on past its
+  // failure, and the request succeeds, so the OSD goes on to its pull.
+  // One that cannot pull from the token (no transport in
+  // oob_client_transports) fails that with EOPNOTSUPP, as does an OSD
+  // built without a transport, whatever the write
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  const uint64_t past_max = 1ull << 40;
+  for (const bool failok : {false, true}) {
+    SCOPED_TRACE(failok ? "FAILOK" : "no FAILOK");
+    ObjectWriteOperation::rdma_delivery_result res;
+    ObjectWriteOperation op;
+    op.write_pulled(past_max, 4096, token, 0, 0, &res);
+    if (failok) {
+      op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    }
+#ifdef HAVE_OSD_OOB_DELIVERY
+    const int want = failok ? -EOPNOTSUPP : -EFBIG;
+#else
+    const int want = -EOPNOTSUPP;
+#endif
+    ASSERT_EQ(want, ioctx.operate("rdma_pulled_failok_obj", &op));
+    // nothing was pulled, nor started
+    ASSERT_EQ(0u, res.bytes);
+    ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED,
+              res.flags);
+  }
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(-ENOENT, ioctx.stat("rdma_pulled_failok_obj", &size, &mtime));
+}
+
 TEST_P(LibRadosMiscPP, RdmaDeliveryLeasePP) {
   // the lease an OSD enforces on out-of-band delivery is a pool option
   // the client reads from its OSDMap: the built-in default when unset,
@@ -1243,6 +1279,56 @@ TEST_P(LibRadosMiscECPP, CompareExtentRange) {
   ObjectReadOperation read2;
   read2.cmpext(2097152, bl3, nullptr);
   ASSERT_EQ(0, ioctx.operate("foo", &read2, nullptr));
+}
+
+TEST_P(LibRadosMiscECPP, RdmaPulledWriteNotAnAppendPP) {
+  SKIP_IF_CRIMSON();
+  // An erasure-coded pool without overwrites only appends: a pulled
+  // WRITE that would not append at the end of the object is bound to
+  // fail. An OSD that pulls fails it before its pull, its descriptor
+  // declined, with EINVAL: EOPNOTSUPP, the error of the same write
+  // inline, would tell the client to send the payload inline, and the
+  // write would fail again. An OSD built without a transport fails
+  // every pulled write with EOPNOTSUPP
+  const std::string oid = "rdma_pulled_ec_obj";
+  const std::string content(alignment, 'a');
+  bufferlist bl;
+  bl.append(content);
+  ASSERT_EQ(0, ioctx.write_full(oid, bl));
+  bufferlist again;
+  again.append(content);
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.write(oid, again, again.length(), 0));
+
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  // before the end, and past it
+  for (const uint64_t off : {uint64_t(0), 2 * alignment}) {
+    SCOPED_TRACE(off);
+    ObjectWriteOperation::rdma_delivery_result res;
+    ObjectWriteOperation op;
+    op.write_pulled(off, alignment, token, 0, 0, &res);
+#ifdef HAVE_OSD_OOB_DELIVERY
+    const int want = -EINVAL;
+#else
+    const int want = -EOPNOTSUPP;
+#endif
+    ASSERT_EQ(want, ioctx.operate(oid, &op));
+    ASSERT_EQ(0u, res.bytes);
+    ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED,
+              res.flags);
+  }
+  // an append is no such write: an OSD that cannot pull from the token
+  // (no transport in oob_client_transports) fails it as such
+  ObjectWriteOperation::rdma_delivery_result res;
+  ObjectWriteOperation op;
+  op.write_pulled(alignment, alignment, token, 0, 0, &res);
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.operate(oid, &op));
+  ASSERT_EQ(ObjectWriteOperation::rdma_delivery_result::DECLINED, res.flags);
+
+  bufferlist read_bl;
+  ASSERT_EQ((int)content.size(), ioctx.read(oid, read_bl, 0, 0));
+  ASSERT_EQ(content, read_bl.to_str());
 }
 
 // On an optimized EC pool, a CALL whose method reads the object

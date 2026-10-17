@@ -12,6 +12,10 @@
 #include "messages/MOSDRepOpReply.h"
 #include "include/ceph_assert.h"
 #include "osd/osd_types.h"
+#ifdef HAVE_OSD_OOB_DELIVERY
+#include "common/Throttle.h"
+#include "osd/oob_pull.h"
+#endif
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -107,8 +111,50 @@ void OpRequest::_unregistered() {
   request->clear_data();
   request->clear_payload();
   request->release_message_throttle();
+#ifdef HAVE_OSD_OOB_DELIVERY
+  // The last reference to the request is gone: nothing can run or answer
+  // it any more, whichever PG or path of the OSD dropped it. Those of its
+  // pulls that did not start never will. The pulled payloads went with
+  // the ops' data, or stay with the pulls until they end. Their bytes go
+  // back to the client throttle now: the caps of the transfer threads
+  // bound those of the pulls that still run
+  if (oob_pull && oob_pull->abandon(this)) {
+    lsubdout(tracker->cct, osd, 10) << "oob pull: " << reqid << " dropped, "
+      << "its pulls that did not start never will" << dendl;
+  }
+  oob_pull.reset();
+  // nor does it wait for the pulls of an earlier attempt any more, whose
+  // settle then kicks nothing for it
+  if (auto earlier = oob_pull_waits.lock(); earlier) {
+    earlier->leave(this);
+  }
+  oob_pull_waits.reset();
+  if (oob_throttle) {
+    oob_throttle->put(oob_throttled);
+    oob_throttle = nullptr;
+    oob_throttled = 0;
+  }
+#endif
   request->set_connection(nullptr);
 }
+
+#ifdef HAVE_OSD_OOB_DELIVERY
+bool OpRequest::reserve_pulled(Throttle* t, uint64_t len)
+{
+  if (!t || !len) {
+    return true;
+  }
+  // get_or_fail() counts under no limit too, as put() uncounts, so that
+  // a limit set while the payload is held gets back what was taken
+  if (!t->get_or_fail(len)) {
+    return false;
+  }
+  ceph_assert(!oob_throttle || oob_throttle == t);
+  oob_throttle = t;
+  oob_throttled += len;
+  return true;
+}
+#endif
 
 int OpRequest::maybe_init_op_info(const OSDMap &osdmap) {
   if (op_info.get_flags())

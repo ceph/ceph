@@ -118,11 +118,13 @@ Transfers::Transfers(CephContext* cct, unsigned threads, unsigned max_jobs,
 	    "Out-of-band transfers running");
   b.add_u64_counter(l_oob_xfer_refused, "refused",
 		    "Out-of-band transfers refused over a cap or while "
-		    "stopping: a push is delivered inline", nullptr,
+		    "stopping: a push is delivered inline, a pull fails its "
+		    "write", nullptr,
 		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_oob_xfer_expired, "expired",
 		    "Out-of-band transfers taken past the time they could "
-		    "start: a push is delivered inline", nullptr,
+		    "start: a push is delivered inline, a pull fails its "
+		    "write", nullptr,
 		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_oob_xfer_shed, "shed",
 		    "Out-of-band transfers still queued when the OSD stopped",
@@ -132,6 +134,9 @@ Transfers::Transfers(CephContext* cct, unsigned threads, unsigned max_jobs,
 		 nullptr, PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_oob_xfer_push_lat, "push_lat",
 		 "Time an out-of-band push took", nullptr,
+		 PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_oob_xfer_pull_lat, "pull_lat",
+		 "Time an out-of-band pull took", nullptr,
 		 PerfCountersBuilder::PRIO_USEFUL);
   logger = {b.create_perf_counters(), cct};
   cct->get_perfcounters_collection()->add(logger.get());
@@ -226,7 +231,7 @@ void Transfers::dispatch(xfer_job& job)
   }
   job.delays = delays.get();
   job.run();
-  logger->tinc(l_oob_xfer_push_lat,
+  logger->tinc(job.pulls() ? l_oob_xfer_pull_lat : l_oob_xfer_push_lat,
 	       unsigned_span(ceph::mono_clock::now() - start));
 }
 
@@ -334,7 +339,7 @@ void Transfers::dump(ceph::Formatter* f) const
   f->open_array_section("running");
   for (const auto& r : running) {
     f->open_object_section("job");
-    f->dump_string("kind", "push");
+    f->dump_string("kind", r.job->pulls() ? "pull" : "push");
     f->dump_bool("inline", r.here);
     f->dump_float("age", secs(now - r.submitted));
     f->dump_float("queued_for", secs(r.started - r.submitted));

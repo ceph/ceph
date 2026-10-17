@@ -35,7 +35,7 @@ namespace ceph::oob { class Arena; }
  * names "cuobj"; PrimaryLogPG reaches it through
  * OSDService::oob_executor_for() for cuObject tokens.
  *
- * Thread safety: execute_plan() may be called
+ * Thread safety: execute_plan() and execute_pull() may be called
  * concurrently from any number of op worker threads, and of transfer
  * threads when cuObject runs on them (osd_oob_cuobj_transfer_threads).
  * Each thread lazily allocates its own cuObject channel (DCI), and only
@@ -89,6 +89,18 @@ public:
   /// marks landed too
   bool delivery_complete() const override { return true; }
 
+  /// the payload of a write, read out of the client
+  /// window with handlePutObject, as the gateway's staged PUT reads it,
+  /// through the same staging buffers and channel as execute_plan()
+  bool pulls(const std::string& token) const override;
+  ssize_t execute_pull(const std::string& key,
+		       const std::string& token,
+		       const ceph::osd::oob::placement_plan& plan,
+		       uint64_t total,
+		       ceph::buffer::list* out,
+		       std::chrono::milliseconds budget,
+		       bool* started) override;
+
   /// take what completed of the writes that timed-out plans left posted
   /// on this thread's channel, and give back their staging buffers and
   /// those of failed submissions whose time came; a thread without a
@@ -119,8 +131,8 @@ public:
   void release_window(uint64_t id, uint64_t quarantine_ms) override;
 
 private:
-  /// a plan's transfer through local_len bytes of staging: from data
-  /// when pushing, into *out when pulling
+  /// execute_plan() and execute_pull(): local_len bytes of staging, from
+  /// data when pushing, into *out when pulling
   ssize_t run_plan(bool pull, const std::string& key,
 		   const std::string& token,
 		   const ceph::buffer::list* data, uint64_t local_len,

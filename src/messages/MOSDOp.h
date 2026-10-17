@@ -17,6 +17,7 @@
 #ifndef CEPH_MOSDOP_H
 #define CEPH_MOSDOP_H
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <optional>
@@ -79,8 +80,106 @@ private:
   /// encoded after the v9 fields only when non-empty, and decoded in
   /// the finish_decode() tail of a v9 request when bytes remain there
   std::vector<ceph::rdma::delivery_t> rdma_deliveries;
+  /// the payloads of the writes that the primary pulls out of client
+  /// memory (delivery_t::FLAG_PULL), which a look at the rest of a
+  /// received v9 write found (peek_pulled_len()); fixed in
+  /// decode_payload(), before the OSD queues the request, and never
+  /// changed after
+  uint64_t pulled_len = 0;
+
+  /**
+   * The bytes the pulled writes of a v9 request take out of client
+   * memory, from the part of its payload at q, which finish_decode()
+   * decodes later, on the op thread: the OSD charges the request's cost
+   * to its scheduler before that. As PrimaryLogPG counts them: the
+   * lengths of the WRITEs and WRITEFULLs whose descriptor pulls, summed
+   * with saturation, when the descriptors mirror the ops; 0 for a
+   * request without them, and for one this cannot read, which
+   * finish_decode() fails.
+   */
+  static uint64_t peek_pulled_len(ceph::buffer::list::const_iterator q) {
+    using ceph::decode;
+    try {
+      uint32_t client_inc;
+      decode(client_inc, q);
+      utime_t mtime;
+      decode(mtime, q);
+      // the object's locator, skipped by its encoded length. Every
+      // client encodes it with one (struct_v 3 or later), but
+      // finish_decode() takes an older one too, which has no length:
+      // that one is decoded in full, so that the sum still counts
+      // every pull of a request the OSD runs
+      const auto oloc_at = q;
+      __u8 oloc_v, oloc_compat;
+      decode(oloc_v, q);
+      if (oloc_v < 3) {
+	q = oloc_at;
+	object_locator_t oloc;
+	decode(oloc, q);
+      } else {
+	decode(oloc_compat, q);
+	uint32_t oloc_len;
+	decode(oloc_len, q);
+	q += oloc_len;
+      }
+      // the object's name, which is not needed here
+      uint32_t name_len;
+      decode(name_len, q);
+      q += name_len;
+      __u16 num_ops;
+      decode(num_ops, q);
+      // the ops, read again below alongside their descriptors
+      auto ops_at = q;
+      q += num_ops * sizeof(ceph_osd_op);
+      snapid_t snap, seq;
+      decode(snap, q);
+      decode(seq, q);
+      uint32_t num_snaps;
+      decode(num_snaps, q);
+      if (num_snaps > q.get_remaining() / sizeof(ceph_le64)) {
+	return 0;
+      }
+      q += num_snaps * sizeof(ceph_le64);
+      int32_t retry;
+      decode(retry, q);
+      uint64_t feat;
+      decode(feat, q);
+      if (q.end()) {
+	return 0;
+      }
+      uint32_t num_deliveries;
+      decode(num_deliveries, q);
+      if (num_deliveries != num_ops) {
+	return 0;
+      }
+      uint64_t len = 0;
+      for (unsigned i = 0; i < num_ops; i++) {
+	ceph_osd_op op;
+	decode(op, ops_at);
+	ceph::rdma::delivery_t d;
+	decode(d, q);
+	if (!d.is_pull() ||
+	    (op.op != CEPH_OSD_OP_WRITE && op.op != CEPH_OSD_OP_WRITEFULL)) {
+	  continue;
+	}
+	const uint64_t l = op.extent.length;
+	len = l > UINT64_MAX - len ? UINT64_MAX : len + l;
+      }
+      return len;
+    } catch (const ceph::buffer::error&) {
+      return 0;
+    }
+  }
 
 public:
+  /// what the OSD's scheduler charges for the request: its data, and
+  /// the payloads its writes pull, which reach the OSD all the same
+  int get_cost() const override {
+    constexpr uint64_t max_cost = std::numeric_limits<int>::max();
+    const uint64_t cost = std::min(pulled_len, max_cost) + data.length();
+    return static_cast<int>(std::min(cost, max_cost));
+  }
+
   /// the require_osd_release from which every OSD decodes the delivery
   /// descriptors (set_rdma_deliveries()): a client sends them only to a
   /// cluster at this release or later. An OSD of an earlier release
@@ -93,6 +192,13 @@ public:
   bool has_rdma_delivery() const {
     return !rdma_deliveries.empty();
   }
+  /// the bytes the request's writes pull out of client memory, as
+  /// decode_payload() found them (peek_pulled_len()): what the scheduler
+  /// charges for them, and what PrimaryLogPG holds to
+  /// osd_max_write_size. 0 for a request not flagged as a write
+  uint64_t get_pulled_len() const {
+    return pulled_len;
+  }
   /// whether an op of the request carries a pull descriptor
   /// (delivery_t::is_pull()), whatever its length
   bool has_pulls() const {
@@ -103,6 +209,51 @@ public:
   }
   void set_rdma_deliveries(std::vector<ceph::rdma::delivery_t>&& v) {
     rdma_deliveries = std::move(v);
+  }
+
+  /**
+   * Whether the client asks for the return data of a request
+   * (CEPH_OSD_FLAG_RETURNVEC) for its writes that the primary pulls:
+   * the primary puts the record of each pull in its op's return data,
+   * which the reply then carries, and which the PG log keeps with the
+   * write, as it keeps the records of a request without the flag; the
+   * reply to a resend that the PG answers as a dup reports the pull from
+   * it. Only when the flag changes nothing that another op of the
+   * request returns: with it, a write returns the data and the result of
+   * a CALL or a read, and fails when one returns more than
+   * osd_max_write_op_reply_len. deliveries is aligned with ops, or
+   * empty.
+   */
+  template <typename Ops, typename Deliveries>
+  static bool wants_pull_records(const Ops& ops,
+				 const Deliveries& deliveries) {
+    bool pulls = false;
+    for (size_t i = 0; i < ops.size(); i++) {
+      if (i < deliveries.size() && deliveries[i].is_pull()) {
+	pulls = true;
+	continue;
+      }
+      switch (ops[i].op.op) {
+      // ops that return no data, and 0 when they succeed
+      case CEPH_OSD_OP_CREATE:
+      case CEPH_OSD_OP_SETALLOCHINT:
+      case CEPH_OSD_OP_WRITE:
+      case CEPH_OSD_OP_WRITEFULL:
+      case CEPH_OSD_OP_APPEND:
+      case CEPH_OSD_OP_TRUNCATE:
+      case CEPH_OSD_OP_ZERO:
+      case CEPH_OSD_OP_SETXATTR:
+      case CEPH_OSD_OP_RMXATTR:
+      case CEPH_OSD_OP_OMAPSETVALS:
+      case CEPH_OSD_OP_OMAPSETHEADER:
+      case CEPH_OSD_OP_OMAPRMKEYS:
+      case CEPH_OSD_OP_OMAPCLEAR:
+	break;
+      default:
+	return false;
+      }
+    }
+    return pulls;
   }
 
   friend MOSDOpReply;
@@ -490,6 +641,9 @@ struct ceph_osd_request_head {
       decode(reqid, p);
       decode_trace(p);
       decode_otel_trace(p);
+      if (flags & CEPH_OSD_FLAG_WRITE) {
+	pulled_len = peek_pulled_len(p);
+      }
     } else if (header.version == 8) {
       decode(pgid, p);      // actual pgid
       uint32_t hash;
