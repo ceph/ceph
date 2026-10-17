@@ -158,6 +158,90 @@ TEST_F(ClusterStateTest, IngestPGStats_oldReportedSeq)
   ASSERT_FALSE(p_inc.pg_stat_updates.contains(pgid_old_version));
 }
 
+// a stats report from osd.<osd>, at the fixture's osdmap epoch 1, carrying
+// one PG
+static ceph::ref_t<MPGStats> pg_report(int osd, uint64_t osd_seq, pg_t pgid,
+                                       const pg_stat_t& s)
+{
+  auto m = ceph::make_ref<MPGStats>();
+  m->set_src(entity_name_t::OSD(osd));
+  m->epoch = 1;
+  m->osd_stat.seq = osd_seq;
+  m->pool_stat[1] = store_statfs_t{};
+  m->pg_stat[pgid] = s;
+  return m;
+}
+
+TEST_F(ClusterStateTest, IngestPGStats_FutureEpochDoesNotPin)
+{
+  // A report claiming an osdmap epoch the cluster has not reached (here, a
+  // report whose version fields arrived corrupted) must not keep the next
+  // genuine report for the same PG out of the PGMap.
+  pg_t pgid(0, 1);
+  pg_stat_t bogus = pgstat;
+  bogus.state = PG_STATE_CREATING | PG_STATE_INCONSISTENT |
+                PG_STATE_SNAPTRIM_ERROR;
+  bogus.reported_epoch = 215564294;
+  bogus.reported_seq = 10326389559645962337ull;
+  cs->ingest_pgstats(pg_report(0, 1, pgid, bogus));
+  cs->update_delta_stats();
+
+  pgstat.reported_seq = 3;
+  cs->ingest_pgstats(pg_report(0, 2, pgid, pgstat));
+  cs->update_delta_stats();
+
+  PGMap pg_map = cs->test_get_pg_map();
+  ASSERT_TRUE(pg_map.pg_stat.contains(pgid));
+  ASSERT_EQ(pg_map.pg_stat[pgid].reported_epoch, pgstat.reported_epoch);
+  ASSERT_EQ(pg_map.pg_stat[pgid].reported_seq, pgstat.reported_seq);
+  ASSERT_EQ(pg_map.pg_stat[pgid].state, pgstat.state);
+}
+
+TEST_F(ClusterStateTest, IngestPGStats_BogusSeqFromPrimaryDoesNotPin)
+{
+  // Only reported_seq arrived corrupted, the epoch is current: the next
+  // report from the same primary must still replace it.
+  pg_t pgid(0, 1);
+  pgstat.acting_primary = 0;
+  pg_stat_t bogus = pgstat;
+  bogus.state = PG_STATE_CREATING | PG_STATE_INCONSISTENT;
+  bogus.reported_seq = 10326389559645962337ull;
+  cs->ingest_pgstats(pg_report(0, 1, pgid, bogus));
+  cs->update_delta_stats();
+
+  pgstat.reported_seq = 3;
+  cs->ingest_pgstats(pg_report(0, 2, pgid, pgstat));
+  cs->update_delta_stats();
+
+  PGMap pg_map = cs->test_get_pg_map();
+  ASSERT_TRUE(pg_map.pg_stat.contains(pgid));
+  ASSERT_EQ(pg_map.pg_stat[pgid].reported_seq, pgstat.reported_seq);
+  ASSERT_EQ(pg_map.pg_stat[pgid].state, pgstat.state);
+}
+
+TEST_F(ClusterStateTest, IngestPGStats_LateReportFromOldPrimary)
+{
+  // osd.1 took over as primary and reported; a late, older report from the
+  // previous primary osd.0 must not overwrite it.
+  pg_t pgid(0, 1);
+  pg_stat_t newer = pgstat;
+  newer.acting_primary = 1;
+  newer.reported_seq = 5;
+  cs->ingest_pgstats(pg_report(1, 1, pgid, newer));
+  cs->update_delta_stats();
+
+  pg_stat_t late = pgstat;
+  late.acting_primary = 0;
+  late.reported_seq = 3;
+  cs->ingest_pgstats(pg_report(0, 1, pgid, late));
+  cs->update_delta_stats();
+
+  PGMap pg_map = cs->test_get_pg_map();
+  ASSERT_TRUE(pg_map.pg_stat.contains(pgid));
+  ASSERT_EQ(pg_map.pg_stat[pgid].acting_primary, 1);
+  ASSERT_EQ(pg_map.pg_stat[pgid].reported_seq, newer.reported_seq);
+}
+
 TEST_F(ClusterStateTest, UpdateDeltaStats)
 {
   pg_t pgid(0, 1);
