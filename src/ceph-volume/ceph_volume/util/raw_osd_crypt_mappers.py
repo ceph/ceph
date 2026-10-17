@@ -75,6 +75,19 @@ class RawOsdCryptMappers:
             return kname
         return self._kname_from_backing_device(backing)
 
+    @staticmethod
+    def device_is_hw_opal(backing: str, activate_path: str = '') -> bool:
+        if activate_path.startswith('/dev/mapper/ceph-hw-opal-'):
+            return True
+        try:
+            area = encryption_utils.CephLuks2(backing).get_json_area()
+        except Exception:
+            return False
+        for seg in area.get('segments', {}).values():
+            if isinstance(seg, dict) and seg.get('type') in ('hw-opal', 'hw-opal-crypt'):
+                return True
+        return False
+
     def _build_mapper_names(self) -> Dict[str, str]:
         names: Dict[str, str] = {}
         for role, backing, activate_path in (
@@ -84,10 +97,13 @@ class RawOsdCryptMappers:
         ):
             if not backing:
                 continue
-            kname = self._kname_for_role(backing, activate_path, role)
-            names[role] = 'ceph-{}-{}-{}-dmcrypt'.format(
-                self.credentials.osd_fsid, kname, role,
-            )
+            if self.device_is_hw_opal(backing, activate_path):
+                names[role] = encryption_utils.hw_opal_mapping_name(backing)
+            else:
+                kname = self._kname_for_role(backing, activate_path, role)
+                names[role] = 'ceph-{}-{}-{}-dmcrypt'.format(
+                    self.credentials.osd_fsid, kname, role,
+                )
         return names
 
     def applies(self) -> bool:
@@ -100,7 +116,9 @@ class RawOsdCryptMappers:
         ):
             if not path:
                 continue
-            if path.startswith('/dev/mapper/') and path.endswith('-dmcrypt'):
+            if path.startswith('/dev/mapper/') and (
+                path.endswith('-dmcrypt') or 'ceph-hw-opal-' in path
+            ):
                 return True
             backing = self.backing_device_path(path)
             if not backing:
@@ -151,10 +169,23 @@ class RawOsdCryptMappers:
         )
 
     def _luks_open_for_role(self, role: str, device_path: str) -> None:
+        hw_opal = self.device_is_hw_opal(device_path)
+        with_tpm = 1 if self.credentials.with_tpm else 0
+        kwargs = {
+            'with_tpm': with_tpm,
+            'options': self.dmcrypt_open_opts,
+        }
+        if hw_opal and not with_tpm:
+            kwargs['key_size'] = encryption_utils.HW_OPAL_KEY_SIZE
+        mapping = self._mapper_name_for_role(role)
         encryption_utils.luks_open(
             self.credentials.resolve_secret(self.lockbox_secret),
             device_path,
-            self._mapper_name_for_role(role),
-            with_tpm=1 if self.credentials.with_tpm else 0,
-            options=self.dmcrypt_open_opts,
+            mapping,
+            **kwargs,
         )
+        if hw_opal and not os.path.exists('/dev/mapper/%s' % mapping):
+            raise RuntimeError(
+                'Unable to open OPAL LUKS mapping %s for %s'
+                % (mapping, device_path)
+            )

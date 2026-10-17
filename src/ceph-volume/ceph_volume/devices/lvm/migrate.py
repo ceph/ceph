@@ -334,8 +334,12 @@ class Migrate(object):
 
         target_path = target_lv.lv_path
         tag_tracker = VolumeTagTracker(devices, target_lv)
-        # prepare and encrypt target if data volume is encrypted
-        if tag_tracker.data_device.lv_api.encrypted:
+        # dmcrypt encrypts the target LV. OPAL is disk-level under the VG, so
+        # the LV path is used as-is (target must already sit on OPAL media).
+        is_hw_opal = (
+            tag_tracker.data_device.lv_api.tags.get('ceph.hw_opal_only') == '1'
+        )
+        if tag_tracker.data_device.lv_api.encrypted and not is_hw_opal:
             secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
             mlogger.info(' preparing dmcrypt for {}, uuid {}'.format(target_lv.lv_path, target_lv.lv_uuid))
             target_path = encryption_utils.prepare_dmcrypt(
@@ -373,7 +377,7 @@ class Migrate(object):
 
             system.chown(os.path.join(osd_path, "block.{}".format(
                 target_type)))
-            if tag_tracker.data_device.lv_api.encrypted:
+            if tag_tracker.data_device.lv_api.encrypted and not is_hw_opal:
                 self.close_encrypted(source_devices)
             for d in removed_devices:
                 if d and d.is_lv:
@@ -405,6 +409,9 @@ class Migrate(object):
         source_devices = self.get_source_devices(devices, target_type)
         target_path = os.path.join(osd_path, target_filename)
         tag_tracker = VolumeTagTracker(devices, target_lv)
+        is_hw_opal = (
+            tag_tracker.data_device.lv_api.tags.get('ceph.hw_opal_only') == '1'
+        )
 
         try:
             # ceph-bluestore-tool removes source volume(s) other than
@@ -427,7 +434,7 @@ class Migrate(object):
                     'Failed to migrate device, error code:{}'.format(exit_code))
                 raise SystemExit(
                     'Failed to migrate to : {}'.format(self.args.target))
-            if tag_tracker.data_device.lv_api.encrypted:
+            if tag_tracker.data_device.lv_api.encrypted and not is_hw_opal:
                 self.close_encrypted(source_devices)
             for d in removed_devices:
                 if d and d.is_lv:
@@ -640,8 +647,12 @@ class NewVolume(object):
                 target_lv.lv_path, osd_id, osd_path))
         target_path = target_lv.lv_path
         tag_tracker = VolumeTagTracker(devices, target_lv)
-        # prepare and encrypt target if data volume is encrypted
-        if tag_tracker.data_device.lv_api.encrypted:
+        # dmcrypt encrypts the target LV. OPAL is disk-level under the VG, so
+        # the LV path is used as-is (target must already sit on OPAL media).
+        is_hw_opal = (
+            tag_tracker.data_device.lv_api.tags.get('ceph.hw_opal_only') == '1'
+        )
+        if tag_tracker.data_device.lv_api.encrypted and not is_hw_opal:
             secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
             mlogger.info(' preparing dmcrypt for {}, uuid {}'.format(target_lv.lv_path, target_lv.lv_uuid))
             target_path = encryption_utils.prepare_dmcrypt(

@@ -42,9 +42,9 @@ class Prepare(object):
         self.args = parser.parse_args(self.argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
-        if self.args.dmcrypt:
+        if self.args.dmcrypt or getattr(self.args, 'hw_opal_only', False):
             if not self.args.with_tpm and not os.getenv('CEPH_VOLUME_DMCRYPT_SECRET'):
-                terminal.error('encryption was requested (--dmcrypt) but environment variable ' \
+                terminal.error('encryption was requested (--dmcrypt/--hw-opal-only) but environment variable ' \
                                'CEPH_VOLUME_DMCRYPT_SECRET is not set, you must set ' \
                                'this variable to provide a dmcrypt secret or use --with-tpm ' \
                                'in order to enroll a tpm2 token.')
