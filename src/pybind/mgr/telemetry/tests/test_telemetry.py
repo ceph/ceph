@@ -140,3 +140,31 @@ class TestTelemetry:
             restored = pickle.loads(pickle.dumps(d))
             assert restored is not None, \
                 f"defaultdict({factory.__name__}) failed pickle round-trip"
+
+    def test_anonymize_entity_name_without_salt(self) -> None:
+        """Regression test for the no-salt fallback in anonymize_entity_name().
+
+        Before load() runs, self.salt is None. Anonymizing must not raise,
+        must not persist a temporary salt, and must not use a predictable one.
+        """
+        m = telemetry.Module('telemetry', '', '')
+        assert m.salt is None
+
+        first = m.anonymize_entity_name('mon.a')
+        second = m.anonymize_entity_name('mon.a')
+
+        assert first.startswith('mon.')
+        assert len(first.split('.', 1)[1]) == 40  # sha1 hex digest
+        assert first != second
+        assert m.salt is None
+
+    def test_anonymize_entity_name_with_salt(self) -> None:
+        m = telemetry.Module('telemetry', '', '')
+        m.load()
+        assert m.salt
+
+        anonymized = m.anonymize_entity_name('mds.foo')
+
+        assert anonymized.startswith('mds.')
+        assert anonymized != 'mds.foo'
+        assert anonymized == m.anonymize_entity_name('mds.foo')
