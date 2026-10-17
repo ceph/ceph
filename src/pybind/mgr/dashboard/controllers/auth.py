@@ -12,6 +12,7 @@ from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
 from ..services.auth import AuthManager, AuthType, BaseAuth, JwtManager, OAuth2
 from ..services.cluster import ClusterModel
+from ..services.telemetry import DashboardTelemetryService
 from ..settings import Settings
 from . import APIDoc, APIRouter, ControllerAuthMixin, EndpointDoc, RESTController, allow_empty_body
 
@@ -78,6 +79,7 @@ class Auth(RESTController, ControllerAuthMixin):
                 logger.info('Login successful: %s', username)
                 mgr.ACCESS_CTRL_DB.reset_attempt(username)
                 mgr.ACCESS_CTRL_DB.save()
+                DashboardTelemetryService.increment_login_count()
                 token = JwtManager.gen_token(username, ttl=ttl)
 
                 # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
