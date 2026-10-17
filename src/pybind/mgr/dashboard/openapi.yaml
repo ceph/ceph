@@ -20880,6 +20880,12 @@ paths:
               properties:
                 enabled:
                   type: string
+                max_delete_ops:
+                  default: 0
+                  type: integer
+                max_list_ops:
+                  default: 0
+                  type: integer
                 max_read_bytes:
                   type: string
                 max_read_ops:
@@ -22893,6 +22899,12 @@ paths:
                 enabled:
                   default: false
                   type: boolean
+                max_delete_ops:
+                  default: 0
+                  type: integer
+                max_list_ops:
+                  default: 0
+                  type: integer
                 max_read_bytes:
                   default: 0
                   type: integer
