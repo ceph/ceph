@@ -1,3 +1,4 @@
+from copy import deepcopy
 import enum
 import errno
 import json
@@ -2250,7 +2251,7 @@ Usage:
                       pool: str = ".nvmeof",
                       group: str = '',
                       placement: Optional[str] = None,
-                      unmanaged: bool = False,
+                      unmanaged: Optional[bool] = None,
                       dry_run: bool = False,
                       format: Format = Format.plain,
                       no_overwrite: bool = False,
@@ -2267,14 +2268,48 @@ Usage:
             nvmeof_pool_helper.create_pool_if_needed()
 
         cleanpool = pool.lstrip('.')
-        spec = NvmeofServiceSpec(
-            service_id=f'{cleanpool}.{group}' if group else cleanpool,
-            pool=pool,
-            group=group,
-            placement=PlacementSpec.from_string(placement),
-            unmanaged=unmanaged,
-            preview_only=dry_run
+        service_id = f'{cleanpool}.{group}' if group else cleanpool
+        service_name = f'nvmeof.{service_id}'
+        completion = self.describe_service(
+            service_type='nvmeof',
+            service_name=service_name,
+            refresh=False,
         )
+        raise_if_exception(completion)
+
+        if completion.result:
+            existing_spec = cast(
+                NvmeofServiceSpec,
+                completion.result[0].spec,
+            )
+            self.log.debug(
+                'NVMeOF apply: reusing existing spec for %s',
+                service_name,
+            )
+            # This command scales an existing NVMe-oF service. Preserve the
+            # existing service configuration and only update fields controlled
+            # by this CLI path.
+            spec = deepcopy(existing_spec)
+            if placement is not None:
+                spec.placement = PlacementSpec.from_string(placement)
+
+            if unmanaged is not None:
+                spec.unmanaged = unmanaged
+
+            spec.preview_only = dry_run
+        else:
+            self.log.debug(
+                'NVMeOF apply: no existing service %s found, creating a new spec',
+                service_name,
+            )
+            spec = NvmeofServiceSpec(
+                service_id=service_id,
+                pool=pool,
+                group=group,
+                placement=PlacementSpec.from_string(placement),
+                unmanaged=bool(unmanaged),
+                preview_only=dry_run
+            )
 
         spec.validate()  # force any validation exceptions to be caught correctly
 
