@@ -2334,7 +2334,7 @@ void CDir::go_bad(bool complete)
     if (get_version() == 0) {
       auto _fnode = allocate_fnode();
       _fnode->version = 1;
-      reset_fnode(std::move(_fnode));
+      set_fresh_fnode(std::move(_fnode));
     }
     
     state_set(STATE_BADFRAG);
