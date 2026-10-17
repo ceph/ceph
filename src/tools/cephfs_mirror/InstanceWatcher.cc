@@ -87,21 +87,33 @@ void InstanceWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
 
   std::string dir_path;
   std::string mode;
+  // left empty by an older mirroring module that does not send the field --
+  // decode_json() clears it when the key is absent, so do not seed it here.
+  std::string priority;
   bool purging = false;
   try {
     JSONDecoder jd(bl);
     JSONDecoder::decode_json("dir_path", dir_path, &jd.parser, true);
     JSONDecoder::decode_json("mode", mode, &jd.parser, true);
+    JSONDecoder::decode_json("priority", priority, &jd.parser, false);
     JSONDecoder::decode_json("purging", purging, &jd.parser, false);
   } catch (const JSONDecoder::err &e) {
     derr << ": failed to decode notify json: " << e.what() << dendl;
   }
 
   dout(20) << ": notifier_id=" << notifier_id << ", dir_path=" << dir_path
-           << ", mode=" << mode << ", purging=" << purging << dendl;
+           << ", mode=" << mode << ", priority=" << priority
+           << ", purging=" << purging << dendl;
 
   if (mode == "acquire") {
-    m_listener.acquire_directory(dir_path);
+    // an absent "priority" field maps to the default (thread-shared) mode,
+    // which is also what an unparsable value falls back to.
+    PriorityMode priority_mode = PriorityMode::THREAD_SHARED;
+    if (!priority.empty() && !priority_mode_from_name(priority, &priority_mode)) {
+      derr << ": unknown priority mode=" << priority << " for dir_path=" << dir_path
+           << ", defaulting to " << priority_mode << dendl;
+    }
+    m_listener.acquire_directory(dir_path, priority_mode);
   } else if (mode == "release") {
     m_listener.release_directory(dir_path, purging);
   } else {

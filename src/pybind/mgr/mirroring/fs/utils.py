@@ -16,6 +16,15 @@ INSTANCE_ID_PREFIX = "instance_"
 DIRECTORY_MAP_PREFIX = "dir_map_"
 SYNC_STAT_KEY_PREFIX = "sync_stat"
 
+# priority mode of a mirrored directory -- "thread-shared" directories are
+# crawled and synchronized by the mirror daemon's shared thread pools, a
+# "per-thread" directory gets a crawler thread and a data sync thread pool of
+# its own.
+PRIORITY_MODE_THREAD_SHARED = "thread-shared"
+PRIORITY_MODE_PER_THREAD = "per-thread"
+PRIORITY_MODES = (PRIORITY_MODE_THREAD_SHARED, PRIORITY_MODE_PER_THREAD)
+DEFAULT_PRIORITY_MODE = PRIORITY_MODE_THREAD_SHARED
+
 log = logging.getLogger(__name__)
 
 
@@ -30,6 +39,18 @@ def norm_path(dir_path):
     if not os.path.isabs(dir_path):
         raise MirrorException(-errno.EINVAL, f'{dir_path} should be an absolute path')
     return os.path.normpath(dir_path)
+
+
+def norm_priority_mode(priority_mode):
+    """Validate a user supplied priority mode, defaulting when unset."""
+    if priority_mode is None:
+        return DEFAULT_PRIORITY_MODE
+    if priority_mode not in PRIORITY_MODES:
+        raise MirrorException(
+            -errno.EINVAL,
+            f'invalid priority mode {priority_mode}, expected one of '
+            f'{", ".join(PRIORITY_MODES)}')
+    return priority_mode
 
 
 def sync_stat_omap_key(filesystem, peer_uuid, dir_path):
