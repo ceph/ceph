@@ -89,7 +89,10 @@ as follows:
   (e.g., ``--marker=obj1 --object-version=abc123``).
 
 :command:`bucket limit check`
-  Show bucket sharding stats.
+  Show bucket sharding stats. With no filters, checks all buckets for all users.
+  Pass ``--uid`` to limit to one user's buckets, or ``--bucket`` (and optional
+  ``--tenant``) to check a single bucket. ``--warnings-only`` lists only buckets
+  nearing or over the per-shard object limit.
 
 :command:`bucket link`
   Link bucket to specified user.
