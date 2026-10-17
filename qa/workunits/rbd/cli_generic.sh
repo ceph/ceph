@@ -17,6 +17,11 @@ if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
     tiered=1
 fi
 
+ec_metadata=0
+if ceph osd dump | grep ^pool | grep "'rbd'" | grep erasure; then
+    ec_metadata=1
+fi
+
 remove_images() {
     for img in $IMGS
     do
@@ -163,12 +168,14 @@ test_rename() {
     echo "testing rename..."
     remove_images
 
-    rbd create --image-format 1 -s 1 foo
-    rbd create --image-format 2 -s 1 bar
-    rbd rename foo foo2
-    rbd rename foo2 bar 2>&1 | grep exists
-    rbd rename bar bar2
-    rbd rename bar2 foo2 2>&1 | grep exists
+    if [ $ec_metadata -eq 0 ]; then
+        rbd create --image-format 1 -s 1 foo
+        rbd create --image-format 2 -s 1 bar
+        rbd rename foo foo2
+        rbd rename foo2 bar 2>&1 | grep exists
+        rbd rename bar bar2
+        rbd rename bar2 foo2 2>&1 | grep exists
+    fi
 
     ceph osd pool create rbd2 8
     rbd pool init rbd2
@@ -189,17 +196,19 @@ test_ls() {
     echo "testing ls..."
     remove_images
 
-    rbd create --image-format 1 -s 1 test1
-    rbd create --image-format 1 -s 1 test2
-    rbd ls | grep test1
-    rbd ls | grep test2
-    rbd ls | wc -l | grep 2
-    # look for fields in output of ls -l without worrying about space
-    rbd ls -l | grep 'test1.*1 MiB.*1'
-    rbd ls -l | grep 'test2.*1 MiB.*1'
+    if [ $ec_metadata -eq 0 ]; then
+        rbd create --image-format 1 -s 1 test1
+        rbd create --image-format 1 -s 1 test2
+        rbd ls | grep test1
+        rbd ls | grep test2
+        rbd ls | wc -l | grep 2
+        # look for fields in output of ls -l without worrying about space
+        rbd ls -l | grep 'test1.*1 MiB.*1'
+        rbd ls -l | grep 'test2.*1 MiB.*1'
 
-    rbd rm test1
-    rbd rm test2
+        rbd rm test1
+        rbd rm test2
+    fi
 
     rbd create --image-format 2 -s 1 test1
     rbd create --image-format 2 -s 1 test2
@@ -212,14 +221,16 @@ test_ls() {
     rbd rm test1
     rbd rm test2
 
-    rbd create --image-format 2 -s 1 test1
-    rbd create --image-format 1 -s 1 test2
-    rbd ls | grep test1
-    rbd ls | grep test2
-    rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1 MiB.*2'
-    rbd ls -l | grep 'test2.*1 MiB.*1'
-    remove_images
+    if [ $ec_metadata -eq 0 ]; then
+        rbd create --image-format 2 -s 1 test1
+        rbd create --image-format 1 -s 1 test2
+        rbd ls | grep test1
+        rbd ls | grep test2
+        rbd ls | wc -l | grep 2
+        rbd ls -l | grep 'test1.*1 MiB.*2'
+        rbd ls -l | grep 'test2.*1 MiB.*1'
+        remove_images
+    fi
 
     # test that many images can be shown by ls
     for i in $(seq -w 00 99); do
@@ -246,9 +257,11 @@ test_remove() {
     remove_images
 
     rbd remove "NOT_EXIST" && exit 1 || true	# remove should fail
-    rbd create --image-format 1 -s 1 test1
-    rbd rm test1
-    rbd ls | wc -l | grep "^0$"
+    if [ $ec_metadata -eq 0 ]; then
+        rbd create --image-format 1 -s 1 test1
+        rbd rm test1
+        rbd ls | wc -l | grep "^0$"
+    fi
 
     rbd create --image-format 2 -s 1 test2
     rbd rm test2
@@ -258,11 +271,13 @@ test_remove() {
     # interrupted partway through. simulate this
     # by removing some objects manually.
 
-    # remove with header missing (old format)
-    rbd create --image-format 1 -s 1 test1
-    rados rm -p rbd test1.rbd
-    rbd rm test1
-    rbd ls | wc -l | grep "^0$"
+    if [ $ec_metadata -eq 0 ]; then
+        # remove with header missing (old format)
+        rbd create --image-format 1 -s 1 test1
+        rados rm -p rbd test1.rbd
+        rbd rm test1
+        rbd ls | wc -l | grep "^0$"
+    fi
 
     if [ $tiered -eq 0 ]; then
         # remove with header missing
@@ -976,25 +991,30 @@ test_migration() {
     ceph osd pool create rbd2 8
     rbd pool init rbd2
 
-    # Convert to new format
-    rbd create --image-format 1 -s 128M test1
-    rbd info test1 | grep 'format: 1'
-    rbd migration prepare test1 --image-format 2
-    test "$(get_migration_state test1)" = prepared
-    rbd info test1 | grep 'format: 2'
-    rbd rm test1 && exit 1 || true
-    rbd migration execute test1
-    test "$(get_migration_state test1)" = executed
-    rbd migration commit test1
-    get_migration_state test1 && exit 1 || true
+    if [ $ec_metadata -eq 0 ]; then
+        # Convert to new format
+        rbd create --image-format 1 -s 128M test1
+        rbd info test1 | grep 'format: 1'
+        rbd migration prepare test1 --image-format 2
+        test "$(get_migration_state test1)" = prepared
+        rbd info test1 | grep 'format: 2'
+        rbd rm test1 && exit 1 || true
+        rbd migration execute test1
+        test "$(get_migration_state test1)" = executed
+        rbd migration commit test1
+        get_migration_state test1 && exit 1 || true
 
-    # Enable layering (and some other features)
-    rbd info test1 | grep 'features: .*layering' && exit 1 || true
-    rbd migration prepare test1 --image-feature \
-        layering,exclusive-lock,object-map,fast-diff,deep-flatten
-    rbd info test1 | grep 'features: .*layering'
-    rbd migration execute test1
-    rbd migration commit test1
+        # Enable layering (and some other features)
+        rbd info test1 | grep 'features: .*layering' && exit 1 || true
+        rbd migration prepare test1 --image-feature \
+            layering,exclusive-lock,object-map,fast-diff,deep-flatten
+        rbd info test1 | grep 'features: .*layering'
+        rbd migration execute test1
+        rbd migration commit test1
+    else
+        # Create a format 2 image to use for remaining migration tests
+        rbd create --image-format 2 -s 128M test1
+    fi
 
     # Migration to other pool
     rbd migration prepare test1 rbd2/test1
@@ -1077,7 +1097,7 @@ test_migration() {
     rbd snap purge test1
     rbd rm test1
 
-    for format in 1 2; do
+    for format in $([ $ec_metadata -eq 0 ] && echo "1 2" || echo "2"); do
         # Abort migration after successful prepare
         rbd create -s 128M --image-format ${format} test2
         rbd migration prepare test2 --data-pool rbd2
@@ -2079,10 +2099,12 @@ test_ls
 test_remove
 test_migration
 test_config
-RBD_CREATE_ARGS=""
-test_others
-test_locking
-test_thick_provision
+if [ $ec_metadata -eq 0 ]; then
+    RBD_CREATE_ARGS=""
+    test_others
+    test_locking
+    test_thick_provision
+fi
 RBD_CREATE_ARGS="--image-format 2"
 test_others
 test_locking

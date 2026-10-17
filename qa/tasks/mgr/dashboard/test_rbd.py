@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-public-methods,too-many-lines
 
 from __future__ import absolute_import
 
@@ -419,6 +419,44 @@ class RbdTest(DashboardTestCase):
         self.remove_image('rbd', None, rbd_name)
         self.assertStatus(204)
         self._ceph_cmd(['osd', 'pool', 'delete', 'data_pool', 'data_pool',
+                        '--yes-i-really-really-mean-it'])
+
+    def test_create_rbd_in_ec_pool(self):
+        if not self.bluestore_support:
+            self.skipTest('requires bluestore cluster')
+
+        self._ceph_cmd(['osd', 'erasure-code-profile', 'set', 'ec_rbd_profile',
+                        'k=2', 'm=1', 'crush-failure-domain=osd'])
+        self._ceph_cmd(['osd', 'pool', 'create', 'ec_rbd_pool', '8', 'erasure', 'ec_rbd_profile'])
+
+        self._ceph_cmd(['osd', 'pool', 'set', 'ec_rbd_pool',
+                        'allow_ec_overwrites', 'true'])
+        self._ceph_cmd(['osd', 'pool', 'set', 'ec_rbd_pool',
+                        'allow_ec_optimizations', 'true'])
+
+        self._ceph_cmd(['osd', 'pool', 'application', 'enable', 'ec_rbd_pool', 'rbd'])
+        self._rbd_cmd(['pool', 'init', 'ec_rbd_pool'])
+
+        rbd_name = 'test_rbd_in_ec_pool'
+        self.create_image('ec_rbd_pool', None, rbd_name, 10240)
+        self.assertStatus(201)
+
+        img = self.get_image('ec_rbd_pool', None, rbd_name)
+        self.assertStatus(200)
+
+        self._validate_image(img, name=rbd_name, size=10240,
+                             num_objs=1, obj_size=4194304,
+                             pool_name='ec_rbd_pool',
+                             data_pool=None,
+                             features_name=['deep-flatten',
+                                            'exclusive-lock',
+                                            'fast-diff',
+                                            'layering',
+                                            'object-map'])
+
+        self.remove_image('ec_rbd_pool', None, rbd_name)
+        self.assertStatus(204)
+        self._ceph_cmd(['osd', 'pool', 'delete', 'ec_rbd_pool', 'ec_rbd_pool',
                         '--yes-i-really-really-mean-it'])
 
     def test_create_rbd_twice(self):
