@@ -32,6 +32,7 @@ public:
   } outkey[1] = {0, 0};
   // end must free
   int ret;
+  int worker_id = -1;  // worker that handled this request; -1 if none
   bool done;
   ceph::mutex lock = ceph::make_mutex("rgw_kmip_req::lock");
   ceph::condition_variable cond;
