@@ -351,6 +351,19 @@ When you rename a snapshot that has a checkpoint:
 - Always use ``checkpoint ls`` to verify current snapshot names before removing checkpoints
 - Update any automation scripts if you rename snapshots
 
+Automatic Retention
+-------------------
+
+The ``cephfs-mirror`` daemon automatically prunes old **complete** checkpoints so that
+only the newest ones are retained per mirrored directory.
+
+- Default retention: last **10** complete checkpoints (``cephfs_mirror_checkpoint_keep_count``)
+- The retained count may briefly exceed that limit until the next initialize.
+  A checkpoint completed in the current initialize pass is not pruned in that pass.
+- Pruning runs lazily when checkpoints are initialized (directory acquire, checkpoint
+  add/now, or daemon restart) — not on a fixed timer
+- Checkpoints in **created** or **failed** status are never pruned automatically
+- Only checkpoint metadata is removed; the underlying snapshots are not deleted
 
 Additional Resources
 ====================
