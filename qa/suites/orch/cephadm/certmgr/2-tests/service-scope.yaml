@@ -1,0 +1,4 @@
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.test_certmgr.TestCertMgrServiceScope

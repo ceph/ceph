@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # raised on purpose by these tests
+      - CEPHADM_CERT_ERROR
+      - CEPHADM_CERT_WARNING
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.test_certmgr.TestCertMgrRenewal
