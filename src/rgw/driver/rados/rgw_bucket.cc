@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <algorithm> // for std::min
+
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/JSONFormatter.h"
 #include "common/errno.h"
@@ -3082,12 +3084,20 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   layout.current_index.layout.type =
     type.value_or(rgw::BucketIndexType::Normal);
 
+  // A bucket index can only address rgw_shards_max() shards: rgw_shards_mod()
+  // maps a key to (hval % rgw_shards_max()) % num_shards, so any shard at index
+  // rgw_shards_max() or above never receives an entry. Clamp the creation count
+  // to that maximum, matching the clamps already applied to the same value in
+  // RGWRados::init() and to reshard requests; without it a larger requested or
+  // overridden count is stored verbatim, leaving permanently-dead shards.
   if (shards) {
-    layout.current_index.layout.normal.num_shards = *shards;
-    layout.current_index.layout.normal.min_num_shards = *shards;
+    const uint32_t num_shards = std::min<uint32_t>(*shards, rgw_shards_max());
+    layout.current_index.layout.normal.num_shards = num_shards;
+    layout.current_index.layout.normal.min_num_shards = num_shards;
   } else if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
     layout.current_index.layout.normal.num_shards =
-      cct->_conf->rgw_override_bucket_index_max_shards;
+      std::min<uint32_t>(cct->_conf->rgw_override_bucket_index_max_shards,
+                         rgw_shards_max());
   } else {
     layout.current_index.layout.normal.num_shards =
       zone.bucket_index_max_shards;
