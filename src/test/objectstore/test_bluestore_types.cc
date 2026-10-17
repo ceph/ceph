@@ -15,6 +15,7 @@
 #include "perfglue/heap_profiler.h"
 #include "os/bluestore/Writer.h"
 #include "common/pretty_binary.h"
+#include "test/sanitized_bench.h"
 #include <bitset>
 #include <sstream>
 #include <boost/random/mersenne_twister.hpp>
@@ -437,7 +438,7 @@ TEST(bluestore_blob_t, csum_bench) {
   for (char *a = bp.c_str(); a < bp.c_str() + bp.length(); ++a)
     *a = (unsigned long)a & 0xff;
   bl.append(bp);
-  int count = 256;
+  int count = sanitized_bench_rounds(256);
   for (unsigned csum_type = 1; csum_type < Checksummer::CSUM_MAX; ++csum_type) {
     bluestore_blob_t b;
     b.init_csum(csum_type, 12, bl.length());
