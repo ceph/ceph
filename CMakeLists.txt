@@ -618,6 +618,39 @@ else()
   set(WITH_RADOSGW_LANCEDB_DEFAULT OFF)
 endif()
 option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ${WITH_RADOSGW_LANCEDB_DEFAULT})
+# builds ofi-rma for out-of-band delivery over libfabric, on any
+# provider (tcp, shm, verbs, efa, a UET provider such as the UEC
+# reference provider's libfabric wrapper)
+option(WITH_OOB_OFI "out-of-band delivery over libfabric" OFF)
+if(WITH_OOB_OFI)
+  # pkg-config first, as src/ofi-rma does and as src/script/run-make.sh
+  # decides on, so that a libfabric reached only through PKG_CONFIG_PATH
+  # wins over an older one in the default prefixes
+  find_package(PkgConfig QUIET)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(FABRIC_PC QUIET libfabric)
+  endif()
+  find_path(FABRIC_INCLUDE_DIR rdma/fabric.h
+    HINTS ${FABRIC_PC_INCLUDE_DIRS} REQUIRED)
+  find_library(FABRIC_LIBRARY fabric
+    HINTS ${FABRIC_PC_LIBRARY_DIRS} REQUIRED)
+  # ofi-rma asks for API 1.20, the first with dma-buf registration
+  # (FI_MR_DMABUF), and does not compile against older headers
+  foreach(ver "MAJOR" "MINOR")
+    file(STRINGS "${FABRIC_INCLUDE_DIR}/rdma/fabric.h" FABRIC_${ver}_LINE
+      REGEX "^#define[ \t]+FI_${ver}_VERSION[ \t]+[0-9]+")
+    string(REGEX REPLACE "^#define[ \t]+FI_${ver}_VERSION[ \t]+([0-9]+).*$"
+      "\\1" FABRIC_VERSION_${ver} "${FABRIC_${ver}_LINE}")
+  endforeach()
+  set(FABRIC_VERSION "${FABRIC_VERSION_MAJOR}.${FABRIC_VERSION_MINOR}")
+  if(NOT FABRIC_VERSION MATCHES "^[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "WITH_OOB_OFI needs libfabric 1.20 or later, and "
+      "${FABRIC_INCLUDE_DIR}/rdma/fabric.h does not say its version")
+  elseif(FABRIC_VERSION VERSION_LESS 1.20)
+    message(FATAL_ERROR "WITH_OOB_OFI needs libfabric 1.20 or later, but "
+      "${FABRIC_INCLUDE_DIR}/rdma/fabric.h is ${FABRIC_VERSION}")
+  endif()
+endif()
 # See doc/radosgw/s3rdma.rst for build and runtime requirements.
 option(WITH_RADOSGW_CUOBJ "cuObject RDMA support for RADOS Gateway (experimental)" OFF)
 if(WITH_RADOSGW_CUOBJ)

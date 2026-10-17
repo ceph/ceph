@@ -31,6 +31,15 @@ export LC_ALL=C.UTF-8
 ARCH=$(uname -m)
 
 
+# WITH_OOB_OFI asks for out-of-band delivery over libfabric: ON, as for
+# the CMake option (or 1, true, yes)
+function oob_ofi_wanted {
+    case "${WITH_OOB_OFI:-}" in
+        ON|On|on|1|TRUE|True|true|YES|Yes|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 function munge_ceph_spec_in {
     local with_crimson=$1
     shift
@@ -41,6 +50,9 @@ function munge_ceph_spec_in {
     # http://rpm.org/user_doc/conditional_builds.html
     if ! $with_crimson; then
         sed -i -e 's/%bcond_without crimson/%bcond_with crimson/g' $OUTFILE
+    fi
+    if oob_ofi_wanted; then
+        sed -i -e 's/%bcond_with oob_ofi/%bcond_without oob_ofi/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
@@ -483,6 +495,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
+    oob_ofi_wanted && with_oob_ofi=true || with_oob_ofi=false
     source /etc/os-release
     setup_cuobj_repo || exit 1
     case "$ID" in
@@ -560,9 +573,13 @@ else
         if $with_crimson; then
             build_profiles+=",pkg.ceph.crimson"
         fi
+        if $with_oob_ofi; then
+            build_profiles+=",pkg.ceph.oob-ofi"
+        fi
 
         ci_debug "for_make_check=$for_make_check"
         ci_debug "with_crimson=$with_crimson"
+        ci_debug "with_oob_ofi=$with_oob_ofi"
         ci_debug "with_jaeger=$with_jaeger"
         ci_debug "build_profiles=$build_profiles"
         ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"

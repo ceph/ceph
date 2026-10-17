@@ -282,6 +282,18 @@ add_executable(unittest_oob_gid
 add_ceph_unittest(unittest_oob_gid)
 target_link_libraries(unittest_oob_gid ceph-common)
 
+if(WITH_OOB_OFI AND NOT WITH_SYSTEM_OFI_RMA)
+  # unittest_ofi_rma: the ofi-rma submodule's own tests, token encoding
+  # and writes over the tcp and shm providers, which need no special
+  # hardware
+  add_executable(unittest_ofi_rma
+    ${CMAKE_SOURCE_DIR}/src/ofi-rma/test/test_ofi_rma.cc)
+  add_ceph_unittest(unittest_ofi_rma)
+  target_link_libraries(unittest_ofi_rma ofi_rma)
+  # its tests time writes and waits in fractions of a second
+  set_tests_properties(unittest_ofi_rma PROPERTIES RUN_SERIAL TRUE)
+endif()
+
 # unittest_interval_map
 add_executable(unittest_interval_map
   test_interval_map.cc

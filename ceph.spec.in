@@ -114,6 +114,8 @@
 %bcond_with system_qat
 %endif
 %bcond_with system_rdkafka
+# out-of-band delivery over libfabric, which needs libfabric 1.20 or later
+%bcond_with oob_ofi
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -282,6 +284,9 @@ BuildRequires:	pkgconfig(libibverbs)
 BuildRequires:	pkgconfig(librdmacm)
 %if %{with cuobj}
 BuildRequires:  libcuobjserver-devel >= 2.0.0
+%endif
+%if 0%{with oob_ofi}
+BuildRequires:	pkgconfig(libfabric) >= 1.20
 %endif
 BuildRequires:	pkgconfig(liblz4) >= 1.7
 BuildRequires:	pkgconfig(libnl-3.0)
@@ -1823,6 +1828,9 @@ cmake .. \
 %endif
 %if 0%{with system_rdkafka}
     -DWITH_SYSTEM_RDKAFKA:BOOL=ON \
+%endif
+%if 0%{with oob_ofi}
+    -DWITH_OOB_OFI:BOOL=ON \
 %endif
 %if 0%{without jaeger}
     -DWITH_JAEGER:BOOL=OFF \

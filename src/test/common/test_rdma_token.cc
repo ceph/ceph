@@ -447,7 +447,8 @@ TEST(RdmaToken, CuobjDescriptor)
 
 TEST(RdmaToken, LongestOfiTokenFits)
 {
-  // a token as long as ofi-rma writes one, without its NUL
+  // a token as long as ofi-rma writes one, without its NUL (common/ofi_rma.h
+  // checks that OFI_RMA_TOKEN_MAX - 1 fits RDMA_TOKEN_MAX_LEN)
   std::string t = "7f0012345000:c00000:ofi1:rxm.1:";
   t.resize(RDMA_TOKEN_MAX_LEN - 1, 'a');
   ASSERT_LE(t.size(), RDMA_TOKEN_MAX_LEN);

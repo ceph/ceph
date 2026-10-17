@@ -20,6 +20,10 @@ License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
 Files: bin/git-archive-all.sh
 License: GPL3
 
+Files: src/ofi-rma/*
+Copyright: Copyright (c) 2026 IBM Corporation
+License: MIT (see src/ofi-rma/LICENSE)
+
 Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
 License: LGPL-2 or later

@@ -157,6 +157,9 @@
 /* define if cuObject RDMA enabled */
 #cmakedefine WITH_RADOSGW_CUOBJ
 
+/* Define if out-of-band delivery over libfabric is built */
+#cmakedefine WITH_OOB_OFI
+
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 

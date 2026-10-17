@@ -7,6 +7,11 @@
 #include <cctype>
 #include <charconv>
 
+#ifdef WITH_OOB_OFI
+// for its checks that the tokens ofi-rma writes are the ones this code takes
+#include "common/ofi_rma.h"
+#endif
+
 namespace ceph::rdma {
 
 namespace {
