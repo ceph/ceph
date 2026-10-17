@@ -811,6 +811,47 @@ def get_custom_field(issue, field_id):
         pass
     return None
 
+# A ptl-generated integration branch, e.g. wip-yuri-testing-20261006.163134-umbrella
+_BRANCH_RE = re.compile(r'wip-\S+?-\d{8}\.\d{6}-[^,\s]+')
+
+def build_subject_with_branch_history(current_subject, new_branch, max_len=255):
+    """Move new_branch to the front as the anchor and keep the previous
+    branches, newest-first, in a trailing parenthesized list:
+
+        <new_branch> (<prev_newest>, ..., <prev_oldest>)
+
+    Idempotent: a subject already in this form is re-parsed and extended
+    rather than nested. The parenthesized group is only treated as branch
+    history when every entry matches a ptl branch name, so an arbitrary
+    human subject that happens to end in "(...)" is left untouched.
+
+    Precondition: current_subject is expected to be a ptl branch name or a
+    prior history form. A subject carrying unrelated parentheses does not
+    round-trip (it is wrapped as the anchor and will not re-parse later).
+    """
+    base = current_subject.strip()
+    prev = []
+    old_anchor = base
+    m = re.search(r'\s*\(([^()]*)\)\s*$', base)
+    if m:
+        entries = [x.strip() for x in m.group(1).split(',') if x.strip()]
+        # A trailing "..." marks an earlier length-cap truncation; ignore it.
+        branches = [e for e in entries if e != '...']
+        if branches and all(_BRANCH_RE.fullmatch(e) for e in branches):
+            prev = branches
+            old_anchor = base[:m.start()].rstrip()
+    if not old_anchor:
+        return new_branch  # empty/blank subject: no history to carry
+    if new_branch == old_anchor:
+        return current_subject  # no-op: re-run with the same branch
+    prev = [old_anchor] + [p for p in prev if p != old_anchor and p != new_branch]
+    subject = f"{new_branch} ({', '.join(prev)})"
+    # Redmine subject caps at 255 chars; drop oldest entries if the list grows too long.
+    while len(subject) > max_len and prev:
+        prev.pop()
+        subject = f"{new_branch} ({', '.join(prev)}, ...)" if prev else new_branch
+    return subject[:max_len]
+
 class CommitParityCheck(BaseAuditCheck):
     @property
     def name(self) -> str:
@@ -2016,6 +2057,9 @@ def manage_qa_tracker(args, R, session, branch, prs, tag, qa_tracker_description
 
         issue_kwargs['notes'] = notes.strip()
 
+        if args.subject_branch_history:
+            issue_kwargs['subject'] = build_subject_with_branch_history(issue.subject, branch)
+
         if args.dry_run:
             log.info(f"[DRY RUN] Would update redmine qa issue {issue.url} with kwargs: {issue_kwargs}")
             issue_url = issue.url
@@ -2632,6 +2676,7 @@ def main():
     group.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker (defaults to PR base when --integration)')
     group.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     group.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
+    group.add_argument('--subject-branch-history', dest='subject_branch_history', action='store_true', help='on --update-qa, rewrite the tracker subject to make the new integration branch the anchor and keep prior branches newest-first in a trailing parenthesized list')
 
     group = parser.add_argument_group('CI Repository Options')
     group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo (when making QA tickets)')
