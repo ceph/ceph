@@ -162,8 +162,12 @@ struct MetricReportMessage {
       payload = MDSMetricPayload();
       break;
     default:
-      payload = UnknownMetricPayload();
-      break;
+      // senders only use types the peer knows (should_encode()), so this
+      // is a corrupted message: fail the decode (the messenger drops the
+      // message and resets the connection) rather than abort in
+      // UnknownMetricPayload's decoder
+      throw ::ceph::buffer::malformed_input(
+        "unknown metric report type " + std::to_string(metric_report_type));
   }
 
   std::visit(DecodeMetricPayloadVisitor(iter), payload);
@@ -332,8 +336,9 @@ struct MetricConfigMessage {
       payload = MDSConfigPayload();
       break;
     default:
-      payload = UnknownConfigPayload();
-      break;
+      // see MetricReportMessage::decode()
+      throw ::ceph::buffer::malformed_input(
+        "unknown metric config type " + std::to_string(metric_config_type));
   }
 
   std::visit(DecodeConfigPayloadVisitor(iter), payload);
