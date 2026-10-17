@@ -6,7 +6,9 @@
 #include <cassert>
 
 #include "common/async/context_pool.h"
+#include "common/TrackedOp.h"
 #include "global/global_context.h"
+#include "global/global_init.h"
 #include "gtest/gtest.h"
 #include "messages/MPGStats.h"
 #include "mgr/ClusterState.h"
@@ -187,5 +189,29 @@ struct PythonEnv : public ::testing::Environment {
   TearDown() override
   {
     Py_Finalize();
+  }
+};
+
+class MgrOpRequestTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<OpTracker> tracker;
+
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_mgr_mgroprequest"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+
+  void SetUp() override {
+    tracker = std::make_unique<OpTracker>(cct.get(), true, 1);
+  }
+
+  void TearDown() override {
+    tracker.reset();
   }
 };
