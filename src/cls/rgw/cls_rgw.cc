@@ -2144,6 +2144,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
           op.op_tag.c_str(), op.key.to_string().c_str(), op.olh_epoch);
 
   cls_rgw_obj_key dest_key = op.key;
+  if (dest_key.instance == "null") {
+    dest_key.instance.clear();
+  }
 
   struct rgw_bucket_dir_header header;
   int ret = read_bucket_header(hctx, &header);
@@ -2181,6 +2184,24 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   encode(candidate_epoch, *out);
   CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
           __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
+
+  // The NULL slot is mutable: a newer replacement may commit after preflight.
+  // Check under the index object's lock before changing the target or listing.
+  if (dest_key.instance.empty() && op.olh_epoch &&
+      (obj.get_dir_entry().versioned_epoch > op.olh_epoch ||
+       (olh_found && olh.exists() && olh.get_entry().key == dest_key &&
+        olh.get_epoch() > op.olh_epoch))) {
+    if (!olh_found) {
+      return -ECANCELED;
+    }
+    olh.update_log(CLS_RGW_OLH_OP_STALE, op.op_tag, dest_key,
+                   obj.is_delete_marker(), now_epoch);
+    ret = olh.write(header);
+    if (ret < 0) {
+      return ret;
+    }
+    return write_header_while_logrecord(hctx, header);
+  }
 
   if (!olh_found) {
     bool instance_only = false;

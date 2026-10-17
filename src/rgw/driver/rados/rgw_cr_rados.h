@@ -1365,6 +1365,7 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   bool versioned;
   uint64_t versioned_epoch;
   std::string marker_version_id;
+  bool create_delete_marker;
 
   bool del_if_older;
   ceph::real_time timestamp;
@@ -1393,6 +1394,7 @@ public:
                                                   owner_display_name(_owner_display_name),
                                                   versioned(_versioned),
                                                   versioned_epoch(_versioned_epoch),
+                                                  create_delete_marker(_delete_marker),
                                                   del_if_older(_if_older),
                                                   timestamp(_timestamp) {
     if (_delete_marker) {

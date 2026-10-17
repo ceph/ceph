@@ -4732,9 +4732,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
-  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
-                                  owner, dest_obj_ctx, dest_obj, olh_epoch,
-				  tag, rctx.dpp, rctx.y, no_trace);
+  // Keep the remote NULL selector separate from its canonical local BI key.
+  rgw_obj dest_obj_bi = dest_obj;
+  if (dest_obj_bi.key.have_null_instance()) {
+    dest_obj_bi.key.instance.clear();
+  }
+  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr, owner,
+                                  dest_obj_ctx, dest_obj_bi, olh_epoch, tag,
+                                  rctx.dpp, rctx.y, no_trace);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -5067,7 +5072,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
     if (copy_if_newer && canceled) {
       ldpp_dout(rctx.dpp, 20) << "raced with another write of obj: " << fetched_obj << dendl;
-      dest_obj_ctx.invalidate(dest_obj); /* object was overwritten */
+      dest_obj_ctx.invalidate(dest_obj_bi); /* object was overwritten */
+      if (!(stat_dest_obj == dest_obj_bi)) {
+        dest_obj_ctx.invalidate(stat_dest_obj);
+      }
       ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
       if (ret < 0) {
         ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret
@@ -5108,8 +5116,9 @@ set_err_state:
     // for OP_LINK_OLH to call set_olh() with a real olh_epoch
     if (olh_epoch && *olh_epoch > 0) {
       constexpr bool log_data_change = true;
-      ret = set_olh(rctx.dpp, dest_obj_ctx, dest_bucket_info, dest_obj, false, nullptr,
-                    *olh_epoch, real_time(), false, rctx.y, zones_trace, log_data_change);
+      ret = set_olh(rctx.dpp, dest_obj_ctx, dest_bucket_info, dest_obj_bi,
+                    false, nullptr, *olh_epoch, real_time(), false, rctx.y,
+                    zones_trace, log_data_change);
     } else {
       // we already have the latest copy
       ret = 0;
@@ -9094,6 +9103,9 @@ void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWB
 
   // first remove the relevant pending prefix
   ObjectWriteOperation op;
+  // An explicit zero timestamp preserves the head's current mtime atomically.
+  struct timespec mtime_ts = {};
+  op.mtime2(&mtime_ts);
   bucket_index_guard_olh_op(dpp, state, op);
   op.rmxattr(attr_name.c_str());
   r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
@@ -9131,7 +9143,9 @@ int RGWRados::olh_init_modification_impl(const DoutPrefixProvider *dpp, const RG
     op.create(true);
   } else {
     op.assert_exists();
-    struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
+    // Preserve the current mtime, not a cached value from before a racing
+    // write.
+    struct timespec mtime_ts = {};
     op.mtime2(&mtime_ts);
   }
 
@@ -9815,8 +9829,8 @@ int RGWRados::repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, cons
   ObjectWriteOperation op;
   // assert this is the same olh tag we think we're fixing
   bucket_index_guard_olh_op(dpp, *state, op);
-  // preserve existing mtime
-  struct timespec mtime_ts = ceph::real_clock::to_timespec(state->mtime);
+  // An explicit zero preserves the current mtime, including racing data writes.
+  struct timespec mtime_ts = {};
   op.mtime2(&mtime_ts);
   {
     bufferlist bl;
@@ -9961,7 +9975,8 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   ver_bl.append(last_ver_s.c_str(), last_ver_s.size());
   op.setxattr(RGW_ATTR_OLH_VER, ver_bl);
 
-  struct timespec mtime_ts = real_clock::to_timespec(state.mtime);
+  // Preserve the head's current mtime without replaying the cached timestamp.
+  struct timespec mtime_ts = {};
   op.mtime2(&mtime_ts);
 
   bool need_to_link = false;
@@ -10487,6 +10502,8 @@ int RGWRados::remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RG
   auto i = pending_attrs.begin();
   while (i != pending_attrs.end()) {
     ObjectWriteOperation op;
+    struct timespec mtime_ts = {};
+    op.mtime2(&mtime_ts);
     bucket_index_guard_olh_op(dpp, state, op);
 
     for (int n = 0; n < max_entries && i != pending_attrs.end(); ++n, ++i) {
@@ -11003,6 +11020,31 @@ int RGWRados::bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo
     return -EIO;
   }
 
+  return 0;
+}
+
+int RGWRados::bi_get_delete_marker(
+    const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+    const rgw_obj& obj, rgw_bucket_dir_entry* dirent, optional_yield y)
+{
+  rgw_obj index_obj = obj;
+  if (obj.key.have_null_instance()) {
+    // Existing NULL-marker index suffix; use only as a read selector.
+    index_obj.key.instance.assign("\0d", 2);
+  }
+  int ret = bi_get_instance(dpp, bucket_info, index_obj, dirent, y);
+  if (ret < 0) {
+    return ret;
+  }
+  const std::string instance = obj.key.have_null_instance() ? ""
+                                                            : obj.key.instance;
+  if (!dirent->is_delete_marker() ||
+      dirent->key.name != obj.key.get_index_key_name() ||
+      dirent->key.instance != instance) {
+    ldpp_dout(dpp, 0) << "ERROR: invalid delete-marker index entry for " << obj
+                      << dendl;
+    return -EIO;
+  }
   return 0;
 }
 
