@@ -223,6 +223,9 @@ public:
     std::unique_lock l{lock};
     auto d = _get_or_create_device(dev);
     std::forward<Callback>(cb)(*d, std::forward<Args>(args)...);
+    if (d->empty()) {
+      _erase_device(d);
+    }
   }
 
   template<typename Callback, typename...Args>
