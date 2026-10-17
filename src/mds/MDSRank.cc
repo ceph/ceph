@@ -512,6 +512,8 @@ MDSRank::MDSRank(
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
+  // Clients must direct ops to the source of a pool migration
+  objecter->set_honor_pool_migration();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 

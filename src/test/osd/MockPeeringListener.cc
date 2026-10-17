@@ -83,7 +83,7 @@ void MockPeeringListener::schedule_event_on_commit(
   events_on_commit_scheduled++;
 }
 
-void MockPeeringListener::on_activate_complete() {
+void MockPeeringListener::on_activate_complete(HBHandle *handle) {
   dout(0) << __func__ << dendl;
 
   auto schedule_event = [this](PGPeeringEventRef evt) {
@@ -115,14 +115,12 @@ void MockPeeringListener::on_activate_complete() {
       get_osdmap_epoch(),
       get_osdmap_epoch(),
       PeeringState::RequestBackfill()));
-#if POOL_MIGRATION
   } else if (ps->needs_pool_migration()) {
     dout(10) << "activate queueing pool migration" << dendl;
     schedule_event(std::make_shared<PGPeeringEvent>(
       get_osdmap_epoch(),
       get_osdmap_epoch(),
       PeeringState::DoPoolMigration()));
-#endif
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
     schedule_event(std::make_shared<PGPeeringEvent>(
