@@ -1086,7 +1086,11 @@ def main():
     try:
         if childargs and childargs[0] == 'ping' and not parsed_args.help:
             return ping_monitor(cluster_handle, childargs[1], timeout)
-        result = run_in_thread(cluster_handle.connect, timeout=timeout)
+        try:
+            result = run_in_thread(cluster_handle.connect, timeout=timeout)
+        except rados.ObjectNotFound as e:
+            print(str(e), file=sys.stderr)
+            return errno.ENOENT
         if type(result) is tuple and result[0] == -errno.EINTR:
             print('Cluster connection interrupted or timed out', file=sys.stderr)
             return 1
