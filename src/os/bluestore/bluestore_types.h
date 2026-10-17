@@ -69,6 +69,102 @@ namespace ceph {
   class Formatter;
 }
 
+struct store_statfs_t;
+struct volatile_statfs {
+  enum {
+    STATFS_ALLOCATED = 0,
+    STATFS_STORED,
+    STATFS_COMPRESSED_ORIGINAL,
+    STATFS_COMPRESSED,
+    STATFS_COMPRESSED_ALLOCATED,
+    STATFS_LAST
+  };
+  int64_t values[STATFS_LAST];
+  volatile_statfs() {
+    memset(this, 0, sizeof(volatile_statfs));
+  }
+  void reset() {
+    *this = volatile_statfs();
+  }
+  bool empty() const {
+    for (size_t i = 0; i < STATFS_LAST; ++i) {
+      if (values[i]) {
+	return false;
+      }
+    }
+    return true;
+  }
+  void publish(store_statfs_t* buf) const;
+
+  volatile_statfs& operator+=(const volatile_statfs& other) {
+    for (size_t i = 0; i < STATFS_LAST; ++i) {
+      values[i] += other.values[i];
+    }
+    return *this;
+  }
+  int64_t& allocated() {
+    return values[STATFS_ALLOCATED];
+  }
+  int64_t& stored() {
+    return values[STATFS_STORED];
+  }
+  int64_t& compressed_original() {
+    return values[STATFS_COMPRESSED_ORIGINAL];
+  }
+  int64_t& compressed() {
+    return values[STATFS_COMPRESSED];
+  }
+  int64_t& compressed_allocated() {
+    return values[STATFS_COMPRESSED_ALLOCATED];
+  }
+  int64_t allocated() const {
+    return values[STATFS_ALLOCATED];
+  }
+  int64_t stored() const {
+    return values[STATFS_STORED];
+  }
+  int64_t compressed_original() const {
+    return values[STATFS_COMPRESSED_ORIGINAL];
+  }
+  int64_t compressed() const {
+    return values[STATFS_COMPRESSED];
+  }
+  int64_t compressed_allocated() const {
+    return values[STATFS_COMPRESSED_ALLOCATED];
+  }
+  volatile_statfs& operator=(const store_statfs_t& st);
+  bool operator==(const volatile_statfs& rhs) const {
+    return
+      values[STATFS_ALLOCATED] == rhs.values[STATFS_ALLOCATED] &&
+      values[STATFS_STORED] == rhs.values[STATFS_STORED] &&
+      values[STATFS_COMPRESSED_ORIGINAL] == rhs.values[STATFS_COMPRESSED_ORIGINAL] &&
+      values[STATFS_COMPRESSED] == rhs.values[STATFS_COMPRESSED] &&
+      values[STATFS_COMPRESSED_ALLOCATED] == rhs.values[STATFS_COMPRESSED_ALLOCATED];
+  }
+  bool is_empty() {
+    return values[STATFS_ALLOCATED] == 0 &&
+      values[STATFS_STORED] == 0 &&
+      values[STATFS_COMPRESSED] == 0 &&
+      values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
+      values[STATFS_COMPRESSED_ALLOCATED] == 0;
+  }
+  void decode(ceph::buffer::list::const_iterator& it) {
+    using ceph::decode;
+    for (size_t i = 0; i < STATFS_LAST; i++) {
+      decode(values[i], it);
+    }
+  }
+
+  void encode(ceph::buffer::list& bl) {
+    using ceph::encode;
+    for (size_t i = 0; i < STATFS_LAST; i++) {
+      encode(values[i], bl);
+    }
+  }
+};
+
+std::ostream& operator<<(std::ostream& out, const volatile_statfs& s);
+
 struct bluestore_stats_t
 {
   uint64_t num_objects = 0;

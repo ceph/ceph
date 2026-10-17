@@ -13,7 +13,8 @@
  */
 
 #include "Compression.h"
-#include "BlueStore.h"
+#include "BlueStore_components.h"
+#include "BlueStore_inlines.h"
 #include "include/intarith.h"
 #include "common/debug.h" // for dout()
 #include "common/Formatter.h"
@@ -45,8 +46,8 @@ template <> struct fmt::formatter<BlueStore::Extent::printer>
 using Extent = BlueStore::Extent;
 using ExtentMap = BlueStore::ExtentMap;
 using Blob = BlueStore::Blob;
-using exmp_cit = BlueStore::extent_map_t::const_iterator;
-using exmp_it = BlueStore::extent_map_t::iterator;
+using exmp_cit = bluestore::extent_map_t::const_iterator;
+using exmp_it = bluestore::extent_map_t::iterator;
 using Scanner = BlueStore::Scanner;
 using Scan = BlueStore::Scanner::Scan;
 using P = BlueStore::printer;
