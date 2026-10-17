@@ -17,7 +17,8 @@
 #define CEPH_KEYSSERVER_H
 
 #include <cstdint>
-#include <list>
+#include <deque>
+#include <vector>
 #include <map>
 #include <string>
 
@@ -55,8 +56,8 @@ struct KeyServerData {
   void encode_rotating(ceph::buffer::list& bl) const;
   void decode_rotating(ceph::buffer::list& rotating_bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<KeyServerData> generate_test_instances() {
-    std::list<KeyServerData> ls;
+  static std::vector<KeyServerData> generate_test_instances() {
+    std::vector<KeyServerData> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().version = 1;
@@ -126,8 +127,8 @@ struct KeyServerData {
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
-    static std::list<Incremental> generate_test_instances() {
-      std::list<Incremental> ls;
+    static std::vector<Incremental> generate_test_instances() {
+      std::vector<Incremental> ls;
       ls.emplace_back();
       ls.back().op = AUTH_INC_DEL;
       ls.emplace_back();
@@ -225,7 +226,7 @@ public:
   void decode(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const;
-  static std::list<KeyServer> generate_test_instances();
+  static std::deque<KeyServer> generate_test_instances();
   bool contains(const EntityName& name) const;
   int encode_secrets(ceph::Formatter *f, std::stringstream *ds) const;
   void encode_formatted(std::string label, ceph::Formatter *f, ceph::buffer::list &bl);

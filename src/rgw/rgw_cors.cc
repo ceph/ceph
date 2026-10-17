@@ -15,9 +15,14 @@
 
 #include <string.h>
 
-#include <iostream>
 #include <map>
+#include <span>
+#include <array>
 #include <vector>
+#include <cstddef>
+#include <iostream>
+#include <iterator>
+#include <string_view>
 
 #include <boost/algorithm/string.hpp>
 
@@ -67,9 +72,9 @@ void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty) {
   }
 }
 
-list<RGWCORSRule> RGWCORSRule::generate_test_instances()
+vector<RGWCORSRule> RGWCORSRule::generate_test_instances()
 {
-  list<RGWCORSRule> o;
+  vector<RGWCORSRule> o;
   o.emplace_back();
   o.emplace_back();
   o.back().id = "test";
@@ -87,7 +92,7 @@ int RGWCORSRule::create_rule(const char *allow_origins, const char *allow_header
                   const char *expose_headers, const char* allowed_methods, std::optional<RGWCORSRule>& rule, const char *max_age)
 {
   std::set<std::string> o, h;
-  std::list<std::string> e;
+  std::vector<std::string> e;
   unsigned long a = CORS_MAX_AGE_INVALID;
   const uint8_t flags = ("*"s == allowed_methods)? RGW_CORS_ALL:get_multi_cors_method_flags(allowed_methods);
 
@@ -172,33 +177,51 @@ static bool is_string_in_set(set<string>& s, string h) {
       it != s.end(); ++it) {
     size_t off;
     if ((off = (*it).find("*"))!=string::npos) {
-      list<string> ssplit;
+      // A valid wildcard has at most one prefix and one suffix:
+      std::array<std::string_view, 2> segments {};
+      std::size_t segment_count = 0;
+
+      ceph::for_each_substr(*it, "* \t", [&](std::string_view value) {
+        if (segment_count < std::size(segments)) {
+          segments[segment_count] = value;
+        }
+
+        ++segment_count;
+      });
+
+      if (std::size(segments) < segment_count) {
+        continue;
+      }
+
+      const auto used_segments = std::span {segments}.first(segment_count);
+      auto segment = std::cbegin(used_segments);
+      const auto last_segment = std::cend(used_segments);
       unsigned flen = 0;
-      
-      get_str_list((*it), "* \t", ssplit);
+
       if (off != 0) {
-        if (ssplit.empty())
+        if (segment == last_segment)
           continue;
-        string sl = ssplit.front();
+        const auto& sl = *segment++;
         flen = sl.length();
         dout(10) << "Finding " << sl << ", in " << h << ", at offset 0" << dendl;
         if (!boost::algorithm::starts_with(h,sl))
           continue;
-        ssplit.pop_front();
       }
+
       if (off != ((*it).length() - 1)) {
-        if (ssplit.empty())
+        if (segment == last_segment)
           continue;
-        string sl = ssplit.front();
+        const auto& sl = *segment++;
         dout(10) << "Finding " << sl << ", in " << h 
           << ", at offset not less than " << flen << dendl;
         if (h.size() < sl.size() ||
 	    h.compare((h.size() - sl.size()), sl.size(), sl) != 0)
           continue;
-        ssplit.pop_front();
       }
-      if (!ssplit.empty())
+
+      if (segment != last_segment)
         continue;
+
       return true;
     }
   }
@@ -287,22 +310,18 @@ RGWCORSRule * RGWCORSConfiguration::match_rule(const char *origin,
                                                const char *req_meth,
                                                const char *req_hdrs)
 {
-  for (list<RGWCORSRule>::iterator it_r = rules.begin();
-       it_r != rules.end(); ++it_r) {
-    RGWCORSRule& r = (*it_r);
-    if (r.matches(origin, req_meth, req_hdrs)) {
-      return &r;
+  for (auto& rule : rules) {
+    if (rule.matches(origin, req_meth, req_hdrs)) {
+      return &rule;
     }
   }
   return NULL;
 }
 
 RGWCORSRule * RGWCORSConfiguration::host_name_rule(const char *origin) {
-  for(list<RGWCORSRule>::iterator it_r = rules.begin(); 
-      it_r != rules.end(); ++it_r) {
-    RGWCORSRule& r = (*it_r);
-    if (r.is_origin_present(origin))
-      return &r;
+  for (auto& rule : rules) {
+    if (rule.is_origin_present(origin))
+      return &rule;
   }
   return NULL;
 }
@@ -312,14 +331,13 @@ void RGWCORSConfiguration::erase_host_name_rule(string& origin) {
   unsigned loop = 0;
   /*Erase the host name from that rule*/
   dout(10) << "Num of rules : " << rules.size() << dendl;
-  for(list<RGWCORSRule>::iterator it_r = rules.begin(); 
-      it_r != rules.end(); ++it_r, loop++) {
-    RGWCORSRule& r = (*it_r);
-    r.erase_origin_if_present(origin, &rule_empty);
+  for (auto rule_iter = std::begin(rules);
+       rule_iter != std::end(rules); ++rule_iter, ++loop) {
+    rule_iter->erase_origin_if_present(origin, &rule_empty);
     dout(10) << "Origin:" << origin << ", rule num:" 
       << loop << ", emptying now:" << rule_empty << dendl;
     if (rule_empty) {
-      rules.erase(it_r);
+      rules.erase(rule_iter);
       break;
     }
   }
@@ -329,9 +347,9 @@ void RGWCORSConfiguration::dump() {
   unsigned loop = 1;
   unsigned num_rules = rules.size();
   dout(10) << "Number of rules: " << num_rules << dendl;
-  for(list<RGWCORSRule>::iterator it = rules.begin();
-      it!= rules.end(); ++it, loop++) {
+  for (auto& rule : rules) {
     dout(10) << " <<<<<<< Rule " << loop << " >>>>>>> " << dendl;
-    (*it).dump_origins();
+    rule.dump_origins();
+    ++loop;
   }
 }

@@ -2074,8 +2074,6 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
     return r;
   }
 
-  std::list<bufferlist> bl_list;
-
   auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.id < rhs.id; };
   results.sort(cmp); // merge() requires results to be sorted first
   completed.merge(results, cmp); // merge results in sorted order
@@ -2087,7 +2085,6 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
 
     ldpp_dout(dpp, 20) << "D4NFilterObject::flush:: calling handle_data for offset: " << offset << " bufferlist length: " << bl.length() << dendl;
 
-    bl_list.push_back(bl);
     if (client_cb) {
       int r = client_cb->handle_data(bl, 0, bl.length());
       if (r < 0) {
@@ -3183,7 +3180,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    optional_yield y, CephContext* cct,
 				    std::map<int, std::string>& part_etags,
-				    std::list<rgw_obj_index_key>& remove_objs,
+				    std::vector<rgw_obj_index_key>& remove_objs,
 				    uint64_t& accounted_size, bool& compressed,
 				    RGWCompressionInfo& cs_info, off_t& ofs,
 				    std::string& tag, ACLOwner& owner,

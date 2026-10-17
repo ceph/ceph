@@ -17,6 +17,7 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
+#include <deque>
 #include <ostream>
 #include <set>
 #include <string_view>
@@ -580,7 +581,7 @@ public:
    * to formatter, or nothing if is_sync_and_unlocked.
    */
   void dump(ceph::Formatter *f) const;
-  static std::list<SimpleLock> generate_test_instances();
+  static std::deque<SimpleLock> generate_test_instances();
 
   virtual void print(std::ostream& out) const {
     out << "(";

@@ -419,7 +419,7 @@ int MetaTool::show_fn(meta_op &op)
 }
 int MetaTool::_show_fn(inode_meta_t& inode_meta, const string& fn)
 {
-  std::list<frag_t> frags;
+  std::vector<frag_t> frags;
   inode_meta.get_meta()->dirfragtree.get_leaves(frags);
   std::stringstream ds;
   std::string format = "json";
@@ -637,7 +637,7 @@ int MetaTool::list_meta(meta_op &op)
         if (item != op.inodes.end()) {
             inodeno_t tmp = sop->ino;
             op.pop_op();
-            std::list<frag_t> frags;
+            std::vector<frag_t> frags;
             item->second->get_meta()->dirfragtree.get_leaves(frags);
             for (const auto &frag : frags) {
               meta_op::sub_op* nsop = new meta_op::sub_op(&op);

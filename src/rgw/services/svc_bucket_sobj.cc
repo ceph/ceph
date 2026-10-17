@@ -102,13 +102,14 @@ class BucketEntrypointLister : public RGWMetadataLister {
   using RGWMetadataLister::RGWMetadataLister;
 
   void filter_transform(std::vector<std::string>& oids,
-                        std::list<std::string>& keys) override
+                        std::vector<std::string>& keys) override
   {
     // bucket entrypoints and instances share a namespace, so filter out the
     // instances based on prefix
     constexpr auto filter = [] (const std::string& oid) {
                               return oid.starts_with('.');
                             };
+    keys.reserve(std::size(oids));
     // 'oids' is mutable so we can move its elements instead of copying
     std::remove_copy_if(std::make_move_iterator(oids.begin()),
                         std::make_move_iterator(oids.end()),
@@ -156,9 +157,10 @@ class BucketInstanceLister : public RGWMetadataLister {
   ~BucketInstanceLister() override = default;
 
   void filter_transform(std::vector<std::string>& oids,
-                        std::list<std::string>& keys) override
+                        std::vector<std::string>& keys) override
   {
     // transform instance oids to metadata keys
+    keys.reserve(std::size(oids));
     std::transform(oids.begin(), oids.end(),
                    std::back_inserter(keys),
                    [this](const std::string& oid) {

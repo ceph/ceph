@@ -20,7 +20,7 @@
 #include "common/ceph_time.h"
 
 #include <cmath>
-#include <list>
+#include <vector>
 
 namespace ceph { class Formatter; }
 
@@ -64,7 +64,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<DecayCounter> generate_test_instances();
+  static std::vector<DecayCounter> generate_test_instances();
 
   /**
    * reading

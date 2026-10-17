@@ -19,6 +19,10 @@
 
 #include <pthread.h>
 
+#include <deque>
+#include <string>
+#include <vector>
+
 #include "Client.h"
 #include "include/Distribution.h"
 
@@ -192,9 +196,9 @@ class SyntheticClient {
   }
 
   // run() will do one of these things:
-  std::list<int> modes;
-  std::list<std::string> sargs;
-  std::list<int> iargs;
+  std::vector<int> modes;
+  std::deque<std::string> sargs;
+  std::deque<int> iargs;
   utime_t run_start;
   utime_t run_until;
 

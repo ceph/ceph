@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <utility>
 #include <boost/optional.hpp>
 
@@ -79,7 +80,7 @@ public:
 		     std::function<int()> f) = 0;
 
   virtual int list_keys_init(const DoutPrefixProvider *dpp, const std::string& marker, void **phandle) = 0;
-  virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated) = 0;
+  virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::vector<std::string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
   virtual std::string get_marker(void *handle) = 0;
@@ -130,14 +131,14 @@ public:
 
   int list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, void **phandle);
   int list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void **phandle);
-  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated);
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::vector<std::string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 
   std::string get_marker(void *handle);
 
   void dump_log_entry(cls::log::entry& entry, Formatter *f);
 
-  void get_sections(std::list<std::string>& sections);
+  std::vector<std::string> get_sections();
 
   void parse_metadata_key(const std::string& metadata_key, std::string& type, std::string& entry);
 
@@ -147,4 +148,3 @@ public:
 void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& key, std::string& name, int *shard_id);
 void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
 void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
-

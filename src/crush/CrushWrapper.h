@@ -5,6 +5,7 @@
 #define CEPH_CRUSH_WRAPPER_H
 
 #include <stdlib.h>
+#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -770,9 +771,10 @@ public:
    * enumerate immediate children of given node
    *
    * @param id parent bucket or device id
+   * @param children sequence to append the child IDs to
    * @return number of items, or error
    */
-  int get_children(int id, std::list<int> *children) const;
+  int get_children(int id, std::vector<int>& children) const;
  /**
    * enumerate all children of given node
    *
@@ -808,7 +810,7 @@ public:
   int get_leaves(const std::string &name, std::set<int> *leaves) const;
 
 private:
-  int _get_leaves(int id, std::list<int> *leaves) const; // worker
+  int _get_leaves(int id, std::vector<int>& leaves) const; // worker
 
 public:
   /**
@@ -1660,7 +1662,7 @@ public:
   }
   void dump_tree(ceph::Formatter *f,
 		 const CrushTreeDumper::name_map_t& ws) const;
-  static std::list<CrushWrapper> generate_test_instances();
+  static std::deque<CrushWrapper> generate_test_instances();
 
   int get_osd_pool_default_crush_replicated_rule(CephContext *cct);
 

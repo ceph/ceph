@@ -14,8 +14,9 @@
  */
 
 #include <sys/stat.h>
-#include <iostream>
 #include <string>
+#include <vector>
+#include <iostream>
 
 #include "common/config.h"
 
@@ -41,6 +42,11 @@ extern int syn_filer_flags;
 
 int main(int argc, const char **argv, char *envp[]) 
 {
+  struct client_instance final {
+    Client *client;
+    SyntheticClient *workload;
+  };
+
   //cerr << "ceph-syn starting" << std::endl;
   auto args = argv_to_vec(argc, argv);
 
@@ -58,8 +64,9 @@ int main(int argc, const char **argv, char *envp[])
   if (mc.build_initial_monmap() < 0)
     return -1;
 
-  list<Client*> clients;
-  list<SyntheticClient*> synclients;
+  vector<client_instance> clients;
+  clients.reserve(static_cast<unsigned>(num_client));
+
   vector<Messenger*> messengers{static_cast<unsigned>(num_client), nullptr};
   vector<MonClient*> mclients{static_cast<unsigned>(num_client), nullptr};
 
@@ -72,27 +79,21 @@ int main(int argc, const char **argv, char *envp[])
     auto client = new StandaloneClient(messengers[i], mclients[i], poolctx);
     client->set_filer_flags(syn_filer_flags);
     SyntheticClient *syn = new SyntheticClient(client);
-    clients.push_back(client);
-    synclients.push_back(syn);
+    clients.push_back({client, syn});
     messengers[i]->start();
   }
 
-  for (list<SyntheticClient*>::iterator p = synclients.begin(); 
-       p != synclients.end();
-       ++p)
-    (*p)->start_thread();
+  for (const auto& client : clients) {
+    client.workload->start_thread();
+  }
 
   poolctx.stop();
 
   //cout << "waiting for client(s) to finish" << std::endl;
-  while (!clients.empty()) {
-    Client *client = clients.front();
-    SyntheticClient *syn = synclients.front();
-    clients.pop_front();
-    synclients.pop_front();
-    syn->join_thread();
-    delete syn;
-    delete client;
+  for (const auto& client : clients) {
+    client.workload->join_thread();
+    delete client.workload;
+    delete client.client;
   }
 
   for (int i = 0; i < num_client; ++i) {

@@ -19,9 +19,9 @@
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
 #include <functional>
-#include <list>
 #include <map>
 #include <string>
+#include <vector>
 #include "include/ceph_assert.h"
 
 namespace journal {
@@ -36,7 +36,7 @@ public:
   typedef cls::journal::Tag Tag;
 
   typedef std::set<Client> RegisteredClients;
-  typedef std::list<Tag> Tags;
+  using Tags = std::vector<Tag>;
 
   void init(Context *on_init);
   void shut_down(Context *on_finish);
@@ -153,8 +153,8 @@ private:
   ~JournalMetadata() override;
 
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
-  typedef std::list<JournalMetadataListener*> Listeners;
-  typedef std::list<Context*> Contexts;
+  using Listeners = std::vector<JournalMetadataListener *>;
+  using Contexts = std::vector<Context *>;
 
   struct CommitEntry {
     uint64_t object_num;

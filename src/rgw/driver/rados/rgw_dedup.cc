@@ -790,25 +790,6 @@ namespace rgw::dedup {
   static constexpr uint64_t cost = 1; // 1 throttle unit per request
   static constexpr uint64_t id = 0; // ids unused
   //---------------------------------------------------------------------------
-  [[maybe_unused]]static void show_ref_tags(const DoutPrefixProvider* dpp, std::string &oid, rgw_rados_ref &obj)
-  {
-    unsigned idx = 0;
-    std::list<std::string> refs;
-    std::string wildcard_tag;
-    int ret = cls_refcount_read(obj.ioctx, oid, &refs, true);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << __func__ << "::ERR: manifest::failed cls_refcount_read()"
-                        << " idx=" << idx << dendl;
-      return;
-    }
-
-    for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-      ldpp_dout(dpp, 20) << __func__ << "::manifest::" << oid << "::" << idx
-                         << "::TAG=" << *iter << dendl;
-    }
-  }
-
-  //---------------------------------------------------------------------------
   int Background::free_tail_objs_by_manifest(const string         &ref_tag,
                                              const string         &oid,
                                              const RGWObjManifest &manifest)
@@ -3125,7 +3106,7 @@ namespace rgw::dedup {
         reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
         return ret;
       }
-      std::list<std::string> entries;
+      std::vector<std::string> entries;
       ret = driver->meta_list_keys_next(dpp, handle, max_keys, entries, &has_more);
       if (ret == 0) {
         marker = driver->meta_get_marker(handle);
@@ -3198,7 +3179,7 @@ namespace rgw::dedup {
                           << cpp_strerror(-ret) << dendl;
         break;
       }
-      std::list<std::string> entries;
+      std::vector<std::string> entries;
       ret = driver->meta_list_keys_next(dpp, handle, max_keys, entries, &has_more);
       if (ret == 0) {
         marker = driver->meta_get_marker(handle);
@@ -3368,11 +3349,10 @@ namespace rgw::dedup {
   {
     *p_num_objects       = 0;
     *p_num_objects_bytes = 0;
-    list<string> vec;
-    vec.push_back("default.rgw.buckets.data");
+    const vector<string> pools {"default.rgw.buckets.data"};
     map<string,librados::pool_stat_t> stats;
     auto rados_handle = rados->get_rados_handle();
-    int ret = rados_handle->get_pool_stats(vec, stats);
+    int ret = rados_handle->get_pool_stats(pools, stats);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ":ERROR: fetching pool stats: "
                         << cpp_strerror(-ret) << dendl;

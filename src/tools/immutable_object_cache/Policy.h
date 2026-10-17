@@ -4,8 +4,8 @@
 #ifndef CEPH_CACHE_POLICY_H
 #define CEPH_CACHE_POLICY_H
 
-#include <list>
 #include <string>
+#include <vector>
 
 namespace ceph {
 namespace immutable_obj_cache {
@@ -26,7 +26,7 @@ class Policy {
   virtual void update_status(std::string, cache_status_t,
                              uint64_t size = 0) = 0;
   virtual cache_status_t get_status(std::string) = 0;
-  virtual void get_evict_list(std::list<std::string>* obj_list) = 0;
+  virtual void get_evict_list(std::vector<std::string>& obj_list) = 0;
 };
 
 }  // namespace immutable_obj_cache

@@ -67,9 +67,9 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
   targets[t.name] = t;
 }
 
-list<RGWZone> RGWZone::generate_test_instances()
+vector<RGWZone> RGWZone::generate_test_instances()
 {
-  list<RGWZone> o;
+  vector<RGWZone> o;
   o.emplace_back();
   o.emplace_back();
   return o;
@@ -511,9 +511,9 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
    * rather not clutter the output */
 }
 
-list<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
+vector<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
 {
-  list<RGWZonePlacementInfo> o;
+  vector<RGWZonePlacementInfo> o;
   o.emplace_back();
   o.emplace_back();
   o.back().index_pool = rgw_pool("rgw.buckets.index");
@@ -586,9 +586,9 @@ void RGWZoneStorageClasses::dump(Formatter *f) const
   }
 }
 
-list<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
+vector<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
 {
-  list<RGWZoneStorageClasses> o;
+  vector<RGWZoneStorageClasses> o;
   o.emplace_back();
   return o;
 }
@@ -742,9 +742,9 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   }
 }
 
-list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
+vector<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
 {
-  list<RGWZoneStorageClass> o;
+  vector<RGWZoneStorageClass> o;
   o.emplace_back();
   o.emplace_back();
   o.back().data_pool = rgw_pool("pool1");
@@ -966,11 +966,11 @@ const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
                       const RGWZoneParams& zone_params,
                       const bool *pis_master, const bool *pread_only,
-                      const std::list<std::string>& endpoints,
+                      const std::vector<std::string>& endpoints,
                       const std::string *ptier_type,
                       const bool *psync_from_all,
-                      const std::list<std::string>& sync_from,
-                      const std::list<std::string>& sync_from_rm,
+                      const std::vector<std::string>& sync_from,
+                      const std::vector<std::string>& sync_from_rm,
                       const std::string *predirect_zone,
                       std::optional<int> bucket_index_max_shards,
                       const rgw::zone_features::set& enable_features,
@@ -1045,7 +1045,7 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   }
 
   // add/remove sync_from
-  for (auto add : sync_from) {
+  for (const auto& add : sync_from) {
     zone.sync_from.insert(add);
   }
 
@@ -1586,11 +1586,11 @@ static int create_default_zonegroup(const DoutPrefixProvider* dpp,
 
   // add the zone to the zonegroup
   bool is_master = true;
-  std::list<std::string> empty_list;
+  const std::vector<std::string> no_values;
   rgw::zone_features::set disable_features; // empty
   int r = add_zone_to_group(dpp, info, default_zone, &is_master, nullptr,
-                            empty_list, nullptr, nullptr, empty_list,
-                            empty_list, nullptr, std::nullopt,
+                            no_values, nullptr, nullptr, no_values,
+                            no_values, nullptr, std::nullopt,
                             info.enabled_features, disable_features);
   if (r < 0) {
     return r;
@@ -2309,9 +2309,9 @@ int RGWZoneGroupTierS3Glacier::clear_params(const JSONFormattable& config)
   return 0;
 }
 
-std::list<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
+std::vector<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
 {
-  std::list<rgw_meta_sync_info> o;
+  std::vector<rgw_meta_sync_info> o;
   rgw_meta_sync_info info;
   info.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
   info.period = "periodid";
@@ -2321,9 +2321,9 @@ std::list<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
   return o;
 }
 
-std::list<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
+std::vector<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
 {
-  std::list<rgw_meta_sync_marker> o;
+  std::vector<rgw_meta_sync_marker> o;
   rgw_meta_sync_marker marker;
   marker.state = rgw_meta_sync_marker::IncrementalSync;
   marker.marker = "01234";
@@ -2333,32 +2333,32 @@ std::list<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
   return o;
 }
 
-std::list<rgw_meta_sync_status> rgw_meta_sync_status::generate_test_instances()
+std::vector<rgw_meta_sync_status> rgw_meta_sync_status::generate_test_instances()
 {
-  std::list<rgw_meta_sync_status> o;
+  std::vector<rgw_meta_sync_status> o;
   o.emplace_back();
   return o;
 }
 
-std::list<RGWZoneParams> RGWZoneParams::generate_test_instances()
+std::vector<RGWZoneParams> RGWZoneParams::generate_test_instances()
 {
-  std::list<RGWZoneParams> o;
-  o.emplace_back();
-  o.emplace_back();
-  return o;
-}
-
-std::list<RGWPeriodLatestEpochInfo> RGWPeriodLatestEpochInfo::generate_test_instances()
-{
-  std::list<RGWPeriodLatestEpochInfo> o;
+  std::vector<RGWZoneParams> o;
   o.emplace_back();
   o.emplace_back();
   return o;
 }
 
-std::list<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
+std::vector<RGWPeriodLatestEpochInfo> RGWPeriodLatestEpochInfo::generate_test_instances()
 {
-  std::list<RGWZoneGroup> o;
+  std::vector<RGWPeriodLatestEpochInfo> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
+}
+
+std::vector<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
+{
+  std::vector<RGWZoneGroup> o;
   o.emplace_back();
   o.emplace_back();
   return o;
@@ -2380,12 +2380,11 @@ void RGWNameToId::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("obj_id", obj_id, obj);
 }
 
-std::list<RGWNameToId> RGWNameToId::generate_test_instances() {
-  std::list<RGWNameToId> o;
+std::vector<RGWNameToId> RGWNameToId::generate_test_instances() {
+  std::vector<RGWNameToId> o;
   RGWNameToId n;
   n.obj_id = "id";
   o.push_back(std::move(n));
   o.emplace_back();
   return o;
 }
-

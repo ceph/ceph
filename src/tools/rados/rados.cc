@@ -48,6 +48,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <stdexcept>
+#include <deque>
 #include <climits>
 #include <limits>
 #include <locale>
@@ -76,9 +77,9 @@ using ceph::util::generate_random_number;
 using std::cerr;
 using std::cout;
 using std::dec;
+using std::deque;
 using std::hex;
 using std::less;
-using std::list;
 using std::map;
 using std::multiset;
 using std::ofstream;
@@ -886,7 +887,7 @@ int LoadGen::bootstrap(const char *pool)
   memset(p.c_str(), 0, buf_len);
   bl.push_back(p);
 
-  list<librados::AioCompletion *> completions;
+  deque<librados::AioCompletion *> completions;
   for (i = 0; i < num_objs; i++) {
     obj_info info;
     gen_rand_alphanumeric(buf, 16);
@@ -918,7 +919,7 @@ int LoadGen::bootstrap(const char *pool)
     objs[i] = info;
   }
 
-  list<librados::AioCompletion *>::iterator iter;
+  deque<librados::AioCompletion *>::iterator iter;
   for (iter = completions.begin(); iter != completions.end(); ++iter) {
     AioCompletion *c = *iter;
     c->wait_for_complete();
@@ -1197,7 +1198,7 @@ protected:
     return completions[slot]->get_return_value();
   }
 
-  bool get_objects(std::list<Object>* objects, int num) override {
+  bool get_objects(std::vector<Object>& objects, int num) override {
     int count = 0;
 
     if (!iterator_valid) {
@@ -1212,10 +1213,9 @@ protected:
       return false;
     }
 
-    objects->clear();
+    objects.clear();
     for ( ; oi != ei && count < num; ++oi) {
-      Object obj(oi->get_oid(), oi->get_nspace());
-      objects->push_back(obj);
+      objects.emplace_back(oi->get_oid(), oi->get_nspace());
       ++count;
     }
 
@@ -1289,8 +1289,8 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   }
 
   if (cmd.compare("list") == 0) {
-    list<string> locks;
-    int ret = rados::cls::lock::list_locks(ioctx, oid, &locks);
+    vector<string> locks;
+    int ret = rados::cls::lock::list_locks(ioctx, oid, locks);
     if (ret < 0) {
       cerr << "ERROR: rados_list_locks(): " << cpp_strerror(ret) << std::endl;
       return ret;
@@ -1299,10 +1299,9 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     formatter->open_object_section("object");
     formatter->dump_string("objname", oid);
     formatter->open_array_section("locks");
-    list<string>::iterator iter;
-    for (iter = locks.begin(); iter != locks.end(); ++iter) {
+    for (const auto& lock : locks) {
       formatter->open_object_section("lock");
-      formatter->dump_string("name", *iter);
+      formatter->dump_string("name", lock);
       formatter->close_section();
     }
     formatter->close_section();
@@ -2363,31 +2362,31 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
-    list<string> vec;
-    ret = rados.pool_list(vec);
+    vector<string> pools;
+    ret = rados.pool_list(pools);
     if (ret < 0) {
       cerr << "error listing pools: " << cpp_strerror(ret) << std::endl;
       return 1;
     }
-    for (list<string>::iterator i = vec.begin(); i != vec.end(); ++i)
-      cout << *i << std::endl;
+    for (const auto& pool : pools)
+      cout << pool << std::endl;
   }
   else if (strcmp(nargs[0], "df") == 0) {
     // pools
-    list<string> vec;
+    vector<string> pools;
 
     if (!pool_name) {
-      ret = rados.pool_list(vec);
+      ret = rados.pool_list(pools);
       if (ret < 0) {
 	cerr << "error listing pools: " << cpp_strerror(ret) << std::endl;
 	return 1;
       }
     } else {
-      vec.push_back(pool_name);
+      pools.push_back(pool_name);
     }
 
     map<string,librados::pool_stat_t> stats;
-    ret = rados.get_pool_stats(vec, stats);
+    ret = rados.get_pool_stats(pools, stats);
     if (ret < 0) {
       cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
       return 1;
@@ -3617,18 +3616,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     string oid(nargs[1]);
-    std::list<obj_watch_t> lw;
+    std::vector<obj_watch_t> watchers;
 
-    ret = io_ctx.list_watchers(oid, &lw);
+    ret = io_ctx.list_watchers(oid, watchers);
     if (ret < 0) {
       cerr << "error listing watchers " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
       return 1;
     }
-    else
-      ret = 0;
-    
-    for (std::list<obj_watch_t>::iterator i = lw.begin(); i != lw.end(); ++i) {
-      cout << "watcher=" << i->addr << " client." << i->watcher_id << " cookie=" << i->cookie << std::endl;
+
+    ret = 0;
+
+    for (const auto& watcher : watchers) {
+      cout << "watcher=" << watcher.addr << " client." << watcher.watcher_id
+           << " cookie=" << watcher.cookie << std::endl;
     }
   } else if (strcmp(nargs[0], "listsnaps") == 0) {
     if (!pool_name || (nargs.size() < 2 && !obj_name)) {

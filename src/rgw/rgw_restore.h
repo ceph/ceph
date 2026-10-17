@@ -62,7 +62,7 @@ struct RestoreEntry {
   }
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static void generate_test_instances(std::list<rgw::restore::RestoreEntry*>& l);
+  static void generate_test_instances(std::vector<rgw::restore::RestoreEntry*>& l);
 };
 WRITE_CLASS_ENCODER(RestoreEntry)
 

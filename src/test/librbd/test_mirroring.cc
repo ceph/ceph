@@ -34,8 +34,9 @@
 #include "common/Cond.h"
 #include <boost/scope_exit.hpp>
 #include <boost/assign/list_of.hpp>
-#include <utility>
+#include <deque>
 #include <vector>
+#include <utility>
 
 using namespace std;
 
@@ -879,8 +880,11 @@ TEST_F(TestMirroring, RemoveBootstrapped)
 }
 
 TEST_F(TestMirroring, AioPromoteDemote) {
-  std::list<std::string> image_names;
-  for (size_t idx = 0; idx < 10; ++idx) {
+  constexpr std::size_t image_count = 10;
+  std::vector<std::string> image_names;
+  image_names.reserve(image_count);
+
+  for (size_t idx = 0; idx < image_count; ++idx) {
     image_names.push_back(get_temp_image_name());
   }
 
@@ -888,7 +892,9 @@ TEST_F(TestMirroring, AioPromoteDemote) {
 
   // create mirror images
   int order = 20;
-  std::list<librbd::Image> images;
+  std::vector<librbd::Image> images;
+  images.reserve(image_count);
+
   for (auto &image_name : image_names) {
     ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048,
                                RBD_FEATURE_EXCLUSIVE_LOCK |
@@ -902,7 +908,9 @@ TEST_F(TestMirroring, AioPromoteDemote) {
   }
 
   // demote all images
-  std::list<librbd::RBD::AioCompletion *> aio_comps;
+  std::vector<librbd::RBD::AioCompletion *> aio_comps;
+  aio_comps.reserve(image_count);
+
   for (auto &image : images) {
     aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
     ASSERT_EQ(0, image.aio_mirror_image_demote(aio_comps.back()));
@@ -945,8 +953,11 @@ TEST_F(TestMirroring, AioPromoteDemote) {
 }
 
 TEST_F(TestMirroring, AioGetInfo) {
-  std::list<std::string> image_names;
-  for (size_t idx = 0; idx < 10; ++idx) {
+  constexpr std::size_t image_count = 10;
+  std::vector<std::string> image_names;
+  image_names.reserve(image_count);
+
+  for (size_t idx = 0; idx < image_count; ++idx) {
     image_names.push_back(get_temp_image_name());
   }
 
@@ -954,7 +965,9 @@ TEST_F(TestMirroring, AioGetInfo) {
 
   // create mirror images
   int order = 20;
-  std::list<librbd::Image> images;
+  std::vector<librbd::Image> images;
+  images.reserve(image_count);
+
   for (auto &image_name : image_names) {
     ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048,
                                RBD_FEATURE_EXCLUSIVE_LOCK |
@@ -965,8 +978,13 @@ TEST_F(TestMirroring, AioGetInfo) {
     ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
   }
 
-  std::list<librbd::RBD::AioCompletion *> aio_comps;
-  std::list<librbd::mirror_image_info_t> infos;
+  std::vector<librbd::RBD::AioCompletion *> aio_comps;
+  std::vector<librbd::mirror_image_info_t> infos;
+
+  // Async operations retain the output addresses:
+  aio_comps.reserve(image_count);
+  infos.reserve(image_count);
+
   for (auto &image : images) {
     aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
     infos.emplace_back();
@@ -990,8 +1008,11 @@ TEST_F(TestMirroring, AioGetInfo) {
 }
 
 TEST_F(TestMirroring, AioGetStatus) {
-  std::list<std::string> image_names;
-  for (size_t idx = 0; idx < 10; ++idx) {
+  constexpr std::size_t image_count = 10;
+  std::vector<std::string> image_names;
+  image_names.reserve(image_count);
+
+  for (size_t idx = 0; idx < image_count; ++idx) {
     image_names.push_back(get_temp_image_name());
   }
 
@@ -999,7 +1020,9 @@ TEST_F(TestMirroring, AioGetStatus) {
 
   // create mirror images
   int order = 20;
-  std::list<librbd::Image> images;
+  std::vector<librbd::Image> images;
+  images.reserve(image_count);
+
   for (auto &image_name : image_names) {
     ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048,
                                RBD_FEATURE_EXCLUSIVE_LOCK |
@@ -1010,8 +1033,13 @@ TEST_F(TestMirroring, AioGetStatus) {
     ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
   }
 
-  std::list<librbd::RBD::AioCompletion *> aio_comps;
-  std::list<librbd::mirror_image_global_status_t> statuses;
+  std::vector<librbd::RBD::AioCompletion *> aio_comps;
+  std::vector<librbd::mirror_image_global_status_t> statuses;
+
+  // Async operations retain the output addresses:
+  aio_comps.reserve(image_count);
+  statuses.reserve(image_count);
+
   for (auto &image : images) {
     aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
     statuses.emplace_back();
@@ -1492,8 +1520,11 @@ TEST_F(TestMirroring, AioSnapshotCreate)
 {
   REQUIRE_FORMAT_V2();
 
-  std::list<std::string> image_names;
-  for (size_t idx = 0; idx < 10; ++idx) {
+  constexpr std::size_t image_count = 10;
+  std::vector<std::string> image_names;
+  image_names.reserve(image_count);
+
+  for (size_t idx = 0; idx < image_count; ++idx) {
     image_names.push_back(get_temp_image_name());
   }
 
@@ -1506,7 +1537,9 @@ TEST_F(TestMirroring, AioSnapshotCreate)
   uint64_t features;
   ASSERT_TRUE(get_features(&features));
   int order = 20;
-  std::list<librbd::Image> images;
+  std::vector<librbd::Image> images;
+  images.reserve(image_count);
+
   for (auto &image_name : image_names) {
     ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048, features,
                                &order));
@@ -1517,8 +1550,12 @@ TEST_F(TestMirroring, AioSnapshotCreate)
   }
 
   // create snapshots
-  std::list<uint64_t> snap_ids;
-  std::list<librbd::RBD::AioCompletion *> aio_comps;
+  std::deque<uint64_t> snap_ids;
+  std::vector<librbd::RBD::AioCompletion *> aio_comps;
+
+  // Async operations retain the snapshot-ID addresses:
+  aio_comps.reserve(image_count);
+
   for (auto &image : images) {
     snap_ids.emplace_back();
     aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));

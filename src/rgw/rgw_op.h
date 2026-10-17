@@ -723,7 +723,7 @@ public:
     const DoutPrefixProvider * dpp;
     unsigned int num_deleted;
     unsigned int num_unfound;
-    std::list<fail_desc_t> failures;
+    std::vector<fail_desc_t> failures;
 
     rgw::sal::Driver*  const driver;
     req_state * const s;
@@ -745,7 +745,7 @@ public:
       return num_unfound;
     }
 
-    const std::list<fail_desc_t> get_failures() const {
+    const std::vector<fail_desc_t>& get_failures() const {
       return failures;
     }
 
@@ -754,7 +754,7 @@ public:
                            ACLOwner& bucket_owner /* out */,
 			   optional_yield y);
     bool delete_single(const acct_path_t& path, optional_yield y);
-    bool delete_chunk(const std::list<acct_path_t>& paths, optional_yield y);
+    bool delete_chunk(const std::vector<acct_path_t>& paths, optional_yield y);
   };
   /* End of Deleter subclass */
 
@@ -772,8 +772,7 @@ public:
   void pre_exec() override;
   void execute(optional_yield y) override;
 
-  virtual int get_data(std::list<acct_path_t>& items,
-                       bool * is_truncated) = 0;
+  virtual int get_data(std::vector<acct_path_t>& items, bool& is_truncated) = 0;
   void send_response() override = 0;
 
   const char* name() const override { return "bulk_delete"; }
