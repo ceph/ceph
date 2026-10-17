@@ -5,9 +5,13 @@
 
 #include <memory>
 #include <string>
+#include "lancedb.h"
 
 namespace rgw::sal {
   class Driver;
+}
+namespace TOPNSPC::common {
+class CephContext;
 }
 class DoutPrefixProvider;
 struct LanceDBSession;
@@ -16,6 +20,9 @@ namespace rgw::s3vector {
   struct bucket_namespace_t;
 
   bool init(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
+  // whether vector operations use sessions. a negative
+  // rgw_s3vector_session_inactive_timeout disables them
+  bool sessions_enabled(const TOPNSPC::common::CephContext* cct);
   void shutdown();
   void pause();
   void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
@@ -29,5 +36,11 @@ namespace rgw::s3vector {
   bool notify_session_create(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name);
   // notify manager for session deletion
   bool notify_session_delete(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name);
+  // delete one session immediately by bucket name
+  int delete_session(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name);
+  // get index cache stats for a session by bucket name
+  int get_index_cache_stats(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name, LanceDBSessionCacheStats& out_stats);
+  // get metadata cache stats for a session by bucket name
+  int get_metadata_cache_stats(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name, LanceDBSessionCacheStats& out_stats);
 }
 
