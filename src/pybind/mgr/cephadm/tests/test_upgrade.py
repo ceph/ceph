@@ -247,6 +247,21 @@ def test_upgrade_state_crush_roundtrip():
     assert restored.crush_bucket_name == 'rack1'
 
 
+def test_upgrade_state_fs_dicts_roundtrip_through_json():
+    # fs_original_max_mds / fs_original_allow_standby_replay are keyed by
+    # fscid (int). The upgrade state is persisted as JSON, whose object keys
+    # are strings: after a mgr failover the keys must be ints again, or the
+    # filesystems would never be scaled back up / get standby-replay back.
+    u = UpgradeState(
+        'target', 'pid',
+        fs_original_max_mds={1: 2, 2: 3},
+        fs_original_allow_standby_replay={1: True})
+    restored = UpgradeState.from_json(json.loads(json.dumps(u.to_json())))
+    assert restored
+    assert restored.fs_original_max_mds == {1: 2, 2: 3}
+    assert restored.fs_original_allow_standby_replay == {1: True}
+
+
 def _test_osd_dd(osd_id: int, digests: List[str]) -> DaemonDescription:
     return DaemonDescription(
         daemon_type='osd',
@@ -921,6 +936,266 @@ def test_to_upgrade_batches_mds_when_fail_fs(
     assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
 
 
+def _fsmap_two_filesystems():
+    # Two multi-rank filesystems. 'up' is non-empty so the fail_fs branch logs
+    # and issues 'fs fail'; max_mds > 1 so the max_mds branch issues 'fs set'.
+    return {'filesystems': [
+        {'id': 1, 'mdsmap': {'fs_name': 'cephfs', 'max_mds': 2, 'flags': 0,
+                             'up': {'mds_0': 1, 'mds_1': 2}, 'in': [0, 1],
+                             'info': {'gid_1': {'name': 'a', 'state': 'up:active'},
+                                      'gid_2': {'name': 'b', 'state': 'up:active'}}}},
+        {'id': 2, 'mdsmap': {'fs_name': 'cephfs2', 'max_mds': 2, 'flags': 0,
+                             'up': {'mds_0': 3, 'mds_1': 4}, 'in': [0, 1],
+                             'info': {'gid_3': {'name': 'c', 'state': 'up:active'},
+                                      'gid_4': {'name': 'd', 'state': 'up:active'}}}},
+    ]}
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_fail_fs_scopes_to_targeted_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With fail_fs=true and the upgrade scoped to a single filesystem
+    # (need_upgrade only contains cephfs2's MDS), only cephfs2 must be failed.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs2.host1.abcde',
+                                      service_name='mds.cephfs2')]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    failed = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs fail']
+    assert 'cephfs2' in failed
+    assert 'cephfs' not in failed
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_includes_fs_actually_served(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # A daemon from service mds.cephfs2 currently holds a rank in cephfs
+    # (standby takeover: mds_join_fs is only a preference). The filesystem
+    # it actually serves must be prepared too, not only its service's.
+    fsmap = _fsmap_two_filesystems()
+    fsmap['filesystems'][0]['mdsmap']['info']['gid_1']['name'] = 'cephfs2.host1.abcde'
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: fsmap if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs2.host1.abcde',
+                                      service_name='mds.cephfs2')]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    failed = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs fail']
+    assert 'cephfs' in failed
+    assert 'cephfs2' in failed
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_ignores_standby_replay_membership(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # A filesystem with allow_standby_replay can grab a standby from another
+    # service's pool as up:standby-replay at any time. That daemon holds no
+    # rank there, so the borrowing filesystem must NOT become a preparation
+    # target of the borrowed daemon's upgrade (this used to livelock the
+    # one-filesystem-at-a-time sequencing by repeatedly disabling
+    # standby-replay on the already-restored filesystem).
+    fsmap = _fsmap_two_filesystems()
+    fsmap['filesystems'][0]['mdsmap']['info']['gid_1'] = {
+        'name': 'cephfs2.host1.abcde', 'state': 'up:standby-replay'}
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: fsmap if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs2.host1.abcde',
+                                      service_name='mds.cephfs2')]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    failed = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs fail']
+    assert 'cephfs2' in failed
+    assert 'cephfs' not in failed
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_max_mds_scopes_to_targeted_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With fail_fs=false the targeted filesystem is scaled to max_mds 1, and
+    # only the targeted filesystem (cephfs2) must be touched.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=False)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs2.host1.abcde',
+                                      service_name='mds.cephfs2')]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    scaled = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs set'
+              and c.args[0].get('var') == 'max_mds']
+    assert 'cephfs2' in scaled
+    assert 'cephfs' not in scaled
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_all_mds_touches_all_filesystems(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With --daemon-types mds (or no filter), need_upgrade contains MDS from
+    # every filesystem, so all filesystems must still be prepared.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [
+        DaemonDescription(daemon_type='mds', daemon_id='cephfs.host1.aaaaa',
+                          service_name='mds.cephfs'),
+        DaemonDescription(daemon_type='mds', daemon_id='cephfs2.host1.bbbbb',
+                          service_name='mds.cephfs2'),
+    ]
+    cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    failed = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs fail']
+    assert 'cephfs' in failed
+    assert 'cephfs2' in failed
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_rejoins_only_fs_failed_by_upgrade(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # Only filesystems the upgrade itself failed (recorded in
+    # fs_failed_for_upgrade) must be set joinable again. A filesystem an admin
+    # set NOT_JOINABLE for another reason (here 'cephfs') must be left alone.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 0, fail_fs=True, fs_failed_for_upgrade=[2])
+
+    cephadm_module.upgrade._complete_mds_upgrade()
+
+    rejoined = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+                if c.args and c.args[0].get('prefix') == 'fs set'
+                and c.args[0].get('var') == 'joinable']
+    assert 'cephfs2' in rejoined
+    assert 'cephfs' not in rejoined
+    # the tracking list is cleared once completion has run
+    assert cephadm_module.upgrade.upgrade_state.fs_failed_for_upgrade == []
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_rejoins_nothing_when_upgrade_failed_no_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # If the upgrade did not fail any filesystem (empty fs_failed_for_upgrade),
+    # completion must not set any filesystem joinable.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 0, fail_fs=True, fs_failed_for_upgrade=[])
+
+    cephadm_module.upgrade._complete_mds_upgrade()
+
+    rejoined = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+                if c.args and c.args[0].get('prefix') == 'fs set'
+                and c.args[0].get('var') == 'joinable']
+    assert rejoined == []
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_scales_up_only_finished_fs(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # With fail_fs=false, filesystems are scaled down to max_mds 1 during the
+    # upgrade (recorded in fs_original_max_mds by fscid). When completion is
+    # invoked for a single finished filesystem (fs_names given), only that
+    # filesystem must be scaled back up; the other entries must be retained
+    # for later restoration.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 0, fail_fs=False,
+        fs_original_max_mds={1: 2, 2: 2})
+
+    cephadm_module.upgrade._complete_mds_upgrade(fs_names=['cephfs'])
+
+    scaled = [c.args[0]['fs_name'] for c in check_mon_command.call_args_list
+              if c.args and c.args[0].get('prefix') == 'fs set'
+              and c.args[0].get('var') == 'max_mds']
+    assert scaled == ['cephfs']
+    # cephfs2 (fscid 2) is still being upgraded: its entry must remain
+    assert cephadm_module.upgrade.upgrade_state.fs_original_max_mds == {2: 2}
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_scales_up_after_mgr_failover(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # Same as above, but with the upgrade state reloaded from the store as a
+    # new mgr would after a failover during the MDS phase.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    u = UpgradeState('target_image', 'pid', fail_fs=False,
+                     fs_original_max_mds={1: 2, 2: 2},
+                     fs_original_allow_standby_replay={1: True})
+    cephadm_module.upgrade.upgrade_state = UpgradeState.from_json(
+        json.loads(json.dumps(u.to_json())))
+
+    cephadm_module.upgrade._complete_mds_upgrade(fs_names=['cephfs'])
+
+    fs_sets = [(c.args[0]['fs_name'], c.args[0]['var'], c.args[0]['val'])
+               for c in check_mon_command.call_args_list
+               if c.args and c.args[0].get('prefix') == 'fs set']
+    assert fs_sets == [('cephfs', 'max_mds', '2'),
+                       ('cephfs', 'allow_standby_replay', '1')]
+    assert cephadm_module.upgrade.upgrade_state.fs_original_max_mds == {2: 2}
+    assert cephadm_module.upgrade.upgrade_state.fs_original_allow_standby_replay == {}
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_untracks_fs_when_fs_fail_fails(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # The fs is recorded as failed by the upgrade before 'fs fail' is issued
+    # (mgr failover safety). If the mon rejects 'fs fail', the entry must be
+    # dropped again so completion does not treat the fs as failed by us.
+    def mon_command(cmd):
+        if cmd.get('prefix') == 'fs fail':
+            raise RuntimeError('fs fail failed: EPERM')
+        return (0, '', '')
+    check_mon_command.side_effect = mon_command
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs.host1.abcde',
+                                      service_name='mds.cephfs')]
+    with pytest.raises(RuntimeError):
+        cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    assert cephadm_module.upgrade.upgrade_state.fs_failed_for_upgrade == []
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)
@@ -1374,3 +1649,136 @@ def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: Ceph
                         assert wait(cephadm_module, cephadm_module.upgrade_start(
                             '', '21.2.0', host_placement='test2')
                         ).startswith('Initiating upgrade')
+
+
+def _mds_entries_for_services(*service_names):
+    # Build (DaemonDescription, bool) entries like _detect_need_upgrade returns,
+    # one MDS per given service name (service_name is 'mds.<fs>').
+    entries = []
+    for i, svc in enumerate(service_names):
+        fs = svc[len('mds.'):]
+        entries.append(
+            (DaemonDescription(daemon_type='mds',
+                               daemon_id=f'{fs}.host{i}.aaaaa',
+                               service_name=svc), False))
+    return entries
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_picks_single_fs(
+        cephadm_module: CephadmOrchestrator):
+    # MDS from three filesystems -> only one filesystem's MDS are kept.
+    need_upgrade = _mds_entries_for_services(
+        'mds.cephfs2', 'mds.cephfs', 'mds.cephfs', 'mds.cephfs3')
+    restricted = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(need_upgrade)
+    fs_names = {d.service_name() for d, _ in restricted}
+    assert fs_names == {'mds.cephfs'}, fs_names
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_is_deterministic(
+        cephadm_module: CephadmOrchestrator):
+    # Selection is the lowest (sorted) service name, regardless of input order.
+    a = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(
+        _mds_entries_for_services('mds.b', 'mds.a', 'mds.c'))
+    b = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(
+        _mds_entries_for_services('mds.c', 'mds.b', 'mds.a'))
+    assert {d.service_name() for d, _ in a} == {'mds.a'}
+    assert {d.service_name() for d, _ in b} == {'mds.a'}
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_sequences_across_passes(
+        cephadm_module: CephadmOrchestrator):
+    # Simulate successive serve() passes: once a filesystem's MDS are upgraded
+    # they drop out of need_upgrade and the next filesystem is selected.
+    selected = []
+    remaining = ['mds.cephfs', 'mds.cephfs2', 'mds.cephfs3']
+    # one MDS per fs for simplicity
+    while remaining:
+        entries = _mds_entries_for_services(*remaining)
+        restricted = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(entries)
+        fs_names = {d.service_name() for d, _ in restricted}
+        assert len(fs_names) == 1
+        picked = fs_names.pop()
+        selected.append(picked)
+        remaining.remove(picked)
+    assert selected == ['mds.cephfs', 'mds.cephfs2', 'mds.cephfs3']
+
+
+def test_restrict_mds_need_upgrade_to_one_fs_handles_multi_part_fs_names(
+        cephadm_module: CephadmOrchestrator):
+    # Filesystem names may themselves contain dots (service 'mds.my.fs');
+    # everything after the 'mds.' prefix is the filesystem grouping key.
+    need_upgrade = _mds_entries_for_services('mds.my.fs', 'mds.my.fs', 'mds.other')
+    restricted = cephadm_module.upgrade._restrict_mds_need_upgrade_to_one_fs(need_upgrade)
+    fs_names = {d.service_name() for d, _ in restricted}
+    # 'mds.my.fs' sorts before 'mds.other'
+    assert fs_names == {'mds.my.fs'}, fs_names
+    assert len(restricted) == 2
+
+
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, '_prepare_for_mds_upgrade', return_value=True)
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+    'filesystems': [],
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_waits_for_cache_after_last_mds_of_a_fs(
+    get_daemons: mock.MagicMock,
+    get_daemons_by_type: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    complete: mock.MagicMock,
+    _prepare: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # Regression: after the last MDS of one filesystem was redeployed, the
+    # next pass still sees those daemons in need_upgrade (daemon cache not
+    # refreshed yet: unknown image id, correct image name) and, being
+    # restricted to that filesystem, _to_upgrade skips them all. The pass
+    # must then wait, not fall through to the next daemon type - with
+    # --daemon-types mds that declared the upgrade complete while the MDS
+    # of the remaining filesystems had never been touched.
+    target_digest = 'target_image@digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    stale = DaemonDescription(daemon_type='mds', daemon_id='cephfs2.host1.aaa', hostname='host1',
+                              service_name='mds.cephfs2', container_image_name=target_digest,
+                              container_image_id=None)
+    old = DaemonDescription(daemon_type='mds', daemon_id='cephfs3.host1.bbb', hostname='host1',
+                            service_name='mds.cephfs3', container_image_name='old_image',
+                            container_image_id='old', container_image_digests=['old@digest'])
+    get_daemons.return_value = [stale, old]
+    get_daemons_by_type.return_value = [stale, old]
+
+    def detect(daemons, *args, **kwargs):
+        return (False, [(d, False) for d in daemons if d.daemon_type == 'mds'], [], 0)
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', target_id='image_id',
+        target_digests=[target_digest], target_version='19.3.0-0',
+        daemon_types=['mds'], fail_fs=True)
+    with mock.patch.object(CephadmUpgrade, '_detect_need_upgrade', side_effect=detect):
+        cephadm_module.upgrade._do_upgrade()
+
+    # still upgrading: the pass restricted itself to cephfs2 (all stale) and waited
+    assert cephadm_module.upgrade.upgrade_state is not None
+    complete.assert_not_called()
