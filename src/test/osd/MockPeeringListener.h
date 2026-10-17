@@ -73,6 +73,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   bool inject_event_stall = false;         // route grants to stalled_events
   bool inject_keep_preempt = false;        // route preempt events to stalled_events
+  bool inject_remote_reservation_stall = false; // route remote reservation grants to stalled_events
   bool inject_fail_reserve_recovery_space = false;
 
   std::function<int(ObjectStore::Transaction&&)> queue_transaction_callback;
@@ -259,6 +260,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   void update_local_background_io_priority(
     unsigned priority) override {
     io_priority_updated = true;
+    io_reservation_priority = priority;
   }
 
   void cancel_local_background_io_reservation() override {
@@ -563,6 +565,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   int events_scheduled = 0;
   int io_reservations_requested = 0;
   int remote_recovery_reservations_requested = 0;
+  unsigned io_reservation_priority = 0;
+  unsigned remote_recovery_reservation_priority = 0;
   int events_on_commit_scheduled = 0;
   bool first_write_in_interval = false;
 };
