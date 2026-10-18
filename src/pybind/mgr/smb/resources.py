@@ -41,6 +41,7 @@ from .enums import (
     LoginAccess,
     LoginCategory,
     PasswordFilter,
+    PersistentHandlesDurability,
     SMBClustering,
     SourceReferenceType,
     TLSCredentialType,
@@ -1018,6 +1019,10 @@ class Cluster(_RBase):
     keybridge: Optional[KeyBridge] = None
     # client support mode for client-specific optimizations (macOS, etc.)
     client_compat: Optional[ClientSupportMode] = None
+    # Cluster-wide policy; independent of enablement and share defaults.
+    persistent_handles_durability: Optional[
+        PersistentHandlesDurability
+    ] = None
     # share defaults
     share_defaults: Optional[ShareDefaults] = None
 
@@ -1052,6 +1057,8 @@ class Cluster(_RBase):
                 'bind_addrs must have at least one value or not be set'
             )
         validation.check_debug_level(self.debug_level)
+        if self.persistent_handles_durability is not None:
+            PersistentHandlesDurability(self.persistent_handles_durability)
         if self.share_defaults is not None:
             self.share_defaults.validate()
 

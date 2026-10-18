@@ -120,6 +120,11 @@ class SMBClustering(_StrEnum):
     NEVER = 'never'
 
 
+class PersistentHandlesDurability(_StrEnum):
+    FULL_OUTAGE = 'full_outage'
+    PARTIAL_OUTAGE = 'partial_outage'
+
+
 class ShowResults(_StrEnum):
     FULL = 'full'
     COLLAPSED = 'collapsed'

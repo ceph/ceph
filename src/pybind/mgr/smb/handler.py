@@ -1254,6 +1254,11 @@ def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
     )
     if persistent_handles:
         cluster_global_opts['persistent handles'] = 'yes'
+        # A stored durability policy is inert without persistent handles.
+        if cluster.persistent_handles_durability is not None:
+            cluster_global_opts['persistent handles durability'] = str(
+                cluster.persistent_handles_durability
+            )
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
         assert cluster.domain_settings is not None
         cluster_global_opts['security'] = 'ads'

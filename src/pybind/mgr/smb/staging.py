@@ -24,6 +24,7 @@ from .enums import (
     ConfigNS,
     Intent,
     JoinSourceType,
+    PersistentHandlesDurability,
     SMBClustering,
     SourceReferenceType,
     State,
@@ -477,6 +478,26 @@ def _check_cluster_modifications(
     prev = ClusterEntry.from_store(
         staging.destination_store, cluster.cluster_id
     ).get_cluster()
+    # Database persistence is fixed at startup; reload cannot migrate it.
+    # Omission means full_outage, even while handles are disabled.
+    durability = (
+        cluster.persistent_handles_durability
+        or PersistentHandlesDurability.FULL_OUTAGE
+    )
+    prev_durability = (
+        prev.persistent_handles_durability
+        or PersistentHandlesDurability.FULL_OUTAGE
+    )
+    if durability != prev_durability:
+        raise ErrorResult(
+            cluster,
+            'persistent_handles_durability value may not be changed',
+            status={
+                'existing_values': [
+                    {'persistent_handles_durability': prev_durability}
+                ]
+            },
+        )
     if cluster.auth_mode != prev.auth_mode:
         raise ErrorResult(
             cluster,
