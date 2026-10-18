@@ -83,7 +83,7 @@ void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
 void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
                                     uint64_t timeout)
 {
-  auto in = ::cls::rgw::bucket_datum::encode_timeout(timeout);
+  auto in = bucket_datum::encode_timeout(timeout);
   op.exec(method::bucket_set_tag_timeout, in);
 }
 
@@ -92,14 +92,14 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  const map<RGWObjCategory, rgw_bucket_category_stats>& stats,
                                  const map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats)
 {
-  auto in = ::cls::rgw::bucket_datum::encode_stats(absolute, stats, dec_stats);
+  auto in = bucket_datum::encode_stats(absolute, stats, dec_stats);
   o.exec(method::bucket_update_stats, in);
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const string& tag,
                                const cls_rgw_obj_key& key, const string& locator)
 {
-  auto in = ::cls::rgw::write_datum::encode_prepare(op, tag, key, locator);
+  auto in = write_datum::encode_prepare(op, tag, key, locator);
   o.exec(method::bucket_prepare_op, in);
 }
 
@@ -112,9 +112,11 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
                                 const rgw_zone_set *zones_trace,
 				const std::string& obj_locator)
 {
-  auto in = ::cls::rgw::write_datum::encode_complete(op, tag, ver, key, dir_meta,
-                                                  remove_objs, log_op, bilog_flags,
-                                                  zones_trace, obj_locator);
+  auto in = write_datum::encode_complete(op, tag,
+                                         ver, key, dir_meta,
+                                         remove_objs,
+                                         log_op, bilog_flags, zones_trace,
+                                         obj_locator);
   o.exec(method::bucket_complete_op, in);
 }
 
@@ -159,12 +161,12 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             rgw_cls_list_ret* result)
 {
   ceph_assert(result);
-  auto in = ::cls::rgw::bucket_datum::encode_request(start_obj, filter_prefix, delimiter,
-                                                   num_entries, list_versions);
+  auto in = bucket_datum::encode_request(start_obj, filter_prefix, delimiter,
+                                         num_entries, list_versions);
   op.exec(method::bucket_list, in, new reply_completion {*result, nullptr,
     [](const ::ceph::buffer::list& bytes, rgw_cls_list_ret& output) {
       static_assert(std::is_nothrow_move_assignable_v<rgw_cls_list_ret>);
-      auto candidate = ::cls::rgw::bucket_datum::decode_reply<::cls::rgw::bucket_datum::flat_entries>(bytes);
+      auto candidate = bucket_datum::decode_reply<bucket_datum::flat_entries>(bytes);
       output.dir.header = std::move(candidate.dir.header);
       output.dir.m = std::move(candidate.dir.m);
       output.marker = std::move(candidate.marker);
@@ -175,25 +177,25 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
 {
-  auto in = ::cls::rgw::object_datum::encode_remove(keep_attr_prefixes);
+  auto in = object_datum::encode_remove(keep_attr_prefixes);
   o.exec(method::obj_remove, in);
 }
 
 void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const string& attr)
 {
-  auto in = ::cls::rgw::object_datum::encode_version(attr);
+  auto in = object_datum::encode_version(attr);
   o.exec(method::obj_store_pg_ver, in);
 }
 
 void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist)
 {
-  auto in = ::cls::rgw::object_datum::encode_prefix(prefix, fail_if_exist);
+  auto in = object_datum::encode_prefix(prefix, fail_if_exist);
   o.exec(method::obj_check_attrs_prefix, in);
 }
 
 void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type)
 {
-  auto in = ::cls::rgw::object_datum::encode_mtime(mtime, high_precision_time, static_cast<std::uint8_t>(type));
+  auto in = object_datum::encode_mtime(mtime, high_precision_time, static_cast<std::uint8_t>(type));
   o.exec(method::obj_check_mtime, in);
 }
 
@@ -201,14 +203,14 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry)
 {
-  bufferlist in, out;
-  in = ::cls::rgw::bi_datum::encode_get_request(key, index_type);
+  auto in = bi_datum::encode_get_request(key, index_type);
+  bufferlist out;
   int r = io_ctx.exec(oid, method::bi_get, in, out);
   if (r < 0)
     return r;
 
   try {
-    auto candidate = ::cls::rgw::bi_datum::decode_get_reply(out);
+    auto candidate = bi_datum::decode_get_reply(out);
     *entry = std::move(candidate);
   } catch (ceph::buffer::error& err) {
     return -EIO;
@@ -221,7 +223,7 @@ namespace
 {
 void bi_put(ObjectWriteOperation& op, const rgw_cls_bi_entry& entry)
 {
-  auto input = ::cls::rgw::bi_datum::encode_put_entry(entry);
+  auto input = bi_datum::encode_put_entry(entry);
   op.exec(method::bi_put, input);
 }
 } // anonymous namespace
@@ -246,7 +248,7 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             std::vector<rgw_cls_bi_entry> entries,
                             bool check_existing)
 {
-  auto in = ::cls::rgw::bi_datum::encode_put_request(entries, check_existing);
+  auto in = bi_datum::encode_put_request(entries, check_existing);
 
   op.exec(method::bi_put_entries, in);
 }
@@ -259,13 +261,13 @@ static int bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name_filter, const std::string& marker, uint32_t max,
                    EntriesT *destination, bool *truncated, bool reshardlog)
 try {
-  bufferlist in, out;
-  in = ::cls::rgw::bi_datum::encode_request(max, name_filter, marker, reshardlog);
+  auto in = bi_datum::encode_request(max, name_filter, marker, reshardlog);
+  bufferlist out;
   int r = io_ctx.exec(oid, method::bi_list, in, out);
   if (r < 0)
     return r;
 
-  auto [candidate, is_truncated] = ::cls::rgw::bi_datum::decode_reply<EntriesT>(out);
+  auto [candidate, is_truncated] = bi_datum::decode_reply<EntriesT>(out);
   destination->swap(candidate);
   *truncated = is_truncated;
 
@@ -310,9 +312,10 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace,
                             bufferlist* epoch_out_bl)
 {
-  auto in = ::cls::rgw::write_datum::encode_link(key, olh_tag, delete_marker, op_tag, meta,
-                                              olh_epoch, unmod_since, high_precision_time,
-                                              log_op, zones_trace);
+  auto in = write_datum::encode_link(key, olh_tag, delete_marker,
+                                     op_tag, meta,
+                                     olh_epoch, unmod_since, high_precision_time,
+                                     log_op, zones_trace);
   if (epoch_out_bl) {
     op.exec(method::bucket_link_olh, in, epoch_out_bl, nullptr);
   } else {
@@ -322,7 +325,7 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
 
 void cls_rgw_bucket_refresh_instance(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key)
 {
-  auto in = ::cls::rgw::write_datum::encode_refresh(key);
+  auto in = write_datum::encode_refresh(key);
   op.exec(method::bucket_refresh_instance, in);
 }
 
@@ -346,8 +349,9 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    uint16_t bilog_flags, const rgw_zone_set& zones_trace,
                                    bufferlist* epoch_out_bl)
 {
-  auto in = ::cls::rgw::write_datum::encode_unlink(key, op_tag, olh_tag, olh_epoch,
-                                                log_op, bilog_flags, zones_trace);
+  auto in = write_datum::encode_unlink(key, op_tag, olh_tag,
+                                       olh_epoch,
+                                       log_op, bilog_flags, zones_trace);
   if (epoch_out_bl) {
     op.exec(method::bucket_unlink_instance, in, epoch_out_bl, nullptr);
   } else {
@@ -362,10 +366,10 @@ template <typename ReplyT>
 void get_olh_log(ObjectReadOperation& op, const cls_rgw_obj_key& olh,
                  const uint64_t marker, const std::string& tag, ReplyT& output, int& status)
 {
-  auto input = ::cls::rgw::olh_datum::encode_request(olh, marker, tag, true);
+  auto input = olh_datum::encode_request(olh, marker, tag, true);
   op.exec(method::bucket_read_olh_log, input, new reply_completion {output, &status,
     [](const ::ceph::buffer::list& bytes, ReplyT& output) {
-      ::cls::rgw::olh_datum::decode_reply(bytes, output);
+      olh_datum::decode_reply(bytes, output);
     }});
 }
 
@@ -410,7 +414,7 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, const std::string& oid, const cls_rgw_obj
 
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag)
 {
-  auto in = ::cls::rgw::write_datum::encode_trim(olh, ver, olh_tag);
+  auto in = write_datum::encode_trim(olh, ver, olh_tag);
   op.exec(method::bucket_trim_olh_log, in);
 }
 
@@ -424,7 +428,7 @@ int cls_rgw_clear_olh(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, co
 
 void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, const string& olh_tag)
 {
-  auto in = ::cls::rgw::write_datum::encode_clear(olh, olh_tag);
+  auto in = write_datum::encode_clear(olh, olh_tag);
   op.exec(method::bucket_clear_olh, in);
 }
 
@@ -433,11 +437,11 @@ void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         cls_rgw_bi_log_list_ret *pdata, int *ret)
 {
   ceph_assert(pdata);
-  auto in = ::cls::rgw::bilog_datum::encode_list(marker, max);
+  auto in = bilog_datum::encode_list(marker, max);
   op.exec(method::bi_log_list, in, new reply_completion {*pdata, ret,
     [](const ::ceph::buffer::list& bytes, cls_rgw_bi_log_list_ret& output) {
       auto [entries, truncated] =
-        ::cls::rgw::bilog_datum::decode_reply<std::list<::rgw_bi_log_entry>>(bytes);
+        bilog_datum::decode_reply<std::list<::rgw_bi_log_entry>>(bytes);
       output.entries = std::move(entries);
       output.truncated = truncated;
     }});
@@ -447,7 +451,7 @@ void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
                         const std::string& end_marker)
 {
-  auto in = ::cls::rgw::bilog_datum::encode_trim(start_marker, end_marker);
+  auto in = bilog_datum::encode_trim(start_marker, end_marker);
   op.exec(method::bi_log_trim, in);
 }
 
@@ -468,7 +472,7 @@ void cls_rgw_bucket_check_index_decode(const bufferlist& out,
                                        rgw_cls_check_index_ret& result)
 {
   static_assert(std::is_nothrow_move_assignable_v<rgw_cls_check_index_ret>);
-  auto candidate = ::cls::rgw::bucket_datum::decode_check_reply(out);
+  auto candidate = bucket_datum::decode_check_reply(out);
   result.existing_header = std::move(candidate.existing_header);
   result.calculated_header = std::move(candidate.calculated_header);
 }
@@ -523,10 +527,8 @@ public:
 int cls_rgw_get_dir_header_async(IoCtx& io_ctx, const string& oid,
                                  boost::intrusive_ptr<RGWGetDirHeader_CB> cb)
 {
-  bufferlist in, out;
-  rgw_cls_list_op call;
-  call.num_entries = 0;
-  encode(call, in);
+  // A zero-entry listing requests only the directory header.
+  auto in = bucket_datum::encode_request({}, {}, {}, 0, false);
   ObjectReadOperation op;
   op.exec(method::bucket_list, in,
           new GetDirHeaderCompletion(std::move(cb)));
@@ -547,22 +549,22 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
   if (is_truncated)
     *is_truncated = false;
 
-  bufferlist in, out;
-  in = ::cls::rgw::usage_datum::encode_read(user, bucket, start_epoch, end_epoch, max_entries, read_iter);
+  auto in = usage_datum::encode_read(user, bucket, start_epoch, end_epoch, max_entries, read_iter);
+  bufferlist out;
   int r = io_ctx.exec(oid, method::user_usage_log_read, in, out);
   if (r < 0)
     return r;
 
   try {
-    using entries = ::cls::rgw::usage_datum::native_entries;
-    auto result = ::cls::rgw::usage_datum::decode_reply<entries>(out);
-    static_assert(std::is_nothrow_move_assignable_v<decltype(result.usage)> &&
-                  std::is_nothrow_move_assignable_v<decltype(result.next_iter)>);
-    read_iter = std::move(result.next_iter);
+    using entries = usage_datum::native_entries;
+    auto candidate = usage_datum::decode_reply<entries>(out);
+    static_assert(std::is_nothrow_move_assignable_v<decltype(candidate.usage)> &&
+                  std::is_nothrow_move_assignable_v<decltype(candidate.next_iter)>);
+    read_iter = std::move(candidate.next_iter);
     if (is_truncated)
-      *is_truncated = result.truncated;
+      *is_truncated = candidate.truncated;
 
-    usage = std::move(result.usage);
+    usage = std::move(candidate.usage);
   } catch (ceph::buffer::error& e) {
     return -EINVAL;
   }
@@ -573,7 +575,7 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
 int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
 			   uint64_t start_epoch, uint64_t end_epoch)
 {
-  auto in = ::cls::rgw::usage_datum::encode_trim(user, bucket, start_epoch, end_epoch);
+  auto in = usage_datum::encode_trim(user, bucket, start_epoch, end_epoch);
 
   bool done = false;
   do {
@@ -591,7 +593,7 @@ int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user,
 
 void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch)
 {
-  auto in = ::cls::rgw::usage_datum::encode_trim(user, bucket, start_epoch, end_epoch);
+  auto in = usage_datum::encode_trim(user, bucket, start_epoch, end_epoch);
 
   op.exec(method::user_usage_log_trim, in);
 }
@@ -604,7 +606,7 @@ void cls_rgw_usage_log_clear(ObjectWriteOperation& op)
 
 void cls_rgw_usage_log_add(ObjectWriteOperation& op, rgw_usage_log_info& info)
 {
-  auto in = ::cls::rgw::usage_datum::encode_add(info.entries);
+  auto in = usage_datum::encode_add(info.entries);
   op.exec(method::user_usage_log_add, in);
 }
 
@@ -612,20 +614,20 @@ void cls_rgw_usage_log_add(ObjectWriteOperation& op, rgw_usage_log_info& info)
 
 void cls_rgw_gc_set_entry(ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info)
 {
-  auto in = ::cls::rgw::gc_datum::encode_set(expiration_secs, info);
+  auto in = gc_datum::encode_set(expiration_secs, info);
   op.exec(method::gc_set_entry, in);
 }
 
 void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, const string& tag)
 {
-  auto in = ::cls::rgw::gc_datum::encode_defer(expiration_secs, tag);
+  auto in = gc_datum::encode_defer(expiration_secs, tag);
   op.exec(method::gc_defer_entry, in);
 }
 
 void cls_rgw_gc_list(ObjectReadOperation& op, const string& marker,
                      uint32_t max, bool expired_only, bufferlist& out)
 {
-  auto in = ::cls::rgw::gc_datum::encode_list(marker, max, expired_only);
+  auto in = gc_datum::encode_list(marker, max, expired_only);
   op.exec(method::gc_list, in, &out, nullptr);
 }
 
@@ -634,10 +636,10 @@ int cls_rgw_gc_list_decode(const bufferlist& out,
                            bool& truncated, std::string& next_marker)
 {
   try {
-    auto ret = ::cls::rgw::gc_datum::decode_reply<std::list<::cls_rgw_gc_obj_info>>(out);
-    entries.swap(ret.entries);
-    truncated = ret.truncated;
-    next_marker = std::move(ret.next_marker);
+    auto candidate = gc_datum::decode_reply<std::list<::cls_rgw_gc_obj_info>>(out);
+    entries.swap(candidate.entries);
+    truncated = candidate.truncated;
+    next_marker = std::move(candidate.next_marker);
   } catch (ceph::buffer::error& err) {
     return -EIO;
   }
@@ -647,7 +649,7 @@ int cls_rgw_gc_list_decode(const bufferlist& out,
 
 void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const vector<string>& tags)
 {
-  auto in = ::cls::rgw::gc_datum::encode_remove(tags);
+  auto in = gc_datum::encode_remove(tags);
   op.exec(method::gc_remove, in);
 }
 
@@ -673,14 +675,14 @@ int cls_rgw_lc_get_head_decode(const bufferlist& out, cls_rgw_lc_obj_head& head)
 
 void cls_rgw_lc_put_head(ObjectWriteOperation& op, const cls_rgw_lc_obj_head& head)
 {
-  auto in = ::cls::rgw::lc_datum::encode_head(head);
+  auto in = lc_datum::encode_head(head);
   op.exec(method::lc_put_head, in);
 }
 
 void cls_rgw_lc_get_next_entry(ObjectReadOperation& op, const string& marker,
                                bufferlist& out)
 {
-  auto in = ::cls::rgw::lc_datum::encode_marker(marker);
+  auto in = lc_datum::encode_marker(marker);
   op.exec(method::lc_get_next_entry, in, &out, nullptr);
 }
 
@@ -701,21 +703,21 @@ int cls_rgw_lc_get_next_entry_decode(const bufferlist& out, cls_rgw_lc_entry& en
 void cls_rgw_lc_rm_entry(ObjectWriteOperation& op,
                          const cls_rgw_lc_entry& entry)
 {
-  auto in = ::cls::rgw::lc_datum::encode_entry(entry);
+  auto in = lc_datum::encode_entry(entry);
   op.exec(method::lc_rm_entry, in);
 }
 
 void cls_rgw_lc_set_entry(ObjectWriteOperation& op,
                           const cls_rgw_lc_entry& entry)
 {
-  auto in = ::cls::rgw::lc_datum::encode_entry(entry);
+  auto in = lc_datum::encode_entry(entry);
   op.exec(method::lc_set_entry, in);
 }
 
 void cls_rgw_lc_get_entry(ObjectReadOperation& op, const std::string& marker,
                           bufferlist& out)
 {
-  auto in = ::cls::rgw::lc_datum::encode_marker(marker);
+  auto in = lc_datum::encode_marker(marker);
   op.exec(method::lc_get_entry, in, &out, nullptr);
 }
 
@@ -736,7 +738,7 @@ int cls_rgw_lc_get_entry_decode(const bufferlist& out, cls_rgw_lc_entry& entry)
 void cls_rgw_lc_list(ObjectReadOperation& op, const string& marker,
                      uint32_t max_entries, bufferlist& out)
 {
-  auto in = ::cls::rgw::lc_datum::encode_list(marker, max_entries);
+  auto in = lc_datum::encode_list(marker, max_entries);
 
   op.exec(method::lc_list_entries, in, &out, nullptr);
 }
@@ -762,7 +764,7 @@ void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op,
                                         const std::string& part_key,
                                         const RGWUploadPartInfo& info)
 {
-  auto in = ::cls::rgw::multipart_datum::encode_update(part_key, info);
+  auto in = multipart_datum::encode_update(part_key, info);
 
   op.exec(method::mp_upload_part_info_update, in);
 }
@@ -771,23 +773,23 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
 			 const cls_rgw_reshard_entry& entry,
 			 const bool create_only)
 {
-  auto in = ::cls::rgw::reshard_datum::encode_add(entry, create_only);
+  auto in = reshard_datum::encode_add(entry, create_only);
   op.exec(method::reshard_add, in);
 }
 
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
                          list<cls_rgw_reshard_entry>& entries, bool* is_truncated)
 {
-  bufferlist in, out;
-  in = ::cls::rgw::reshard_datum::encode_list(max, marker);
+  auto in = reshard_datum::encode_list(max, marker);
+  bufferlist out;
   int r = io_ctx.exec(oid, method::reshard_list, in, out);
   if (r < 0)
     return r;
 
   try {
-    auto candidate = ::cls::rgw::reshard_datum::decode_reply<std::list<::cls_rgw_reshard_entry>>(out);
-    entries.swap(candidate.first);
-    *is_truncated = candidate.second;
+    auto [decoded_entries, truncated] = reshard_datum::decode_reply<std::list<::cls_rgw_reshard_entry>>(out);
+    entries.swap(decoded_entries);
+    *is_truncated = truncated;
   } catch (ceph::buffer::error& err) {
     return -EIO;
   }
@@ -797,14 +799,14 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
 
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry)
 {
-  bufferlist in, out;
-  in = ::cls::rgw::reshard_datum::encode_entry(entry);
+  auto in = reshard_datum::encode_entry(entry);
+  bufferlist out;
   int r = io_ctx.exec(oid, method::reshard_get, in, out);
   if (r < 0)
     return r;
 
   try {
-    auto candidate = ::cls::rgw::reshard_datum::decode_entry(out);
+    auto candidate = reshard_datum::decode_entry(out);
     static_assert(std::is_nothrow_move_assignable_v<decltype(candidate)>);
     entry = std::move(candidate);
   } catch (ceph::buffer::error& err) {
@@ -816,40 +818,39 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
 
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
 {
-  auto in = ::cls::rgw::reshard_datum::encode_remove(entry);
+  auto in = reshard_datum::encode_remove(entry);
   op.exec(method::reshard_remove, in);
 }
 
 void cls_rgw_clear_bucket_resharding(librados::ObjectWriteOperation& op)
 {
-  auto in = ::cls::rgw::reshard_datum::encode_empty();
+  auto in = reshard_datum::encode_empty();
   op.exec(method::clear_bucket_resharding, in);
 }
 
 void cls_rgw_get_bucket_resharding(librados::ObjectReadOperation& op,
                                    bufferlist& out)
 {
-  auto in = ::cls::rgw::reshard_datum::encode_empty();
+  auto in = reshard_datum::encode_empty();
   op.exec(method::get_bucket_resharding, in, &out, nullptr);
 }
 
 void cls_rgw_get_bucket_resharding_decode(const bufferlist& out,
                                           cls_rgw_bucket_instance_entry& entry)
 {
-  entry = ::cls::rgw::reshard_datum::decode_instance(out);
+  entry = reshard_datum::decode_instance(out);
 }
 
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
 {
-  bufferlist in, out;
-  in = ::cls::rgw::reshard_datum::encode_guard(ret_err);
+  auto in = reshard_datum::encode_guard(ret_err);
   op.exec(method::guard_bucket_resharding, in);
 }
 
 void cls_rgw_set_bucket_resharding(librados::ObjectWriteOperation& op,
                                    cls_rgw_reshard_status status)
 {
-  auto in = ::cls::rgw::reshard_datum::encode_instance(::cls_rgw_bucket_instance_entry {status});
+  auto in = reshard_datum::encode_instance(::cls_rgw_bucket_instance_entry {status});
 
   op.assert_exists(); // the shard must exist; if not fail rather than recreate
   op.exec(method::set_bucket_resharding, in);

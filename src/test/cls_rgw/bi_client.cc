@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <chrono>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -28,6 +29,8 @@ std::size_t write_next = 0;
 bool assert_pending = false;
 bool captured_assert = false;
 byte_buffer *request_output = nullptr;
+std::unique_ptr<::librados::ObjectOperationCompletion> header_completion;
+int submission_status = 0;
 
 byte_buffer response()
 {
@@ -1014,4 +1017,80 @@ TEST_CASE("Multipart client preserves native manifest normalization and owns enc
     info.past_prefixes.clear();
     info.crypt_salt.clear();
     CHECK(request_bytes.contents_equal(encoded));
+}
+
+void librados::ObjectOperation::exec_impl(const char *cls, const char *method,
+                                          byte_buffer& input, ObjectOperationCompletion *completion)
+{
+    exec_impl(cls, method, input);
+    REQUIRE_FALSE(header_completion);
+    header_completion.reset(completion);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *,
+                                ObjectReadOperation *, byte_buffer *output)
+{
+    CHECK(oid == "object");
+    CHECK(output == nullptr);
+
+    return submission_status;
+}
+
+TEST_CASE("Directory header client reuses list requests and preserves native callback results", "[rgw][cls][bucket-list]")
+{
+    struct header_callback final : ::RGWGetDirHeader_CB
+    {
+        unsigned calls = 0;
+        int status = 123;
+        ::rgw_bucket_dir_header header;
+
+        void handle_response(const int result, const ::rgw_bucket_dir_header& value) override
+        {
+            ++calls;
+            status = result;
+            header = value;
+        }
+
+    };
+    ::rgw_cls_list_op request;
+    byte_buffer expected;
+    ::encode(request, expected);
+    ::rgw_cls_list_ret reply;
+    reply.dir.header.ver = 41;
+    reply.dir.header.tag_timeout = 23;
+    reply.marker = {"tail", "version"};
+    byte_buffer bytes;
+    ::encode(reply, bytes);
+    byte_buffer prefix;
+    ::encode(reply.dir, prefix);
+    ::ceph::encode(reply.is_truncated, prefix);
+    ::librados::IoCtx context;
+    submission_status = 0;
+    for (const auto [status, malformed] : {std::pair {0, false}, std::pair {-EAGAIN, false},
+                                          std::pair {0, true}}) {
+        boost::intrusive_ptr<header_callback> callback {new header_callback};
+        CHECK(0 == ::cls_rgw_get_dir_header_async(context, "object", callback));
+        CHECK(request_method == "bucket_list");
+        CHECK(request_bytes.contents_equal(expected));
+        CHECK(callback->calls == 0);
+        REQUIRE(header_completion);
+        auto response = bytes;
+        if (malformed) {
+            // Reject the trailing key's compatibility after the directory header decodes.
+            const char incompatible = char(0xFF);
+            response.begin(6 + prefix.length() + 1).copy_in(1, &incompatible);
+        }
+        auto completion = std::move(header_completion);
+        completion->handle_completion(status, response);
+        CHECK(callback->calls == 1);
+        CHECK(callback->status == (malformed ? -EIO : status));
+        CHECK(callback->header.ver == 41);
+        CHECK(callback->header.tag_timeout == 23);
+    }
+    boost::intrusive_ptr<header_callback> callback {new header_callback};
+    submission_status = -ECANCELED;
+    CHECK(-ECANCELED == ::cls_rgw_get_dir_header_async(context, "object", callback));
+    CHECK(callback->calls == 0);
+    header_completion.reset();
+    submission_status = 0;
 }

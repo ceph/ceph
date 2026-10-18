@@ -56,33 +56,28 @@ void cls_rgw_gc_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs
 int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max, bool expired_only,
                                   list<cls_rgw_gc_obj_info>& entries, bool& truncated, string& next_marker)
 {
-  bufferlist in, out;
-  in = ::cls::rgw::gc_datum::encode_list(marker, max, expired_only);
+  auto in = ::cls::rgw::gc_datum::encode_list(marker, max, expired_only);
+  bufferlist out;
 
   int r = io_ctx.exec(oid, method::list_entries, in, out);
   if (r < 0)
     return r;
 
-  ::cls::rgw::gc_datum::list_reply<std::list<cls_rgw_gc_obj_info>> ret;
   try {
-    ret = ::cls::rgw::gc_datum::decode_reply<std::list<cls_rgw_gc_obj_info>>(out);
+    auto candidate = ::cls::rgw::gc_datum::decode_reply<std::list<cls_rgw_gc_obj_info>>(out);
+    entries.swap(candidate.entries);
+    truncated = candidate.truncated;
+    next_marker = std::move(candidate.next_marker);
   } catch (ceph::buffer::error& err) {
     return -EIO;
   }
-
-  entries.swap(ret.entries);
-
-  truncated = ret.truncated;
-
-  next_marker = std::move(ret.next_marker);
 
   return 0;
 }
 
 void cls_rgw_gc_queue_remove_entries(ObjectWriteOperation& op, uint32_t num_entries)
 {
-  bufferlist in, out;
-  in = ::cls::rgw::queued_gc_datum::encode_remove(num_entries);
+  auto in = ::cls::rgw::queued_gc_datum::encode_remove(num_entries);
   op.exec(method::remove_entries, in);
 }
 

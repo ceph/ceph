@@ -37,8 +37,7 @@ missing-object behavior, precision and comparison rules remain native.
 Usage add, read and trim use independent requests and read replies. Add borrows
 its entry vector and skips the unused user string after validating its bounds.
 Read replies decode first-wins associations into either a tree or flat map;
-the public client moves its tree map and continuation string into caller outputs
-in both Datum and native-only builds.
+the public client moves its tree map and continuation string into caller outputs.
 Nested usage-entry codecs, aggregation, key transition and scan policy stay native.
 
 Reshard queue and bucket-control operations also use independent records.
@@ -51,8 +50,8 @@ Legacy GC operations in ``cls_rgw`` use borrowed builders and independent reques
 records. Listing moves decoded object chains directly into the module vector,
 without the former append-only callback or chain copy. Public list replies retain
 the native info/chain codecs, expired-only default, cutoff and continuation rules.
-The same direct move also benefits native-only builds; fetched future rows do not
-cause eager reply allocation. Name/time-index storage and cleanup remain native.
+Fetched future rows do not cause eager reply allocation. Name/time-index storage
+and cleanup remain native.
 
 Lifecycle operations use borrowed builders and independent module records. The
 client keeps its native compatibility decoders, including the unmarked version-1
@@ -171,6 +170,21 @@ and zone codecs remain nested wire contracts. In particular, borrowing does not
 change packed-integer boundary behavior. Optional arguments preserve their native
 defaults, and link retains its existing zero bilog flags and epoch-output path.
 The public interfaces remain C++23; the C++26 implementations remain private.
+
+The client implementation groups the complete builder's borrowed arguments by
+role, using its existing ``cls::rgw`` namespace import::
+
+    auto in = write_datum::encode_complete(op, tag,
+                                           ver, key, dir_meta,
+                                           remove_objs,
+                                           log_op, bilog_flags, zones_trace,
+                                           obj_locator);
+
+The operation identity, object state, removals, logging controls and locator stay
+visible at the call site. There is no additional argument record or builder layer.
+The asynchronous directory-header helper uses the same borrowed bucket-list
+request encoder with a zero entry limit. Its callback retains native decoding,
+including a header decoded before a later response error.
 
 The module profiles preserve the older single-version-byte prepare/complete
 envelopes and every subsequent field-version gate. Complete reads old name-only
