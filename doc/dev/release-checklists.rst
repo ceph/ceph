@@ -100,9 +100,9 @@ Code cleanup
 - [x] search code for "after X-1" or "X" for conditional checks
 - [x] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
   `ceph_release_t::*`)
-- [ ] search code for `require_osd_release`
-- [ ] search code for `min_mon_release`
-- [ ] check include/denc.h if DENC_START macro still needs reference to squid
+- [?] search code for `require_osd_release` ... and do what?
+- [?] search code for `min_mon_release` ... and do what?
+- [?] check include/denc.h if DENC_START macro still needs reference to squid
 
 QA suite
 --------
