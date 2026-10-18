@@ -4168,9 +4168,19 @@ class TestMirroring(CephFSTestCase):
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                peer_spec, f'/{dir_name}', snap1, 2)
 
-        time.sleep(self.MGR_METRICS_CACHE_TTL + 1)
-        res3 = self.mgr_mirror_status(self.primary_fs_name)
+        # persist_dir_sync_stat() is an async AIO write; under valgrind the omap
+        # write may not have landed by the time check_peer_status() returns.
+        # Retry: sleep TTL+1 each iteration to ensure a fresh cache load, then
+        # assert the omap-persisted value has caught up with the in-memory count.
         peer_uuid = self.get_peer_uuid(peer_spec)
+        with safe_while(sleep=self.MGR_METRICS_CACHE_TTL + 1, tries=10,
+                        action='wait for mgr snaps_synced=2') as proceed:
+            while proceed():
+                res3 = self.mgr_mirror_status(self.primary_fs_name)
+                if (res3['metrics'].get(f'/{dir_name}', {})
+                        .get('peer', {}).get(peer_uuid, {})
+                        .get('snaps_synced') == 2):
+                    break
         self.assertEqual(
             res3['metrics'][f'/{dir_name}']['peer'][peer_uuid]['snaps_synced'], 2)
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
