@@ -482,6 +482,45 @@ class RemovedShare(_RBase):
         return rc
 
 
+class _AvailabilityResource(resourcelib.Resource):
+    """Strict input parsing for availability's opt-in fields."""
+
+    def object_from_simplified(self, data: Simplified) -> object:
+        # Reject truthy strings like "false" without changing older fields.
+        if not isinstance(data, dict):
+            raise ValueError('availability must be an object/mapping')
+        unknown = set(data) - set(self.fields)
+        if unknown:
+            raise ValueError(
+                f'unsupported availability fields: {sorted(unknown)}'
+            )
+        value = data.get('persistent_handles')
+        if value is not None and not isinstance(value, bool):
+            raise ValueError(
+                'availability.persistent_handles must be a boolean'
+            )
+        return super().object_from_simplified(data)
+
+
+@resourcelib.component()
+class ShareAvailability(_RBase):
+    """Share-scoped availability overrides; unset fields inherit."""
+
+    persistent_handles: Optional[bool] = None
+
+    def validate(self) -> None:
+        if self.persistent_handles is not None and not isinstance(
+            self.persistent_handles, bool
+        ):
+            raise ValueError(
+                'availability.persistent_handles must be a boolean'
+            )
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        return _AvailabilityResource(rc.resource_cls)
+
+
 @resourcelib.component()
 class ShareDefaults(_RBase):
     # IMPORTANT: You have to copy paste these fields between Share and
@@ -490,6 +529,11 @@ class ShareDefaults(_RBase):
     # checker is worth it _for now_.
 
     acl_support: Optional[ACLSupportPolicy] = None
+    availability: Optional[ShareAvailability] = None
+
+    def validate(self) -> None:
+        if self.availability is not None:
+            self.availability.validate()
 
 
 @resourcelib.resource('ceph.smb.share')
@@ -513,6 +557,7 @@ class Share(_RBase):
     hosts_access: Optional[List[HostAccessEntry]] = None
     # common share defaults
     acl_support: Optional[ACLSupportPolicy] = None
+    availability: Optional[ShareAvailability] = None
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id
@@ -544,6 +589,12 @@ class Share(_RBase):
         if self.comment is not None and '\n' in self.comment:
             raise ValueError('Comment cannot contain newlines')
         validation.check_custom_options(self.custom_smb_share_options)
+        if self.availability is not None:
+            if self.rgw is not None:
+                raise ValueError(
+                    'availability is not supported for RGW shares'
+                )
+            self.availability.validate()
         if self.restrict_access and not self.login_control:
             raise ValueError(
                 'a share with restricted access must define at least one login_control entry'
@@ -1001,6 +1052,8 @@ class Cluster(_RBase):
                 'bind_addrs must have at least one value or not be set'
             )
         validation.check_debug_level(self.debug_level)
+        if self.share_defaults is not None:
+            self.share_defaults.validate()
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
