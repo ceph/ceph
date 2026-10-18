@@ -120,9 +120,13 @@ add_executable(unittest_peeringstate
 add_ceph_unittest(unittest_peeringstate)
 target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 # pg_backend_test_fixture: object library for PGBackendTestFixture implementation
+# MockPeeringListener.cc belongs here: PGBackendTestFixture.h pulls in
+# OsdTestFixture.h, which holds a unique_ptr<MockPeeringListener>, so every
+# user of this object library needs MockPeeringListener's vtable.
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
   MockPGBackendListener.cc
+  MockPeeringListener.cc
   MockStore.cc
   ObjectTracker.cc
 )
@@ -131,7 +135,6 @@ target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 # ec_peering_test_fixture: object library for ECPeeringTestFixture implementation
 add_library(ec_peering_test_fixture OBJECT
   ECPeeringTestFixture.cc
-  MockPeeringListener.cc
 )
 target_link_libraries(ec_peering_test_fixture osd os global GTest::GTest)
 
