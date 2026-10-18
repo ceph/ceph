@@ -55,7 +55,7 @@ Create Cluster
 
 .. prompt:: bash #
 
-   ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--client-compat={default|macos}] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
+   ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--client-compat={default|macos}] [--persistent-handles={true|false}] [--persistent-handles-durability={full_outage|partial_outage}] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
 
 Create a new logical cluster, identified by the cluster ID value. The cluster
 create command must specify the authentication mode the cluster will use. This
@@ -112,6 +112,17 @@ public_addrs
     that will be managed by the clustering subsystem and may automatically move
     between nodes running Samba containers.  Can be specified multiple times to
     assign more than one public address to the SMB cluster.
+persistent_handles
+    Optional boolean. Enable persistent handles by default for CephFS-backed
+    shares in this cluster. Sets
+    ``share_defaults.availability.persistent_handles`` and enables global
+    support even without shares. Defaults to ``false``. Initial enablement must
+    be configured when creating the cluster. See :ref:`smb-availability`.
+persistent_handles_durability
+    Optional cluster-wide policy: ``full_outage`` (default) or ``partial_outage``.
+    Only takes effect with persistent handles and Samba clustering enabled.
+    The effective policy cannot change after cluster creation.
+    See :ref:`smb-availability`.
 password_filter
     Optional.  One of ``none`` or ``base64``. If the filter is ``none`` the
     password values on the command line are assumed to be plain text. If the
@@ -276,6 +287,33 @@ Revert to default (standard) compatibility mode:
 .. note::
    The ``macos`` compatibility mode is recommended when the primary clients accessing the SMB shares are macOS systems. Otherwise default mode is recommended.
 
+
+
+Update Cluster Availability
++++++++++++++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb cluster update availability <cluster_id> [--persistent-handles={true|false}] [--persistent-handles-durability={full_outage|partial_outage}]
+
+Update the cluster's share availability defaults and cluster-wide durability
+policy. ``--persistent-handles`` updates
+``share_defaults.availability.persistent_handles``;
+``--persistent-handles-durability`` updates
+the direct cluster field ``persistent_handles_durability``. Omitted options
+preserve their existing values, including unrelated share defaults. CephFS
+shares without an explicit override inherit the share default.
+
+For example, disable the cluster default:
+
+.. prompt:: bash #
+
+   ceph smb cluster update availability mycluster --persistent-handles=false
+
+Shares that explicitly enable persistent handles continue to require global
+server support. Once global support is disabled, it cannot be re-enabled on
+the same cluster. The durability policy cannot change after cluster creation.
+See :ref:`smb-availability` for details.
 
 
 Remove Cluster
@@ -525,6 +563,39 @@ larger bursts but may temporarily consume more resources.
    throughput remains limited by your configured IOPS and bandwidth limits.
 
 
+Update Share Availability
++++++++++++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb share update availability <cluster_id> <share_id> [--persistent-handles={true|false}]
+
+Update ``availability.persistent_handles`` for a CephFS-backed share, overriding
+``share_defaults.availability.persistent_handles`` on its cluster. Omitting
+``--persistent-handles`` preserves the existing setting. Durability is
+configured only at cluster level.
+
+Disable continuous availability for a share that inherits an enabled cluster
+default:
+
+.. prompt:: bash #
+
+   ceph smb share update availability mycluster ordinary --persistent-handles=false
+
+Explicitly enable a CephFS share while global persistent-handle support remains
+enabled:
+
+.. prompt:: bash #
+
+   ceph smb share update availability mycluster available --persistent-handles=true
+
+Enabling a share requires global persistent-handle support to remain enabled
+on the cluster. To remove an override and resume inheritance, use
+``ceph smb apply`` with the share's ``availability.persistent_handles`` field
+omitted.
+See :ref:`smb-availability` for details.
+
+
 Update Share QoS
 ++++++++++++++++
 
@@ -705,6 +776,90 @@ all share resources associated with the cluster "bob".
     The ``show`` subcommand prints out resources in the same form that the
     ``apply`` command accepts, making it possible to "round-trip" values
     between show and apply.
+
+
+.. _smb-availability:
+
+Availability Policy
+-------------------
+
+Persistent handles allow SMB clients to retain open file handles across server
+outages. They are supported for CephFS-backed shares and are disabled by default.
+
+Set ``share_defaults.availability.persistent_handles`` on a cluster to enable
+persistent handles by default for its CephFS shares. A share can override this
+setting with an explicit ``true`` or ``false`` in its own
+``availability.persistent_handles`` field. An omitted or ``null`` share value
+inherits the default; an unset default means ``false``.
+
+An enabled share default also enables global server support immediately, even
+if the cluster has no shares or all current shares explicitly opt out. This
+reserves global support so that future shares can inherit the enabled default.
+Global support remains enabled while the share default or any CephFS share
+requires it. Durability is configured separately with the direct cluster field
+``persistent_handles_durability``; it is not a share default.
+
+Initial enablement must be configured when creating the cluster, either in the
+cluster's ``share_defaults.availability`` or on a CephFS share included in the
+same ``ceph smb apply`` request.
+Additional shares can be enabled while global support remains enabled. Once
+neither the share default nor any share requires persistent handles, global
+support is disabled and cannot be re-enabled on that cluster. To replace the
+last enabled share, apply its removal and the new enabled share together.
+
+For example, enable persistent handles by default while excluding one share:
+
+.. code-block:: yaml
+
+    - resource_type: ceph.smb.cluster
+      cluster_id: example
+      auth_mode: user
+      user_group_settings:
+        - source_type: empty
+      share_defaults:
+        availability:
+          persistent_handles: true
+      persistent_handles_durability: full_outage
+    - resource_type: ceph.smb.share
+      cluster_id: example
+      share_id: available
+      cephfs:
+        volume: cephfs
+        path: /available
+    - resource_type: ceph.smb.share
+      cluster_id: example
+      share_id: ordinary
+      cephfs:
+        volume: cephfs
+        path: /ordinary
+      availability:
+        persistent_handles: false
+
+RGW shares do not inherit availability settings. They must omit ``availability``
+or set it to ``null``; any other value, including an empty object, is rejected.
+
+The cluster-only ``persistent_handles_durability`` option selects the failure
+coverage for clustered Samba:
+
+``full_outage``
+    The default. Preserves persistent handles across an outage of all nodes.
+``partial_outage``
+    Preserves persistent handles only while at least one node remains running,
+    with lower overhead than ``full_outage``.
+
+Durability can be configured while persistent handles are disabled, but only
+takes effect with persistent handles and Samba clustering enabled. It does not
+enable persistent handles and cannot be overridden by shares. The effective
+policy is fixed at cluster creation; omission means ``full_outage``.
+
+Enabling persistent handles adds overhead and can reduce performance. Commands
+return a performance warning when applying enabled availability settings.
+
+.. important::
+   Disabling affects new connections. It does not revoke existing persistent
+   handles or update existing client connections. Plan client disconnections
+   if immediate enforcement is required. Availability updates do not
+   automatically restart the SMB service.
 
 
 Composing Resource Specifications
@@ -915,6 +1070,12 @@ public_addrs
         a host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied, the network is automatically determined
         using the address value supplied and taken as the destination.
+persistent_handles_durability
+    Optional cluster-level string: ``full_outage`` (default) or ``partial_outage``.
+    Only takes effect with persistent handles and Samba clustering enabled.
+    May be set while handles are disabled; does not enable them. Shares cannot
+    override it. The effective policy is fixed at cluster creation.
+    See :ref:`smb-availability`.
 share_defaults:
     Optional. An object containing default values for configuring shares
     within the cluster. A value set here applies to all shares within
@@ -930,6 +1091,21 @@ share_defaults:
         details.
         This value may only be set once, on new clusters. See
         :ref:`smb-auth-id-mapping-perms` for more information on this topic.
+    availability
+        Optional object. Availability defaults for CephFS-backed shares only;
+        RGW shares do not inherit this mapping.
+
+        Fields:
+
+        persistent_handles
+            Optional boolean. Defaults to ``false``. Enables continuous
+            availability on CephFS shares without an explicit override. Also
+            enables global persistent-handle support even when there are no
+            shares or all shares explicitly opt out, reserving support for
+            future shares. Initial enablement must be configured when creating
+            the cluster. Durability is not a share default; configure it with
+            the direct cluster field ``persistent_handles_durability``.
+            See :ref:`smb-availability`.
 remote_control
     Optional object. This object configures an SMB cluster to deploy an extra
     ``remote-control`` service. This service provides a gRPC server that
@@ -1202,6 +1378,21 @@ max_connections
     Optional integer. Specifies the maximum number of simultaneous client
     connections to a specific share. The default value is 0 and it indicates
     that there is no limit on the number of connections
+availability
+    Optional object. Configures availability for CephFS shares. RGW shares
+    must omit this field or set it to ``null``.
+
+    Fields:
+
+    persistent_handles
+        Optional boolean. Enables continuous availability for the share.
+        If omitted or ``null``, inherits the cluster's
+        ``share_defaults.availability.persistent_handles``
+        value, defaulting to ``false``. An explicit ``false`` disables the
+        feature for this share without disabling global support required by
+        other shares or the cluster's share default. Durability is configured
+        only with the cluster's direct ``persistent_handles_durability`` field.
+        See :ref:`smb-availability` for restrictions.
 _`acl_support`
     Optional. Configures NTFS-style ACL behavior. The value may be one of
     ``default`` or ``disabled``. If left unset the cluster's value (from
