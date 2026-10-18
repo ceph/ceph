@@ -98,7 +98,7 @@ Code cleanup
 ------------
 
 - [x] search code for "after X-1" or "X" for conditional checks
-- [ ] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
+- [x] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
   `ceph_release_t::*`)
 - [ ] search code for `require_osd_release`
 - [ ] search code for `min_mon_release`
