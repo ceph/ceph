@@ -5,6 +5,7 @@
 #define CEPH_MGR_MGRSESSION_H
 
 #include "common/RefCountedObj.h"
+#include "common/ceph_time.h"
 #include "common/entity_name.h"
 #include "msg/msg_types.h"
 #include "MgrCap.h"
@@ -23,6 +24,8 @@ struct MgrSession : public RefCountedObject {
   MgrCap caps;
 
   std::set<std::string> declared_types;
+
+  ceph::coarse_mono_time last_keepalive;  ///< last keepalive we sent
 
   const entity_addr_t& get_peer_addr() const {
     return inst.addr;
