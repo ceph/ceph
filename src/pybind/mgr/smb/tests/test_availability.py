@@ -215,6 +215,39 @@ def test_inactive_durability_policy(amodule):
     assert not amodule._internal_store['shares', 'foo.s1'].exists()
 
 
+def test_availability_cluster_updates(amodule):
+    _apply(
+        amodule,
+        [
+            _cluster(
+                share_availability=ShareAvailability(persistent_handles=True)
+            ),
+            _share(),
+            _share('s2', ShareAvailability(persistent_handles=False)),
+        ],
+    )
+    for enabled in [True, False]:
+        result = amodule.cluster_update_availability(
+            'foo', persistent_handles=enabled
+        )
+        assert result.success, result.to_simplified()
+        cfg = _config(amodule)
+        assert cfg['shares']['s1']['options'].get(
+            'continuous availability', 'no'
+        ) == ('yes' if enabled else 'no')
+        assert (
+            cfg['shares']['s2']['options']['continuous availability'] == 'no'
+        )
+        stored = amodule._internal_store['shares', 'foo.s1'].get()
+        assert 'availability' not in stored
+    result = amodule.cluster_update_availability(
+        'foo', persistent_handles=True
+    )
+    assert not result.success
+    assert 'persistent handles cannot be enabled' in result.msg
+    assert 'persistent handles' not in _globals(amodule)
+
+
 @pytest.mark.parametrize(
     'old,new,enabled,allowed',
     [
@@ -246,6 +279,72 @@ def test_durability_immutable(amodule, old, new, allowed, enabled):
             amodule._internal_store['clusters', 'foo'].get()
             == cluster.to_simplified()
         )
+
+
+def test_availability_cli(amodule):
+    durability = Durability.FULL_OUTAGE
+    result = amodule.cluster_create(
+        'foo',
+        smb.enums.AuthMode.USER,
+        define_user_pass=['test%password'],
+        clustering=smb.enums.SMBClustering.NEVER,
+        persistent_handles=True,
+        persistent_handles_durability=durability,
+    )
+    assert result.success, result.to_simplified()
+    original = amodule._internal_store['clusters', 'foo'].get()
+    assert (
+        original['share_defaults']['availability']['persistent_handles']
+        is True
+    )
+    assert 'availability' not in original
+    assert original.get('persistent_handles_durability') == durability
+    assert _globals(amodule)['persistent handles'] == 'yes'
+    assert (
+        _globals(amodule).get('persistent handles durability') == durability
+    )
+    result = amodule.cluster_update_availability('foo')
+    assert result.success, result.to_simplified()
+    assert original == amodule._internal_store['clusters', 'foo'].get()
+
+    result = amodule.cluster_update_availability(
+        'foo', persistent_handles=False
+    )
+    assert result.success, result.to_simplified()
+    assert 'persistent handles' not in _globals(amodule)
+    stored = amodule._internal_store['clusters', 'foo'].get()
+    assert stored.get('persistent_handles_durability') == durability
+
+    result = amodule.cluster_update_availability(
+        'foo', persistent_handles_durability=Durability.PARTIAL_OUTAGE
+    )
+    assert not result.success
+    assert stored == amodule._internal_store['clusters', 'foo'].get()
+
+
+def test_cluster_availability_cli_preserves_other_defaults(amodule):
+    cluster = _cluster(
+        share_availability=ShareAvailability(persistent_handles=True)
+    )
+    cluster.share_defaults.acl_support = smb.enums.ACLSupportPolicy.DISABLED
+    _apply(amodule, [cluster])
+    result = amodule.cluster_update_availability(
+        'foo', persistent_handles_durability=Durability.FULL_OUTAGE
+    )
+    assert result.success, result.to_simplified()
+    stored = amodule._internal_store['clusters', 'foo'].get()
+    assert stored['share_defaults'] == cluster.share_defaults.to_simplified()
+    result = amodule.cluster_update_availability(
+        'foo', persistent_handles=False
+    )
+    assert result.success, result.to_simplified()
+    stored = amodule._internal_store['clusters', 'foo'].get()
+    assert stored['share_defaults']['acl_support'] == 'disabled'
+    assert stored['share_defaults']['availability'] == {
+        'persistent_handles': False
+    }
+    assert stored['persistent_handles_durability'] == 'full_outage'
+    assert 'availability' not in stored
 
 
 def test_availability_invalid_boolean():
