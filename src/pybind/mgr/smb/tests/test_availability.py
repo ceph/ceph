@@ -130,47 +130,121 @@ def test_transition_error_blames_enablers(amodule):
         assert 'persistent handles cannot be enabled' in found[rid].msg
 
 
-@pytest.mark.parametrize('opt_out', [False, True])
-def test_default_reserves_global_support(amodule, opt_out):
+def test_default_reserves_global_support(amodule):
     cluster = _cluster(
         share_availability=ShareAvailability(persistent_handles=True)
     )
-    shares = (
-        [_share(availability=ShareAvailability(persistent_handles=False))]
-        if opt_out
-        else []
-    )
-    assert smb.resources.requires_persistent_handles(cluster, shares)
-    _apply(amodule, [cluster, *shares])
+    assert smb.resources.requires_persistent_handles(cluster, [])
+    _apply(amodule, [cluster])
+    assert _globals(amodule)['persistent handles'] == 'yes'
     # Future shares can still opt in.
     _apply(
         amodule,
-        [_share('later', ShareAvailability(persistent_handles=True))],
+        [
+            _share('inherited'),
+            _share('later', ShareAvailability(persistent_handles=True)),
+        ],
     )
+    assert (
+        _config(amodule)['shares']['inherited']['options'][
+            'continuous availability'
+        ]
+        == 'yes'
+    )
+    stored = amodule._internal_store['shares', 'foo.inherited'].get()
+    assert 'availability' not in stored
+
+
+def _config(module, cluster_id='foo'):
+    return module._public_store[cluster_id, 'config.smb'].get()
+
+
+def _globals(module, cluster_id='foo'):
+    return _config(module, cluster_id)['globals'][cluster_id]['options']
+
+
+@pytest.mark.parametrize(
+    'cluster_availability,share_availability',
+    [
+        (None, None),
+        ({'persistent_handles': True}, None),
+        ({'persistent_handles': True}, {'persistent_handles': False}),
+        ({'persistent_handles': False}, {'persistent_handles': True}),
+    ],
+)
+def test_availability_inheritance(
+    amodule, cluster_availability, share_availability
+):
+    cluster_data = _cluster().to_simplified()
+    share_data = _share().to_simplified()
+    if cluster_availability is not None:
+        cluster_data['share_defaults'] = {
+            'availability': cluster_availability
+        }
+    if share_availability is not None:
+        share_data['availability'] = share_availability
+    _apply(amodule, smb.resources.load([share_data, cluster_data]))
+    cluster_enabled = bool(
+        (cluster_availability or {}).get('persistent_handles')
+    )
+    share_value = (share_availability or {}).get('persistent_handles')
+    enabled = cluster_enabled if share_value is None else share_value
+    cfg = _config(amodule)
+    global_opts = cfg['globals']['foo']['options']
+    share_opts = cfg['shares']['s1']['options']
+    assert global_opts.get('persistent handles', 'no') == (
+        'yes' if cluster_enabled or enabled else 'no'
+    )
+    assert share_opts.get('continuous availability', 'no') == (
+        'yes' if enabled else 'no'
+    )
+    # Do not persist inherited values on shares.
+    stored = amodule._internal_store['shares', 'foo.s1'].get()
+    stored_availability = stored.get('availability') or {}
+    assert stored_availability.get('persistent_handles') == share_value
 
 
 def test_availability_reconciliation(amodule):
+    cluster = _cluster(
+        share_availability=ShareAvailability(
+            persistent_handles=False,
+        )
+    )
     enabled = ShareAvailability(persistent_handles=True)
     share1 = _share(availability=enabled)
     share2 = _share('s2', availability=enabled)
-    _apply(amodule, [_cluster(), share1, share2])
     _apply(
         amodule,
         [
-            replace(
-                share1,
-                availability=ShareAvailability(persistent_handles=False),
-            )
+            cluster,
+            share1,
+            share2,
+            _cluster('other'),
+            _share(cluster_id='other', availability=enabled),
         ],
     )
+    opts = _globals(amodule)
+    assert opts['persistent handles'] == 'yes'
+
+    # Keep support required by other stored shares.
+    disabled = ShareAvailability(persistent_handles=False)
+    _apply(amodule, [replace(share1, availability=disabled)])
+    assert _globals(amodule)['persistent handles'] == 'yes'
     _apply(
         amodule, [smb.resources.RemovedShare(cluster_id='foo', share_id='s2')]
     )
+    opts = _globals(amodule)
+    assert 'persistent handles' not in opts
+    assert 'persistent handles durability' not in opts
+    assert _globals(amodule, 'other')['persistent handles'] == 'yes'
+
+    # Removing the final requirement prevents re-enablement.
     result = amodule._apply_res([share1]).one()
-    assert not result.success
+    assert not result.success, result.to_simplified()
     assert 'persistent handles cannot be enabled' in result.msg
-    stored = amodule._internal_store['shares', 'foo.s1'].get()
-    assert stored['availability']['persistent_handles'] is False
+    stored_share = amodule._internal_store['shares', 'foo.s1'].get()
+    assert stored_share['availability']['persistent_handles'] is False
+    assert 'persistent handles' not in _globals(amodule)
 
 
 def test_availability_invalid_boolean():

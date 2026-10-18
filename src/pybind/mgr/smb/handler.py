@@ -1189,6 +1189,8 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         opts[f'{ceph_vfs}:keybridge name'] = str(cephfs.fscrypt_key.name)
         opts[f'{ceph_vfs}:keybridge kind'] = 'B64'
         opts[f'{ceph_vfs}:fscrypt'] = 'keybridge'
+    if share.persistent_handles_enabled(conf.cluster):
+        cfg['options']['continuous availability'] = 'yes'
     # extend share with user+group login access lists
     _generate_share_login_control(share, cfg)
     _generate_share_hosts_access(share, cfg)
@@ -1263,6 +1265,11 @@ def _generate_share_hosts_access(
 def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
     cluster_global_opts = {}
     cluster = conf.resource
+    persistent_handles = resources.requires_persistent_handles(
+        cluster, (share.resource for share in conf.shares)
+    )
+    if persistent_handles:
+        cluster_global_opts['persistent handles'] = 'yes'
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
         assert cluster.domain_settings is not None
         cluster_global_opts['security'] = 'ads'
