@@ -405,7 +405,7 @@ class ClusterConfigHandler:
                         )
                     )
         except ErrorResult as err:
-            results.append(err)
+            results.replace(err)
         except Exception as err:
             log.exception("error updating resource")
             msg = str(err)
@@ -413,7 +413,7 @@ class ClusterConfigHandler:
                 # handle the case where the exception has no text
                 msg = f"error updating resource: {type(err)} (see logs for details)"
             result = ErrorResult(resource, msg=msg)
-            results.append(result)
+            results.replace(result)
         if results.success:
             log.debug(
                 'successfully updated %s resources. syncing changes to public stores',
