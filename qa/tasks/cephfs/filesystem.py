@@ -19,8 +19,7 @@ from teuthology.parallel import parallel
 from teuthology import contextutil
 
 from tasks.ceph_manager import write_conf
-from tasks.ceph_manager import CephManager
-from tasks.ceph_test_case import RunCephCmd
+from tasks.ceph_manager import CephManager, RunCephCmd
 
 
 log = logging.getLogger(__name__)
@@ -90,6 +89,8 @@ class FSStatus(RunCephCmd):
     """
     def __init__(self, mon_manager, epoch=None):
         self.mon_manager = mon_manager
+        super().__init__(self.mon_manager)
+
         cmd = ["fs", "dump", "--format=json"]
         if epoch is not None:
             cmd.append(str(epoch))
@@ -250,6 +251,7 @@ class CephClusterBase(RunCephCmd):
             manager = CephManager(self.admin_remote, ctx=ctx,
                                   logger=log.getChild('ceph_manager'))
         self.mon_manager = manager
+        super().__init__(self.mon_manager)
 
     def get_config(self, key, service_type=None):
         """
