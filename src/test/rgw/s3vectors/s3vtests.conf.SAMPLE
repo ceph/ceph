@@ -1,6 +1,6 @@
 [DEFAULT]
 # Store data inside vector buckets by default. Set true to test S3 backing buckets.
-s3vector_s3_bucket = false
+s3vector_data_s3_bucket = false
 port = 8000
 host = localhost
 zonegroup = default

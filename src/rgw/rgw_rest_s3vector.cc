@@ -134,7 +134,7 @@ protected:
   // known here. the operations needed by each request were taken from the SAL
   // calls that it makes: note that "s3:GetObject" covers the head of an object as
   // well, and that removing vectors writes deletion files, and deletes nothing
-  // Native vector data uses its own bucket's owner; a separate S3 backing
+  // Native vector data uses its own bucket's permissions; a separate S3 backing
   // bucket uses that bucket's ACL and policies.
   int verify_backend_permission(const std::string& bucket_name,
                                   const rgw::s3vector::BackendConfig& backend_config,
@@ -148,19 +148,10 @@ protected:
     }
 
     if (rgw::s3vector::uses_vector_bucket_storage(*backend_config.storage_mode)) {
-      std::unique_ptr<rgw::sal::VectorBucket> vector_bucket;
-      int ret = driver->load_vector_bucket(this,
-          rgw_bucket(bucket_ns.name(), bucket_name), &vector_bucket, y);
-      if (ret == -ENOENT) {
-        return 0; // CreateVectorBucket has no existing owner to check.
-      }
-      if (ret < 0) {
-        return ret;
-      }
-      // Native data uses the vector bucket's default owner policy. It must
-      // never inherit access granted to a same-name S3 bucket.
-      return s->auth.identity->is_owner_of(vector_bucket->get_info().owner)
-          ? 0 : -EACCES;
+      // The caller has already authorized the S3 Vectors operation. Native
+      // storage needs no additional S3 permissions; an owner-only check here
+      // would reject access granted by the vector bucket's policy.
+      return 0;
     }
 
     std::unique_ptr<rgw::sal::Bucket> s3_bucket;
