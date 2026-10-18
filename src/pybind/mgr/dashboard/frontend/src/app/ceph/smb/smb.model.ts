@@ -11,6 +11,7 @@ export interface SMBCluster {
   placement?: CephServicePlacement;
   clustering?: Clustering;
   public_addrs?: PublicAddress[];
+  persistent_handles?: PersistentHandles;
   count?: number;
 }
 
@@ -73,6 +74,21 @@ export const AUTHMODE = {
   ActiveDirectory: 'active-directory'
 };
 
+export const PERSISTENT_HANDLES = {
+  Default: 'default',
+  Enabled: 'enabled'
+} as const;
+
+export type PersistentHandles = (typeof PERSISTENT_HANDLES)[keyof typeof PERSISTENT_HANDLES];
+
+export const CONTINUOUS_AVAILABILITY = {
+  Default: 'default',
+  Enabled: 'enabled'
+} as const;
+
+export type ContinuousAvailability =
+  (typeof CONTINUOUS_AVAILABILITY)[keyof typeof CONTINUOUS_AVAILABILITY];
+
 export const PLACEMENT = {
   host: 'hosts',
   label: 'label'
@@ -98,6 +114,7 @@ export interface SMBShare {
   browseable?: boolean;
   restrict_access?: boolean;
   login_control?: SMBShareLoginControl;
+  continuous_availability?: ContinuousAvailability;
 }
 
 export interface SMBJoinAuth {

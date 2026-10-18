@@ -404,6 +404,19 @@
               </cd-helper>
             </div>
           }
+          <!-- Persistent Handles -->
+          <div class="form-item">
+            <cds-checkbox
+              id="persistent_handles"
+              formControlName="persistent_handles"
+              i18n
+              >Persistent Handles
+            </cds-checkbox>
+            <cd-helper i18n>
+              Enable persistent file handles for this cluster. Required for application HA on
+              Windows clients accessing SMB shares.
+            </cd-helper>
+          </div>
           <!-- Clustering -->
           <div class="form-item">
             <cds-select

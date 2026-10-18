@@ -61,14 +61,18 @@ describe('SmbClusterResourcePageComponent', () => {
   });
 
   it('should build overviewFields with correct labels and values after init', () => {
-    expect(component.overviewFields.length).toBe(2);
+    expect(component.overviewFields.length).toBe(3);
     expect(component.overviewFields[0]).toEqual({
-      label: 'Name', // Matches $localize`Name`
+      label: 'Name',
       value: 'test-cluster'
     });
     expect(component.overviewFields[1]).toEqual({
-      label: 'Authentication Mode', // Matches $localize`Authentication Mode`
+      label: 'Authentication Mode',
       value: 'active_directory'
+    });
+    expect(component.overviewFields[2]).toEqual({
+      label: 'Persistent Handles',
+      value: 'default'
     });
   });
 

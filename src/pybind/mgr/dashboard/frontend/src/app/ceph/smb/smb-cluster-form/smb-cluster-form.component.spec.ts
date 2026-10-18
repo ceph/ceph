@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { FormArray, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ComboBoxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
-import { AUTHMODE } from '../smb.model';
+import { AUTHMODE, PERSISTENT_HANDLES } from '../smb.model';
 import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
@@ -90,6 +90,28 @@ describe('SmbClusterFormComponent', () => {
   it('should delete domain', () => {
     component.deleteDomainSettingsModal();
     expect(component).toBeTruthy();
+  });
+
+  it('should default persistent_handles to false', () => {
+    expect(component.smbForm.get('persistent_handles').value).toBe(false);
+  });
+
+  it('should map persistent_handles true to enabled in buildRequest', () => {
+    component.smbForm.get('cluster_id').setValue('test-cluster');
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('persistent_handles').setValue(true);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.persistent_handles).toBe(PERSISTENT_HANDLES.Enabled);
+  });
+
+  it('should map persistent_handles false to default in buildRequest', () => {
+    component.smbForm.get('cluster_id').setValue('test-cluster');
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('persistent_handles').setValue(false);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.persistent_handles).toBe(PERSISTENT_HANDLES.Default);
   });
 
   it('should get usersgroups resources on user authmode', () => {

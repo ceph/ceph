@@ -11,7 +11,14 @@ import { map } from 'rxjs/operators';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
-import { Filesystem, PROVIDER, SHARE_RESOURCE, ShareRequestModel, SMBShare } from '../smb.model';
+import {
+  CONTINUOUS_AVAILABILITY,
+  Filesystem,
+  PROVIDER,
+  SHARE_RESOURCE,
+  ShareRequestModel,
+  SMBShare
+} from '../smb.model';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
 
@@ -105,6 +112,8 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           inputPath: cephfs?.path,
           readonly: this.shareResponse.readonly ?? false,
           browseable: this.shareResponse.browseable ?? true,
+          continuous_availability:
+            this.shareResponse.continuous_availability === CONTINUOUS_AVAILABILITY.Enabled,
           read_iops_limit: qos?.read_iops_limit,
           write_iops_limit: qos?.write_iops_limit,
           read_burst_mult: qos?.read_burst_mult,
@@ -162,6 +171,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       }),
       browseable: new FormControl(true),
       readonly: new FormControl(false),
+      continuous_availability: new FormControl(false),
       read_iops_limit: new FormControl(0, [Validators.min(0), Validators.max(QOS_IOPS_MAX)]),
       write_iops_limit: new FormControl(0, [Validators.min(0), Validators.max(QOS_IOPS_MAX)]),
       read_bw_limit: new FormControl(0, [Validators.min(0), Validators.max(this.readBwMax)]),
@@ -304,7 +314,10 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           }
         },
         browseable: rawFormValue.browseable,
-        readonly: rawFormValue.readonly
+        readonly: rawFormValue.readonly,
+        continuous_availability: rawFormValue.continuous_availability
+          ? CONTINUOUS_AVAILABILITY.Enabled
+          : CONTINUOUS_AVAILABILITY.Default
       }
     };
     return requestModel;

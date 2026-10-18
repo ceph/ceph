@@ -7,6 +7,7 @@ import _ from 'lodash';
 import {
   AUTHMODE,
   CLUSTERING,
+  PERSISTENT_HANDLES,
   PLACEMENT,
   RESOURCE,
   DomainSettings,
@@ -15,7 +16,8 @@ import {
   ClusterRequestModel,
   SMBUsersGroups,
   PublicAddress,
-  SMBCluster
+  SMBCluster,
+  PersistentHandles
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -127,6 +129,9 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
           const upperCaseCluster = upperFirstPipe.transform(responseClustering);
           this.smbForm.get('clustering').setValue(upperCaseCluster || '');
         }
+        this.smbForm
+          .get('persistent_handles')
+          .setValue(this.clusterResponse.persistent_handles === PERSISTENT_HANDLES.Enabled);
         if (customDnsList?.length) {
           customDnsList.forEach((dns: string) => {
             customDnsFormArray.push(new FormControl(dns));
@@ -211,7 +216,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       clustering: new UntypedFormControl(
         CLUSTERING.Default.charAt(0).toUpperCase() + CLUSTERING.Default.slice(1)
       ),
-      public_addrs: new FormArray([])
+      public_addrs: new FormArray([]),
+      persistent_handles: [false]
     });
 
     this.orchService.status().subscribe((status) => {
@@ -382,6 +388,11 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     if (rawFormValue.clustering && rawFormValue.clustering.toLowerCase() !== CLUSTERING.Default) {
       requestModel.cluster_resource.clustering = rawFormValue.clustering.toLowerCase();
     }
+
+    const persistentHandles: PersistentHandles = rawFormValue.persistent_handles
+      ? PERSISTENT_HANDLES.Enabled
+      : PERSISTENT_HANDLES.Default;
+    requestModel.cluster_resource.persistent_handles = persistentHandles;
 
     if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;

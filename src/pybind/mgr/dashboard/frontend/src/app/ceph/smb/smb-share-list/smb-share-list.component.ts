@@ -97,6 +97,11 @@ export class SmbShareListComponent implements OnInit {
         flexGrow: 2
       },
       {
+        name: $localize`Continuous Availability`,
+        prop: 'continuous_availability',
+        flexGrow: 2
+      },
+      {
         name: $localize`IOPS Limit`,
         prop: 'cephfs.qos',
         cellTemplate: this.iopsLimitTpl,
