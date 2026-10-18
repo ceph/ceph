@@ -7,12 +7,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #include <array>
 #include <limits>
 #include <map>
+#include <memory>
 #include <random>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -512,6 +515,51 @@ TEST_CASE("BI randomized native envelopes preserve every field", "[rgw][cls][dat
         CHECK(result.second == truncated);
         CHECK(cursor.end());
         CHECK(wire::encode_entries(client_row_fields, result.first, result.second).contents_equal(bytes));
+    }
+}
+
+TEST_CASE("RGW request publication accepts assign-only records and move-only decoders", "[rgw][cls][datum]")
+{
+    struct publication_record final
+    {
+        std::uint32_t number = 0;
+
+    public:
+        publication_record() = default;
+        publication_record(const publication_record&) = delete;
+        publication_record(publication_record&&) = delete;
+
+        publication_record& operator=(publication_record&&) noexcept = default;
+
+    };
+    static_assert(!std::is_move_constructible_v<publication_record>);
+    static_assert(std::is_nothrow_move_assignable_v<publication_record>);
+
+    byte_buffer input;
+    input.append("prefix", 6);
+    ENCODE_START(1, 1, input);
+    ::ceph::encode(std::uint32_t {42}, input);
+    ENCODE_FINISH(input);
+    for (const bool fail : {false, true}) {
+        auto cursor = input.cbegin(6);
+        publication_record value;
+        value.number = 999;
+        auto decode = [adjustment = std::make_unique<std::uint32_t>(1), fail](
+                          auto& fields, auto& candidate, std::uint8_t) {
+            candidate.number = fields.template scalar<std::uint32_t>() + *adjustment;
+            if (fail) {
+                throw std::runtime_error {"late decoding failure"};
+            }
+        };
+        if (fail) {
+            CHECK_THROWS_AS(::cls::rgw::wire::decode_record<1>(value, cursor, std::move(decode)), std::runtime_error);
+            CHECK(999 == value.number);
+            CHECK(6 == cursor.get_off());
+            continue;
+        }
+        CHECK_NOTHROW(::cls::rgw::wire::decode_record<1>(value, cursor, std::move(decode)));
+        CHECK(43 == value.number);
+        CHECK(cursor.end());
     }
 }
 

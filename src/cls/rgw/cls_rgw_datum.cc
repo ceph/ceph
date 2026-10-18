@@ -18,6 +18,7 @@
 namespace cls::rgw::bi_datum {
 
 namespace datum = ::ceph::salad::datum;
+using ::cls::rgw::wire::decode_record;
 
 namespace {
 
@@ -42,12 +43,10 @@ void decode(get_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     using key = ::cls_rgw_obj_key;
 
-    auto cursor = input;
-    get_request candidate;
-    candidate.type = static_cast<::BIIndexType>(::cls::rgw::bi_wire::decode_get_request(
-        datum::binary_fields<&key::name, &key::instance> {}, cursor, candidate.key));
-    value = std::move(candidate);
-    input = cursor;
+    decode_record(value, input, [](auto& cursor, auto& candidate) {
+        candidate.type = static_cast<::BIIndexType>(::cls::rgw::bi_wire::decode_get_request(
+            datum::binary_fields<&key::name, &key::instance> {}, cursor, candidate.key));
+    });
 }
 
 void encode(const entry& value, ::ceph::buffer::list& output)
@@ -74,28 +73,26 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 
 void decode(entry& value, ::ceph::buffer::list::const_iterator& input)
 {
-    auto cursor = input;
-    entry candidate;
-    ::cls::rgw::bi_wire::decode_entry(module_entry_fields, cursor, candidate);
-    value = std::move(candidate);
-    input = cursor;
+    decode_record(value, input, [](auto& cursor, auto& candidate) {
+        ::cls::rgw::bi_wire::decode_entry(module_entry_fields, cursor, candidate);
+    });
 }
 
 void decode(put_request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    auto cursor = input;
-    auto [entries, check_existing] = ::cls::rgw::bi_wire::decode_entries<std::vector<entry>>(module_entry_fields, cursor);
-    value = {std::move(entries), check_existing};
-    input = cursor;
+    decode_record(value, input, [](auto& cursor, auto& candidate) {
+        auto [entries, check_existing] = ::cls::rgw::bi_wire::decode_entries<std::vector<entry>>(
+            module_entry_fields, cursor);
+        candidate.entries = std::move(entries);
+        candidate.check_existing = check_existing;
+    });
 }
 
 void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    auto cursor = input;
-    entry_put_request candidate;
-    ::cls::rgw::bi_wire::decode_entry_message(module_entry_fields, cursor, candidate.item);
-    value = std::move(candidate);
-    input = cursor;
+    decode_record(value, input, [](auto& cursor, auto& candidate) {
+        ::cls::rgw::bi_wire::decode_entry_message(module_entry_fields, cursor, candidate.item);
+    });
 }
 
 ::ceph::buffer::list encode_put_entry(const ::rgw_cls_bi_entry& value)

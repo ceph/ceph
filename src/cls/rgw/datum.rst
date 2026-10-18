@@ -193,6 +193,10 @@ Link retains the version-2 seconds-only timestamp and the later precise timestam
 rules. Compatible future tails and nonzero booleans keep their native meaning.
 A shared RGW adapter publishes each decoder's candidate and cursor only after the
 envelope succeeds, with no-throw move assignment required for publication.
+Its ``decode_record`` overloads accept either a complete wire decoder or framed
+field decoding, sharing the same publication boundary. The candidate is filled
+in place; this requires neither move construction of the record nor a copy of
+the decoding callable. BI get, entry and batch decoders use this same boundary.
 No temporary native operation record or removal-list nodes are required.
 
 Batch writes

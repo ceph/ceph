@@ -482,28 +482,36 @@ public:
 
 };
 
-// Publish an owning request and its native cursor only after its frame succeeds.
-template <std::uint8_t Supported, std::uint8_t FirstFramed = 0, typename T, typename DecodeT>
+// Publish an owning request and its native cursor only after decoding succeeds.
+template <typename T, typename DecodeT>
 [[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, const DecodeT decode)
 {
     static_assert(std::is_nothrow_move_assignable_v<T>);
     auto cursor = input;
     T candidate;
-    reader archive {cursor};
-    auto body = [&](reader& fields, const std::uint8_t version) {
-        std::invoke(decode, fields, candidate, version);
-
-        return 0;
-    };
-    if constexpr (0 == FirstFramed) {
-        archive.frame(Supported, body);
-    }
-
-    if constexpr (0 != FirstFramed) {
-        archive.frame(Supported, FirstFramed, body);
-    }
+    std::invoke(decode, cursor, candidate);
     value = std::move(candidate);
     input = cursor;
+}
+
+template <std::uint8_t Supported, std::uint8_t FirstFramed = 0, typename T, typename DecodeT>
+[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, const DecodeT decode)
+{
+    decode_record(value, input, [&decode](auto& cursor, auto& candidate) {
+        reader archive {cursor};
+        auto body = [&decode, &candidate](reader& fields, const std::uint8_t version) {
+            std::invoke(decode, fields, candidate, version);
+
+            return 0;
+        };
+        if constexpr (0 == FirstFramed) {
+            archive.frame(Supported, body);
+        }
+
+        if constexpr (0 != FirstFramed) {
+            archive.frame(Supported, FirstFramed, body);
+        }
+    });
 }
 
 struct key_fields final
