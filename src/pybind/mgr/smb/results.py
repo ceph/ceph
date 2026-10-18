@@ -262,6 +262,16 @@ class ResultGroup:
     def append(self, result: Result) -> None:
         self._contents.append(result)
 
+    def replace(self, result: Result) -> None:
+        """Replace or append a result without merging incompatible metadata."""
+        key = self._rkey(result)
+        if key:
+            for index, previous in enumerate(self._contents):
+                if self._rkey(previous) == key:
+                    self._contents[index] = result
+                    return
+        self.append(result)
+
     def one(self) -> Result:
         return one(self._contents)
 

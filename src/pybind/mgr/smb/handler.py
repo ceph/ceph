@@ -396,7 +396,7 @@ class ClusterConfigHandler:
                         )
                     )
         except ErrorResult as err:
-            results.append(err)
+            results.replace(err)
         except Exception as err:
             log.exception("error updating resource")
             msg = str(err)
