@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 
 import pytest
@@ -345,6 +346,24 @@ def test_cluster_availability_cli_preserves_other_defaults(amodule):
     }
     assert stored['persistent_handles_durability'] == 'full_outage'
     assert 'availability' not in stored
+
+
+def test_share_availability_cli_json_warning(amodule):
+    _apply(
+        amodule,
+        [
+            _cluster(
+                share_availability=ShareAvailability(persistent_handles=True)
+            ),
+            _share(availability=ShareAvailability(persistent_handles=False)),
+        ],
+    )
+    rc, body, _ = amodule.share_update_availability.command(
+        'foo', 's1', persistent_handles=True, format='json'
+    )
+    assert rc == 0, body
+    data = json.loads(body)
+    assert data['success']
 
 
 def test_availability_invalid_boolean():

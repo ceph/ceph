@@ -762,6 +762,37 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         ]
         return self._apply_res(rm_shares)
 
+    @SMBCLICommand('share update availability', perm='rw')
+    def share_update_availability(
+        self,
+        cluster_id: str,
+        share_id: str,
+        persistent_handles: Optional[bool] = None,
+    ) -> results.Result:
+        """Update a share's persistent-handle override"""
+        shares = [
+            share
+            for share in self._handler.matching_resources(
+                [f'ceph.smb.share.{cluster_id}.{share_id}']
+            )
+            if isinstance(share, resources.Share)
+        ]
+        if not shares:
+            raise ValueError(f'Share {cluster_id}/{share_id} not found')
+        if len(shares) != 1:
+            raise ValueError(
+                f'Multiple shares found matching {cluster_id}/{share_id}'
+            )
+        share = shares[0]
+        availability = share.availability
+        if persistent_handles is not None:
+            availability = replace(
+                availability or resources.ShareAvailability(),
+                persistent_handles=persistent_handles,
+            )
+        updated_share = replace(share, availability=availability)
+        return self._apply_res([updated_share]).squash(updated_share)
+
     @SMBCLICommand('share update cephfs qos', perm='rw')
     def share_update_qos(
         self,
