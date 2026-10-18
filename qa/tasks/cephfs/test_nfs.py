@@ -826,6 +826,7 @@ class TestNFS(MgrTestCase):
                     }
                 ],
                 "deployment_type": "standalone",
+                "enable_rdma": False,
                 "virtual_ip": None,
             }
         }
