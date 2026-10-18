@@ -237,6 +237,22 @@ public:
         output.append(reinterpret_cast<const char *>(bytes.data()), bytes.size());
     }
 
+    // Metadata-only frames need neither a streaming header nor a backpatch.
+    template <typename RecordT, auto ...Member>
+    void frame(const std::uint8_t version, const RecordT& value, datum::binary_fields<Member...> selected)
+    {
+        constexpr auto header_size = encoded_size(frame_header {}, header_fields {});
+        const auto body_size = checked_count(encoded_size(value, selected));
+        const auto size = header_size + body_size;
+        ensure(size);
+        auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
+        std::span bytes {storage.get_pos_add(size), static_cast<std::size_t>(size)};
+        zpp::bits::out archive {bytes, zpp::bits::size4b {}, zpp::bits::endian::little {}};
+        const frame_header header {version, 1, body_size};
+        throw_if_error(datum::serialize_schema(archive, header, header_fields {}));
+        throw_if_error(datum::serialize_schema(archive, value, selected));
+    }
+
     template <typename BodyT>
     void frame(const std::uint8_t version, const std::uint8_t compatible, BodyT&& body)
     {

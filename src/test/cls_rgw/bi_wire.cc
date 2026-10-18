@@ -14,6 +14,7 @@
 #include <random>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -190,6 +191,79 @@ TEST_CASE("RGW field archives preserve successful bytes and report undersized sc
     cursor = truncated.cbegin();
     ::cls::rgw::wire::reader short_input {cursor};
     CHECK_THROWS_AS(short_input.fields<3>(decoded, fields), std::system_error);
+}
+
+TEST_CASE("RGW scalar metadata preserves native bytes across append boundaries", "[rgw][cls][datum]")
+{
+    byte_buffer expected;
+    ::ceph::encode(std::uint8_t {0xFF}, expected);
+    ::ceph::encode(std::uint16_t {0xABCD}, expected);
+    ::ceph::encode(std::uint32_t {0xABCDEF12}, expected);
+    ::ceph::encode(std::uint64_t {0xABCDEF1234567890}, expected);
+    for (const auto tail : {1u, 2u, 3u, 4u, 7u, 8u}) {
+        byte_buffer bytes;
+        {
+            auto storage = bytes.get_contiguous_appender(tail);
+        }
+        ::cls::rgw::wire::writer output {bytes};
+        output.scalar(std::uint8_t {0xFF});
+        output.scalar(std::uint16_t {0xABCD});
+        output.scalar(std::uint32_t {0xABCDEF12});
+        output.scalar(std::uint64_t {0xABCDEF1234567890});
+        CHECK(bytes.contents_equal(expected));
+    }
+}
+
+TEST_CASE("RGW metadata spans preserve bytes across fresh and shared append storage", "[rgw][cls][datum]")
+{
+    struct record final
+    {
+        std::uint32_t generation;
+        std::string_view name;
+        std::uint8_t flags;
+    };
+    const auto fields = datum::binary_fields<&record::generation, &record::name, &record::flags> {};
+    for (const auto size : {0u, 1u, 4095u, 4096u, 8193u, 65536u}) {
+        for (const bool framed : {false, true}) {
+            for (const bool append : {false, true}) {
+                std::string name(size, 'n');
+                if (!name.empty()) {
+                    name[size / 2] = '\0';
+                }
+                const record value {0x01020304, name, 7};
+                byte_buffer bytes;
+                byte_buffer expected;
+                byte_buffer shared;
+                shared.append("opaque", 6);
+                if (append) {
+                    bytes.append("prefix", 6);
+                    expected.append("prefix", 6);
+                    bytes.append(shared);
+                    expected.append(shared);
+                }
+                byte_buffer body;
+                ::ceph::encode(value.generation, body);
+                ::ceph::encode(name, body);
+                ::ceph::encode(value.flags, body);
+                if (framed) {
+                    ::ceph::encode(std::uint8_t {3}, expected);
+                    ::ceph::encode(std::uint8_t {1}, expected);
+                    ::ceph::encode(static_cast<std::uint32_t>(body.length()), expected);
+                }
+                expected.append(body);
+                ::cls::rgw::wire::writer output {bytes};
+                if (framed) {
+                    output.frame(3, value, fields);
+                }
+                if (!framed) {
+                    output.fields(value, fields);
+                }
+                name.assign("changed");
+                CHECK(bytes.contents_equal(expected));
+                CHECK(shared.to_str() == "opaque");
+            }
+        }
+    }
 }
 
 TEST_CASE("RGW metadata sizes follow selected order and field conversions", "[rgw][cls][datum]")

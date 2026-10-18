@@ -49,6 +49,12 @@ struct request_prefix final
     std::uint8_t reshard;
 };
 
+struct empty_entries final
+{
+    std::uint32_t count;
+    std::uint8_t flag;
+};
+
 struct entry_prefix final
 {
     std::uint8_t kind;
@@ -64,12 +70,10 @@ inline byte_buffer encode_request(const std::uint32_t maximum, const std::string
 {
     byte_buffer output;
     detail::writer archive {output};
-    archive.frame(2, [&] {
-        using prefix = detail::request_prefix;
+    using prefix = detail::request_prefix;
 
-        archive.fields(prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)},
-            datum::binary_fields<&prefix::maximum, &prefix::filter, &prefix::marker, &prefix::reshard> {});
-    });
+    archive.frame(2, prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)},
+        datum::binary_fields<&prefix::maximum, &prefix::filter, &prefix::marker, &prefix::reshard> {});
 
     return output;
 }
@@ -192,6 +196,14 @@ byte_buffer encode_entries(const EntriesT& entries, const bool flag, datum::bina
     const auto size = detail::checked_count(std::ranges::size(entries));
     byte_buffer output;
     detail::writer archive {output};
+    if (0 == size) {
+        using body = detail::empty_entries;
+
+        archive.frame(1, body {size, static_cast<std::uint8_t>(flag)},
+            datum::binary_fields<&body::count, &body::flag> {});
+
+        return output;
+    }
     archive.frame(1, [&] {
         archive.scalar(size);
         for (const auto& entry : entries) {
