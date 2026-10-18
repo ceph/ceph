@@ -107,8 +107,8 @@ Code cleanup
 QA suite
 --------
 
-- [ ] create qa/workunits/test_telemetry_(X-1).sh
-- [ ] create qa/workunits/test_telemetry_(X-1)_x.sh
+- [x] create qa/workunits/test_telemetry_(X-1).sh
+- [x] create qa/workunits/test_telemetry_(X-1)_x.sh
 - [ ] create qa/suites/upgrade/(X-1)-x
 - [ ] remove qa/suites/upgrade/(X-3)-x-*
 - [ ] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
