@@ -130,10 +130,11 @@ Using Curl to Install Cephadm
 Cephadm Requires Python 3.9 or Later
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``cephadm`` requires Python 3.9 or later. If you encounter difficulties
-running ``cephadm``, then you may not have Python or the correct version of
-Python installed. This includes any errors that include the message ``bad
-interpreter`` or ``cannot execute: required file not found``.
+Beginning with Umbrella, ``cephadm`` requires Python 3.9 or later. Tentacle
+requires Python 3.8 or later, and Squid Python 3.6 or later. If you encounter
+difficulties running ``cephadm``, then you may not have Python or the correct
+version of Python installed. This includes any errors that include the message
+``bad interpreter`` or ``cannot execute: required file not found``.
 
 You can manually run cephadm with a particular version of Python by prefixing
 the command with your installed Python version. For example:
