@@ -414,12 +414,11 @@ void MgrStandby::respawn()
   }
   new_argv[orig_argc] = NULL;
 
-  /* Determine the path to our executable, test if Linux /proc/self/exe exists.
-   * This allows us to exec the same executable even if it has since been
-   * unlinked.
+  /* Determine the path to exec. Re-executing the image we are running would
+   * pair it with libraries an upgrade has replaced.
    */
   char exe_path[PATH_MAX] = "";
-  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
+  if (get_respawn_exe_path(exe_path, sizeof(exe_path)) < 0) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -428,9 +427,6 @@ void MgrStandby::respawn()
 
     /* Fall back to a best-effort: just running in our CWD */
     strncpy(exe_path, orig_argv[0], PATH_MAX-1);
-  } else {
-    dout(1) << "respawning with exe " << exe_path << dendl;
-    strcpy(exe_path, PROCPREFIX "/proc/self/exe");
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
@@ -438,7 +434,7 @@ void MgrStandby::respawn()
   unblock_all_signals(NULL);
   execv(exe_path, new_argv);
 
-  derr << "respawn execv " << orig_argv[0]
+  derr << "respawn execv " << exe_path
        << " failed with " << cpp_strerror(errno) << dendl;
   ceph_abort();
 }

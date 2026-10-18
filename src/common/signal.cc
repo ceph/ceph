@@ -15,6 +15,7 @@
 
 #include <cstdlib>
 #include <sstream>
+#include <string_view>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -28,6 +29,8 @@
 #include "common/perf_counters.h"
 
 #include "global/pidfile.h"
+
+#include "include/compat.h"
 
 using namespace std::literals;
 
@@ -85,6 +88,33 @@ void unblock_all_signals(sigset_t *old_sigset)
   int ret = pthread_sigmask(SIG_UNBLOCK, &sigset, old_sigset);
   ceph_assert(ret == 0);
 }
+
+#ifdef PROCPREFIX
+ssize_t get_respawn_exe_path(char *path, size_t buff_length)
+{
+  constexpr std::string_view deleted = " (deleted)";
+
+  /* A result that fills the buffer may be truncated, and a truncated path is
+   * worse than none: the caller falls back to argv[0]. */
+  ssize_t len = readlink(PROCPREFIX "/proc/self/exe", path, buff_length - 1);
+  if (len < 0 || (size_t)len == buff_length - 1) {
+    return -1;
+  }
+  /* The kernel appends " (deleted)" once the executable is unlinked, which is
+   * what replacing it does. */
+  std::string_view exe{path, (size_t)len};
+  if (exe.size() > deleted.size() && exe.ends_with(deleted)) {
+    len -= deleted.size();
+  }
+  path[len] = '\0';
+  return len;
+}
+#else
+ssize_t get_respawn_exe_path(char *, size_t)
+{
+  return -1;
+}
+#endif /* PROCPREFIX */
 #else
 std::string signal_mask_to_str()
 {
