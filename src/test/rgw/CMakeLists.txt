@@ -170,6 +170,11 @@ add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager ${rgw_libs})
 
 if(WITH_RADOSGW_RADOS)
+# unittest_rgw_bucket_metadata
+add_executable(unittest_rgw_bucket_metadata test_rgw_bucket_metadata.cc)
+add_ceph_unittest(unittest_rgw_bucket_metadata)
+target_link_libraries(unittest_rgw_bucket_metadata unit-main ${rgw_libs})
+
 # unittest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)

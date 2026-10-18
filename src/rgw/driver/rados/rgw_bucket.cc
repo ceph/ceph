@@ -2964,14 +2964,12 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   RGWDataChangesLog *svc_datalog{nullptr};
 
 protected:
-  virtual bool is_vector_bucket() const;
-
-  virtual int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
+  int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
                   const std::string& entry, RGWBucketCompleteInfo& bci,
                   const std::optional<RGWBucketCompleteInfo>& old_bci,
                   const RGWObjVersionTracker& objv_tracker,
                   bool from_remote_zone);
-  virtual int put_post(const DoutPrefixProvider* dpp, optional_yield y,
+  int put_post(const DoutPrefixProvider* dpp, optional_yield y,
                const RGWBucketCompleteInfo& bci,
                const std::optional<RGWBucketCompleteInfo>& old_bci,
                RGWObjVersionTracker& objv_tracker);
@@ -3020,11 +3018,6 @@ protected:
   std::string get_marker(void *handle) override;
 };
 
-bool RGWBucketInstanceMetadataHandler::is_vector_bucket() const
-{
-  return false;
-}
-
 int RGWBucketInstanceMetadataHandler::get(std::string& entry, RGWMetadataObject **obj,
                                           optional_yield y, const DoutPrefixProvider *dpp)
 {
@@ -3036,10 +3029,6 @@ int RGWBucketInstanceMetadataHandler::get(std::string& entry, RGWMetadataObject 
     return ret;
   }
 
-  if (bci.info.is_vector() != is_vector_bucket()) {
-    return -ENOENT;
-  }
-
   *obj = new RGWBucketInstanceMetadataObject(bci, bci.info.objv_tracker.read_version, mtime);
   return 0;
 }
@@ -3049,6 +3038,15 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
                                           optional_yield y, const DoutPrefixProvider *dpp,
                                           RGWMDLogSyncType sync_type, bool from_remote_zone)
 {
+  auto newobj = static_cast<RGWBucketInstanceMetadataObject*>(obj);
+  RGWBucketCompleteInfo& bci = newobj->get_bci();
+
+  // Full metadata sync lists both bucket types, but vector instances are local
+  // to each zone. Skip them before reading or modifying any local state.
+  if (from_remote_zone && bci.info.is_vector()) {
+    return STATUS_NO_APPLY;
+  }
+
   // read existing bucket instance
   std::optional old = RGWBucketCompleteInfo{};
   int ret = svc_bucket->read_bucket_instance_info(entry, &old->info, nullptr,
@@ -3059,13 +3057,8 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
     return ret;
   }
 
-  auto newobj = static_cast<RGWBucketInstanceMetadataObject*>(obj);
-  RGWBucketCompleteInfo& bci = newobj->get_bci();
-
-  // The metadata sections remain distinct even though instance storage is shared.
   // A put must not change the type of an existing instance.
-  if (bci.info.is_vector() != is_vector_bucket() ||
-      (old && old->info.is_vector() != is_vector_bucket())) {
+  if (old && old->info.is_vector() != bci.info.is_vector()) {
     return -EINVAL;
   }
 
@@ -3151,19 +3144,24 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     string bucket_instance;
     parse_bucket(entry, &tenant_name, &bucket_name, &bucket_instance);
 
-    RGWZonePlacementInfo rule_info;
     bci.info.bucket.name = bucket_name;
     bci.info.bucket.bucket_id = bucket_instance;
     bci.info.bucket.tenant = tenant_name;
-    // if the sync module never writes data, don't require the zone to specify all placement targets
-    if (svc_zone->sync_module_supports_writes()) {
-      int ret = svc_zone->select_bucket_location_by_rule(dpp, bci.info.placement_rule, &rule_info, y);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
-        return ret;
+
+    // Indexless vector instances store their data outside the vector bucket.
+    // Native vector instances need the same local placement setup as S3.
+    if (!bci.info.is_vector() || !bci.info.is_indexless()) {
+      RGWZonePlacementInfo rule_info;
+      // if the sync module never writes data, don't require the zone to specify all placement targets
+      if (svc_zone->sync_module_supports_writes()) {
+        int ret = svc_zone->select_bucket_location_by_rule(dpp, bci.info.placement_rule, &rule_info, y);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+          return ret;
+        }
       }
+      bci.info.layout.current_index.layout.type = rule_info.index_type;
     }
-    bci.info.layout.current_index.layout.type = rule_info.index_type;
   } else {
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
@@ -3171,9 +3169,10 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
 
     //if the bucket is being deleted, create and store a special log type for
     //bucket instance cleanup in multisite setup
-    const auto& log = bci.info.layout.logs.back();
-    if (bci.info.bucket_deleted() && log.layout.type != rgw::BucketLogType::Deleted) {
-      const auto index_log = bci.info.layout.logs.back();
+    if (!bci.info.is_vector() && bci.info.bucket_deleted() &&
+        bci.info.layout.logs.back().layout.type != rgw::BucketLogType::Deleted) {
+      const auto& log = bci.info.layout.logs.back();
+      const auto index_log = log;
       const int shards_num = rgw::num_shards(index_log);
       bci.info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
       ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
@@ -3190,14 +3189,15 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
   }
 
   //always keep bucket versioning enabled on archive zone
-  if (driver->get_zone()->get_tier_type() == "archive") {
+  if (!bci.info.is_vector() &&
+      driver->get_zone()->get_tier_type() == "archive") {
     bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
   }
 
   /* record the read version (if any), store the new version */
   bci.info.objv_tracker.read_version = objv_tracker.read_version;
   bci.info.objv_tracker.write_version = objv_tracker.write_version;
-  
+
   return 0;
 }
 
@@ -3210,6 +3210,13 @@ int RGWBucketInstanceMetadataHandler::put_post(
   int ret = svc_bi->init_index(dpp, y, bci.info, bci.info.layout.current_index);
   if (ret < 0) {
     return ret;
+  }
+
+  // Native vector instances need an index, but not S3 lifecycle or topics.
+  // init_index() is a no-op for indexless instances.
+  if (bci.info.is_vector()) {
+    objv_tracker = bci.info.objv_tracker;
+    return STATUS_APPLIED;
   }
 
   /* update lc list on changes to lifecyle policy */
@@ -3277,8 +3284,8 @@ int RGWBucketInstanceMetadataHandler::remove(std::string& entry, RGWObjVersionTr
     return ret;
   }
 
-  if (bci.info.is_vector() != is_vector_bucket()) {
-    return -ENOENT;
+  if (bci.info.is_vector()) {
+    return 0;
   }
 
   // skip bucket instance removal. each zone will handle it independently during trimming
@@ -3315,34 +3322,7 @@ int RGWBucketInstanceMetadataHandler::list_keys_next(const DoutPrefixProvider* d
                                                      bool* truncated)
 {
   auto lister = static_cast<RGWMetadataLister*>(handle);
-  bool more = false;
-  do {
-    int ret = lister->get_next(dpp, max, keys, &more);
-    if (ret < 0) {
-      return ret;
-    }
-
-    // Instance keys share a namespace, so their type must be read from the
-    // cached bucket info. Keep zone-local vector instances out of full sync.
-    for (auto i = keys.begin(); i != keys.end();) {
-      RGWBucketInfo info;
-      ret = svc_bucket->read_bucket_instance_info(*i, &info, nullptr, nullptr,
-                                                 null_yield, dpp);
-      if (ret == -ENOENT) {
-        i = keys.erase(i);
-      } else if (ret < 0) {
-        return ret;
-      } else if (info.is_vector() != is_vector_bucket()) {
-        i = keys.erase(i);
-      } else {
-        ++i;
-      }
-    }
-  } while (max > 0 && keys.empty() && more);
-  if (truncated) {
-    *truncated = more;
-  }
-  return 0;
+  return lister->get_next(dpp, max, keys, truncated);
 }
 
 void RGWBucketInstanceMetadataHandler::list_keys_complete(void *handle)
@@ -3370,33 +3350,6 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
   }
 };
 
-class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
-protected:
-  bool is_vector_bucket() const override { return true; }
-
-  int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
-                  const std::string& entry, RGWBucketCompleteInfo& bci,
-                  const std::optional<RGWBucketCompleteInfo>& old_bci,
-                  const RGWObjVersionTracker& objv_tracker,
-                  bool from_remote_zone) override {
-    bci.info.flags |= BUCKET_DATASYNC_DISABLED;
-    return 0;
-  }
-  int put_post(const DoutPrefixProvider* dpp, optional_yield y,
-               const RGWBucketCompleteInfo& bci,
-               const std::optional<RGWBucketCompleteInfo>& old_bci,
-               RGWObjVersionTracker& objv_tracker) override {return 0;}
- public:
-   RGWVectorBucketInstanceMetadataHandler(rgw::sal::Driver* driver,
-                                   RGWSI_Zone* svc_zone,
-                                   RGWSI_Bucket* svc_bucket) :
-     RGWBucketInstanceMetadataHandler(driver, svc_zone, svc_bucket, nullptr,  nullptr) {}
-
-  string get_type() override { return "vectorbucket.instance"; }
-
-  // see RGWVectorBucketMetadataHandler::is_synced()
-  bool is_synced() const override { return false; }
-};
 #endif
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
@@ -3951,14 +3904,6 @@ auto create_vector_bucket_metadata_handler(librados::Rados& rados,
       rados, svc_bucket, ctl_bucket);
 }
 
-auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
-                                             RGWSI_Zone* svc_zone,
-                                             RGWSI_Bucket* svc_bucket)
-    -> std::unique_ptr<RGWMetadataHandler>
-{
-  return std::make_unique<RGWVectorBucketInstanceMetadataHandler>(driver, svc_zone,
-                                                            svc_bucket);
-}
 #endif
 
 list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()

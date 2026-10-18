@@ -5,6 +5,7 @@ import threading
 import subprocess
 import os
 import string
+import tempfile
 from datetime import datetime, timedelta, timezone
 import pytest
 import boto3
@@ -831,18 +832,25 @@ def test_vector_bucket_shared_instance_namespace(delete_first, owner_type):
         result = admin_json(['bucket', 'stats'] + s3_args)
         assert result['id'] == s3_id
 
-        # Metadata sections are used by full metadata sync. Each section must
-        # list and expose only its own bucket type despite sharing storage.
-        for section, own_key, other_key in (
-            ('bucket.instance', s3_key, vector_key),
-            ('vectorbucket.instance', vector_key, s3_key),
-        ):
-            keys = admin_json(['metadata', 'list', section])
-            assert own_key in keys
-            assert other_key not in keys
-            metadata_get(f'{section}:{own_key}')
-            _, ret = admin(['metadata', 'get', f'{section}:{other_key}'])
-            assert ret != 0
+        # Both types use one instance metadata section. Metadata sync skips
+        # vector instances when applying the decoded metadata on the peer.
+        keys = admin_json(['metadata', 'list', 'bucket.instance'])
+        assert s3_key in keys
+        assert vector_key in keys
+        for key in (s3_key, vector_key):
+            metadata_get(f'bucket.instance:{key}')
+
+        # A local metadata update must preserve the vector layout and initialize
+        # its native index, while remaining valid for indexless storage too.
+        vector_metadata_key = f'bucket.instance:{vector_key}'
+        vector_metadata = admin_json(['metadata', 'get', vector_metadata_key])
+        with tempfile.NamedTemporaryFile(mode='w+') as metadata_file:
+            json.dump(vector_metadata, metadata_file)
+            metadata_file.flush()
+            out, ret = admin(['metadata', 'put', vector_metadata_key,
+                              '--infile', metadata_file.name])
+            assert ret == 0, out
+        assert metadata_get(vector_metadata_key) == vector_metadata['data']
 
         if delete_first == 'vector':
             # A vector bucket deletion must leave S3 objects untouched.
@@ -856,7 +864,7 @@ def test_vector_bucket_shared_instance_namespace(delete_first, owner_type):
                 obj['Body'].close()
             s3conn.delete_object(Bucket=bucket_name, Key='probe')
             metadata_get(f'bucket.instance:{s3_key}')
-            _, ret = admin(['metadata', 'get', f'vectorbucket.instance:{vector_key}'])
+            _, ret = admin(['metadata', 'get', f'bucket.instance:{vector_key}'])
             assert ret != 0
             _, ret = admin(['bucket', 'layout'] + vector_args +
                            ['--bucket-id', vector_id])
@@ -872,7 +880,7 @@ def test_vector_bucket_shared_instance_namespace(delete_first, owner_type):
             s3conn.delete_bucket(Bucket=bucket_name)
             s3_created = False
             assert _vector_bucket_exists(conn, bucket_name)
-            metadata_get(f'vectorbucket.instance:{vector_key}')
+            metadata_get(f'bucket.instance:{vector_key}')
             _, ret = admin(['metadata', 'get', f'bucket:{s3_name}'])
             assert ret != 0
             # Restore the backing bucket so the RGW backend can clean up normally.

@@ -196,13 +196,17 @@ private:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << session_name.second <<
                 " of namespace: " << session_name.first << dendl;
-              std::unique_lock l(sessions_mutex);
-              if (sessions.find(session_name) != sessions.end()) {
-                ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << session_name.second <<
-                  " of namespace: " << session_name.first << dendl;
-                return;
+              {
+                std::shared_lock l(sessions_mutex);
+                if (sessions.find(session_name) != sessions.end()) {
+                  ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << session_name.second <<
+                    " of namespace: " << session_name.first << dendl;
+                  return;
+                }
               }
 
+              // Session messages are processed serially. Keep bucket I/O and
+              // session construction outside the lock used by session readers.
               const std::string backend_str = cct->_conf.get_val<std::string>("rgw_s3vector_backend");
               BackendType backend_type;
               if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
@@ -236,7 +240,9 @@ private:
               ldpp_dout(this, 20) << "INFO: created session for bucket: " << session_name.second <<
                 " of namespace: " << session_name.first << dendl;
 
-              sessions[session_name] = SessionPtr(session, LanceDBSessionDeleter());
+              SessionPtr session_ptr(session, LanceDBSessionDeleter());
+              std::unique_lock l(sessions_mutex);
+              sessions.emplace(session_name, std::move(session_ptr));
               return;
             }
           case message_t::Op::SESSION_DELETE:

@@ -710,7 +710,8 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
 
   // Once no vector indexes remain, remove internal objects and uploads before
   // dropping the bucket index. A separate S3 backing bucket is left intact.
-  if (info.layout.current_index.layout.type != rgw::BucketIndexType::Indexless) {
+  // This is being indicated by the fact the vector bucket is indexless
+  if (!info.is_indexless()) {
     ListParams params;
     params.list_versions = true;
     params.allow_unordered = true;
@@ -932,8 +933,9 @@ int RadosBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield 
                                   RGWBucketEnt* ent)
 {
   librados::Rados& rados = *store->getRados()->get_rados_handle();
+  // This shared method handles both S3 and vector buckets.
   auto* ctl = info.is_vector() ? store->ctl()->vector_bucket : store->ctl()->bucket;
-  if (info.is_vector() && info.layout.current_index.layout.type == rgw::BucketIndexType::Indexless) {
+  if (info.is_vector() && info.is_indexless()) {
     return 0;
   }
   return ctl->sync_owner_stats(dpp, rados, info.owner, info, y, ent);
@@ -1052,7 +1054,8 @@ int RadosVectorBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, c
 
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  if (info.is_vector() && info.layout.current_index.layout.type == rgw::BucketIndexType::Indexless) {
+  // Indexless vector buckets have no local objects to inspect.
+  if (info.is_vector() && info.is_indexless()) {
     return 0;
   }
   return store->getRados()->check_bucket_empty(dpp, info, y);
