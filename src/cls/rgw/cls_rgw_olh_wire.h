@@ -49,7 +49,7 @@ void encode_event(writer& archive, const EntryT& value,
                   datum::binary_fields<Name, Instance>)
 {
     const std::string_view tag = datum::member_lens<Tag> {}(value);
-    archive.frame(1, [&] {
+    archive.frame(1, [&] [[gnu::noinline]] {
         using prefix = event_prefix;
 
         archive.fields(prefix {datum::member_lens<Epoch> {}(value),
