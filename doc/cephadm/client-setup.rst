@@ -19,7 +19,7 @@ Prerequisites
 
 - A running Ceph cluster, and a root shell on a cluster host that holds the
   configuration file and the ``client.admin`` keyring. With cephadm, by
-  default, those are the hosts that have the ``_admin`` label, such as the
+  default, these are the hosts that have the ``_admin`` label, such as the
   bootstrap host (see :ref:`cephadm-special-host-labels`).
 - The ``ceph`` command on that host. If it is not installed there, put
   ``cephadm shell --`` before each ``ceph`` command that you run on that
@@ -56,11 +56,11 @@ Procedure
    command fails, it prints an error and leaves the file empty: correct the
    error and run the command again before you go on.
 
-#. Create a user for the client, with the capabilities that the client needs,
-   and write its keyring to a file. Choose a name that no user has yet: if
-   the user exists, the command changes its capabilities. This example
-   creates ``client.user1701`` with read and write access to the file system
-   ``cephfs1701``:
+#. Create a CephX user for the client, with the capabilities that the client
+   needs, and write its keyring to a file. Choose a name that no user has
+   yet: if the user exists, the command changes its capabilities. This
+   example creates ``client.user1701`` with read and write access to the file
+   system ``cephfs1701``:
 
    .. prompt:: bash #
 
