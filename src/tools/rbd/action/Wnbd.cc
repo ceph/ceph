@@ -4,6 +4,7 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/compat.h"
 #include "include/stringify.h"
 #include "common/SubProcess.h"
 #include <iostream>
@@ -23,7 +24,8 @@ static int call_wnbd_cmd(const po::variables_map &vm,
                         const std::vector<std::string> &args,
                         const std::vector<std::string> &ceph_global_init_args) {
   char exe_path[PATH_MAX];
-  ssize_t exe_path_bytes = get_self_exe_path(exe_path, PATH_MAX);
+  // Returns 0 on failure, with the buffer contents undefined.
+  ssize_t exe_path_bytes = GetModuleFileName(NULL, exe_path, PATH_MAX - 1);
 
   if (exe_path_bytes > 4) {
     // Drop .exe suffix as we're going to add the "-wnbd" suffix.
@@ -31,7 +33,7 @@ static int call_wnbd_cmd(const po::variables_map &vm,
     exe_path_bytes -= 4;
   }
 
-  if (exe_path_bytes < 0) {
+  if (exe_path_bytes == 0) {
     strcpy(exe_path, "rbd-wnbd");
   } else {
     if (snprintf(exe_path + exe_path_bytes,
