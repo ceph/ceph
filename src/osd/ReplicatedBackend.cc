@@ -595,7 +595,7 @@ void ReplicatedBackend::submit_transaction(
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
   const eversion_t &pg_committed_to,
-  vector<pg_log_entry_t>&& _log_entries,
+  vector<pg_log_entry_t>&& log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
   ceph_tid_t tid,
@@ -608,7 +608,6 @@ void ReplicatedBackend::submit_transaction(
     soid,
     delta_stats);
 
-  vector<pg_log_entry_t> log_entries(_log_entries);
   ObjectStore::Transaction op_t{get_parent()->min_peer_features()};
   PGTransactionUPtr t(std::move(_t));
   set<hobject_t> added, removed;
