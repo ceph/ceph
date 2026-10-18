@@ -1914,9 +1914,7 @@ done:
 
   return 0;
 }
-#endif
 
-#ifdef WITH_RADOSGW_RADOS
 int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj_key& key, bool fix, Formatter *f) {
   f->open_object_section("object");
   f->open_object_section("key");
@@ -1943,9 +1941,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj_key& k
 
   return 0;
 }
-#endif
 
-#ifdef WITH_RADOSGW_RADOS
 int do_check_object_locator(const string& tenant_name, const string& bucket_name,
                             bool fix, bool remove_bad, Formatter *f)
 {
@@ -2018,9 +2014,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   return 0;
 }
-#endif
 
-#ifdef WITH_RADOSGW_RADOS
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver,
                                                     const RGWZoneGroup& zonegroup,
@@ -4294,9 +4288,9 @@ int main(int argc, const char **argv)
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
   std::string min_rw_val, max_rw_val, min_rw_stripe_val;  // sinks; conversion via ->each (legacy atoll compat)
+  std::string rgw_obj_fs_val;  // sink; feeds the std::optional rgw_obj_fs via ->each (only set when given)
 #endif
   std::string prefix_val;  // sink; feeds the std::optional opt_prefix via ->each (only set when given)
-  std::string rgw_obj_fs_val;  // sink; feeds the std::optional rgw_obj_fs via ->each (only set when given)
 
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
@@ -4722,11 +4716,13 @@ int main(int argc, const char **argv)
       bucket_cmd->alias("buckets");
       auto* bucket_list   = bucket_cmd->add_subcommand("list",   "list buckets (specify --allow-unordered for faster, unsorted listing)");
       auto* bucket_stats  = bucket_cmd->add_subcommand("stats",  "returns bucket statistics");
+#ifdef WITH_RADOSGW_RADOS
       auto* bucket_link   = bucket_cmd->add_subcommand("link",   "link bucket to specified user");
       auto* bucket_unlink = bucket_cmd->add_subcommand("unlink", "unlink bucket from specified user");
       auto* bucket_check  = bucket_cmd->add_subcommand("check",  "check bucket index by verifying size and object count stats");
       auto* bucket_check_olh      = bucket_check->add_subcommand("olh",      "check for olh index entries and objects that are pending removal");
       auto* bucket_check_unlinked = bucket_check->add_subcommand("unlinked", "check for object versions that are not visible in a bucket listing");
+#endif
       auto* bucket_rm     = bucket_cmd->add_subcommand("rm",     "remove bucket");
       bucket_rm->alias("remove");
       auto* bucket_layout = bucket_cmd->add_subcommand("layout", "show the bucket's layout");
@@ -4739,7 +4735,9 @@ int main(int argc, const char **argv)
       auto* bucket_logging_info  = bucket_logging->add_subcommand("info",  "get info on bucket logging configuration on source bucket or list of sources in log bucket");
       auto* bucket_logging_list  = bucket_logging->add_subcommand("list",  "list the log objects pending commit for the source bucket");
       bucket_logging->require_subcommand(show_cli11_help ? 0 : 1);
+#ifdef WITH_RADOSGW_RADOS
       auto* bucket_rewrite = bucket_cmd->add_subcommand("rewrite", "rewrite all objects in the specified bucket");
+#endif
       auto* bucket_set_min_shards = bucket_cmd->add_subcommand("set-min-shards", "set the minimum number of shards that dynamic resharding will consider for a bucket");
       auto* bucket_object       = bucket_cmd->add_subcommand("object", "bucket object commands");
       auto* bucket_object_shard = bucket_object->add_subcommand("shard", "show the shard index a given object maps to");
@@ -4748,6 +4746,7 @@ int main(int argc, const char **argv)
       auto* bucket_shard_objects = bucket_shard->add_subcommand("objects", "show sample object names that map to bucket shards");
       bucket_shard_objects->alias("object");
       bucket_shard->require_subcommand(show_cli11_help ? 0 : 1);
+#ifdef WITH_RADOSGW_RADOS
       auto* bucket_resync           = bucket_cmd->add_subcommand("resync", "bucket resync commands");
       auto* bucket_resync_encrypted = bucket_resync->add_subcommand("encrypted", "encrypted multipart resync commands");
       auto* bucket_resync_encrypted_multipart = bucket_resync_encrypted->add_subcommand("multipart", "repair replication of encrypted multipart uploads");
@@ -4760,6 +4759,7 @@ int main(int argc, const char **argv)
       auto* bucket_rados      = bucket_cmd->add_subcommand("rados", "bucket rados commands");
       auto* bucket_rados_list = bucket_rados->add_subcommand("list", "list rados objects backing bucket's objects");
       bucket_rados->require_subcommand(show_cli11_help ? 0 : 1);
+#endif
       bucket_cmd->require_subcommand(show_cli11_help ? 0 : 1);
 
       // bucket list options
@@ -4785,6 +4785,7 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_stats, "--marker",             marker,             marker_desc);
       add_multilevel_binary_flag(bucket_stats,   "--show-restore-stats", show_restore_stats, "if the flag is in present it will show restores stats in the bucket stats command");
 
+#ifdef WITH_RADOSGW_RADOS
       // bucket link options
       add_multilevel_option(bucket_link, "--bucket,-b",       bucket_name,     bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_link, "--bucket-id",       bucket_id,       bucket_id_desc, reject_empty_bucket_id);
@@ -4814,6 +4815,7 @@ int main(int argc, const char **argv)
       add_multilevel_strict_int(bucket_check_unlinked, "--max-concurrent-ios",max_concurrent_ios, "maximum concurrent ios for bucket operations (default: 32)");
       add_multilevel_binary_flag(bucket_check_unlinked, "--dump-keys",     dump_keys,     "output all checked keys");
       add_multilevel_binary_flag(bucket_check_unlinked, "--hide-progress", hide_progress, "suppress per-shard progress output");
+#endif
 
       // bucket rm options
       add_multilevel_option(bucket_rm, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
@@ -4850,6 +4852,7 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_logging_list, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
       add_multilevel_option(bucket_logging_list, "--format",    format,      format_desc);
 
+#ifdef WITH_RADOSGW_RADOS
       // bucket rewrite options
       add_multilevel_option(bucket_rewrite, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_rewrite, "--bucket-id", bucket_id,   bucket_id_desc, reject_empty_bucket_id);
@@ -4871,6 +4874,7 @@ int main(int argc, const char **argv)
       add_multilevel_option(bucket_rewrite, "--min-rewrite-stripe-size", min_rw_stripe_val,
                             "min stripe size for object rewrite (default 0)")
           ->each([&min_rewrite_stripe_size](const std::string& v) { min_rewrite_stripe_size = (uint64_t)atoll(v.c_str()); });
+#endif
 
       // bucket set-min-shards options
       add_multilevel_option(bucket_set_min_shards, "--bucket,-b",  bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
@@ -4901,6 +4905,7 @@ int main(int argc, const char **argv)
           ->each([&opt_prefix](const std::string& v) { opt_prefix = v; });
       add_multilevel_option(bucket_shard_objects, "--format", format, format_desc);
 
+#ifdef WITH_RADOSGW_RADOS
       // bucket resync encrypted multipart options
       add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket,-b", bucket_name, bucket_desc)->option_text("<bucket> REQUIRED");
       add_multilevel_option(bucket_resync_encrypted_multipart, "--bucket-id",  bucket_id,  bucket_id_desc, reject_empty_bucket_id);
@@ -4928,6 +4933,7 @@ int main(int argc, const char **argv)
       };
       register_radoslist_opts(bucket_radoslist);
       register_radoslist_opts(bucket_rados_list);
+#endif
 
       bucket_list->callback(
           [&cli11_readonly, &cli11_action,
@@ -5060,6 +5066,7 @@ int main(int argc, const char **argv)
         };
       });
 
+#ifdef WITH_RADOSGW_RADOS
       bucket_link->callback(
           [&uid_str, &user_id_arg,
            &cli11_non_master_op, &cli11_action, &bucket_op, &bucket_id, &new_bucket_name] {
@@ -5152,6 +5159,7 @@ int main(int argc, const char **argv)
           return 0;
         };
       });
+#endif
 
       bucket_rm->callback(
           [&cli11_action, &cli11_need_gc,
@@ -5381,6 +5389,7 @@ int main(int argc, const char **argv)
         };
       });
 
+#ifdef WITH_RADOSGW_RADOS
       bucket_logging_list->callback(
           [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket, &formatter] {
 
@@ -5560,6 +5569,7 @@ int main(int argc, const char **argv)
           return 0;
         };
       });
+#endif
 
       bucket_set_min_shards->callback(
           [&cli11_action, &bucket_name, &bucket_id, &tenant, &bucket,
@@ -5615,7 +5625,9 @@ int main(int argc, const char **argv)
       bucket_object_shard->callback(
           [&cli11_readonly, &cli11_action, &object, &num_shards,
            &num_shards_specified, &formatter] {
+#ifdef WITH_RADOSGW_RADOS
         cli11_readonly = true;
+#endif
 
         cli11_action = [&object, &num_shards, &num_shards_specified,
                         &formatter]() -> int {
@@ -5642,7 +5654,9 @@ int main(int argc, const char **argv)
       bucket_shard_objects->callback(
           [&cli11_readonly, &cli11_action, &opt_prefix, &num_shards,
            &num_shards_specified, &specified_shard_id, &shard_id, &formatter] {
+#ifdef WITH_RADOSGW_RADOS
         cli11_readonly = true;
+#endif
 
         cli11_action = [&opt_prefix, &num_shards, &num_shards_specified,
                         &specified_shard_id, &shard_id, &formatter]() -> int {
@@ -5693,6 +5707,7 @@ int main(int argc, const char **argv)
         };
       });
 
+#ifdef WITH_RADOSGW_RADOS
       bucket_resync_encrypted_multipart->callback(
           [&cli11_action, &bucket_name, &tenant, &bucket_id, &bucket,
            &yes_i_really_mean_it, &marker, &formatter, &stream_flusher_ptr] {
@@ -5783,6 +5798,7 @@ int main(int argc, const char **argv)
 
         cli11_action = radoslist_action;
       });
+#endif
     } // bucket command registrations
 
     // Skip CLI11 for legacy-owned commands so it can't reject them or mis-match
@@ -10987,10 +11003,8 @@ next:
     formatter->close_section(); // outer
     formatter->flush(cout);
   } // OPT::OBJECT_MANIFEST
-#endif
 
 
-#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::DEDUP_STATS    ||
       opt_cmd == OPT::DEDUP_ESTIMATE ||
       opt_cmd == OPT::DEDUP_ABORT    ||

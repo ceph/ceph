@@ -5,6 +5,7 @@
 #   ./test_cli11_bucket.sh
 #   RGW_ADMIN=/path/to/radosgw-admin ./test_cli11_bucket.sh
 #   CEPH_CONF=/path/to/ceph.conf ./test_cli11_bucket.sh
+#   RGW_STANDALONE_ADMIN=/path/to/rgw-standalone-admin ./test_cli11_bucket.sh
 #
 # Test types:
 #   check()        - no cluster needed: verifies exit code + exact message
@@ -12,11 +13,14 @@
 #                    usage: check_warns "desc" exit_code "error_msg_or_empty" "msg1" "msg2" ... -- command args
 #   check_help()   - no cluster needed: verifies exit 0 for --cli11-help positions
 #   check_cluster()- cluster needed: verifies command output and exit code
+#   check_standalone()      - like check(), on rgw-standalone-admin; skipped if not built
+#   check_standalone_help() - whether a subcommand is listed in rgw-standalone-admin's bucket help
 #
 # Run from the build directory:
 #   cd /path/to/ceph/build && bash /path/to/test_cli11_bucket.sh
 
 RGW_ADMIN="${RGW_ADMIN:-./bin/radosgw-admin}"
+RGW_STANDALONE_ADMIN="${RGW_STANDALONE_ADMIN:-./bin/rgw-standalone-admin}"
 export CEPH_CONF="${CEPH_CONF:-./ceph.conf}"
 # Route dout/derr log lines off stderr so async cluster logs (e.g. "ERROR:
 # obj.oid is empty") can't interleave mid-line with the cerr messages we grep.
@@ -245,6 +249,76 @@ check_help_content() {
   else
     echo "PASS [$desc]"
     PASS=$((PASS+1))
+  fi
+}
+
+# rgw-standalone-admin keeps its data in local databases, by default under
+# /var/lib/ceph/radosgw (created by package install only). Point every
+# location at a fresh temp dir so commands that get past parsing can run.
+if [ -x "$RGW_STANDALONE_ADMIN" ]; then
+  _sa_dir=$(mktemp -d)
+  trap 'rm -rf "$_sa_dir"' EXIT
+  mkdir -p "$_sa_dir/base" "$_sa_dir/lmdb"
+fi
+_run_standalone() {
+  "$RGW_STANDALONE_ADMIN" --no-mon-config \
+    --dbstore-config-uri="file:$_sa_dir/config.db" --dbstore-db-dir="$_sa_dir" \
+    --rgw-posix-userdb-dir="$_sa_dir" --rgw-posix-base-path="$_sa_dir/base" \
+    --rgw-posix-database-root="$_sa_dir/lmdb" "$@"
+}
+
+# check_standalone: like check(), but runs rgw-standalone-admin (the build
+# without RADOS). SKIPs when that binary isn't built.
+#   usage: check_standalone "desc" expected_exit "expected_msg_or_empty" command args
+check_standalone() {
+  local desc="$1" expected_exit="$2" expected_msg="$3"
+  shift 3
+  if [ ! -x "$RGW_STANDALONE_ADMIN" ]; then
+    echo "SKIP [$desc]: $RGW_STANDALONE_ADMIN not built"
+    SKIP=$((SKIP+1))
+    return
+  fi
+  local tmpfile; tmpfile=$(mktemp)
+  _run_standalone "$@" >"$tmpfile" 2>&1
+  local exit_code=$?
+  local output; output=$(filter <"$tmpfile")
+  rm -f "$tmpfile"
+
+  local ok=1
+  if [ "$exit_code" != "$expected_exit" ]; then
+    echo "FAIL [$desc]: expected exit $expected_exit, got $exit_code"
+    echo "     output: $output"
+    ok=0
+  fi
+  if [ -n "$expected_msg" ] && ! echo "$output" | grep -qF -- "$expected_msg"; then
+    echo "FAIL [$desc]: expected message not found: $expected_msg"
+    echo "     output: $output"
+    ok=0
+  fi
+  [ "$ok" = "1" ] && { echo "PASS [$desc]"; PASS=$((PASS+1)); } || FAIL=$((FAIL+1))
+}
+
+# check_standalone_help: checks whether a bucket subcommand appears in
+# rgw-standalone-admin's `bucket --cli11-help` list. Unlike check_help_content,
+# it can also check that a subcommand is absent (not compiled in).
+#   usage: check_standalone_help "desc" listed|not-listed subcommand
+check_standalone_help() {
+  local desc="$1" expect="$2" sub="$3"
+  if [ ! -x "$RGW_STANDALONE_ADMIN" ]; then
+    echo "SKIP [$desc]: $RGW_STANDALONE_ADMIN not built"
+    SKIP=$((SKIP+1))
+    return
+  fi
+  local output; output=$(_run_standalone bucket --cli11-help 2>&1)
+  local found=0
+  echo "$output" | grep -qE -- "^  $sub( |,|\$)" && found=1
+  if { [ "$expect" = "listed" ] && [ "$found" = "1" ]; } ||
+     { [ "$expect" = "not-listed" ] && [ "$found" = "0" ]; }; then
+    echo "PASS [$desc]"
+    PASS=$((PASS+1))
+  else
+    echo "FAIL [$desc]: expected '$sub' $expect in bucket --cli11-help"
+    FAIL=$((FAIL+1))
   fi
 }
 
@@ -3032,8 +3106,45 @@ fi
 
 # ============================================================
 echo ""
+echo "=== standalone build: RADOS-only bucket commands are not compiled in ==="
+# ============================================================
+
+check_standalone "standalone: bucket link"                       1 "$ERR_SUBCOMMAND" bucket link --bucket b --uid u
+check_standalone "standalone: bucket unlink"                     1 "$ERR_SUBCOMMAND" bucket unlink --bucket b --uid u
+check_standalone "standalone: bucket check"                      1 "$ERR_SUBCOMMAND" bucket check --bucket b
+check_standalone "standalone: bucket check olh"                  1 "$ERR_SUBCOMMAND" bucket check olh --bucket b
+check_standalone "standalone: bucket check unlinked"             1 "$ERR_SUBCOMMAND" bucket check unlinked --bucket b
+check_standalone "standalone: bucket rewrite"                    1 "$ERR_SUBCOMMAND" bucket rewrite --bucket b
+check_standalone "standalone: bucket resync encrypted multipart" 1 "$ERR_SUBCOMMAND" bucket resync encrypted multipart --bucket b
+check_standalone "standalone: bucket radoslist"                  1 "$ERR_SUBCOMMAND" bucket radoslist --bucket b
+check_standalone "standalone: bucket rados list"                 1 "ERROR: unexpected argument: 'rados'" bucket rados list --bucket b
+
+check_standalone_help "standalone help: link not listed"      not-listed link
+check_standalone_help "standalone help: unlink not listed"    not-listed unlink
+check_standalone_help "standalone help: check not listed"     not-listed check
+check_standalone_help "standalone help: rewrite not listed"   not-listed rewrite
+check_standalone_help "standalone help: resync not listed"    not-listed resync
+check_standalone_help "standalone help: radoslist not listed" not-listed radoslist
+check_standalone_help "standalone help: rados not listed"     not-listed rados
+
+check_standalone_help "standalone help: list listed"           listed list
+check_standalone_help "standalone help: stats listed"          listed stats
+check_standalone_help "standalone help: rm listed"             listed rm
+check_standalone_help "standalone help: layout listed"         listed layout
+check_standalone_help "standalone help: chown listed"          listed chown
+check_standalone_help "standalone help: limit listed"          listed limit
+check_standalone_help "standalone help: logging listed"        listed logging
+check_standalone_help "standalone help: set-min-shards listed" listed set-min-shards
+check_standalone_help "standalone help: object listed"         listed object
+check_standalone_help "standalone help: shard listed"          listed shard
+
+check_standalone "standalone: bucket list still runs"  0 "[]" bucket list
+check_standalone "standalone: bucket stats still runs" 2 ""   bucket stats --bucket nosuch
+
+# ============================================================
+echo ""
 echo "========================================"
 echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"
-[ "$SKIP" -gt 0 ] && echo "(some tests require a running cluster or aws CLI)"
+[ "$SKIP" -gt 0 ] && echo "(some tests require a running cluster, aws CLI or rgw-standalone-admin)"
 echo "========================================"
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1
