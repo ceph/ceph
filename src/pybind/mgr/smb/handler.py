@@ -554,7 +554,6 @@ class ClusterConfigHandler:
         """Trigger synchronization for all the clusters listed in
         `modified_cluster_ids` or all clusters if None.
         """
-        share_ids = self.share_ids()
         present_cluster_ids = set()
         removed_cluster_ids = set()
         change_groups = []
@@ -575,9 +574,12 @@ class ClusterConfigHandler:
                 continue
             present_cluster_ids.add(cluster_id)
             cluster_shares = [
-                self._share_entry(cid, shid).get_share()
-                for cid, shid in share_ids
-                if cid == cluster_id
+                ShareEntry(entry.full_key[1], entry).get_share()
+                for entry in config_store.find_in_store(
+                    self.internal_store,
+                    str(ShareEntry.namespace),
+                    {'cluster_id': cluster_id},
+                )
             ]
             change_group = ClusterChangeGroup(
                 cluster,
