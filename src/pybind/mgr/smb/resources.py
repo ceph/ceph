@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, Iterable, List, Optional, Tuple, Union, cast
 
 import base64
 import dataclasses
@@ -1139,6 +1139,26 @@ class Cluster(_RBase):
         if self.bind_addrs is None:
             return None
         return [b.to_spec() for b in self.bind_addrs]
+
+
+def requires_persistent_handles(
+    cluster: Cluster, shares: Iterable[Share]
+) -> bool:
+    """Resolve managed global support, excluding RGW and custom options."""
+    # An enabled default reserves support even when no share uses it.
+    defaults = cluster.share_defaults
+    if (
+        defaults
+        and defaults.availability
+        and defaults.availability.persistent_handles
+    ):
+        return True
+    return any(
+        share.cephfs is not None
+        and share.availability is not None
+        and share.availability.persistent_handles is True
+        for share in shares
+    )
 
 
 @resourcelib.resource('ceph.smb.join.auth')

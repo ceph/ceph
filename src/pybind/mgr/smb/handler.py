@@ -395,6 +395,8 @@ class ClusterConfigHandler:
                             resource, staging, create_only=create_only
                         )
                     )
+                if results.success:
+                    staging.check_availability_transitions()
         except ErrorResult as err:
             results.replace(err)
         except Exception as err:

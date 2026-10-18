@@ -145,6 +145,63 @@ class Staging:
             self.destination_store, rgw_credential_id
         ).get_rgw_credential()
 
+    def check_availability_transitions(self) -> None:
+        """Validate transitions against the full batch after resource checks."""
+        affected: Dict[str, SMBResource] = {}
+        for resource in self.incoming.values():
+            if isinstance(resource, (resources.Cluster, resources.Share)):
+                affected.setdefault(resource.cluster_id, resource)
+        for cluster_id, source in affected.items():
+            cluster = self.get_cluster(cluster_id)
+            previous = (
+                None
+                if self.is_new(cluster)
+                else ClusterEntry.from_store(
+                    self.destination_store, cluster_id
+                ).get_cluster()
+            )
+            shares = {
+                entry.full_key: ShareEntry(
+                    entry.full_key[1], entry
+                ).get_share()
+                for entry in config_store.find_in_store(
+                    self.destination_store,
+                    str(ShareEntry.namespace),
+                    {'cluster_id': cluster_id},
+                )
+            }
+            previous_enabled = (
+                previous is not None
+                and resources.requires_persistent_handles(
+                    previous, shares.values()
+                )
+            )
+            for key in self.deleted:
+                shares.pop(key, None)
+            for key, resource in self.incoming.items():
+                if (
+                    isinstance(resource, resources.Share)
+                    and resource.cluster_id == cluster_id
+                ):
+                    shares[key] = resource
+            enabled = resources.requires_persistent_handles(
+                cluster, shares.values()
+            )
+            if previous is not None and not previous_enabled and enabled:
+                raise ErrorResult(
+                    source,
+                    'persistent handles cannot be enabled on an existing '
+                    'cluster when global support is disabled',
+                    status={
+                        'cluster_id': cluster_id,
+                        'hint': {
+                            'note': 'Enable persistent handles when creating '
+                            'the cluster, either in share_defaults.availability or on a '
+                            'CephFS share in the same batch',
+                        },
+                    },
+                )
+
     def save(self) -> ResultGroup:
         results = ResultGroup()
         for res in self.deleted.values():

@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 import smb
@@ -51,6 +53,49 @@ def _apply(module, resources):
     result = module._apply_res(resources)
     assert result.success, result.to_simplified()
     return result
+
+
+@pytest.mark.parametrize('opt_out', [False, True])
+def test_default_reserves_global_support(amodule, opt_out):
+    cluster = _cluster(
+        share_availability=ShareAvailability(persistent_handles=True)
+    )
+    shares = (
+        [_share(availability=ShareAvailability(persistent_handles=False))]
+        if opt_out
+        else []
+    )
+    assert smb.resources.requires_persistent_handles(cluster, shares)
+    _apply(amodule, [cluster, *shares])
+    # Reserved support lets future shares opt in without late enablement.
+    _apply(
+        amodule,
+        [_share('later', ShareAvailability(persistent_handles=True))],
+    )
+
+
+def test_availability_reconciliation(amodule):
+    enabled = ShareAvailability(persistent_handles=True)
+    share1 = _share(availability=enabled)
+    share2 = _share('s2', availability=enabled)
+    _apply(amodule, [_cluster(), share1, share2])
+    _apply(
+        amodule,
+        [
+            replace(
+                share1,
+                availability=ShareAvailability(persistent_handles=False),
+            )
+        ],
+    )
+    _apply(
+        amodule, [smb.resources.RemovedShare(cluster_id='foo', share_id='s2')]
+    )
+    result = amodule._apply_res([share1]).one()
+    assert not result.success
+    assert 'persistent handles cannot be enabled' in result.msg
+    stored = amodule._internal_store['shares', 'foo.s1'].get()
+    assert stored['availability']['persistent_handles'] is False
 
 
 def test_availability_invalid_boolean():
