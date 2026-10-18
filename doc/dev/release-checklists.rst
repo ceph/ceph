@@ -114,7 +114,7 @@ QA suite
 - [x] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
 - [x] update qa/ upgrade suites require-osd-release calls to tentacle
 - [x] create qa/releases/X.yaml
-- [ ] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
 - [ ] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
 
 
