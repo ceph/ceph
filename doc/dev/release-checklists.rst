@@ -130,7 +130,7 @@ In the `ceph/ceph-build.git` repo:
 CBT
 ---
 Completed once ``src/ceph_release`` has been updated to X:
-- [ ] create CBT branch for new release at https://github.com/ceph/cbt/tree/main
+- [x] create CBT branch for new release at https://github.com/ceph/cbt/tree/main
 - [ ] add mapping X -> release name to `CBT_RELEASE_MAP` in `ceph/qa/tasks/cbt.py`
 - [ ] schedule teuthology runs against ``main`` with all suites using CBT 
   `rados/perf` (12 workloads), `crimson-rados/perf` (12 workloads), `perf-basic` (3 workloads);
