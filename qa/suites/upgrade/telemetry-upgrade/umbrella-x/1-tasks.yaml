@@ -33,22 +33,22 @@ overrides:
       - but it is still running
 tasks:
 - install:
-    branch: squid
+    branch: umbrella
     exclude_packages:
       - ceph-volume
       - ceph-osd-classic
       - ceph-osd-crimson
 - print: "**** done install task..."
-- print: "**** done start installing squid cephadm ..."
+- print: "**** done start installing umbrella cephadm ..."
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:squid
-    compiled_cephadm_branch: squid
+    image: quay.ceph.io/ceph-ci/ceph:umbrella
+    compiled_cephadm_branch: umbrella
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
-- print: "**** done end installing squid cephadm ..."
+- print: "**** done end installing umbrella cephadm ..."
 
 - print: "**** done start cephadm.shell ceph config set mgr..."
 - cephadm.shell:
@@ -56,17 +56,17 @@ tasks:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 
-- print: "**** done start telemetry squid..."
+- print: "**** done start telemetry umbrella..."
 - workunit:
     clients:
       client.0:
-        - test_telemetry_squid.sh
-- print: "**** done end telemetry squid..."
+        - test_telemetry_umbrella.sh
+- print: "**** done end telemetry umbrella..."
 
 - print: "**** done start upgrade sequence..."
+- sequential: [ignore-auth-warn-cephadm]
 - sequential:
     - print: "**** done start upgrade..."
-    - sequential: [ignore-auth-warn-cephadm]
     - cephadm.shell:
         env: [sha1]
         mon.a:
@@ -83,12 +83,12 @@ tasks:
     - cephadm.shell:
         env: [sha1]
         mon.a:
-            - ceph osd require-osd-release umbrella
+            - ceph osd require-osd-release vampire
 
     - print: "**** done start telemetry x..."
     - workunit:
         clients:
           client.0:
-            - test_telemetry_squid_x.sh
+            - test_telemetry_umbrella_x.sh
     - print: "**** done end telemetry x..."
 - print: "**** done end upgrade sequence..."
