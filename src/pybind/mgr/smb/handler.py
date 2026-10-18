@@ -882,6 +882,24 @@ class _ShareConf:
     rgw_entity: str = ''
 
     @property
+    def persistent_handles(self) -> bool:
+        """Resolve the override without persisting inherited values."""
+        if self.resource.cephfs is None:
+            return False
+        availability = self.resource.availability
+        if (
+            availability is not None
+            and availability.persistent_handles is not None
+        ):
+            return availability.persistent_handles
+        defaults = self.cluster.share_defaults
+        return bool(
+            defaults
+            and defaults.availability
+            and defaults.availability.persistent_handles
+        )
+
+    @property
     def acl_support(self) -> ACLSupportPolicy:
         if self.resource.acl_support is not None:
             return self.resource.acl_support
@@ -1151,6 +1169,12 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         opts[f'{ceph_vfs}:keybridge name'] = str(cephfs.fscrypt_key.name)
         opts[f'{ceph_vfs}:keybridge kind'] = 'B64'
         opts[f'{ceph_vfs}:fscrypt'] = 'keybridge'
+    if conf.persistent_handles:
+        cfg['options']['continuous availability'] = 'yes'
+    elif (
+        share.availability and share.availability.persistent_handles is False
+    ):
+        cfg['options']['continuous availability'] = 'no'
     # extend share with user+group login access lists
     _generate_share_login_control(share, cfg)
     _generate_share_hosts_access(share, cfg)
@@ -1225,6 +1249,11 @@ def _generate_share_hosts_access(
 def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
     cluster_global_opts = {}
     cluster = conf.resource
+    persistent_handles = resources.requires_persistent_handles(
+        cluster, (share.resource for share in conf.shares)
+    )
+    if persistent_handles:
+        cluster_global_opts['persistent handles'] = 'yes'
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
         assert cluster.domain_settings is not None
         cluster_global_opts['security'] = 'ads'
