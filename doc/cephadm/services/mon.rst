@@ -126,7 +126,7 @@ specification:
 
 ``networks``
     A list of IP networks in CIDR notation (e.g., ``10.1.2.0/24``). If
-    specified, Monitors will only be deployed on hosts with IP addresses in
+    specified, Monitors will be deployed only on hosts with IP addresses in
     one of the listed networks. Write each network exactly as the subnet is
     configured on the hosts. This field does not set the address that a
     Monitor binds to. That address comes from the ``hostname:network`` form
