@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 CBT_FIRST_RELEASE = 21
 CBT_RELEASE_MAP = {
     21 : "umbrella",
-    # 22 : "vampire",
+    22 : "vampire",
     # 23 : "w_release" ...
 }
 
