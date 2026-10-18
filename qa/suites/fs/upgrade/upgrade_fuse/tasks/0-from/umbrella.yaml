@@ -1,26 +1,26 @@
 meta:
 - desc: |
-   setup ceph/squid
+   setup ceph/umbrella
 
 tasks:
 - install:
-    branch: squid
+    branch: umbrella
     exclude_packages:
       - ceph-volume
       - ceph-osd-classic
       - ceph-osd-crimson
 - print: "**** done install task..."
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:squid
+    image: quay.ceph.io/ceph-ci/ceph:umbrella
     skip_dashboard: true
     roleless: true
-    compiled_cephadm_branch: squid
+    compiled_cephadm_branch: umbrella
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
-- print: "**** done end installing squid cephadm ..."
+- print: "**** done end installing umbrella cephadm ..."
 - cephadm.shell:
     host.a:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force

@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/squid latest
+   install ceph/umbrella latest
 tasks:
 - install:
-    branch: squid
+    branch: umbrella
     exclude_packages:
       - cephadm
       - ceph-mgr-cephadm
@@ -29,7 +29,7 @@ tasks:
       - NetworkManager
       - iproute
       - util-linux
-- print: "**** done installing squid"
+- print: "**** done installing umbrella"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -51,5 +51,5 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client squid
+      - ceph osd set-require-min-compat-client umbrella
 - print: "**** done ceph"
