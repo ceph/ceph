@@ -404,6 +404,11 @@ class ClusterConfigHandler:
                             resource, staging, create_only=create_only
                         )
                     )
+                if results.success:
+                    for err in staging.check_availability_transitions(
+                        self.public_store
+                    ):
+                        results.replace(err)
         except ErrorResult as err:
             results.replace(err)
         except Exception as err:
@@ -634,6 +639,25 @@ class ClusterConfigHandler:
             self._remove_cluster(cluster_id)
 
     def _sync_modified(self, updated: ResultGroup) -> None:
+        # Only new clusters start as not yet orchestrated.
+        for result in updated.resources():
+            if (
+                isinstance(result.src, resources.Cluster)
+                and (result.status or {}).get('state') == State.CREATED
+            ):
+                cluster_id = result.src.cluster_id
+                entry = self.public_store[
+                    external.cluster_placeholder_key(cluster_id)
+                ]
+                if (
+                    not entry.exists()
+                    and not self.public_store[
+                        external.spec_backup_key(cluster_id)
+                    ].exists()
+                ):
+                    entry.set(
+                        {'cluster_id': cluster_id, 'orch_submitted': False}
+                    )
         cluster_ids = self._find_modifications(updated)
         self._sync_clusters(cluster_ids)
 

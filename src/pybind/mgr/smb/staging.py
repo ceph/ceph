@@ -17,7 +17,7 @@ import operator
 
 from ceph.fs.earmarking import EarmarkTopScope
 
-from . import config_store, resources, rgw, utils
+from . import config_store, external, resources, rgw, utils
 from .enums import (
     AuthMode,
     CaseInsensitiveCheckPolicy,
@@ -144,6 +144,90 @@ class Staging:
         return RGWCredentialEntry.from_store(
             self.destination_store, rgw_credential_id
         ).get_rgw_credential()
+
+    def check_availability_transitions(
+        self, public_store: ConfigStore
+    ) -> List[ErrorResult]:
+        """Validate transitions against the full batch after resource checks.
+        Return an error for every resource that is rejected.
+        """
+        affected: Dict[str, List[SMBResource]] = {}
+        for resource in self.incoming.values():
+            if isinstance(resource, (resources.Cluster, resources.Share)):
+                affected.setdefault(resource.cluster_id, []).append(resource)
+        errors: List[ErrorResult] = []
+        for cluster_id, batch in affected.items():
+            errors.extend(
+                self._check_cluster_availability(
+                    cluster_id, batch, public_store
+                )
+            )
+        return errors
+
+    def _check_cluster_availability(
+        self,
+        cluster_id: str,
+        batch: List[SMBResource],
+        public_store: ConfigStore,
+    ) -> List[ErrorResult]:
+        ckey = (str(ClusterEntry.namespace), cluster_id)
+        if ckey not in self._store_keys():
+            return []
+        if not external.cluster_orchestration_submitted(
+            public_store, cluster_id
+        ):
+            return []
+        previous = ClusterEntry.from_store(
+            self.destination_store, cluster_id
+        ).get_cluster()
+        cluster = self.incoming.get(ckey, previous)
+        assert isinstance(cluster, resources.Cluster)
+        shares = ShareEntry.get_cluster_shares(
+            self.destination_store, cluster_id
+        )
+        if resources.requires_persistent_handles(previous, shares.values()):
+            return []
+        for key in self.deleted:
+            shares.pop(key, None)
+        for key, resource in self.incoming.items():
+            if (
+                isinstance(resource, resources.Share)
+                and resource.cluster_id == cluster_id
+            ):
+                shares[key] = resource
+        if not resources.requires_persistent_handles(
+            cluster, shares.values()
+        ):
+            return []
+        # Only the batch can introduce the requirement.
+        enablers = [
+            resource
+            for resource in batch
+            if (
+                isinstance(resource, resources.Cluster)
+                and resource.default_persistent_handles
+            )
+            or (
+                isinstance(resource, resources.Share)
+                and resource.persistent_handles_override
+            )
+        ]
+        return [
+            ErrorResult(
+                resource,
+                'persistent handles cannot be enabled after orchestration '
+                'has started or when its history is unknown',
+                status={
+                    'cluster_id': cluster_id,
+                    'hint': {
+                        'note': 'To enable persistent handles, remove and '
+                        'recreate the SMB cluster with them enabled before '
+                        'first orchestration. This interrupts SMB service.',
+                    },
+                },
+            )
+            for resource in enablers or batch[:1]
+        ]
 
     def save(self) -> ResultGroup:
         results = ResultGroup()

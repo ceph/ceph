@@ -1,6 +1,10 @@
+from dataclasses import replace
+from unittest.mock import Mock
+
 import pytest
 
 import smb
+from smb.resources import ShareAvailability
 
 
 def _cluster(cluster_id='foo', share_availability=None):
@@ -32,7 +36,7 @@ def _share(share_id='s1', availability=None, cluster_id='foo'):
 
 @pytest.fixture
 def amodule():
-    return smb.module.Module(
+    module = smb.module.Module(
         'smb',
         '',
         '',
@@ -44,12 +48,129 @@ def amodule():
         earmark_resolver=smb.handler._FakeEarmarkResolver(),
         update_orchestration=False,
     )
+    module._handler._orch = Mock()
+    return module
 
 
 def _apply(module, resources):
     result = module._apply_res(resources)
     assert result.success, result.to_simplified()
     return result
+
+
+def test_orchestration_history_lifecycle(amodule):
+    cluster = _cluster()
+    _apply(amodule, [cluster, _share()])
+    entry = amodule._public_store['foo', 'cluster-info']
+    assert entry.get()['orch_submitted'] is True
+    _apply(
+        amodule, [smb.resources.RemovedShare(cluster_id='foo', share_id='s1')]
+    )
+    orch = amodule._handler._orch
+    amodule._handler._orch = None
+    _apply(amodule, [cluster])
+    assert entry.get()['orch_submitted'] is True
+    enabled = _share(availability=ShareAvailability(persistent_handles=True))
+    result = amodule._apply_res([enabled]).one()
+    assert not result.success
+    assert 'persistent handles cannot be enabled' in result.msg
+    amodule._handler._orch = orch
+    _apply(amodule, [smb.resources.RemovedCluster(cluster_id='foo')])
+    assert not entry.exists()
+    orch.remove_smb_service.assert_called_once_with('smb.foo')
+    _apply(amodule, [cluster])
+    assert entry.get()['orch_submitted'] is False
+    _apply(amodule, [enabled])
+
+
+def test_unknown_orchestration_history(amodule):
+    cluster = _cluster()
+    _apply(amodule, [cluster])
+    entry = amodule._public_store['foo', 'cluster-info']
+    info = dict(entry.get())
+    del info['orch_submitted']
+    entry.set(info)
+    _apply(amodule, [cluster])
+    assert entry.get()['orch_submitted'] is None
+    result = amodule._apply_res(
+        [_share(availability=ShareAvailability(persistent_handles=True))]
+    ).one()
+    assert not result.success
+    assert 'history is unknown' in result.msg
+
+
+def _results_by_id(result_group):
+    found = {}
+    for result in result_group:
+        src = result.src
+        rid = getattr(src, 'share_id', None) or src.cluster_id
+        assert rid not in found, f'duplicate result for {rid}'
+        found[rid] = result
+    return found
+
+
+def test_transition_error_blames_enablers(amodule):
+    _apply(amodule, [_cluster(), _share('s0')])
+    enabled = ShareAvailability(persistent_handles=True)
+    rg = amodule._apply_res(
+        [
+            _cluster(share_availability=enabled),
+            _share('s1'),
+            _share('s2', enabled),
+        ]
+    )
+    assert not rg.success
+    found = _results_by_id(rg)
+    assert set(found) == {'foo', 's1', 's2'}
+    # Inheriting the default does not make s1 responsible.
+    assert isinstance(found['s1'], smb.results.ResourceResult)
+    assert found['s1'].success
+    for rid in ('foo', 's2'):
+        assert isinstance(found[rid], smb.results.ErrorResult)
+        assert 'persistent handles cannot be enabled' in found[rid].msg
+
+
+@pytest.mark.parametrize('opt_out', [False, True])
+def test_default_reserves_global_support(amodule, opt_out):
+    cluster = _cluster(
+        share_availability=ShareAvailability(persistent_handles=True)
+    )
+    shares = (
+        [_share(availability=ShareAvailability(persistent_handles=False))]
+        if opt_out
+        else []
+    )
+    assert smb.resources.requires_persistent_handles(cluster, shares)
+    _apply(amodule, [cluster, *shares])
+    # Future shares can still opt in.
+    _apply(
+        amodule,
+        [_share('later', ShareAvailability(persistent_handles=True))],
+    )
+
+
+def test_availability_reconciliation(amodule):
+    enabled = ShareAvailability(persistent_handles=True)
+    share1 = _share(availability=enabled)
+    share2 = _share('s2', availability=enabled)
+    _apply(amodule, [_cluster(), share1, share2])
+    _apply(
+        amodule,
+        [
+            replace(
+                share1,
+                availability=ShareAvailability(persistent_handles=False),
+            )
+        ],
+    )
+    _apply(
+        amodule, [smb.resources.RemovedShare(cluster_id='foo', share_id='s2')]
+    )
+    result = amodule._apply_res([share1]).one()
+    assert not result.success
+    assert 'persistent handles cannot be enabled' in result.msg
+    stored = amodule._internal_store['shares', 'foo.s1'].get()
+    assert stored['availability']['persistent_handles'] is False
 
 
 def test_availability_invalid_boolean():
