@@ -4,10 +4,11 @@ from unittest.mock import Mock
 import pytest
 
 import smb
+from smb.enums import PersistentHandlesDurability as Durability
 from smb.resources import ShareAvailability
 
 
-def _cluster(cluster_id='foo', share_availability=None):
+def _cluster(cluster_id='foo', share_availability=None, durability=None):
     return smb.resources.Cluster(
         cluster_id=cluster_id,
         auth_mode=smb.enums.AuthMode.USER,
@@ -22,6 +23,7 @@ def _cluster(cluster_id='foo', share_availability=None):
             if share_availability is not None
             else None
         ),
+        persistent_handles_durability=durability,
     )
 
 
@@ -208,7 +210,8 @@ def test_availability_reconciliation(amodule):
     cluster = _cluster(
         share_availability=ShareAvailability(
             persistent_handles=False,
-        )
+        ),
+        durability=Durability.PARTIAL_OUTAGE,
     )
     enabled = ShareAvailability(persistent_handles=True)
     share1 = _share(availability=enabled)
@@ -225,6 +228,7 @@ def test_availability_reconciliation(amodule):
     )
     opts = _globals(amodule)
     assert opts['persistent handles'] == 'yes'
+    assert opts['persistent handles durability'] == 'partial_outage'
 
     # Keep support required by other stored shares.
     disabled = ShareAvailability(persistent_handles=False)
@@ -245,6 +249,47 @@ def test_availability_reconciliation(amodule):
     stored_share = amodule._internal_store['shares', 'foo.s1'].get()
     assert stored_share['availability']['persistent_handles'] is False
     assert 'persistent handles' not in _globals(amodule)
+    stored = amodule._internal_store['clusters', 'foo'].get()
+    assert stored['persistent_handles_durability'] == 'partial_outage'
+    assert 'availability' not in stored
+    assert (
+        stored['share_defaults']['availability']['persistent_handles']
+        is False
+    )
+    _apply(amodule, [cluster])
+    assert 'persistent handles durability' not in _globals(amodule)
+
+
+@pytest.mark.parametrize(
+    'old,new,enabled,allowed',
+    [
+        (None, Durability.FULL_OUTAGE, True, True),
+        (Durability.PARTIAL_OUTAGE, Durability.FULL_OUTAGE, False, False),
+    ],
+)
+def test_durability_immutable(amodule, old, new, allowed, enabled):
+    cluster = _cluster(
+        share_availability=ShareAvailability(persistent_handles=enabled),
+        durability=old,
+    )
+    _apply(amodule, [cluster, _share()])
+    result = amodule._apply_res(
+        [
+            replace(
+                cluster,
+                persistent_handles_durability=new,
+            )
+        ]
+    )
+    assert result.success == allowed, result.to_simplified()
+    if not allowed:
+        assert 'persistent_handles_durability value may not be changed' in (
+            result.to_simplified()['results'][0]['msg']
+        )
+        assert (
+            amodule._internal_store['clusters', 'foo'].get()
+            == cluster.to_simplified()
+        )
 
 
 def test_availability_invalid_boolean():

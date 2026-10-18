@@ -41,6 +41,7 @@ from .enums import (
     LoginAccess,
     LoginCategory,
     PasswordFilter,
+    PersistentHandlesDurability,
     SMBClustering,
     SourceReferenceType,
     TLSCredentialType,
@@ -1012,6 +1013,10 @@ class Cluster(_RBase):
     keybridge: Optional[KeyBridge] = None
     # client support mode for client-specific optimizations (macOS, etc.)
     client_compat: Optional[ClientSupportMode] = None
+    # cluster-wide persistent handles durability
+    persistent_handles_durability: Optional[
+        PersistentHandlesDurability
+    ] = None
     # share defaults
     share_defaults: Optional[ShareDefaults] = None
 

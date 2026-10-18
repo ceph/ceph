@@ -24,6 +24,7 @@ from .enums import (
     ConfigNS,
     Intent,
     JoinSourceType,
+    PersistentHandlesDurability,
     SMBClustering,
     SourceReferenceType,
     State,
@@ -182,6 +183,28 @@ class Staging:
         ).get_cluster()
         cluster = self.incoming.get(ckey, previous)
         assert isinstance(cluster, resources.Cluster)
+        # Database backup behavior is fixed when smbd opens its databases.
+        durability = (
+            cluster.persistent_handles_durability
+            or PersistentHandlesDurability.FULL_OUTAGE
+        )
+        prev_durability = (
+            previous.persistent_handles_durability
+            or PersistentHandlesDurability.FULL_OUTAGE
+        )
+        if durability != prev_durability:
+            return [
+                ErrorResult(
+                    cluster,
+                    'persistent_handles_durability value may not be changed '
+                    'after orchestration has started or when its history is unknown',
+                    status={
+                        'existing_values': [
+                            {'persistent_handles_durability': prev_durability}
+                        ]
+                    },
+                )
+            ]
         shares = ShareEntry.get_cluster_shares(
             self.destination_store, cluster_id
         )
