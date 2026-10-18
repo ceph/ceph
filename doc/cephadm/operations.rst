@@ -248,9 +248,9 @@ Rotating a Daemon's Authentication Key
 
 All Ceph and gateway daemons in the cluster have a secret key that is used to connect
 to and authenticate with the cluster.  The ``ceph orch daemon rotate-key``
-command is disabled. It is rejected on main, in Squid from 19.2.6 and in
-Tentacle from 20.2.4, because it did not work for some daemon types that have
-client keys (for example NFS and NVMe-oF) and could take those daemons down.
+command is disabled in releases beginning with Squid 19.2.6 and
+Tentacle 20.2.4. It did not work for some daemon types that have client keys
+(for example NFS and NVMe-oF) and could take those daemons down.
 
 
 .. _cephadm-logs:
@@ -933,9 +933,9 @@ Commands requiring passwordless sudo support:
    python command to add to the ``sudo`` configuration.
    In some rare configurations ``/usr/bin/cephadm`` will be used instead.
 
-.. note:: This list is correct for Squid and Tentacle. On the main branch the
-   Manager no longer runs ``which``, ``python3``, ``rm``, ``sysctl`` or
-   ``true`` over SSH. It runs the cephadm binary directly, as
+.. note:: This list is correct for Umbrella and earlier releases. In later
+   releases, the Manager no longer runs ``which``, ``python3``, ``rm``,
+   ``sysctl`` or ``true`` over SSH. It runs the cephadm binary directly, as
    ``sudo /var/lib/ceph/<fsid>/cephadm.<sha256 of the binary>``, and uses
    ``ls``, ``mkdir``, ``touch``, ``chown``, ``chmod`` and ``mv`` to install
    that binary. The example ``sudoers`` line below does not allow that path.
