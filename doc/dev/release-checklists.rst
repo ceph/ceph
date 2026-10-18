@@ -111,7 +111,7 @@ QA suite
 - [x] create qa/workunits/test_telemetry_(X-1)_x.sh
 - [x] create qa/suites/upgrade/(X-1)-x
 - [x] remove qa/suites/upgrade/(X-3)-x-*
-- [ ] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
+- [x] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
 - [ ] update qa/ upgrade suites require-osd-release calls to tentacle
 - [ ] create qa/releases/X.yaml
 - [ ] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml

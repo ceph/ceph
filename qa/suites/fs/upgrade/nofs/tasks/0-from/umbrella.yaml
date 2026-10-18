@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/squid latest
+   install ceph/umbrella latest
 tasks:
 - install:
-    branch: squid
+    branch: umbrella
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -15,7 +15,7 @@ tasks:
       - ceph-osd-classic
       - ceph-osd-crimson
     extra_packages: ['librados2']
-- print: "**** done installing squid"
+- print: "**** done installing umbrella"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -37,5 +37,5 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client squid
+      - ceph osd set-require-min-compat-client umbrella
 - print: "**** done ceph"
