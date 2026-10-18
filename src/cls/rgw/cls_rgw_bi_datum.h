@@ -59,23 +59,23 @@ struct put_request final
     bool check_existing = false;
 };
 
+// Borrow records only during encoding; the returned message retains its bytes.
 ::ceph::buffer::list encode_request(std::uint32_t maximum, std::string_view filter,
                                     std::string_view marker, bool reshard);
 ::ceph::buffer::list encode_get_request(const ::cls_rgw_obj_key& key, ::BIIndexType type);
-void decode(get_request& value, ::ceph::buffer::list::const_iterator& input);
-void encode(const entry& value, ::ceph::buffer::list& output);
-::rgw_cls_bi_entry decode_get_reply(const ::ceph::buffer::list& input);
-
-void decode(request& value, ::ceph::buffer::list::const_iterator& input);
-void decode(put_request& value, ::ceph::buffer::list::const_iterator& input);
-void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& input);
-void decode(entry& value, ::ceph::buffer::list::const_iterator& input);
-void encode(const reply& value, ::ceph::buffer::list& output);
-
-// Borrow records only during encoding; the returned message retains its bytes.
 ::ceph::buffer::list encode_put_request(const std::vector<::rgw_cls_bi_entry>& entries,
                                         bool check_existing);
 ::ceph::buffer::list encode_put_entry(const ::rgw_cls_bi_entry& value);
+
+void encode(const entry& value, ::ceph::buffer::list& output);
+void encode(const reply& value, ::ceph::buffer::list& output);
+
+void decode(request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(get_request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(put_request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& input);
+void decode(entry& value, ::ceph::buffer::list::const_iterator& input);
+::rgw_cls_bi_entry decode_get_reply(const ::ceph::buffer::list& input);
 
 // Explicit vector/list instantiations return owned candidates. The client
 // publishes caller outputs only after transport and decoding have succeeded.

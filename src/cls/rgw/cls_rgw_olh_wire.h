@@ -160,19 +160,13 @@ auto decode_reply(datum::binary_fields<EventMember...> event_fields,
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
         const auto size = fields.template sequence_size<12>(1);
         GroupsT groups;
-        if constexpr (requires { groups.reserve(size); }) {
-            groups.reserve(size);
-        }
+        ::ceph::util::maybe_reserve(groups, size);
         for (std::uint32_t index = 0; index < size; ++index) {
             const auto epoch = fields.template scalar<std::uint64_t>();
-            const auto count = fields.template sequence_size<34>();
-            EntriesT entries;
-            if constexpr (requires { entries.reserve(count); }) {
-                entries.reserve(count);
-            }
-            for (std::uint32_t item = 0; item < count; ++item) {
-                detail::decode_event(event_fields, key_fields, fields, entries.emplace_back());
-            }
+            auto entries = fields.template sequence<34, EntriesT>(
+                [event_fields, key_fields](auto& fields, auto& entry) {
+                    detail::decode_event(event_fields, key_fields, fields, entry);
+                });
             std::invoke(insert, groups, epoch, std::move(entries));
         }
         const bool truncated = 0 != fields.template scalar<std::uint8_t>();

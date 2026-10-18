@@ -3,6 +3,7 @@
 #ifndef CEPH_CLS_RGW_DATUM_WIRE_H
  #define CEPH_CLS_RGW_DATUM_WIRE_H
 
+#include "common/container_concepts.h"
 #include "datum/codec/zpp.h"
 #include "include/buffer.h"
 #include "include/compat.h"
@@ -392,6 +393,21 @@ public:
         input.copy(size, value);
     }
 
+    // Validate the count before allocating unpublished sequence storage:
+    template <unsigned Minimum, typename EntriesT, typename DecodeT>
+    requires ::ceph::concepts::has_emplace_back<EntriesT>
+    EntriesT sequence(DecodeT&& decode, const unsigned tail = 0)
+    {
+        const auto count = sequence_size<Minimum>(tail);
+        EntriesT entries;
+        ::ceph::util::maybe_reserve(entries, count);
+        for (std::uint32_t index = 0; index < count; ++index) {
+            std::invoke(decode, *this, entries.emplace_back());
+        }
+
+        return entries;
+    }
+
     // Nested native codecs retain their wire rules; validate their consumed
     // bytes against this envelope before advancing its cursor:
     template <typename T>
@@ -403,6 +419,14 @@ public:
         decode(value, cursor);
         require(cursor.get_off() - input.get_off());
         input = cursor;
+    }
+
+    template <unsigned Minimum, typename EntriesT>
+    requires ::ceph::concepts::has_emplace_back<EntriesT>
+    EntriesT native(const unsigned tail = 0)
+    {
+        return sequence<Minimum, EntriesT>(
+            [](auto& fields, auto& value) { fields.native(value); }, tail);
     }
 
     template <typename BodyT>

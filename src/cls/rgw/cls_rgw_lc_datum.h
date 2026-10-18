@@ -45,13 +45,14 @@ struct list_reply final
 ::ceph::buffer::list encode(const ::cls_rgw_lc_entry& entry);
 ::ceph::buffer::list encode(const ::cls_rgw_lc_obj_head& head);
 ::ceph::buffer::list encode(std::string_view marker, std::uint32_t maximum);
+void encode(const entry_message& value, ::ceph::buffer::list& output);
+void encode(const head_message& value, ::ceph::buffer::list& output);
+void encode(const list_reply& value, ::ceph::buffer::list& output);
+
 void decode(marker_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(entry_message& value, ::ceph::buffer::list::const_iterator& input);
 void decode(head_message& value, ::ceph::buffer::list::const_iterator& input);
 void decode(list_request& value, ::ceph::buffer::list::const_iterator& input);
-void encode(const entry_message& value, ::ceph::buffer::list& output);
-void encode(const head_message& value, ::ceph::buffer::list& output);
-void encode(const list_reply& value, ::ceph::buffer::list& output);
 
 } // cls::rgw::lc_datum
 

@@ -218,14 +218,8 @@ auto decode_entries(datum::binary_fields<Member...> selected, byte_buffer::const
 
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
         // Each entry needs at least 15 bytes; reserve the final flag byte.
-        const auto size = fields.template sequence_size<15>(1);
-        EntriesT entries;
-        if constexpr (requires { entries.reserve(size); }) {
-            entries.reserve(size);
-        }
-        for (std::uint32_t index = 0; index < size; ++index) {
-            detail::decode_entry(selected, fields, entries.emplace_back());
-        }
+        auto entries = fields.template sequence<15, EntriesT>(
+            [selected](auto& fields, auto& entry) { detail::decode_entry(selected, fields, entry); }, 1);
         const bool flag = 0 != fields.template scalar<std::uint8_t>();
 
         return std::pair {std::move(entries), flag};

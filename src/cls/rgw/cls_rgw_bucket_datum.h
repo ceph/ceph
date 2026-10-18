@@ -15,7 +15,8 @@
 
 namespace cls::rgw::bucket_datum {
 
-struct request final {
+struct request final
+{
     ::cls_rgw_obj_key start_obj;
     std::string filter_prefix;
     std::string delimiter;
@@ -25,13 +26,16 @@ struct request final {
 };
 
 template <typename EntriesT>
-struct directory final {
+struct directory final
+{
     ::rgw_bucket_dir_header header;
+
     EntriesT m;
 };
 
 template <typename EntriesT>
-struct list_reply final {
+struct list_reply final
+{
     directory<EntriesT> dir;
     ::cls_rgw_obj_key marker;
 
@@ -45,18 +49,21 @@ using reply = list_reply<flat_entries>;
 using stat_association = std::pair<::RGWObjCategory, ::rgw_bucket_category_stats>;
 using stat_associations = std::vector<stat_association>;
 
-struct stats_request final {
+struct stats_request final
+{
     stat_associations stats;
     stat_associations dec_stats;
 
     bool absolute = false;
 };
 
-struct timeout_request final {
+struct timeout_request final
+{
     std::uint64_t tag_timeout = 0;
 };
 
-struct check_reply final {
+struct check_reply final
+{
     ::rgw_bucket_dir_header existing_header;
     ::rgw_bucket_dir_header calculated_header;
 };

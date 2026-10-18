@@ -8,7 +8,7 @@ using ::cls::rgw::wire::decode_record;
 using ::cls::rgw::wire::writer;
 
 ::ceph::buffer::list encode_bulk(const std::list<::cls_user_bucket_entry>& entries,
-                               const bool add, const ::ceph::real_time time)
+                                 const bool add, const ::ceph::real_time time)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -31,7 +31,7 @@ using ::cls::rgw::wire::writer;
 }
 
 ::ceph::buffer::list encode_bucket_list(const std::string_view marker,
-                                      const std::string_view end_marker, const int maximum)
+                                        const std::string_view end_marker, const int maximum)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -63,7 +63,7 @@ using ::cls::rgw::wire::writer;
 }
 
 ::ceph::buffer::list encode_resource_add(const ::cls_user_account_resource& entry,
-                                       const bool exclusive, const std::uint32_t limit)
+                                         const bool exclusive, const std::uint32_t limit)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -86,8 +86,8 @@ using ::cls::rgw::wire::writer;
 }
 
 ::ceph::buffer::list encode_resource_list(const std::string_view marker,
-                                        const std::string_view path_prefix,
-                                        const std::uint32_t maximum)
+                                          const std::string_view path_prefix,
+                                          const std::uint32_t maximum)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -105,11 +105,7 @@ void decode(bulk_request& value, ::ceph::buffer::list::const_iterator& input)
     decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
         // The oldest bucket entry has a one-byte version, empty name, size and mtime.
         // Reserve only after proving the count fits, including the bool/time tail.
-        const auto count = fields.template sequence_size<17>(9);
-        candidate.entries.reserve(count);
-        for (std::uint32_t index = 0; index < count; ++index) {
-            fields.native(candidate.entries.emplace_back());
-        }
+        candidate.entries = fields.template native<17, decltype(candidate.entries)>(9);
         candidate.add = 0 != fields.template scalar<std::uint8_t>();
         fields.native(candidate.time);
     });

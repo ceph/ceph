@@ -14,18 +14,21 @@
 
 namespace cls::rgw::bilog_datum {
 
-struct list_request final {
+struct list_request final
+{
     std::string marker;
 
     std::uint32_t max = 0;
 };
 
-struct trim_request final {
+struct trim_request final
+{
     std::string start_marker;
     std::string end_marker;
 };
 
-struct reply final {
+struct reply final
+{
     std::vector<::rgw_bi_log_entry> entries;
 
     bool truncated = false;

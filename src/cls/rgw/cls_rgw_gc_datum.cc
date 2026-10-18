@@ -34,7 +34,7 @@ using ::cls::rgw::wire::writer;
 }
 
 ::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum,
-                                  const bool expired)
+                                 const bool expired)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -86,11 +86,8 @@ void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(remove_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        const auto count = fields.template sequence_size<4>();
-        candidate.tags.reserve(count);
-        for (std::uint32_t index = 0; index < count; ++index) {
-            fields.text(candidate.tags.emplace_back());
-        }
+        candidate.tags = fields.template sequence<4, decltype(candidate.tags)>(
+            [](auto& fields, auto& tag) { fields.text(tag); });
     });
 }
 
@@ -114,13 +111,7 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
     list_reply<EntriesT> candidate;
     reader archive {cursor};
     archive.frame(2, [&](auto& fields, const std::uint8_t version) {
-        const auto count = fields.template sequence_size<28>(version >= 2 ? 5 : 1);
-        if constexpr (::ceph::concepts::reservable_container<EntriesT>) {
-            candidate.entries.reserve(count);
-        }
-        for (std::uint32_t index = 0; index < count; ++index) {
-            fields.native(candidate.entries.emplace_back());
-        }
+        candidate.entries = fields.template native<28, EntriesT>(version >= 2 ? 5 : 1);
         if (version >= 2) {
             fields.text(candidate.next_marker);
         }
@@ -139,10 +130,13 @@ template list_reply<std::list<::cls_rgw_gc_obj_info>> decode_reply(const ::ceph:
 
 namespace cls::rgw::queued_gc_datum {
 
+using ::cls::rgw::wire::decode_record;
+using ::cls::rgw::wire::writer;
+
 ::ceph::buffer::list encode_init(const std::uint64_t size, const std::uint64_t deferred)
 {
     ::ceph::buffer::list output;
-    ::cls::rgw::wire::writer archive {output};
+    writer archive {output};
     archive.frame(1, [&] {
         archive.scalar(size);
         archive.scalar(deferred);
@@ -154,7 +148,7 @@ namespace cls::rgw::queued_gc_datum {
 ::ceph::buffer::list encode_remove(const std::uint64_t count)
 {
     ::ceph::buffer::list output;
-    ::cls::rgw::wire::writer archive {output};
+    writer archive {output};
     archive.frame(1, [&] { archive.scalar(count); });
 
     return output;
@@ -162,7 +156,7 @@ namespace cls::rgw::queued_gc_datum {
 
 void decode(init_request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    ::cls::rgw::wire::decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
         candidate.size = fields.template scalar<std::uint64_t>();
         candidate.num_deferred_entries = fields.template scalar<std::uint64_t>();
     });
@@ -170,7 +164,7 @@ void decode(init_request& value, ::ceph::buffer::list::const_iterator& input)
 
 void decode(remove_request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    ::cls::rgw::wire::decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
+    decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
         candidate.num_entries = fields.template scalar<std::uint64_t>();
     });
 }

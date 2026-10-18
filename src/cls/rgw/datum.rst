@@ -340,8 +340,11 @@ ranges retain their owners. Those underlying allocations remain alive until the
 reply is released and may contain additional stored events; avoiding
 materialization does not imply minimum retained memory.
 
-Adapter-decoded nested frames have their own read boundaries. Outer sequence
-counts are checked against minimum encoded element sizes before reserving storage.
+Adapter-decoded nested frames have their own read boundaries. The RGW reader
+shares one counted-sequence loop between native leaves and selected-field
+decoders. Each binding supplies the minimum encoded element size and any
+required trailing bytes; count checks precede storage reservation and in-place
+element decoding. Vector and list bindings use the same loop.
 These checks reject impossible outer allocations; they are not a total work or
 memory quota for an arbitrarily large valid message. Native stored-object codecs and their resource policy remain
 separate from the request/reply adapters.

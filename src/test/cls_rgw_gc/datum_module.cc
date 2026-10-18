@@ -19,18 +19,26 @@ bytes canonical(const auto& value)
     encode(value, result);
     return result;
 }
-struct storage {
+
+struct storage final
+{
     ::cls_queue_head head;
     std::vector<::cls_queue_list_ret> pages;
+
     std::vector<::cls_queue_list_op> lists;
     std::vector<std::pair<std::string, bytes>> effects;
     std::vector<bytes> enqueued;
+
     std::string removed;
     bytes xattr;
     bool has_xattr = false;
+
     unsigned page = 0;
+
     int fail_at = -1;
     int failure = -EAGAIN;
+
+public:
     storage()
     {
         ::cls_rgw_gc_urgent_data urgent;
@@ -38,7 +46,9 @@ struct storage {
         head.bl_urgent_data = canonical(urgent);
         head.max_urgent_data_size = 1024 * 1024;
     }
+
 };
+
 using method = std::pair<int, ::cls_method_cxx_call_t>;
 std::map<std::string, method> methods;
 int effect(storage& state, std::string name, bytes value = {})
