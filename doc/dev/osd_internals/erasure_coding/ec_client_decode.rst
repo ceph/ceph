@@ -53,19 +53,14 @@ bandwidth onto a subset of OSDs at a time when the cluster is already doing
 recovery. Client latency and throughput drop exactly when the cluster is
 least able to absorb it.
 
-There are also gaps in the healthy path that matter for RGW:
+RGW already uses direct reads when the operator sets
+``rados_replica_read_policy=balance`` for the RGW daemons, so RGW needs no
+changes for this design.
 
-- RGW does not request balanced reads on its data path, so it never uses
-  direct reads unless the operator sets the global
-  ``rados_replica_read_policy=balance``.
-- librados requests the object version on every read unless
-  ``set_no_version_on_read()`` is called. RGW does not call it. A version
-  request forces an extra sub-read to the primary even for a read that fits
-  in one chunk on a non-primary shard.
-- In the current implementation, a non-``EAGAIN`` error from *any* shard
-  (for example ``-EIO`` from a single medium error) is returned to the
-  application instead of being retried via the primary. See
-  ``SplitOp::assemble_rc()``.
+There is also a gap in the healthy path. In the current implementation, a
+non-``EAGAIN`` error from *any* shard (for example ``-EIO`` from a single
+medium error) is returned to the application instead of being retried via
+the primary. See ``SplitOp::assemble_rc()``.
 
 Why Is This Important?
 ----------------------
@@ -106,8 +101,9 @@ In Scope (Requirements)
 #. **Shared code with Fast EC.** Read planning, extent arithmetic and decode
    come from code shared with the OSD's Fast EC read pipeline. The client
    does not have its own EC implementation.
-#. **RGW coverage.** All RGW data read paths (see `RGW Read Path Coverage`_)
-   use direct reads on Fast EC data pools, including in degraded mode.
+#. **RGW coverage.** With ``rados_replica_read_policy=balance``, all RGW
+   data read paths (see `RGW Read Path Coverage`_) use direct reads on Fast
+   EC data pools, including in degraded mode, without RGW code changes.
 #. **Upgrade.** Client-side decode is only enabled once every OSD runs a
    release that supports it. Older clients keep working (healthy direct reads
    or primary reads). Newer clients against older OSDs behave as today.
@@ -144,7 +140,6 @@ Dependencies
 - EC direct reads / ``SplitOp`` framework (Umbrella) and the recent
   ``Objecter`` fixes for forced-OSD reads on interval change.
 - Fast EC read pipeline (``ECCommon::ReadPipeline``, ``ECUtil``).
-- RGW team: data-path flag changes and packaging review (see stories).
 - Build/packaging: EC plugins must be available to the RGW process.
 - QE / Performance: RGW large-object degraded-mode benchmarks.
 
@@ -153,11 +148,11 @@ Customers & Stakeholders
 
 - **Driving:** Product management for object storage. Customers running RGW
   on Fast EC with large objects (backup, media, AI data lakes).
-- **Impacted squads:** RADOS (Objecter, OSD, Mon), RGW (data path, packaging).
+- **Impacted squads:** RADOS (Objecter, OSD, Mon), Build (packaging).
 - **Contributing teams:**
 
-  - RGW: set balanced-read and no-version flags on data reads (Story 1),
-    review head-object behaviour, packaging dependency.
+  - RGW: review `RGW Read Path Coverage`_ and the head-object behaviour.
+    No RGW code changes.
   - QE: teuthology suites for RGW on Fast EC with OSD thrashing.
   - Performance: healthy and degraded RGW GET benchmarks before merge to
     main.
@@ -176,9 +171,10 @@ with the number of OSDs rather than being limited by primary OSDs.
 
 *Acceptance criteria:*
 
-- With default RGW and client configuration on a healthy cluster, at least
-  99% of data bytes returned by RGW GETs of objects of 64 MiB or larger are
-  served by direct reads (``objecter`` counters on the RGW process).
+- With ``rados_replica_read_policy=balance`` set for RGW on a healthy
+  cluster, at least 99% of data bytes returned by RGW GETs of objects of
+  64 MiB or larger are served by direct reads (``objecter`` counters on the
+  RGW process).
 - Read data is byte-identical to the data written (checksum verified by the
   benchmark tool).
 - Ordered and complex operations from RGW keep working unchanged
@@ -238,9 +234,9 @@ Success Criteria
 - Stories 1–4 acceptance criteria met.
 - No regression in RGW s3-tests, ``rados`` and ``rgw`` teuthology suites
   run on Fast EC data pools.
-- RGW small-object GET (4 KiB–1 MiB) p99 latency is no worse than 10% above
-  the primary-mediated baseline. If it is, the head-object policy in
-  `RGW Read Path Coverage`_ is changed before GA.
+- RGW small-object GET (4 KiB–1 MiB) p99 latency with
+  ``rados_replica_read_policy=balance`` is no worse than 10% above the
+  primary-mediated baseline. If it is, see `Open Questions`_.
 - Primary OSD network egress for read workloads drops to about the primary's
   own shard share (about ``1/k`` of the PG's read bandwidth) in both healthy
   and degraded modes.
@@ -250,7 +246,9 @@ Impact on Dependent Products
 
 Downstream products that deploy RGW (for example ODF/Fusion object
 services) need to ship the EC plugins in the RGW container image. The
-standard Ceph container already includes them. Otherwise, there is no impact.
+standard Ceph container already includes them. To use direct reads, they set
+``rados_replica_read_policy=balance`` in the RGW configuration. Otherwise,
+there is no impact.
 
 High-Level Solution
 -------------------
@@ -323,15 +321,17 @@ Alternatives considered:
 User Experience
 ---------------
 
-No user action is needed in the normal case.
+No user action is needed in the normal case, beyond the existing opt-in to
+balanced reads.
 
 #. **Upgrade.** After all OSDs run the V release and the operator runs
    ``ceph osd require-osd-release v``, the monitor sets the
    ``ec_client_decode`` flag on every Fast EC pool, alongside the existing
    ``split_reads`` flag.
-#. **RGW.** RGW requests balanced reads on its data path by default
-   (``rgw_data_balanced_reads=true``), so RGW GETs use direct reads without
-   changing global client options.
+#. **RGW** opts in with the existing client option, for example
+   ``ceph config set client.rgw rados_replica_read_policy balance``. RGW
+   sets no read flags of its own and sends no ordered reads, so every RGW
+   data read then uses direct reads. No RGW code changes are needed.
 #. **Other librados clients** opt in as today: per operation with
    ``OPERATION_BALANCE_READS``, or globally with
    ``rados_replica_read_policy=balance``.
@@ -342,8 +342,8 @@ No user action is needed in the normal case.
    flags.
 #. **Containment.** ``ceph osd pool set <pool> ec_client_decode false``
    (whole cluster) or ``rados_ec_client_decode=false`` (one client) turns
-   decode off. ``rgw_data_balanced_reads=false`` returns RGW to
-   primary-only reads.
+   decode off. Setting ``rados_replica_read_policy`` back to ``default``
+   returns a client, including RGW, to primary-only reads.
 
 Terminology: *direct read*, *client decode*, *reference sub-read*,
 *fallback* (defined above). There are no GUI changes.
@@ -399,7 +399,6 @@ Milestones
 #. Client decode prototype passes ``ceph_test_rados_io_sequence`` with forced
    decode.
 #. Error-handling corrections and counters merged.
-#. RGW data-path changes merged.
 #. Performance baseline (healthy and degraded) established.
 #. Feature complete. Teuthology suites green.
 
@@ -410,19 +409,21 @@ Standard Stories
 tell a client decode from a primary decode in logs, and how to turn the
 feature off. A story will be raised.
 
-**Documentation:** Required. This covers the new pool flag, client and RGW
-config options, and release notes (behaviour change for RGW defaults).
+**Documentation:** Required. This covers the new pool flag, client config
+options, guidance to set ``rados_replica_read_policy=balance`` for RGW, and
+release notes.
 
 Risks
 -----
 
-- **Risk:** Small-object RGW GETs regress, because the head-object read
-  (prefetch of up to ``rgw_max_chunk_size``) is split into ``k`` sub-reads
-  even when the object is only a few KiB.
+- **Risk:** Small-object RGW GETs with ``rados_replica_read_policy=balance``
+  regress, because the head-object read (prefetch of up to
+  ``rgw_max_chunk_size``) is split into ``k`` sub-reads even when the object
+  is only a few KiB. This is existing direct-read behaviour that this design
+  does not change.
   **Likelihood / Impact:** Medium / Medium.
-  **Mitigation:** Benchmark early (milestone 7). If it regresses, RGW sends
-  the head prefetch without ``BALANCE_READS`` and only the size-bounded
-  data reads use direct reads (see `RGW Read Path Coverage`_).
+  **Mitigation:** Benchmark early (milestone 6). If it regresses, see
+  `Open Questions`_.
 - **Risk:** Extracting the planner from ``ECCommon`` changes OSD behaviour.
   **Likelihood / Impact:** Low / High.
   **Mitigation:** Pure refactor with an equivalence unit test that runs both
@@ -578,7 +579,7 @@ Other API Interfaces
   on ``READ``/``SPARSE_READ`` ops inside an ``EC_DIRECT_READ`` ``MOSDOp``
   (see `OSD Changes`_). It is only sent when the pool has
   ``ec_client_decode``, which guarantees the OSDs understand it.
-- **S3/Swift:** No API change. RGW's read path changes internally.
+- **S3/Swift:** No API change and no RGW code change.
 - **Grafana:** No new dashboards. The new ``objecter`` counters on RGW are
   exported through the existing RGW perf counter path. Adding a
   "direct vs fallback reads" panel to the RGW dashboard is a stretch item.
@@ -589,11 +590,6 @@ Other API Interfaces
 External Changes / Interfaces
 -----------------------------
 
-- RGW default behaviour changes: data-pool GET reads carry
-  ``BALANCE_READS`` and do not request the object version (Story 1). This is
-  safe for RGW. Tail objects are written once before the head object that
-  refers to them is written, and head reads are protected by the existing
-  ``RGW_ATTR_ID_TAG`` ``cmpxattr`` guard.
 - ``SplitOp`` sub-read errors are reclassified (see `Error Handling`_). A
   shard ``-EIO`` now falls back to the primary instead of being returned to
   the application. This is a bug fix to existing behaviour.
@@ -653,9 +649,6 @@ OSD (small changes)
 Monitor (small change)
     New pool flag ``ec_client_decode``, set automatically and settable by
     the operator.
-
-RGW (small change)
-    Sets balanced reads and ``no_version_on_read`` on data-path reads.
 
 Why the design meets each requirement
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1044,6 +1037,11 @@ default storage class) plus *tail* objects (4 MiB stripes
 classes the head lives in the default storage class's pool with no inline
 data, and all data is in tail objects in the EC pool.
 
+The table assumes RGW runs with ``rados_replica_read_policy=balance``. RGW
+sets no read flags of its own and sends no ordered reads, so the policy adds
+``BALANCE_READS`` to every read below. RGW requests the object version on
+every read, so the reference sub-read is always sent.
+
 .. list-table::
    :header-rows: 1
    :widths: 25 35 40
@@ -1065,8 +1063,7 @@ data, and all data is in tail objects in the EC pool.
    * - GET: tail stripes / multipart parts (``get_obj_iterate_cb``)
      - ``READ(ofs, ≤ 4 MiB)``. Up to 16 MiB in flight
        (``rgw_get_obj_window_size``).
-     - Split and decode if degraded. With ``no_version_on_read``, a read
-       that fits in one chunk goes as a single direct op to its shard.
+     - Split and decode if degraded.
    * - Range GET, ``partNumber`` GET
      - Unaligned ``READ`` on head or tail
      - Split. The planner aligns shard reads (4 KiB) and decode handles
@@ -1092,27 +1089,15 @@ data, and all data is in tail objects in the EC pool.
      - Cache misses use the GET paths above
      - Covered.
 
-RGW changes (Story 1, RGW team):
-
-- New option ``rgw_data_balanced_reads`` (bool, default ``true``). When
-  true, RGW sets ``librados::OPERATION_BALANCE_READS`` on data-object reads
-  in ``get_obj_iterate_cb`` and the head prefetch, and opens data-pool
-  ``IoCtx``\ s with ``set_no_version_on_read(true)`` for the iterate path.
-  The prefetch keeps requesting the version (``raw_obj_stat`` uses it). This
-  costs nothing because the reference sub-read is already present for
-  multi-shard reads.
-- **Head prefetch on small objects.** ``READ(0, 4 MiB)`` with an unknown
-  size is split into ``k`` sub-reads even for a 4 KiB object. Most of them
-  return no data. Via the primary, the read costs one message and one shard
-  read. With this design it costs ``k`` messages. Large objects are
-  unaffected: the prefetch is one 4 MiB read in a multi-GiB GET. If
-  benchmarks show a regression (success criterion), the agreed mitigation is
-  for RGW to omit ``BALANCE_READS`` on the prefetch only. After the
-  prefetch, RGW knows the object size, so later reads are size-bounded and
-  split efficiently.
-- Packaging: make sure ``libec_*.so`` is installed wherever ``radosgw`` is
-  (Debian ``radosgw`` currently depends on ``ceph-common``, not
-  ``ceph-base``).
+**Head prefetch on small objects.** ``READ(0, 4 MiB)`` with an unknown size
+is split into ``k`` sub-reads even for a 4 KiB object. Most of them return
+no data. Via the primary, the read costs one message and one shard read. As
+a direct read it costs ``k`` messages. This is existing direct-read
+behaviour that this design does not change. Large objects are unaffected:
+the prefetch is one 4 MiB read in a multi-GiB GET. After the prefetch, RGW
+knows the object size, so later reads are size-bounded and split
+efficiently. If benchmarks show a regression (success criterion), see
+`Open Questions`_.
 
 Is there a simpler solution?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1200,11 +1185,6 @@ Limits and Config Settings
      - ``true``
      - Client: allow client-side decode for direct reads. Runtime. When
        false, degraded reads go via the primary.
-   * - ``rgw_data_balanced_reads``
-     - bool
-     - ``true``
-     - RGW: request balanced (direct) reads and no object version on data
-       reads. Runtime (new ``IoCtx``\ s).
    * - ``objecter_debug_ec_direct_read_exclude_shards``
      - str
      - empty
@@ -1329,7 +1309,8 @@ CI / Automation
   - ``rados/thrash-erasure-code`` with Fast EC,
     ``rados_replica_read_policy=balance`` and decode on.
   - ``rgw`` suites (s3-tests, multisite, crypt, compression) with the data
-    pool on Fast EC (4+2, 8+3) and OSD thrashing.
+    pool on Fast EC (4+2, 8+3), ``rados_replica_read_policy=balance`` and
+    OSD thrashing.
 
 Configurations
 --------------
@@ -1432,7 +1413,8 @@ host-failure-domain degraded tests.
 
 To be completed at epic closure:
 
-- Release notes: new pool flag, RGW default change, Debian packaging note.
+- Release notes: new pool flag, ``rados_replica_read_policy=balance``
+  guidance for RGW, Debian packaging note.
 - DST material link.
 - Development and support debug guide: counters, log lines, switches.
 - Follow-on epics identified (see below).
@@ -1453,8 +1435,10 @@ Future Work
 Open Questions
 --------------
 
-#. Should the head-prefetch mitigation be decided before merge (pending the
-   benchmark), or shipped behind an RGW option?
+#. If the small-object benchmark regresses with
+   ``rados_replica_read_policy=balance``, is guidance to keep the default
+   policy for small-object RGW workloads enough, or is an Objecter change
+   needed for the head prefetch?
 #. Should ``split_reads`` also become operator-settable, so that support can
    turn off all direct reads on a pool without client config changes?
 #. Exact bit for ``CEPH_OSD_OP_FLAG_EC_SHARD_EXTENT`` and whether the
