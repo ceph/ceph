@@ -291,6 +291,13 @@ inline int op_to_perm(std::uint64_t op) {
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
   case s3GetObjectVersionForReplication:
+  case s3vectorsGetVectors:
+  case s3vectorsGetVectorBucket:
+  case s3vectorsGetIndex:
+  case s3vectorsListVectors:
+  case s3vectorsListVectorBuckets:
+  case s3vectorsListIndexes:
+  case s3vectorsQueryVectors:
     return RGW_PERM_READ;
 
   case s3AbortMultipartUpload:
@@ -310,6 +317,12 @@ inline int op_to_perm(std::uint64_t op) {
   case s3ReplicateDelete:
   case s3ReplicateObject:
   case s3ReplicateTags:
+  case s3vectorsCreateIndex:
+  case s3vectorsCreateVectorBucket:
+  case s3vectorsDeleteIndex:
+  case s3vectorsDeleteVectorBucket:
+  case s3vectorsDeleteVectors:
+  case s3vectorsPutVectors:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
@@ -332,6 +345,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketObjectLockConfiguration:
   case s3GetBucketPublicAccessBlock:
   case s3GetBucketOwnershipControls:
+  case s3vectorsGetVectorBucketPolicy:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -356,6 +370,8 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketObjectLockConfiguration:
   case s3PutBucketPublicAccessBlock:
   case s3PutBucketOwnershipControls:
+  case s3vectorsDeleteVectorBucketPolicy:
+  case s3vectorsPutVectorBucketPolicy:
     return RGW_PERM_WRITE_ACP;
 
   case snsGetTopicAttributes:
@@ -369,6 +385,7 @@ inline int op_to_perm(std::uint64_t op) {
     return RGW_PERM_WRITE;
 
   case s3All:
+  case s3vectorsAll:
     return RGW_PERM_FULL_CONTROL;
   }
   return RGW_PERM_INVALID;

@@ -466,8 +466,7 @@ namespace rgw::s3vector {
     verify_name(vector_bucket_name);
   }
 
-  void decode_index_name(std::string& vector_bucket_name, std::string& index_name, JSONObj* obj) {
-    boost::optional<rgw::ARN> arn;
+  void decode_index_name(std::string& vector_bucket_name, std::string& index_name, boost::optional<rgw::ARN>& arn, JSONObj* obj) {
     decode_name_or_arn("indexName", "indexArn", index_name, arn, obj);
     if (arn) {
       ceph_assert(index_name.empty());
@@ -1012,7 +1011,7 @@ namespace rgw::s3vector {
   }
 
   void delete_index_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
   }
 
   int delete_index(const delete_index_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y) {
@@ -1072,7 +1071,7 @@ namespace rgw::s3vector {
   }
 
   void get_index_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
   }
 
   void get_index_reply_t::dump(ceph::Formatter* f) const {
@@ -1537,9 +1536,13 @@ namespace rgw::s3vector {
     decode_vector_bucket_name(vector_bucket_name, vector_bucket_arn, obj);
 
     if (policy.empty()) {
-      throw JSONDecoder::err("policy must be specified and cannot be empty");
+      throw JSONDecoder::err("Invalid JSON policy");
     }
-    // policy TODO: validate JSON
+
+    JSONParser parser;
+    if(!parser.parse(policy.c_str(), policy.length())) {
+      throw JSONDecoder::err("Invalid JSON policy");
+    }
   }
 
   // get vector bucket policy
@@ -1608,7 +1611,7 @@ namespace rgw::s3vector {
   }
 
   void put_vectors_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
     JSONDecoder::decode_json("vectors", vectors, obj, true);
 
     // the maximum number of vectors is configurable, and is verified in put_vectors()
@@ -2048,7 +2051,7 @@ namespace rgw::s3vector {
   }
 
   void get_vectors_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
     JSONDecoder::decode_json("keys", keys, obj, true);
     JSONDecoder::decode_json("returnData", return_data, obj);
     JSONDecoder::decode_json("returnMetadata", return_metadata, obj);
@@ -2305,7 +2308,7 @@ namespace rgw::s3vector {
   }
 
   void list_vectors_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
     JSONDecoder::decode_json("maxResults", max_results, default_max_results, obj);
     std::string next_token;
     JSONDecoder::decode_json("nextToken", next_token, obj);
@@ -2427,7 +2430,7 @@ namespace rgw::s3vector {
   }
 
   void delete_vectors_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
     JSONDecoder::decode_json("keys", keys, obj, true);
 
     if (keys.empty() || keys.size() > 500) {
@@ -2511,7 +2514,7 @@ namespace rgw::s3vector {
 
   void query_vectors_t::decode_json(JSONObj* obj) {
     JSONDecoder::decode_json("filter", filter, obj);
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
     rgw::s3vector::decode_json("queryVector", query_vector, obj);
     JSONDecoder::decode_json("returnDistance", return_distance, obj);
     JSONDecoder::decode_json("returnMetadata", return_metadata, obj);
