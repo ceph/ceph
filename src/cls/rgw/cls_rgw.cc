@@ -3182,6 +3182,9 @@ template <typename EntriesT>
 static void reserve_bi_entries(EntriesT& entries, std::size_t incoming)
 {
   if constexpr (requires { entries.reserve(entries.size() + incoming); }) {
+    if (0 == incoming) {
+      return;
+    }
     entries.reserve(entries.size() + incoming);
   }
 }
