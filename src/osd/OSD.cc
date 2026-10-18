@@ -6993,7 +6993,8 @@ void OSD::_get_purged_snaps()
   } else {
     purged_snaps_request = purged_snaps_request_t{start, last};
   }
-  MMonGetPurgedSnaps *m = new MMonGetPurgedSnaps(start, last);
+  MMonGetPurgedSnaps *m =
+    new MMonGetPurgedSnaps(start, purged_snaps_request->last);
   monc->send_mon_message(m);
 }
 
