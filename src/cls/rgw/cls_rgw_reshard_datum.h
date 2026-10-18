@@ -62,7 +62,7 @@ struct guard_request final
 
 ::ceph::buffer::list encode_add(const ::cls_rgw_reshard_entry& entry, bool create_only);
 ::ceph::buffer::list encode_entry(const ::cls_rgw_reshard_entry& entry);
-::ceph::buffer::list encode_list(std::uint32_t maximum, std::string_view marker);
+::ceph::buffer::list encode_list(std::string_view marker, std::uint32_t maximum);
 ::ceph::buffer::list encode_remove(const ::cls_rgw_reshard_entry& entry);
 ::ceph::buffer::list encode_instance(const ::cls_rgw_bucket_instance_entry& entry);
 ::ceph::buffer::list encode_empty();

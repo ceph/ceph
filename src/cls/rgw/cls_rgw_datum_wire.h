@@ -111,7 +111,7 @@ struct metadata_size final
 } // detail
 
 template <typename RecordT, auto ...Member>
-constexpr std::uint64_t encoded_size(const RecordT& value, datum::binary_fields<Member...> selected)
+constexpr std::uint64_t encoded_size(datum::binary_fields<Member...> selected, const RecordT& value)
 {
     detail::metadata_size archive;
     const auto result = datum::serialize_schema(archive, value, selected);
@@ -147,7 +147,7 @@ public:
     }
 
     template <typename RecordT, auto ...Member>
-    void fields(const std::uint64_t size, const RecordT& value, datum::binary_fields<Member...> selected)
+    void fields(datum::binary_fields<Member...> selected, const RecordT& value, const std::uint64_t size)
     {
         ensure(size);
         auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
@@ -157,9 +157,9 @@ public:
     }
 
     template <typename RecordT, auto ...Member>
-    void fields(const RecordT& value, datum::binary_fields<Member...> selected)
+    void fields(datum::binary_fields<Member...> selected, const RecordT& value)
     {
-        fields(encoded_size(value, selected), value, selected);
+        fields(selected, value, encoded_size(selected, value));
     }
 
     template <typename T>
@@ -167,7 +167,7 @@ public:
     {
         using record = scalar_record<T>;
 
-        fields(sizeof(T), record {value}, datum::binary_fields<&record::value> {});
+        fields(datum::binary_fields<&record::value> {}, record {value}, sizeof(T));
     }
 
     void payload(const byte_buffer& value)
@@ -195,7 +195,7 @@ public:
     {
         using record = scalar_record<std::string_view>;
 
-        fields(record {value}, datum::binary_fields<&record::value> {});
+        fields(datum::binary_fields<&record::value> {}, record {value});
     }
 
     // A native byte chain can carry a string without an owning string temporary:
@@ -239,10 +239,10 @@ public:
 
     // Metadata-only frames need neither a streaming header nor a backpatch.
     template <typename RecordT, auto ...Member>
-    void frame(const std::uint8_t version, const RecordT& value, datum::binary_fields<Member...> selected)
+    void frame(datum::binary_fields<Member...> selected, const std::uint8_t version, const RecordT& value)
     {
-        constexpr auto header_size = encoded_size(frame_header {}, header_fields {});
-        const auto body_size = checked_count(encoded_size(value, selected));
+        constexpr auto header_size = encoded_size(header_fields {}, frame_header {});
+        const auto body_size = checked_count(encoded_size(selected, value));
         const auto size = header_size + body_size;
         ensure(size);
         auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
@@ -314,7 +314,7 @@ public:
     }
 
     template <std::size_t Size, typename RecordT, auto ...Member>
-    void fields(RecordT& value, datum::binary_fields<Member...> selected)
+    void fields(datum::binary_fields<Member...> selected, RecordT& value)
     {
         require(Size);
         std::array<char, Size> storage CEPH_INDETERMINATE;
@@ -335,7 +335,7 @@ public:
     {
         using record = scalar_record<T>;
         record value CEPH_INDETERMINATE;
-        fields<sizeof(T)>(value, datum::binary_fields<&record::value> {});
+        fields<sizeof(T)>(datum::binary_fields<&record::value> {}, value);
 
         return value.value;
     }
@@ -409,7 +409,7 @@ public:
     decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
     {
         frame_header header CEPH_INDETERMINATE;
-        fields<6>(header, header_fields {});
+        fields<6>(header_fields {}, header);
         if (header.compatible > supported) {
             throw ::ceph::buffer::malformed_input {"RGW CLS frame needs a newer decoder"};
         }
@@ -446,7 +446,7 @@ public:
     bool canonical_frame(const std::uint8_t version, BodyT&& body)
     {
         frame_header header CEPH_INDETERMINATE;
-        fields<6>(header, header_fields {});
+        fields<6>(header_fields {}, header);
         require(header.length);
         if (version != header.version || 1 != header.compatible) {
             return false;
@@ -491,13 +491,12 @@ struct key_fields final
 inline void encode_key(writer& archive, const std::string_view name, const std::string_view instance)
 {
     archive.frame(1, [&] {
-        archive.fields(key_fields {name, instance},
-            datum::binary_fields<&key_fields::name, &key_fields::instance> {});
+        archive.fields(datum::binary_fields<&key_fields::name, &key_fields::instance> {}, key_fields {name, instance});
     });
 }
 
 template <typename KeyT, auto Name, auto Instance>
-KeyT& decode_key(reader& archive, KeyT& value, datum::binary_fields<Name, Instance>)
+KeyT& decode_key(datum::binary_fields<Name, Instance>, reader& archive, KeyT& value)
 {
     return archive.frame(1, [&](auto& fields, std::uint8_t) -> KeyT& {
         fields.text(value.*Name);
@@ -512,7 +511,7 @@ inline auto decode_key(reader& archive)
     using key = std::pair<std::string, std::string>;
 
     key value;
-    decode_key(archive, value, datum::binary_fields<&key::first, &key::second> {});
+    decode_key(datum::binary_fields<&key::first, &key::second> {}, archive, value);
 
     return value;
 }

@@ -141,8 +141,8 @@ TEST_CASE("Lifecycle marker and list requests preserve frames and request-versio
             ::ceph::encode(std::numeric_limits<std::uint32_t>::max(), output);
         })));
     }
-    CHECK(binding::encode_marker("marker").contents_equal(canonical(native(binding::marker_request {"marker"}))));
-    CHECK(binding::encode_list("marker", 17).contents_equal(canonical(native(binding::list_request {"marker", 17, 3}))));
+    CHECK(binding::encode("marker").contents_equal(canonical(native(binding::marker_request {"marker"}))));
+    CHECK(binding::encode("marker", 17).contents_equal(canonical(native(binding::list_request {"marker", 17, 3}))));
 }
 
 TEST_CASE("Lifecycle entry messages retain old pair requests and native leaf versions", "[rgw][cls][datum][lc]")
@@ -160,7 +160,7 @@ TEST_CASE("Lifecycle entry messages retain old pair requests and native leaf ver
     binding::entry_message value;
     value.entry = {std::string(80, 'b'), 17, std::numeric_limits<std::uint32_t>::max()};
     const auto expected = canonical(native(value));
-    CHECK(binding::encode_entry(value.entry).contents_equal(expected));
+    CHECK(binding::encode(value.entry).contents_equal(expected));
     bytes output;
     binding::encode(value, output);
     CHECK(output.contents_equal(expected));
@@ -177,7 +177,7 @@ TEST_CASE("Lifecycle head messages preserve old rollover defaults and native cod
     value.head.start_date = 17;
     value.head.marker = std::string(80, 'm');
     value.head.shard_rollover_date = 19;
-    CHECK(binding::encode_head(value.head).contents_equal(canonical(native(value))));
+    CHECK(binding::encode(value.head).contents_equal(canonical(native(value))));
     bytes output;
     binding::encode(value, output);
     CHECK(output.contents_equal(canonical(native(value))));

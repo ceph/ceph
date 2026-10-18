@@ -46,10 +46,11 @@ byte_buffer fragmented(const byte_buffer& bytes)
 
 auto encode(const olh::reply& value, const bool stales = true)
 {
-    return wire::encode_reply(value.epochs, value.truncated,
+    return wire::encode_reply(
         datum::binary_fields<&olh::event::epoch, &olh::event::operation, &olh::event::tag,
                              &olh::event::object, &olh::event::delete_marker> {},
         datum::binary_fields<&olh::object_key::name, &olh::object_key::instance> {},
+        value.epochs, value.truncated,
         [stales](const olh::event& entry) { return stales || olh::action::stale != entry.operation; }, stales);
 }
 

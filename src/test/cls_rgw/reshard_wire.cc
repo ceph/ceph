@@ -175,7 +175,7 @@ TEST_CASE("Reshard queue requests preserve legacy leaves and borrowed wire profi
     CHECK(binding::encode_entry(value).contents_equal(canonical(native(binding::entry_message {value}))));
     binding::remove_request remove {value.tenant, value.bucket_name, value.bucket_id};
     CHECK(binding::encode_remove(value).contents_equal(canonical(native(remove))));
-    CHECK(binding::encode_list(17, "marker").contents_equal(canonical(native(binding::list_request {"marker", 17}))));
+    CHECK(binding::encode_list("marker", 17).contents_equal(canonical(native(binding::list_request {"marker", 17}))));
 }
 
 TEST_CASE("Reshard control preserves empty frames, signed errors and all status bytes", "[rgw][cls][datum][reshard]")

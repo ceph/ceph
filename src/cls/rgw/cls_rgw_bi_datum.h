@@ -63,7 +63,7 @@ struct put_request final
                                     std::string_view marker, bool reshard);
 ::ceph::buffer::list encode_get_request(const ::cls_rgw_obj_key& key, ::BIIndexType type);
 void decode(get_request& value, ::ceph::buffer::list::const_iterator& input);
-void encode_get_reply(const entry& value, ::ceph::buffer::list& output);
+void encode(const entry& value, ::ceph::buffer::list& output);
 ::rgw_cls_bi_entry decode_get_reply(const ::ceph::buffer::list& input);
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);

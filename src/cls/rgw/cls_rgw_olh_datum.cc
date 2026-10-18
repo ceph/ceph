@@ -78,7 +78,8 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 
 void encode_reply(const log_page groups, const bool stales, const bool truncated, ::ceph::buffer::list& output)
 {
-    auto candidate = ::cls::rgw::olh_wire::encode_reply(groups, truncated, native_event_fields, native_key_fields,
+    auto candidate = ::cls::rgw::olh_wire::encode_reply(native_event_fields, native_key_fields,
+        groups, truncated,
         [](const native_entry& value) { return ::CLS_RGW_OLH_OP_STALE != value.op; }, stales);
     output.claim_append(candidate);
 }
@@ -163,7 +164,7 @@ void decode_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret&
 
     auto cursor = input.cbegin();
     auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<groups_type, groups_type::mapped_type>(
-        cursor, native_event_fields, native_key_fields,
+        native_event_fields, native_key_fields, cursor,
         [](auto& groups, const std::uint64_t epoch, auto&& entries) {
             groups.try_emplace(epoch, std::move(entries));
         });
@@ -178,7 +179,7 @@ void decode_reply(const ::ceph::buffer::list& input, ::cls::rgw::olh::reply& val
 
     auto cursor = input.cbegin();
     auto [groups, truncated] = ::cls::rgw::olh_wire::decode_reply<groups_type, entries_type>(
-        cursor, client_event_fields, client_key_fields,
+        client_event_fields, client_key_fields, cursor,
         [](auto& groups, const std::uint64_t epoch, auto&& entries) {
             groups.emplace_back(epoch, std::move(entries));
         });

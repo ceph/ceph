@@ -41,10 +41,10 @@ struct list_reply final
     std::uint8_t compat_v = 3;
 };
 
-::ceph::buffer::list encode_marker(std::string_view marker);
-::ceph::buffer::list encode_entry(const ::cls_rgw_lc_entry& entry);
-::ceph::buffer::list encode_head(const ::cls_rgw_lc_obj_head& head);
-::ceph::buffer::list encode_list(std::string_view marker, std::uint32_t maximum);
+::ceph::buffer::list encode(std::string_view marker);
+::ceph::buffer::list encode(const ::cls_rgw_lc_entry& entry);
+::ceph::buffer::list encode(const ::cls_rgw_lc_obj_head& head);
+::ceph::buffer::list encode(std::string_view marker, std::uint32_t maximum);
 void decode(marker_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(entry_message& value, ::ceph::buffer::list::const_iterator& input);
 void decode(head_message& value, ::ceph::buffer::list::const_iterator& input);

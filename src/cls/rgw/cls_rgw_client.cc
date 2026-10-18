@@ -675,14 +675,14 @@ int cls_rgw_lc_get_head_decode(const bufferlist& out, cls_rgw_lc_obj_head& head)
 
 void cls_rgw_lc_put_head(ObjectWriteOperation& op, const cls_rgw_lc_obj_head& head)
 {
-  auto in = lc_datum::encode_head(head);
+  auto in = lc_datum::encode(head);
   op.exec(method::lc_put_head, in);
 }
 
 void cls_rgw_lc_get_next_entry(ObjectReadOperation& op, const string& marker,
                                bufferlist& out)
 {
-  auto in = lc_datum::encode_marker(marker);
+  auto in = lc_datum::encode(marker);
   op.exec(method::lc_get_next_entry, in, &out, nullptr);
 }
 
@@ -703,21 +703,21 @@ int cls_rgw_lc_get_next_entry_decode(const bufferlist& out, cls_rgw_lc_entry& en
 void cls_rgw_lc_rm_entry(ObjectWriteOperation& op,
                          const cls_rgw_lc_entry& entry)
 {
-  auto in = lc_datum::encode_entry(entry);
+  auto in = lc_datum::encode(entry);
   op.exec(method::lc_rm_entry, in);
 }
 
 void cls_rgw_lc_set_entry(ObjectWriteOperation& op,
                           const cls_rgw_lc_entry& entry)
 {
-  auto in = lc_datum::encode_entry(entry);
+  auto in = lc_datum::encode(entry);
   op.exec(method::lc_set_entry, in);
 }
 
 void cls_rgw_lc_get_entry(ObjectReadOperation& op, const std::string& marker,
                           bufferlist& out)
 {
-  auto in = lc_datum::encode_marker(marker);
+  auto in = lc_datum::encode(marker);
   op.exec(method::lc_get_entry, in, &out, nullptr);
 }
 
@@ -738,7 +738,7 @@ int cls_rgw_lc_get_entry_decode(const bufferlist& out, cls_rgw_lc_entry& entry)
 void cls_rgw_lc_list(ObjectReadOperation& op, const string& marker,
                      uint32_t max_entries, bufferlist& out)
 {
-  auto in = lc_datum::encode_list(marker, max_entries);
+  auto in = lc_datum::encode(marker, max_entries);
 
   op.exec(method::lc_list_entries, in, &out, nullptr);
 }
@@ -780,7 +780,7 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
                          list<cls_rgw_reshard_entry>& entries, bool* is_truncated)
 {
-  auto in = reshard_datum::encode_list(max, marker);
+  auto in = reshard_datum::encode_list(marker, max);
   bufferlist out;
   int r = io_ctx.exec(oid, method::reshard_list, in, out);
   if (r < 0)

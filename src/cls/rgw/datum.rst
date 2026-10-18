@@ -274,9 +274,9 @@ Datum core customization is required.
 
 Metadata writers can derive their size from those same selected fields::
 
-    archive.fields(prefix {maximum, filter, marker, reshard},
-        datum::binary_fields<&prefix::maximum, &prefix::filter,
-                             &prefix::marker, &prefix::reshard> {});
+    archive.fields(datum::binary_fields<&prefix::maximum, &prefix::filter,
+                                       &prefix::marker, &prefix::reshard> {},
+                   prefix {maximum, filter, marker, reshard});
 
 The RGW-local size observer invokes the existing Datum field codecs. Fixed
 unsigned scalar widths compile to constants; strings contribute their runtime
@@ -287,9 +287,29 @@ The automatic form supports unsigned scalars, ``std::string`` and
 ``std::string_view``, including field codecs that purely convert to those
 representations. Such codecs run during both sizing and encoding. Other codecs,
 or codecs for which a separate size observation is undesirable, retain the
-explicit ``archive.fields(size, value, selected)`` form. The wire order is
+explicit ``archive.fields(selected, value, size)`` form. The wire order is
 specified once; no Datum or zpp core extension is needed. Fixed reader gather
 bounds and frame-version requirements remain explicit protocol constraints.
+
+Adapter interface conventions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use overloads for the same behavior when the existing argument types distinguish
+the calls. For example, lifecycle callers use ``lc_datum::encode(entry)``,
+``lc_datum::encode(head)`` and ``lc_datum::encode(marker, maximum)``. Distinct wire
+operations with otherwise identical argument types retain descriptive names.
+
+Private wire helpers take field-selection descriptors first, archive or input
+handles next, then data and associated options. Automatic and explicit-size
+metadata writes share the leading arguments: ``archive.fields(selected, value)``
+and ``archive.fields(selected, value, size)``. Keep long calls grouped by role;
+avoid introducing wrapper records or tags merely to shorten a function name.
+Caller argument order is independent of encoded field order. Required Ceph
+``encode(value, output)`` and ``decode(value, cursor)`` customization signatures
+and established public client interfaces retain their conventions.
+
+Native buffer handling
+~~~~~~~~~~~~~~~~~~~~~~
 
 zpp archives require contiguous storage. RGW's shared adapter writes metadata
 directly into Ceph append space, retains opaque BI payload fragments and gathers

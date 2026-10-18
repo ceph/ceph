@@ -72,15 +72,15 @@ inline byte_buffer encode_request(const std::uint32_t maximum, const std::string
     detail::writer archive {output};
     using prefix = detail::request_prefix;
 
-    archive.frame(2, prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)},
-        datum::binary_fields<&prefix::maximum, &prefix::filter, &prefix::marker, &prefix::reshard> {});
+    archive.frame(datum::binary_fields<&prefix::maximum, &prefix::filter, &prefix::marker, &prefix::reshard> {},
+                  2, prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)});
 
     return output;
 }
 
 template <typename RequestT, auto Maximum, auto Filter, auto Marker, auto Reshard>
-void decode_request(byte_buffer::const_iterator& input, RequestT& value,
-                    datum::binary_fields<Maximum, Filter, Marker, Reshard>)
+void decode_request(datum::binary_fields<Maximum, Filter, Marker, Reshard>,
+                    byte_buffer::const_iterator& input, RequestT& value)
 {
     ::cls::rgw::wire::decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
         candidate.*Maximum = fields.template scalar<std::uint32_t>();
@@ -105,13 +105,12 @@ inline byte_buffer encode_get_request(const std::string_view name, const std::st
 }
 
 template <typename KeyT, auto ...Member>
-std::uint8_t decode_get_request(byte_buffer::const_iterator& input, KeyT& key,
-                                datum::binary_fields<Member...> selected)
+std::uint8_t decode_get_request(datum::binary_fields<Member...> selected, byte_buffer::const_iterator& input, KeyT& key)
 {
     detail::reader archive {input};
 
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(fields, key, selected);
+        ::cls::rgw::wire::decode_key(selected, fields, key);
 
         return fields.template scalar<std::uint8_t>();
     });
@@ -120,8 +119,7 @@ std::uint8_t decode_get_request(byte_buffer::const_iterator& input, KeyT& key,
 namespace detail {
 
 template <typename EntryT, auto Kind, auto Key, auto Payload>
-void encode_entry(writer& archive, const EntryT& value,
-                  datum::binary_fields<Kind, Key, Payload>)
+void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, const EntryT& value)
 {
     const auto& data = datum::member_lens<Payload> {}(value);
     const std::string_view key = datum::member_lens<Key> {}(value);
@@ -130,15 +128,14 @@ void encode_entry(writer& archive, const EntryT& value,
     archive.frame(1, [&] {
         using prefix = entry_prefix;
 
-        archive.fields(prefix {kind, key, length},
-            datum::binary_fields<&prefix::kind, &prefix::key, &prefix::length> {});
+        archive.fields(datum::binary_fields<&prefix::kind, &prefix::key, &prefix::length> {},
+                       prefix {kind, key, length});
         archive.payload(data);
     });
 }
 
 template <typename EntryT, auto Kind, auto Key, auto Payload>
-EntryT& decode_entry(reader& archive, EntryT& value,
-                     datum::binary_fields<Kind, Key, Payload>)
+EntryT& decode_entry(datum::binary_fields<Kind, Key, Payload>, reader& archive, EntryT& value)
 {
     return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
         auto& kind = value.*Kind;
@@ -155,35 +152,34 @@ EntryT& decode_entry(reader& archive, EntryT& value,
 // Fill unpublished candidates; the binding commits them after decoding succeeds.
 // Selected payload fields retain native owners beyond the input envelope.
 template <typename EntryT, auto ...Member>
-EntryT& decode_entry(byte_buffer::const_iterator& input, EntryT& value,
-                     datum::binary_fields<Member...> selected)
+EntryT& decode_entry(datum::binary_fields<Member...> selected, byte_buffer::const_iterator& input, EntryT& value)
 {
     detail::reader archive {input};
 
-    return detail::decode_entry(archive, value, selected);
+    return detail::decode_entry(selected, archive, value);
 }
 
 // A single-entry message wraps the same entry profile in its own native frame.
 template <typename EntryT, auto ...Member>
-byte_buffer encode_entry_message(const EntryT& value, datum::binary_fields<Member...> selected)
+byte_buffer encode_entry_message(datum::binary_fields<Member...> selected, const EntryT& value)
 {
     byte_buffer output;
     detail::writer archive {output};
     archive.frame(1, [&] {
-        detail::encode_entry(archive, value, selected);
+        detail::encode_entry(selected, archive, value);
     });
 
     return output;
 }
 
 template <typename EntryT, auto ...Member>
-EntryT& decode_entry_message(byte_buffer::const_iterator& input, EntryT& value,
-                             datum::binary_fields<Member...> selected)
+EntryT& decode_entry_message(datum::binary_fields<Member...> selected,
+                             byte_buffer::const_iterator& input, EntryT& value)
 {
     detail::reader archive {input};
 
     return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
-        return detail::decode_entry(fields, value, selected);
+        return detail::decode_entry(selected, fields, value);
     });
 }
 
@@ -191,7 +187,7 @@ EntryT& decode_entry_message(byte_buffer::const_iterator& input, EntryT& value,
 // The binding interprets the flag as truncation or an overwrite check.
 template <typename EntriesT, auto ...Member>
 requires std::ranges::input_range<const EntriesT> && std::ranges::sized_range<const EntriesT>
-byte_buffer encode_entries(const EntriesT& entries, const bool flag, datum::binary_fields<Member...> selected)
+byte_buffer encode_entries(datum::binary_fields<Member...> selected, const EntriesT& entries, const bool flag)
 {
     const auto size = detail::checked_count(std::ranges::size(entries));
     byte_buffer output;
@@ -199,15 +195,15 @@ byte_buffer encode_entries(const EntriesT& entries, const bool flag, datum::bina
     if (0 == size) {
         using body = detail::empty_entries;
 
-        archive.frame(1, body {size, static_cast<std::uint8_t>(flag)},
-            datum::binary_fields<&body::count, &body::flag> {});
+        archive.frame(datum::binary_fields<&body::count, &body::flag> {},
+                      1, body {size, static_cast<std::uint8_t>(flag)});
 
         return output;
     }
     archive.frame(1, [&] {
         archive.scalar(size);
         for (const auto& entry : entries) {
-            detail::encode_entry(archive, entry, selected);
+            detail::encode_entry(selected, archive, entry);
         }
         archive.scalar(static_cast<std::uint8_t>(flag));
     });
@@ -216,7 +212,7 @@ byte_buffer encode_entries(const EntriesT& entries, const bool flag, datum::bina
 }
 
 template <typename EntriesT, auto ...Member>
-auto decode_entries(byte_buffer::const_iterator& input, datum::binary_fields<Member...> selected)
+auto decode_entries(datum::binary_fields<Member...> selected, byte_buffer::const_iterator& input)
 {
     detail::reader archive {input};
 
@@ -228,7 +224,7 @@ auto decode_entries(byte_buffer::const_iterator& input, datum::binary_fields<Mem
             entries.reserve(size);
         }
         for (std::uint32_t index = 0; index < size; ++index) {
-            detail::decode_entry(fields, entries.emplace_back(), selected);
+            detail::decode_entry(selected, fields, entries.emplace_back());
         }
         const bool flag = 0 != fields.template scalar<std::uint8_t>();
 

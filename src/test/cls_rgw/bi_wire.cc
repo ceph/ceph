@@ -155,7 +155,7 @@ TEST_CASE("BI requests preserve native bytes and old version defaults", "[rgw][c
 
         client_request client;
         cursor = input.cbegin();
-        wire::decode_request(cursor, client, client_request_fields);
+        wire::decode_request(client_request_fields, cursor, client);
         CHECK(client.maximum == expected.maximum);
         CHECK(client.prefix == expected.filter);
         CHECK(client.marker == expected.marker);
@@ -171,7 +171,7 @@ TEST_CASE("RGW field archives preserve successful bytes and report undersized sc
     const auto fields = datum::binary_fields<&record::value> {};
     byte_buffer bytes;
     ::cls::rgw::wire::writer output {bytes};
-    CHECK_NOTHROW(output.fields(4, original, fields));
+    CHECK_NOTHROW(output.fields(fields, original, 4));
     byte_buffer expected;
     ::ceph::encode(original.value, expected);
     CHECK(bytes.contents_equal(expected));
@@ -179,18 +179,18 @@ TEST_CASE("RGW field archives preserve successful bytes and report undersized sc
     auto cursor = bytes.cbegin();
     ::cls::rgw::wire::reader input {cursor};
     record decoded {0};
-    CHECK_NOTHROW(input.fields<4>(decoded, fields));
+    CHECK_NOTHROW(input.fields<4>(fields, decoded));
     CHECK(decoded.value == original.value);
     CHECK(cursor.end());
 
     byte_buffer short_bytes;
     ::cls::rgw::wire::writer short_output {short_bytes};
-    CHECK_THROWS_AS(short_output.fields(3, original, fields), std::system_error);
+    CHECK_THROWS_AS(short_output.fields(fields, original, 3), std::system_error);
     byte_buffer truncated;
     truncated.substr_of(bytes, 0, 3);
     cursor = truncated.cbegin();
     ::cls::rgw::wire::reader short_input {cursor};
-    CHECK_THROWS_AS(short_input.fields<3>(decoded, fields), std::system_error);
+    CHECK_THROWS_AS(short_input.fields<3>(fields, decoded), std::system_error);
 }
 
 TEST_CASE("RGW scalar metadata preserves native bytes across append boundaries", "[rgw][cls][datum]")
@@ -253,10 +253,10 @@ TEST_CASE("RGW metadata spans preserve bytes across fresh and shared append stor
                 expected.append(body);
                 ::cls::rgw::wire::writer output {bytes};
                 if (framed) {
-                    output.frame(3, value, fields);
+                    output.frame(fields, 3, value);
                 }
                 if (!framed) {
-                    output.fields(value, fields);
+                    output.fields(fields, value);
                 }
                 name.assign("changed");
                 CHECK(bytes.contents_equal(expected));
@@ -274,11 +274,11 @@ TEST_CASE("RGW metadata sizes follow selected order and field conversions", "[rg
         std::uint64_t epoch;
         std::uint8_t operation;
     };
-    static_assert(9 == metadata::encoded_size(fixed {},
-        datum::binary_fields<&fixed::operation, &fixed::epoch> {}));
-    static_assert(6 == metadata::encoded_size(metadata::frame_header {}, metadata::header_fields {}));
-    static_assert(2 == metadata::encoded_size(metadata::scalar_record<::rgw_metadata_test::converted> {},
-        datum::binary_fields<&metadata::scalar_record<::rgw_metadata_test::converted>::value> {}));
+    static_assert(9 == metadata::encoded_size(datum::binary_fields<&fixed::operation, &fixed::epoch> {}, fixed {}));
+    static_assert(6 == metadata::encoded_size(metadata::header_fields {}, metadata::frame_header {}));
+    static_assert(2 == metadata::encoded_size(
+        datum::binary_fields<&metadata::scalar_record<::rgw_metadata_test::converted>::value> {},
+        metadata::scalar_record<::rgw_metadata_test::converted> {}));
 
     struct record final
     {
@@ -299,10 +299,10 @@ TEST_CASE("RGW metadata sizes follow selected order and field conversions", "[rg
         ::ceph::encode(std::string {value.tail}, expected);
         ::ceph::encode(value.flag, expected);
 
-        CHECK(metadata::encoded_size(value, fields) == expected.length());
+        CHECK(metadata::encoded_size(fields, value) == expected.length());
         byte_buffer bytes;
         metadata::writer output {bytes};
-        output.fields(value, fields);
+        output.fields(fields, value);
         CHECK(bytes.contents_equal(expected));
     }
 }
@@ -314,18 +314,17 @@ TEST_CASE("RGW automatic metadata sizing preserves explicit codecs and rejects e
     const explicit_record value {{1, 2, 3}};
     byte_buffer bytes;
     metadata::writer output {bytes};
-    output.fields(3, value, datum::binary_fields<&explicit_record::value> {});
+    output.fields(datum::binary_fields<&explicit_record::value> {}, value, 3);
     CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
 
     using rejected_record = metadata::scalar_record<::rgw_metadata_test::rejected>;
-    CHECK_THROWS_AS(output.fields(rejected_record {},
-        datum::binary_fields<&rejected_record::value> {}), std::system_error);
+    CHECK_THROWS_AS(output.fields(datum::binary_fields<&rejected_record::value> {}, rejected_record {}), std::system_error);
     CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
     constexpr auto maximum = std::numeric_limits<std::uint32_t>::max();
     static_assert(maximum == metadata::checked_count(maximum));
     CHECK_THROWS_AS(metadata::checked_count(std::uint64_t {maximum} + 1), std::length_error);
-    CHECK_THROWS_AS(output.fields(std::uint64_t {maximum} + 1, value,
-        datum::binary_fields<&explicit_record::value> {}), std::length_error);
+    CHECK_THROWS_AS(output.fields(datum::binary_fields<&explicit_record::value> {},
+                                  value, std::uint64_t {maximum} + 1), std::length_error);
     CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
 }
 
@@ -347,11 +346,11 @@ TEST_CASE("BI replies use independent vector row types and preserve native frame
     CHECK(old_rows[0].payload.contents_equal(rows[0].payload));
 
     auto cursor = bytes.cbegin();
-    auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
+    auto result = wire::decode_entries<std::vector<client_row>>(client_row_fields, cursor);
     check_rows(result.first, rows);
     CHECK(result.second);
     CHECK(cursor.end());
-    CHECK(wire::encode_entries(result.first, result.second, client_row_fields).contents_equal(bytes));
+    CHECK(wire::encode_entries(client_row_fields, result.first, result.second).contents_equal(bytes));
 
     // Decode retains the original opaque buffers rather than flattening the reply.
     const auto source = rows[0].payload.cbegin().get_current_ptr();
@@ -364,7 +363,7 @@ TEST_CASE("BI decoding handles fragmentation and compatible frame extensions", "
     const auto rows = fixtures();
     const auto input = fragmented(rgw_bi_oracle::extended_reply(rows));
     auto cursor = input.cbegin();
-    const auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
+    const auto result = wire::decode_entries<std::vector<client_row>>(client_row_fields, cursor);
     check_rows(result.first, rows);
     CHECK(result.second);
     CHECK(cursor.end());
@@ -388,7 +387,7 @@ TEST_CASE("BI decoder rejects impossible counts before constructing rows", "[rgw
     position.copy_in(4, excessive);
     auto cursor = bytes.cbegin();
     counted_row::constructions = 0;
-    CHECK_THROWS(wire::decode_entries<std::vector<counted_row>>(cursor, client_row_fields));
+    CHECK_THROWS(wire::decode_entries<std::vector<counted_row>>(client_row_fields, cursor));
     CHECK(counted_row::constructions == 0);
 }
 
@@ -400,7 +399,7 @@ TEST_CASE("BI native bool decoding accepts every byte value", "[rgw][cls][datum]
         auto position = bytes.begin(bytes.length() - 1);
         position.copy_in(1, &value);
         auto cursor = bytes.cbegin();
-        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
+        const auto result = wire::decode_entries<std::vector<client_row>>(client_row_fields, cursor);
         CHECK(result.second == (0 != raw));
     }
 }
@@ -422,14 +421,14 @@ TEST_CASE("BI encoding accepts byte vectors and borrowed row ranges", "[rgw][cls
     }
     using selected = datum::binary_fields<&row::kind, &row::key, &row::data>;
 
-    CHECK(wire::encode_entries(std::span {rows}, true, selected {})
+    CHECK(wire::encode_entries(selected {}, std::span {rows}, true)
         .contents_equal(rgw_bi_oracle::encode_reply(expected, true)));
-    CHECK(wire::encode_entries(std::span {rows}, true, selected {})
+    CHECK(wire::encode_entries(selected {}, std::span {rows}, true)
         .contents_equal(rgw_bi_oracle::encode_put_request(expected, true)));
     rows[0].kind = -1;
-    CHECK_THROWS_AS(wire::encode_entries(rows, false, selected {}), std::length_error);
+    CHECK_THROWS_AS(wire::encode_entries(selected {}, rows, false), std::length_error);
     rows[0].kind = 256;
-    CHECK_THROWS_AS(wire::encode_entries(rows, false, selected {}), std::length_error);
+    CHECK_THROWS_AS(wire::encode_entries(selected {}, rows, false), std::length_error);
 }
 
 TEST_CASE("BI decoded payload owners outlive their input envelope", "[rgw][cls][datum]")
@@ -438,7 +437,7 @@ TEST_CASE("BI decoded payload owners outlive their input envelope", "[rgw][cls][
     {
         auto bytes = rgw_bi_oracle::encode_reply(fixtures(), false);
         auto cursor = bytes.cbegin();
-        rows = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields).first;
+        rows = wire::decode_entries<std::vector<client_row>>(client_row_fields, cursor).first;
     }
     check_rows(rows, fixtures());
 }
@@ -454,7 +453,7 @@ TEST_CASE("BI bounded frames reject invalid lengths and compatibility", "[rgw][c
         const char raw = static_cast<char>(value);
         bytes.begin(offset).copy_in(1, &raw);
         auto cursor = bytes.cbegin();
-        CHECK_THROWS(wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields));
+        CHECK_THROWS(wire::decode_entries<std::vector<client_row>>(client_row_fields, cursor));
     }
 }
 
@@ -508,11 +507,11 @@ TEST_CASE("BI randomized native envelopes preserve every field", "[rgw][cls][dat
         const bool truncated = random() % 2;
         const auto bytes = rgw_bi_oracle::encode_reply(rows, truncated);
         auto cursor = bytes.cbegin();
-        const auto result = wire::decode_entries<std::vector<client_row>>(cursor, client_row_fields);
+        const auto result = wire::decode_entries<std::vector<client_row>>(client_row_fields, cursor);
         check_rows(result.first, rows);
         CHECK(result.second == truncated);
         CHECK(cursor.end());
-        CHECK(wire::encode_entries(result.first, result.second, client_row_fields).contents_equal(bytes));
+        CHECK(wire::encode_entries(client_row_fields, result.first, result.second).contents_equal(bytes));
     }
 }
 
@@ -675,7 +674,7 @@ TEST_CASE("BI single puts share entry framing across independent records", "[rgw
         CHECK(old.key == row.key);
         CHECK(old.payload.contents_equal(row.payload));
         const client_row independent {row.payload, row.kind, row.key};
-        CHECK(wire::encode_entry_message(independent, client_row_fields).contents_equal(bytes));
+        CHECK(wire::encode_entry_message(client_row_fields, independent).contents_equal(bytes));
         const auto future = fragmented(rgw_bi_oracle::extended_put_entry(row));
         auto cursor = future.cbegin();
         native::entry_put_request value;
@@ -739,7 +738,7 @@ TEST_CASE("BI get shares key and entry profiles without a shared operation recor
     for (const auto& row : fixtures()) {
         const native::entry source {static_cast<::BIIndexType>(row.kind), row.key, row.payload};
         byte_buffer bytes;
-        native::encode_get_reply(source, bytes);
+        native::encode(source, bytes);
         CHECK(bytes.contents_equal(rgw_bi_oracle::encode_get_reply(row)));
         const auto old = rgw_bi_oracle::decode_get_reply(bytes);
         CHECK(old.kind == row.kind);

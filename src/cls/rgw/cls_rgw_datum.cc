@@ -45,14 +45,14 @@ void decode(get_request& value, ::ceph::buffer::list::const_iterator& input)
     auto cursor = input;
     get_request candidate;
     candidate.type = static_cast<::BIIndexType>(::cls::rgw::bi_wire::decode_get_request(
-        cursor, candidate.key, datum::binary_fields<&key::name, &key::instance> {}));
+        datum::binary_fields<&key::name, &key::instance> {}, cursor, candidate.key));
     value = std::move(candidate);
     input = cursor;
 }
 
-void encode_get_reply(const entry& value, ::ceph::buffer::list& output)
+void encode(const entry& value, ::ceph::buffer::list& output)
 {
-    auto candidate = ::cls::rgw::bi_wire::encode_entry_message(value, module_entry_fields);
+    auto candidate = ::cls::rgw::bi_wire::encode_entry_message(module_entry_fields, value);
     output.claim_append(candidate);
 }
 
@@ -60,22 +60,23 @@ void encode_get_reply(const entry& value, ::ceph::buffer::list& output)
 {
     auto cursor = input.cbegin();
     ::rgw_cls_bi_entry candidate;
-    ::cls::rgw::bi_wire::decode_entry_message(cursor, candidate, native_entry_fields);
+    ::cls::rgw::bi_wire::decode_entry_message(native_entry_fields, cursor, candidate);
 
     return candidate;
 }
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    ::cls::rgw::bi_wire::decode_request(input, value,
-        datum::binary_fields<&request::max, &request::name_filter, &request::marker, &request::reshardlog> {});
+    ::cls::rgw::bi_wire::decode_request(
+        datum::binary_fields<&request::max, &request::name_filter, &request::marker, &request::reshardlog> {},
+        input, value);
 }
 
 void decode(entry& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
     entry candidate;
-    ::cls::rgw::bi_wire::decode_entry(cursor, candidate, module_entry_fields);
+    ::cls::rgw::bi_wire::decode_entry(module_entry_fields, cursor, candidate);
     value = std::move(candidate);
     input = cursor;
 }
@@ -83,7 +84,7 @@ void decode(entry& value, ::ceph::buffer::list::const_iterator& input)
 void decode(put_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
-    auto [entries, check_existing] = ::cls::rgw::bi_wire::decode_entries<std::vector<entry>>(cursor, module_entry_fields);
+    auto [entries, check_existing] = ::cls::rgw::bi_wire::decode_entries<std::vector<entry>>(module_entry_fields, cursor);
     value = {std::move(entries), check_existing};
     input = cursor;
 }
@@ -92,25 +93,25 @@ void decode(entry_put_request& value, ::ceph::buffer::list::const_iterator& inpu
 {
     auto cursor = input;
     entry_put_request candidate;
-    ::cls::rgw::bi_wire::decode_entry_message(cursor, candidate.item, module_entry_fields);
+    ::cls::rgw::bi_wire::decode_entry_message(module_entry_fields, cursor, candidate.item);
     value = std::move(candidate);
     input = cursor;
 }
 
 ::ceph::buffer::list encode_put_entry(const ::rgw_cls_bi_entry& value)
 {
-    return ::cls::rgw::bi_wire::encode_entry_message(value, native_entry_fields);
+    return ::cls::rgw::bi_wire::encode_entry_message(native_entry_fields, value);
 }
 
 ::ceph::buffer::list encode_put_request(const std::vector<::rgw_cls_bi_entry>& entries,
                                         const bool check_existing)
 {
-    return ::cls::rgw::bi_wire::encode_entries(entries, check_existing, native_entry_fields);
+    return ::cls::rgw::bi_wire::encode_entries(native_entry_fields, entries, check_existing);
 }
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    auto candidate = ::cls::rgw::bi_wire::encode_entries(value.entries, value.is_truncated, module_entry_fields);
+    auto candidate = ::cls::rgw::bi_wire::encode_entries(module_entry_fields, value.entries, value.is_truncated);
     output.claim_append(candidate);
 }
 
@@ -119,7 +120,7 @@ std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
 
-    return ::cls::rgw::bi_wire::decode_entries<EntriesT>(cursor, native_entry_fields);
+    return ::cls::rgw::bi_wire::decode_entries<EntriesT>(native_entry_fields, cursor);
 }
 
 template std::pair<std::vector<::rgw_cls_bi_entry>, bool>
@@ -253,8 +254,7 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
             fields.text(candidate.filter_prefix);
         }
         if (version >= 4) {
-            ::cls::rgw::wire::decode_key(fields, candidate.start_obj,
-                datum::binary_fields<&key::name, &key::instance> {});
+            ::cls::rgw::wire::decode_key(datum::binary_fields<&key::name, &key::instance> {}, fields, candidate.start_obj);
         }
         if (version >= 5) {
             candidate.list_versions = 0 != fields.template scalar<std::uint8_t>();
@@ -315,8 +315,7 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
         candidate.is_truncated = 0 != fields.template scalar<std::uint8_t>();
         candidate.cls_filtered = version >= 3;
         if (version >= 4) {
-            ::cls::rgw::wire::decode_key(fields, candidate.marker,
-                datum::binary_fields<&key::name, &key::instance> {});
+            ::cls::rgw::wire::decode_key(datum::binary_fields<&key::name, &key::instance> {}, fields, candidate.marker);
         }
 
         return 0;
@@ -469,7 +468,7 @@ void decode(prepare_request& value, ::ceph::buffer::list::const_iterator& input)
             candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
         }
         if (version >= 5) {
-            ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+            ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
         }
         if (version >= 6) {
             candidate.bilog_flags = fields.template scalar<std::uint16_t>();
@@ -503,7 +502,7 @@ void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input
                 fields.text(removed.name);
             }
             if (!names_only) {
-                ::cls::rgw::wire::decode_key(fields, removed, key_fields);
+                ::cls::rgw::wire::decode_key(key_fields, fields, removed);
             }
         }
         if (version >= 5) {
@@ -516,7 +515,7 @@ void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input
             candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
         }
         if (version >= 7) {
-            ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+            ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
         }
         if (version >= 8) {
             candidate.bilog_flags = fields.template scalar<std::uint16_t>();
@@ -530,7 +529,7 @@ void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input
 void decode(link_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     ::cls::rgw::wire::decode_record<5>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
-        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
         fields.text(candidate.olh_tag);
         candidate.delete_marker = 0 != fields.template scalar<std::uint8_t>();
         fields.text(candidate.op_tag);
@@ -559,7 +558,7 @@ void decode(link_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     ::cls::rgw::wire::decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(fields, candidate.olh, key_fields);
+        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.olh);
         candidate.ver = fields.template scalar<std::uint64_t>();
         fields.text(candidate.olh_tag);
     });
@@ -568,7 +567,7 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(unlink_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     ::cls::rgw::wire::decode_record<3>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
-        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
         fields.text(candidate.op_tag);
         candidate.olh_epoch = fields.template scalar<std::uint64_t>();
         candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
@@ -585,7 +584,7 @@ void decode(unlink_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(clear_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     ::cls::rgw::wire::decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
         fields.text(candidate.olh_tag);
     });
 }
@@ -593,7 +592,7 @@ void decode(clear_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     ::cls::rgw::wire::decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(fields, candidate.key, key_fields);
+        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
     });
 }
 
@@ -605,8 +604,8 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     archive.frame(7, 5, [&] {
         using prefix = prepare_prefix;
 
-        archive.fields(prefix {static_cast<std::uint8_t>(operation), tag, locator, 0},
-            datum::binary_fields<&prefix::operation, &prefix::tag, &prefix::locator, &prefix::log> {});
+        archive.fields(datum::binary_fields<&prefix::operation, &prefix::tag, &prefix::locator, &prefix::log> {},
+                       prefix {static_cast<std::uint8_t>(operation), tag, locator, 0});
         ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
         archive.scalar(std::uint16_t {0});
         archive.scalar(std::uint32_t {0}); // Empty compatibility zone set.
@@ -630,8 +629,8 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     archive.frame(9, 7, [&] {
         using prefix = complete_prefix;
 
-        archive.fields(prefix {static_cast<std::uint8_t>(operation), version.epoch},
-            datum::binary_fields<&prefix::operation, &prefix::epoch> {});
+        archive.fields(datum::binary_fields<&prefix::operation, &prefix::epoch> {},
+                       prefix {static_cast<std::uint8_t>(operation), version.epoch});
         archive.native(metadata);
         archive.text(tag);
         archive.text(locator);
@@ -989,7 +988,7 @@ using ::cls::rgw::wire::writer;
     return output;
 }
 
-::ceph::buffer::list encode_list(const std::uint32_t maximum, const std::string_view marker)
+::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -1171,7 +1170,7 @@ namespace cls::rgw::lc_datum {
 using ::cls::rgw::wire::decode_record;
 using ::cls::rgw::wire::writer;
 
-::ceph::buffer::list encode_marker(const std::string_view marker)
+::ceph::buffer::list encode(const std::string_view marker)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -1180,7 +1179,7 @@ using ::cls::rgw::wire::writer;
     return output;
 }
 
-::ceph::buffer::list encode_entry(const ::cls_rgw_lc_entry& entry)
+::ceph::buffer::list encode(const ::cls_rgw_lc_entry& entry)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -1189,7 +1188,7 @@ using ::cls::rgw::wire::writer;
     return output;
 }
 
-::ceph::buffer::list encode_head(const ::cls_rgw_lc_obj_head& head)
+::ceph::buffer::list encode(const ::cls_rgw_lc_obj_head& head)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -1198,7 +1197,7 @@ using ::cls::rgw::wire::writer;
     return output;
 }
 
-::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum)
+::ceph::buffer::list encode(const std::string_view marker, const std::uint32_t maximum)
 {
     ::ceph::buffer::list output;
     writer archive {output};
@@ -1248,13 +1247,13 @@ void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
 
 void encode(const entry_message& value, ::ceph::buffer::list& output)
 {
-    auto candidate = encode_entry(value.entry);
+    auto candidate = encode(value.entry);
     output.claim_append(candidate);
 }
 
 void encode(const head_message& value, ::ceph::buffer::list& output)
 {
-    auto candidate = encode_head(value.head);
+    auto candidate = encode(value.head);
     output.claim_append(candidate);
 }
 

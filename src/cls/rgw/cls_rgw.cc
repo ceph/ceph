@@ -3019,7 +3019,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       return r;
   }
 
-  ::cls::rgw::bi_datum::encode_get_reply(entry, *out);
+  ::cls::rgw::bi_datum::encode(entry, *out);
 
   return 0;
 }
