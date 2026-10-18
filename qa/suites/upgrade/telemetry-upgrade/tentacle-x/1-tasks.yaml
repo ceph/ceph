@@ -83,7 +83,7 @@ tasks:
     - cephadm.shell:
         env: [sha1]
         mon.a:
-            - ceph osd require-osd-release umbrella
+            - ceph osd require-osd-release vampire
 
     - print: "**** done start telemetry x..."
     - workunit:
