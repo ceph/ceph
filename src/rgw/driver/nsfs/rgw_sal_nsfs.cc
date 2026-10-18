@@ -7636,6 +7636,28 @@ const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
   return "?";
 }
 
+/* What the conversion's attribute rewrite raises, and nothing else.
+ *
+ * `CAP_DAC_OVERRIDE` alone.  The walk runs as the gateway on an
+ * operator's instruction (see convert_attrs()), and an object written
+ * under impersonation is its requester's at `0660`, so the gateway can
+ * read it -- it holds `CAP_DAC_READ_SEARCH` for its whole life -- and
+ * cannot write an attribute to it.  Without this the first object
+ * stops the walk with EACCES and the converting marker stays.
+ *
+ * No `CAP_FOWNER`, which the two other raise sites pair with this one.
+ * It answers only `xattr_permission()`'s sticky-directory gate, and
+ * that gate needs a sticky directory the gateway does not own:  ours
+ * are the gateway's (impersonation design §8a) and NooBaa's are `0777`
+ * with no sticky bit (NOOBAA_WRITE_SURFACE.md).  Nothing produces the
+ * intersection, so naming FOWNER here would raise a capability no call
+ * under it can use.
+ *
+ * In the gateway's permitted set already, so this names a site and not
+ * a new capability. */
+static constexpr uint64_t CONVERT_REWRITE_CAPS =
+  nsfs::cap_bit(CAP_DAC_OVERRIDE);
+
 /* Rewrite one file's attributes into the bucket's format.
  *
  * Not through FSEnt::write_attrs(), which does the write and the prune
@@ -7732,7 +7754,9 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   if (!to_write.empty()) {
-    ret = fs->set_xattrs(dpp, fd, to_write);
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      return fs->set_xattrs(dpp, fd, to_write);
+    });
     if (ret < 0) {
       return ret;
     }
@@ -7751,7 +7775,9 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
     /* the upgrade command's own rewrite, not a request:  it runs on
      * an operator's instruction across objects of many identities,
      * so it uses the gateway's credentials deliberately */
-    ret = fs->remove_xattrs(dpp, fd, to_remove);
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      return fs->remove_xattrs(dpp, fd, to_remove);
+    });
     if (ret < 0) {
       return ret;
     }
@@ -8065,7 +8091,15 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     }
   }
   if (!to_write.empty()) {
-    ret = fs->set_xattrs(dpp, sfd, to_write);
+    /* The adopted-tree case.  inherit_ids() above has given the
+     * sentinel the directory's owner, and in a tree we laid down that
+     * is the gateway, which needs no raise to write it.  In an adopted
+     * one the directory is whoever NooBaa ran as, so the sentinel is
+     * theirs at `0660` by the time this runs and the write fails as an
+     * object's does. */
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      return fs->set_xattrs(dpp, sfd, to_write);
+    });
     if (ret < 0) {
       return ret;
     }
