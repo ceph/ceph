@@ -97,7 +97,7 @@ OSDMap
 Code cleanup
 ------------
 
-- [ ] search code for "after X-1" or "X" for conditional checks
+- [x] search code for "after X-1" or "X" for conditional checks
 - [ ] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
   `ceph_release_t::*`)
 - [ ] search code for `require_osd_release`
