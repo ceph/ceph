@@ -162,12 +162,8 @@ cephadm / Orchestrator
   and support for CephFS shares served from an external Ceph cluster.
 - NVMe-oF gateway spec gained many fields (TLS, KMIP, Prometheus
   frequency, namespace limits, group assignment).
-- Hardware monitoring (``node-proxy``): new ``AtollonSystem`` support
-  for AMI/Atollon BMCs, temperature/fan-speed reporting, and FCM (NVMe
-  vendor log page 0xCA) stats exposed via ``ceph orch hardware
-  status``.
-- NFS-Ganesha: active-active/keepalived-only ingress mode, TLS
-  configuration support, RDMA handling during upgrades.
+- NFS-Ganesha: QoS support, active-active/keepalived-only ingress mode,
+  TLS configuration support, RDMA handling during upgrades.
 - Crimson/seastore OSD deployment support added to cephadm and
   ceph-volume.
 
