@@ -711,6 +711,23 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     // add a watcher to respond to realm configuration changes
     // if we're part of a realm, add a watcher to respond to configuration changes
     if (const auto& realm = env.site->get_realm(); realm) {
+      // for testing: hold the gateway with its frontends up but no realm watch
+      // yet, so a period change can land in that window. the hold ends when
+      // rgw_inject_delay_pattern stops selecting it, or after the delay
+      if (g_conf()->rgw_inject_delay_sec > 0 &&
+          std::string_view(g_conf()->rgw_inject_delay_pattern) ==
+              "delay_realm_watch") {
+        const double delay_sec = g_conf()->rgw_inject_delay_sec;
+        ldpp_dout(dpp, 0) << "injecting delay of up to " << delay_sec
+            << "s before watching the realm" << dendl;
+        const auto until = std::chrono::steady_clock::now() +
+            std::chrono::duration<double>(delay_sec);
+        while (std::chrono::steady_clock::now() < until &&
+               g_conf().get_val<std::string>("rgw_inject_delay_pattern") ==
+                   "delay_realm_watch") {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+      }
       realm_watcher = env.cfgstore->create_realm_watcher(dpp, null_yield, *realm);
     }
     if (realm_watcher) {
