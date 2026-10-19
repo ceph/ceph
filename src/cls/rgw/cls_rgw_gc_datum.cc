@@ -137,10 +137,8 @@ using ::cls::rgw::wire::writer;
 {
     ::ceph::buffer::list output;
     writer archive {output};
-    archive.frame(1, [&] {
-        archive.scalar(size);
-        archive.scalar(deferred);
-    });
+    archive.frame(::ceph::salad::datum::binary_fields<&init_request::size, &init_request::num_deferred_entries> {},
+                  1, init_request {size, deferred});
 
     return output;
 }

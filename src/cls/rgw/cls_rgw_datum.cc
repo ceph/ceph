@@ -754,6 +754,13 @@ using ::cls::rgw::wire::writer;
 {
     ::ceph::buffer::list output;
     writer archive {output};
+    if (prefixes.empty()) {
+        using record = ::cls::rgw::wire::scalar_record<std::uint32_t>;
+
+        archive.frame(::ceph::salad::datum::binary_fields<&record::value> {}, 1, record {0});
+
+        return output;
+    }
     archive.frame(1, [&] { archive.native(prefixes); });
 
     return output;
