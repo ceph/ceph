@@ -1317,15 +1317,22 @@ async fn test_object_anon_put_write_access() {
         .await
         .unwrap();
 
+    /* The bucket's public-read-write ACL grants the write;  `foo` is
+     * the main user's, so under a model where POSIX governs data the
+     * overwrite is denied, and under `s3-native` the gateway performs
+     * it.  Anonymous is its own POSIX identity, so it is asked for by
+     * the empty user. */
     let unauth = get_unauthenticated_client();
-    unauth
+    let access = s3_tests_rs::access_model::Access::ask(
+        s3_tests_rs::access_model::Class::Data,
+        &bucket_name, "foo", "", "w").await;
+    access.judge(unauth
         .put_object()
         .bucket(&bucket_name)
         .key("foo")
         .body(ByteStream::from_static(b"foo"))
         .send()
-        .await
-        .unwrap();
+        .await);
 }
 
 #[tokio::test]

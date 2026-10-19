@@ -91,9 +91,21 @@ async fn test_post_object_anonymous_request() {
     let r = post_object_form(&url, fields, b"bar").await;
     assert_eq!(r.status, 204);
 
-    let resp = client.get_object().bucket(&bucket).key("foo.txt").send().await.unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"bar");
+    /* The *owner* reading back what an anonymous POST wrote.  nsfs
+     * creates owner-only, so the object belongs to anonymous, and
+     * under a model where POSIX governs data the bucket's own owner is
+     * denied its content:  a public-read-write bucket becomes a drop
+     * box each writer can read only its own part of.  Under
+     * `s3-native` the object's `public-read` ACL decides, as S3 says
+     * it should. */
+    let access = s3_tests_rs::access_model::Access::ask(
+        s3_tests_rs::access_model::Class::Data,
+        &bucket, "foo.txt", &get_config().main_user_id, "r").await;
+    if let Some(resp) = access.judge(
+            client.get_object().bucket(&bucket).key("foo.txt").send().await) {
+        let body = resp.body.collect().await.unwrap().into_bytes();
+        assert_eq!(&body[..], b"bar");
+    }
 }
 
 // --- Authenticated POST ---
@@ -1072,11 +1084,32 @@ async fn test_post_object_tags_anonymous_request() {
     let r = post_object_form(&url, fields, b"bar").await;
     assert_eq!(r.status, 204);
 
-    let resp = client.get_object().bucket(&bucket).key("foo.txt").send().await.unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"bar");
+    /* The *owner* reading back what an anonymous POST wrote.  nsfs
+     * creates owner-only, so the object belongs to anonymous, and
+     * under a model where POSIX governs data the bucket's own owner is
+     * denied its content:  a public-read-write bucket becomes a drop
+     * box each writer can read only its own part of.  Under
+     * `s3-native` the object's `public-read` ACL decides, as S3 says
+     * it should.
+     *
+     * The tags are the other class, so they follow `s3-metadata` as
+     * well as `s3-native`. */
+    let cfg = get_config();
+    let data = s3_tests_rs::access_model::Access::ask(
+        s3_tests_rs::access_model::Class::Data,
+        &bucket, "foo.txt", &cfg.main_user_id, "r").await;
+    if let Some(resp) = data.judge(
+            client.get_object().bucket(&bucket).key("foo.txt").send().await) {
+        let body = resp.body.collect().await.unwrap().into_bytes();
+        assert_eq!(&body[..], b"bar");
+    }
 
-    let tag_resp = client.get_object_tagging().bucket(&bucket).key("foo.txt").send().await.unwrap();
+    let attrs = s3_tests_rs::access_model::Access::ask(
+        s3_tests_rs::access_model::Class::ObjectAttrs,
+        &bucket, "foo.txt", &cfg.main_user_id, "r").await;
+    let Some(tag_resp) = attrs.judge(
+        client.get_object_tagging().bucket(&bucket).key("foo.txt")
+            .send().await) else { return };
     let tag_set = tag_resp.tag_set();
     assert_eq!(tag_set.len(), 2);
     for tag in tag_set {

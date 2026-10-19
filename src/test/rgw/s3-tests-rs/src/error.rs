@@ -63,7 +63,7 @@ macro_rules! assert_s3_err {
 /// identity owns -- its tags or its ACL.
 ///
 /// Which way this goes is the gateway's access model, not the
-/// filesystem's verdict, so it cannot be asked of `admin::fs_access`:
+/// permission check, so it cannot be asked of `admin::fs_access`:
 /// under `s3-metadata` the gateway performs the operation itself once
 /// S3 has authorised it, and under `posix-strict` the filesystem's
 /// refusal stands.  `features::cross_account_metadata()` reports
@@ -91,10 +91,10 @@ macro_rules! unless_posix_governs_metadata {
 /// identity owns -- anything that moves its bytes.
 ///
 /// Two inputs, because both can refuse it.  Under a model where POSIX
-/// governs data the filesystem's verdict decides, so this defers to
+/// governs data the permission check decides, so this defers to
 /// `unless_fs_refuses!`;  under `s3-native` S3 is the authority for
-/// bytes as well and the gateway serves what POSIX refused, so the
-/// verdict says nothing.  `features::cross_account_data()` reports
+/// bytes as well and the gateway serves what POSIX denied, so the
+/// check says nothing.  `features::cross_account_data()` reports
 /// which, and the caller passes it:  a helper that read the model
 /// itself would assert the strict models' behaviour against whatever
 /// model the run configured.
@@ -103,11 +103,11 @@ macro_rules! unless_posix_governs_metadata {
 /// asserts **nothing**, as in `unless_posix_governs_metadata!`.
 #[macro_export]
 macro_rules! unless_posix_governs_data {
-    ($model:expr, $verdict:expr, $result:expr) => {{
+    ($model:expr, $check:expr, $result:expr) => {{
         let result = $result;
         match $model {
             Some(true) => Some(result.unwrap()),
-            Some(false) => $crate::unless_fs_refuses!($verdict, result),
+            Some(false) => $crate::unless_fs_refuses!($check, result),
             None => result.ok(),
         }
     }};
@@ -116,18 +116,18 @@ macro_rules! unless_posix_governs_data {
 /// The result of a request S3 permits, where the filesystem may still
 /// refuse it:  under impersonation nsfs serves each request as its POSIX
 /// identity, and the filesystem decides an object's content too
-/// (`admin::fs_access`).  AccessDenied where `verdict` refuses;  the
+/// (`admin::fs_access`).  AccessDenied where `check` denied it;  the
 /// output, unwrapped, otherwise -- `Some` in that case, so a test checks
 /// what it read only where it read.
 ///
 /// The primitive under `unless_posix_governs_data!`, which is what a
 /// test asserting a cross-identity data refusal should reach for:  this
-/// one trusts the verdict whatever the access model says.
+/// one trusts the check whatever the access model says.
 #[macro_export]
 macro_rules! unless_fs_refuses {
-    ($verdict:expr, $result:expr) => {{
+    ($check:expr, $result:expr) => {{
         let result = $result;
-        if $verdict.refuses() {
+        if $check.denied() {
             $crate::assert_s3_err!(result, 403, "AccessDenied");
             None
         } else {

@@ -7,7 +7,7 @@ use s3_tests_rs::client::{get_alt_client, get_client, get_unauthenticated_client
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::{get_new_bucket, get_new_bucket_name};
 use s3_tests_rs::assert_s3_err;
-use s3_tests_rs::admin::fs_access;
+use s3_tests_rs::access_model::{Access, Class};
 
 fn check_grant(grant: &Grant, perm: &str, grantee_type: &str, id: Option<&str>, uri: Option<&str>) {
     assert_eq!(grant.permission().unwrap().as_str(), perm);
@@ -969,14 +969,28 @@ async fn setup_access(
 /// one written.
 async fn check_alt_read(alt_client: &aws_sdk_s3::Client, bucket: &str,
                         key: &str, expected: &[u8]) {
-    let verdict = fs_access(bucket, key, &get_config().alt_user_id, "r").await;
-    let read = s3_tests_rs::unless_posix_governs_data!(
-        s3_tests_rs::features::cross_account_data().await, verdict,
-        alt_client.get_object().bucket(bucket).key(key).send().await);
-    if let Some(out) = read {
+    let access = Access::ask(Class::Data, bucket, key,
+                             &get_config().alt_user_id, "r").await;
+    if let Some(out) = access.judge(
+            alt_client.get_object().bucket(bucket).key(key).send().await) {
         let body = out.body.collect().await.unwrap().into_bytes();
         assert_eq!(&body[..], expected);
     }
+}
+
+/// alt's overwrite of `key`, which the bucket's `public-read-write`
+/// ACL grants it.
+///
+/// The object is the main user's, so under a model where POSIX governs
+/// data the overwrite is denied -- a bucket directory is `1777`, so
+/// alt may add an entry but may not rename over one it does not own --
+/// and under `s3-native` the gateway performs the publish itself.
+async fn check_alt_overwrite(alt_client: &aws_sdk_s3::Client, bucket: &str,
+                             key: &str, body: &'static [u8]) {
+    let access = Access::ask(Class::Data, bucket, key,
+                             &get_config().alt_user_id, "w").await;
+    access.judge(alt_client.put_object().bucket(bucket).key(key)
+        .body(ByteStream::from_static(body)).send().await);
 }
 
 fn check_access_denied<E: std::fmt::Debug>(result: Result<impl std::fmt::Debug, aws_sdk_s3::error::SdkError<E>>) {
@@ -1299,26 +1313,12 @@ async fn test_access_bucket_publicreadwrite_object_private() {
     check_access_denied(
         alt_client.get_object().bucket(&bucket_name).key(&key1).send().await,
     );
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .body(ByteStream::from_static(b"barcontent"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_overwrite(&alt_client, &bucket_name, &key1, b"barcontent").await;
 
     check_access_denied(
         alt_client.get_object().bucket(&bucket_name).key(&key2).send().await,
     );
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&key2)
-        .body(ByteStream::from_static(b"baroverwrite"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_overwrite(&alt_client, &bucket_name, &key2, b"baroverwrite").await;
 
     let objs = get_objects_list(&alt_client, &bucket_name).await;
     assert_eq!(objs, vec!["bar", "foo"]);
@@ -1341,26 +1341,12 @@ async fn test_access_bucket_publicreadwrite_object_publicread() {
 
     check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .body(ByteStream::from_static(b"barcontent"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_overwrite(&alt_client, &bucket_name, &key1, b"barcontent").await;
 
     check_access_denied(
         alt_client.get_object().bucket(&bucket_name).key(&key2).send().await,
     );
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&key2)
-        .body(ByteStream::from_static(b"baroverwrite"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_overwrite(&alt_client, &bucket_name, &key2, b"baroverwrite").await;
 
     let objs = get_objects_list(&alt_client, &bucket_name).await;
     assert_eq!(objs, vec!["bar", "foo"]);
@@ -1383,26 +1369,12 @@ async fn test_access_bucket_publicreadwrite_object_publicreadwrite() {
 
     check_alt_read(&alt_client, &bucket_name, &key1, b"foocontent").await;
 
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&key1)
-        .body(ByteStream::from_static(b"foooverwrite"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_overwrite(&alt_client, &bucket_name, &key1, b"foooverwrite").await;
 
     check_access_denied(
         alt_client.get_object().bucket(&bucket_name).key(&key2).send().await,
     );
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&key2)
-        .body(ByteStream::from_static(b"baroverwrite"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_overwrite(&alt_client, &bucket_name, &key2, b"baroverwrite").await;
 
     let objs = get_objects_list(&alt_client, &bucket_name).await;
     assert_eq!(objs, vec!["bar", "foo"]);

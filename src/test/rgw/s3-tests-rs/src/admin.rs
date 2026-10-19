@@ -274,28 +274,29 @@ impl SavedIdentities {
     }
 }
 
-/// The filesystem's verdict on a request, where impersonation adds one.
+/// The result of a permission check, which impersonation adds to a
+/// request.
 ///
 /// With impersonation on, nsfs serves each request as its POSIX identity,
-/// so the filesystem decides an object's content as well as S3:  a read
-/// S3 permits is still refused to an identity the file's mode excludes,
-/// and a requester with no POSIX record is refused outright.  A test
-/// asserting S3's authorization asks for this first, and asserts the
-/// refusal where the filesystem refuses.
+/// so an object's mode decides its content as well as S3:  a read S3
+/// permits is still denied to an identity the mode excludes, and a
+/// requester with no POSIX record is denied before any file is opened.
+/// A test asserting S3's authorization asks for this first, and asserts
+/// the denial where the check denied it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FsVerdict {
+pub enum FsAccess {
     /// Not impersonating, or nothing could be asked:  S3 alone decides.
     NotImpersonating,
     Permitted,
-    Refused,
-    /// The requester has no POSIX record, and is refused before any file.
+    Denied,
+    /// The requester has no POSIX record, and is denied before any file.
     NoIdentity,
 }
 
-impl FsVerdict {
-    /// Refused by the filesystem, whatever S3 permits.
-    pub fn refuses(self) -> bool {
-        matches!(self, FsVerdict::Refused | FsVerdict::NoIdentity)
+impl FsAccess {
+    /// Denied before S3 is consulted, whatever S3 permits.
+    pub fn denied(self) -> bool {
+        matches!(self, FsAccess::Denied | FsAccess::NoIdentity)
     }
 }
 
@@ -310,16 +311,16 @@ impl FsVerdict {
 /// the object exists.  `user` is the request's user, `tenant$id` for a
 /// tenant's, empty for anonymous.
 pub async fn fs_access(bucket: &str, key: &str, user: &str, mode: &str)
-                       -> FsVerdict {
+                       -> FsAccess {
     let (b, k, u) = (q(bucket), q(key), q(user));
     let r = driver_hint_results("access", &[("bucket", &b), ("key", &k),
                                             ("user", &u), ("mode", mode)])
         .await;
-    match r.as_ref().and_then(|m| m.get("verdict")).map(String::as_str) {
-        Some("permitted") => FsVerdict::Permitted,
-        Some("refused") => FsVerdict::Refused,
-        Some("no-identity") => FsVerdict::NoIdentity,
-        _ => FsVerdict::NotImpersonating,
+    match r.as_ref().and_then(|m| m.get("result")).map(String::as_str) {
+        Some("permitted") => FsAccess::Permitted,
+        Some("refused") => FsAccess::Denied,
+        Some("no-identity") => FsAccess::NoIdentity,
+        _ => FsAccess::NotImpersonating,
     }
 }
 

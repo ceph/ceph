@@ -418,10 +418,10 @@ async fn test_object_copy_canned_acl() {
         .unwrap();
 
     /* S3 grants it;  under impersonation the filesystem decides too */
-    let verdict = fs_access(&bucket_name, "bar321foo",
+    let check = fs_access(&bucket_name, "bar321foo",
                             &get_config().alt_user_id, "r").await;
     s3_tests_rs::unless_posix_governs_data!(
-        s3_tests_rs::features::cross_account_data().await, verdict, alt_client
+        s3_tests_rs::features::cross_account_data().await, check, alt_client
         .get_object()
         .bucket(&bucket_name)
         .key("bar321foo")
@@ -441,10 +441,10 @@ async fn test_object_copy_canned_acl() {
         .unwrap();
 
     /* S3 grants it;  under impersonation the filesystem decides too */
-    let verdict = fs_access(&bucket_name, "foo123bar",
+    let check = fs_access(&bucket_name, "foo123bar",
                             &get_config().alt_user_id, "r").await;
     s3_tests_rs::unless_posix_governs_data!(
-        s3_tests_rs::features::cross_account_data().await, verdict, alt_client
+        s3_tests_rs::features::cross_account_data().await, check, alt_client
         .get_object()
         .bucket(&bucket_name)
         .key("foo123bar")
@@ -840,18 +840,18 @@ async fn test_object_copy_not_owned_object_bucket() {
         .unwrap();
 
     /* S3 grants it;  under impersonation the filesystem decides too */
-    let verdict = fs_access(&bucket_name, "foo123bar",
+    let check = fs_access(&bucket_name, "foo123bar",
                             &get_config().alt_user_id, "r").await;
     let data_model = s3_tests_rs::features::cross_account_data().await;
-    s3_tests_rs::unless_posix_governs_data!(data_model, verdict, alt_client
+    s3_tests_rs::unless_posix_governs_data!(data_model, check, alt_client
         .get_object()
         .bucket(&bucket_name)
         .key("foo123bar")
         .send()
         .await);
 
-    /* the copy reads the source as alt, so the same verdict */
-    s3_tests_rs::unless_posix_governs_data!(data_model, verdict, alt_client
+    /* the copy reads the source as alt, so the same check */
+    s3_tests_rs::unless_posix_governs_data!(data_model, check, alt_client
         .copy_object()
         .bucket(&bucket_name)
         .key("bar321foo")

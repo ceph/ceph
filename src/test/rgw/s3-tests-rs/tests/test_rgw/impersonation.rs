@@ -8,7 +8,7 @@
 //! The fixture ids come from that same option:  group `rgwfix`
 //! (70010), `rgwalice` (70101) in it, `rgwbob` (70102) not.
 
-use s3_tests_rs::admin::fs_access;
+use s3_tests_rs::access_model::{Access, Class};
 use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity,
                          SavedIdentities};
 use s3_tests_rs::client::{get_alt_client, get_client};
@@ -149,10 +149,16 @@ async fn test_impersonation_isolates_identities() {
     let mine = alice.get_object().bucket(&bucket).key(key).send().await;
     assert!(mine.is_ok(), "alice could not read her own object: {mine:?}");
 
-    let theirs = bob.get_object().bucket(&bucket).key(key).send().await;
-    assert!(theirs.is_err(),
-        "bob read an object owned by alice although S3 was the only thing \
-         permitting it;  the filesystem identity is not in effect");
+    /* The subject is the permission check, and it holds at every
+     * access model:  alice's object is alice's, so bob's read of it is
+     * denied.  What the gateway then does about that is the model's
+     * business, which `judge` asserts. */
+    let access = Access::ask(Class::Data, &bucket, key,
+                             &cfg.alt_user_id, "r").await;
+    assert!(access.filesystem_refuses(),
+        "the filesystem permits bob to read an object alice wrote;  \
+         did not cover creation, so the object is not owned by her");
+    access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
 
     unbind_identities().await;
 }
@@ -161,7 +167,7 @@ async fn test_impersonation_isolates_identities() {
 /// inferred from whichever tests happen to read data.
 ///
 /// `rgw_nsfs_access_model` decides what the gateway does with an
-/// operation S3 authorised and the filesystem refused.  For an
+/// operation S3 authorised and the permission check denied.  For an
 /// object's tags and ACL, `s3-metadata` and `s3-native` perform it
 /// and `posix-strict` refuses;  for the object's bytes, only
 /// `s3-native` performs it, which is what the posix driver and every
@@ -175,7 +181,7 @@ async fn test_impersonation_isolates_identities() {
 /// first implementation opened the object as the gateway for an
 /// attribute read and left that descriptor cached on the entry;  the
 /// data path found it already open and served bob bytes the
-/// filesystem had refused him.  The guard written for that case never
+/// he had been denied.  The guard written for that case never
 /// ran -- it keyed on a flag the real path did not set -- so the only
 /// thing that caught it was an unrelated acl test.  This test exists
 /// so that the next person to widen a retry here is told by name.
@@ -324,7 +330,7 @@ async fn test_data_follows_the_access_model() {
 
     /* and the configured model is back */
     let after_restore =
-        s3_tests_rs::access_model::verdict_for("data").await;
+        s3_tests_rs::access_model::model_for("data").await;
     assert_eq!(after_restore.as_deref(), Some("refuse"),
         "the configured model was not restored;  every later test in this \
          run is measuring something nobody configured");
@@ -404,13 +410,26 @@ async fn test_impersonation_owns_a_nested_key() {
     let mine = bob.get_object().bucket(&bucket).key(his).send().await;
     assert!(mine.is_ok(), "bob could not read his own nested object: {mine:?}");
 
-    let theirs = bob.get_object().bucket(&bucket).key(hers).send().await;
-    assert!(theirs.is_err(),
-        "bob read alice's nested object although S3 was the only thing \
-         permitting it;  it is not owned by her");
-    let theirs = alice.get_object().bucket(&bucket).key(his).send().await;
-    assert!(theirs.is_err(),
-        "alice read bob's nested object;  it is not owned by him");
+    /* each is owned by whoever wrote it, which the filesystem says
+     * and no access model changes */
+    let hers_to_bob = Access::ask(Class::Data, &bucket, hers,
+                                  &cfg.alt_user_id, "r").await;
+    assert!(hers_to_bob.filesystem_refuses(),
+        "the filesystem permits bob to read alice's nested object;  it is \
+         owned by her");
+    hers_to_bob.judge(
+        bob.get_object().bucket(&bucket).key(hers).send().await);
+
+    /* The other direction is the permission check and nothing else.  The policy above grants *bob* s3:GetObject;  alice has no
+     * grant on bob's object, so a GET of it is refused by RGW's own
+     * authorization before any file is opened -- which would pass with
+     * impersonation off and prove nothing.  So ask the kernel and do
+     * not read:  there is no S3-authorised operation here to judge. */
+    let his_to_alice = Access::ask(Class::Data, &bucket, his,
+                                   &cfg.main_user_id, "r").await;
+    assert!(his_to_alice.filesystem_refuses(),
+        "the filesystem permits alice to read bob's nested object;  it is \
+         owned by him");
 
     unbind_identities().await;
 }
@@ -476,10 +495,12 @@ async fn test_impersonation_owns_a_completed_upload() {
         .expect("reading the body").into_bytes();
     assert_eq!(&body[..], &up.data[..], "the completed object's bytes differ");
 
-    let theirs = bob.get_object().bucket(&bucket).key(key).send().await;
-    assert!(theirs.is_err(),
-        "bob read alice's completed upload although S3 was the only thing \
-         permitting it;  it is not owned by her");
+    let access = Access::ask(Class::Data, &bucket, key,
+                             &cfg.alt_user_id, "r").await;
+    assert!(access.filesystem_refuses(),
+        "the filesystem permits bob to read the object alice's upload \
+         it was made as the gateway");
+    access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
 
     unbind_identities().await;
 }
@@ -532,10 +553,14 @@ async fn test_impersonation_copies_as_the_requester() {
         .bucket(&bucket).policy(&doc).send().await;
     assert!(pol.is_ok(), "could not grant bob s3:GetObject: {pol:?}");
 
-    /* the premise:  the filesystem refuses bob the read S3 permits */
-    let theirs = bob.get_object().bucket(&bucket).key(key).send().await;
-    assert!(theirs.is_err(),
-        "bob read alice's object;  the premise of this test does not hold");
+    /* the premise:  bob's read is denied by the object's mode, though
+     * S3 permits it */
+    let access = Access::ask(Class::Data, &bucket, key,
+                             &cfg.alt_user_id, "r").await;
+    assert!(access.filesystem_refuses(),
+        "the filesystem permits bob to read alice's object;  the premise \
+         test does not hold");
+    access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
 
     /* the control:  bob can copy at all -- his own object, in his bucket */
     let put = bob.put_object()
@@ -549,14 +574,13 @@ async fn test_impersonation_copies_as_the_requester() {
         .send().await;
     assert!(cp.is_ok(), "bob could not copy his own object: {cp:?}");
 
-    /* and cannot copy what the filesystem will not let him read */
-    let stolen = bob.copy_object()
+    /* and the copy follows the same check as the read:  a copy is a
+     * read of the source, so a model that refuses bob the bytes
+     * refuses him the copy, and one that serves them serves it */
+    access.judge(bob.copy_object()
         .bucket(&bobs_bucket).key("stolen")
         .copy_source(format!("{bucket}/{key}"))
-        .send().await;
-    assert!(stolen.is_err(),
-        "bob copied an object the filesystem refuses him;  the copy read \
-         the source as the gateway");
+        .send().await);
 
     /* alice's copy of her own object is hers */
     let cp = alice.copy_object()
@@ -568,10 +592,13 @@ async fn test_impersonation_copies_as_the_requester() {
     assert!(mine.is_ok(),
         "alice could not read her own copy;  it was made as the gateway: \
          {mine:?}");
-    let theirs = bob.get_object().bucket(&bucket).key("alices-copy").send().await;
-    assert!(theirs.is_err(),
-        "bob read alice's copy although S3 was the only thing permitting \
-         it;  it is not owned by her");
+    let hers = Access::ask(Class::Data, &bucket, "alices-copy",
+                           &cfg.alt_user_id, "r").await;
+    assert!(hers.filesystem_refuses(),
+        "the filesystem permits bob to read alice's copy;  it is not owned \
+         by her");
+    hers.judge(
+        bob.get_object().bucket(&bucket).key("alices-copy").send().await);
 
     unbind_identities().await;
 }
@@ -602,6 +629,7 @@ async fn test_impersonation_honours_the_group_vector() {
         return;
     }
 
+    let cfg = get_config();
     let alice = get_client();
     let bucket = "impersonate-fixture";
 
@@ -612,10 +640,15 @@ async fn test_impersonation_honours_the_group_vector() {
     assert!(open.is_ok(),
         "the control object was unreadable;  the fixture or the gateway \
          is wrong, not the group vector: {open:?}");
-    let gated = alice.get_object().bucket(bucket).key("grouped.txt")
-        .send().await;
-    assert!(gated.is_ok(),
-        "holding gid {GID_SHARED} did not grant the read: {gated:?}");
+    /* the vector's effect is in the permission check, which is
+     * the same answer at every access model -- so this reads the
+     * vector itself and not what the gateway does about it */
+    let gated = Access::ask(Class::Data, bucket, "grouped.txt",
+                            &cfg.main_user_id, "r").await;
+    assert!(!gated.filesystem_refuses(),
+        "holding gid {GID_SHARED} did not grant the read");
+    gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
+        .send().await);
 
     /* same identity, no group */
     bind_identities(None).await;
@@ -624,11 +657,14 @@ async fn test_impersonation_honours_the_group_vector() {
     assert!(open.is_ok(),
         "the control object became unreadable without the group; \
          something other than the group vector changed: {open:?}");
-    let gated = alice.get_object().bucket(bucket).key("grouped.txt")
-        .send().await;
-    assert!(gated.is_err(),
-        "the object was read without the group in the vector — an absent \
-         list left the gateway's own groups in place rather than clearing");
+    let gated = Access::ask(Class::Data, bucket, "grouped.txt",
+                            &cfg.main_user_id, "r").await;
+    assert!(gated.filesystem_refuses(),
+        "the filesystem permitted the read without the group in the \
+         vector — an absent list left the gateway's own groups in place \
+         rather than clearing");
+    gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
+        .send().await);
 
     unbind_identities().await;
 }
@@ -786,7 +822,7 @@ async fn test_a_raise_is_effective_for_one_call_and_dropped_after() {
         None => return,
     };
 
-    match m.get("verdict").map(String::as_str) {
+    match m.get("result").map(String::as_str) {
         Some("ran") => {
             assert_eq!(
                 m.get("before").map(String::as_str), Some("0"),
@@ -865,7 +901,7 @@ async fn test_nested_run_as_refuses_a_different_identity() {
         /* no admin access, or a driver without the hint */
         None => return,
     };
-    match m.get("verdict").map(String::as_str) {
+    match m.get("result").map(String::as_str) {
         Some("ran") => {}
         /* impersonation off, or the fixture's users carry no identity:
          * the nested path is unreachable, so there is nothing to assert */
