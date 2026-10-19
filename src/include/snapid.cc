@@ -14,6 +14,7 @@
  */
 
 #include "snapid.h"
+#include "include/rados.h" // for CEPH_NOSNAP
 
 #include <fmt/compile.h>
 
