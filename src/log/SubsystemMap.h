@@ -6,7 +6,6 @@
 
 #include <array>
 #include <cstdint>
-#include <vector>
 #include <algorithm>
 
 #include "common/likely.h"
@@ -34,20 +33,11 @@ class SubsystemMap {
   // The rest. Should be as small as possible to not unnecessarily
   // enlarge md_config_t and spread it other elements across cache
   // lines. Access can be slow.
-  std::vector<ceph_subsys_item_t> m_subsys;
+  std::array<ceph_subsys_item_t, ceph_subsys_get_num()> m_subsys = ceph_subsys_get_as_array();
 
   friend class Log;
 
 public:
-  SubsystemMap() {
-    constexpr auto s = ceph_subsys_get_as_array();
-    m_subsys.reserve(s.size());
-
-    for (const ceph_subsys_item_t& item : s) {
-      m_subsys.emplace_back(item);
-    }
-  }
-
   constexpr static std::size_t get_num() {
     return ceph_subsys_get_num();
   }
