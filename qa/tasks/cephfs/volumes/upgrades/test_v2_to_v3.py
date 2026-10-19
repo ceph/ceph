@@ -31,7 +31,7 @@ class TestBasic(SubvolAutoUpgrade):
 
         # this will trigger subvol auto-upgrade
         v3_sv_path = v2.getpath().strip()
-        v3 = SubvolV3(v2=v2)
+        v3 = SubvolV3(sv=v2)
         self.assertEqual(v3_sv_path, v3.get_mnt_path())
 
         v3.sanity_test_meta_file()
@@ -53,7 +53,7 @@ class TestBasic(SubvolAutoUpgrade):
 
         # this will trigger subvol auto-upgrade
         v3_sv_path = v2.getpath().strip()
-        v3 = SubvolV3(v2=v2)
+        v3 = SubvolV3(sv=v2)
         self.assertEqual(v3_sv_path, v3.get_mnt_path())
 
         v3.sanity_test_meta_file()
@@ -74,7 +74,7 @@ class TestBasic(SubvolAutoUpgrade):
 
         # this will trigger subvol auto-upgrade
         v3_sv_path = v2.getpath().strip()
-        v3 = SubvolV3(v2=v2)
+        v3 = SubvolV3(sv=v2)
         self.assertEqual(v3_sv_path, v3.get_mnt_path())
 
         v3.sanity_test_meta_file()
@@ -113,7 +113,7 @@ class TestWithIoLoad(SubvolAutoUpgrade):
         # this will trigger subvol auto-upgrade
         v3_sv_path = v2.getpath().strip()
         # getting v3 object
-        v3 = SubvolV3(v2=v2)
+        v3 = SubvolV3(sv=v2)
         self.assertEqual(v3_sv_path, v3.get_mnt_path())
 
         v3.sanity_test_meta_file()
@@ -146,7 +146,7 @@ class TestWithIoLoad(SubvolAutoUpgrade):
         # this will trigger subvol auto-upgrade
         v3_sv_path = v2.getpath().strip()
         # getting v3 object
-        v3 = SubvolV3(v2=v2)
+        v3 = SubvolV3(sv=v2)
         self.assertEqual(v3_sv_path, v3.get_mnt_path())
 
         v3.sanity_test_meta_file()
@@ -181,7 +181,7 @@ class TestWithIoLoad(SubvolAutoUpgrade):
         # this will trigger subvol auto-upgrade
         v3_sv_path = v2.getpath().strip()
         # getting v3 object
-        v3 = SubvolV3(v2=v2)
+        v3 = SubvolV3(sv=v2)
         self.assertEqual(v3_sv_path, v3.get_mnt_path())
 
         # XXX confirm that writer threads haven't crash due to upgrade

@@ -274,9 +274,9 @@ class SubvolBase(SubvolOps):
         assert getpath == exp_snap_path
 
 
-class SubvolV2(SubvolBase):
+class V1V2Base(SubvolBase):
     '''
-    Helper class for v2 subvolumes.
+    Base class for SubvolV1 and SubvolV2.
     '''
 
     def __init__(self, mon_manager=None, mount=None, volname=None, name=None,
@@ -308,7 +308,7 @@ class SubvolV2(SubvolBase):
 
     @property
     def version(self):
-        return 2
+        raise NotImplementedError('derived class should override this method')
 
     @property
     def mnt_path(self):
@@ -331,9 +331,7 @@ class SubvolV2(SubvolBase):
         return self._meta_path
 
     def get_snap_base_path(self):
-        if not self._snap_base_path:
-            self._snap_base_path = join(self.base_path, '.snap')
-        return self._snap_base_path
+        raise NotImplementedError('derived class should override this method')
 
     def get_snap_path(self, snap_name):
         return join(self.get_snap_base_path(), snap_name)
@@ -341,6 +339,80 @@ class SubvolV2(SubvolBase):
 
     # ----- create stuff without create command ------
 
+    def custom_create(self):
+        raise NotImplementedError('derived class should override this method')
+
+    def custom_create_snap(self):
+        raise NotImplementedError('derived class should override this method')
+
+
+class SubvolV1(V1V2Base):
+    '''
+    Helper class for v1 subvolumes.
+    '''
+
+    @property
+    def version(self):
+        return 1
+
+    def get_snap_base_path(self):
+        if not self._snap_base_path:
+            self._snap_base_path = join(self.uuid_path, '.snap')
+        return self._snap_base_path
+
+    def custom_create(self):
+        '''
+        For testing subvol auto-upgrade, create v1 subvol without using
+        'subvolume create' command.
+        '''
+        self.mount_a.run_shell(f'sudo mkdir -p {self.mnt_path[1:]}')
+
+        self.mount.write_file(self.meta_path[1:], dedent(f'''\
+            [GLOBAL]
+            version = 1
+            type = subvolume
+            path = {self.mnt_path}
+            state = complete'''), sudo=True)
+
+        # 755 so that files can accessed without unnecessary hassles
+        self.mount.run_shell(f'chmod -R 755 {self.mnt_path[1:]}')
+
+        for i in range(1, 6):
+            self.mount.run_shell(f'dd if=/dev/zero of={self.mnt_path[1:]}/file-{i} '
+                                 'bs=1M count=1')
+
+    def custom_create_snap(self, snap_name=None):
+        '''
+        For testing subvol auto-upgrade, create v1 snap subvol without using
+        'subvolume snapshot create' command.
+        '''
+        snap_name = snap_name if snap_name else gen_subvol_snap_name()
+
+        self.mount.run_libcephfs_pybind_code(dedent(f"""
+        cephfs.mksnap('{self.get_snap_base_path()}', '{snap_name}', 0o755)
+        """))
+
+        snap_path = self.get_snap_path(snap_name)
+        # verify that snap was created
+        self.mount.run_shell(f'stat {snap_path[1:]}')
+
+        self.snaps.append(snap_name)
+        return snap_name
+
+
+class SubvolV2(V1V2Base):
+    '''
+    Helper class for v2 subvolumes.
+    '''
+
+    @property
+    def version(self):
+        return 2
+
+    def get_snap_base_path(self):
+        if not self._snap_base_path:
+            self._snap_base_path = join(self.base_path, '.snap')
+        return self._snap_base_path
 
     def custom_create(self):
         '''
@@ -396,25 +468,26 @@ class SubvolV3(SubvolBase):
 
 
     def __init__(self, mon_manager=None, mount=None, volname=None, name=None,
-                 uuid=None, grp_name=None, snaps=[], retained=False, v2=None):
+                 uuid=None, grp_name=None, snaps=[], retained=False, sv=None):
         self._reset_paths()
 
-        if v2:
+        # sv = subvol
+        if sv:
             assert not (mon_manager or mount or volname or name or uuid or
                         grp_name or snaps or retained)
-            assert type(v2) is SubvolV2
+            assert type(sv) in (SubvolV2, SubvolV1)
 
-            super().__init__(mon_manager=v2.mon_manager, mount=v2.mount,
-                             volname=v2.volname, name=v2.name, uuid=v2.uuid,
-                             grp_name=v2.grp_name, snaps=v2.snaps,
-                             retained=v2.retained)
-            self.has_v2_snaps = True if v2.snaps else False
-            self.uuid = self.fetch_uuid() if self.has_v2_snaps else v2.uuid
+            super().__init__(mon_manager=sv.mon_manager, mount=sv.mount,
+                             volname=sv.volname, name=sv.name, uuid=sv.uuid,
+                             grp_name=sv.grp_name, snaps=sv.snaps,
+                             retained=sv.retained)
+            self.has_prev_version_snaps = True if sv.snaps else False
+            self.uuid = self.fetch_uuid() if self.has_prev_version_snaps else sv.uuid
         else:
             super().__init__(mon_manager, mount=mount, volname=volname, name=name,
                              uuid=uuid, grp_name=grp_name, snaps=snaps,
                              retained=retained)
-            self.has_v2_snaps = False
+            self.has_prev_version_snaps = False
             self.uuuid = str(uuid4())
 
         self._verify_attrs()
@@ -431,8 +504,8 @@ class SubvolV3(SubvolBase):
 
         assert type(self.uuid) is str, \
                 f'self.uuid = {self.uuid}'
-        assert type(self.has_v2_snaps) is bool, \
-                f'self.has_v2_snaps = {self.has_v2_snaps}'
+        assert type(self.has_prev_version_snaps) is bool, \
+                f'self.has_prev_version_snaps = {self.has_prev_version_snaps}'
 
 
     # ----- subvol helper -----
@@ -511,5 +584,5 @@ class SubvolV3(SubvolBase):
         assert f'state = complete' in meta_content
         assert f'type = subvolume' in meta_content
 
-        if self.has_v2_snaps:
-            assert 'has_v2_snaps = True' in meta_content
+        if self.has_prev_version_snaps:
+            assert 'has_prev_version_snaps = True' in meta_content
