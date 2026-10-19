@@ -172,7 +172,8 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
                             const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
                             bool delete_marker, const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace,
-                            ceph::buffer::list* epoch_out_bl = nullptr);
+                            ceph::buffer::list* epoch_out_bl = nullptr,
+                            const cls_rgw_link_olh_cond* cond = nullptr);
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const std::string& op_tag,
                                    const std::string& olh_tag, uint64_t olh_epoch, bool log_op, uint16_t bilog_flags, const rgw_zone_set& zones_trace,

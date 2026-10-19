@@ -176,11 +176,12 @@ struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
   uint64_t olh_epoch{0};
   ceph::real_time unmod_since; /* only create delete marker if newer than this */
   bool high_precision_time{false};
+  cls_rgw_link_olh_cond cond; /* link only if the current version meets this */
 
   rgw_cls_link_olh_op() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(key, bl);
     encode(olh_tag, bl);
     encode(delete_marker, bl);
@@ -194,11 +195,13 @@ struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
     encode(unmod_since, bl);
     encode(high_precision_time, bl);
     encode(zones_trace, bl);
+    encode(cond.type, bl);
+    encode(cond.key, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(key, bl);
     decode(olh_tag, bl);
     decode(delete_marker, bl);
@@ -222,6 +225,10 @@ struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
     }
     if (struct_v >= 5) {
       decode(zones_trace, bl);
+    }
+    if (struct_v >= 6) {
+      decode(cond.type, bl);
+      decode(cond.key, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1871,7 +1878,8 @@ struct CLSRGWLinkOLHBase : private cls_rgw_bi_log_related_op {
                 uint64_t olh_epoch,
                 ceph::real_time unmod_since,
                 bool high_precision_time,
-                ceph::bufferlist* epoch_out_bl = nullptr) const;
+                ceph::bufferlist* epoch_out_bl = nullptr,
+                const cls_rgw_link_olh_cond* cond = nullptr) const;
 };
 
 // typed OLH-link issuer. DeleteMarkerV selects LINK_OLH vs LINK_OLH_DM.

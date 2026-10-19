@@ -145,10 +145,11 @@ void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& o,
                                   uint64_t olh_epoch,
                                   ceph::real_time unmod_since,
                                   bool high_precision_time,
-                                  ceph::bufferlist* epoch_out_bl) const {
+                                  ceph::bufferlist* epoch_out_bl,
+                                  const cls_rgw_link_olh_cond* cond) const {
   cls_rgw_bucket_link_olh(o, key, olh_tag, delete_marker, op_tag, meta,
                           olh_epoch, unmod_since, high_precision_time,
-                          log_op, zones_trace, epoch_out_bl);
+                          log_op, zones_trace, epoch_out_bl, cond);
 }
 
 void CLSRGWUnlinkInstance::unlink_instance(librados::ObjectWriteOperation& o,
@@ -335,10 +336,13 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
                             const bufferlist& olh_tag, bool delete_marker,
                             const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace,
-                            bufferlist* epoch_out_bl)
+                            bufferlist* epoch_out_bl, const cls_rgw_link_olh_cond* cond)
 {
   bufferlist in;
   rgw_cls_link_olh_op call;
+  if (cond) {
+    call.cond = *cond;
+  }
   call.key = key;
   call.olh_tag = olh_tag.to_str();
   call.op_tag = op_tag;
