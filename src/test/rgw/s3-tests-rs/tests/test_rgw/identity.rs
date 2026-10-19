@@ -24,7 +24,7 @@ use s3_tests_rs::admin::{
 use s3_tests_rs::client::{build_s3_client, get_iam_root_client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
-use s3_tests_rs::fixtures::TestGuard;
+use s3_tests_rs::fixtures::{PrivateUser, TestGuard};
 
 /// `None` from the accessor means unknown, so skip rather than assert.
 async fn nsfs_only() -> bool {
@@ -314,12 +314,16 @@ async fn test_identity_reports_whether_the_key_resolves() {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
-    let cfg = get_config();
-    let known = cfg.main_user_id.clone();
     let unknown = "identity-nobody-by-that-name";
-    /* the record as found, put back at the end:  the run may bind this
-     * user for impersonation */
-    let saved = SavedIdentities::take(&[&known]).await;
+    /* A user of this module's own.  `resolves` is true only for a user
+     * that exists, so this needs a real one -- and it scrubs and
+     * rewrites the row of whoever it names, which the main user cannot
+     * afford while 590 tests authenticate as it. */
+    let Some(user) = PrivateUser::create("identity").await else {
+        eprintln!("no IAM root credentials;  nothing to check");
+        return;
+    };
+    let known = user.id.clone();
     scrub(&known).await;
     scrub(unknown).await;
 
@@ -344,7 +348,6 @@ async fn test_identity_reports_whether_the_key_resolves() {
         .expect("the row should exist regardless");
     assert_eq!(j["uid"], 13);
 
-    saved.restore().await;
     scrub(unknown).await;
 }
 

@@ -11,10 +11,10 @@
 use s3_tests_rs::access_model::{Access, Class};
 use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity,
                          SavedIdentities};
-use s3_tests_rs::client::{get_alt_client, get_client};
+use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
-use s3_tests_rs::fixtures::{get_new_bucket, TestGuard};
+use s3_tests_rs::fixtures::{get_new_bucket, PrivateUser, TestGuard};
 use s3_tests_rs::hints::{clear_hint, with_hint};
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
 
@@ -29,51 +29,35 @@ async fn nsfs_only() -> bool {
     }
 }
 
-/// Map the two S3 users onto the fixture's POSIX identities.
+/// alice and bob, each a user of this module's own, bound to the
+/// fixture's POSIX identities.
+///
+/// Not the suite's `main`/`alt`.  This module used to rebind *their*
+/// identity rows while 590 other tests authenticate as them, and a row
+/// changed for the length of one test is a 403 for whoever else is
+/// mid-request -- a correct 403, since no identity means refuse, which
+/// is why it read as noise for a week.
+///
+/// `tag` names the test, not the module:  nextest runs each test in
+/// its own process, so two of them would otherwise create and delete
+/// the same private user and this module would interfere with itself.
 ///
 /// `alice` carries the gating group, `bob` carries none — which is
 /// the difference the group test turns on, and is also the
 /// `Credentials::groups` empty-vector case from the resolver.
-async fn bind_identities(alice_groups: Option<&str>) {
-    remember_identities().await;
-    let cfg = get_config();
-    let mut a: Vec<(&str, &str)> = vec![
-        ("identity", &cfg.main_user_id),
-        ("uid", UID_ALICE),
-        ("gid", UID_ALICE),
-    ];
-    if let Some(g) = alice_groups {
-        a.push(("groups", g));
+async fn alice_and_bob(tag: &str, alice_groups: Option<&str>)
+    -> Option<(PrivateUser, PrivateUser)> {
+    let alice = PrivateUser::create(&format!("imp{tag}a")).await?;
+    let bob = PrivateUser::create(&format!("imp{tag}b")).await?;
+    if !alice.bind(UID_ALICE, UID_ALICE, alice_groups).await {
+        eprintln!("binding alice failed");
+        return None;
     }
-    let r = nsfs_put_identity(&a).await;
-    assert_eq!(r.status, 200, "binding the main user failed: {}", r.body);
-
-    let r = nsfs_put_identity(&[
-        ("identity", &cfg.alt_user_id),
-        ("uid", UID_BOB),
-        ("gid", UID_BOB),
-    ]).await;
-    assert_eq!(r.status, 200, "binding the alt user failed: {}", r.body);
-}
-
-/// What the two users were bound to before this test touched them,
-/// put back by `unbind_identities()`.  Each test is its own process, so
-/// once per test.
-static FOUND: tokio::sync::OnceCell<SavedIdentities> =
-    tokio::sync::OnceCell::const_new();
-
-async fn remember_identities() {
-    FOUND.get_or_init(|| async {
-        let cfg = get_config();
-        SavedIdentities::take(&[&cfg.main_user_id, &cfg.alt_user_id]).await
-    }).await;
-}
-
-/// Put both users back as `remember_identities()` found them.
-async fn unbind_identities() {
-    if let Some(found) = FOUND.get() {
-        found.restore().await;
+    if !bob.bind(UID_BOB, UID_BOB, None).await {
+        eprintln!("binding bob failed");
+        return None;
     }
+    Some((alice, bob))
 }
 
 /// Is the gateway actually impersonating?
@@ -117,12 +101,12 @@ async fn test_impersonation_isolates_identities() {
                    --with-impersonation");
         return;
     }
-    let cfg = get_config();
-    bind_identities(None).await;
-
-    let alice = get_client();
-    let bob = get_alt_client();
-    let bucket = get_new_bucket(Some(&alice)).await;
+    let Some((alice_u, bob_u)) = alice_and_bob("iso", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
     let key = "alices-object";
 
     let put = alice.put_object()
@@ -137,7 +121,7 @@ async fn test_impersonation_isolates_identities() {
     let doc = make_json_policy(
         "s3:GetObject", &resource,
         Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
-                                                cfg.alt_user_id)]})),
+                                                bob_u.id)]})),
         None, None);
     let pol = alice.put_bucket_policy()
         .bucket(&bucket).policy(&doc).send().await;
@@ -154,13 +138,12 @@ async fn test_impersonation_isolates_identities() {
      * denied.  What the gateway then does about that is the model's
      * business, which `judge` asserts. */
     let access = Access::ask(Class::Data, &bucket, key,
-                             &cfg.alt_user_id, "r").await;
-    assert!(access.filesystem_refuses(),
+                             &bob_u.id, "r").await;
+    assert!(access.denied(),
         "the filesystem permits bob to read an object alice wrote;  \
          did not cover creation, so the object is not owned by her");
     access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
 
-    unbind_identities().await;
 }
 
 /// Which authority decides an object's bytes, asserted rather than
@@ -202,12 +185,12 @@ async fn test_data_follows_the_access_model() {
                    --with-impersonation");
         return;
     }
-    let cfg = get_config();
-    bind_identities(None).await;
-
-    let alice = get_client();
-    let bob = get_alt_client();
-    let bucket = get_new_bucket(Some(&alice)).await;
+    let Some((alice_u, bob_u)) = alice_and_bob("line", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
     let key = "alices-object";
     let body = b"alice wrote this";
 
@@ -230,7 +213,7 @@ async fn test_data_follows_the_access_model() {
     let doc = make_json_policy(
         "s3:*", &resource,
         Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
-                                                cfg.alt_user_id)]})),
+                                                bob_u.id)]})),
         None, None);
     alice.put_bucket_policy().bucket(&bucket).policy(&doc).send().await
         .expect("could not grant bob s3:*");
@@ -257,13 +240,12 @@ async fn test_data_follows_the_access_model() {
      * operation to it covers every test that calls it */
     let data_model = s3_tests_rs::features::cross_account_data().await;
     let tested = s3_tests_rs::access_model::assert_data_follows_the_filesystem(
-        &alice, &bob, &cfg.alt_user_id, &bucket, key, body, data_model).await;
+        &alice, &bob, &bob_u.id, &bucket, key, body, data_model).await;
     if !tested {
         eprintln!("either the configured model permits the gateway to \
                    serve the bytes itself, or the filesystem permits bob \
                    this object;  there is no line to test");
-        unbind_identities().await;
-        return;
+            return;
     }
 
     /* A positive control:  the same client, the same call, on an
@@ -299,8 +281,7 @@ async fn test_data_follows_the_access_model() {
     let before = s3_tests_rs::access_model::served_counts().await;
     if before.is_none() {
         eprintln!("no access-model hint;  the counters cannot be checked");
-        unbind_identities().await;
-        return;
+            return;
     }
     let (_, data_before) = before.unwrap();
 
@@ -338,7 +319,6 @@ async fn test_data_follows_the_access_model() {
     assert!(refused_again.is_err(),
         "the restore did not take:  bob can still read alice's bytes");
 
-    unbind_identities().await;
 }
 
 /// A nested key:  its directories are the gateway's, its object the
@@ -364,12 +344,12 @@ async fn test_impersonation_owns_a_nested_key() {
                    --with-impersonation");
         return;
     }
-    let cfg = get_config();
-    bind_identities(None).await;
-
-    let alice = get_client();
-    let bob = get_alt_client();
-    let bucket = get_new_bucket(Some(&alice)).await;
+    let Some((alice_u, bob_u)) = alice_and_bob("nested", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
     let hers = "a/b/alices-object";
     let his = "a/b/bobs-object";
 
@@ -387,7 +367,7 @@ async fn test_impersonation_owns_a_nested_key() {
         "Statement": [{
             "Effect": "Allow",
             "Principal": {"AWS": [format!("arn:aws:iam:::user/{}",
-                                          cfg.alt_user_id)]},
+                                          bob_u.id)]},
             "Action": ["s3:GetObject", "s3:PutObject"],
             "Resource": resource,
         }],
@@ -413,8 +393,8 @@ async fn test_impersonation_owns_a_nested_key() {
     /* each is owned by whoever wrote it, which the filesystem says
      * and no access model changes */
     let hers_to_bob = Access::ask(Class::Data, &bucket, hers,
-                                  &cfg.alt_user_id, "r").await;
-    assert!(hers_to_bob.filesystem_refuses(),
+                                  &bob_u.id, "r").await;
+    assert!(hers_to_bob.denied(),
         "the filesystem permits bob to read alice's nested object;  it is \
          owned by her");
     hers_to_bob.judge(
@@ -426,12 +406,11 @@ async fn test_impersonation_owns_a_nested_key() {
      * impersonation off and prove nothing.  So ask the kernel and do
      * not read:  there is no S3-authorised operation here to judge. */
     let his_to_alice = Access::ask(Class::Data, &bucket, his,
-                                   &cfg.main_user_id, "r").await;
-    assert!(his_to_alice.filesystem_refuses(),
+                                   &alice_u.id, "r").await;
+    assert!(his_to_alice.denied(),
         "the filesystem permits alice to read bob's nested object;  it is \
          owned by him");
 
-    unbind_identities().await;
 }
 
 /// A completed multipart upload belongs to the identity that uploaded it.
@@ -454,12 +433,12 @@ async fn test_impersonation_owns_a_completed_upload() {
                    --with-impersonation");
         return;
     }
-    let cfg = get_config();
-    bind_identities(None).await;
-
-    let alice = get_client();
-    let bob = get_alt_client();
-    let bucket = get_new_bucket(Some(&alice)).await;
+    let Some((alice_u, bob_u)) = alice_and_bob("upload", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
     let key = "alices-upload";
 
     /* three equal parts and a short one, so a layout that can link the
@@ -479,7 +458,7 @@ async fn test_impersonation_owns_a_completed_upload() {
     let doc = make_json_policy(
         "s3:GetObject", &resource,
         Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
-                                                cfg.alt_user_id)]})),
+                                                bob_u.id)]})),
         None, None);
     let pol = alice.put_bucket_policy()
         .bucket(&bucket).policy(&doc).send().await;
@@ -496,13 +475,12 @@ async fn test_impersonation_owns_a_completed_upload() {
     assert_eq!(&body[..], &up.data[..], "the completed object's bytes differ");
 
     let access = Access::ask(Class::Data, &bucket, key,
-                             &cfg.alt_user_id, "r").await;
-    assert!(access.filesystem_refuses(),
+                             &bob_u.id, "r").await;
+    assert!(access.denied(),
         "the filesystem permits bob to read the object alice's upload \
          it was made as the gateway");
     access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
 
-    unbind_identities().await;
 }
 
 /// A copy is the requester's:  it reads the source as them, and it
@@ -528,13 +506,13 @@ async fn test_impersonation_copies_as_the_requester() {
                    --with-impersonation");
         return;
     }
-    let cfg = get_config();
-    bind_identities(None).await;
-
-    let alice = get_client();
-    let bob = get_alt_client();
-    let bucket = get_new_bucket(Some(&alice)).await;
-    let bobs_bucket = get_new_bucket(Some(&bob)).await;
+    let Some((alice_u, bob_u)) = alice_and_bob("copy", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
+    let bobs_bucket = get_new_bucket(Some(bob)).await;
     let key = "alices-object";
 
     let put = alice.put_object()
@@ -547,7 +525,7 @@ async fn test_impersonation_copies_as_the_requester() {
     let doc = make_json_policy(
         "s3:GetObject", &resource,
         Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
-                                                cfg.alt_user_id)]})),
+                                                bob_u.id)]})),
         None, None);
     let pol = alice.put_bucket_policy()
         .bucket(&bucket).policy(&doc).send().await;
@@ -556,8 +534,8 @@ async fn test_impersonation_copies_as_the_requester() {
     /* the premise:  bob's read is denied by the object's mode, though
      * S3 permits it */
     let access = Access::ask(Class::Data, &bucket, key,
-                             &cfg.alt_user_id, "r").await;
-    assert!(access.filesystem_refuses(),
+                             &bob_u.id, "r").await;
+    assert!(access.denied(),
         "the filesystem permits bob to read alice's object;  the premise \
          test does not hold");
     access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
@@ -593,14 +571,13 @@ async fn test_impersonation_copies_as_the_requester() {
         "alice could not read her own copy;  it was made as the gateway: \
          {mine:?}");
     let hers = Access::ask(Class::Data, &bucket, "alices-copy",
-                           &cfg.alt_user_id, "r").await;
-    assert!(hers.filesystem_refuses(),
+                           &bob_u.id, "r").await;
+    assert!(hers.denied(),
         "the filesystem permits bob to read alice's copy;  it is not owned \
          by her");
     hers.judge(
         bob.get_object().bucket(&bucket).key("alices-copy").send().await);
 
-    unbind_identities().await;
 }
 
 /// The group vector, which is the case worth the fixture.
@@ -629,12 +606,26 @@ async fn test_impersonation_honours_the_group_vector() {
         return;
     }
 
-    let cfg = get_config();
-    let alice = get_client();
     let bucket = "impersonate-fixture";
 
-    /* with the gating group */
-    bind_identities(Some(GID_SHARED)).await;
+    /* The one test here that cannot have a user of its own.  It reads
+     * `impersonate-fixture`, which rgw-vstart.sh creates as the main
+     * user, and it needs `grouped.txt` at `0040 root:rgwfix` -- files
+     * only root can place, at fixture time, which no test can make for
+     * itself.  A private user has no S3 grant on that bucket and
+     * nothing to read.
+     *
+     * So this one borrows the main user's row, and is the residual of
+     * the interference the rest of the module stopped causing.  It is
+     * bounded:  one test, in the serial group, rebinding one row. */
+    let cfg = get_config();
+    let alice = get_client();
+    let main_id = cfg.main_user_id.clone();
+    let saved = SavedIdentities::take(&[&main_id]).await;
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", main_id.as_str()), ("uid", UID_ALICE),
+        ("gid", UID_ALICE), ("groups", GID_SHARED)]).await.status, 200,
+        "binding the main user with the gating group failed");
     let open = alice.get_object().bucket(bucket).key("open.txt")
         .send().await;
     assert!(open.is_ok(),
@@ -644,29 +635,32 @@ async fn test_impersonation_honours_the_group_vector() {
      * the same answer at every access model -- so this reads the
      * vector itself and not what the gateway does about it */
     let gated = Access::ask(Class::Data, bucket, "grouped.txt",
-                            &cfg.main_user_id, "r").await;
-    assert!(!gated.filesystem_refuses(),
+                            &main_id, "r").await;
+    assert!(!gated.denied(),
         "holding gid {GID_SHARED} did not grant the read");
     gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
         .send().await);
 
-    /* same identity, no group */
-    bind_identities(None).await;
+    /* the same identity, no group */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", main_id.as_str()), ("uid", UID_ALICE),
+        ("gid", UID_ALICE)]).await.status, 200,
+        "rebinding the main user without the group failed");
     let open = alice.get_object().bucket(bucket).key("open.txt")
         .send().await;
     assert!(open.is_ok(),
         "the control object became unreadable without the group; \
          something other than the group vector changed: {open:?}");
     let gated = Access::ask(Class::Data, bucket, "grouped.txt",
-                            &cfg.main_user_id, "r").await;
-    assert!(gated.filesystem_refuses(),
+                            &main_id, "r").await;
+    assert!(gated.denied(),
         "the filesystem permitted the read without the group in the \
          vector — an absent list left the gateway's own groups in place \
          rather than clearing");
     gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
         .send().await);
 
-    unbind_identities().await;
+    saved.restore().await;
 }
 
 /// An identity with no record is refused, not served as the gateway.
@@ -694,11 +688,12 @@ async fn test_impersonation_refuses_an_unprovisioned_identity() {
                    --with-impersonation");
         return;
     }
-    let cfg = get_config();
-    let alice = get_client();
-
-    bind_identities(None).await;
-    let bucket = get_new_bucket(Some(&alice)).await;
+    let Some((alice_u, _bob_u)) = alice_and_bob("unprov", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let alice = &alice_u.client;
+    let bucket = get_new_bucket(Some(alice)).await;
 
     /* the control */
     let ok = alice.put_object()
@@ -708,7 +703,7 @@ async fn test_impersonation_refuses_an_unprovisioned_identity() {
     assert!(ok.is_ok(), "a provisioned identity could not write: {ok:?}");
 
     /* take the record away and try the same thing */
-    let _ = nsfs_delete_identity(&cfg.main_user_id).await;
+    let _ = nsfs_delete_identity(&alice_u.id).await;
     let denied = alice.put_object()
         .bucket(&bucket).key("unprovisioned")
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"x"))
@@ -723,7 +718,6 @@ async fn test_impersonation_refuses_an_unprovisioned_identity() {
     assert!(read.is_err(),
         "an identity with no POSIX record read an object");
 
-    unbind_identities().await;
 }
 
 /// NooBaa's guard on where an account's buckets go, enacted
@@ -750,11 +744,13 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
                    --with-impersonation");
         return;
     }
-    let cfg = get_config();
-    let alice = get_client();
-    remember_identities().await;
+    let Some((alice_u, _bob_u)) = alice_and_bob("nbp", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let alice = &alice_u.client;
     let bind = |nbp: &'static str| {
-        let me = cfg.main_user_id.clone();
+        let me = alice_u.id.clone();
         async move {
             let r = nsfs_put_identity(&[
                 ("identity", me.as_str()),
@@ -781,7 +777,6 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
     if ok == 200 {
         let _ = alice.delete_bucket().bucket(&allowed).send().await;
     }
-    unbind_identities().await;
 
     assert_eq!(r, 403, "alice created a bucket where she cannot write");
     assert_eq!(ok, 200, "alice was refused where she can write");
@@ -811,11 +806,10 @@ async fn test_a_raise_is_effective_for_one_call_and_dropped_after() {
     if !nsfs_only().await {
         return;
     }
-    let cfg = get_config();
     let r = s3_tests_rs::admin::driver_hint_results(
         "raise",
         &[("cap", "promote"),
-          ("user", &s3_tests_rs::admin::q(&cfg.main_user_id))]).await;
+          ("user", &s3_tests_rs::admin::q(&get_config().main_user_id))]).await;
     let m = match r {
         Some(m) => m,
         /* no admin access, or a driver without the hint */
@@ -891,11 +885,10 @@ async fn test_nested_run_as_refuses_a_different_identity() {
     if !nsfs_only().await {
         return;
     }
-    let cfg = get_config();
     let r = s3_tests_rs::admin::driver_hint_results(
         "nested-identity",
-        &[("outer", &s3_tests_rs::admin::q(&cfg.main_user_id)),
-          ("inner", &s3_tests_rs::admin::q(&cfg.alt_user_id))]).await;
+        &[("outer", &s3_tests_rs::admin::q(&get_config().main_user_id)),
+          ("inner", &s3_tests_rs::admin::q(&get_config().alt_user_id))]).await;
     let m = match r {
         Some(m) => m,
         /* no admin access, or a driver without the hint */
@@ -981,10 +974,12 @@ async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
                    --with-non-md5-etag");
         return;
     }
-    bind_identities(None).await;
-
-    let alice = get_client();
-    let bucket = get_new_bucket(Some(&alice)).await;
+    let Some((alice_u, _bob_u)) = alice_and_bob("etag", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let alice = &alice_u.client;
+    let bucket = get_new_bucket(Some(alice)).await;
 
     async fn put_then_head(c: &aws_sdk_s3::Client, bucket: &str, key: &str)
         -> Result<(String, String), String>
@@ -1012,7 +1007,6 @@ async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
     let injected = with_hint(INJECT, &[("enable", "true")],
                              put_then_head(&alice, &bucket, "diverged")).await;
 
-    unbind_identities().await;
 
     let (put_etag, head_etag) = fixed.unwrap_or_else(|e| panic!("{e}"));
     let (bad_put, bad_head) = injected.unwrap_or_else(|e| panic!("{e}"));

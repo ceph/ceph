@@ -374,3 +374,104 @@ pub async fn check_configure_versioning_retry(
     }
     panic!("versioning status never reached {expected}");
 }
+
+/* --- PrivateUser ------------------------------------------------------ */
+
+/// An IAM user of one test module's own, with its own access key and,
+/// under impersonation, its own identity row.
+///
+/// Three modules used to borrow `main_user_id` or `alt_user_id` and
+/// rewrite the identity row of whichever they took, while 590 other
+/// tests authenticate as those two.  A row absent or changed for the
+/// length of one test is a 403 for whoever else is mid-request, and
+/// that 403 is the gateway behaving correctly:  no identity means
+/// refuse.  The failures rotated between runs and were called noise
+/// for a week.  A test that borrows global mutable state is not
+/// flaky, it is wrong.
+///
+/// `tag` names the borrower, so two modules cannot collide on the
+/// name.  Needs the IAM root credentials, so a backend without them
+/// gets `None` and the caller skips rather than borrowing.
+pub struct PrivateUser {
+    pub name: String,
+    /// Its owner key:  what a bucket it creates is owned by, and what
+    /// an identity row is keyed on.
+    pub id: String,
+    pub client: aws_sdk_s3::Client,
+}
+
+impl PrivateUser {
+    /// A plain RGW user, created through Admin Ops, not an IAM
+    /// account member.
+    ///
+    /// The distinction is load-bearing:  a member's buckets are owned
+    /// by its *account*, and the driver keys a custom-bucket-path
+    /// allowlist on the bucket's owner
+    /// (`rgw_sal_nsfs.cc:5340`, `get_identity(to_string(owner))`).
+    /// So a member's row is not the one consulted, and a test using
+    /// one would be back to borrowing shared state -- the account's
+    /// row instead of the main user's.  A plain user is its own owner.
+    pub async fn create(tag: &str) -> Option<PrivateUser> {
+        let cfg = get_config();
+        let uid = format!("{}priv{tag}", cfg.iam_name_prefix);
+
+        /* leave nothing from a failed run */
+        let _ = crate::admin::admin_request(
+            reqwest::Method::DELETE, "/admin/user",
+            &format!("uid={}&purge-data", crate::admin::q(&uid)), None).await;
+
+        let r = crate::admin::admin_request(
+            reqwest::Method::PUT, "/admin/user",
+            &format!("uid={}&display-name={}",
+                     crate::admin::q(&uid), crate::admin::q(tag)), None).await;
+        if r.status != 200 {
+            eprintln!("PrivateUser({tag}): create returned {}: {}",
+                      r.status, r.body);
+            return None;
+        }
+        let j: serde_json::Value = serde_json::from_str(&r.body).ok()?;
+        let k = j.get("keys")?.get(0)?;
+        let akid = k.get("access_key")?.as_str()?.to_string();
+        let sk = k.get("secret_key")?.as_str()?.to_string();
+
+        Some(PrivateUser {
+            name: uid.clone(),
+            id: uid,
+            client: crate::client::build_s3_client(&akid, &sk),
+        })
+    }
+
+    /// Give it a POSIX identity.  Only meaningful under impersonation;
+    /// returns whether the row was written.
+    pub async fn bind(&self, uid: &str, gid: &str, groups: Option<&str>)
+        -> bool {
+        let mut p: Vec<(&str, &str)> = vec![
+            ("identity", &self.id), ("uid", uid), ("gid", gid)];
+        if let Some(g) = groups {
+            p.push(("groups", g));
+        }
+        crate::admin::nsfs_put_identity(&p).await.status == 200
+    }
+}
+
+impl Drop for PrivateUser {
+    fn drop(&mut self) {
+        if std::env::var("S3TEST_NO_CLEANUP").is_ok() {
+            return;
+        }
+        /* Drop cannot await, so a thread with its own runtime, as
+         * TestGuard does for buckets. */
+        let id = self.id.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all().build().expect("cleanup runtime");
+            rt.block_on(async {
+                let _ = crate::admin::nsfs_delete_identity(&id).await;
+                let _ = crate::admin::admin_request(
+                    reqwest::Method::DELETE, "/admin/user",
+                    &format!("uid={}&purge-data", crate::admin::q(&id)),
+                    None).await;
+            });
+        }).join().ok();
+    }
+}

@@ -88,11 +88,10 @@ impl Access {
     }
 
     /// Whether the permission check denied it, whatever the gateway
-    /// does about
-    /// it.  The subject of a test about ownership or the group
-    /// vector:  that alice's object is alice's holds at every access
-    /// model, and only what the gateway does next varies.
-    pub fn filesystem_refuses(&self) -> bool {
+    /// does about that.  The subject of a test about ownership or the
+    /// group vector:  that alice's object is alice's holds at every
+    /// access model, and only what the gateway does next varies.
+    pub fn denied(&self) -> bool {
         self.check.denied()
     }
 

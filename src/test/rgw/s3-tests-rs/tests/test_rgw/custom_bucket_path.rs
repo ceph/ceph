@@ -9,10 +9,9 @@
 //! decision through a real request:  refused with no allowlist, admitted
 //! with one, refused outside it.
 
-use s3_tests_rs::admin::{as_json, driver_hint, nsfs_delete_identity, nsfs_put_identity,
-                         SavedIdentities};
-use s3_tests_rs::client::get_client;
-use s3_tests_rs::config::get_config;
+use s3_tests_rs::admin::{as_json, driver_hint, nsfs_delete_identity,
+                         nsfs_put_identity};
+use s3_tests_rs::fixtures::PrivateUser;
 use s3_tests_rs::features::features;
 use s3_tests_rs::fixtures::{get_new_bucket_name, TestGuard};
 
@@ -26,8 +25,15 @@ async fn nsfs_only() -> bool {
     }
 }
 
-/// The gateway's base path, from the adoption hint, which reports it.
-async fn base_path() -> String {
+/// The default `new_buckets_path` for an owner created in RGW, from
+/// the adoption hint, which reports it as `base_path`.
+///
+/// Not a root buckets live under:  a bucket is found through the
+/// record that places it, and the record carries its path
+/// (NSFS_BUCKET_PLACEMENT_PLAN.md 7).  What this test wants of it is
+/// only that it is a path the gateway can create in, so the allowlist
+/// has something real to admit.
+async fn default_new_buckets_path() -> String {
     let r = driver_hint("adoption", &[]).await;
     assert_eq!(r.status, 200, "the adoption hint: {}", r.body);
     let v = as_json(&r).expect("the adoption hint's reply is not JSON");
@@ -38,8 +44,8 @@ async fn base_path() -> String {
 }
 
 /// A CreateBucket with the header set to `path`;  the HTTP status.
-async fn create_at(bucket: &str, path: &str) -> u16 {
-    let client = get_client();
+async fn create_at(client: &aws_sdk_s3::Client, bucket: &str, path: &str)
+    -> u16 {
     let path = path.to_string();
     match client.create_bucket().bucket(bucket)
         .customize()
@@ -65,38 +71,48 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
-    let cfg = get_config();
-    let me = cfg.main_user_id.clone();
-    let base = base_path().await;
+    /* A user of this module's own.  This test deletes the identity
+     * row of whoever it names, to show that a request with no
+     * allowlist is refused -- and 590 tests authenticate as the main
+     * user, for whom a missing row is a correct 403. */
+    let Some(user) = PrivateUser::create("custompath").await else {
+        eprintln!("no IAM root credentials;  nothing to check");
+        return;
+    };
+    let me = user.id.clone();
+    let base = default_new_buckets_path().await;
     /* under the base path, which the allowlist names;  the raw-prefix
      * match NooBaa makes is the unit suite's to pin */
     let bucket = get_new_bucket_name();
     let at = format!("{base}/custom-{bucket}");
 
-    /* the record as found, put back at the end:  the run may bind this
-     * user for impersonation */
-    let saved = SavedIdentities::take(&[&me]).await;
-
     /* no allowlist:  refused, which shows the header was read */
     nsfs_delete_identity(&me).await;
-    assert_eq!(create_at(&bucket, &at).await, 403,
+    assert_eq!(create_at(&user.client, &bucket, &at).await, 403,
                "a custom path was admitted with no allowlist");
 
-    /* an allowlist admitting it */
+    /* An allowlist admitting it, and deliberately no uid.  nsfs
+     * checks the requester's own access to the path before it makes
+     * the directory as the gateway, so a row carrying a uid is
+     * refused for any path that uid cannot write.  A row carrying
+     * only an allowlist is served as the gateway, which is what makes
+     * this independent of who owns the path -- and nsfs assumes no
+     * single root of its own (DECISIONS.md 2026-10-13: a bucket
+     * exists because a record says so, and the record carries its
+     * path). */
     let r = nsfs_put_identity(&[("identity", me.as_str()),
                                 ("custom_bucket_path_allowed_list", base.as_str())]).await;
     assert_eq!(r.status, 200, "setting the allowlist: {}", r.body);
-    let created = create_at(&bucket, &at).await;
+    let created = create_at(&user.client, &bucket, &at).await;
 
     /* and one path it does not admit */
     let other = get_new_bucket_name();
-    let outside = create_at(&other, "/no/such/allowed/prefix").await;
+    let outside =
+        create_at(&user.client, &other, "/no/such/allowed/prefix").await;
 
-    let client = get_client();
     if created == 200 {
-        let _ = client.delete_bucket().bucket(&bucket).send().await;
+        let _ = user.client.delete_bucket().bucket(&bucket).send().await;
     }
-    saved.restore().await;
 
     assert_eq!(created, 200, "a custom path the allowlist admits was refused");
     assert_eq!(outside, 403, "a custom path outside the allowlist was admitted");
