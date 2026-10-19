@@ -17367,7 +17367,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    * when the filesystem refuses something S3 authorised.
    *
    *   model=<name>        the model in force
-   *   data=<verdict>      what it does for object *bytes*
+   *   data=<result>      what it does for object *bytes*
    *   object_attrs=<...>  and for an object's tags and ACL
    *
    * `set=` points it at another model for the rest of the process:
@@ -17446,7 +17446,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    * `cap` names what to raise, `dac_override` by default;  `user` is
    * an rgw_user string for the impersonating arm, which is skipped
    * without one.  On a gateway started without the file capabilities
-   * the first two are `verdict=not-permitted`, which is the
+   * the first two are `result=not-permitted`, which is the
    * deployment answer and not a failure of the primitive. */
   if (hint == "raise") {
     auto effective_set = []() -> uint64_t {
@@ -17487,7 +17487,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     const uint64_t after = effective_set();
 
     if (out) {
-      (*out)["verdict"] = (ret == 0) ? "ran" : "not-permitted";
+      (*out)["result"] = (ret == 0) ? "ran" : "not-permitted";
       (*out)["requested"] = std::to_string(want);
       (*out)["before"] = std::to_string((before & want) ? 1 : 0);
       (*out)["inside"] =
@@ -17542,7 +17542,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    *   different=-35     nested as another identity is refused, -EDEADLK
    *
    * Only reachable on a gateway that can assume an identity, so the
-   * suite skips it when `verdict=not-impersonating`. */
+   * suite skips it when `result=not-impersonating`. */
   if (hint == "ran-as") {
     /* Which POSIX identity a converted consumer chose for one object.
      *
@@ -17581,7 +17581,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   if (hint == "nested-identity") {
     if (!nsfs::impersonation_enabled()) {
       if (out) {
-	(*out)["verdict"] = "not-impersonating";
+	(*out)["result"] = "not-impersonating";
       }
       return 0;
     }
@@ -17594,7 +17594,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if ((hint_credentials(dpp, this, o_it->second, outer) < 0) ||
 	(hint_credentials(dpp, this, i_it->second, inner) < 0)) {
       if (out) {
-	(*out)["verdict"] = "no-identity";
+	(*out)["result"] = "no-identity";
       }
       return 0;
     }
@@ -17610,7 +17610,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       return 0;
     });
     if (out) {
-      (*out)["verdict"] = "ran";
+      (*out)["result"] = "ran";
       (*out)["outer_uid"] = std::to_string(outer.uid);
       (*out)["inner_uid"] = std::to_string(inner.uid);
       (*out)["same"] = std::to_string(same);
@@ -17620,23 +17620,23 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   }
 
   if (hint == "access") {
-    /* The filesystem's verdict on a request, for the tests that check
+    /* The permission check on a request, for the tests that check
      * the gateway against it:  whether `user`, served as its POSIX
      * identity, may read (`mode=r`) or write (`mode=w`) the current
      * object at `key` in `bucket`.  Asked of the kernel as that
      * identity -- faccessat(AT_EACCESS) on the helper pool -- so the
      * suite never re-implements the check.
      *
-     *   verdict=not-impersonating   the switch is off;  S3 alone decides
-     *   verdict=no-identity         the user has no POSIX record
-     *   verdict=permitted | refused
+     *   result=not-impersonating   the switch is off;  S3 alone decides
+     *   result=no-identity         the user has no POSIX record
+     *   result=permitted | refused
      *
      * `user` is an rgw_user string, `tenant$id` for a tenant's;  empty
      * is anonymous, which has no identity.  `tenant` names the bucket's
      * tenant, if it has one. */
     auto put = [out](const char* v) {
       if (out) {
-	(*out)["verdict"] = v;
+	(*out)["result"] = v;
       }
     };
     if (!nsfs::impersonation_enabled()) {
