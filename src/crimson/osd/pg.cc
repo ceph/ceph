@@ -1038,6 +1038,9 @@ PG::submit_transaction(
 
   peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, at_version);
   peering_state.update_trim_to();
+  // OpsExecuter captured pg_trim_to before update_trim_to() ran; use the
+  // fresh value so this op applies the trim it just computed
+  osd_op_p.pg_trim_to = peering_state.get_pg_trim_to();
 
   ceph_assert(!log_entries.empty());
   ceph_assert(log_entries.rbegin()->version >= projected_last_update);
