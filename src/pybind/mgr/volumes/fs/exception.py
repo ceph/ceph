@@ -91,6 +91,16 @@ class V2UpgradeError(VolumesError):
         self.errmsg = f'Error upgrading subvol from v2 to v3: {self.errmsg}'
 
 
+class V1UpgradeError(VolumesError):
+    '''
+    Subvol auto-upgrade from v2 to v3.
+    '''
+
+    def __init__(self, exception=None):
+        super().__init__(exception=exception)
+        self.errmsg = f'Error upgrading subvol from v2 to v3: {self.errmsg}'
+
+
 class EvictionError(VolumesError):
     pass
 

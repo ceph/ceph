@@ -7,7 +7,6 @@ from .subvolume_v1 import SubvolumeV1
 from .subvolume_v2 import SubvolumeV2
 from .subvolume_v3 import SubvolumeV3
 from .metadata_manager import MetadataManager
-from ..template import SubvolumeOpType
 from ...exception import (MetadataMgrException, VolumeException,
                           PrevpathNotRecognizedError)
 
@@ -61,35 +60,6 @@ class SubvolumeLoader(object):
 
         return asu
 
-    def upgrade_v1_to_v2(self, subvolume):
-        # legacy mode subvolumes cannot be upgraded to v2
-        if subvolume.legacy_mode:
-            return
-
-        version = int(subvolume.metadata_mgr.get_global_option('version'))
-        if version >= SubvolumeV2.VERSION:
-            return
-
-        if not self.allow_subvolume_upgrade(subvolume):
-            return
-
-        v1_subvolume = self._get_subvolume_version(version)(subvolume.mgr, subvolume.fs, subvolume.vol_spec, subvolume.group, subvolume.subvolname)
-        try:
-            v1_subvolume.open(SubvolumeOpType.SNAP_LIST)
-        except VolumeException as ve:
-            # if volume is not ready for snapshot listing, do not upgrade at present
-            if ve.errno == -errno.EAGAIN:
-                return
-            raise
-
-        # v1 subvolumes with snapshots cannot be upgraded to v2
-        if v1_subvolume.list_snapshots():
-            return
-
-        subvolume.metadata_mgr.update_global_section(
-                MetadataManager.GLOBAL_META_KEY_VERSION, SubvolumeV2.VERSION)
-        subvolume.metadata_mgr.flush()
-
     def get_subvolume_object(self, mgr, fs, vol_spec, group, subvolname):
         base_subvol = SubvolumeBase(mgr, fs, vol_spec, group, subvolname)
 
@@ -104,12 +74,7 @@ class SubvolumeLoader(object):
             elif disc_version in ('legacy', 'pre-legacy'):
                 subvol_obj = SubvolumeV1(mgr, fs, vol_spec, group, subvolname,
                                          legacy=True)
-            elif disc_version == 1:
-                self.upgrade_v1_to_v2(base_subvol)
-                disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
-                subvol_obj = SubvolumeV1(mgr, fs, vol_spec, group, subvolname,
-                                          legacy=False)
-            elif disc_version in (3, 2):
+            elif disc_version in (3, 2, 1):
                 disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
                 try:
                     subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
@@ -117,8 +82,16 @@ class SubvolumeLoader(object):
                 except PrevpathNotRecognizedError:
                     assert disc_version != 3
 
-                    subvol_obj = SubvolumeV2(mgr, fs, vol_spec, group, subvolname,
-                                             disc_uuid, disc_version)
+                    if disc_version == 2:
+                        subvol_obj = SubvolumeV2(mgr, fs, vol_spec, group,
+                                                 subvolname, disc_uuid,
+                                                 disc_version)
+                    elif disc_version == 1:
+                        subvol_obj = SubvolumeV1(mgr, fs, vol_spec, group,
+                                                 subvolname, disc_uuid,
+                                                 disc_version)
+                    else:
+                        assert False
             else:
                 assert False, \
                     f'invalid version. disc_version = {disc_version}'
