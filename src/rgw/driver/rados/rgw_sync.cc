@@ -1968,8 +1968,12 @@ public:
         ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << " truncated=" << truncated << dendl;
         // compare with what we've read, not with what was cloned: the clone fetches the
         // remote log up to its tip, while each pass below reads at most
-        // INCREMENTAL_MAX_ENTRIES of it
-        if (!period_marker.empty() && period_marker <= max_marker) {
+        // INCREMENTAL_MAX_ENTRIES of it. once the clone has reached period_marker and the
+        // last read found nothing more, there is nothing left of the period to read: its
+        // entries may have been trimmed (e.g. we were its master, our peers synced it and
+        // the log got trimmed), so max_marker would never get there
+        if (!period_marker.empty() &&
+            (period_marker <= max_marker || (period_marker <= mdlog_marker && !truncated))) {
           tn->log(10, SSTR("finished syncing current period: max_marker=" << max_marker << " mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker << " period_marker=" << period_marker));
           done_with_period = true;
           break;
