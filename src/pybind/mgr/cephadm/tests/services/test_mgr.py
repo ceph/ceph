@@ -2,11 +2,8 @@ import json
 from unittest import mock
 
 from cephadm.module import CephadmOrchestrator
-from cephadm.services.cephadmservice import (
-    CephadmDaemonDeploySpec,
-    DaemonDeployContext,
-    MgrService,
-)
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
+from cephadm.services.mgr import MgrService
 
 
 class TestMgrService:

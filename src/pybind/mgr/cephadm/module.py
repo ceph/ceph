@@ -84,7 +84,8 @@ from . import utils
 from . import ssh
 from .cli import CephadmCLICommand
 from .migrations import Migrations
-from .services.cephadmservice import MgrService, RgwService
+from .services.mgr import MgrService
+from .services.rgw import RgwService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.mgmt_gateway import MgmtGatewayService

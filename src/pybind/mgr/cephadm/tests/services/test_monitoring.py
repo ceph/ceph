@@ -163,7 +163,7 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("socket.getfqdn")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
+    @patch("cephadm.services.monitoring.alertmanager.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
@@ -278,7 +278,7 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("socket.getfqdn")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
+    @patch("cephadm.services.monitoring.alertmanager.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
@@ -384,7 +384,7 @@ class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("socket.getfqdn")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
+    @patch("cephadm.services.monitoring.alertmanager.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch('cephadm.cert_mgr.CertMgr.generate_cert', lambda instance, fqdn, ip: ('mycert', 'mykey'))
     def test_alertmanager_config_custom_webhook_urls(
@@ -491,7 +491,7 @@ class TestMonitoring:
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
-    @patch('cephadm.services.cephadmservice.CephExporterService.get_keyring_with_caps', Mock(return_value='[client.ceph-exporter.test]\nkey = fake-secret\n'))
+    @patch('cephadm.services.ceph_exporter.CephExporterService.get_keyring_with_caps', Mock(return_value='[client.ceph-exporter.test]\nkey = fake-secret\n'))
     def test_ceph_exporter_config_security_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
@@ -793,7 +793,7 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator._get_mgr_ips", lambda _: ['::1'])
-    @patch("cephadm.services.monitoring.password_hash", lambda password: 'prometheus_password_hash')
+    @patch("cephadm.services.monitoring.prometheus.password_hash", lambda password: 'prometheus_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None, ca_cert_required=False: TLSCredentials('mycert', 'mykey'))
@@ -2080,7 +2080,7 @@ def _dependency_test_daemon(name):
 
 
 def test_ceph_exporter_get_dependencies():
-    from cephadm.services.cephadmservice import CephExporterService
+    from cephadm.services.ceph_exporter import CephExporterService
 
     mgr = _dependency_test_mgr()
     mgr.secure_monitoring_stack = True
