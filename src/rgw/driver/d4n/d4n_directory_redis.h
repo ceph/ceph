@@ -24,7 +24,8 @@ class RedisLease : public Lease {
                 const std::string& resource_name,
                 const std::string& holder_id,
                 const std::string& token,
-                uint64_t ttl_nanoseconds) override;
+                uint64_t ttl_nanoseconds,
+    		std::optional<std::reference_wrapper<Transaction>> txn = std::nullopt) override;
 
     int renew(const DoutPrefixProvider* dpp,
               const std::string& resource_name,

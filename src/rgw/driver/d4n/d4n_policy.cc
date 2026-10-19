@@ -13,61 +13,120 @@
 
 namespace rgw::d4n {
 
-int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
-  std::string raw;
-  auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
-  int ret = dir.get_kv(dpp, y, "lfuda", "age", raw, std::ref(*txn));
-  if (ret < 0) return ret;
+int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  int synced_age = age;
 
-  int stored_age = raw.empty() ? 0 : std::stoi(raw);
+  auto result = retry_transaction(
+      dpp,
+      y,
+      [this, dpp]() {
+        return this->driver->get_txn_factory()->create_transaction(dpp);
+      },
+      [this, dpp, y, &synced_age](rgw::d4n::Transaction& txn) -> int {
+        std::string raw;
+        int ret = dir.get_kv(dpp, y, "lfuda", "age", raw, std::ref(txn));
+        if (ret < 0) {
+          return ret;
+        }
 
-  if (age > stored_age) {
-    ret = dir.set_kv(dpp, y, "lfuda", "age", std::to_string(age), std::ref(*txn));
-    if (ret < 0) return ret;
-  } else {
-    age = stored_age;
-  }
-  txn->commit(dpp, y);
+        int stored_age = raw.empty() ? 0 : std::stoi(raw);
+
+        synced_age = std::max(age, stored_age);
+
+        if (age > stored_age) {
+          ret = dir.set_kv(dpp, y, "lfuda", "age",
+                           std::to_string(age), std::ref(txn));
+          if (ret < 0) {
+            return ret;
+          }
+        }
+
+        return 0;
+      });
+
+  int ret_txn = handle_transaction_result(dpp, "LFUDAPolicy", __func__, result, [](const TransactionResult&) {
+    return 0; //Values getting updated lazily, uncertain case shouldn't cause a failure.
+  });
+
+  if (ret_txn < 0)
+    return ret_txn;
+
+  age = synced_age;
   return 0;
 }
 
-int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y) {
-  auto txn = this->driver->get_txn_factory()->create_transaction(dpp); 
-  if (fabs(weightSum - postedSum) > (postedSum * 0.1)) {
-    std::map<std::string, std::string> fetched;
-    int ret = dir.get_kv_multi(dpp, y, "lfuda",
-                                {"minLocalWeights_sum", "minLocalWeights_size"},
-                                fetched, std::ref(*txn));
-    if (ret < 0) return ret;
+int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  float synced_weight_sum = weightSum;
+  float synced_posted_sum = postedSum;
+  const float entries_map_size = static_cast<float>(entries_map.size());
 
-    float minAvgWeight = std::stof(fetched.at("minLocalWeights_sum"))
-                        / std::stof(fetched.at("minLocalWeights_size"));
-    float localAvgWeight = entries_map.size()
-        ? static_cast<float>(weightSum) / static_cast<float>(entries_map.size())
-        : 0.0f;
+  auto result = retry_transaction(
+      dpp,
+      y,
+      [this, dpp]() {
+        return this->driver->get_txn_factory()->create_transaction(dpp);
+      },
+      [this, dpp, y, entries_map_size, &synced_weight_sum, &synced_posted_sum](rgw::d4n::Transaction& txn) -> int {
+        synced_weight_sum = weightSum;
+        synced_posted_sum = postedSum;
 
-    if (localAvgWeight < minAvgWeight) {
-        ret = dir.set_kv_multi(dpp, y, "lfuda", {
-            {"minLocalWeights_sum",     std::to_string(weightSum)},
-            {"minLocalWeights_size",    std::to_string(entries_map.size())},
-            {"minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address}
-        }, std::ref(*txn));
+        if (fabs(weightSum - postedSum) > (postedSum * 0.1)) {
+          std::map<std::string, std::string> fetched;
+          int ret = dir.get_kv_multi(
+              dpp, y, "lfuda",
+              {"minLocalWeights_sum", "minLocalWeights_size"},
+              fetched, std::ref(txn));
+          if (ret < 0) {
+            return ret;
+          }
 
-        if (ret < 0) return ret;
-    } else {
-        weightSum = std::stoi(fetched.at("minLocalWeights_sum"));
-        postedSum = std::stoi(fetched.at("minLocalWeights_sum")); // preserved from original
-    }
-  }
+          float min_avg_weight =
+              std::stof(fetched.at("minLocalWeights_sum")) /
+              std::stof(fetched.at("minLocalWeights_size"));
 
-  auto ret = dir.set_kv_multi(dpp, y,
-                          dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, {
-                              {"avgLocalWeight_sum",  std::to_string(weightSum)},
-                              {"avgLocalWeight_size", std::to_string(entries_map.size())}
-                          },
-			  std::ref(*txn));
-  if (ret < 0) return ret;
-  txn->commit(dpp, y);
+          float local_avg_weight = entries_map_size > 0.0f
+              ? static_cast<float>(weightSum) / entries_map_size
+              : 0.0f;
+
+          if (local_avg_weight < min_avg_weight) {
+            ret = dir.set_kv_multi(dpp, y, "lfuda", {
+                {"minLocalWeights_sum", std::to_string(weightSum)},
+                {"minLocalWeights_size", std::to_string(entries_map_size)},
+                {"minLocalWeights_address",
+                 dpp->get_cct()->_conf->rgw_d4n_local_rgw_address}
+            }, std::ref(txn));
+
+            if (ret < 0) {
+              return ret;
+            }
+
+  	    synced_posted_sum = weightSum;
+          } else {
+            synced_posted_sum = std::stof(fetched.at("minLocalWeights_sum")); // Preserved from original.
+          }
+        }
+
+        return dir.set_kv_multi(
+            dpp, y,
+            dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, {
+                {"avgLocalWeight_sum", std::to_string(synced_weight_sum)},
+                {"avgLocalWeight_size", std::to_string(entries_map_size)}
+            },
+            std::ref(txn));
+      });
+
+  int ret_txn = handle_transaction_result(dpp, "LFUDAPolicy", __func__, result, [](const TransactionResult&) {
+    //Valus are lazily updated so an uncertain commit should be abandoned rather than retried or returned EIO.
+    return 0;
+  });
+
+  if (ret_txn < 0)
+    return ret_txn;
+
+  postedSum = synced_posted_sum;
+
   return 0;
 }
 
@@ -261,17 +320,39 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     ldpp_dout(dpp, 0) << "LFUDAPolicy::init(): transaction factory is not initialized" << dendl;
     return -EINVAL;
   }
-  auto txn = txn_factory->create_transaction(dpp);
-  dir.set_kv_multi(dpp, y,
-      "lfuda",
-      {
-          {"minLocalWeights_sum",     std::to_string(weightSum)},
-          {"minLocalWeights_size",    std::to_string(entries_map.size())},
-          {"minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address}
-      }, 
-      std::ref(*txn));
-  dir.set_kv_if_not_exists(dpp, y, "lfuda", "age", std::to_string(age), std::ref(*txn));
-  txn->commit(dpp, y);
+
+  auto result = retry_transaction(
+      dpp,
+      y,
+      [txn_factory, dpp]() {
+        return txn_factory->create_transaction(dpp);
+      },
+      [this, dpp](rgw::d4n::Transaction& txn) -> int {
+        int ret = dir.set_kv_multi(
+            dpp, y, "lfuda",
+            {
+                {"minLocalWeights_sum", std::to_string(weightSum)},
+                {"minLocalWeights_size", std::to_string(entries_map.size())},
+                {"minLocalWeights_address",
+                 dpp->get_cct()->_conf->rgw_d4n_local_rgw_address}
+            },
+            std::ref(txn));
+        if (ret < 0) {
+          return ret;
+        }
+
+        return dir.set_kv_if_not_exists(
+            dpp, y, "lfuda", "age", std::to_string(age), std::ref(txn));
+      });
+
+  int ret_txn = handle_transaction_result(dpp, "LFUDAPolicy", __func__, result, [](const TransactionResult&) {
+    /* in case of uncertain, we should return and let the admin take care of the problem. 
+       there is a possiblity that directory is not responsive */
+    return -EIO;
+  });
+
+  if (ret_txn < 0)
+    return ret_txn;
 
   asio::co_spawn(io_context.get_executor(),
         directory_sync(dpp, y), asio::detached);
@@ -652,13 +733,11 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       block.cacheObj.hostsList.insert(remoteCacheAddress);
       // TODO: Need to get and then update the host atomically in a remote setup
       // Update global weight and remove host in one directory::set call
-      //auto txn = this->driver->get_txn_factory()->create_transaction(dpp); 
       if (int ret = blockDir.set(dpp, y, &block, std::nullopt) < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to update victim block entry in directory." << dendl;
 	return ret;
       }
     } else {
-      //auto txn = this->driver->get_txn_factory()->create_transaction(dpp); 
       if ((ret = blockDir.del(dpp, y, &block, std::nullopt)) < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << " Failed to delete victim block." << dendl;
 	return ret;
@@ -945,7 +1024,7 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
   //    version via invalidate_dirty_object() WITHOUT tombstoning its version-specific HEAD block,
   //    so this must not be gated on the invalid flag - the specific version has been invalidated
   //    (either by the overwrite or by delete_obj) and its HEAD block must go.
-  auto delete_head_blocks = [&](rgw::d4n::Transaction* txn) {
+  auto delete_head_blocks = [&](rgw::d4n::Transaction& txn) -> int {
     rgw::d4n::CacheBlock head_block {
       .cacheObj = {
         .objName = e->obj_key.get_oid(),
@@ -954,10 +1033,17 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
       .blockID = 0,
       .size = 0,
     };
-    if (blockDir.get(dpp, y, &head_block, std::ref(*txn)) == 0 && head_block.invalid) {
-      if ((ret = blockDir.del(dpp, y, &head_block, std::ref(*txn))) < 0) {
-        ldpp_dout(dpp, 0) << "Failed to delete HEAD block for: " << e->obj_key.get_oid() << ", ret=" << ret << dendl;
+
+    int head_ret = blockDir.get(dpp, y, &head_block, std::ref(txn));
+    if (head_ret == 0 && head_block.invalid) {
+      ret = blockDir.del(dpp, y, &head_block, std::ref(txn));
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "Failed to delete HEAD block for: "
+                          << e->obj_key.get_oid() << ", ret=" << ret << dendl;
+        return ret;
       }
+    } else if (head_ret < 0 && head_ret != -ENOENT) {
+      return head_ret;
     }
 
     if (e->obj_key.have_null_instance()) {
@@ -969,10 +1055,17 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
         .blockID = 0,
         .size = 0,
       };
-      if (blockDir.get(dpp, y, &null_head, std::ref(*txn)) == 0 && null_head.invalid) {
-        if ((ret = blockDir.del(dpp, y, &null_head, std::ref(*txn))) < 0) {
-          ldpp_dout(dpp, 0) << "Failed to delete null HEAD block for: " << e->obj_key.name << ", ret=" << ret << dendl;
+
+      int null_ret = blockDir.get(dpp, y, &null_head, std::ref(txn));
+      if (null_ret == 0 && null_head.invalid) {
+        ret = blockDir.del(dpp, y, &null_head, std::ref(txn));
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "Failed to delete null HEAD block for: "
+                            << e->obj_key.name << ", ret=" << ret << dendl;
+          return ret;
         }
+      } else if (null_ret < 0 && null_ret != -ENOENT) {
+        return null_ret;
       }
     }
 
@@ -984,34 +1077,65 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
       .blockID = 0,
       .size = 0,
     };
-    if (blockDir.get(dpp, y, &ver_head, std::ref(*txn)) == 0) {
-      if ((ret = blockDir.del(dpp, y, &ver_head, std::ref(*txn))) < 0) {
-        ldpp_dout(dpp, 0) << "Failed to delete version-specific HEAD block for: " << e->obj_key.name << ", ret=" << ret << dendl;
+
+    int ver_ret = blockDir.get(dpp, y, &ver_head, std::ref(txn));
+    if (ver_ret == 0) {
+      ret = blockDir.del(dpp, y, &ver_head, std::ref(txn));
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "Failed to delete version-specific HEAD block for: "
+                          << e->obj_key.name << ", ret=" << ret << dendl;
+        return ret;
       }
+    } else if (ver_ret < 0 && ver_ret != -ENOENT) {
+      return ver_ret;
     }
+
+    return 0;
   };
+
 
   if (e->delete_marker) {
     // Delete markers have a HEAD block (in both the directory and the local cache) and no data
     // blocks. Remove the directory entries first, then the local cache and policy entries, so a
     // crash mid-cleanup never leaves an orphaned directory entry.
-    auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
-    delete_head_blocks(txn.get());
-    if ((ret = txn->commit(dpp, y)) < 0) {
-      ldpp_dout(dpp, 0) << "Failed to commit transaction for HEAD block cleanup, ret=" << ret << dendl;
-      return ret;
+    auto txn_factory = this->driver->get_txn_factory();
+    if (!txn_factory) {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                        << "(): transaction factory is not initialized" << dendl;
+      return -EINVAL;
     }
+
+    auto result = retry_transaction(
+        dpp,
+        y,
+        [txn_factory, dpp]() {
+          return txn_factory->create_transaction(dpp);
+        },
+        [this, dpp, y, &delete_head_blocks](rgw::d4n::Transaction& txn) -> int {
+          return delete_head_blocks(txn);
+        });
+
+    int ret_txn = handle_transaction_result(dpp, "LFUDAPolicy", __func__, result, [](const TransactionResult&) {
+      /* FIXME: in case of uncertain, we should skip the error */ 
+      return 0;
+    });
+
+    if (ret_txn < 0)
+      return ret_txn;
 
     ret = cacheDriver->delete_data(dpp, e->key, y);
     if (ret == 0 || ret == -ENOENT) {
       if (!(ret = erase(dpp, e->key, y))) {
-        ldpp_dout(dpp, 0) << "Failed to delete policy entry for: " << e->key << ", ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "Failed to delete policy entry for: "
+                          << e->key << ", ret=" << ret << dendl;
         return -EINVAL;
       }
     } else {
-      ldpp_dout(dpp, 0) << "Failed to delete head block for: " << e->key << ", ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "Failed to delete head block for: "
+                        << e->key << ", ret=" << ret << dendl;
       return ret;
     }
+
     return 0;
   }
 
@@ -1060,41 +1184,80 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
   // rediscovered to finish (or repeat) the cleanup, rather than orphaned directory entries that
   // nothing knows to clean up.
   {
-    auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+    auto txn_factory = this->driver->get_txn_factory();
+    if (!txn_factory) {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                        << "(): transaction factory is not initialized" << dendl;
+      return -EINVAL;
+    }
+
     std::string local_addr = dpp->get_cct()->_conf->rgw_d4n_local_rgw_address;
-    for (off_t fst = 0; fst < lst; ) {
-      off_t cur_size = std::min<off_t>(fst + chunk_size, lst);
-      off_t cur_len = cur_size - fst;
-      rgw::d4n::CacheBlock blk {
-        .cacheObj = {
-          .objName = e->obj_key.name,
-          .bucketName = e->bucket_id,
+
+    auto result = retry_transaction(
+        dpp,
+        y,
+        [txn_factory, dpp]() {
+          return txn_factory->create_transaction(dpp);
         },
-        .blockID = static_cast<uint64_t>(fst),
-        .version = e->version,
-        .size = static_cast<uint64_t>(cur_len),
-      };
-      if (blockDir.get(dpp, y, &blk, std::ref(*txn)) == 0) {
-        if (blk.cacheObj.hostsList.size() <= 1) {
-          // Last copy - delete the entire block directory entry
-          if ((ret = blockDir.del(dpp, y, &blk, std::ref(*txn))) < 0) {
-            ldpp_dout(dpp, 0) << "Failed to delete block directory entry for blockID=" << fst << ", ret=" << ret << dendl;
+        [this, dpp, y, e, lst, chunk_size, &local_addr,
+         &delete_head_blocks](rgw::d4n::Transaction& txn) -> int {
+          for (off_t fst = 0; fst < lst; ) {
+            off_t cur_size = std::min<off_t>(fst + chunk_size, lst);
+            off_t cur_len = cur_size - fst;
+
+            rgw::d4n::CacheBlock blk {
+              .cacheObj = {
+                .objName = e->obj_key.name,
+                .bucketName = e->bucket_id,
+              },
+              .blockID = static_cast<uint64_t>(fst),
+              .version = e->version,
+              .size = static_cast<uint64_t>(cur_len),
+            };
+
+            int get_ret = blockDir.get(dpp, y, &blk, std::ref(txn));
+            if (get_ret == 0) {
+	      if (blk.cacheObj.hostsList.contains(local_addr)) {
+                if (blk.cacheObj.hostsList.size() <= 1) {
+                  // Last copy: delete the entire block directory entry.
+                  int del_ret = blockDir.del(dpp, y, &blk, std::ref(txn));
+                  if (del_ret < 0) {
+                    ldpp_dout(dpp, 0) << "Failed to delete block directory entry for blockID="
+                                    << fst << ", ret=" << del_ret << dendl;
+                    return del_ret;
+                  }
+                } else if (blk.cacheObj.hostsList.contains(local_addr)) {
+                  // Multiple copies: remove this host from the entry.
+                  int remove_ret = blockDir.remove_host(
+                      dpp, y, &blk, local_addr, std::ref(txn));
+                  if (remove_ret < 0) {
+                    ldpp_dout(dpp, 0) << "Failed to remove host from block directory entry for blockID="
+                                    << fst << ", ret=" << remove_ret << dendl;
+                    return remove_ret;
+                  }
+                }
+	      }
+            } else if (get_ret != -ENOENT) {
+              return get_ret;
+            }
+
+            fst += cur_len;
           }
-        } else if (blk.cacheObj.hostsList.contains(local_addr)) {
-          // Multiple copies exist - just remove this host from the entry
-          if ((ret = blockDir.remove_host(dpp, y, &blk, local_addr, std::ref(*txn))) < 0) {
-            ldpp_dout(dpp, 0) << "Failed to remove host from block directory entry for blockID=" << fst << ", ret=" << ret << dendl;
-          }
-        }
-      }
-      fst += cur_len;
-    }
-    // HEAD block directory entries are removed in the same transaction as the data blocks.
-    delete_head_blocks(txn.get());
-    if ((ret = txn->commit(dpp, y)) < 0) {
-      ldpp_dout(dpp, 0) << "Failed to commit transaction for directory cleanup, ret=" << ret << dendl;
-      return ret;
-    }
+
+          // Remove HEAD entries in the same transaction as the data blocks.
+          return delete_head_blocks(txn);
+        });
+
+    int ret_txn = handle_transaction_result(dpp, "LFUDAPolicy", __func__, result, [](const TransactionResult&) {
+      /* In case of uncertain, we should return and let the caller decide */ 
+      return -EIO;
+    });
+
+    /* Deleting directory entries has failed. We should return 
+    otherwise we will endup with orphan directory entries */
+    if (ret_txn < 0)
+      return ret_txn;
+
   }
 
   // Step 2: delete the local cache data blocks and their policy entries.

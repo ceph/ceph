@@ -21,6 +21,8 @@ using boost::redis::request;
 using boost::redis::response;
 using boost::redis::ignore_t;
 
+class Transaction;
+
 inline int check_bool(std::string_view str) {
   if (str == "true" || str == "1") {
     return 1;
@@ -199,10 +201,11 @@ class Lease {
     //
     // Idempotent: returns 0 if already acquired by same holder_id + token
     virtual int acquire(const DoutPrefixProvider* dpp,
-                        const std::string& resource_name,
-                        const std::string& holder_id,
-                        const std::string& token,
-                        uint64_t ttl_nanoseconds) = 0;
+    		        const std::string& resource_name,
+	                const std::string& holder_id,
+            		const std::string& token,
+            		uint64_t ttl_nanoseconds,
+    			std::optional<std::reference_wrapper<Transaction>> txn = std::nullopt) = 0;
 
     // Renew an existing lease
     //
@@ -362,11 +365,40 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
+enum class TransactionStatus {
+  success,
+  retryable_not_committed,
+  uncertain,
+  failed,
+  retries_exhausted
+};
+
+struct TransactionResult {
+  TransactionStatus status;
+  int error = 0;
+  int directory_error = 0;
+};
 
 //Used for Batching/Transaction in Directory
 class Transaction {
 public:
   virtual ~Transaction() = default;
+
+  virtual TransactionResult commit_with_outcome(const DoutPrefixProvider* dpp, optional_yield y)
+  {
+    const int ret = commit(dpp, y);
+
+    if (ret == 0) {
+      return {TransactionStatus::success, 0, 0};
+    }
+
+    if (ret == -EAGAIN) {
+      return {TransactionStatus::retryable_not_committed, ret, 0};
+    }
+
+    return {TransactionStatus::failed, ret, 0};
+  }
+
   virtual int commit(const DoutPrefixProvider* dpp, optional_yield y) = 0;
   virtual int abort(const DoutPrefixProvider* dpp, optional_yield y) = 0;
 };
@@ -376,6 +408,98 @@ public:
   virtual ~TransactionFactory() = default;
   virtual std::unique_ptr<Transaction> create_transaction(const DoutPrefixProvider* dpp) = 0;
 };
+
+
+
+template <typename CreateTransaction, typename Operation>
+TransactionResult retry_transaction(const DoutPrefixProvider* dpp, optional_yield y, CreateTransaction&& create_transaction, Operation&& operation, unsigned max_attempts = 5)
+{
+  for (unsigned attempt = 1; attempt <= max_attempts; ++attempt) {
+    auto txn = create_transaction();
+
+    const int ret = operation(*txn);
+
+    if (ret < 0) {
+      txn->abort(dpp, y);
+
+      if (ret == -EAGAIN) {
+        ldpp_dout(dpp, 10) << __func__ << "(): Operation returned EAGAIN; retrying attempt " << attempt << "/" << max_attempts << dendl;
+        continue;
+      }
+
+      return {TransactionStatus::failed, ret, 0};
+    }
+
+    const auto outcome = txn->commit_with_outcome(dpp, y);
+
+    switch (outcome.status) {
+    case TransactionStatus::success:
+      return {TransactionStatus::success, 0, 0};
+
+    case TransactionStatus::retryable_not_committed:
+      ldpp_dout(dpp, 10) << __func__ << "(): Commit definitely not committed; retrying attempt " << attempt << "/" << max_attempts << dendl;
+      continue;
+
+    case TransactionStatus::uncertain:
+      ldpp_dout(dpp, 0) << __func__ << "(): Commit outcome uncertain; not retrying automatically" << dendl;
+      return {TransactionStatus::uncertain, outcome.error, outcome.directory_error};
+
+    case TransactionStatus::retries_exhausted:
+      ldpp_dout(dpp, 0) << __func__ << "(): Transaction retry budget exhausted" << dendl;
+      return {TransactionStatus::retries_exhausted, outcome.error < 0 ? outcome.error : -EAGAIN, outcome.directory_error};
+
+    case TransactionStatus::failed:
+      return {TransactionStatus::failed, outcome.error, outcome.directory_error};
+    }
+  }
+
+  ldpp_dout(dpp, 0) << __func__ << "(): Transaction failed after " << max_attempts << " attempts" << dendl;
+
+  return {TransactionStatus::retries_exhausted, -EAGAIN, 0};
+}
+
+
+template <typename UncertainHandler>
+int handle_transaction_result(const DoutPrefixProvider* dpp, const char* component, const char* function, const TransactionResult& result, UncertainHandler&& handle_uncertain)
+{
+  switch (result.status) {
+  case TransactionStatus::success:
+    return 0;
+
+  case TransactionStatus::retryable_not_committed:
+    ldpp_dout(dpp, 0) << component << "::" << function
+                      << "(): Transaction remains retryable, ret="
+                      << result.error
+                      << ", error=" << result.directory_error << dendl;
+    return result.error < 0 ? result.error : -EAGAIN;
+
+  //Each caller should provide the method for uncertain case.
+  case TransactionStatus::uncertain:
+    ldpp_dout(dpp, 0) << component << "::" << function
+                      << "(): Transaction outcome is uncertain, error="
+                      << result.error
+                      << ", error=" << result.directory_error << dendl;
+
+    return std::invoke(std::forward<UncertainHandler>(handle_uncertain), result);
+
+  case TransactionStatus::retries_exhausted:
+    ldpp_dout(dpp, 0) << component << "::" << function
+                      << "(): Transaction retry budget exhausted, ret="
+                      << result.error
+                      << ", error=" << result.directory_error << dendl;
+    return result.error < 0 ? result.error : -EAGAIN;
+
+  case TransactionStatus::failed:
+    ldpp_dout(dpp, 0) << component << "::" << function
+                      << "(): Transaction failed, ret="
+                      << result.error
+                      << ", error=" << result.directory_error << dendl;
+    return result.error < 0 ? result.error : -EIO;
+  }
+
+  return -EIO;
+}
+
 
 class Directory {
 public:

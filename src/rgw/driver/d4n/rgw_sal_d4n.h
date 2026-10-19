@@ -76,6 +76,8 @@ inline std::string get_versioned_head_block_name(const std::string& version, con
   return "_:" + version + "_" + obj_name;
 }
 
+enum class MissingHeadAction { NONE, BACKEND, NOOP };
+
 // Lease TTL for GET operations to prevent concurrent deletion (in nanoseconds)
 // 30 seconds = 30,000,000,000 nanoseconds
 constexpr uint64_t D4N_LEASE_TTL_NANOSECONDS = 30'000'000'000ULL;

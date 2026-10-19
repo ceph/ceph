@@ -9,6 +9,8 @@
 #include "common/dout_fmt.h"
 #include "d4n_directory_fdb.h"
 #include <source_location>
+#include <optional>
+#include <functional>
 
 namespace rgw::d4n {
 
@@ -91,73 +93,74 @@ uint64_t calculate_expiry(uint64_t ttl_nanoseconds)
   return now + ttl_nanoseconds;
 }
 
-int FDBLease::acquire(const DoutPrefixProvider* dpp,
-                             const std::string& resource_name,
-                             const std::string& holder_id,
-                             const std::string& token,
-                             uint64_t ttl_nanoseconds)
+int FDBLease::acquire(const DoutPrefixProvider* dpp, const std::string& resource_name, const std::string& holder_id, const std::string& token,
+    uint64_t ttl_nanoseconds,
+    std::optional<std::reference_wrapper<Transaction>> txn)
 {
   if (ttl_nanoseconds == 0) {
-    ldpp_dout(dpp, 10) << "FDBLease::" << __func__
-                       << " invalid TTL=0 for resource=" << resource_name << dendl;
+    ldpp_dout(dpp, 10) << "FDBLease::" << __func__ << " invalid TTL=0 for resource=" << resource_name << dendl;
     return -EINVAL;
   }
 
   if (resource_name.empty() || holder_id.empty() || token.empty()) {
-    ldpp_dout(dpp, 10) << "FDBLease::" << __func__
-                       << " empty resource_name/holder_id/token" << dendl;
+    ldpp_dout(dpp, 10) << "FDBLease::" << __func__ << " empty resource_name/holder_id/token" << dendl;
     return -EINVAL;
   }
 
   const auto fdb_key = make_lease_key(resource_name);
 
-  try {
-    return lfdb::make_transactor(FDBdb)([&](auto& tr) {
-      const auto now = current_time_nanoseconds();
+  auto acquire_impl = [&](auto& tr) -> int {
+    const auto now = current_time_nanoseconds();
 
-      // Check if resource already has an active lease
-      LeaseData existing_lease;
-      if (lfdb::get(tr, fdb_key, existing_lease)) {
-        if (existing_lease.is_active(now)) {
-          // Handle transaction replay - if we already acquired this lease
-          // (commit_unknown_result replay), return success instead of -EEXIST
-          if (existing_lease.holder_id == holder_id && existing_lease.token == token) {
-            ldpp_dout(dpp, 20) << "FDBLease::" << __func__
-                               << " lease already acquired by us (replay): resource="
-                               << resource_name << dendl;
-            return 0;  // Idempotent - already acquired by us
-          }
-          ldpp_dout(dpp, 10) << "FDBLease::" << __func__
-                             << " resource already leased by holder=" << existing_lease.holder_id
-                             << " resource=" << resource_name << dendl;
-          return -EEXIST;
+    LeaseData existing_lease;
+    if (lfdb::get(tr, fdb_key, existing_lease)) {
+      if (existing_lease.is_active(now)) {
+        if (existing_lease.holder_id == holder_id && existing_lease.token == token) {
+          ldpp_dout(dpp, 20) << "FDBLease::" << __func__ << " lease already acquired by us: resource=" << resource_name << dendl;
+          return 0;
         }
-        // Expired, can reuse
-        ldpp_dout(dpp, 20) << "FDBLease::" << __func__
-                           << " reusing expired lease on resource=" << resource_name << dendl;
+
+        ldpp_dout(dpp, 10) << "FDBLease::" << __func__ << " resource already leased by holder=" << existing_lease.holder_id << " resource=" << resource_name << dendl;
+        return -EEXIST;
       }
 
-      // Acquire the lease
-      LeaseData new_lease{
-        .expiry = calculate_expiry(ttl_nanoseconds),
-        .holder_id = holder_id,
-        .token = token,
-        .tick_count = 0,
-        .last_renewal_id = ""  // No renewals yet
-      };
-      lfdb::set(tr, fdb_key, new_lease);
+      ldpp_dout(dpp, 20) << "FDBLease::" << __func__ << " reusing expired lease on resource=" << resource_name << dendl;
+    }
 
-      // NOTE: Log before commit() - may print multiple times on transaction replay
-      ldpp_dout(dpp, 20) << "FDBLease::" << __func__
-                         << " acquired lease: resource=" << resource_name
-                         << " holder=" << holder_id
-                         << " expiry_ns=" << new_lease.expiry << dendl;
-      return 0;
-    });
+    LeaseData new_lease{
+      .expiry = calculate_expiry(ttl_nanoseconds),
+      .holder_id = holder_id,
+      .token = token,
+      .tick_count = 0,
+      .last_renewal_id = ""
+    };
+
+    lfdb::set(tr, fdb_key, new_lease);
+
+    ldpp_dout(dpp, 20) << "FDBLease::" << __func__ << (txn ? " staged lease acquisition: resource=" : " acquired lease: resource=")
+                       << resource_name
+                       << " holder=" << holder_id
+                       << " expiry_ns=" << new_lease.expiry << dendl;
+
+    return 0;
+  };
+
+  try {
+    if (txn) {
+      auto* fdb_txn = dynamic_cast<FDBTransaction*>(&txn->get());
+
+      if (!fdb_txn) {
+        ldpp_dout(dpp, 0) << "FDBLease::" << __func__ << " incompatible transaction type for resource=" << resource_name << dendl;
+        return -EINVAL;
+      }
+
+      return acquire_impl(fdb_txn->get_transaction());
+    }
+
+    return lfdb::make_transactor(FDBdb)(acquire_impl);
+
   } catch (const lfdb::libfdb_exception& e) {
-    ldpp_dout(dpp, 0) << "FDBLease::" << __func__
-                      << " FDB error for resource=" << resource_name
-                      << ": " << e.what() << dendl;
+    ldpp_dout(dpp, 0) << "FDBLease::" << __func__ << " FDB error for resource=" << resource_name << ": " << e.what() << dendl;
     return -EIO;
   }
 }
@@ -485,6 +488,51 @@ inline void report_fdb_error(
       e.what());
 }
 
+TransactionResult FDBTransaction::commit_with_outcome(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  if (executed_) {
+    return {TransactionStatus::failed, -EINVAL, 0};
+  }
+
+  try {
+    const lfdb::commit_result result = lfdb::commit(lfdb::with_result, txn_);
+    executed_ = true;
+
+    if (result.committed) {
+      return {TransactionStatus::success, 0, 0};
+    }
+
+    const auto error = result.replay_error;
+
+    ldpp_dout(dpp, 10) << "FDBTransaction::" << __func__ << "() commit failed; FoundationDB error: " << error << dendl;
+
+    if (fdb_error_predicate(FDB_ERROR_PREDICATE_MAYBE_COMMITTED, error)) {
+      return {TransactionStatus::uncertain, -EIO, error};
+    }
+
+    if (fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED, error)) {
+      return {TransactionStatus::retryable_not_committed, -EAGAIN, error};
+    }
+
+    return {TransactionStatus::failed, -EIO, error};
+  } catch (const lfdb::libfdb_exception& e) {
+    executed_ = true;
+
+    const auto error = e.fdb_error_value;
+
+    ldpp_dout(dpp, 0) << "FDBTransaction::" << __func__ << "() ERROR: " << e.what() << dendl;
+
+    if (fdb_error_predicate(FDB_ERROR_PREDICATE_MAYBE_COMMITTED, error)) {
+      return {TransactionStatus::uncertain, -EIO, error};
+    }
+
+    if (fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED, error)) {
+      return {TransactionStatus::retryable_not_committed, -EAGAIN, error};
+    }
+
+    return {TransactionStatus::failed, -EIO, error};
+  }
+}
 
 int FDBTransaction::commit(const DoutPrefixProvider* dpp, optional_yield y)
 {

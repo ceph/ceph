@@ -242,8 +242,16 @@ int RedisLease::acquire(const DoutPrefixProvider* dpp,
                                const std::string& resource_name,
                                const std::string& holder_id,
                                const std::string& token,
-                               uint64_t ttl_nanoseconds)
+                               uint64_t ttl_nanoseconds,
+    			       std::optional<std::reference_wrapper<Transaction>> txn)
 {
+  if (txn){
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                    << " does not support acquiring a lease with an external transaction"
+                    << " for resource=" << resource_name << dendl;
+    return -ENOTSUP;
+  }
+
   if (ttl_nanoseconds == 0) {
     ldpp_dout(dpp, 10) << "RedisLease::" << __func__
                        << " invalid TTL=0 for resource=" << resource_name << dendl;
