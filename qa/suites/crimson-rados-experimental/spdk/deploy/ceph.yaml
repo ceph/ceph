@@ -1,0 +1,7 @@
+tasks:
+- install:
+- spdk_nvmet_tcp:
+- ceph:
+    conf:
+      osd:
+        debug monc: 20
