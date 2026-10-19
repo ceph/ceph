@@ -181,6 +181,25 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 WRITE_FLTTYPE_ENCODER(float, uint32_t, le32)
 WRITE_FLTTYPE_ENCODER(double, uint64_t, le64)
 
+// Catch implicit conversions to the arithmetic encoders above.
+//
+// Without this, any type that is implicitly convertible to bool or to
+// an integer (pointers, unscoped enums, classes with a conversion
+// operator) silently gets encoded with one of these overloads if its
+// proper encoder is not visible (e.g. a missing #include), which may
+// change the wire format.
+//
+// For a type without a better match, this deleted template is an
+// exact match and wins over all conversions.  The non-template
+// overloads (above, and those written for specific types) win over it
+// on a tie, and types with denc_traits are left to the denc glue.
+template<typename T>
+requires (!denc_traits<T>::supported &&
+	  (std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_pointer_v<T> ||
+	   std::convertible_to<const T&, uint64_t> ||
+	   std::convertible_to<const T&, bool>))
+void encode(const T &v, ::ceph::bufferlist& bl, uint64_t features=0) = delete;
+
 // see denc.h for ENCODE_DUMP_PATH discussion and definition.
 #ifdef ENCODE_DUMP_PATH
 # define ENCODE_DUMP_PRE()			\
