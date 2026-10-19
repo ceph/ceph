@@ -19,6 +19,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMonCommand.h"
 
+#include "include/ceph_release_numbers.h"
 #include "include/stringify.h"
 #include "include/util.h" // for dump_services()
 #include "mgr/MgrContext.h"

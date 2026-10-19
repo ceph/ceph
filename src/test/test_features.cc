@@ -12,6 +12,7 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 #include "include/ceph_features.h"
+#include "include/ceph_release_numbers.h"
 
 using namespace std;
 
