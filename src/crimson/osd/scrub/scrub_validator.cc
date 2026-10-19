@@ -1438,18 +1438,23 @@ chunk_result_t validate_chunk(
   //       (scrub_backend.cc:1041-1045)
   // These two are additive — an object with a shard-level SIZE_MISMATCH_INFO
   // AND object-level SIZE_MISMATCH counts as 2 errors (one per category).
+  // Classic counts any shard with nonzero errors that isn't deep as shallow,
+  // while crimson counts it as shallow only if has_shallow_errors() is true.
+  // Those should agree for the flags that are actually set.(TBD)
   for (const auto &i: ret.object_errors) {
+    // Deep errors take precedence over shallow ones (classic checks
+    // has_deep_errors() first), so an entry with both counts as deep.
     for (const auto &[shard_id, shard_info] : i.shards) {
-      if (shard_info.has_shallow_errors()) {
-        ++ret.stats.num_shallow_scrub_errors;
-      } else if (shard_info.has_deep_errors()) {
+      if (shard_info.has_deep_errors()) {
         ++ret.stats.num_deep_scrub_errors;
+      } else if (shard_info.has_shallow_errors()) {
+        ++ret.stats.num_shallow_scrub_errors;
       }
     }
-    if (i.has_shallow_errors()) {
-      ++ret.stats.num_shallow_scrub_errors;
-    } else if (i.has_deep_errors()) {
+    if (i.has_deep_errors()) {
       ++ret.stats.num_deep_scrub_errors;
+    } else if (i.has_shallow_errors()) {
+      ++ret.stats.num_shallow_scrub_errors;
     }
   }
   // Count primary-path snapset entries:
