@@ -914,6 +914,28 @@ protected:
    * the steps after mkdir fail */
   bool inject_create_failure{false};
 
+  /* Which POSIX identity a converted consumer chose for one named
+   * object, so a test can assert the uid and not the status --  (n)
+   * phase D's validation clause.  Phase C plumbed the authenticated
+   * user and the compiler catches a missing identity, not a wrong
+   * one;  this records the choice so a wrong one is a test failure
+   * rather than a silent inversion.
+   *
+   * Selected by requester, not global.  A global slot would hold
+   * whatever ran last, and the suite runs in parallel -- see the
+   * buffered-bytes counter, which is global and has no such
+   * protection.
+   *
+   * By requester rather than by object because the question is
+   * whether *this caller's* operations ran as it, which is not a
+   * per-object question:  a test may touch several objects, and a
+   * bucket-level attribute write names no key at all.  A selected
+   * user is also its own switch -- empty means record nothing -- so
+   * there is no second flag to leave set. */
+  ceph::mutex ran_as_lock = ceph::make_mutex("NSFSDriver::ran_as_lock");
+  std::string ran_as_who;
+  std::vector<std::pair<std::string, uid_t>> ran_as_seen;
+
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
   {
@@ -1535,6 +1557,35 @@ public:
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
   bool fsio_link_fail_injected() const { return inject_fsio_link_fail; }
   bool fsio_skip_cleanup_injected() const { return inject_fsio_skip_cleanup; }
+
+  /* Record what this requester's operations choose, discarding
+   * anything held for a previous one.  See ran_as_lock. */
+  void select_ran_as(const std::string& who) {
+    std::lock_guard l{ran_as_lock};
+    ran_as_who = who;
+    ran_as_seen.clear();
+  }
+  /* Record the identity `site` chose, if this is the selected
+   * requester.
+   * An inactive identity is the gateway, which is the answer when
+   * impersonation is off and is worth recording rather than
+   * dropping:  the test then has both polarities. */
+  void note_ran_as(const char* site, const std::string& who,
+		   const nsfs::FSIdentity& id) {
+    std::lock_guard l{ran_as_lock};
+    if (ran_as_who.empty() || (who != ran_as_who)) {
+      return;
+    }
+    ran_as_seen.emplace_back(site,
+			     id.active() ? id.cred.uid : ::geteuid());
+  }
+  /* Drain, and stop selecting:  a read answers for the operations
+   * between the select and itself and for nothing after them. */
+  std::vector<std::pair<std::string, uid_t>> take_ran_as() {
+    std::lock_guard l{ran_as_lock};
+    ran_as_who.clear();
+    return std::move(ran_as_seen);
+  }
 
   /* Internal APIs */
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }

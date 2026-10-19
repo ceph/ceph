@@ -11885,6 +11885,8 @@ int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
      * attribute write needs O_RDWR. */
     set_access(id, /*ro=*/false);
   }
+  /* what this attribute write chose, for the `ran-as` hint */
+  driver->note_ran_as("attrs", who.to_str(), id);
   return 0;
 }
 
@@ -13311,6 +13313,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       return pret;
     }
   }
+  /* what this delete chose, for the `ran-as` hint */
+  source->driver->note_ran_as("delete", auth_user.to_str(), identity);
 
   bool has_cond = params.if_match ||
     !real_clock::is_zero(params.last_mod_time_match) ||
@@ -17460,6 +17464,41 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    *
    * Only reachable on a gateway that can assume an identity, so the
    * suite skips it when `verdict=not-impersonating`. */
+  if (hint == "ran-as") {
+    /* Which POSIX identity a converted consumer chose for one object.
+     *
+     * `select` names the requester and clears whatever was recorded;
+     * a later call with no `select` drains what has been seen since
+     * and stops.  Scoped to one requester rather than global because
+     * the suite runs in parallel, and a global slot would answer for
+     * whichever request happened to run last.  By requester rather
+     * than by object:  the question is whether this caller's
+     * operations ran as it, and a bucket-level attribute write names
+     * no object at all.
+     *
+     * This reports the identity the driver *chose*, not the uid a
+     * syscall ran under.  That the switch itself works is what
+     * `nested-identity` and `raise` establish;  what phase C left
+     * open is whether the right identity reaches the call, and a
+     * wrong one is a wrong choice. */
+    auto a_it = params.find("select");
+    if (a_it != params.end()) {
+      select_ran_as(a_it->second);
+      if (out) {
+	(*out)["selecting"] = a_it->second;
+      }
+      return 0;
+    }
+    const auto seen = take_ran_as();
+    if (out) {
+      (*out)["count"] = std::to_string(seen.size());
+      for (const auto& [site, uid] : seen) {
+	(*out)[std::string("ran_as_") + site] = std::to_string(uid);
+      }
+    }
+    return 0;
+  }
+
   if (hint == "nested-identity") {
     if (!nsfs::impersonation_enabled()) {
       if (out) {
