@@ -3690,7 +3690,7 @@ try {
     }
     CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d",
 	    __func__, op_ret.entries.size(), op_ret.is_truncated);
-    encode(op_ret, *out);
+    encode(op.format, op_ret, *out);
     return 0;
   }
 
@@ -3763,7 +3763,7 @@ try {
 
   CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d",
 	  __func__, op_ret.entries.size(), op_ret.is_truncated);
-  encode(op_ret, *out);
+  encode(op.format, op_ret, *out);
 
   return 0;
 } catch (const std::bad_alloc&) {

@@ -4,7 +4,8 @@ Datum wire bindings for RGW CLS
 The RGW-owned ``cls_rgw``, ``cls_rgw_gc`` and ``cls_user`` classes bind all
 61 structured operations to independent client and module records. Seven
 data-free entries (including an alias) and one encoded-stream entry need no
-structured outer binding. The endpoints share the existing Ceph encoding,
+structured outer binding. The endpoints share explicit wire profiles, retaining
+the existing Ceph encodings except for the negotiated BI-list reply below,
 including versions, lengths, scalar widths, element encodings and map semantics.
 A container category alone does not define that contract. Generic classes used
 by RGW remain outside this migration.
@@ -125,6 +126,32 @@ status reference. Keep those outputs alive until the operation completes.
 These BI and OLH interfaces decode complete candidates before publishing
 outputs; decode failures preserve the caller's previous result. Completion errors
 map allocation failures to ``-ENOMEM`` and malformed responses to ``-EIO``.
+
+Compact bucket-index list replies
+---------------------------------
+
+The BI-list client sends request version 3 with compatibility version 1 and the
+same fields as version 2. Version 3 advertises support for compact replies. An
+older module decodes those fields and returns its established reply; requests
+through version 2 still receive that reply from a new module. No discovery
+operation or retry is needed. The existing client signatures do not change.
+
+A nonempty compact reply has outer version 2 and compatibility version 2.
+Its body follows the ordinary zpp sequence profile: a little-endian uint32 count,
+then each entry's uint8 kind, uint32-counted key and uint32-counted opaque payload,
+followed by the existing byte flag. Datum selects the metadata fields; native
+buffer operations retain fragmented payload owners. There is no intermediate
+owning record or flattened payload. Removing each entry's six-byte frame saves
+exactly six bytes per entry. Empty replies retain the existing eleven-byte form.
+
+The decoder selects the entry profile using the compatibility byte, preserving
+compatible future extensions of the original framed reply. It accepts both
+reply forms into either public list or vector outputs. Counts and field lengths
+are checked against the outer frame before storage is reserved or copied;
+malformed responses preserve caller outputs. Future changes to compact entry
+layout must establish a new wire profile and compatibility version, since entries have no individual
+extension boundary. Stored records, batch puts and single-entry operations
+retain their established encodings.
 
 Single-entry reads
 ------------------

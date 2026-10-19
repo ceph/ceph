@@ -16,6 +16,11 @@
 
 namespace cls::rgw::bi_datum {
 
+enum struct reply_format : std::uint8_t {
+    framed = 1,
+    compact = 2
+};
+
 struct request final
 {
     std::uint32_t max = 0;
@@ -24,6 +29,8 @@ struct request final
     std::string marker;
 
     bool reshardlog = false;
+
+    reply_format format = reply_format::framed;
 };
 
 struct entry final
@@ -62,6 +69,8 @@ struct put_request final
 // Borrow records only during encoding; the returned message retains its bytes.
 ::ceph::buffer::list encode_request(std::uint32_t maximum, std::string_view filter,
                                     std::string_view marker, bool reshard);
+::ceph::buffer::list encode_request(reply_format format, std::uint32_t maximum, std::string_view filter,
+                                    std::string_view marker, bool reshard);
 ::ceph::buffer::list encode_get_request(const ::cls_rgw_obj_key& key, ::BIIndexType type);
 ::ceph::buffer::list encode_put_request(const std::vector<::rgw_cls_bi_entry>& entries,
                                         bool check_existing);
@@ -69,6 +78,7 @@ struct put_request final
 
 void encode(const entry& value, ::ceph::buffer::list& output);
 void encode(const reply& value, ::ceph::buffer::list& output);
+void encode(reply_format format, const reply& value, ::ceph::buffer::list& output);
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(get_request& value, ::ceph::buffer::list::const_iterator& input);

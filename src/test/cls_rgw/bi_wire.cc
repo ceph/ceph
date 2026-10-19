@@ -11,6 +11,7 @@
 
 #include <array>
 #include <limits>
+#include <list>
 #include <map>
 #include <memory>
 #include <random>
@@ -842,4 +843,183 @@ TEST_CASE("BI get bounds key fields and preserves request publication on failure
         short_input.substr_of(bytes, 0, size);
         CHECK_THROWS(native::decode_get_reply(short_input));
     }
+}
+
+TEST_CASE("BI compact negotiation keeps old peers usable without another operation", "[rgw][cls][datum][compact]")
+{
+    const rgw_bi_oracle::request expected {19, std::string {"f\0x", 3}, "marker", true};
+    const auto bytes = native::encode_request(native::reply_format::compact,
+        expected.maximum, expected.filter, expected.marker, expected.reshard);
+    const auto old = rgw_bi_oracle::decode_request(bytes);
+    CHECK(old.maximum == expected.maximum);
+    CHECK(old.filter == expected.filter);
+    CHECK(old.marker == expected.marker);
+    CHECK(old.reshard == expected.reshard);
+    auto canonical = rgw_bi_oracle::encode_request(expected);
+    const char version = 3;
+    canonical.begin().copy_in(1, &version);
+    CHECK(bytes.contents_equal(canonical));
+
+    for (const auto format : {native::reply_format::framed, native::reply_format::compact}) {
+        const auto input = native::encode_request(format,
+            expected.maximum, expected.filter, expected.marker, expected.reshard);
+        auto cursor = input.cbegin();
+        native::request decoded;
+        native::decode(decoded, cursor);
+        CHECK(decoded.format == format);
+        CHECK(cursor.end());
+    }
+    for (unsigned size = 0; size < bytes.length(); ++size) {
+        byte_buffer short_input;
+        short_input.substr_of(bytes, 0, size);
+        auto cursor = short_input.cbegin();
+        native::request preserved {17, "preserve", "cursor", false};
+        CHECK_THROWS(native::decode(preserved, cursor));
+        CHECK(preserved.max == 17);
+        CHECK(preserved.format == native::reply_format::framed);
+        CHECK(cursor.get_off() == 0);
+    }
+
+    const auto old_reply = rgw_bi_oracle::extended_reply(fixtures());
+    const auto [rows, truncated] = native::decode_reply<std::vector<::rgw_cls_bi_entry>>(old_reply);
+    REQUIRE(rows.size() == fixtures().size());
+    CHECK(rows.front().idx == fixtures().front().key);
+    CHECK(truncated);
+}
+
+TEST_CASE("BI compact replies match ordinary zpp container bytes and retain opaque owners", "[rgw][cls][datum][compact]")
+{
+    struct flat_row final
+    {
+        std::uint8_t kind;
+        std::string_view key;
+        std::string_view data;
+    };
+    for (const auto count : {0u, 1u, 2u, 1000u}) {
+        native::reply page;
+        page.is_truncated = true;
+        const auto fixture = fixtures().front();
+        for (unsigned index = 0; index < count; ++index) {
+            page.entries.emplace_back(static_cast<::BIIndexType>(index % 256),
+                fixture.key + std::to_string(index), fixture.payload);
+        }
+        byte_buffer framed;
+        native::encode(page, framed);
+        byte_buffer compact;
+        native::encode(native::reply_format::compact, page, compact);
+        CHECK(compact.length() + 6 * count == framed.length());
+        if (0 == count) {
+            CHECK(compact.contents_equal(framed));
+        }
+        if (0 < count) {
+            std::vector<std::string> payloads;
+            std::vector<flat_row> flat;
+            payloads.reserve(count);
+            flat.reserve(count);
+            for (const auto& entry : page.entries) {
+                payloads.push_back(entry.data.to_str());
+                flat.emplace_back(static_cast<std::uint8_t>(entry.type), entry.idx, payloads.back());
+            }
+            std::vector<char> body;
+            zpp::bits::out out {body, zpp::bits::size4b {}, zpp::bits::endian::little {}};
+            out(flat, page.is_truncated).or_throw();
+            byte_buffer expected;
+            ENCODE_START(2, 2, expected);
+            expected.append(body.data(), body.size());
+            ENCODE_FINISH(expected);
+            CHECK(compact.contents_equal(expected));
+            bool old_truncated = false;
+            CHECK_THROWS(rgw_bi_oracle::decode_reply(compact, old_truncated));
+        }
+        for (const auto& input : {compact, fragmented(compact)}) {
+            const auto [vector_rows, vector_truncated] = native::decode_reply<std::vector<::rgw_cls_bi_entry>>(input);
+            const auto [list_rows, list_truncated] = native::decode_reply<std::list<::rgw_cls_bi_entry>>(input);
+            auto cursor = input.cbegin();
+            const auto independent = wire::decode_entries<std::vector<client_row>, 2>(client_row_fields, cursor);
+            REQUIRE(vector_rows.size() == count);
+            REQUIRE(list_rows.size() == count);
+            REQUIRE(independent.first.size() == count);
+            CHECK(independent.second);
+            CHECK(cursor.end());
+            CHECK(vector_truncated);
+            CHECK(list_truncated);
+            unsigned index = 0;
+            for (const auto& item : list_rows) {
+                CHECK(item.type == page.entries[index].type);
+                CHECK(item.idx == page.entries[index].idx);
+                CHECK(item.data.contents_equal(page.entries[index].data));
+                CHECK(vector_rows[index].idx == item.idx);
+                CHECK(independent.first[index].tag == static_cast<std::uint8_t>(item.type));
+                CHECK(independent.first[index].name == item.idx);
+                CHECK(independent.first[index].contents.contents_equal(item.data));
+                ++index;
+            }
+        }
+        if (0 < count) {
+            const auto source = page.entries.front().data.cbegin().get_current_ptr();
+            auto [rows, truncated] = native::decode_reply<std::vector<::rgw_cls_bi_entry>>(compact);
+            const auto decoded = rows.front().data.cbegin().get_current_ptr();
+            CHECK(source.c_str() == decoded.c_str());
+            compact.clear();
+            page.entries.clear();
+            CHECK(rows.front().data.contents_equal(fixture.payload));
+        }
+    }
+}
+
+TEST_CASE("BI compact replies reject truncations and impossible bounds before allocation", "[rgw][cls][datum][compact]")
+{
+    const auto rows = fixtures();
+    native::reply page;
+    for (const auto& row : rows) {
+        page.entries.emplace_back(static_cast<::BIIndexType>(row.kind), row.key, row.payload);
+    }
+    byte_buffer bytes;
+    native::encode(native::reply_format::compact, page, bytes);
+    for (unsigned size = 0; size < bytes.length(); ++size) {
+        byte_buffer shortened;
+        shortened.substr_of(bytes, 0, size);
+        CHECK_THROWS(native::decode_reply<std::vector<::rgw_cls_bi_entry>>(fragmented(shortened)));
+    }
+    for (const unsigned offset : {6u, 11u, 18u}) {
+        auto invalid = fragmented(bytes);
+        const char maximum[] = {char(0xFF), char(0xFF), char(0xFF), char(0xFF)};
+        invalid.begin(offset).copy_in(4, maximum);
+        auto cursor = invalid.cbegin();
+        counted_row::constructions = 0;
+        CHECK_THROWS((wire::decode_entries<std::vector<counted_row>, 2>(client_row_fields, cursor)));
+        if (6 == offset) {
+            CHECK(counted_row::constructions == 0);
+        }
+    }
+    for (const auto [offset, value] : {std::pair {1u, char(3)}, std::pair {0u, char(1)}}) {
+        auto invalid = fragmented(bytes);
+        invalid.begin(offset).copy_in(1, &value);
+        CHECK_THROWS(native::decode_reply<std::vector<::rgw_cls_bi_entry>>(invalid));
+    }
+    for (unsigned raw = 0; raw < 256; ++raw) {
+        auto input = fragmented(bytes);
+        const char flag = static_cast<char>(raw);
+        input.begin(input.length() - 1).copy_in(1, &flag);
+        const auto result = native::decode_reply<std::vector<::rgw_cls_bi_entry>>(input);
+        CHECK(result.second == (0 != raw));
+    }
+}
+
+TEST_CASE("BI compact payload owners survive every source record and envelope", "[rgw][cls][datum][compact]")
+{
+    auto [rows, address] = [] {
+        native::reply page;
+        page.entries.push_back({::BIIndexType::Plain, "owned", payload()});
+        const auto address = reinterpret_cast<std::uintptr_t>(page.entries.front().data.cbegin().get_current_ptr().c_str());
+        byte_buffer bytes;
+        native::encode(native::reply_format::compact, page, bytes);
+        auto result = native::decode_reply<std::vector<::rgw_cls_bi_entry>>(bytes);
+
+        return std::pair {std::move(result.first), address};
+    }();
+    REQUIRE(rows.size() == 1);
+    CHECK(rows.front().idx == "owned");
+    CHECK(rows.front().data.to_str() == std::string {"abc\0\xFF!", 6});
+    CHECK(reinterpret_cast<std::uintptr_t>(rows.front().data.cbegin().get_current_ptr().c_str()) == address);
 }

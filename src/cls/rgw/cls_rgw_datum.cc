@@ -34,6 +34,17 @@ constexpr auto module_entry_fields = datum::binary_fields<&entry::type, &entry::
     return ::cls::rgw::bi_wire::encode_request(maximum, filter, marker, reshard);
 }
 
+::ceph::buffer::list encode_request(const reply_format format, const std::uint32_t maximum,
+                                    const std::string_view filter, const std::string_view marker, const bool reshard)
+{
+    if (reply_format::compact == format) {
+        // Old modules accept this compatible request and return framed replies.
+        return ::cls::rgw::bi_wire::encode_request<3>(maximum, filter, marker, reshard);
+    }
+
+    return encode_request(maximum, filter, marker, reshard);
+}
+
 ::ceph::buffer::list encode_get_request(const ::cls_rgw_obj_key& key, const ::BIIndexType type)
 {
     return ::cls::rgw::bi_wire::encode_get_request(key.name, key.instance, std::to_underlying(type));
@@ -66,9 +77,10 @@ void encode(const entry& value, ::ceph::buffer::list& output)
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    ::cls::rgw::bi_wire::decode_request(
+    const auto version = ::cls::rgw::bi_wire::decode_request(
         datum::binary_fields<&request::max, &request::name_filter, &request::marker, &request::reshardlog> {},
         input, value);
+    value.format = version >= 3 ? reply_format::compact : reply_format::framed;
 }
 
 void decode(entry& value, ::ceph::buffer::list::const_iterator& input)
@@ -112,12 +124,23 @@ void encode(const reply& value, ::ceph::buffer::list& output)
     output.claim_append(candidate);
 }
 
+void encode(const reply_format format, const reply& value, ::ceph::buffer::list& output)
+{
+    if (reply_format::compact == format) {
+        auto candidate = ::cls::rgw::bi_wire::encode_entries<2>(module_entry_fields, value.entries, value.is_truncated);
+        output.claim_append(candidate);
+
+        return;
+    }
+    encode(value, output);
+}
+
 template <typename EntriesT>
 std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
 
-    return ::cls::rgw::bi_wire::decode_entries<EntriesT>(native_entry_fields, cursor);
+    return ::cls::rgw::bi_wire::decode_entries<EntriesT, 2>(native_entry_fields, cursor);
 }
 
 template std::pair<std::vector<::rgw_cls_bi_entry>, bool>

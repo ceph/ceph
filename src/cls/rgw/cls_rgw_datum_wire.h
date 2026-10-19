@@ -71,6 +71,8 @@ struct frame_header final
 using header_fields = datum::binary_fields<&frame_header::version,
     &frame_header::compatible, &frame_header::length>;
 
+inline constexpr auto growing_metadata = std::true_type {};
+
 // Keep success local when the archive's throwing helper is outlined.
 [[gnu::always_inline]] inline void throw_if_error(const zpp::bits::errc result)
 {
@@ -161,6 +163,18 @@ public:
     void fields(datum::binary_fields<Member...> selected, const RecordT& value)
     {
         fields(selected, value, encoded_size(selected, value));
+    }
+
+    // Unframed entry streams need append growth once their first arena fills.
+    template <typename RecordT, auto ...Member>
+    void fields(std::true_type, datum::binary_fields<Member...> selected, const RecordT& value)
+    {
+        const auto size = encoded_size(selected, value);
+        ensure(size);
+        auto storage = output.append_hole(static_cast<unsigned>(size));
+        std::span bytes {storage.c_str(), static_cast<std::size_t>(size)};
+        zpp::bits::out archive {bytes, zpp::bits::size4b {}, zpp::bits::endian::little {}};
+        throw_if_error(datum::serialize_schema(archive, value, selected));
     }
 
     template <typename T>
@@ -441,6 +455,24 @@ public:
         const auto finish = input.get_off() + header.length;
         reader fields {input, finish};
         decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version);
+        input += finish - input.get_off();
+
+        return result;
+    }
+
+    template <typename BodyT>
+    requires std::invocable<BodyT, reader&, std::uint8_t, std::uint8_t>
+    decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
+    {
+        frame_header header CEPH_INDETERMINATE;
+        fields<6>(header_fields {}, header);
+        if (header.compatible > supported) {
+            throw ::ceph::buffer::malformed_input {"RGW CLS frame needs a newer decoder"};
+        }
+        require(header.length);
+        const auto finish = input.get_off() + header.length;
+        reader fields {input, finish};
+        decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version, header.compatible);
         input += finish - input.get_off();
 
         return result;

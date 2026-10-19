@@ -261,7 +261,7 @@ static int bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name_filter, const std::string& marker, uint32_t max,
                    EntriesT *destination, bool *truncated, bool reshardlog)
 try {
-  auto in = bi_datum::encode_request(max, name_filter, marker, reshardlog);
+  auto in = bi_datum::encode_request(bi_datum::reply_format::compact, max, name_filter, marker, reshardlog);
   bufferlist out;
   int r = io_ctx.exec(oid, method::bi_list, in, out);
   if (r < 0)

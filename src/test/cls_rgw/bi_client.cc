@@ -32,12 +32,23 @@ byte_buffer *request_output = nullptr;
 std::unique_ptr<::librados::ObjectOperationCompletion> header_completion;
 int submission_status = 0;
 
-byte_buffer response()
+byte_buffer response(const bool compact = false)
 {
     ::rgw_cls_bi_list_ret value;
     value.entries.push_back({::BIIndexType::Plain, "row", {}});
     value.is_truncated = true;
     byte_buffer bytes;
+    if (compact) {
+        ENCODE_START(2, 2, bytes);
+        ::ceph::encode(std::uint32_t {1}, bytes);
+        ::ceph::encode(static_cast<std::uint8_t>(value.entries.front().type), bytes);
+        ::ceph::encode(value.entries.front().idx, bytes);
+        ::ceph::encode(value.entries.front().data, bytes);
+        ::ceph::encode(value.is_truncated, bytes);
+        ENCODE_FINISH(bytes);
+
+        return bytes;
+    }
     ::encode(value, bytes);
 
     return bytes;
@@ -60,7 +71,7 @@ int librados::IoCtx::exec_impl(const std::string& oid, const char *cls, const ch
     return transport_status;
 }
 
-TEST_CASE("BI client preserves native requests and both output interfaces", "[rgw][cls][datum]")
+TEST_CASE("BI client advertises compact replies and accepts native fallback for both outputs", "[rgw][cls][datum]")
 {
     ::librados::IoCtx context;
     reply_bytes = response();
@@ -73,6 +84,8 @@ TEST_CASE("BI client preserves native requests and both output interfaces", "[rg
     request.reshardlog = true;
     byte_buffer expected;
     ::encode(request, expected);
+    const char version = 3;
+    expected.begin().copy_in(1, &version);
     std::vector<::rgw_cls_bi_entry> entries;
     bool truncated = false;
 
@@ -89,6 +102,18 @@ TEST_CASE("BI client preserves native requests and both output interfaces", "[rg
                                request.max, &compatible, &truncated, true));
     CHECK(request_method == "bi_list");
     CHECK(request_bytes.contents_equal(expected));
+    REQUIRE(compatible.size() == 1);
+    CHECK(compatible.front().idx == "row");
+
+    reply_bytes = response(true);
+    truncated = false;
+    CHECK(0 == ::cls_rgw_bi_list(context, "object", request.name_filter, request.marker,
+                               request.max, entries, truncated, true));
+    REQUIRE(entries.size() == 1);
+    CHECK(entries.front().idx == "row");
+    CHECK(truncated);
+    CHECK(0 == ::cls_rgw_bi_list(context, "object", request.name_filter, request.marker,
+                               request.max, &compatible, &truncated, true));
     REQUIRE(compatible.size() == 1);
     CHECK(compatible.front().idx == "row");
 }
@@ -126,6 +151,28 @@ TEST_CASE("BI client failures preserve caller outputs and native status", "[rgw]
     REQUIRE(entries.size() == 1);
     CHECK(entries[0].idx == "preserve");
     CHECK_FALSE(truncated);
+}
+
+TEST_CASE("BI compact reply failures preserve both output interfaces", "[rgw][cls][datum]")
+{
+    ::librados::IoCtx context;
+    transport_status = 0;
+    allocation_failure = false;
+    const auto full = response(true);
+    for (unsigned size = 0; size < full.length(); ++size) {
+        std::vector<::rgw_cls_bi_entry> entries {{::BIIndexType::Invalid, "preserve", {}}};
+        std::list<::rgw_cls_bi_entry> compatible {{::BIIndexType::Invalid, "preserve", {}}};
+        bool truncated = false;
+        reply_bytes.clear();
+        reply_bytes.substr_of(full, 0, size);
+        CHECK(-EIO == ::cls_rgw_bi_list(context, "object", "", "", 9, entries, truncated));
+        CHECK(-EIO == ::cls_rgw_bi_list(context, "object", "", "", 9, &compatible, &truncated));
+        REQUIRE(entries.size() == 1);
+        REQUIRE(compatible.size() == 1);
+        CHECK(entries.front().idx == "preserve");
+        CHECK(compatible.front().idx == "preserve");
+        CHECK_FALSE(truncated);
+    }
 }
 
 void librados::ObjectOperation::exec_impl(const char *cls, const char *method, byte_buffer& input)

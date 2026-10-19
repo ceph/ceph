@@ -63,9 +63,13 @@ struct entry_prefix final
     std::uint32_t length;
 };
 
+constexpr auto entry_prefix_fields = datum::binary_fields<&entry_prefix::kind,
+    &entry_prefix::key, &entry_prefix::length> {};
+
 } // detail
 
-inline byte_buffer encode_request(const std::uint32_t maximum, const std::string_view filter,
+template <std::uint8_t Version = 2>
+byte_buffer encode_request(const std::uint32_t maximum, const std::string_view filter,
                                   const std::string_view marker, const bool reshard)
 {
     byte_buffer output;
@@ -73,21 +77,25 @@ inline byte_buffer encode_request(const std::uint32_t maximum, const std::string
     using prefix = detail::request_prefix;
 
     archive.frame(datum::binary_fields<&prefix::maximum, &prefix::filter, &prefix::marker, &prefix::reshard> {},
-                  2, prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)});
+                  Version, prefix {maximum, filter, marker, static_cast<std::uint8_t>(reshard)});
 
     return output;
 }
 
 template <typename RequestT, auto Maximum, auto Filter, auto Marker, auto Reshard>
-void decode_request(datum::binary_fields<Maximum, Filter, Marker, Reshard>,
+std::uint8_t decode_request(datum::binary_fields<Maximum, Filter, Marker, Reshard>,
                     byte_buffer::const_iterator& input, RequestT& value)
 {
-    ::cls::rgw::wire::decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
+    std::uint8_t decoded_version = 0;
+    ::cls::rgw::wire::decode_record<2>(value, input, [&decoded_version](auto& fields, auto& candidate, const std::uint8_t version) {
         candidate.*Maximum = fields.template scalar<std::uint32_t>();
         fields.text(candidate.*Filter);
         fields.text(candidate.*Marker);
         candidate.*Reshard = version >= 2 && 0 != fields.template scalar<std::uint8_t>();
+        decoded_version = version;
     });
+
+    return decoded_version;
 }
 
 // BI get and OLH use the same object-key frame, followed by operation fields.
@@ -118,33 +126,43 @@ std::uint8_t decode_get_request(datum::binary_fields<Member...> selected, byte_b
 
 namespace detail {
 
-template <typename EntryT, auto Kind, auto Key, auto Payload>
+template <std::uint8_t Version = 1, typename EntryT, auto Kind, auto Key, auto Payload>
 void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, const EntryT& value)
 {
     const auto& data = datum::member_lens<Payload> {}(value);
     const std::string_view key = datum::member_lens<Key> {}(value);
     const auto length = checked_count(payload_size(data));
     const auto kind = ::cls::rgw::wire::checked_byte(datum::member_lens<Kind> {}(value));
-    archive.frame(1, [&] {
-        using prefix = entry_prefix;
-
-        archive.fields(datum::binary_fields<&prefix::kind, &prefix::key, &prefix::length> {},
-                       prefix {kind, key, length});
+    using prefix = entry_prefix;
+    if constexpr (1 == Version) {
+        archive.frame(1, [&] {
+            archive.fields(entry_prefix_fields, prefix {kind, key, length});
+            archive.payload(data);
+        });
+    }
+    if constexpr (2 == Version) {
+        archive.fields(::cls::rgw::wire::growing_metadata, entry_prefix_fields, prefix {kind, key, length});
         archive.payload(data);
-    });
+    }
 }
 
-template <typename EntryT, auto Kind, auto Key, auto Payload>
+template <std::uint8_t Version = 1, typename EntryT, auto Kind, auto Key, auto Payload>
 EntryT& decode_entry(datum::binary_fields<Kind, Key, Payload>, reader& archive, EntryT& value)
 {
-    return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
+    const auto body = [&](auto& fields) -> EntryT& {
         auto& kind = value.*Kind;
         kind = static_cast<std::remove_cvref_t<decltype(kind)>>(fields.template scalar<std::uint8_t>());
         fields.text(value.*Key);
         fields.payload(value.*Payload);
 
         return value;
-    });
+    };
+    if constexpr (1 == Version) {
+        return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& { return body(fields); });
+    }
+    if constexpr (2 == Version) {
+        return body(archive);
+    }
 }
 
 } // detail
@@ -185,10 +203,11 @@ EntryT& decode_entry_message(datum::binary_fields<Member...> selected,
 
 // List replies and batch requests share a counted entry sequence and flag.
 // The binding interprets the flag as truncation or an overwrite check.
-template <typename EntriesT, auto ...Member>
+template <std::uint8_t Version = 1, typename EntriesT, auto ...Member>
 requires std::ranges::input_range<const EntriesT> && std::ranges::sized_range<const EntriesT>
 byte_buffer encode_entries(datum::binary_fields<Member...> selected, const EntriesT& entries, const bool flag)
 {
+    static_assert(1 == Version || 2 == Version);
     const auto size = detail::checked_count(std::ranges::size(entries));
     byte_buffer output;
     detail::writer archive {output};
@@ -200,10 +219,10 @@ byte_buffer encode_entries(datum::binary_fields<Member...> selected, const Entri
 
         return output;
     }
-    archive.frame(1, [&] {
+    archive.frame(Version, Version, [&] {
         archive.scalar(size);
         for (const auto& entry : entries) {
-            detail::encode_entry(selected, archive, entry);
+            detail::encode_entry<Version>(selected, archive, entry);
         }
         archive.scalar(static_cast<std::uint8_t>(flag));
     });
@@ -211,18 +230,31 @@ byte_buffer encode_entries(datum::binary_fields<Member...> selected, const Entri
     return output;
 }
 
-template <typename EntriesT, auto ...Member>
+template <typename EntriesT, std::uint8_t Supported = 1, auto ...Member>
 auto decode_entries(datum::binary_fields<Member...> selected, byte_buffer::const_iterator& input)
 {
     detail::reader archive {input};
 
-    return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        // Each entry needs at least 15 bytes; reserve the final flag byte.
-        auto entries = fields.template sequence<15, EntriesT>(
-            [selected](auto& fields, auto& entry) { detail::decode_entry(selected, fields, entry); }, 1);
-        const bool flag = 0 != fields.template scalar<std::uint8_t>();
+    return archive.frame(Supported, [&](auto& fields, const std::uint8_t version, const std::uint8_t compatible) {
+        const auto body = [&]<std::uint8_t Version>() {
+            // Unframed entries need nine bytes; framed entries need fifteen.
+            // Both reserve the final flag before allocating any rows.
+            auto entries = fields.template sequence<1 == Version ? 15 : 9, EntriesT>(
+                [selected](auto& fields, auto& entry) { detail::decode_entry<Version>(selected, fields, entry); }, 1);
+            const bool flag = 0 != fields.template scalar<std::uint8_t>();
 
-        return std::pair {std::move(entries), flag};
+            return std::pair {std::move(entries), flag};
+        };
+        if constexpr (2 <= Supported) {
+            if (2 <= compatible) {
+                if (version < 2) {
+                    throw ::ceph::buffer::malformed_input {"RGW CLS compact reply needs version two"};
+                }
+                return body.template operator()<2>();
+            }
+        }
+
+        return body.template operator()<1>();
     });
 }
 
