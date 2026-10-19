@@ -2086,6 +2086,12 @@ void get_stale_instances(rgw::sal::Driver* driver, const std::string& bucket_nam
       continue;
     }
     binfo = bucket->get_info();
+    // vector buckets are never resharded, and have no S3 entrypoint to compare
+    // against, so they would look stale. they are listed with the S3 instances
+    if (binfo.is_vector()) {
+      ldpp_dout(dpp, 10) << "skipping vector bucket instance: " << bucket_instance << dendl;
+      continue;
+    }
     if (binfo.reshard_status == cls_rgw_reshard_status::DONE)
       stale_instances.emplace_back(std::move(binfo));
     else {
@@ -3284,8 +3290,11 @@ int RGWBucketInstanceMetadataHandler::remove(std::string& entry, RGWObjVersionTr
     return ret;
   }
 
+  // vector instances are local to the zone and are never trimmed by sync, so
+  // the removal of the metadata is the only way to drop one
   if (bci.info.is_vector()) {
-    return 0;
+    return svc_bucket->remove_bucket_instance_info(entry, bci.info,
+                                                   &bci.info.objv_tracker, y, dpp);
   }
 
   // skip bucket instance removal. each zone will handle it independently during trimming

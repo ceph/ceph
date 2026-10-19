@@ -1,6 +1,6 @@
+# the storage options are set on the RGWs by the tests, so they are not given
+# in "ceph.conf", where they would override the changes that the tests make
 overrides:
-  ceph:
-    conf:
-      client:
-        rgw_s3vector_backend: rgw
-        rgw_s3vector_data_s3_bucket: true
+  s3vectors-tests:
+    s3vector_backend: rgw
+    s3vector_data_s3_bucket: true

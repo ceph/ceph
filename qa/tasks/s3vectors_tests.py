@@ -370,14 +370,20 @@ def task(ctx,config):
         config = dict.fromkeys(config)
     clients=config.keys()
 
+    # the storage options are set on the RGWs by the tests themselves, through
+    # "ceph config set". they must not be given in "ceph.conf", since a value of
+    # the configuration file overrides the one set on the cluster, and the tests
+    # could not change it. so, they are taken from the overrides of this task.
+    # the overrides are merged into each client section, not the top level
+    overrides = ctx.config.get('overrides', {}).get('s3vectors-tests', {})
+    for client in clients:
+        if not config[client]:
+            config[client] = {}
+        teuthology.deep_merge(config[client], overrides)
+
     log.debug('config is %s', config)
 
     s3vtests_conf = {}
-
-    ceph_overrides = ctx.config.get('overrides', {}).get('ceph', {})
-    rgw_config = ceph_overrides.get('conf', {}).get('client', {})
-    s3vector_backend = rgw_config.get('rgw_s3vector_backend', 'rgw')
-    s3vector_data_s3_bucket = rgw_config.get('rgw_s3vector_data_s3_bucket', False)
 
     # some "radosgw-admin" commands are allowed only on the master zone. note that
     # the client of its RGW is assumed to be the same as the one of the tested zone
@@ -405,8 +411,8 @@ def task(ctx,config):
                 'port':endpoint.port,
                 'host':endpoint.dns_name,
                 'zonegroup':ctx.rgw.zonegroup,
-                's3vector_backend':s3vector_backend,
-                's3vector_data_s3_bucket':s3vector_data_s3_bucket,
+                's3vector_backend':config[client].get('s3vector_backend', 'rgw'),
+                's3vector_data_s3_bucket':config[client].get('s3vector_data_s3_bucket', False),
                 'cluster':cluster_name,
                 'rgw_client':daemon_type + '.' + client_id,
                 },

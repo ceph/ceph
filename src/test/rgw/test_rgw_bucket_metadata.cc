@@ -32,6 +32,7 @@ protected:
     bool exists = false;
     int reads = 0;
     int writes = 0;
+    int removes = 0;
 
     BucketService() : RGWSI_Bucket_SObj(g_ceph_context) {}
 
@@ -55,6 +56,14 @@ protected:
       ++writes;
       info = value;
       exists = true;
+      return 0;
+    }
+
+    int remove_bucket_instance_info(const std::string& key,
+        const RGWBucketInfo& bucket_info, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider* dpp) override {
+      ++removes;
+      exists = false;
       return 0;
     }
   } service;
@@ -119,7 +128,29 @@ protected:
     return handler->put(entry, &obj, objv, null_yield, &dpp,
                         RGWMDLogSyncType::APPLY_ALWAYS, from_remote_zone);
   }
+  int remove() {
+    RGWObjVersionTracker objv;
+    return handler->remove(entry, objv, null_yield, &dpp);
+  }
 };
+
+TEST_P(BucketInstanceMetadata, Remove) {
+  service.exists = true;
+  service.info = bucket_info();
+  EXPECT_EQ(0, remove());
+  if (service.info.is_vector()) {
+    // vector instances are never trimmed by sync, so the metadata removes them
+    EXPECT_EQ(1, service.removes);
+    EXPECT_FALSE(service.exists);
+  } else {
+    // S3 instances are left to the trimming of each zone
+    EXPECT_EQ(0, service.removes);
+    EXPECT_TRUE(service.exists);
+  }
+  // a missing instance is not an error
+  service.exists = false;
+  EXPECT_EQ(0, remove());
+}
 
 TEST_P(BucketInstanceMetadata, Get) {
   service.exists = true;

@@ -1001,6 +1001,15 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(-ENOENT);
     }
 
+    // vector buckets are local to the zone and are never synced, so no peer
+    // holds a sync status for them, and they have no S3 entrypoint. trimming
+    // one would mistake it for a deleted bucket and remove its instance
+    if (pbucket_info->is_vector()) {
+      ldpp_dout(dpp, 10) << "bucket=" << bucket_instance
+          << " is a vector bucket, skipping trim" << dendl;
+      return set_cr_done();
+    }
+
     if (pbucket_info->layout.logs.empty()) {
       return set_cr_done(); // no bilogs to trim
     }

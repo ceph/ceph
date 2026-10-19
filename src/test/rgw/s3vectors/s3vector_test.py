@@ -842,15 +842,21 @@ def test_vector_bucket_shared_instance_namespace(delete_first, owner_type):
 
         # A local metadata update must preserve the vector layout and initialize
         # its native index, while remaining valid for indexless storage too.
+        # the vector instance is local to the zone, so the update is legitimate on
+        # a non-master zone as well, where it has to be confirmed
         vector_metadata_key = f'bucket.instance:{vector_key}'
         vector_metadata = admin_json(['metadata', 'get', vector_metadata_key])
+        s3_metadata = metadata_get(f'bucket.instance:{s3_key}')
         with tempfile.NamedTemporaryFile(mode='w+') as metadata_file:
             json.dump(vector_metadata, metadata_file)
             metadata_file.flush()
             out, ret = admin(['metadata', 'put', vector_metadata_key,
-                              '--infile', metadata_file.name])
+                              '--infile', metadata_file.name,
+                              '--yes-i-really-mean-it'])
             assert ret == 0, out
         assert metadata_get(vector_metadata_key) == vector_metadata['data']
+        # the S3 instance of the same name is not touched by the update
+        assert metadata_get(f'bucket.instance:{s3_key}') == s3_metadata
 
         if delete_first == 'vector':
             # A vector bucket deletion must leave S3 objects untouched.
@@ -895,6 +901,134 @@ def test_vector_bucket_shared_instance_namespace(delete_first, owner_type):
         if s3_created:
             s3conn.delete_object(Bucket=bucket_name, Key='probe')
             s3conn.delete_bucket(Bucket=bucket_name)
+
+
+def _admin_json(args, cluster=None):
+    """ the JSON output of a "radosgw-admin" command. the startup warnings on
+    stderr are kept out of the JSON on stdout """
+    out, ret = admin(args, cluster=cluster, stderr=None)
+    assert ret == 0, out
+    return json.loads(out)
+
+
+def _instance_keys(bucket_name):
+    """ the instance metadata keys of a vector bucket of the main user, and of
+    the S3 bucket of the same name when it exists """
+    vector_id = _admin_json(['metadata', 'get', f'vectorbucket:{bucket_name}'])['data']['bucket']['bucket_id']
+    keys = [f'{bucket_name}:{vector_id}']
+    out, ret = admin(['metadata', 'get', f'bucket:{bucket_name}'], stderr=None)
+    if ret == 0:
+        s3_id = json.loads(out)['data']['bucket']['bucket_id']
+        keys.append(f'{bucket_name}:{s3_id}')
+    return keys
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_not_stale_instance():
+    """ the stale instances of resharding are told apart by their S3 entrypoint,
+    which a vector bucket does not have. a vector bucket is listed with the S3
+    instances, but must not be reported as stale, and must survive the deletion
+    of the stale instances """
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    dimension = 4
+    # an S3 bucket of the same name has a different instance id. with a
+    # separate backing bucket it is also the backing bucket of the vector bucket
+    _create_s3bucket(s3conn, bucket_name)
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vectors = generate_vectors(3, dimension)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_key, s3_key = _instance_keys(bucket_name)
+        keys = _admin_json(['metadata', 'list', 'bucket.instance'])
+        assert vector_key in keys
+        assert s3_key in keys
+
+        # the listing has to be confirmed where resharding is disabled, i.e. in
+        # a multisite configuration
+        stale = _admin_json(['reshard', 'stale-instances', 'list',
+                             '--yes-i-really-mean-it'])
+        assert vector_key not in stale, f'vector bucket instance reported as stale: {stale}'
+        assert s3_key not in stale, f'S3 bucket instance reported as stale: {stale}'
+
+        # the deletion is refused where resharding is disabled, i.e. in a
+        # multisite configuration. where it runs, it must leave the vector
+        # bucket alone
+        out, ret = admin(['reshard', 'stale-instances', 'delete'], stderr=None)
+        if ret == 0:
+            deleted = [d['bucket_instance'] for d in json.loads(out)]
+            assert vector_key not in deleted, f'vector bucket instance deleted: {deleted}'
+            assert s3_key not in deleted, f'S3 bucket instance deleted: {deleted}'
+        else:
+            log.info("stale instances are not deleted: %s", out)
+
+        # the vector bucket, its index and its vectors are intact
+        _admin_json(['metadata', 'get', f'bucket.instance:{vector_key}'])
+        result = conn.list_indexes(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert index_name in [i['indexName'] for i in result['indexes']]
+        result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  keys=[v['key'] for v in vectors])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result['vectors']) == len(vectors)
+    finally:
+        _delete_vector_bucket_if_exists(conn, bucket_name)
+        s3conn.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_instance_metadata_rm():
+    """ "metadata rm bucket.instance:<key>" deletes the instance of a vector
+    bucket. S3 instances are left to the bilog trimming of each zone, but vector
+    instances are local to the zone, and nothing else removes them. the S3
+    bucket of the same name is not affected """
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    _create_s3bucket(s3conn, bucket_name)
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_key, s3_key = _instance_keys(bucket_name)
+        keys = _admin_json(['metadata', 'list', 'bucket.instance'])
+        assert vector_key in keys
+        assert s3_key in keys
+
+        # the vector instance is local to the zone, so the removal is legitimate
+        # on a non-master zone as well, where it has to be confirmed
+        out, ret = admin(['metadata', 'rm', f'bucket.instance:{vector_key}',
+                          '--yes-i-really-mean-it'], stderr=None)
+        assert ret == 0, out
+        keys = _admin_json(['metadata', 'list', 'bucket.instance'])
+        assert vector_key not in keys, f'vector bucket instance still listed: {keys}'
+        out, ret = admin(['metadata', 'get', f'bucket.instance:{vector_key}'], stderr=None)
+        assert ret != 0, f'vector bucket instance still exists: {out}'
+        # a missing instance is reported, as for any metadata key
+        out, ret = admin(['metadata', 'rm', f'bucket.instance:{vector_key}',
+                          '--yes-i-really-mean-it'], stderr=None)
+        assert ret != 0, f'removing a missing vector bucket instance succeeded: {out}'
+
+        # the S3 bucket of the same name is intact
+        assert s3_key in keys
+        _admin_json(['metadata', 'get', f'bucket.instance:{s3_key}'])
+        s3conn.put_object(Bucket=bucket_name, Key='probe', Body=b'probe')
+        s3conn.delete_object(Bucket=bucket_name, Key='probe')
+    finally:
+        # without its instance the vector bucket cannot be deleted through the
+        # API any more, so its entrypoint is dropped directly
+        _delete_vector_bucket_if_exists(conn, bucket_name)
+        admin(['metadata', 'rm', f'vectorbucket:{bucket_name}',
+               '--yes-i-really-mean-it'], stderr=None)
+        s3conn.delete_bucket(Bucket=bucket_name)
 
 
 @pytest.mark.vector_bucket_test
@@ -1110,6 +1244,58 @@ def test_vector_data_not_synced():
     for c in (conn2, conn):
         _ = _delete_vector_bucket(c, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.multisite_test
+def test_vector_bucket_survives_bilog_autotrim():
+    """ the automated trimming of the bucket index logs removes the instances of
+    buckets that are deleted: no peer zone syncs them, and they have no
+    entrypoint. a vector bucket is never synced and has no S3 entrypoint, and
+    must be left alone by the trimming """
+    conn = connection()
+    conn2 = connection2()
+    if not conn2:
+        pytest.skip("skipping test_vector_bucket_survives_bilog_autotrim since second connection is not configured")
+
+    dimension = 4
+    index_name = 'test-index'
+    bucket_name = gen_bucket_name()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    try:
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vectors = generate_vectors(3, dimension)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_key = _instance_keys(bucket_name)[0]
+        # the instance is listed with the S3 instances, which the trim walks
+        assert vector_key in _admin_json(['metadata', 'list', 'bucket.instance'])
+
+        # the zone holding the vector bucket finds no peer syncing it. the other
+        # zone has nothing of it, and is not trimmed: in teuthology, its keyring
+        # is not installed on the node running the tests
+        out, ret = admin(['bilog', 'autotrim'])
+        assert ret == 0, out
+
+        # the vector bucket, its index and its vectors are intact
+        _admin_json(['metadata', 'get', f'bucket.instance:{vector_key}'])
+        result = conn.get_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.list_indexes(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert index_name in [i['indexName'] for i in result['indexes']]
+        result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  keys=[v['key'] for v in vectors])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert len(result['vectors']) == len(vectors)
+    finally:
+        _delete_vector_bucket_if_exists(conn, bucket_name)
+        _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 
 def _create_s3bucket(s3conn, bucket_name):
