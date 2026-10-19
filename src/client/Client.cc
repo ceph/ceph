@@ -766,6 +766,22 @@ void Client::_finish_init()
     plb.add_time_avg(l_c_fscrypt_wr_lat, "fscrypt_wr_lat", "Overall fscrypt write latency");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
+
+    // Standalone readahead section shared by all Fh::readahead instances.
+    PerfCountersBuilder ralb(cct, "readahead", l_readahead_first, l_readahead_last);
+    ralb.add_u64_counter(l_readahead_observes, "observes",
+			 "Reads observed by readahead state");
+    ralb.add_u64_counter(l_readahead_resets, "resets",
+			 "Non-sequential reads that reset readahead state");
+    ralb.add_u64_counter(l_readahead_sequential, "sequential",
+			 "Consecutive reads that extend the sequential stream");
+    ralb.add_u64_counter(l_readahead_issued, "issued",
+			 "Readahead extents issued");
+    ralb.add_u64_counter(l_readahead_issued_bytes, "issued_bytes",
+			 "Bytes of issued readahead extents", NULL, 0,
+			 unit_t(UNIT_BYTES));
+    readahead_logger.reset(ralb.create_perf_counters());
+    cct->get_perfcounters_collection()->add(readahead_logger.get());
   }
 
   cct->_conf.add_observer(this);
@@ -893,6 +909,10 @@ void Client::shutdown()
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger.get());
     logger.reset();
+  }
+  if (readahead_logger) {
+    cct->get_perfcounters_collection()->remove(readahead_logger.get());
+    readahead_logger.reset();
   }
 }
 
@@ -11199,6 +11219,7 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
   }
 
   const auto& conf = cct->_conf;
+  f->readahead.set_perf_counters(readahead_logger.get());
   f->readahead.set_trigger_requests(1);
   f->readahead.set_min_readahead_size(conf->client_readahead_min);
   uint64_t max_readahead = Readahead::NO_LIMIT;

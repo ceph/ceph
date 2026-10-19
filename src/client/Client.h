@@ -1160,6 +1160,7 @@ public:
   bool tick_thread_stopped = false;
 
   std::unique_ptr<PerfCounters> logger;
+  std::unique_ptr<PerfCounters> readahead_logger;
   std::atomic<uint64_t> aio_in_flight{0};
   std::atomic<uint64_t> sync_in_flight{0};
   std::unique_ptr<MDSMap> mdsmap;
