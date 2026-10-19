@@ -343,6 +343,56 @@ new client requests during this time.
     or ``ceph orch daemon redeploy <daemon-name>`` commands
 
 
+Pushing bucket usage metrics to Pushgateway
+--------------------------------------------
+
+Cephadm can optionally push per-bucket and per-user RGW storage usage metrics
+to a Prometheus Pushgateway at a configurable interval.  A running pushgateway
+service is required (see :ref:`mgr-cephadm-monitoring`).
+
+To enable this, set ``metrics_push_enabled`` to ``true`` in the RGW service
+spec.  The following options are available:
+
+- ``metrics_push_enabled`` (bool, default ``false``) – enable the periodic
+  metrics push timer.
+- ``metrics_push_interval`` (int, default ``3600``, minimum ``60``) – how
+  often (in seconds) the push job runs.
+- ``metrics_push_timeout`` (int, default ``300``, minimum ``30``) – maximum
+  time (in seconds) the job can run before being killed.
+
+Example spec:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: myrealm.myzone
+    placement:
+      hosts:
+      - host1
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      metrics_push_enabled: true
+      metrics_push_interval: 3600
+      metrics_push_timeout: 300
+
+When enabled, cephadm installs a systemd timer for each RGW daemon that
+periodically runs the ``rgw-export-bucket-usage`` script inside the RGW
+container.  The following Prometheus metrics are pushed:
+
+- ``ceph_rgw_bucket_usage_bytes`` – total logical size in bytes per bucket
+- ``ceph_rgw_bucket_usage_bytes_utilized`` – total compressed size in bytes
+  per bucket
+- ``ceph_rgw_bucket_usage_objects`` – total number of objects per bucket
+
+Each metric carries ``bucket``, ``owner``, ``tenant``, and ``zone`` labels.
+
+The timer is automatically cleaned up when the RGW daemon is removed or when
+``metrics_push_enabled`` is set to ``false``.  Changing ``metrics_push_interval``
+or ``metrics_push_timeout`` automatically reconfigures the timer.  When
+``secure_monitoring_stack`` is enabled, metrics are pushed over HTTPS with
+mTLS certificates that are provisioned automatically.
+
 Service specification
 ---------------------
 

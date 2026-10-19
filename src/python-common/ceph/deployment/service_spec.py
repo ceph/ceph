@@ -1735,6 +1735,9 @@ class RGWSpec(ServiceSpec):
                  rgw_exit_timeout_secs: int = 120,
                  qat: Optional[Dict[str, str]] = None,
                  d3n_cache: Optional[Dict[str, Any]] = None,
+                 metrics_push_enabled: Optional[bool] = None,
+                 metrics_push_interval: Optional[int] = None,
+                 metrics_push_timeout: Optional[int] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1804,6 +1807,13 @@ class RGWSpec(ServiceSpec):
 
         self.qat = qat or {}
         self.d3n_cache = d3n_cache or {}
+
+        # Enable periodic push of per-bucket/per-user usage metrics to pushgateway
+        self.metrics_push_enabled = metrics_push_enabled
+        # How often (in seconds) the metrics push job runs (default: 3600 = 1 hour)
+        self.metrics_push_interval = metrics_push_interval
+        # Max time (in seconds) the job can run before being killed (default: 300)
+        self.metrics_push_timeout = metrics_push_timeout
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
@@ -1914,6 +1924,17 @@ class RGWSpec(ServiceSpec):
                 D3NCacheSpec.from_json(self.d3n_cache)
             except D3NCacheError as e:
                 raise SpecValidationError(str(e))
+
+        verify_boolean(self.metrics_push_enabled, 'metrics_push_enabled')
+        verify_int(self.metrics_push_interval, 'metrics_push_interval')
+        verify_int(self.metrics_push_timeout, 'metrics_push_timeout')
+        if self.metrics_push_enabled:
+            if self.metrics_push_interval is not None and self.metrics_push_interval < 60:
+                raise SpecValidationError(
+                    'metrics_push_interval must be at least 60 seconds')
+            if self.metrics_push_timeout is not None and self.metrics_push_timeout < 30:
+                raise SpecValidationError(
+                    'metrics_push_timeout must be at least 30 seconds')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
