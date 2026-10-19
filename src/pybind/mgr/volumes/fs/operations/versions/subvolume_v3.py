@@ -15,7 +15,7 @@ from ...utils import gen_uuid, verify_uuid, safe_join, to_utf8, to_str
 from ...fs_util import (listdir, path_exists, listsnaps, statx, is_dir_empty,
                         get_all_xattrs, set_all_xattrs)
 from ...exception import (VolumeException, MetadataMgrException,
-                          V2UpgradeError)
+                          V2UpgradeError, V1UpgradeError)
 
 
 log = getLogger(__name__)
@@ -152,24 +152,60 @@ class SubvolHelper:
         return set_all_xattrs(self.fs, path, xattrs)
 
 
-class V2Incar(SubvolHelper, PreV3Helper):
+class V1V2Base(SubvolHelper, PreV3Helper):
     '''
-    For helping SubvolV3 with its v2 incarnation.
+    Base class for methods of V1Incar and V2Incar
     '''
 
     def __init__(self, fs, spec, base_path):
+        super().__init__(fs, spec)
+
         self.fs = fs
         self.spec = spec
-        self.base_path: Final = base_path
-        self.reset_attrs()
+        self._base_path = base_path
 
-    def reset_attrs(self):
-        self._uuid = None
+        self.empty = False
+        self.upgrading = False
+        self.v3_incar_base_path = safe_join(self.base_path, INCAR_BASE_DIR)
+
+        self._uuid = None if self.is_upgraded() else self.fetch_uuid()
         self._meta_path = None
         self._uuid_path = None
         self._snap_base_path = None
 
+    def mark_empty(self):
+        assert not self.empty
+        self.empty = True
+
+        self.fs = None
+        self.spec = None
+        self._base_path = None
+        self._meta_path = None
+        self._uuid_path = None
+
+    def mark_upgraded(self):
+        assert self.upgrading
+        self.upgrading = False
+        self._meta_path = None
+
+    def is_upgraded(self):
+        if self.upgrading:
+            return False
+        else:
+            return self.path_exists(self.v3_incar_base_path)
+
+    @property
+    def base_path(self):
+        if self.empty:
+             return
+
+        return self._base_path
+
     def fetch_uuid(self):
+        assert not self.is_upgraded(), \
+            ('v1/v2 subvolume was upgraded to v3, it doesn\'t have it\'s own '
+             'UUID anymore')
+
         subdirs = self.list_dirs(self.base_path)
         if INCAR_BASE_DIR in subdirs:
             subdirs.remove(INCAR_BASE_DIR)
@@ -180,55 +216,43 @@ class V2Incar(SubvolHelper, PreV3Helper):
 
     @property
     def uuid(self):
-        if not self._uuid:
-            self._uuid = self.fetch_uuid()
-        return self._uuid
+        raise NotImplementedError('to be overridden by derived classes')
 
     @property
     def meta_path(self):
-        if not self.uuid:
-            return
+        assert not self.is_upgraded(), \
+            ('v1/v2 subvolume has be upgraded to v3, v1/v2 meta path is '
+             'now invalid and non-existent')
 
         if not self._meta_path:
-            self._meta_path = safe_join(self.base_path, '.meta')
+            self._meta_path = safe_join(self.base_path, META_FILE_NAME)
         return self._meta_path
 
     @property
     def uuid_path(self):
-        if not self.uuid:
-            return
-
         if not self._uuid_path:
             self._uuid_path = safe_join(self.base_path, self.uuid)
         return self._uuid_path
 
     @property
     def snap_base_path(self):
-        if not self.uuid:
-            return
-
-        if not self._snap_base_path:
-            self._snap_base_path = safe_join(self.base_path, self.spec.snap_base_dir)
-        return self._snap_base_path
+        raise NotImplementedError('to be overridden by derived classes')
 
     def get_snap_names(self):
-        if not self.uuid:
+        if self.empty:
             return []
 
         return self.list_snaps(self.snap_base_path)
 
     def find_snap(self, snap_name):
-        if not self.uuid:
-            return None
+        if self.empty:
+            return
 
         if snap_name in self.get_snap_names():
             return safe_join(self.snap_base_path, snap_name)
 
-    def has_snap(self, snap_name=None, uuid=None):
-        if not self.uuid:
-            return False
-
-        if uuid and uuid != self.uuid:
+    def has_snap(self, snap_name=None):
+        if self.empty:
             return False
 
         if snap_name:
@@ -237,6 +261,102 @@ class V2Incar(SubvolHelper, PreV3Helper):
             if not self.path_exists(self.snap_base_path):
                 return False
             return not self.is_dir_empty(self.snap_base_path)
+
+
+class V1Incar(V1V2Base):
+    '''
+    For helping SubvolV3 with its v1 incarnation and v1 subvol layout during
+    subvol auto-upgrade.
+    '''
+
+    def __init__(self, fs, spec, base_path, md):
+        self.md = md
+        super().__init__(fs, spec, base_path)
+        self.empty = (not self.uuid)
+
+    def mark_upgraded(self):
+        super().mark_upgraded()
+
+        self._snap_base_path = None
+
+    def fetch_uuid(self):
+        if self.is_upgraded():
+            self.md.refresh()
+            return self.md.get_global_option('v1_incar', None)
+        else:
+            return super().fetch_uuid()
+
+    @property
+    def uuid(self):
+        if self.empty:
+            return
+
+        if not self._uuid:
+            self._uuid = self.fetch_uuid()
+        return self._uuid
+
+    def fetch_snap_base_path(self):
+        if self.empty:
+            return None
+
+        if self.is_upgraded():
+            return safe_join(self.base_path, INCAR_BASE_DIR, self.uuid, MNT_DIR,
+                             self.spec.SNAP_BASE_DIR)
+        else:
+            return safe_join(self.uuid_path, self.spec.SNAP_BASE_DIR)
+
+    @property
+    def snap_base_path(self):
+        if self.empty:
+            return
+
+        if not self._snap_base_path:
+            self._snap_base_path = self.fetch_snap_base_path()
+        return self._snap_base_path
+
+    def is_snap_path(self, path):
+        dir_name = basename(dirname(dirname(path)))
+        return dir_name == MNT_DIR
+
+
+class V2Incar(V1V2Base):
+    '''
+    For helping SubvolV3 with its v2 incarnation and v2 subvol layout during
+    subvol auto-upgrade.
+     '''
+
+    def __init__(self, fs, spec, base_path):
+        super().__init__(fs, spec, base_path)
+
+        self.empty = (self.is_upgraded() and not self.has_snap())
+
+    def mark_upgraded(self):
+        super().mark_upgraded()
+
+        self._uuid = None
+
+    @property
+    def uuid(self):
+        assert not self.is_upgraded(), \
+                ('v1/v2 subvolume has be upgraded to v3, v1/v2 meta path is '
+                 'now invalid and non-existent')
+
+        if self.empty:
+            return
+
+        if not self._uuid:
+            self._uuid = self.fetch_uuid()
+        return self._uuid
+
+    @property
+    def snap_base_path(self):
+        if self.empty:
+            return
+
+        if not self._snap_base_path:
+            self._snap_base_path = safe_join(self.base_path,
+                                             self.spec.SNAP_BASE_DIR)
+        return self._snap_base_path
 
     def is_snap_path(self, path):
         dir_name = basename(dirname(dirname(path)))
@@ -289,6 +409,7 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
         self._reset_basic_paths()
         self._reset_md_attrs()
         self._reset_v2_helper()
+        self._reset_v1_helper()
 
     def _reset_basic_paths(self):
         self._base_path = None
@@ -386,7 +507,7 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
         return dir_name == INCAR_BASE_DIR
 
 
-    # ----- v2 helpers -----
+    # ----- v2 and v1 helpers -----
 
 
     @property
@@ -397,6 +518,15 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
 
     def _reset_v2_helper(self):
         self._v2 = None
+
+    @property
+    def v1(self):
+        if not self._v1:
+            self._v1 = V1Incar(self.fs, self.spec, self.base_path, self.md)
+        return self._v1
+
+    def _reset_v1_helper(self):
+        self._v1 = None
 
 
     # ----- methods for subvol creation, opening and removal -----
@@ -600,7 +730,16 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
                 self.trash_base_dir()
                 return True
         else:
-            if self.v2.is_snap_path(snap_path):
+            if self.v1.is_snap_path(snap_path):
+                if self.v1.has_snap():
+                    return False
+
+                self.md.remove_global_option('has_v1_snaps')
+                self.md.flush()
+
+                self.v1.mark_empty()
+                return True
+            elif self.v2.is_snap_path(snap_path):
                 if self.v2.has_snap():
                     return False
 
@@ -616,19 +755,23 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
                     self.trash_uuid_dir(uuid)
                     return True
             else:
-                log.info(f'snap_path = {snap_path}')
-                assert False
+                msg = f'snap_path = {snap_path}'
+                log.error(msg)
+                assert False, msg
 
     def has_snap(self, snap_name=None):
-        if self.v2.has_snap(snap_name):
+        if self.v1.has_snap(snap_name):
             return True
-        elif self.v3_has_snap(snap_name):
+        elif self.v2.has_snap(snap_name):
+            return True
+        elif self.has_v3_snap(snap_name):
             return True
         else:
             return False
 
     def get_snap_names(self):
         all_snap_names = []
+        all_snap_names += self.v1.get_snap_names()
         all_snap_names += self.v2.get_snap_names()
         all_snap_names += self.get_v3_snap_names()
         return all_snap_names
@@ -640,7 +783,9 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
         '''
         snap_name = to_utf8(snap_name)
 
-        if snap_path := self.v2.find_snap(snap_name):
+        if snap_path := self.v1.find_snap(snap_name):
+            pass
+        elif snap_path := self.v2.find_snap(snap_name):
             pass
         elif uuid := self.get_v3_incar_of_snap(snap_name):
             snap_path = self.get_snap_path(snap_name, uuid)
@@ -689,6 +834,8 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
     def _auto_upgrade(self, disc_version):
         if disc_version == 2:
             self._upgrade_from_v2()
+        elif disc_version == 1:
+            self._upgrade_from_v1()
         else:
             assert False, \
                 f'disc_version = {disc_version}'
@@ -704,8 +851,8 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
         # XXX: needs to be done as **early** as possible to keep the possibility
         # of client IO interruption minimum, keeping subvol upgrade seamless.
         #
-        # XXX: applying prevpath vxattr on v2 UUID path as it would be renamed
-        # renamed to mnt path. setting it after renaming v2 UUID path to mnt
+        # XXX: applying prevpath vxattr on v1/v2 UUID path as it would be
+        # renamed to mnt path. setting it after renaming v1/v2 UUID path to mnt
         # path create a minute period between them during which MDS will reject
         # client requests, causing client IO interruption.
         for i in range(100):
@@ -732,7 +879,6 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
             uid, gid, mode = self.statx(self.v2.uuid_path, ('uid', 'gid',
                                                             'mode'))
             sv_xattrs = self.get_all_xattrs(self.v2.uuid_path)
-
             self.fs.mkdirs(self.get_incar_path(), 0o755)
             self.fs.rename(self.v2.uuid_path, self.get_mnt_path())
             self.fs.chmod(self.get_mnt_path(), mode)
@@ -742,7 +888,6 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
 
             self.fs.rename(self.v2.meta_path, self.meta_path)
             self.fs.symlink(self.meta_file_name, self.meta_symlink_path[1:])
-
             for path in (self.meta_path, self.meta_symlink_path):
                 self.fs.chown(path, 0, 0)
                 self.fs.chmod(path, 0o644)
@@ -792,4 +937,77 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
         self.clean_stale_snapshot_metadata()
 
         log.info(f'subvol {self.name}: auto-upgrade from v2 to v3 was '
+                 'successful')
+
+
+    # ----- methods for subvol auto-upgrade from v1 -----
+
+
+    def _upgrade_v1_to_v3_layout(self):
+        log.info(f'subvol {self.name}: upgrading layout from v1 to v3...')
+
+        try:
+            uid, gid, mode = self.statx(self.v1.uuid_path, ('uid', 'gid',
+                                                            'mode'))
+            sv_xattrs = self.get_all_xattrs(self.v1.uuid_path)
+            self.fs.mkdirs(self.get_incar_path(), 0o755)
+            self.fs.rename(self.v1.uuid_path, self.get_mnt_path())
+            self.fs.chmod(self.get_mnt_path(), mode)
+            self.fs.chown(self.get_mnt_path(), uid, gid)
+            if sv_xattrs:
+                self.set_all_xattrs(self.get_mnt_path(), sv_xattrs)
+
+            self.fs.rename(self.v1.meta_path, self.meta_path)
+            self.fs.symlink(self.meta_file_name, self.meta_symlink_path[1:])
+            for path in (self.meta_path, self.meta_symlink_path):
+                self.fs.chown(path, 0, 0)
+                self.fs.chmod(path, 0o644)
+        except Exception as e:
+            raise V1UpgradeError(e)
+
+        log.info(f'subvol {self.name}: layout upgrade from v1 to v3 was '
+                 'successful')
+
+    def _update_v1_to_v3_meta(self):
+        log.info(f'subvol {self.name}: updating meta file as part of v1 to v3'
+                 'auto-upgrade...')
+
+        try:
+            self.md.refresh()
+
+            self.md.update_global_section('version', self.VERSION)
+            self.md.update_global_section('path', self.get_mnt_path())
+            self.md.update_global_section('prevpath', self.v1.uuid_path)
+            self.v1.mark_upgraded()
+            if self.v1.has_snap():
+                self.md.update_global_section('has_v1_snaps', True)
+                self.md.update_global_section('v1_incar', self.uuid)
+
+            self.md.flush()
+        except MetadataMgrException as e:
+            raise V1UpgradeError(e)
+
+        log.info(f'subvol {self.name}: meta file update as part of v1 to v3 '
+                 'upgrade was successful')
+
+    def _upgrade_from_v1(self):
+        log.info(f'subvol {self.name}: initiating v1 to v3 auto-upgrade')
+
+        assert self.v1.uuid, \
+            f'self.v1.uuid = {self.v1.uuid}'
+        assert self.v1.uuid == self.uuid, \
+            f'self.v1.uuid = {self.v1.uuid} self.uuid = {self.uuid}'
+
+        self.v1.upgrading = True
+        self.set_prev_path(self.v1.uuid_path)
+        self._reset_basic_paths()
+
+        self._upgrade_v1_to_v3_layout()
+        self._reset_md_attrs()
+        self._update_v1_to_v3_meta()
+
+        assert self.uuid == self.v1.uuid
+        self.clean_stale_snapshot_metadata()
+
+        log.info(f'subvol {self.name}: auto-upgrade from v1 to v3 was '
                  'successful')
