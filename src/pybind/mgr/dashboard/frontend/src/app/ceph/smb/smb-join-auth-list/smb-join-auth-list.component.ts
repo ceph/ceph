@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SMB_CONTEXT, SmbContext } from '~/app/shared/constants/smb.constant';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -19,16 +20,22 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
-export const JOIN_AUTH_PATH = 'cephfs/smb/active-directory';
-
 @Component({
   selector: 'cd-smb-join-auth-list',
   templateUrl: './smb-join-auth-list.component.html',
   styleUrls: ['./smb-join-auth-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(JOIN_AUTH_PATH) }],
+  providers: [
+    {
+      provide: URLBuilderService,
+      useFactory: (ctx: SmbContext) => new URLBuilderService(`${ctx.basePath}/active-directory`),
+      deps: [SMB_CONTEXT]
+    }
+  ],
   standalone: false
 })
 export class SmbJoinAuthListComponent implements OnInit {
+  private readonly ctx = inject(SMB_CONTEXT);
+  private readonly joinAuthPath = `${this.ctx.basePath}/active-directory`;
   columns: CdTableColumn[];
   permission: Permission;
   tableActions: CdTableAction[];
@@ -68,7 +75,7 @@ export class SmbJoinAuthListComponent implements OnInit {
         flexGrow: 2,
         cellTransformation: CellTemplate.redirect,
         customTemplateConfig: {
-          redirectLink: ['/cephfs/smb/cluster', '::prop', 'overview']
+          redirectLink: [`/${this.ctx.basePath}/cluster`, '::prop', 'overview']
         }
       }
     ];
@@ -120,7 +127,7 @@ export class SmbJoinAuthListComponent implements OnInit {
       itemNames: [authId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${JOIN_AUTH_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${this.joinAuthPath}/${URLVerbs.DELETE}`, {
             authId: authId
           }),
           call: this.smbService.deleteJoinAuth(authId)

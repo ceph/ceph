@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, inject, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -11,6 +11,7 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SMB_CONTEXT, StorageBackend } from '~/app/shared/constants/smb.constant';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -19,8 +20,6 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
-export const SHARE_PATH = 'cephfs/smb/share';
-
 @Component({
   selector: 'cd-smb-share-list',
   templateUrl: './smb-share-list.component.html',
@@ -28,6 +27,9 @@ export const SHARE_PATH = 'cephfs/smb/share';
   standalone: false
 })
 export class SmbShareListComponent implements OnInit {
+  private readonly ctx = inject(SMB_CONTEXT);
+  private readonly sharePath = `${this.ctx.basePath}/share`;
+
   @Input()
   clusterId: string;
   @ViewChild('table', { static: true })
@@ -115,31 +117,34 @@ export class SmbShareListComponent implements OnInit {
         flexGrow: 2
       }
     ];
-    this.tableActions = [
-      {
-        name: `${this.actionLabels.CREATE}`,
-        permission: 'create',
-        icon: Icons.add,
-        routerLink: () => [`/${SHARE_PATH}/${URLVerbs.CREATE}`, this.clusterId],
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
-      },
-      {
-        name: this.actionLabels.EDIT,
-        permission: 'update',
-        icon: Icons.edit,
-        routerLink: () => [
-          `/${SHARE_PATH}/${URLVerbs.EDIT}`,
-          this.clusterId,
-          this.selection.first().name
-        ]
-      },
-      {
-        permission: 'delete',
-        icon: Icons.destroy,
-        click: () => this.deleteShareModal(),
-        name: this.actionLabels.DELETE
-      }
-    ];
+    const createAction: CdTableAction = {
+      name: `${this.actionLabels.CREATE}`,
+      permission: 'create',
+      icon: Icons.add,
+      routerLink: () => [`/${this.sharePath}/${URLVerbs.CREATE}`, this.clusterId],
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+    };
+    const editAction: CdTableAction = {
+      name: this.actionLabels.EDIT,
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => [
+        `/${this.sharePath}/${URLVerbs.EDIT}`,
+        this.clusterId,
+        this.selection.first().name
+      ]
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteShareModal(),
+      name: this.actionLabels.DELETE
+    };
+
+    this.tableActions =
+      this.ctx.backend === StorageBackend.RGW
+        ? [editAction, deleteAction]
+        : [createAction, editAction, deleteAction];
 
     this.smbShares$ = this.subject$.pipe(
       switchMap(() =>
@@ -171,7 +176,7 @@ export class SmbShareListComponent implements OnInit {
       itemNames: [`Share: ${share_id} (${name}) from cluster: ${cluster_id}`],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${SHARE_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${this.sharePath}/${URLVerbs.DELETE}`, {
             share_id: share_id
           }),
           call: this.smbService.deleteShare(cluster_id, share_id)

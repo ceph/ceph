@@ -11,6 +11,7 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { JOIN_AUTH_RESOURCE } from '../smb.model';
 import { of } from 'rxjs';
 import { USER } from '~/app/shared/constants/app.constants';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 export const FOO_JOIN_AUTH = {
   auth_id: 'foo',
@@ -31,7 +32,12 @@ describe('SmbJoinAuthFormComponent', () => {
     await TestBed.configureTestingModule({
       imports: [SharedModule, ReactiveFormsModule],
       declarations: [SmbJoinAuthFormComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])]
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbJoinAuthFormComponent);
