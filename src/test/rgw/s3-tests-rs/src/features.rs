@@ -142,6 +142,27 @@ pub async fn access_model() -> Option<String> {
     std::env::var("S3TEST_ACCESS_MODEL").ok().filter(|v| !v.is_empty())
 }
 
+/// Whether an S3 grant reaches another identity's object *bytes* on a
+/// backend where the filesystem would refuse.
+///
+/// The data half of the question [`cross_account_metadata`] asks, and
+/// a separate one:  `s3-metadata` answers yes to that and no to this.
+/// `None` is unknown; `Some(false)` is a backend that reported a model
+/// which does not do this.
+///
+/// Pass it to `unless_posix_governs_data!` rather than reading it deep
+/// inside a helper, so a test says at its call site which model it is
+/// asserting against.
+pub async fn cross_account_data() -> Option<bool> {
+    match access_model().await.as_deref() {
+        Some("s3-native") => Some(true),
+        Some("s3-metadata") | Some("posix-strict") => Some(false),
+        /* a model this suite has not heard of: unknown, not false */
+        Some(_) => None,
+        None => None,
+    }
+}
+
 /// Whether an S3 grant reaches another identity's object *metadata* --
 /// its tags and ACL -- on a backend where the filesystem would refuse.
 ///

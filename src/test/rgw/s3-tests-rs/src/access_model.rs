@@ -1,11 +1,15 @@
 //! The invariant the nsfs access model rests on, as something any
 //! test can assert.
 //!
-//! `rgw_nsfs_cross_account_permission` decides what the gateway does
-//! when the filesystem refuses an operation S3 authorised.  Under
-//! `s3-metadata` it performs the object's *metadata* work itself --
-//! tags and ACL.  It must never do that for the object's **bytes**,
-//! at any value of the setting, and it has already been broken once:
+//! `rgw_nsfs_access_model` decides what the gateway does when the
+//! filesystem refuses an operation S3 authorised:  `posix-strict`
+//! refuses it too, `s3-metadata` performs the object's *metadata*
+//! work itself -- tags and ACL -- and `s3-native` performs the data
+//! work as well, which is what the posix driver and every other RGW
+//! backend do.
+//!
+//! **Under the first two it must never do that for the object's
+//! bytes**, and it has already been broken once:
 //! on 2026-10-16 an attribute read left a gateway-opened descriptor
 //! cached on the object and a data read found it, serving bytes the
 //! filesystem had refused.
@@ -22,10 +26,12 @@ use crate::admin::{driver_hint_results, fs_access};
 /// Point the gateway at another access model for the rest of the
 /// process, returning the one it had.
 ///
-/// `posix-strict`, `s3-metadata`, `default`, or `data-on-s3s-word`,
-/// which is wrong on purpose so that a test can watch itself fail.
-/// `None` means the gateway has no such hint, which is every backend
-/// but nsfs.
+/// `posix-strict`, `s3-metadata`, `s3-native`, or `default`.
+/// Switching to `s3-native` is how a test asserting the byte line
+/// gets its other polarity:  the same read the strict models refuse
+/// is served there, so the refusal is shown to be the model's doing
+/// and not the fixture's.  `None` means the gateway has no such
+/// hint, which is every backend but nsfs.
 ///
 /// **A caller that sets this must put it back**, unconditionally, or
 /// every later test in the run is measuring a model nobody asked
@@ -40,8 +46,8 @@ pub async fn restore_access_model() {
     let _ = driver_hint_results("access-model", &[("set", "default")]).await;
 }
 
-/// How many operations the gateway has performed on the access
-/// model's say-so after the filesystem refused the requester,
+/// How many operations the gateway has performed itself after the
+/// filesystem refused the requester, which the access model permits,
 /// as `(object_attrs, data)`.
 ///
 /// This is what makes a success attributable.  A test that sees a
@@ -96,8 +102,17 @@ pub async fn assert_data_follows_the_filesystem(
     bucket: &str,
     key: &str,
     body: &[u8],
-    model: Option<bool>,
+    data_model: Option<bool>,
 ) -> bool {
+    /* Not an invariant under a model that permits the gateway to read
+     * and write the bytes itself, which it does on purpose.  Passed
+     * in rather than read here, so the caller states which model it is
+     * asserting against -- and `features::cross_account_data()` is the
+     * one that answers for this class, not the metadata one. */
+    if data_model != Some(false) {
+        return false;
+    }
+
     /* the filesystem's own answer, asked of the gateway rather than
      * inferred from the fixture's uids */
     if !fs_access(bucket, key, other_user_id, "r").await.refuses() {
@@ -126,7 +141,7 @@ pub async fn assert_data_follows_the_filesystem(
         };
         assert!(refused,
             "{op:?} moved bytes the filesystem refused this identity, \
-             access model = {model:?};  no model permits that");
+             access model = {data_model:?};  no strict model permits that");
     }
 
     /* and the owner's object is what the owner wrote.  A write

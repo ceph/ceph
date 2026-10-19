@@ -157,31 +157,35 @@ async fn test_impersonation_isolates_identities() {
     unbind_identities().await;
 }
 
-/// The line the access model is drawn on: metadata may follow S3,
-/// **data never does**.
-///
-/// `rgw_nsfs_cross_account_permission` lets the gateway perform an
-/// object's tag and ACL work for an identity S3 authorised and the
-/// filesystem refused.  It must not do the same for the object's
-/// bytes, at any value, and that is asserted here rather than
+/// Which authority decides an object's bytes, asserted rather than
 /// inferred from whichever tests happen to read data.
 ///
-/// It is asserted here because it has already been broken once.  On
-/// 2026-10-16 the first implementation opened the object as the
-/// gateway for an attribute read and left that descriptor cached on
-/// the entry;  the data path found it already open and served bob
-/// bytes the filesystem had refused him.  The guard written for that
-/// case never ran -- it keyed on a flag the real path did not set --
-/// so the only thing that caught it was an unrelated acl test.  This
-/// test exists so that the next person to widen a retry here is told
-/// by name.
+/// `rgw_nsfs_access_model` decides what the gateway does with an
+/// operation S3 authorised and the filesystem refused.  For an
+/// object's tags and ACL, `s3-metadata` and `s3-native` perform it
+/// and `posix-strict` refuses;  for the object's bytes, only
+/// `s3-native` performs it, which is what the posix driver and every
+/// other RGW backend do.  This test asserts the data line at the
+/// configured model, then switches to `s3-native` and asserts that
+/// the same read succeeds -- so the refusals are evidence of the
+/// model rather than of the fixture.
 ///
-/// Both halves matter.  The metadata half must *succeed* under
+/// The data line is asserted here because it has already been broken
+/// once, at a model that was supposed to refuse.  On 2026-10-16 the
+/// first implementation opened the object as the gateway for an
+/// attribute read and left that descriptor cached on the entry;  the
+/// data path found it already open and served bob bytes the
+/// filesystem had refused him.  The guard written for that case never
+/// ran -- it keyed on a flag the real path did not set -- so the only
+/// thing that caught it was an unrelated acl test.  This test exists
+/// so that the next person to widen a retry here is told by name.
+///
+/// Both classes matter.  The metadata half must *succeed* under
 /// `s3-metadata`, or a gateway that simply refuses everything would
 /// pass the data half and look correct.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_the_access_model_never_puts_data_on_s3s_word() {
+async fn test_data_follows_the_access_model() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -245,11 +249,13 @@ async fn test_the_access_model_never_puts_data_on_s3s_word() {
 
     /* the data half -- the shared invariant, so that adding a data
      * operation to it covers every test that calls it */
+    let data_model = s3_tests_rs::features::cross_account_data().await;
     let tested = s3_tests_rs::access_model::assert_data_follows_the_filesystem(
-        &alice, &bob, &cfg.alt_user_id, &bucket, key, body, model).await;
+        &alice, &bob, &cfg.alt_user_id, &bucket, key, body, data_model).await;
     if !tested {
-        eprintln!("the filesystem permits bob this object;  there is no \
-                   line to test");
+        eprintln!("either the configured model permits the gateway to \
+                   serve the bytes itself, or the filesystem permits bob \
+                   this object;  there is no line to test");
         unbind_identities().await;
         return;
     }
@@ -273,24 +279,17 @@ async fn test_the_access_model_never_puts_data_on_s3s_word() {
         .expect("bob could not read his own object;  a refusal above says \
                  nothing");
 
-    /* And the omission itself, positively:  flip the only knob that
-     * could put data on S3's word, and confirm it *still* refuses.
+    /* The other polarity, and why it is needed.
      *
-     * Data is off this axis **by construction** -- no data path
-     * consults the access model at all -- and that is a stronger
-     * guarantee than a verdict, because no configuration, hint or
-     * later enum value can reach a path that does not exist.  This
-     * asserts the construction rather than trusting it:  a future
-     * change that wires a data path to the model fails here, which
-     * is the moment to have the argument.
+     * An assertion that cannot be made to fail asserts nothing.
+     * Under the configured model the gateway must not have performed
+     * any of the data operations above itself, and the counts are
+     * what distinguish "refused" from "never asked";  switching to
+     * `s3-native` and seeing the same read succeed is what makes the
+     * refusals evidence of the model rather than of the fixture.
      *
-     * Restored before the assertion, so a failure cannot leave the
+     * Restored before the assertions, so a failure cannot leave the
      * run measuring a model nobody configured. */
-    /* The negative case, and why it happened.
-     *
-     * Under the configured model the gateway must not have served
-     * any of the data above on the model's say-so.  The count is
-     * what distinguishes "refused" from "never asked". */
     let before = s3_tests_rs::access_model::served_counts().await;
     if before.is_none() {
         eprintln!("no access-model hint;  the counters cannot be checked");
@@ -304,7 +303,7 @@ async fn test_the_access_model_never_puts_data_on_s3s_word() {
      * cannot be violated on demand is an invariant nothing has
      * tested:  the first guard written for this line never ran at
      * all, because it keyed on a flag the real path did not set. */
-    let had = s3_tests_rs::access_model::set_access_model("data-on-s3s-word")
+    let had = s3_tests_rs::access_model::set_access_model("s3-native")
         .await;
     assert!(had.is_some(), "the access model could not be switched");
 
@@ -313,15 +312,15 @@ async fn test_the_access_model_never_puts_data_on_s3s_word() {
     s3_tests_rs::access_model::restore_access_model().await;
 
     assert!(permitted.is_ok(),
-        "a model that puts data on S3's word did not let bob read the \
-         bytes, so the refusals asserted above are not evidence:  they \
-         would hold whatever the model said");
+        "s3-native did not let bob read the bytes, so the refusals \
+         asserted above are not evidence:  they would hold whatever the \
+         model said");
     let (_, data_after) = after.expect("the counters went away");
     assert!(data_after > data_before,
-        "bob's read succeeded but the gateway did not record serving it \
-         on the model's say-so ({data_before} -> {data_after});  the \
-         success is not attributable to the model, so the fixture is not \
-         proving what it claims");
+        "bob's read succeeded but the gateway did not record performing \
+         it itself ({data_before} -> {data_after});  the success is not \
+         attributable to the model, so the fixture is not proving what \
+         it claims");
 
     /* and the configured model is back */
     let after_restore =

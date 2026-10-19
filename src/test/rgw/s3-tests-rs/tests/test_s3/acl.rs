@@ -961,19 +961,22 @@ async fn setup_access(
 
 /// alt's read of `key`, which S3 grants it.
 ///
-/// Under impersonation the filesystem decides an object's content as
-/// well, and alt is a different identity from the main user who wrote
-/// the object;  where the filesystem refuses alt, the read must be
-/// refused too (`fs_access`).  Otherwise the body is the one written.
+/// Under impersonation nsfs serves the read as alt's POSIX identity,
+/// and alt is a different identity from the main user who wrote the
+/// object -- so under a model where POSIX governs data the
+/// filesystem's refusal stands, and under `s3-native` the gateway
+/// serves it anyway.  Either way the body, where there is one, is the
+/// one written.
 async fn check_alt_read(alt_client: &aws_sdk_s3::Client, bucket: &str,
                         key: &str, expected: &[u8]) {
-    let read = alt_client.get_object().bucket(bucket).key(key).send().await;
-    if fs_access(bucket, key, &get_config().alt_user_id, "r").await.refuses() {
-        assert_s3_err!(read, 403, "AccessDenied");
-        return;
+    let verdict = fs_access(bucket, key, &get_config().alt_user_id, "r").await;
+    let read = s3_tests_rs::unless_posix_governs_data!(
+        s3_tests_rs::features::cross_account_data().await, verdict,
+        alt_client.get_object().bucket(bucket).key(key).send().await);
+    if let Some(out) = read {
+        let body = out.body.collect().await.unwrap().into_bytes();
+        assert_eq!(&body[..], expected);
     }
-    let body = read.unwrap().body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], expected);
 }
 
 fn check_access_denied<E: std::fmt::Debug>(result: Result<impl std::fmt::Debug, aws_sdk_s3::error::SdkError<E>>) {

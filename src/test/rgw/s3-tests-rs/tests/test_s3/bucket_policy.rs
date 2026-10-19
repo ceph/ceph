@@ -1155,7 +1155,8 @@ async fn test_ignore_public_acls() {
     /* S3 grants it;  under impersonation the filesystem decides too */
     let verdict = fs_access(&bucket_name, "key1",
                             &get_config().alt_user_id, "r").await;
-    if let Some(resp) = s3_tests_rs::unless_fs_refuses!(verdict, alt_client
+    if let Some(resp) = s3_tests_rs::unless_posix_governs_data!(
+        s3_tests_rs::features::cross_account_data().await, verdict, alt_client
         .get_object()
         .bucket(&bucket_name)
         .key("key1")
@@ -1323,10 +1324,10 @@ async fn test_bucket_policy_get_obj_tagging_existing_tag() {
     setup_tags_for_policy_test(&client, &bucket_name).await;
 
     let alt_client = get_alt_client();
-    /* S3 grants it;  under impersonation the filesystem decides too */
-    let verdict = fs_access(&bucket_name, "publictag",
-                            &get_config().alt_user_id, "r").await;
-    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
+    /* S3 grants it;  the tags are metadata, so the access model says
+     * whether the gateway performs it once the filesystem refuses */
+    s3_tests_rs::unless_posix_governs_metadata!(
+        s3_tests_rs::features::cross_account_metadata().await, alt_client
         .get_object_tagging()
         .bucket(&bucket_name)
         .key("publictag")
@@ -1386,10 +1387,10 @@ async fn test_bucket_policy_get_obj_acl_existing_tag() {
     setup_tags_for_policy_test(&client, &bucket_name).await;
 
     let alt_client = get_alt_client();
-    /* S3 grants it;  under impersonation the filesystem decides too */
-    let verdict = fs_access(&bucket_name, "publictag",
-                            &get_config().alt_user_id, "r").await;
-    s3_tests_rs::unless_fs_refuses!(verdict, alt_client
+    /* S3 grants it;  the ACL is metadata, so the access model says
+     * whether the gateway performs it once the filesystem refuses */
+    s3_tests_rs::unless_posix_governs_metadata!(
+        s3_tests_rs::features::cross_account_metadata().await, alt_client
         .get_object_acl()
         .bucket(&bucket_name)
         .key("publictag")
@@ -2077,7 +2078,8 @@ async fn test_bucket_policy_put_obj_copy_source_meta() {
      * of the source too, and there is then no copy to go on with */
     let verdict = fs_access(&src_bucket, "public/foo",
                             &get_config().alt_user_id, "r").await;
-    let copied = s3_tests_rs::unless_fs_refuses!(verdict, alt_client
+    let copied = s3_tests_rs::unless_posix_governs_data!(
+        s3_tests_rs::features::cross_account_data().await, verdict, alt_client
         .copy_object()
         .bucket(&dest_bucket)
         .key("new_foo")
