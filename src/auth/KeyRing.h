@@ -19,10 +19,12 @@
 #include "auth/Auth.h"
 #include "include/common_fwd.h"
 
+#include <string_view>
+
 class KeyRing : public KeyStore {
   std::map<EntityName, EntityAuth> keys;
 
-  int set_modifier(const char *type, const char *val, EntityName& name, std::map<std::string, ceph::buffer::list>& caps);
+  int set_modifier(std::string_view type, std::string_view val, EntityName& name, std::map<std::string, ceph::buffer::list>& caps);
 public:
   void decode_plaintext(ceph::buffer::list::const_iterator& bl);
   /* Create a KeyRing from a Ceph context.
