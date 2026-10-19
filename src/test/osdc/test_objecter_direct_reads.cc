@@ -146,9 +146,9 @@ protected:
                                          CEPH_FEATURES_SUPPORTED_DEFAULT);
     inc.encode(m->incremental_maps[inc.epoch],
                CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
-    // A paused op makes the Objecter ask for the next map; wanting it
-    // already, as _maybe_request_map() does, stops the unconnected MonClient
-    // opening a session.
+    // A paused op, or one left without an OSD, makes the Objecter ask for
+    // the next map; wanting it already, as _maybe_request_map() does, stops
+    // the unconnected MonClient opening a session.
     monc.sub_want("osdmap", inc.epoch + 1, CEPH_SUBSCRIBE_ONETIME);
     objecter->handle_osd_map(m.get());
     poll();
@@ -323,6 +323,33 @@ TEST_F(TestSplitOpMapChange, ECDirectReadRedrivesWhenPrimaryMoves)
 TEST_F(TestSplitOpMapChange, ECDirectReadRedrivesWhenMinSizeChanges)
 {
   direct_read_redriven_on_new_interval([this] { raise_min_size(); }, primary);
+}
+
+// A map can land while _op_submit() has the rwlock dropped to relock for the
+// first sub-read of a split read, so the sub-read to osd.1 has a target from
+// the older map.  Neither sub-read is sent, and the next change to the PG
+// redrives the whole read to the primary.
+TEST_F(TestSplitOpMapChange, ECSplitReadNewIntervalDuringSubmit)
+{
+  g_ceph_context->_conf.set_val_or_die("objecter_debug_inject_relock_delay",
+                                       "true");
+  objecter->relock_delay = [this] {
+    // Only the first sub-read relocks.
+    g_ceph_context->_conf.set_val_or_die("objecter_debug_inject_relock_delay",
+                                         "false");
+    raise_min_size();
+  };
+  ceph_tid_t parent = submit_read(0, 2 * chunk_size,
+                                  CEPH_OSD_FLAG_BALANCE_READS);
+  EXPECT_TRUE(sent_to(primary).empty());
+  EXPECT_TRUE(sent_to(shard1_osd).empty());
+
+  mark_down(parity_osd);
+  EXPECT_TRUE(sent_to(shard1_osd).empty());
+  ASSERT_EQ(1u, sent_to(primary).size());
+  EXPECT_EQ(parent, sent_to(primary).back().first);
+  reply(primary, cons[primary]->sent.back());
+  EXPECT_EQ(0, done.wait_for(0));
 }
 
 // An ORDER_READS_WRITES read must not overtake a write that a full pool
