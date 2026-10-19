@@ -1113,6 +1113,10 @@ int PGBackendTestFixture::direct_read(
   uint64_t length,
   bufferlist& out_data)
 {
+  // do_op refuses a direct read to a pool without EC optimizations.
+  if (!backend->get_is_ec_optimized()) {
+    return -EOPNOTSUPP;
+  }
   std::vector<OSDOp> ops(1);
   ops[0].op.op = CEPH_OSD_OP_READ;
   ops[0].op.extent.offset = offset;

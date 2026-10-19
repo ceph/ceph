@@ -297,7 +297,7 @@ public:
     if (is_optimized()) {
       return optimized.is_direct_read_local(off, len);
     }
-    return true;
+    ceph_abort_msg("Direct reads legacy EC");
   }
 
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(

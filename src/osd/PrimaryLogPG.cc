@@ -2059,6 +2059,14 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   }
 
   if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    if (!pgbackend->get_is_ec_optimized()) {
+      // A client only sends a direct read to an optimized EC pool. Refuse one
+      // to any other pool rather than serve it from the wrong place.
+      dout(4) << __func__ << ": direct read on a pool without EC optimizations "
+              << *m << dendl;
+      osd->reply_op_error(op, -EOPNOTSUPP);
+      return;
+    }
     // This means "is in acting set"
     if (is_primary() || is_nonprimary()) {
       op->set_ec_direct_read();

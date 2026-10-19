@@ -494,6 +494,38 @@ TEST_P(TestBackendBasics, DirectReadRefusedForOtherShardsData) {
   }
 }
 
+/*
+ * DirectReadRefusedOnLegacyEC - a direct read to a pool without EC
+ * optimizations is refused with -EOPNOTSUPP. A client only sends a direct read
+ * to an optimized EC pool, so reaching one here is a client bug; do_op refuses
+ * it rather than serve it from a shard that cannot, which is why the backend
+ * may then assume a direct read is optimized.
+ */
+TEST_P(TestBackendBasics, DirectReadRefusedOnLegacyEC) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      (backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Only legacy (non-optimized) EC refuses direct reads";
+  }
+
+  hobject_t hoid = make_test_object("test_direct_read_legacy_" +
+    backend_config.label);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      PGBackend* backend = test_pg->backend.get();
+      bufferlist bl;
+      EXPECT_EQ(-EOPNOTSUPP, direct_read(backend, hoid, 0, stripe_unit, bl))
+        << "shard " << shard_id;
+      EXPECT_EQ(0u, bl.length()) << "shard " << shard_id;
+    }
+  }
+}
+
 TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
 {
   const auto& backend_config = GetParam().backend;
