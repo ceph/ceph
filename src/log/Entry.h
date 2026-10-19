@@ -42,7 +42,6 @@ public:
   virtual ~Entry() = default;
 
   virtual std::string_view strv() const = 0;
-  virtual std::size_t size() const = 0;
 
   time m_stamp;
   pthread_t m_thread;
@@ -74,9 +73,6 @@ public:
   std::string_view strv() const override {
     return cos->strv();
   }
-  std::size_t size() const override {
-    return cos->strv().size();
-  }
 
 private:
   CachedStackStringStream cos;
@@ -107,9 +103,6 @@ public:
   std::string_view strv() const override {
     return std::string_view(str.data(), str.size());
   }
-  std::size_t size() const override {
-    return str.size();
-  }
 
 private:
   boost::container::small_vector<char, 1024> str;
@@ -128,9 +121,6 @@ public:
 
   std::string_view strv() const override {
     return std::string_view(str.data(), str.size());
-  }
-  std::size_t size() const override {
-    return str.size();
   }
 
   auto get_inserter() {
