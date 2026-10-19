@@ -224,7 +224,9 @@ template <typename I>
 int GroupEnableRequest<I>::validate_snapshot_dependencies() {
   // A member can retain user snapshots from a group it has left. This group
   // cannot mirror the other group's snapshot metadata.
+  std::set<std::pair<int64_t, std::string>> current_images;
   for (auto image_ctx : m_image_ctxs) {
+    current_images.emplace(image_ctx->md_ctx.get_id(), image_ctx->id);
     std::shared_lock image_locker{image_ctx->image_lock};
     for (const auto& [snap_id, snap_info] : image_ctx->snap_info) {
       auto group_ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
@@ -242,23 +244,13 @@ int GroupEnableRequest<I>::validate_snapshot_dependencies() {
     }
   }
 
-  std::set<std::pair<int64_t, std::string>> current_images;
-  for (const auto &image : m_images) {
-    current_images.emplace(image.spec.pool_id, image.spec.image_id);
-  }
-
   for (const auto &group_snap : m_group_snaps) {
-    if (cls::rbd::get_group_snap_namespace_type(group_snap.snapshot_namespace) !=
-        cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
-      continue;
-    }
-
     for (const auto &image_snap : group_snap.snaps) {
       if (current_images.contains({image_snap.pool, image_snap.image_id})) {
         continue;
       }
 
-      lderr(m_cct) << "cannot enable mirror group: snapshot '"
+      lderr(m_cct) << "cannot enable mirror group: existing snapshot '"
                    << group_snap.name << "' references image '"
                    << image_snap.image_id << "' outside the group" << dendl;
       return -EINVAL;

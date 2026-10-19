@@ -259,6 +259,52 @@ template <typename I>
 void BootstrapRequest<I>::remove_local_group() {
   dout(10) << dendl;
 
+  if (*m_resync_requested && !m_resync_snapshots_checked &&
+      !(*m_state_builder)->remote_group_id.empty()) {
+    // Validate saved remote membership before removing any local snapshots.
+    load_remote_group_snapshots(true);
+    return;
+  }
+
+  if (*m_resync_requested) {
+    for (const auto &[global_image_id, remote_image] :
+         (*m_state_builder)->remote_images) {
+      if ((*m_state_builder)->local_images.count(global_image_id) != 0) {
+        continue;
+      }
+
+      std::string local_image_id;
+      int r = get_local_image_id(global_image_id, &local_image_id);
+      if (r == -ENOENT) {
+        continue;
+      } else if (r < 0) {
+        finish(r);
+        return;
+      }
+
+      std::string image_name;
+      r = librbd::cls_client::dir_get_name(&m_local_io_ctx, RBD_DIRECTORY,
+                                          local_image_id, &image_name);
+      if (r < 0) {
+        image_name = local_image_id;
+      }
+      derr << "cannot resync group " << (*m_state_builder)->group_name
+           << ": image '" << image_name << "' exists outside this group; "
+           << "disable mirroring and remove it before retrying" << dendl;
+
+      // Clear this group's old references so image disable is not blocked.
+      // Keep the image, its standalone snapshots and the live group intact.
+      auto ctx = new LambdaContext([this](int r) {
+        finish(r < 0 ? r : -EEXIST);
+      });
+      auto req = RemoveLocalGroupRequest<I>::create(
+        m_local_io_ctx, m_global_group_id, true, m_threads->work_queue, ctx,
+        true /* snapshots_only */);
+      req->send();
+      return;
+    }
+  }
+
   std::vector<std::pair<std::string, std::string>> reclaim_images;
   if (*m_resync_requested) {
     for (const auto& [global_image_id, local] :
@@ -377,23 +423,40 @@ void BootstrapRequest<I>::handle_load_local_group_snapshots(int r) {
 }
 
 template <typename I>
-void BootstrapRequest<I>::load_remote_group_snapshots() {
+void BootstrapRequest<I>::load_remote_group_snapshots(bool validate_for_resync) {
   m_remote_group_snaps.clear();
-  auto ctx = create_context_callback<BootstrapRequest<I>,
-    &BootstrapRequest<I>::handle_load_remote_group_snapshots>(this);
+  auto ctx = new LambdaContext([this, validate_for_resync](int r) {
+    handle_load_remote_group_snapshots(r, validate_for_resync);
+  });
+  // Resync only needs membership validation. Missing snapshot order metadata
+  // must not prevent cleanup; normal bootstrap still requires sorted history.
+  bool sort_snapshots = !validate_for_resync;
   auto req = librbd::group::ListSnapshotsRequest<I>::create(m_remote_io_ctx,
-    (*m_state_builder)->remote_group_id, true, true, &m_remote_group_snaps,
-    ctx);
+    (*m_state_builder)->remote_group_id, sort_snapshots, sort_snapshots,
+    &m_remote_group_snaps, ctx);
   req->send();
 }
 
 template <typename I>
-void BootstrapRequest<I>::handle_load_remote_group_snapshots(int r) {
+void BootstrapRequest<I>::handle_load_remote_group_snapshots(
+    int r, bool validate_for_resync) {
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "failed to load remote group snapshots: " << cpp_strerror(r)
          << dendl;
     m_on_finish->complete(r);
+    return;
+  }
+
+  r = validate_user_snapshot_dependencies();
+  if (r < 0) {
+    m_on_finish->complete(r);
+    return;
+  }
+
+  if (validate_for_resync) {
+    m_resync_snapshots_checked = true;
+    remove_local_group();
     return;
   }
 
@@ -412,6 +475,30 @@ void BootstrapRequest<I>::handle_load_remote_group_snapshots(int r) {
     return;
   }
   reconcile_local_group_members();
+}
+
+template <typename I>
+int BootstrapRequest<I>::validate_user_snapshot_dependencies() {
+  std::set<std::pair<int64_t, std::string>> members;
+  for (const auto& [global_image_id, spec] : (*m_state_builder)->remote_images) {
+    members.insert(spec);
+  }
+  for (const auto& snap : m_remote_group_snaps) {
+    if (!std::holds_alternative<cls::rbd::GroupSnapshotNamespaceUser>(
+          snap.snapshot_namespace)) {
+      continue;
+    }
+    for (const auto& spec : snap.snaps) {
+      if (!members.contains({spec.pool, spec.image_id})) {
+        derr << "cannot mirror group " << (*m_state_builder)->group_name
+             << ": user group snapshot '" << snap.name << "' references image "
+             << spec.image_id << " outside the current group; remove this "
+             << "snapshot on the primary before retrying" << dendl;
+        return -EBUSY;
+      }
+    }
+  }
+  return 0;
 }
 
 template <typename I>
