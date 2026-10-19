@@ -819,14 +819,15 @@ declare -a test_mirrored_group_add_and_remove_images_1=("${CLUSTER2}" "${CLUSTER
 
 test_mirrored_group_add_and_remove_images_scenarios=1
 
+# Test sequence:
+# 1. Mirror a group, add an enabled image, and retry the same add.
+# 2. Detach with snapshots pending; check attach and disable before and after
+#   sync. Disable with a retained user snapshot and reject enabling again until
+#   that snapshot is removed, then repeat membership changes.
+# Expected: Mirror snapshots block attach until removed; pending peers block
+#   disable. User snapshots remain readable, and the final empty group replays.
 test_mirrored_group_add_and_remove_images()
 {
-  # Test sequence:
-  # 1. Create and mirror an image group.
-  # 2. Add, retry, detach, and reverse membership changes.
-  # 3. Check the secondary after each completed membership change.
-  # Expected result: snapshot dependencies and image identities are preserved,
-  # and both clusters converge on the final empty group.
   if skip_without_dynamic_groups test_mirrored_group_add_and_remove_images; then
     return 0
   fi
@@ -898,10 +899,22 @@ test_mirrored_group_add_and_remove_images()
   test -n "${saved_image_snap_id}" || fail "saved group snapshot is missing the detached image"
   test "$(xmlstarlet sel -t -v '//group_snapshot/state' "${CMD_STDOUT}")" = created || fail "saved group snapshot is incomplete"
   test "$(xmlstarlet sel -t -v 'count(//group_snapshot/images/image)' "${CMD_STDOUT}")" = "$((group_image_count + 1))" || fail "saved group snapshot has the wrong image count"
-  # After mirror snapshot cleanup, a retained user group snapshot must allow
-  # attachment. Detach again and check that it also allows image disable.
+  # Disable must retain the secondary's saved group snapshot, even after its
+  # former member moves to the trash.
+  local retained_secondary_image_id
+  retained_secondary_image_id=$(get_image_id "${secondary_cluster}" "${pool}" "${image_name}")
+  disable_mirror "${primary_cluster}" "${pool}" "${image_name}"
+  wait_for_image_present "${secondary_cluster}" "${pool}" "${image_name}" deleted "${retained_secondary_image_id}"
+  get_image_snap_id_from_group_snap_info "${secondary_cluster}" "${pool}/${group}@membership-before-detach" "${pool}/${image_name}" saved_image_snap_id
+  test -n "${saved_image_snap_id}" || fail "disable lost the former member's group snapshot"
+  expect_failure "cannot enable standalone mirroring while user group snapshots remain" rbd --cluster="${primary_cluster}" mirror image enable "${pool}/${image_name}" snapshot
+  group_snap_remove "${primary_cluster}" "${pool}/${group}" "membership-before-detach"
+  enable_mirror "${primary_cluster}" "${pool}" "${image_name}" snapshot
+  # Create another user snapshot after attachment. It must allow detach and
+  # disable, but block group enable while the former member is disabled.
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
   wait_for_group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_name}"
+  group_snap_create "${primary_cluster}" "${pool}/${group}" "membership-before-detach"
   group_image_remove "${primary_cluster}" "${pool}/${group}" "${pool}/${image_name}"
   wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
   disable_mirror "${primary_cluster}" "${pool}" "${image_name}"
@@ -3022,6 +3035,12 @@ declare -a test_mirror_group_snapshot_unlink_peer_1=("${CLUSTER2}" "${CLUSTER1}"
 
 test_mirror_group_snapshot_unlink_peer_scenarios=1
 
+# Test sequence:
+# 1. Sync group snapshots and check their image snapshot references.
+# 2. Unlink a peer, then detach a member and advance replay and snapshot
+#   cleanup. Disable the former member without --force after its references clear.
+# Expected: Peer removal reaches the image snapshots, old snapshots from
+#   former members are pruned, and normal mirror disable succeeds.
 test_mirror_group_snapshot_unlink_peer()
 {
   local primary_cluster=$1 ; shift
@@ -3067,10 +3086,30 @@ test_mirror_group_snapshot_unlink_peer()
     assert_image_snap_present_in_group_snap "${secondary_cluster}" "${pool}" "${group0}" "${image_prefix}${i}" "${secondary_group_snap_id}"
   done
 
+  if dynamic_groups_enabled; then
+    local former_image="${image_prefix}$((image_count - 1))"
+    local former_group_snap_id former_image_snap_id detach_group_snap_id
+    mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}/${group0}"
+    get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" former_group_snap_id
+    get_image_snapshot_with_group_snap_info "${primary_cluster}" "${pool}" "${former_image}" "${former_group_snap_id}" former_image_snap_id || fail "group snapshot ${former_group_snap_id} is not linked to ${former_image}"
+
+    group_image_remove "${primary_cluster}" "${pool}/${group0}" "${pool}/${former_image}"
+    get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" detach_group_snap_id
+    wait_for_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${detach_group_snap_id}"
+    wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group0}" "${detach_group_snap_id}"
+
+    mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}/${group0}"
+    wait_for_group_snap_not_present "${primary_cluster}" "${pool}/${group0}" "${former_group_snap_id}"
+    wait_for_snap_not_present "${primary_cluster}" "${pool}" "${former_image}" "${former_image_snap_id}" || fail "snapshot ${former_image_snap_id} from former member ${former_image} was not removed"
+  fi
+
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
   group_remove "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  if dynamic_groups_enabled; then
+    mirror_image_disable "${primary_cluster}" "${pool}/${former_image}"
+  fi
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
   wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"

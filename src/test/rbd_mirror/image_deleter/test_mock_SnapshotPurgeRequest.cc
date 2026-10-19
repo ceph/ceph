@@ -202,6 +202,66 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SuccessJournal) {
   ASSERT_EQ(0, ctx.wait());
 }
 
+// Test sequence:
+// 1. Keep an image snapshot referenced by a saved user group snapshot.
+// 2. Try purging it, remove the group snapshot metadata, and retry.
+// Expected: The first request returns -EBUSY without removal; the retry can
+//   delete the snapshot.
+TEST_F(TestMockImageDeleterSnapshotPurgeRequest, RetainedUserGroupSnapshot) {
+  cls::rbd::ImageSnapshotNamespaceGroup ns{
+    m_local_io_ctx.get_id(), "snapshot-group", "saved-snapshot"};
+  {
+    std::unique_lock locker{m_local_image_ctx->image_lock};
+    m_local_image_ctx->add_snap(ns, "saved", 1, 0, {},
+      RBD_PROTECTION_STATUS_UNPROTECTED, 0, {});
+  }
+  const auto header = librbd::util::group_header_name(ns.group_id);
+  bufferlist empty;
+  ASSERT_EQ(0, m_local_io_ctx.write_full(header, empty));
+  cls::rbd::GroupSnapshot snap;
+  snap.id = ns.group_snapshot_id;
+  snap.name = "saved";
+  snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
+  snap.snaps.emplace_back(m_local_io_ctx.get_id(), m_local_image_ctx->id, 1);
+  ASSERT_EQ(0, librbd::cls_client::group_snap_set(&m_local_io_ctx, header, snap));
+
+  librbd::MockTestImageCtx mock_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  InSequence seq;
+  expect_set_journal_policy(mock_image_ctx);
+  expect_open(mock_image_ctx, 0);
+  expect_acquire_lock(mock_image_ctx, 0);
+  expect_get_snap_namespace(mock_image_ctx, 1, ns, 0);
+  expect_get_snap_name(mock_image_ctx, 1, "saved", 0);
+  expect_is_snap_protected(mock_image_ctx, 1, false, 0);
+  EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(_, _, _)).Times(0);
+  expect_close(mock_image_ctx, 0);
+  C_SaferCond ctx;
+  auto req = MockSnapshotPurgeRequest::create(m_local_io_ctx,
+    mock_image_ctx.id, &ctx);
+  req->send();
+  ASSERT_EQ(-EBUSY, ctx.wait());
+
+  // Once group cleanup removes the reference, deletion can finish normally.
+  ASSERT_EQ(0, librbd::cls_client::group_snap_remove(&m_local_io_ctx,
+    header, snap.id));
+  expect_set_journal_policy(mock_image_ctx);
+  expect_open(mock_image_ctx, 0);
+  expect_acquire_lock(mock_image_ctx, 0);
+  expect_get_snap_namespace(mock_image_ctx, 1, ns, 0);
+  expect_get_snap_name(mock_image_ctx, 1, "saved", 0);
+  expect_is_snap_protected(mock_image_ctx, 1, false, 0);
+  expect_start_op(mock_image_ctx, true);
+  expect_snap_remove(mock_image_ctx, ns, "saved", 0);
+  expect_close(mock_image_ctx, 0);
+  C_SaferCond retry_ctx;
+  req = MockSnapshotPurgeRequest::create(m_local_io_ctx,
+    mock_image_ctx.id, &retry_ctx);
+  req->send();
+  ASSERT_EQ(0, retry_ctx.wait());
+}
+
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SuccessSnapshot) {
   {
     std::unique_lock image_locker{m_local_image_ctx->image_lock};

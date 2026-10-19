@@ -124,6 +124,10 @@ private:
    *                            |                                                 v
    *                            + ------------------------------------------> FINISH(r)
    *
+   *  On resync, REMOVE_LOCAL_GROUP checks for remote members that already
+   *  exist outside the local group. Clear only this group's snapshot
+   *  references and finish with -EEXIST until the user removes the conflict.
+   *
    *  HANDLE_REMOTE_GROUP_RESULT also calls FINISH directly when the local
    *  group is primary, both groups are missing, the peers are not linked, or
    *  an error prevents bootstrap from continuing.
