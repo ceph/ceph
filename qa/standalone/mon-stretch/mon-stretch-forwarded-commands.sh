@@ -27,9 +27,13 @@ function run() {
     done
 }
 
+function leader_name() {
+    ceph quorum_status --format=json | jq -r .quorum_leader_name
+}
+
 function peon_addr() {
     local leader
-    leader=$(ceph quorum_status --format=json | jq -r .quorum_leader_name) || return 1
+    leader=$(leader_name) || return 1
     if [ "$leader" = "b" ]; then
         echo $CEPH_MON_A
     else
@@ -37,10 +41,10 @@ function peon_addr() {
     fi
 }
 
-function TEST_stretch_mode_commands_via_peon() {
+function run_three_mons() {
     local dir=$1
-    local peon
 
+    CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A"
     run_mon $dir a --public-addr $CEPH_MON_A || return 1
     wait_for_quorum 300 1 || return 1
     run_mon $dir b --public-addr $CEPH_MON_B || return 1
@@ -49,6 +53,13 @@ function TEST_stretch_mode_commands_via_peon() {
     run_mon $dir c --public-addr $CEPH_MON_C || return 1
     CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A,$CEPH_MON_B,$CEPH_MON_C"
     wait_for_quorum 300 3 || return 1
+}
+
+function TEST_stretch_mode_commands_via_peon() {
+    local dir=$1
+    local peon
+
+    run_three_mons $dir || return 1
 
     local dc
     for dc in dc1 dc2; do
@@ -71,6 +82,26 @@ function TEST_stretch_mode_commands_via_peon() {
     ceph --mon-host-override $peon \
         mon disable_stretch_mode --yes-i-really-mean-it || return 1
     ceph mon dump --format=json | jq -e '.stretch_mode | not' || return 1
+}
+
+function TEST_disallowed_leader_via_peon() {
+    local dir=$1
+    local leader peon
+
+    run_three_mons $dir || return 1
+    ceph mon set election_strategy disallow || return 1
+    wait_for_quorum 300 3 || return 1
+
+    leader=$(leader_name) || return 1
+    peon=$(peon_addr) || return 1
+    ceph --mon-host-override $peon mon add disallowed_leader $leader || return 1
+    wait_for_quorum 300 3 || return 1
+    test "$(leader_name)" != "$leader" || return 1
+
+    peon=$(peon_addr) || return 1
+    ceph --mon-host-override $peon mon rm disallowed_leader $leader || return 1
+    wait_for_quorum 300 3 || return 1
+    ceph mon dump --format=json | jq -e '.disallowed_leaders == ""' || return 1
 }
 
 main mon-stretch-forwarded-commands "$@"
