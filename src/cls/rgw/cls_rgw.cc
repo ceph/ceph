@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <exception>
+#include <limits>
 #include <new>
 #include <type_traits>
 #include <map>
@@ -2355,6 +2356,7 @@ try {
     return -EINVAL;
   }
 
+  const auto tag = op.tag();
   rgw_bucket_olh_entry olh_data_entry;
   string olh_data_key;
   encode_olh_data_key(op.olh, &olh_data_key);
@@ -2363,7 +2365,7 @@ try {
   if (0 == ret) {
     if (op.get_stales) {
       if (const auto result = ::cls::rgw::olh_datum::encode_stored_reply(
-            encoded, op.ver_marker, op.olh_tag, *out)) {
+            encoded, op.ver_marker, tag, *out)) {
         return *result;
       }
     }
@@ -2379,8 +2381,11 @@ try {
     return ret;
   }
 
-  if (olh_data_entry.tag != op.olh_tag) {
-    CLS_LOG(1, "NOTICE: %s: olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%s", __func__, olh_data_entry.tag.c_str(), op.olh_tag.c_str());
+  if (olh_data_entry.tag != tag) {
+    const auto tag_length = static_cast<int>(std::min<std::size_t>(
+        tag.size(), std::numeric_limits<int>::max()));
+    CLS_LOG(1, "NOTICE: %s: olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%.*s",
+            __func__, olh_data_entry.tag.c_str(), tag_length, tag.data());
     return -ECANCELED;
   }
 

@@ -289,19 +289,20 @@ public:
 
 };
 
-class reader final
+template <typename CursorT>
+class basic_reader final
 {
-    byte_buffer::const_iterator& input;
+    CursorT& input;
 
     unsigned limit;
 
 public:
-    explicit reader(byte_buffer::const_iterator& input)
+    explicit basic_reader(CursorT& input)
         : input(input), limit(input.get_off() + input.get_remaining())
     {}
 
 private:
-    reader(byte_buffer::const_iterator& input, const unsigned limit)
+    basic_reader(CursorT& input, const unsigned limit)
         : input(input), limit(limit)
     {}
 
@@ -361,6 +362,18 @@ public:
         require(size);
         value.clear();
         input.copy(size, value);
+    }
+
+    void text(::ceph::buffer::ptr& value)
+    {
+        const auto size = scalar<std::uint32_t>();
+        require(size);
+        if (0 == size) {
+            value = ::ceph::buffer::ptr {};
+
+            return;
+        }
+        input.copy_shallow(size, value);
     }
 
     std::string text()
@@ -453,7 +466,7 @@ public:
         }
         require(header.length);
         const auto finish = input.get_off() + header.length;
-        reader fields {input, finish};
+        basic_reader fields {input, finish};
         decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version);
         input += finish - input.get_off();
 
@@ -461,7 +474,7 @@ public:
     }
 
     template <typename BodyT>
-    requires std::invocable<BodyT, reader&, std::uint8_t, std::uint8_t>
+    requires std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>
     decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
     {
         frame_header header CEPH_INDETERMINATE;
@@ -471,7 +484,7 @@ public:
         }
         require(header.length);
         const auto finish = input.get_off() + header.length;
-        reader fields {input, finish};
+        basic_reader fields {input, finish};
         decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version, header.compatible);
         input += finish - input.get_off();
 
@@ -507,12 +520,14 @@ public:
         if (version != header.version || 1 != header.compatible) {
             return false;
         }
-        reader fields {input, input.get_off() + header.length};
+        basic_reader fields {input, input.get_off() + header.length};
 
         return std::invoke(std::forward<BodyT>(body), fields) && 0 == fields.remaining();
     }
 
 };
+
+using reader = basic_reader<byte_buffer::const_iterator>;
 
 // Publish an owning request and its native cursor only after decoding succeeds.
 template <typename T, typename DecodeT>

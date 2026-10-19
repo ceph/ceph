@@ -10,6 +10,8 @@
 #include <limits>
 #include <utility>
 
+#include <algorithm>
+#include <array>
 #include <map>
 #include <random>
 #include <string>
@@ -31,14 +33,13 @@ auto fixture()
                        {42, {}}, {std::numeric_limits<std::uint64_t>::max(), {}}}, true};
 }
 
-byte_buffer fragmented(const byte_buffer& bytes)
+byte_buffer fragmented(const byte_buffer& bytes, const unsigned stride = 1)
 {
     byte_buffer result;
-    auto input = bytes.cbegin();
-    while (input.get_remaining()) {
-        char value;
-        input.copy(1, &value);
-        result.append(::ceph::buffer::ptr {::ceph::buffer::copy(&value, 1)});
+    const auto storage = bytes.to_str();
+    for (std::size_t offset = 0; offset < storage.size(); offset += stride) {
+        const auto size = std::min<std::size_t>(stride, storage.size() - offset);
+        result.append(::ceph::buffer::copy(storage.data() + offset, size));
     }
 
     return result;
@@ -96,11 +97,69 @@ TEST_CASE("OLH requests preserve native bytes, versions and nested extensions", 
         native::decode(result, cursor);
         CHECK(result.olh.name == expected.key.name);
         CHECK(result.olh.instance == expected.key.instance);
-        CHECK(result.olh_tag == expected.tag);
+        CHECK(result.tag() == expected.tag);
         CHECK(result.ver_marker == expected.marker);
         CHECK(result.get_stales == (version >= 2));
         CHECK(cursor.end());
     }
+}
+
+TEST_CASE("OLH request tags retain storage across field boundaries", "[rgw][cls][datum][olh][request]")
+{
+    for (const auto& tag : {std::string {}, std::string {"t\0g", 3},
+                            std::string(32, 't'), std::string(129, 't')}) {
+        const auto original = wire::encode_request("object", "", 9, tag, true);
+        const auto bytes = original.to_str();
+        for (unsigned split = 0; split <= bytes.size(); ++split) {
+            byte_buffer input;
+            if (split) {
+                input.append(::ceph::buffer::copy(bytes.data(), split));
+            }
+            if (split < bytes.size()) {
+                input.append(::ceph::buffer::copy(bytes.data() + split, bytes.size() - split));
+            }
+            auto cursor = input.cbegin();
+            native::request result;
+            native::decode(result, cursor);
+            CHECK(cursor.end());
+            if (!tag.empty() && 1 == input.get_num_buffers()) {
+                const auto& source = input.buffers().front();
+                const auto lower = reinterpret_cast<std::uintptr_t>(source.c_str());
+                const auto upper = lower + source.length();
+                const auto retained = reinterpret_cast<std::uintptr_t>(result.tag().data());
+                CHECK(lower <= retained);
+                CHECK(retained + result.tag().size() <= upper);
+            }
+            input.clear();
+            CHECK(result.tag() == tag);
+            CHECK(result.olh.name == "object");
+        }
+        auto cursor = original.cbegin();
+        const auto owned = wire::decode_request(cursor,
+            [](auto&&, auto&&, std::uint64_t, std::string&& value, bool) {
+                return std::move(value);
+            });
+        CHECK(owned == tag);
+    }
+}
+
+TEST_CASE("Retained wire text replaces an existing value, including empty text", "[rgw][cls][datum][olh][request]")
+{
+    byte_buffer bytes;
+    ::cls::rgw::wire::writer output {bytes};
+    output.text("previous");
+    output.text("replacement");
+    output.text("");
+    auto cursor = bytes.cbegin();
+    ::cls::rgw::wire::reader input {cursor};
+    ::ceph::buffer::ptr value;
+    input.text(value);
+    CHECK(std::string_view {value.c_str(), value.length()} == "previous");
+    input.text(value);
+    CHECK(std::string_view {value.c_str(), value.length()} == "replacement");
+    input.text(value);
+    CHECK(value.length() == 0);
+    CHECK(cursor.end());
 }
 
 TEST_CASE("OLH event and nested map bindings preserve native encoding", "[rgw][cls][datum][olh]")
@@ -158,14 +217,18 @@ TEST_CASE("OLH framing rejects every proper truncation without publishing candid
         CHECK(compatible.log.size() == 1);
     }
     const auto request = wire::encode_request("name", "", 9, "tag", true);
+    auto storage = wire::encode_request("held", "", 3, "preserve", true);
+    auto preserved_cursor = storage.cbegin();
+    native::request preserved;
+    native::decode(preserved, preserved_cursor);
+    storage.clear();
     for (unsigned size = 0; size < request.length(); ++size) {
         byte_buffer prefix;
         prefix.substr_of(request, 0, size);
         auto cursor = prefix.cbegin();
-        native::request value;
-        value.olh_tag = "preserve";
+        auto value = preserved;
         CHECK_THROWS_AS(native::decode(value, cursor), ::ceph::buffer::error);
-        CHECK(value.olh_tag == "preserve");
+        CHECK(value.tag() == "preserve");
         CHECK(cursor.get_off() == 0);
     }
 }
@@ -325,4 +388,80 @@ TEST_CASE("Stored OLH projection retains canonical bytes and their owners", "[rg
     future.append(compatible);
     CHECK_FALSE(native::encode_stored_reply(future, 0, stored.tag, output).has_value());
     CHECK(output.contents_equal(preserved));
+}
+
+TEST_CASE("Stored OLH projection handles every physical field boundary", "[rgw][cls][olh][stored]")
+{
+    ::rgw_bucket_olh_entry stored;
+    stored.key = {"object", ""};
+    stored.tag.assign(32, 't');
+    ::rgw_bucket_olh_log_entry event;
+    event.epoch = 5;
+    event.op = ::CLS_RGW_OLH_OP_LINK_OLH;
+    event.op_tag.assign(67, 't');
+    event.key = {std::string(129, 'n'), std::string(31, 'i')};
+    event.delete_marker = true;
+    stored.pending_log[7].push_back(std::move(event));
+    stored.pending_log[9];
+    byte_buffer original;
+    ::encode(stored, original);
+    const auto bytes = original.to_str();
+    ::rgw_cls_read_olh_log_ret expected;
+    expected.log = stored.pending_log;
+    byte_buffer wanted;
+    ::encode(expected, wanted);
+    for (unsigned split = 0; split <= bytes.size(); ++split) {
+        byte_buffer input;
+        if (split) {
+            input.append(::ceph::buffer::copy(bytes.data(), split));
+        }
+        if (split < bytes.size()) {
+            input.append(::ceph::buffer::copy(bytes.data() + split, bytes.size() - split));
+        }
+        byte_buffer output;
+        REQUIRE(native::encode_stored_reply(input, 0, stored.tag, output) == 0);
+        CHECK(native::encode_stored_reply(input, 0, "wrong", output) == -ECANCELED);
+        input.clear();
+        CHECK(output.contents_equal(wanted));
+    }
+}
+
+TEST_CASE("Stored OLH pagination agrees across native and sparse fragment chains", "[rgw][cls][olh][stored]")
+{
+    ::rgw_bucket_olh_entry stored;
+    stored.key = {"object", ""};
+    stored.tag.assign(32, 't');
+    for (std::uint64_t epoch = 0; epoch < 1002; ++epoch) {
+        auto& entries = stored.pending_log[epoch];
+        if (epoch % 11) {
+            ::rgw_bucket_olh_log_entry event;
+            event.epoch = epoch;
+            event.op = ::CLS_RGW_OLH_OP_LINK_OLH;
+            event.op_tag.assign(3 + 64 * (epoch % 3), 't');
+            event.key = {std::string(129, 'n'), std::string(31, 'i')};
+            event.delete_marker = epoch % 2;
+            entries.push_back(std::move(event));
+        }
+    }
+    byte_buffer original;
+    ::encode(stored, original);
+    auto contiguous = original;
+    contiguous.rebuild();
+    REQUIRE(contiguous.get_num_buffers() == 1);
+    const std::array inputs {original, contiguous, fragmented(original, 32)};
+    for (const std::uint64_t marker : {0ULL, 17ULL, 1000ULL, 0xFFFFFFFFFFFFFFFFULL}) {
+        ::rgw_cls_read_olh_log_ret expected;
+        auto first = stored.pending_log.upper_bound(marker);
+        for (unsigned count = 0; first != stored.pending_log.end() && count < 1000; ++count, ++first) {
+            expected.log.insert(*first);
+        }
+        expected.is_truncated = first != stored.pending_log.end();
+        byte_buffer wanted;
+        ::encode(expected, wanted);
+        for (const auto& input : inputs) {
+            byte_buffer output;
+            REQUIRE(native::encode_stored_reply(input, marker, stored.tag, output) == 0);
+            CHECK(output.contents_equal(wanted));
+        }
+    }
 }

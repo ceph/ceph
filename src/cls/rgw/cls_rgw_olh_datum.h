@@ -4,12 +4,12 @@
 
 #include "cls_rgw_ops.h"
 #include "cls_rgw_olh_types.h"
+#include "include/buffer.h"
 
 #include <cstdint>
 
 #include <optional>
 #include <ranges>
-#include <string>
 #include <string_view>
 
 namespace cls::rgw::olh_datum {
@@ -17,10 +17,20 @@ namespace cls::rgw::olh_datum {
 struct request final
 {
     ::cls_rgw_obj_key olh;
-    std::string olh_tag;
 
     std::uint64_t ver_marker = 0;
     bool get_stales = false;
+
+    std::string_view tag() const noexcept
+    {
+        return {tag_bytes.length() ? tag_bytes.c_str() : "", tag_bytes.length()};
+    }
+
+private:
+    // Keep the tag's backing bytes alive without exposing mutable input.
+    ::ceph::buffer::ptr tag_bytes;
+
+    friend void decode(request&, ::ceph::buffer::list::const_iterator&);
 };
 
 using stored_log = decltype(::rgw_bucket_olh_entry::pending_log);

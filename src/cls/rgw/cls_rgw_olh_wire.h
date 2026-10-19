@@ -95,7 +95,7 @@ inline byte_buffer encode_request(const std::string_view name, const std::string
     return output;
 }
 
-template <typename FactoryT>
+template <typename TagT = std::string, typename FactoryT>
 auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
 {
     detail::reader archive {input};
@@ -103,7 +103,8 @@ auto decode_request(byte_buffer::const_iterator& input, FactoryT&& factory)
     return archive.frame(2, [&](auto& fields, const std::uint8_t version) {
         auto [name, instance] = detail::decode_key(fields);
         const auto marker = fields.template scalar<std::uint64_t>();
-        auto tag = fields.text();
+        TagT tag CEPH_INDETERMINATE;
+        fields.text(tag);
         const bool stales = version >= 2 && 0 != fields.template scalar<std::uint8_t>();
 
         return std::invoke(std::forward<FactoryT>(factory), std::move(name),

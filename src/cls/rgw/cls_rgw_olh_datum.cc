@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cerrno>
 #include <ranges>
+#include <span>
+#include <type_traits>
 #include <utility>
 
 namespace cls::rgw::olh_datum {
@@ -24,9 +26,97 @@ constexpr auto client_event_fields = datum::binary_fields<&client_entry::epoch, 
     &client_entry::tag, &client_entry::object, &client_entry::delete_marker> {};
 constexpr auto client_key_fields = datum::binary_fields<&client_key::name, &client_key::instance> {};
 
-using ::cls::rgw::wire::reader;
+// Track the current physical fragment while inspecting metadata. The input owns its bytes.
+template <bool SingleFragment>
+class fragment_cursor final
+{
+    ::ceph::buffer::list::buffers_t::const_iterator current;
+    ::ceph::buffer::list::buffers_t::const_iterator finish;
 
-bool canonical_key(reader& archive)
+    std::span<const char> block;
+
+    unsigned position = 0;
+    unsigned length;
+
+public:
+    explicit fragment_cursor(const ::ceph::buffer::list& input)
+        : length(input.length())
+    {
+        if constexpr (SingleFragment) {
+            const auto& fragment = input.buffers().front();
+            block = {fragment.c_str(), fragment.length()};
+        } else {
+            current = input.buffers().begin();
+            finish = input.buffers().end();
+        }
+    }
+
+    unsigned get_off() const noexcept { return position; }
+    unsigned get_remaining() const noexcept { return length - position; }
+
+    std::size_t get_ptr_and_advance(const std::size_t wanted, const char **bytes)
+    {
+        if constexpr (!SingleFragment) {
+            while (block.empty() && current != finish) {
+                const auto& fragment = *current++;
+                if (fragment.length()) {
+                    block = {fragment.c_str(), fragment.length()};
+                }
+            }
+            if (block.empty() && wanted) {
+                throw ::ceph::buffer::end_of_buffer {};
+            }
+        }
+        const auto size = SingleFragment ? wanted : std::min(wanted, block.size());
+        *bytes = block.data();
+        block = block.subspan(size);
+        position += size;
+
+        return size;
+    }
+
+    fragment_cursor& operator+=(const unsigned size)
+    {
+        if constexpr (SingleFragment) {
+            block = block.subspan(size);
+        } else {
+            auto remaining = size;
+            const auto step = std::min<std::size_t>(remaining, block.size());
+            block = block.subspan(step);
+            remaining -= step;
+            // Whole skipped fragments need only their lengths.
+            while (remaining) {
+                if (current == finish) {
+                    throw ::ceph::buffer::end_of_buffer {};
+                }
+                const auto& fragment = *current++;
+                if (remaining < fragment.length()) {
+                    block = {fragment.c_str() + remaining, fragment.length() - remaining};
+                    remaining = 0;
+                } else {
+                    remaining -= fragment.length();
+                }
+            }
+        }
+        position += size;
+
+        return *this;
+    }
+
+    void copy(unsigned size, char *output)
+    {
+        while (size) {
+            const char *bytes;
+            const auto count = get_ptr_and_advance(size, &bytes);
+            std::copy_n(bytes, count, output);
+            output += count;
+            size -= count;
+        }
+    }
+
+};
+
+bool canonical_key(auto& archive)
 {
     return archive.canonical_frame(1, [](auto& fields) {
         fields.skip_text();
@@ -36,7 +126,7 @@ bool canonical_key(reader& archive)
     });
 }
 
-bool canonical_event(reader& archive)
+bool canonical_event(auto& archive)
 {
     return archive.canonical_frame(1, [](auto& fields) {
         fields.skip(9); // Epoch and action are preserved byte for byte.
@@ -49,51 +139,13 @@ bool canonical_event(reader& archive)
     });
 }
 
-} // anonymous namespace
-
-::ceph::buffer::list encode_request(const ::cls_rgw_obj_key& key, const std::uint64_t marker,
-                                    const std::string_view tag, const bool stales)
-{
-    return ::cls::rgw::olh_wire::encode_request(key.name, key.instance, marker, tag, stales);
-}
-
-void decode(request& value, ::ceph::buffer::list::const_iterator& input)
-{
-    auto cursor = input;
-    auto candidate = ::cls::rgw::olh_wire::decode_request(cursor,
-        [](std::string&& name, std::string&& instance, const std::uint64_t marker,
-           std::string&& tag, const bool stales) {
-            request result;
-            result.olh.name = std::move(name);
-            result.olh.instance = std::move(instance);
-            result.olh_tag = std::move(tag);
-            result.ver_marker = marker;
-            result.get_stales = stales;
-
-            return result;
-        });
-    value = std::move(candidate);
-    input = cursor;
-}
-
-void encode_reply(const log_page groups, const bool stales, const bool truncated, ::ceph::buffer::list& output)
-{
-    auto candidate = ::cls::rgw::olh_wire::encode_reply(native_event_fields, native_key_fields,
-        groups, truncated,
-        [](const native_entry& value) { return ::CLS_RGW_OLH_OP_STALE != value.op; }, stales);
-    output.claim_append(candidate);
-}
-
-std::optional<int> encode_stored_reply(const ::ceph::buffer::list& input, const std::uint64_t marker,
+template <bool SingleFragment>
+std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
+                                       const ::ceph::buffer::list& input, const std::uint64_t marker,
                                        const std::string_view tag, ::ceph::buffer::list& output)
-try {
-    // Dense fragment chains favor the existing single-pass owning decoder.
-    const auto owner_bytes = std::uint64_t {input.get_num_buffers()} * sizeof(::ceph::buffer::ptr_node);
-    if (input.length() < owner_bytes) {
-        return std::nullopt;
-    }
-    auto cursor = input.cbegin();
-    reader archive {cursor};
+{
+    fragment_cursor<SingleFragment> cursor {input};
+    ::cls::rgw::wire::basic_reader archive {cursor};
     unsigned lower = 0;
     unsigned upper = 0;
     std::uint32_t selected = 0;
@@ -153,6 +205,56 @@ try {
     output.claim_append(candidate);
 
     return 0;
+}
+
+} // anonymous namespace
+
+::ceph::buffer::list encode_request(const ::cls_rgw_obj_key& key, const std::uint64_t marker,
+                                    const std::string_view tag, const bool stales)
+{
+    return ::cls::rgw::olh_wire::encode_request(key.name, key.instance, marker, tag, stales);
+}
+
+void decode(request& value, ::ceph::buffer::list::const_iterator& input)
+{
+    auto cursor = input;
+    auto candidate = ::cls::rgw::olh_wire::decode_request<::ceph::buffer::ptr>(cursor,
+        [](std::string&& name, std::string&& instance, const std::uint64_t marker,
+           ::ceph::buffer::ptr&& tag, const bool stales) {
+            request result;
+            result.olh.name = std::move(name);
+            result.olh.instance = std::move(instance);
+            result.tag_bytes = std::move(tag);
+            result.ver_marker = marker;
+            result.get_stales = stales;
+
+            return result;
+        });
+    value = std::move(candidate);
+    input = cursor;
+}
+
+void encode_reply(const log_page groups, const bool stales, const bool truncated, ::ceph::buffer::list& output)
+{
+    auto candidate = ::cls::rgw::olh_wire::encode_reply(native_event_fields, native_key_fields,
+        groups, truncated,
+        [](const native_entry& value) { return ::CLS_RGW_OLH_OP_STALE != value.op; }, stales);
+    output.claim_append(candidate);
+}
+
+std::optional<int> encode_stored_reply(const ::ceph::buffer::list& input, const std::uint64_t marker,
+                                       const std::string_view tag, ::ceph::buffer::list& output)
+try {
+    // Dense fragment chains favor the existing single-pass owning decoder.
+    const auto owner_bytes = std::uint64_t {input.get_num_buffers()} * sizeof(::ceph::buffer::ptr_node);
+    if (input.length() < owner_bytes) {
+        return std::nullopt;
+    }
+    if (1 == input.get_num_buffers() && input.length()) {
+        return encode_stored_reply(std::true_type {}, input, marker, tag, output);
+    }
+
+    return encode_stored_reply(std::false_type {}, input, marker, tag, output);
 } catch (const ::ceph::buffer::error&) {
     // Let the established stored-record decoder retain native error behavior.
     return std::nullopt;
