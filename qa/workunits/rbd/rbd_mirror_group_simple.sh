@@ -2971,10 +2971,30 @@ test_mirror_group_snapshot_unlink_peer()
     assert_image_snap_present_in_group_snap "${secondary_cluster}" "${pool}" "${group0}" "${image_prefix}${i}" "${secondary_group_snap_id}"
   done
 
+  if dynamic_groups_enabled; then
+    local former_image="${image_prefix}$((image_count - 1))"
+    local former_group_snap_id former_image_snap_id detach_group_snap_id
+    mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}/${group0}"
+    get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" former_group_snap_id
+    get_image_snapshot_with_group_snap_info "${primary_cluster}" "${pool}" "${former_image}" "${former_group_snap_id}" former_image_snap_id || fail "group snapshot ${former_group_snap_id} is not linked to ${former_image}"
+
+    group_image_remove "${primary_cluster}" "${pool}/${group0}" "${pool}/${former_image}"
+    get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" detach_group_snap_id
+    wait_for_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${detach_group_snap_id}"
+    wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group0}" "${detach_group_snap_id}"
+
+    mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}/${group0}"
+    wait_for_group_snap_not_present "${primary_cluster}" "${pool}/${group0}" "${former_group_snap_id}"
+    wait_for_snap_not_present "${primary_cluster}" "${pool}" "${former_image}" "${former_image_snap_id}" || fail "snapshot ${former_image_snap_id} from former member ${former_image} was not removed"
+  fi
+
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
   group_remove "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  if dynamic_groups_enabled; then
+    mirror_image_disable "${primary_cluster}" "${pool}/${former_image}" --force
+  fi
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
   wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"

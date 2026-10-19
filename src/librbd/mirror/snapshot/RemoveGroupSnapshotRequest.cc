@@ -8,6 +8,9 @@
 #include "common/ceph_context.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/Operations.h"
+#include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Utils.h"
 #include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
@@ -30,18 +33,92 @@ template <typename I>
 void RemoveGroupSnapshotRequest<I>::send() {
   ldout(m_cct, 10) << dendl;
 
+  open_missing_image_contexts();
+}
+
+template <typename I>
+void RemoveGroupSnapshotRequest<I>::open_missing_image_contexts() {
+  std::set<cls::rbd::GroupImageSpec> missing_images;
+  for (const auto& snap : m_group_snap->snaps) {
+    if (snap.snap_id == CEPH_NOSNAP) {
+      continue;
+    }
+    auto it = std::find_if(m_image_ctxs->begin(), m_image_ctxs->end(),
+      [&snap](auto image_ctx) {
+        return image_ctx != nullptr && image_ctx->id == snap.image_id &&
+               image_ctx->md_ctx.get_id() == snap.pool;
+      });
+    if (it == m_image_ctxs->end()) {
+      missing_images.emplace(snap.image_id, snap.pool);
+    }
+  }
+
+  std::vector<std::pair<cls::rbd::GroupImageSpec, librados::IoCtx>> images;
+  for (const auto& image_spec : missing_images) {
+    librados::IoCtx image_io_ctx;
+    int r = util::create_ioctx(m_group_io_ctx, "image", image_spec.pool_id,
+                               {}, &image_io_ctx);
+    if (r == -ENOENT) {
+      ldout(m_cct, 10) << "image pool no longer exists: pool_id="
+                       << image_spec.pool_id << dendl;
+      continue;
+    } else if (r < 0) {
+      lderr(m_cct) << "failed to open image pool " << image_spec.pool_id
+                   << ": " << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+    images.emplace_back(image_spec, std::move(image_io_ctx));
+  }
+
+  auto ctx = create_context_callback<
+    RemoveGroupSnapshotRequest<I>,
+    &RemoveGroupSnapshotRequest<I>::handle_open_missing_image_contexts>(this);
+  auto gather_ctx = new C_Gather(m_cct, ctx);
+  for (auto& [image_spec, image_io_ctx] : images) {
+    auto image_ctx = I::create("", image_spec.image_id, nullptr, image_io_ctx,
+                               false);
+    image_ctx->read_only_mask &= ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+    m_owned_image_ctxs.push_back(image_ctx);
+    auto image_index = m_owned_image_ctxs.size() - 1;
+    auto on_open = new LambdaContext(
+      [this, image_index, image_spec,
+       on_finish=gather_ctx->new_sub()](int r) {
+        if (r < 0) {
+          m_owned_image_ctxs[image_index] = nullptr;
+          if (r == -ENOENT) {
+            // An earlier cleanup may have removed the image snapshots but
+            // failed to remove the group snapshot metadata. After clearing
+            // all remaining snapshots, the user can delete a former member
+            // separately. A retry can still find its old ID in that metadata.
+            ldout(m_cct, 10) << "image no longer exists: image_id="
+                             << image_spec.image_id << ", pool_id="
+                             << image_spec.pool_id << dendl;
+            r = 0;
+          }
+        }
+        on_finish->complete(r);
+      });
+    image_ctx->state->open(librbd::OPEN_FLAG_SKIP_OPEN_PARENT, on_open);
+  }
+  gather_ctx->activate();
+}
+
+template <typename I>
+void RemoveGroupSnapshotRequest<I>::handle_open_missing_image_contexts(int r) {
+  if (r < 0) {
+    lderr(m_cct) << "failed to open group snapshot images: "
+                 << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    close_owned_image_contexts();
+    return;
+  }
   remove_group_image_snapshots();
 }
 
 template <typename I>
 void RemoveGroupSnapshotRequest<I>::remove_group_image_snapshots() {
   ldout(m_cct, 10) << "group snap id: " << m_group_snap->id << dendl;
-
-  if (m_image_ctxs->empty()) {
-    ldout(m_cct, 10) << "no images" << dendl;
-    remove_group_snapshot();
-    return;
-  }
 
   auto ctx = create_context_callback<
       RemoveGroupSnapshotRequest<I>,
@@ -58,13 +135,23 @@ void RemoveGroupSnapshotRequest<I>::remove_group_image_snapshots() {
         return image_ctx != nullptr && image_ctx->id == snap.image_id &&
                image_ctx->md_ctx.get_id() == snap.pool;
       });
-    if (it == m_image_ctxs->end()) {
-      ldout(m_cct, 10) << "skipping snapshot removal for image no longer in "
-                          "the group: image_id="
-                       << snap.image_id << ", pool_id=" << snap.pool << dendl;
-      continue;
+    ImageCtx *ictx = nullptr;
+    if (it != m_image_ctxs->end()) {
+      ictx = *it;
+    } else {
+      auto owned_it = std::find_if(
+        m_owned_image_ctxs.begin(), m_owned_image_ctxs.end(),
+        [&snap](auto image_ctx) {
+          return image_ctx != nullptr && image_ctx->id == snap.image_id &&
+                 image_ctx->md_ctx.get_id() == snap.pool;
+        });
+      if (owned_it == m_owned_image_ctxs.end()) {
+        // The image or its pool disappeared before it could be opened, so its
+        // snapshot is already gone.
+        continue;
+      }
+      ictx = *owned_it;
     }
-    ImageCtx *ictx = *it;
 
     ldout(m_cct, 10) << "removing individual snapshot: "
                      << snap.snap_id << ", from image id:"
@@ -73,7 +160,6 @@ void RemoveGroupSnapshotRequest<I>::remove_group_image_snapshots() {
   }
 
   gather_ctx->activate();
-
 }
 
 template <typename I>
@@ -83,7 +169,8 @@ void RemoveGroupSnapshotRequest<I>::handle_remove_group_image_snapshots(int r) {
   if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "failed to remove individual group image snapshots: "
                  << cpp_strerror(r) << dendl;
-    finish(r);
+    m_ret_val = r;
+    close_owned_image_contexts();
     return;
   }
 
@@ -113,11 +200,12 @@ void RemoveGroupSnapshotRequest<I>::handle_remove_group_snapshot(int r) {
   if (r < 0) {
     lderr(m_cct) << "failed to remove group snapshot metadata: "
                  << cpp_strerror(r) << dendl;
-    finish(r);
+    m_ret_val = r;
+    close_owned_image_contexts();
     return;
   }
 
-  finish(0);
+  close_owned_image_contexts();
 }
 
 template <typename I>
@@ -145,6 +233,29 @@ void RemoveGroupSnapshotRequest<I>::remove_image_snapshot(ImageCtx *image_ctx,
   }
   image_ctx->operations->snap_remove(snap_namespace, snap_name.c_str(),
                                      gather_ctx->new_sub());
+}
+
+template <typename I>
+void RemoveGroupSnapshotRequest<I>::close_owned_image_contexts() {
+  auto ctx = create_context_callback<
+    RemoveGroupSnapshotRequest<I>,
+    &RemoveGroupSnapshotRequest<I>::handle_close_owned_image_contexts>(this);
+  auto gather_ctx = new C_Gather(m_cct, ctx);
+  for (auto image_ctx : m_owned_image_ctxs) {
+    if (image_ctx != nullptr) {
+      image_ctx->state->close(gather_ctx->new_sub());
+    }
+  }
+  gather_ctx->activate();
+}
+
+template <typename I>
+void RemoveGroupSnapshotRequest<I>::handle_close_owned_image_contexts(int r) {
+  m_owned_image_ctxs.clear();
+  if (m_ret_val == 0 && r < 0) {
+    m_ret_val = r;
+  }
+  finish(m_ret_val);
 }
 
 template <typename I>
