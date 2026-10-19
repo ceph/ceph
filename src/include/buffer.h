@@ -233,8 +233,7 @@ struct error_code;
 
     ptr() : _raw(nullptr), _off(0), _len(0) {}
     ptr(ceph::unique_leakable_ptr<raw> r);
-    // cppcheck-suppress noExplicitConstructor
-    ptr(unsigned l);
+    explicit ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
     ptr(ptr&& p) noexcept;
@@ -949,9 +948,7 @@ struct error_code;
         _len(0),
         _num(0) {
     }
-    // cppcheck-suppress noExplicitConstructor
-    // cppcheck-suppress noExplicitConstructor
-    list(unsigned prealloc)
+    explicit list(unsigned prealloc)
       : _carriage(&always_empty_bptr),
         _len(0),
         _num(0) {
