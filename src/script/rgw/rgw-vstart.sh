@@ -373,6 +373,28 @@ IMP_UID_N=70103
 # testx$..." and were measuring that rather than CORS (2026-10-16).
 IMP_USER_T=rgwtenant
 IMP_UID_T=70104
+# The rest of the suite's principals.  Every identity that can
+# authenticate needs a record, and this list has fallen behind that
+# three times -- the tenanted user above (2026-10-16), anonymous, and
+# then these four (2026-10-19), each found by an unrelated test failing
+# with "no POSIX identity recorded for ..." and measuring that instead
+# of what it was written for.  `identity::test_every_principal_is_
+# provisioned` now fails by name when it happens again.
+#
+# The two IAM root accounts are here because an account authenticates
+# like any other principal, and a user created inside an account needs
+# no row of its own:  resolve_credentials() tries the user's row and
+# falls back to its account's when that is absent
+# (identity_db.cc:893), which is what makes these two rows cover every
+# user of either account.
+IMP_USER_I=rgwiam
+IMP_UID_I=70105
+IMP_USER_P=rgwpolicy
+IMP_UID_P=70106
+IMP_USER_R1=rgwacct1
+IMP_UID_R1=70107
+IMP_USER_R2=rgwacct2
+IMP_UID_R2=70108
 IMP_BUCKET=impersonate-fixture
 IMP_OWNED=impersonate-owned
 IMP_MULTI=impersonate-multiproto
@@ -415,6 +437,14 @@ if $IMPERSONATE; then
 	getent passwd "$IMP_USER_N" >/dev/null 2>&1 || \
 		sudo useradd -u "$IMP_UID_N" -M -N -s /sbin/nologin \
 			"$IMP_USER_N"
+	# the remaining principals, each in no gating group
+	for _u in "$IMP_USER_I:$IMP_UID_I" "$IMP_USER_P:$IMP_UID_P" \
+		  "$IMP_USER_R1:$IMP_UID_R1" "$IMP_USER_R2:$IMP_UID_R2"; do
+		_n=${_u%%:*}
+		_i=${_u##*:}
+		getent passwd "$_n" >/dev/null 2>&1 || \
+			sudo useradd -u "$_i" -M -N -s /sbin/nologin "$_n"
+	done
 	# the tenanted user, in no gating group:  what it tests is CORS
 	# and presigning, not group reach
 	getent passwd "$IMP_USER_T" >/dev/null 2>&1 || \
@@ -685,11 +715,20 @@ if $IMPERSONATE; then
 	# single-quoted:  the id begins with a digit after the tenant's
 	# `$`, which double quotes would read as a positional parameter
 	IMP_TENANT_USER='testx$9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+	# vstart's own ids, as s3tests.conf records them
+	IMP_IAM_USER=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+	IMP_POLICY_USER=s3policyonly
+	IMP_ACCT1=RGW11111111111111111
+	IMP_ACCT2=RGW22222222222222222
 	if ! python3 "$SRC_DIR/src/script/rgw/nsfs-impersonate-fixture.py" \
 			localhost 8000 "$IMP_AK" "$IMP_SK" "$IMP_BUCKET" \
 			testid "$IMP_UID_A" "$IMP_ALT_USER" "$IMP_UID_B" \
 			"$IMP_TENANT_USER" "$IMP_UID_T" \
-			anonymous "$IMP_UID_N"; then
+			anonymous "$IMP_UID_N" \
+			"$IMP_IAM_USER" "$IMP_UID_I" \
+			"$IMP_POLICY_USER" "$IMP_UID_P" \
+			"$IMP_ACCT1" "$IMP_UID_R1" \
+			"$IMP_ACCT2" "$IMP_UID_R2"; then
 		echo "error: could not create the impersonation fixture" >&2
 		exit 1
 	fi
