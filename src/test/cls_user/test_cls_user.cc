@@ -194,3 +194,95 @@ INSTANTIATE_TEST_SUITE_P(, TestClsAccount,
   return pool_type_name(info.param);
   }
 );
+
+// test fixture for the user header stats
+class TestClsUserStats : public ceph::test::ClsTestFixture {
+ protected:
+  // add 'count' buckets with one 4KiB object each
+  int add_buckets(const std::string& oid, unsigned first, unsigned count)
+  {
+    std::list<cls_user_bucket_entry> entries;
+    for (unsigned i = first; i < first + count; i++) {
+      cls_user_bucket_entry e;
+      e.bucket.name = "bucket" + std::to_string(i);
+      e.size = 4096;
+      e.size_rounded = 4096;
+      e.count = 1;
+      entries.push_back(std::move(e));
+    }
+    librados::ObjectWriteOperation op;
+    cls_user_set_buckets(op, entries, true);
+    return ioctx.operate(oid, &op);
+  }
+
+  int get_header(const std::string& oid, cls_user_header& header)
+  {
+    librados::ObjectReadOperation op;
+    int r2 = 0;
+    cls_user_get_header(op, &header, &r2);
+    int r1 = ioctx.operate(oid, &op, nullptr);
+    if (r1 < 0) return r1;
+    return r2;
+  }
+
+  int write_header(const std::string& oid, const cls_user_header& header)
+  {
+    bufferlist bl;
+    encode(header, bl);
+    return ioctx.omap_set_header(oid, bl);
+  }
+
+  // same loop as reset_stats() in rgw/driver/rados/buckets.cc
+  int reset_stats(const std::string& oid)
+  {
+    cls_user_reset_stats2_op call;
+    cls_user_reset_stats2_ret ret;
+    do {
+      bufferlist in, out;
+      librados::ObjectWriteOperation op;
+      int rval = 0;
+
+      call.time = ceph::real_clock::now();
+      ret.update_call(call);
+
+      encode(call, in);
+      op.exec(cls::user::method::reset_user_stats2, in, &out, &rval);
+      int r = ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC);
+      if (r < 0) return r;
+      auto p = out.cbegin();
+      decode(ret, p);
+    } while (ret.truncated);
+    return 0;
+  }
+};
+
+TEST_P(TestClsUserStats, reset_stats_multiple_calls)
+{
+  const std::string oid = __PRETTY_FUNCTION__;
+  // reset_user_stats2 reads up to 1000 bucket entries per call,
+  // so 2500 buckets need three calls
+  constexpr unsigned num_buckets = 2500;
+  for (unsigned i = 0; i < num_buckets; i += 500) {
+    ASSERT_EQ(0, add_buckets(oid, i, 500));
+  }
+
+  cls_user_header header;
+  ASSERT_EQ(0, get_header(oid, header));
+  EXPECT_EQ(num_buckets, header.stats.total_entries);
+
+  // clear the header stats, then rebuild them from the bucket entries
+  ASSERT_EQ(0, write_header(oid, cls_user_header{}));
+  ASSERT_EQ(0, reset_stats(oid));
+
+  ASSERT_EQ(0, get_header(oid, header));
+  EXPECT_EQ(num_buckets, header.stats.total_entries);
+  EXPECT_EQ(num_buckets * 4096, header.stats.total_bytes);
+  EXPECT_EQ(num_buckets * 4096, header.stats.total_bytes_rounded);
+}
+
+INSTANTIATE_TEST_SUITE_P(, TestClsUserStats,
+  ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+  [](const ::testing::TestParamInfo<PoolType>& info) {
+  return pool_type_name(info.param);
+  }
+);
