@@ -42,6 +42,14 @@ PK=$(ceph auth export client.rot | grep pending.key | awk '{print $4}')
 echo "2, K is $K"
 echo "2, PK is $PK"
 
+# a keyring saved while a key is pending can be read back
+keyring=$(mktemp)
+ceph auth export client.rot -o $keyring
+ceph-authtool -l $keyring | grep $PK
+ceph auth import -i $keyring
+ceph auth export client.rot | grep pending.key | grep $PK
+rm -f $keyring
+
 ceph auth export client.rot
 
 while ceph -n client.rot --key $K -s ; do
