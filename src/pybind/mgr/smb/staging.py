@@ -606,6 +606,76 @@ def _check_share_resource(
     raise ValueError(f"invalid share: missing rgw and cephfs config: {share}")
 
 
+def warn_availability(
+    resource: SMBResource,
+    staging: Staging,
+    recorder: WarningRecorder,
+) -> None:
+    """Warn about enabled handles after the batch is applied."""
+    if isinstance(resource, resources.Cluster):
+        defaults = resource.share_defaults
+        if (
+            defaults
+            and defaults.availability
+            and defaults.availability.persistent_handles
+        ):
+            recorder.record_warning(
+                f'Persistent handles are enabled by default for cluster '
+                f'"{resource.cluster_id}" via share_defaults.availability. '
+                'Existing and newly created CephFS shares '
+                'inherit this setting unless explicitly disabled with '
+                'availability.persistent_handles: false. Global support remains '
+                'enabled even with no shares or when all shares opt out. '
+                'Persistent-handle state '
+                'management can significantly impact performance.'
+            )
+    elif (
+        isinstance(resource, resources.Share) and resource.cephfs is not None
+    ):
+        _warn_share_availability(
+            resource, staging.get_cluster(resource.cluster_id), recorder
+        )
+
+
+def _warn_share_availability(
+    share: resources.Share,
+    cluster: resources.Cluster,
+    recorder: WarningRecorder,
+) -> None:
+    defaults = cluster.share_defaults
+    cluster_enabled = bool(
+        defaults
+        and defaults.availability
+        and defaults.availability.persistent_handles
+    )
+    share_value = (
+        share.availability.persistent_handles if share.availability else None
+    )
+    if share_value is False or (share_value is None and not cluster_enabled):
+        return
+    if share_value is True:
+        message = (
+            f'Persistent handles are explicitly enabled for CephFS share '
+            f'"{share.cluster_id}.{share.share_id}". '
+        )
+        if not cluster_enabled:
+            message += (
+                'Although the cluster default is disabled, this share requires '
+                'global persistent-handle support for the cluster. '
+            )
+    else:
+        message = (
+            f'CephFS share "{share.cluster_id}.{share.share_id}" inherits '
+            f'persistent handles from cluster "{cluster.cluster_id}" '
+            'share_defaults.availability. '
+        )
+    recorder.record_warning(
+        message
+        + 'Persistent-handle state management can significantly impact '
+        'performance.'
+    )
+
+
 def _check_share_rgw(share: resources.Share, staging: Staging) -> None:
     assert share.rgw  # appease mypy
     # Check if cluster uses external Ceph cluster

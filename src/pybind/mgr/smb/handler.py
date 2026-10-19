@@ -75,6 +75,7 @@ from .staging import (
     rgw_credential_refs,
     tls_refs,
     ug_refs,
+    warn_availability,
 )
 from .utils import checked, ynbool
 
@@ -420,6 +421,10 @@ class ClusterConfigHandler:
             _reconcile_store(staging.destination_store)
             with _store_transaction(staging.destination_store):
                 self._sync_modified(results)
+                for resource_result in results.resources():
+                    warn_availability(
+                        resource_result.src, staging, resource_result
+                    )
         return results
 
     def cluster_ids(self) -> List[str]:

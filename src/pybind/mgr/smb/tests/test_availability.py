@@ -96,6 +96,14 @@ def test_default_reserves_global_support(amodule, opt_out):
     assert 'availability' not in stored
 
 
+def _persistent_handle_warnings(result):
+    return [
+        warning
+        for warning in result.get('warnings', [])
+        if 'persistent handles' in warning.lower()
+    ]
+
+
 def _config(module, cluster_id='foo'):
     return module._public_store[cluster_id, 'config.smb'].get()
 
@@ -125,12 +133,26 @@ def test_availability_inheritance(
         }
     if share_availability is not None:
         share_data['availability'] = share_availability
-    _apply(amodule, smb.resources.load([share_data, cluster_data]))
+    result = _apply(amodule, smb.resources.load([share_data, cluster_data]))
     cluster_enabled = bool(
         (cluster_availability or {}).get('persistent_handles')
     )
     share_value = (share_availability or {}).get('persistent_handles')
     enabled = cluster_enabled if share_value is None else share_value
+    results_by_type = {
+        item['resource']['resource_type']: item
+        for item in result.to_simplified()['results']
+    }
+    cluster_warnings = _persistent_handle_warnings(
+        results_by_type['ceph.smb.cluster']
+    )
+    share_warnings = _persistent_handle_warnings(
+        results_by_type['ceph.smb.share']
+    )
+    assert bool(cluster_warnings) == cluster_enabled
+    assert bool(share_warnings) == enabled
+    for warning in cluster_warnings + share_warnings:
+        assert 'performance' in warning
     cfg = _config(amodule)
     global_opts = cfg['globals']['foo']['options']
     share_opts = cfg['shares']['s1']['options']
@@ -293,6 +315,11 @@ def test_availability_cli(amodule):
         persistent_handles_durability=durability,
     )
     assert result.success, result.to_simplified()
+    warnings = _persistent_handle_warnings(result.to_simplified())
+    assert len(warnings) == 1
+    assert 'newly created CephFS shares' in warnings[0]
+    assert 'availability.persistent_handles: false' in warnings[0]
+    assert 'performance' in warnings[0]
     original = amodule._internal_store['clusters', 'foo'].get()
     assert (
         original['share_defaults']['availability']['persistent_handles']
@@ -306,6 +333,7 @@ def test_availability_cli(amodule):
     )
     result = amodule.cluster_update_availability('foo')
     assert result.success, result.to_simplified()
+    assert _persistent_handle_warnings(result.to_simplified()) == warnings
     assert original == amodule._internal_store['clusters', 'foo'].get()
 
     result = amodule.cluster_update_availability(
@@ -313,6 +341,7 @@ def test_availability_cli(amodule):
     )
     assert result.success, result.to_simplified()
     assert 'persistent handles' not in _globals(amodule)
+    assert not _persistent_handle_warnings(result.to_simplified())
     stored = amodule._internal_store['clusters', 'foo'].get()
     assert stored.get('persistent_handles_durability') == durability
 
@@ -364,6 +393,7 @@ def test_share_availability_cli_json_warning(amodule):
     assert rc == 0, body
     data = json.loads(body)
     assert data['success']
+    assert 'performance' in _persistent_handle_warnings(data)[0]
 
 
 def test_availability_invalid_boolean():
