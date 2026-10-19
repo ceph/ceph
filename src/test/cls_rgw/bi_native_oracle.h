@@ -51,6 +51,7 @@ row decode_put_entry(const ::ceph::buffer::list& bytes);
 ::ceph::buffer::list extended_reply(const std::vector<row>& rows);
 
 using epoch_groups = std::map<std::uint64_t, std::vector<std::uint32_t>>;
+
 ::ceph::buffer::list encode_groups(const epoch_groups& groups);
 epoch_groups decode_groups(const ::ceph::buffer::list& bytes);
 

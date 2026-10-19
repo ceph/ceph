@@ -396,7 +396,7 @@ TEST_CASE("Account resource list keeps fetched marker prefix filtering corruptio
     CHECK_FALSE(reply.truncated);
     list.marker.clear();
     list.path_prefix = "/none/";
-    list.max_entries = 0xffffffff;
+    list.max_entries = 0xFFFFFFFF;
     CHECK(invoke(state, "account_resource_list", list) == 0);
     reply = decoded<::cls_user_account_resource_list_ret>(state.reply);
     CHECK(reply.entries.empty());

@@ -197,6 +197,7 @@ TEST_CASE("Bucket listing requests preserve all legacy gates and borrowed bytes"
 TEST_CASE("Bucket replies bind alternate associative containers with last-wins old values", "[rgw][cls][datum][bucket-list]")
 {
     using tree_entries = std::map<std::string, ::rgw_bucket_dir_entry>;
+
     for (std::uint8_t outer = 0; outer <= 6; ++outer) {
         for (std::uint8_t directory = 0; directory <= 3; ++directory) {
             for (std::uint8_t old_leaf = 0; old_leaf <= 9; ++old_leaf) {

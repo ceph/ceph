@@ -17,6 +17,7 @@
 namespace {
 
 using bytes = ::ceph::buffer::list;
+
 constexpr std::uint64_t pg_version = 0xFEDCBA9876543210ull;
 
 bytes canonical(const auto& value)

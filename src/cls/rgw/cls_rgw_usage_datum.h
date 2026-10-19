@@ -28,6 +28,7 @@ struct read_request final
 {
     std::uint64_t start_epoch = 0;
     std::uint64_t end_epoch = 0;
+
     std::string owner;
     std::string bucket;
 
@@ -39,6 +40,7 @@ struct trim_request final
 {
     std::uint64_t start_epoch = 0;
     std::uint64_t end_epoch = 0;
+
     std::string user;
     std::string bucket;
 };
@@ -48,6 +50,7 @@ struct read_reply final
 {
     EntriesT usage;
     std::string next_iter;
+
     bool truncated = false;
 };
 

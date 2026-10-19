@@ -109,6 +109,7 @@ struct metadata_size final
 
         return {};
     }
+
 };
 
 } // detail
@@ -129,6 +130,7 @@ class writer final
 {
     byte_buffer& output;
 
+private:
     void copy_payload(const byte_buffer& value, const unsigned offset, const unsigned size)
     {
         ensure(size);
@@ -296,9 +298,18 @@ class basic_reader final
 
     unsigned limit;
 
+    unsigned get_offset() const noexcept
+    {
+        if constexpr (requires { input.get_offset(); }) {
+            return input.get_offset();
+        } else {
+            return input.get_off();
+        }
+    }
+
 public:
     explicit basic_reader(CursorT& input)
-        : input(input), limit(input.get_off() + input.get_remaining())
+        : input(input), limit(get_offset() + input.get_remaining())
     {}
 
 private:
@@ -307,7 +318,7 @@ private:
     {}
 
 public:
-    unsigned remaining() const noexcept { return limit - input.get_off(); }
+    unsigned remaining() const noexcept { return limit - get_offset(); }
 
     void require(const std::size_t size) const
     {
@@ -350,6 +361,7 @@ public:
     T scalar()
     {
         using record = scalar_record<T>;
+
         record value CEPH_INDETERMINATE;
         fields<sizeof(T)>(datum::binary_fields<&record::value> {}, value);
 
@@ -358,10 +370,7 @@ public:
 
     void text(std::string& value)
     {
-        const auto size = scalar<std::uint32_t>();
-        require(size);
-        value.clear();
-        input.copy(size, value);
+        payload(value);
     }
 
     void text(::ceph::buffer::ptr& value)
@@ -412,7 +421,9 @@ public:
         return equal;
     }
 
-    void payload(byte_buffer& value)
+    template <typename BytesT>
+    requires std::same_as<BytesT, std::string> || std::same_as<BytesT, byte_buffer>
+    void payload(BytesT& value)
     {
         const auto size = scalar<std::uint32_t>();
         require(size);
@@ -444,7 +455,7 @@ public:
 
         auto cursor = input;
         decode(value, cursor);
-        require(cursor.get_off() - input.get_off());
+        require(cursor.get_off() - get_offset());
         input = cursor;
     }
 
@@ -465,30 +476,21 @@ public:
             throw ::ceph::buffer::malformed_input {"RGW CLS frame needs a newer decoder"};
         }
         require(header.length);
-        const auto finish = input.get_off() + header.length;
+        const auto finish = get_offset() + header.length;
         basic_reader fields {input, finish};
-        decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version);
-        input += finish - input.get_off();
+        if constexpr (std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>) {
+            decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version, header.compatible);
+            input += finish - get_offset();
 
-        return result;
-    }
-
-    template <typename BodyT>
-    requires std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>
-    decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
-    {
-        frame_header header CEPH_INDETERMINATE;
-        fields<6>(header_fields {}, header);
-        if (header.compatible > supported) {
-            throw ::ceph::buffer::malformed_input {"RGW CLS frame needs a newer decoder"};
+            return result;
         }
-        require(header.length);
-        const auto finish = input.get_off() + header.length;
-        basic_reader fields {input, finish};
-        decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version, header.compatible);
-        input += finish - input.get_off();
 
-        return result;
+        if constexpr (!std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>) {
+            decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version);
+            input += finish - get_offset();
+
+            return result;
+        }
     }
 
     // Prepare/complete versions before the framed format have only a version
@@ -520,7 +522,7 @@ public:
         if (version != header.version || 1 != header.compatible) {
             return false;
         }
-        basic_reader fields {input, input.get_off() + header.length};
+        basic_reader fields {input, get_offset() + header.length};
 
         return std::invoke(std::forward<BodyT>(body), fields) && 0 == fields.remaining();
     }

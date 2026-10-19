@@ -282,9 +282,9 @@ int cls_cxx_map_remove_range(cls_method_context_t context, const std::string& fi
     if (const int result = effect(state, "remove-range", arguments); result < 0) {
         return result;
     }
-    const auto begin = state.values.lower_bound(first);
-    const auto end = state.values.lower_bound(last);
-    state.values.erase(begin, end);
+    const auto lower = state.values.lower_bound(first);
+    const auto upper = state.values.lower_bound(last);
+    state.values.erase(lower, upper);
 
     return 0;
 }

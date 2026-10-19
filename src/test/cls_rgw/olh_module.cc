@@ -9,8 +9,8 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include <fstream>
 #include <algorithm>
+#include <fstream>
 #include <limits>
 #include <map>
 #include <string>

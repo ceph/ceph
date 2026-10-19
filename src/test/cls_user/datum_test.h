@@ -11,6 +11,7 @@ using bytes = ::ceph::buffer::list;
 inline bytes canonical(const auto& value)
 {
     using ::ceph::encode;
+
     bytes output;
     encode(value, output);
 

@@ -10,6 +10,7 @@
 namespace {
 
 using namespace user_cls_test;
+
 bytes request;
 std::string method;
 std::unique_ptr<::librados::ObjectOperationCompletion> pending;
@@ -33,9 +34,11 @@ struct callback_state final
 class header_callback final : public ::RGWGetUserHeader_CB
 {
     callback_state& state;
+
 public:
     explicit header_callback(callback_state& state) : state(state)
     {}
+
     ~header_callback() override { ++state.destroyed; }
 
 public:
@@ -114,7 +117,7 @@ TEST_CASE("User clients borrow builder inputs and retain timestamp and request b
     ::cls_user_account_resource_add_op add;
     add.entry = resource();
     add.exclusive = true;
-    add.limit = 0xffffffff;
+    add.limit = 0xFFFFFFFF;
     ::cls_user_account_resource_add(operation, add.entry, add.exclusive, add.limit);
     const auto expected = canonical(add);
     add.entry.name.clear();

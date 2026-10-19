@@ -21,6 +21,7 @@ auto& methods()
 void load_module()
 {
     using handle = std::unique_ptr<void, decltype([](void *p) noexcept { dlclose(p); })>;
+
     const char *path = std::getenv("CEPH_TEST_CLS_RGW_MODULE");
     static const handle loaded {dlopen(path ? path : TEST_CLS_RGW_MODULE, RTLD_LAZY | RTLD_LOCAL)};
     if (!loaded) {

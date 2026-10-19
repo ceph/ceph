@@ -10,16 +10,20 @@
 namespace {
 
 using bytes = ::ceph::buffer::list;
+
 bytes request, reply;
 std::string method, class_name;
 int status = 0;
+
 bytes canonical(const auto& value)
 {
     using ::ceph::encode;
+
     bytes output;
     encode(value, output);
     return output;
 }
+
 } // anonymous namespace
 
 void librados::ObjectOperation::exec_impl(const char *cls, const char *name, bytes& input)
@@ -28,6 +32,7 @@ void librados::ObjectOperation::exec_impl(const char *cls, const char *name, byt
     method = name;
     request = input;
 }
+
 int librados::IoCtx::exec_impl(const std::string&, const char *cls, const char *name, bytes& input, bytes& output)
 {
     class_name = cls;

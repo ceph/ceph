@@ -24,6 +24,7 @@ static_assert(!usage_reply_binding<std::multimap<::rgw_user_bucket, ::rgw_usage_
 bytes canonical(const auto& value)
 {
     using ::ceph::encode;
+
     bytes output;
     encode(value, output);
 

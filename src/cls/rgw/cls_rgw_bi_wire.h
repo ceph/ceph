@@ -134,12 +134,14 @@ void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, con
     const auto length = checked_count(payload_size(data));
     const auto kind = ::cls::rgw::wire::checked_byte(datum::member_lens<Kind> {}(value));
     using prefix = entry_prefix;
+
     if constexpr (1 == Version) {
         archive.frame(1, [&] {
             archive.fields(entry_prefix_fields, prefix {kind, key, length});
             archive.payload(data);
         });
     }
+
     if constexpr (2 == Version) {
         archive.fields(::cls::rgw::wire::growing_metadata, entry_prefix_fields, prefix {kind, key, length});
         archive.payload(data);
@@ -157,9 +159,11 @@ EntryT& decode_entry(datum::binary_fields<Kind, Key, Payload>, reader& archive, 
 
         return value;
     };
+
     if constexpr (1 == Version) {
         return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& { return body(fields); });
     }
+
     if constexpr (2 == Version) {
         return body(archive);
     }

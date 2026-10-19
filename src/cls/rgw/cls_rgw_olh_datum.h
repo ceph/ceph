@@ -21,16 +21,18 @@ struct request final
     std::uint64_t ver_marker = 0;
     bool get_stales = false;
 
-    std::string_view tag() const noexcept
-    {
-        return {tag_bytes.length() ? tag_bytes.c_str() : "", tag_bytes.length()};
-    }
-
 private:
     // Keep the tag's backing bytes alive without exposing mutable input.
     ::ceph::buffer::ptr tag_bytes;
 
     friend void decode(request&, ::ceph::buffer::list::const_iterator&);
+
+public:
+    std::string_view tag() const noexcept
+    {
+        return {tag_bytes.length() ? tag_bytes.c_str() : "", tag_bytes.length()};
+    }
+
 };
 
 using stored_log = decltype(::rgw_bucket_olh_entry::pending_log);

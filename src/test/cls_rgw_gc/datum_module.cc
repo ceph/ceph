@@ -12,9 +12,11 @@
 namespace {
 
 using bytes = ::ceph::buffer::list;
+
 bytes canonical(const auto& value)
 {
     using ::ceph::encode;
+
     bytes result;
     encode(value, result);
     return result;
@@ -50,12 +52,15 @@ public:
 };
 
 using method = std::pair<int, ::cls_method_cxx_call_t>;
+
 std::map<std::string, method> methods;
+
 int effect(storage& state, std::string name, bytes value = {})
 {
     state.effects.emplace_back(std::move(name), std::move(value));
     return int(state.effects.size()) == state.fail_at ? state.failure : 0;
 }
+
 int invoke(storage& state, bytes request, const std::string& name, bytes *reply = nullptr)
 {
     static const bool initialized = [] { __cls_init(); return true; }();
@@ -83,10 +88,12 @@ int invoke(storage& state, bytes request, const std::string& name, bytes *reply 
     }
     return result;
 }
+
 ::ceph::real_time time_at(const int offset = 0)
 {
     return ::ceph::real_time {std::chrono::seconds {1234567890 + offset} + std::chrono::nanoseconds {123}};
 }
+
 ::cls_rgw_gc_obj_info info(const std::string& tag, const int offset = 0)
 {
     ::cls_rgw_gc_obj_info result;
@@ -95,6 +102,7 @@ int invoke(storage& state, bytes request, const std::string& name, bytes *reply 
     result.chain.objs.emplace_back().key.name = std::string(80, 'n');
     return result;
 }
+
 ::cls_queue_list_ret page(std::initializer_list<::cls_rgw_gc_obj_info> values, const bool more = false)
 {
     ::cls_queue_list_ret result;
@@ -105,6 +113,7 @@ int invoke(storage& state, bytes request, const std::string& name, bytes *reply 
     }
     return result;
 }
+
 ::cls_rgw_gc_urgent_data urgent(const storage& state)
 {
     ::cls_rgw_gc_urgent_data result;
@@ -112,6 +121,7 @@ int invoke(storage& state, bytes request, const std::string& name, bytes *reply 
     ::decode(result, cursor);
     return result;
 }
+
 bytes set_request(const ::cls_rgw_gc_obj_info& value, const unsigned expiration = 17)
 {
     ::cls_rgw_gc_set_entry_op request;
@@ -119,6 +129,7 @@ bytes set_request(const ::cls_rgw_gc_obj_info& value, const unsigned expiration 
     request.expiration_secs = expiration;
     return canonical(request);
 }
+
 } // anonymous namespace
 
 int cls_register(const char *name, cls_handle_t *handle)
@@ -127,7 +138,9 @@ int cls_register(const char *name, cls_handle_t *handle)
     *handle = nullptr;
     return 0;
 }
+
 int cls_log(int, const char *, ...) { return 0; }
+
 namespace detail {
 
 int cls_register_cxx_method_impl(cls_handle_t, const char *name, const int flags,
@@ -137,6 +150,7 @@ int cls_register_cxx_method_impl(cls_handle_t, const char *name, const int flags
     *handle = nullptr;
     return 0;
 }
+
 } // detail
 
 extern "C" int clock_gettime(clockid_t clock, timespec *value) noexcept
@@ -147,6 +161,7 @@ extern "C" int clock_gettime(clockid_t clock, timespec *value) noexcept
     }
     return int(::syscall(SYS_clock_gettime, clock, value));
 }
+
 int queue_init(cls_method_context_t context, const ::cls_queue_init_op& op)
 {
     auto& state = *static_cast<storage *>(context);
@@ -155,6 +170,7 @@ int queue_init(cls_method_context_t context, const ::cls_queue_init_op& op)
     state.head.bl_urgent_data = op.bl_urgent_data;
     return 0;
 }
+
 int queue_read_head(cls_method_context_t context, ::cls_queue_head& head)
 {
     auto& state = *static_cast<storage *>(context);
@@ -162,6 +178,7 @@ int queue_read_head(cls_method_context_t context, ::cls_queue_head& head)
     head = state.head;
     return 0;
 }
+
 int queue_write_head(cls_method_context_t context, ::cls_queue_head& head)
 {
     auto& state = *static_cast<storage *>(context);
@@ -169,6 +186,7 @@ int queue_write_head(cls_method_context_t context, ::cls_queue_head& head)
     state.head = head;
     return 0;
 }
+
 int queue_enqueue(cls_method_context_t context, ::cls_queue_enqueue_op& op, ::cls_queue_head&)
 {
     auto& state = *static_cast<storage *>(context);
@@ -176,6 +194,7 @@ int queue_enqueue(cls_method_context_t context, ::cls_queue_enqueue_op& op, ::cl
     state.enqueued = op.bl_data_vec;
     return 0;
 }
+
 int queue_list_entries(cls_method_context_t context, const ::cls_queue_list_op& op,
                        ::cls_queue_list_ret& result, ::cls_queue_head&)
 {
@@ -186,6 +205,7 @@ int queue_list_entries(cls_method_context_t context, const ::cls_queue_list_op& 
     else { result.is_truncated = false; result.entries.clear(); result.next_marker = "end"; }
     return 0;
 }
+
 int queue_remove_entries(cls_method_context_t context, const ::cls_queue_remove_op& op, ::cls_queue_head&)
 {
     auto& state = *static_cast<storage *>(context);
@@ -193,6 +213,7 @@ int queue_remove_entries(cls_method_context_t context, const ::cls_queue_remove_
     state.removed = op.end_marker;
     return 0;
 }
+
 int cls_cxx_getxattr(cls_method_context_t context, const char *, bytes *value)
 {
     auto& state = *static_cast<storage *>(context);
@@ -201,6 +222,7 @@ int cls_cxx_getxattr(cls_method_context_t context, const char *, bytes *value)
     *value = state.xattr;
     return 0;
 }
+
 int cls_cxx_setxattr(cls_method_context_t context, const char *, bytes *value)
 {
     auto& state = *static_cast<storage *>(context);

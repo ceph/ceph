@@ -51,7 +51,8 @@ public:
         }
     }
 
-    unsigned get_off() const noexcept { return position; }
+public:
+    unsigned get_offset() const noexcept { return position; }
     unsigned get_remaining() const noexcept { return length - position; }
 
     std::size_t get_ptr_and_advance(const std::size_t wanted, const char **bytes)
@@ -159,7 +160,7 @@ std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
         const auto count = fields.template sequence_size<12>(6);
         std::uint64_t previous = 0;
         for (std::uint32_t index = 0; index < count; ++index) {
-            const auto start = cursor.get_off();
+            const auto start = cursor.get_offset();
             const auto epoch = fields.template scalar<std::uint64_t>();
             if (0 != index && epoch <= previous) {
                 return false; // Native map decoding orders and deduplicates groups.
@@ -179,7 +180,7 @@ std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
                 if (0 == selected) {
                     lower = start;
                 }
-                upper = cursor.get_off();
+                upper = cursor.get_offset();
                 ++selected;
             }
         }

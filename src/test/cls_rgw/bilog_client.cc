@@ -18,6 +18,7 @@
 namespace {
 
 using bytes = ::ceph::buffer::list;
+
 std::unique_ptr<::librados::ObjectOperationCompletion> pending;
 bytes request_bytes;
 std::string request_method;

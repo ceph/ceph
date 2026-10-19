@@ -64,6 +64,7 @@ public:
       *status = result;
     }
   }
+
 };
 
 } // anonymous namespace

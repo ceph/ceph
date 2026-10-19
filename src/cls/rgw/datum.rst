@@ -376,6 +376,10 @@ shares one counted-sequence loop between native leaves and selected-field
 decoders. Each binding supplies the minimum encoded element size and any
 required trailing bytes; count checks precede storage reservation and in-place
 element decoding. Vector and list bindings use the same loop.
+Frame decoding also has one implementation for callbacks that inspect version
+alone or both version and compatibility. Owning text and buffer fields share
+their length-prefix checks and read operation; the destination type retains its
+existing copy and ownership behavior.
 These checks reject impossible outer allocations; they are not a total work or
 memory quota for an arbitrarily large valid message. Native stored-object codecs and their resource policy remain
 separate from the request/reply adapters.

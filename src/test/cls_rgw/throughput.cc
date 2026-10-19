@@ -233,6 +233,7 @@ public:
             }
         }
     }
+
 };
 
 rgw_cls_bi_entry entry(const unsigned index, const bool fragmented)

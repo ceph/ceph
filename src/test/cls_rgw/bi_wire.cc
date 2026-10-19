@@ -38,21 +38,23 @@ struct rejected final {};
 namespace ceph::salad::datum {
 
 template <>
-struct binary_field_codec<::rgw_metadata_test::converted>
+struct binary_field_codec<::rgw_metadata_test::converted> final
 {
     static constexpr auto apply(auto& archive, const auto& value)
     {
         return archive(static_cast<std::uint16_t>(value.local_value));
     }
+
 };
 
 template <>
-struct binary_field_codec<::rgw_metadata_test::rejected>
+struct binary_field_codec<::rgw_metadata_test::rejected> final
 {
     static constexpr zpp::bits::errc apply(auto&, const auto&)
     {
         return std::errc::invalid_argument;
     }
+
 };
 
 } // ceph::salad::datum
@@ -171,6 +173,7 @@ TEST_CASE("BI requests preserve native bytes and old version defaults", "[rgw][c
 TEST_CASE("RGW field archives preserve successful bytes and report undersized schemas", "[rgw][cls][datum]")
 {
     using record = ::cls::rgw::wire::scalar_record<std::uint32_t>;
+
     const record original {0x01020304};
     const auto fields = datum::binary_fields<&record::value> {};
     byte_buffer bytes;
@@ -195,6 +198,80 @@ TEST_CASE("RGW field archives preserve successful bytes and report undersized sc
     cursor = truncated.cbegin();
     ::cls::rgw::wire::reader short_input {cursor};
     CHECK_THROWS_AS(short_input.fields<3>(fields, decoded), std::system_error);
+}
+
+TEST_CASE("RGW frame callbacks preserve metadata, reference returns, and extension bounds", "[rgw][cls][datum]")
+{
+    namespace shared = ::cls::rgw::wire;
+
+    byte_buffer encoded;
+    shared::writer output {encoded};
+    output.frame(7, 2, [&] {
+        output.scalar(std::uint32_t {0x01020304});
+        output.scalar(std::uint16_t {0xFFFF});
+    });
+    const auto input = fragmented(encoded);
+    auto cursor = input.cbegin();
+    shared::reader archive {cursor};
+    std::uint32_t value = 0;
+
+    SECTION("The version-only callback returns the caller's reference") {
+        auto& result = archive.frame(2, [&](auto& fields, const std::uint8_t version) -> std::uint32_t& {
+            CHECK(7 == version);
+            value = fields.template scalar<std::uint32_t>();
+
+            return value;
+        });
+        CHECK(&result == &value);
+    }
+
+    SECTION("The compatibility-aware callback wins when both arities are supported") {
+        std::uint8_t compatibility = 0;
+        auto& result = archive.frame(2,
+            [&](auto& fields, const std::uint8_t version, const auto ...compatible) -> std::uint32_t& {
+                CHECK(7 == version);
+                CHECK(1 == sizeof...(compatible));
+                ((compatibility = compatible), ...);
+                value = fields.template scalar<std::uint32_t>();
+
+                return value;
+            });
+        CHECK(2 == compatibility);
+        CHECK(&result == &value);
+    }
+
+    CHECK(0x01020304 == value);
+    CHECK(cursor.end());
+}
+
+TEST_CASE("RGW owning byte reads replace destinations and preserve payload owners", "[rgw][cls][datum]")
+{
+    for (const auto& expected : {std::string {}, std::string {"a\0b", 3}}) {
+        byte_buffer encoded;
+        ::ceph::encode(expected, encoded);
+        auto input = fragmented(encoded);
+        const auto *backing = input.buffers().back().c_str();
+
+        auto cursor = input.cbegin();
+        ::cls::rgw::wire::reader text_archive {cursor};
+        std::string text = "old text";
+        text_archive.text(text);
+        CHECK(cursor.end());
+
+        cursor = input.cbegin();
+        ::cls::rgw::wire::reader payload_archive {cursor};
+        auto bytes = payload();
+        payload_archive.payload(bytes);
+        CHECK(cursor.end());
+        input.clear();
+
+        CHECK(text == expected);
+        CHECK(bytes.to_str() == expected);
+        if (!expected.empty()) {
+            REQUIRE(!bytes.buffers().empty());
+            CHECK(bytes.buffers().back().c_str() == backing);
+        }
+    }
 }
 
 TEST_CASE("RGW scalar metadata preserves native bytes across append boundaries", "[rgw][cls][datum]")
@@ -315,6 +392,7 @@ TEST_CASE("RGW automatic metadata sizing preserves explicit codecs and rejects e
 {
     namespace metadata = ::cls::rgw::wire;
     using explicit_record = metadata::scalar_record<std::array<std::uint8_t, 3>>;
+
     const explicit_record value {{1, 2, 3}};
     byte_buffer bytes;
     metadata::writer output {bytes};
@@ -322,6 +400,7 @@ TEST_CASE("RGW automatic metadata sizing preserves explicit codecs and rejects e
     CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
 
     using rejected_record = metadata::scalar_record<::rgw_metadata_test::rejected>;
+
     CHECK_THROWS_AS(output.fields(datum::binary_fields<&rejected_record::value> {}, rejected_record {}), std::system_error);
     CHECK(bytes.to_str() == std::string {"\1\2\3", 3});
     constexpr auto maximum = std::numeric_limits<std::uint32_t>::max();

@@ -18,6 +18,7 @@ namespace {
 
 namespace olh = ::cls::rgw::olh;
 using byte_buffer = ::ceph::buffer::list;
+
 std::unique_ptr<::librados::ObjectOperationCompletion> pending;
 byte_buffer request_bytes;
 byte_buffer reply_bytes;

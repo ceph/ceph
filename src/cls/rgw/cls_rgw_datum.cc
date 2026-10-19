@@ -23,6 +23,7 @@ using ::cls::rgw::wire::decode_record;
 namespace {
 
 using native_entry = ::rgw_cls_bi_entry;
+
 constexpr auto native_entry_fields = datum::binary_fields<&native_entry::type, &native_entry::idx, &native_entry::data> {};
 constexpr auto module_entry_fields = datum::binary_fields<&entry::type, &entry::idx, &entry::data> {};
 
@@ -448,6 +449,7 @@ using ::cls::rgw::wire::decode_record;
 using ::cls::rgw::wire::reader;
 using ::cls::rgw::wire::writer;
 using key = ::cls_rgw_obj_key;
+
 constexpr auto key_fields = datum::binary_fields<&key::name, &key::instance> {};
 
 struct prepare_prefix final
