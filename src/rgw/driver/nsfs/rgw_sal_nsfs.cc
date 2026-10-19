@@ -3175,17 +3175,27 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
   return 0;
 }
 
-int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::string temp_fname, bool excl)
+int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
+			 std::string temp_fname, bool excl, bool as_gateway)
 {
   if (fd < 0) {
     return 0;
   }
 
+  /* As the gateway only where the caller says the access model allows
+   * it (NSFSObject::link_temp_file), which raises CAP_FOWNER for it:
+   * the publish links the requester's O_TMPFILE into the directory,
+   * and fs.protected_hardlinks allows that only to the inode's owner.
+   * Narrow on purpose -- the open() and stat() below must stay the
+   * requester's, because they cache a descriptor on the entry and a
+   * gateway-opened one outliving this call is the defect
+   * with_cross_account_retry() records. */
+  const FSIdentity& who = as_gateway ? FSIdentity_none() : identity;
   int ret = excl
     ? fs_strategy->link_temp_file_excl(fd, parent->get_fd(), get_name(),
-				       dpp, identity)
+				       dpp, who)
     : fs_strategy->link_temp_file(fd, parent->get_fd(), get_name(),
-				  dpp, identity);
+				  dpp, who);
   if (ret < 0) {
     return ret;
   }
@@ -3371,7 +3381,7 @@ int Directory::read(int64_t ofs, int64_t left, bufferlist &bl,
 }
 
 int Directory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
-                              std::string temp_fname, bool excl)
+                              std::string temp_fname, bool excl, bool)
 {
   return -EINVAL;
 }
@@ -3795,7 +3805,8 @@ int NooBaaDirectoryObject::write_attrs(const DoutPrefixProvider* dpp,
 
 int NooBaaDirectoryObject::link_temp_file(const DoutPrefixProvider* dpp,
 					  optional_yield y,
-					  std::string target_fname, bool excl)
+					  std::string target_fname, bool excl,
+					  bool)
 {
   return refuse_noobaa_directory_object_change(dpp, parent->get_name());
 }
@@ -4123,7 +4134,7 @@ int MPDirectory::read(int64_t ofs, int64_t left, bufferlist &bl,
 }
 
 int MPDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
-                                std::string temp_fname, bool excl)
+                                std::string temp_fname, bool excl, bool)
 {
   if (tmpname.empty()) {
     return 0;
@@ -12515,7 +12526,68 @@ int NSFSObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file)
 int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, bool excl)
 {
   std::string temp_fname = gen_temp_fname();
-  int ret = ent->link_temp_file(dpp, y, temp_fname, excl);
+
+  /* The publish is on the access-model axis, and the model decides it
+   * before the first syscall rather than after a refusal.
+   *
+   * A bucket directory is `1777` under impersonation, so a requester
+   * may create a new entry in it but may not rename over one it does
+   * not own -- the sticky bit -- and the kernel says `EPERM` where an
+   * ordinary permission failure says `EACCES`.  Overwriting another
+   * identity's object therefore fails at the publish even after the
+   * open and the bytes have succeeded, which is what `s3-native` is
+   * for.
+   *
+   * It cannot be a retry.  The publish links the `O_TMPFILE` into the
+   * directory under a temp name and then renames it onto the object,
+   * and the strategy unlinks that temp name when the rename is
+   * refused -- so a first attempt spends the inode's one link.  An
+   * `O_TMPFILE` is linkable exactly once:  the kernel sets
+   * `I_LINKABLE` at creation and clears it on the first `linkat`, and
+   * `vfs_link()` then returns `ENOENT` for an inode at `nlink == 0`
+   * whatever capability the caller holds.  Measured 2026-10-19
+   * (probes/tmpfile/relinkprobe.c).
+   *
+   * So under a model that permits it the whole publish is the
+   * gateway's, for every write and not only a refused one.  The bucket
+   * directory is the gateway's property under that model, and the
+   * published inode is still the requester's `O_TMPFILE` -- only the
+   * directory operations move.
+   *
+   * `CAP_FOWNER`, and only the link needs it.  The rename needs
+   * nothing -- a directory's owner may rename over anything inside it
+   * whatever the sticky bit says -- but the link is of the requester's
+   * inode, and `fs.protected_hardlinks` allows a hardlink to another's
+   * inode only to its owner or to someone holding read *and* write on
+   * it.  The gateway holds `CAP_DAC_READ_SEARCH`, so
+   * `safe_hardlink_source()` refuses and the kernel falls to
+   * `inode_owner_or_capable(CAP_FOWNER)`.  Measured 2026-10-19:
+   * without the raise the publish runs as uid 1000 and `linkat`
+   * returns EPERM.  The same rule bit the demote from the other side
+   * (punch list, `d75e5561a39`). */
+  static constexpr uint64_t PUBLISH_AS_GATEWAY_CAPS =
+    nsfs::cap_bit(CAP_FOWNER);
+  const bool as_gateway = ent->get_identity().active() &&
+    (driver->get_access_strategy()->refused(nsfs::AccessClass::data) ==
+     nsfs::Refused::as_gateway_raised);
+
+  int ret;
+  if (as_gateway) {
+    ret = nsfs::with_capabilities(dpp, PUBLISH_AS_GATEWAY_CAPS,
+				  [&]() -> int {
+      return ent->link_temp_file(dpp, y, temp_fname, excl,
+				 /*as_gateway=*/true);
+    });
+    if (ret == 0) {
+      driver->publishes_as_gateway.fetch_add(1, std::memory_order_relaxed);
+      ldpp_dout(dpp, 10) << "nsfs: " << get_name()
+	<< ": the gateway performed the publish itself, which the access"
+	" model permits (" << driver->get_access_strategy()->name()
+	<< ")" << dendl;
+    }
+  } else {
+    ret = ent->link_temp_file(dpp, y, temp_fname, excl);
+  }
   if (ret < 0)
     return ret;
 
@@ -12635,11 +12707,13 @@ int NSFSObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 {
   if (!ent)
     return -ENOENT;
-  /* Data asks the access model too, and every configured model says
-   * refuse -- so this is the shape of the question rather than a
-   * path anyone can take.  It exists so the answer is *stated*:  a
-   * later change that wants data on S3's word has one place to say
-   * so, and the test that forbids it has something to flip. */
+  /* Data asks the access model too.  `posix-strict` and
+   * `s3-metadata` refuse;  `s3-native` performs the read as the
+   * gateway, which is what that model is for.  An earlier version of
+   * this comment said every configured model refuses, which was true
+   * when it was written and is why only this path was wired up --
+   * the publish was not, and an overwrite under `s3-native` failed at
+   * the rename until 2026-10-19. */
   return with_cross_account_retry(dpp, nsfs::AccessClass::data,
 				  [&](int use_fd) -> int {
     return ent->read(ofs, left, bl, dpp, y, use_fd);
@@ -17344,11 +17418,13 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	(m->refused(nsfs::AccessClass::object_attrs) == nsfs::Refused::refuse)
 	  ? "refuse" : "as_gateway_raised";
       /* why, not just whether:  how many operations the gateway has
-       * performed on the model's say-so, by class */
+       * performed itself, which the model permits, by class */
       (*out)["attrs_served"] = std::to_string(
 	cross_account_attrs_served.load(std::memory_order_relaxed));
       (*out)["data_served"] = std::to_string(
 	cross_account_data_served.load(std::memory_order_relaxed));
+      (*out)["publishes_as_gateway"] = std::to_string(
+	publishes_as_gateway.load(std::memory_order_relaxed));
     }
     return 0;
   }

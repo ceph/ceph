@@ -384,7 +384,9 @@ public:
 			 int use_fd = -1);
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) = 0;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   /* Build this entry's listing row.  Only Directory::fill_cache()
    * composes keys from a path prefix as it descends;  every other caller
@@ -427,7 +429,9 @@ public:
 		   int use_fd = -1) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, const std::string& dst_name);
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<File>(*this);
   }
@@ -472,7 +476,9 @@ public:
     return std::make_unique<Directory>(*this);
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "") override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
@@ -507,7 +513,9 @@ public:
   virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
 		   int use_fd = -1) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
   std::unique_ptr<File> get_part_file(int partnum);
@@ -575,7 +583,9 @@ public:
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
 			 int use_fd = -1) override;
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
-  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
+			     std::string target_fname, bool excl = false,
+			     bool as_gateway = false) override;
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<NooBaaDirectoryObject>(*this);
   }
@@ -1604,6 +1614,17 @@ public:
    * attributable. */
   std::atomic<uint64_t> cross_account_attrs_served{0};
   std::atomic<uint64_t> cross_account_data_served{0};
+
+  /* How many publishes the gateway performed itself, which the
+   * access model permits.
+   *
+   * Separate from the two counts above, which record a refusal the
+   * model turned into service.  The publish never learns of a refusal
+   * -- it is decided from the model before the first syscall, because
+   * its first step spends the O_TMPFILE's one link
+   * (NSFSObject::link_temp_file) -- so this counts what the gateway
+   * did and not what the filesystem said. */
+  std::atomic<uint64_t> publishes_as_gateway{0};
 
   /* The POSIX credentials to serve a request as.
    *
