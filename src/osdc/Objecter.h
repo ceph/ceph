@@ -2571,6 +2571,11 @@ public:
   };
   std::map<int,OSDSession*> osd_sessions;
 
+  // Runs in _op_submit() with the rwlock dropped when
+  // objecter_debug_inject_relock_delay is set.  A test can replace it to land
+  // a map there.
+  fu2::unique_function<void()> relock_delay = [] { sleep(1); };
+
   bool osdmap_full_flag() const;
   bool osdmap_pool_full(const int64_t pool_id) const;
 

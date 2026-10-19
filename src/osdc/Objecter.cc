@@ -2745,7 +2745,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
     epoch_t orig_epoch = osdmap->get_epoch();
     sul.unlock();
     if (cct->_conf->objecter_debug_inject_relock_delay) {
-      sleep(1);
+      relock_delay();
     }
     sul.lock();
     if (orig_epoch != osdmap->get_epoch()) {
