@@ -5,6 +5,7 @@
 #include "journal/Utils.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "include/rados.h" // for CEPH_OSD_FLAG_*
 #include <limits>
 
 #define dout_subsys ceph_subsys_journaler
