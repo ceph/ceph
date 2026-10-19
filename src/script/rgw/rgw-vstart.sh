@@ -357,6 +357,16 @@ IMP_USER_A=rgwalice
 IMP_UID_A=70101
 IMP_USER_B=rgwbob
 IMP_UID_B=70102
+# the POSIX identity an unauthenticated request runs as.  A deployment
+# that serves public buckets has an anonymous account
+# (ACCOUNT_IMPORT.md 6.8;  NooBaa provisions one with
+# `account add --anonymous`), and with impersonation on a request whose
+# identity has no record is refused rather than served as the gateway.
+# Its own uid, not the gateway's:  anonymous is then a distinct
+# principal on the filesystem, which is what lets a test assert it
+# cannot reach what alice can.
+IMP_USER_N=rgwanon
+IMP_UID_N=70103
 # the suite's *tenanted* user is a principal like any other, and under
 # impersonation a principal with no identity row cannot be served -- so
 # the cors `_tenant` tests refused with "no POSIX identity recorded for
@@ -401,6 +411,10 @@ if $IMPERSONATE; then
 	getent passwd "$IMP_USER_B" >/dev/null 2>&1 || \
 		sudo useradd -u "$IMP_UID_B" -M -N -s /sbin/nologin \
 			"$IMP_USER_B"
+	# in no gating group:  anonymous reaches only what is open to all
+	getent passwd "$IMP_USER_N" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_N" -M -N -s /sbin/nologin \
+			"$IMP_USER_N"
 	# the tenanted user, in no gating group:  what it tests is CORS
 	# and presigning, not group reach
 	getent passwd "$IMP_USER_T" >/dev/null 2>&1 || \
@@ -674,7 +688,8 @@ if $IMPERSONATE; then
 	if ! python3 "$SRC_DIR/src/script/rgw/nsfs-impersonate-fixture.py" \
 			localhost 8000 "$IMP_AK" "$IMP_SK" "$IMP_BUCKET" \
 			testid "$IMP_UID_A" "$IMP_ALT_USER" "$IMP_UID_B" \
-			"$IMP_TENANT_USER" "$IMP_UID_T"; then
+			"$IMP_TENANT_USER" "$IMP_UID_T" \
+			anonymous "$IMP_UID_N"; then
 		echo "error: could not create the impersonation fixture" >&2
 		exit 1
 	fi
