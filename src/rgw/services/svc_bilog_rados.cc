@@ -670,7 +670,7 @@ int RGWSI_BILog_RADOS_FIFO::remove_log_shards(
          std::string bucket_id, uint64_t gen, int n) -> asio::awaitable<void> {
         co_return co_await log_remove(
             dpp, std::move(neo), neo_loc, n,
-            [bucket_id = std::move(bucket_id), gen](int shard_id) {
+            [&bucket_id, gen](int shard_id) {
               return bilog_fifo_oid(bucket_id, gen, shard_id);
             },
             false);
