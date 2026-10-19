@@ -137,7 +137,7 @@ class MetadataManager(object):
         self.update_section_multi(
             MetadataManager.GLOBAL_SECTION, {MetadataManager.GLOBAL_META_KEY_VERSION : str(version),
                                              MetadataManager.GLOBAL_META_KEY_TYPE    : str(typ),
-                                             MetadataManager.GLOBAL_META_KEY_PATH    : str(path),
+                                             MetadataManager.GLOBAL_META_KEY_PATH    : to_str(path),
                                              MetadataManager.GLOBAL_META_KEY_STATE   : str(state)
             })
 

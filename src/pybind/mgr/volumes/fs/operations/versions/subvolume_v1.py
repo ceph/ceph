@@ -47,6 +47,30 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     """
     VERSION = 1
 
+    def __init__(self, mgr, fs, spec, group, name, legacy=False):
+        super().__init__(mgr, fs, spec, group, name, legacy)
+        if self.legacy:
+            self._create_legacy_meta_file()
+
+    def _create_legacy_meta_file(self):
+        assert self.legacy_mode
+
+        try:
+            self.fs.mkdirs(self.legacy_dir, 0o700)
+        except cephfs.Error as e:
+            raise VolumeException(exception=e)
+
+        subvol_type = SubvolumeTypes.TYPE_NORMAL
+        try:
+            init_state = SubvolumeOpSm.get_init_state(subvol_type)
+        except OpSmException as e:
+            raise VolumeException(-errno.EINVAL,
+                                  'subvolume init state could not be fetched.'
+                                  f'exception: {e}')
+
+        # XXX: v0/legacy is only upgradable to v1
+        self.init_config(self.VERSION, subvol_type, self.base_path, init_state)
+
     # TODO: probably redundant now
     # for compatibility with v3
     def has_snap(self):
