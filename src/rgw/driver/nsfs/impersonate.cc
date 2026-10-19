@@ -531,12 +531,16 @@ class ImpersonationPool {
 	  tl_impersonating = false;
 	}
       }
+      /* Notify under the lock, not after it.  `job` is a local of
+       * run(), so dropping the lock first lets the caller wake on
+       * its own, see `done`, return and destroy the mutex and the
+       * condition variable before this thread touches them. */
       {
 	std::lock_guard lock(job->m);
 	job->result = ret;
 	job->done = true;
+	job->cv.notify_one();
       }
-      job->cv.notify_one();
     }
   }
 
