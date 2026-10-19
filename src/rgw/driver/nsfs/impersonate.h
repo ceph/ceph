@@ -110,9 +110,9 @@ void note_identity_changed(const rgw_user& key);
 /* Every identity's record may have changed.
  *
  * For a change to an *account's* row.  Personalities are cached under
- * the user a request authenticated as, and a member with no row of its
+ * the user a request authenticated as, and a user with no row of its
  * own was resolved through its account's, so bumping the account's
- * own shard reaches none of them.  Nothing records which members went
+ * own shard reaches none of them.  Nothing records which users went
  * through which account, so every shard is bumped:  each thread then
  * re-resolves an identity once, on its next use.  Account rows change
  * by operator action, which is rare enough for that to be the right

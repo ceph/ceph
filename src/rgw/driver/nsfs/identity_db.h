@@ -33,9 +33,10 @@ namespace rgw { namespace sal { namespace nsfs {
  *
  * One record per *account*:  on Scale an account has one POSIX
  * identity and every user and role in it runs as that identity.  A
- * member has no row of its own and resolves to its account's (see
- * resolve_credentials() below).  NooBaa stores a copy of this block on
- * every member, but the copy is its storage layout rather than its
+ * user in an account has no row of its own and resolves to its
+ * account's (see resolve_credentials() below).  NooBaa stores a copy
+ * of this block on every user, but the copy is its storage layout
+ * rather than its
  * model -- docs/ACCOUNT_IMPORT.md section 2.8.  A row keyed on a user
  * is still possible, and takes precedence over its account's.
  *
@@ -67,7 +68,11 @@ struct Identity {
 
   std::string distinguished_name;
 
-  /* carried and managed, not yet read by any request path */
+  /* Placement.  `new_buckets_path` seeds a new bucket's path and
+   * `custom_bucket_path_allowed_list` admits one the request asks
+   * for;  both are read on CreateBucket (rgw_sal_nsfs.cc:5275 and
+   * :5341).  `fs_backend` is carried and managed and nothing reads it
+   * yet. */
   std::string new_buckets_path;
   std::string custom_bucket_path_allowed_list;
   std::string fs_backend;
@@ -378,9 +383,9 @@ public:
    * inherit_ids() already treats as real.
    *
    * Several rows is also not an error.  `Uid` is not unique, and on
-   * Scale every member of an account runs as the account
+   * Scale every user of an account runs as the account
    * (ACCOUNT_IMPORT.md section 2.8), so the account's row and each
-   * member's carry one uid. */
+   * user's carry one uid. */
   int get_identities_by_uid(const DoutPrefixProvider* dpp, uid_t uid,
 			    std::vector<Identity>& out) const;
 
@@ -436,9 +441,9 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 /* An authenticated user's credentials:  its own row, else its
  * account's.
  *
- * On Scale every member of an account runs as the account
- * (ACCOUNT_IMPORT.md §2.8), so a member ordinarily has no row and
- * resolves to the account's.  A row keyed on the user wins where one
+ * On Scale every user of an account runs as the account
+ * (ACCOUNT_IMPORT.md §2.8), so a user in one ordinarily has no row
+ * and resolves to the account's.  A row keyed on the user wins where one
  * exists, which keeps a per-user identity expressible without making
  * anyone write one.  `account` empty is a user outside any account,
  * which resolves under its own key alone.
@@ -456,10 +461,10 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 /* The same, for a request.
  *
  * `s->user` is the *authenticated* user:  every applier's
- * `load_acct_info()` puts it there, and for a member of an account
- * that is the member, carrying its `account_id`.  `s->owner` would
- * reach the account directly, but only the account:  it cannot see a
- * row keyed on the member, so the precedence above would be lost.
+ * `load_acct_info()` puts it there, and for a user in an account that
+ * is the user, carrying its `account_id`.  `s->owner` would reach the
+ * account directly, but only the account:  it cannot see a row keyed
+ * on the user, so the precedence above would be lost.
  *
  * Under a system request carrying `rgwx-uid`, `SysReqApplier`
  * replaces `s->user` with the impersonated owner, so the request is
@@ -483,7 +488,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  *
  * Only `groups` is taken from the row.  The uid and gid on `inout`
  * came from the file and are authoritative for the file;  the row's
- * are the account's, and a member writing in a directory that is not
+ * are the account's, and a user writing in a directory that is not
  * SGID creates files with its own primary gid.
  *
  *   0         `inout.groups` is filled from the row, and `key`, if

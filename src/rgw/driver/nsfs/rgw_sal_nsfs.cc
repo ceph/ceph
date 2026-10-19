@@ -751,7 +751,7 @@ static constexpr uint64_t PROMOTE_RESIDUE_CAPS =
 /* The identity an object records for itself, resolved to credentials.
  *
  * The third rung of the promote's ladder (n plan §5).  A uid can be
- * carried by several identity rows -- every member of an account runs
+ * carried by several identity rows -- every user of an account runs
  * as the account -- and where their group lists differ the uid cannot
  * say which applies.  A recorded owner can:  it is a name, and a name
  * is the identity table's primary key, so this is the ordinary keyed
@@ -13041,7 +13041,7 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  /* The account is needed only on a miss, and a member is normally in
+  /* The account is needed only on a miss, and such a user is normally in
    * the user cache already, since authenticating it put it there.  A
    * user that will not load still resolves under its own key. */
   rgw_account_id account;
@@ -17652,7 +17652,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * suite never re-implements the check.
      *
      *   result=not-impersonating   the switch is off;  S3 alone decides
-     *   result=no-identity         the user has no POSIX record
+     *   result=no-identity         the user has no identity row
      *   result=permitted | refused
      *
      * `user` is an rgw_user string, `tenant$id` for a tenant's;  empty

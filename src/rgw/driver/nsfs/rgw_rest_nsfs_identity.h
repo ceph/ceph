@@ -128,8 +128,8 @@ inline void dump_identity(Formatter* f, const Identity& id)
 /* Personalities registered from a row's previous contents are stale
  * once it changes;  without this they keep being served until the
  * FIFO cursor evicts them, which on a table above the working set may
- * be never.  An account's row is reached by every member of the
- * account under that member's own key, so it invalidates them all. */
+ * be never.  An account's row is reached by every user of the account
+ * under that user's own key, so it invalidates them all. */
 inline void note_row_changed(const std::string& key)
 {
   const rgw_owner owner = parse_owner(key);
@@ -372,7 +372,7 @@ public:
  * The response names the key it used.  A row that is never found is
  * almost always a key that is not the one the request produces, and
  * nothing else shows that.  When a row resolves, `row` names it, which
- * for the caller form is the account's when a member has none of its
+ * for the caller form is the account's when the user has none of its
  * own. */
 class RGWOp_NSFS_Credentials_Get : public RGWRESTOp {
 public:

@@ -29,7 +29,7 @@
 /* An allocation-free hash for rgw_user.
  *
  * The obvious to_str() allocates for anything past the small-string
- * bound, and an account member's id is a 36-character UUID, so every
+ * bound, and an account user's id is a 36-character UUID, so every
  * lookup would allocate.  Hashing the three members in place reads
  * the same bytes and allocates nothing.
  *

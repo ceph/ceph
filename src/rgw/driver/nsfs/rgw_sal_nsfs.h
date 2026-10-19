@@ -1634,7 +1634,7 @@ public:
    * The one entry point a request path needs;  nothing outside the
    * driver should reach the identity database directly.  Keyed on
    * `s->user`, the authenticated user, falling back to its account's
-   * row, which is where a member of an account ordinarily finds its
+   * row, which is where a user in an account ordinarily finds its
    * identity (ACCOUNT_IMPORT.md §2.8).  Returns what
    * nsfs::resolve_credentials() returns:  0 resolved, -ENOENT no
    * impersonation asked for, -EPERM asked for and unavailable.  `row`
