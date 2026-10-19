@@ -40,7 +40,7 @@
 #include "common/error_code.h"
 #include "common/likely.h"
 #include "ceph_release.h"
-#include "include/rados.h"
+#include "include/ceph_release_numbers.h"
 
 template<typename T, typename=void>
 struct denc_traits {

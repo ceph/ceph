@@ -18,6 +18,8 @@
 
 #include <string>
 
+#include "include/ceph_release_numbers.h"
+
 class feature_bitset_t;
 namespace ceph {
   class Formatter;
