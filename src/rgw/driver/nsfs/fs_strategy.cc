@@ -946,10 +946,17 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                               dst_dir_fd, dst_name, excl, id);
   }
 
-  /* gpfs_clone_copy() has no exclusive-create mode, so the best we can
-   * do here is check first.  this narrows the race, it does not close
-   * it;  the appliance target is a local fs, which takes the POSIX
-   * path above. */
+  /* gpfs_clone_copy() has no exclusive-create mode, so the best we
+   * can do here is check first.  This narrows the race, it does not
+   * close it:  two forks of the same shadow can both pass this check,
+   * and both then believe they won, so neither joins.
+   *
+   * What bounds it is the caller, not the filesystem.  Both callers
+   * passing excl are the shadow fork -- NSFSObject::get_fsio_handle()
+   * and NSFSFSIOObject::reclone() -- and both are reached only from
+   * rgw_file.cc, so no S3 request takes this path.  It also needs
+   * has_clone(), and an active identity falls back to the copy
+   * above. */
   if (excl &&
       (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, 0) == 0)) {
     return -EEXIST;

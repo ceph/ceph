@@ -12564,7 +12564,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    * `inode_owner_or_capable(CAP_FOWNER)`.  Measured 2026-10-19:
    * without the raise the publish runs as uid 1000 and `linkat`
    * returns EPERM.  The same rule bit the demote from the other side
-   * (punch list, `d75e5561a39`). */
+   * (`d75e5561a39`). */
   static constexpr uint64_t PUBLISH_AS_GATEWAY_CAPS =
     nsfs::cap_bit(CAP_FOWNER);
   const bool as_gateway = ent->get_identity().active() &&
