@@ -376,9 +376,6 @@ public:
   class SocketHook;
   friend class SocketHook;
 
-  class Decoder_AllocationsAndStatFS;
-
-  class ExtentDecoderPartial;
   /////////////////////////////
 
   Estimator* create_estimator();
@@ -2557,21 +2554,6 @@ public:
   void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
 
 private:
-  struct  read_alloc_stats_t {
-    uint32_t onode_count             = 0;
-    uint32_t shard_count             = 0;
-
-    uint32_t skipped_illegal_extent  = 0;
-
-    uint64_t shared_blob_count      = 0;
-    uint64_t compressed_blob_count   = 0;
-    uint64_t spanning_blob_count     = 0;
-    uint64_t insert_count            = 0;
-    uint64_t extent_count            = 0;
-
-    std::map<uint64_t, volatile_statfs> actual_pool_vstatfs;
-    volatile_statfs actual_store_vstatfs;
-  };
   int allocation_recover_and_compare(
     SimpleBitmap *sbmap,
     read_alloc_stats_t &stats,

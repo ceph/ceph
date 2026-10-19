@@ -17213,7 +17213,12 @@ void BlueStore::set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offs
   sbmap->set(offset >> min_alloc_size_order, length >> min_alloc_size_order);
 }
 
-class BlueStore::ExtentDecoderPartial : public bluestore::ExtentMap::ExtentDecoder {
+class ExtentDecoderPartial : public bluestore::ExtentMap::ExtentDecoder {
+  using Extent = bluestore::Extent;
+  using Blob = bluestore::Blob;
+  using BlobRef = bluestore::BlobRef;
+  using Collection = bluestore::Collection;
+
   BlueStore& store;
   read_alloc_stats_t& stats;
   SimpleBitmap& sbmap;
@@ -17264,7 +17269,7 @@ public:
     volatile_statfs* _per_pool_statfs);
 };
 
-BlueStore::BlobRef BlueStore::ExtentDecoderPartial::decode_create_blob(
+BlueStore::BlobRef ExtentDecoderPartial::decode_create_blob(
   bptr_c_it_t& p,
   __u8 struct_v,
   uint64_t* sbid,
@@ -17274,7 +17279,7 @@ BlueStore::BlobRef BlueStore::ExtentDecoderPartial::decode_create_blob(
   b->decode<true>(p, struct_v, sbid, include_ref_map, c);
   return b;
 }
-void BlueStore::ExtentDecoderPartial::_consume_new_blob(bool spanning,
+void ExtentDecoderPartial::_consume_new_blob(bool spanning,
                                                         uint64_t extent_no,
                                                         uint64_t sbid,
                                                         BlobRef b)
@@ -17347,7 +17352,7 @@ void BlueStore::ExtentDecoderPartial::_consume_new_blob(bool spanning,
   }
 }
 
-void BlueStore::ExtentDecoderPartial::consume_blobid(Extent* le,
+void ExtentDecoderPartial::consume_blobid(Extent* le,
                                                      bool spanning,
                                                      uint64_t blobid)
 {
@@ -17362,7 +17367,7 @@ void BlueStore::ExtentDecoderPartial::consume_blobid(Extent* le,
   }
 }
 
-void BlueStore::ExtentDecoderPartial::consume_blob(Extent* le,
+void ExtentDecoderPartial::consume_blob(Extent* le,
                                                    uint64_t extent_no,
                                                    uint64_t sbid,
                                                    BlobRef b)
@@ -17374,13 +17379,13 @@ void BlueStore::ExtentDecoderPartial::consume_blob(Extent* le,
   }
 }
 
-void BlueStore::ExtentDecoderPartial::consume_spanning_blob(uint64_t sbid,
+void ExtentDecoderPartial::consume_spanning_blob(uint64_t sbid,
                                                             BlobRef b)
 {
   _consume_new_blob(true, 0/*doesn't matter*/, sbid, b);
 }
 
-void BlueStore::ExtentDecoderPartial::reset(const ghobject_t _oid,
+void ExtentDecoderPartial::reset(const ghobject_t _oid,
                                             volatile_statfs* _per_pool_statfs)
 {
   oid = _oid;

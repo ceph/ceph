@@ -15,7 +15,6 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_INLINES_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_INLINES_H
 
-#include "BlueStore.h"
 #include "BlueStore_objects.h"
 #include "bluestore_types.h"
 

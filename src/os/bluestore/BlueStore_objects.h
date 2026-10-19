@@ -16,7 +16,6 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_H
 
 #include "BlueStore_fwd.h"
-#include "BlueStore.h"
 
 /*
  * extent map blob encoding
