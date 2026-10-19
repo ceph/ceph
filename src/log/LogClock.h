@@ -36,10 +36,10 @@ struct taggedrep {
   uint64_t count;
   bool coarse;
 
-  explicit taggedrep(uint64_t count) : count(count), coarse(true) {}
-  taggedrep(uint64_t count, bool coarse) : count(count), coarse(coarse) {}
+  explicit constexpr taggedrep(uint64_t count) : count(count), coarse(true) {}
+  constexpr taggedrep(uint64_t count, bool coarse) : count(count), coarse(coarse) {}
 
-  explicit operator uint64_t() {
+  explicit constexpr operator uint64_t() const {
     return count;
   }
 };
@@ -47,41 +47,41 @@ struct taggedrep {
 // Proper significant figure support would be a bit excessive. Also
 // we'd have to know the precision of the clocks on Linux and FreeBSD
 // and whatever else we want to support.
-inline taggedrep operator +(const taggedrep& l, const taggedrep& r) {
+constexpr taggedrep operator +(const taggedrep& l, const taggedrep& r) {
   return { l.count + r.count, l.coarse || r.coarse };
 }
-inline taggedrep operator -(const taggedrep& l, const taggedrep& r) {
+constexpr taggedrep operator -(const taggedrep& l, const taggedrep& r) {
   return { l.count - r.count, l.coarse || r.coarse };
 }
-inline taggedrep operator *(const taggedrep& l, const taggedrep& r) {
+constexpr taggedrep operator *(const taggedrep& l, const taggedrep& r) {
   return { l.count * r.count, l.coarse || r.coarse };
 }
-inline taggedrep operator /(const taggedrep& l, const taggedrep& r) {
+constexpr taggedrep operator /(const taggedrep& l, const taggedrep& r) {
   return { l.count / r.count, l.coarse || r.coarse };
 }
-inline taggedrep operator %(const taggedrep& l, const taggedrep& r) {
+constexpr taggedrep operator %(const taggedrep& l, const taggedrep& r) {
   return { l.count % r.count, l.coarse || r.coarse };
 }
 
 // You can compare coarse and fine time. You shouldn't do so in any
 // case where ordering actually MATTERS but in practice people won't
 // actually ping-pong their logs back and forth between them.
-inline bool operator ==(const taggedrep& l, const taggedrep& r) {
+constexpr bool operator ==(const taggedrep& l, const taggedrep& r) {
   return l.count == r.count;
 }
-inline bool operator !=(const taggedrep& l, const taggedrep& r) {
+constexpr bool operator !=(const taggedrep& l, const taggedrep& r) {
   return l.count != r.count;
 }
-inline bool operator <(const taggedrep& l, const taggedrep& r) {
+constexpr bool operator <(const taggedrep& l, const taggedrep& r) {
   return l.count < r.count;
 }
-inline bool operator <=(const taggedrep& l, const taggedrep& r) {
+constexpr bool operator <=(const taggedrep& l, const taggedrep& r) {
   return l.count <= r.count;
 }
-inline bool operator >=(const taggedrep& l, const taggedrep& r) {
+constexpr bool operator >=(const taggedrep& l, const taggedrep& r) {
   return l.count >= r.count;
 }
-inline bool operator >(const taggedrep& l, const taggedrep& r) {
+constexpr bool operator >(const taggedrep& l, const taggedrep& r) {
   return l.count > r.count;
 }
 }
@@ -109,7 +109,7 @@ public:
 
   // Since our formatting is done in microseconds and we're using it
   // anyway, we may as well keep this one
-  static timeval to_timeval(time_point t) {
+  static constexpr timeval to_timeval(time_point t) {
     auto rep = t.time_since_epoch().count();
     timespan ts(rep.count);
     #ifndef _WIN32
