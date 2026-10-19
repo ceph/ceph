@@ -81,6 +81,16 @@ int pre_remove_image(librados::IoCtx& io_ctx, const std::string& image_id) {
     return r;
   }
 
+  // Image removal must not bypass the group dependency checks used by
+  // image disable. Clean acknowledged snapshots before pre-removal checks.
+  if (!image_ctx->group_spec.is_valid()) {
+    r = util::cleanup_group_snapshot_dependencies(image_ctx);
+    if (r < 0) {
+      image_ctx->state->close();
+      return r;
+    }
+  }
+
   C_SaferCond ctx;
   auto req = image::PreRemoveRequest<I>::create(image_ctx, false, &ctx);
   req->send();

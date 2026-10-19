@@ -31,6 +31,9 @@ void notify_unquiesce(std::vector<ImageCtxT *> &ictxs,
 template <typename ImageCtxT = librbd::ImageCtx>
 librados::snap_t get_group_snap_id(
     ImageCtxT *ictx, const cls::rbd::SnapshotNamespace& in_snap_namespace);
+// Remove acknowledged group mirror dependencies before disable or removal.
+int cleanup_group_snapshot_dependencies(ImageCtx *ictx);
+
 int group_snap_remove(librados::IoCtx& group_ioctx, const std::string& group_id,
                       const cls::rbd::GroupSnapshot& group_snap);
 

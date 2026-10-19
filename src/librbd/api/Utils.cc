@@ -9,6 +9,10 @@
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Utils.h"
+#include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
+#include <algorithm>
+#include <set>
+#include <shared_mutex>
 #if defined(HAVE_LIBCRYPTSETUP)
 #include "librbd/crypto/luks/LUKSEncryptionFormat.h"
 #endif
@@ -20,6 +24,98 @@
 namespace librbd {
 namespace api {
 namespace util {
+
+int cleanup_group_snapshot_dependencies(ImageCtx *ictx) {
+  struct GroupSnapshotRef {
+    cls::rbd::GroupSpec group_spec;
+    std::string group_snap_id;
+
+    bool operator<(const GroupSnapshotRef &rhs) const {
+      if (group_spec != rhs.group_spec) {
+        return group_spec < rhs.group_spec;
+      }
+      return group_snap_id < rhs.group_snap_id;
+    }
+  };
+
+  std::set<GroupSnapshotRef> group_snapshot_refs;
+  {
+    std::shared_lock image_locker{ictx->image_lock};
+    for (const auto &[snap_id, snap_info] : ictx->snap_info) {
+      if (auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+            &snap_info.snap_namespace);
+        mirror_ns != nullptr && mirror_ns->group_spec.is_valid()) {
+        if (mirror_ns->group_snap_id.empty() ||
+            !mirror_ns->mirror_peer_uuids.empty()) {
+          return -EBUSY;
+        }
+        group_snapshot_refs.insert({mirror_ns->group_spec,
+          mirror_ns->group_snap_id});
+      }
+    }
+  }
+
+  if (group_snapshot_refs.empty()) {
+    return 0;
+  }
+
+  for (const auto &ref : group_snapshot_refs) {
+    librados::IoCtx group_ioctx;
+    int r = librbd::util::create_ioctx(ictx->md_ctx, "group", ref.group_spec.pool_id,
+                              {}, &group_ioctx);
+    if (r < 0) {
+      return r == -ENOENT ? -EBUSY : r;
+    }
+
+    cls::rbd::GroupSnapshot group_snap;
+    r = cls_client::group_snap_get_by_id(
+      &group_ioctx, librbd::util::group_header_name(ref.group_spec.group_id),
+      ref.group_snap_id, &group_snap);
+    if (r == -ENOENT) {
+      continue; // Another group cleanup already removed this snapshot.
+    } else if (r < 0) {
+      return r;
+    }
+    auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+      &group_snap.snapshot_namespace);
+    if (ns == nullptr || ns->is_non_primary() ||
+        !ns->mirror_peer_uuids.empty()) {
+      return -EBUSY;
+    }
+    if (std::none_of(group_snap.snaps.begin(), group_snap.snaps.end(),
+          [ictx](const auto& snap) {
+            return snap.pool == ictx->md_ctx.get_id() &&
+                   snap.image_id == ictx->id;
+          })) {
+      // Refresh below still checks for remaining group-linked snapshots.
+      continue;
+    }
+    std::vector<ImageCtx*> image_ctxs{ictx};
+    C_SaferCond ctx;
+    auto req = mirror::snapshot::RemoveGroupSnapshotRequest<>::create(
+      group_ioctx, ref.group_spec.group_id, &group_snap, &image_ctxs, &ctx);
+    req->send();
+    r = ctx.wait();
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  int r = ictx->state->refresh();
+  if (r < 0) {
+    return r;
+  }
+  std::shared_lock image_locker{ictx->image_lock};
+  for (const auto &[snap_id, snap_info] : ictx->snap_info) {
+    auto ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+      &snap_info.snap_namespace);
+    if (ns != nullptr && ns->group_spec.is_valid()) {
+      // Keep snapshots still owned by a group until group cleanup removes them.
+      return -EBUSY;
+    }
+  }
+  return 0;
+}
 
 template <typename I>
 int create_encryption_format(

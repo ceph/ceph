@@ -20,6 +20,7 @@
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
 #include "librbd/api/Namespace.h"
+#include "librbd/api/Utils.h"
 #include "librbd/mirror/DemoteRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -41,7 +42,6 @@
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
-#include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -145,83 +145,6 @@ std::string get_mon_host(CephContext* cct) {
   }
   ldout(cct, 20) << "mon_host=" << mon_host << dendl;
   return mon_host;
-}
-
-template <typename I>
-int check_group_snapshot_dependencies(I *ictx) {
-  CephContext *cct = ictx->cct;
-
-  struct GroupSnapshotRef {
-    cls::rbd::GroupSpec group_spec;
-    std::string group_snap_id;
-
-    bool operator<(const GroupSnapshotRef &rhs) const {
-      if (group_spec != rhs.group_spec) {
-        return group_spec < rhs.group_spec;
-      }
-      return group_snap_id < rhs.group_snap_id;
-    }
-  };
-
-  std::set<GroupSnapshotRef> group_snapshot_refs;
-  {
-    std::shared_lock image_locker{ictx->image_lock};
-    for (const auto &[snap_id, snap_info] : ictx->snap_info) {
-      if (auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-            &snap_info.snap_namespace);
-        mirror_ns != nullptr && mirror_ns->group_spec.is_valid() &&
-        !mirror_ns->group_snap_id.empty()) {
-        group_snapshot_refs.insert({mirror_ns->group_spec,
-          mirror_ns->group_snap_id});
-      }
-    }
-  }
-
-  for (const auto &ref : group_snapshot_refs) {
-    librados::IoCtx group_ioctx;
-    int r = util::create_ioctx(ictx->md_ctx, "group", ref.group_spec.pool_id,
-      {}, &group_ioctx);
-    if (r == -ENOENT) {
-      continue;
-    } else if (r < 0) {
-      lderr(cct) << "failed to access group pool "
-                 << ref.group_spec.pool_id << ": " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    }
-
-    cls::rbd::GroupSnapshot group_snap;
-    r = cls_client::group_snap_get_by_id(&group_ioctx,
-      util::group_header_name(ref.group_spec.group_id), ref.group_snap_id,
-      &group_snap);
-    if (r == -ENOENT) {
-      continue;
-    } else if (r < 0) {
-      lderr(cct) << "failed to retrieve group snapshot "
-                 << ref.group_snap_id << ": " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    auto image_it = std::find_if(group_snap.snaps.begin(),
-      group_snap.snaps.end(), [ictx](const auto &image_snap) {
-        return image_snap.pool == ictx->md_ctx.get_id() &&
-               image_snap.image_id == ictx->id;
-      });
-    if (image_it == group_snap.snaps.end()) {
-      continue;
-    }
-
-    // Keep mirroring enabled only while a peer still needs this group
-    // snapshot. Retained user snapshots and synced mirror snapshots do not
-    // block disabling mirroring after detach.
-    auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-      &group_snap.snapshot_namespace);
-    if (mirror_ns != nullptr && !mirror_ns->mirror_peer_uuids.empty()) {
-      return -EBUSY;
-    }
-  }
-
-  return 0;
 }
 
 int create_bootstrap_user(CephContext* cct, librados::Rados& rados,
@@ -627,6 +550,18 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
     return r;
   }
 
+  {
+    std::shared_lock image_locker{ictx->image_lock};
+    for (const auto &[snap_id, snap_info] : ictx->snap_info) {
+      if (std::holds_alternative<cls::rbd::ImageSnapshotNamespaceGroup>(
+            snap_info.snap_namespace)) {
+        lderr(cct) << "cannot enable standalone mirroring while user group "
+                   << "snapshots remain on the image" << dendl;
+        return -EINVAL;
+      }
+    }
+  }
+
   cls::rbd::MirrorMode mirror_mode;
   r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
   if (r < 0) {
@@ -742,10 +677,10 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     return r;
   }
 
-  r = check_group_snapshot_dependencies(ictx);
+  r = util::cleanup_group_snapshot_dependencies(ictx);
   if (r == -EBUSY) {
     lderr(cct) << "cannot disable mirroring: group snapshots referencing "
-                  "this image still have pending mirror peers"
+                  "this image still have pending mirror peers or need cleanup"
                << dendl;
     return r;
   } else if (r < 0) {

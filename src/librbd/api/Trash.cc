@@ -17,6 +17,7 @@
 #include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
 #include "librbd/api/DiffIterate.h"
+#include "librbd/api/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/mirror/DisableRequest.h"
@@ -47,10 +48,20 @@ template <typename I>
 int disable_mirroring(I *ictx) {
   ldout(ictx->cct, 10) << dendl;
 
+  if (ictx->group_spec.is_valid()) {
+    return -EMLINK;
+  }
+  // Trash<>::move() also disables mirroring directly. Preserve pending group
+  // snapshots, including when remove is configured to move images to trash.
+  int r = util::cleanup_group_snapshot_dependencies(ictx);
+  if (r < 0) {
+    return r;
+  }
+
   C_SaferCond ctx;
   auto req = mirror::DisableRequest<I>::create(ictx, false, true, &ctx);
   req->send();
-  int r = ctx.wait();
+  r = ctx.wait();
   if (r < 0) {
     lderr(ictx->cct) << "failed to disable mirroring: " << cpp_strerror(r)
                      << dendl;
@@ -66,7 +77,7 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 
   uint64_t features;
   uint64_t incompatible_features;
-  int r = cls_client::get_features(&io_ctx, util::header_name(image_id), true,
+  int r = cls_client::get_features(&io_ctx, librbd::util::header_name(image_id), true,
                                    &features, &incompatible_features);
   if (r < 0) {
     lderr(cct) << "failed to retrieve features: " << cpp_strerror(r) << dendl;
@@ -289,7 +300,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
   int r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name,
                                  &image_id);
   if (r == -ENOENT) {
-    r = io_ctx.stat(util::old_header_name(image_name), nullptr, nullptr);
+    r = io_ctx.stat(librbd::util::old_header_name(image_name), nullptr, nullptr);
     if (r == 0) {
       // cannot move V1 image to trash
       ldout(cct, 10) << "cannot move v1 image to trash" << dendl;
@@ -436,7 +447,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
 
     for (const auto &entry : trash_entries) {
       int64_t data_pool_id = -1;
-      r = cls_client::get_data_pool(&io_ctx, util::header_name(entry.id),
+      r = cls_client::get_data_pool(&io_ctx, librbd::util::header_name(entry.id),
                                     &data_pool_id);
       if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
         lderr(cct) << "failed to query data pool: " << cpp_strerror(r) << dendl;
@@ -447,8 +458,8 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
 
       if (data_pool_id != io_ctx.get_id()) {
         librados::IoCtx data_io_ctx;
-        r = util::create_ioctx(io_ctx, "image", data_pool_id,
-                               {}, &data_io_ctx);
+        r = librbd::util::create_ioctx(io_ctx, "image", data_pool_id,
+                                       {}, &data_io_ctx);
         if (r < 0) {
           lderr(cct) << "error accessing data pool" << dendl;
           continue;
@@ -686,7 +697,7 @@ int Trash<I>::restore(librados::IoCtx &io_ctx,
   // check if no image exists with the same name
   bool create_id_obj = true;
   std::string existing_id;
-  r = cls_client::get_id(&io_ctx, util::id_obj_name(image_name), &existing_id);
+  r = cls_client::get_id(&io_ctx, librbd::util::id_obj_name(image_name), &existing_id);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error checking if image " << image_name << " exists: "
                << cpp_strerror(r) << dendl;
@@ -719,7 +730,7 @@ int Trash<I>::restore(librados::IoCtx &io_ctx,
     librados::ObjectWriteOperation op;
     op.create(true);
     cls_client::set_id(&op, image_id);
-    r = io_ctx.operate(util::id_obj_name(image_name), &op);
+    r = io_ctx.operate(librbd::util::id_obj_name(image_name), &op);
     if (r < 0) {
       lderr(cct) << "error adding id object for image " << image_name
                  << ": " << cpp_strerror(r) << dendl;
