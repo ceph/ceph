@@ -58,7 +58,7 @@ public:
 /* This should never be moved to the heap! Only allocate this on the stack. See
  * CachedStackStringStream for rationale.
  */
-class MutableEntry : public Entry {
+class MutableEntry final : public Entry {
 public:
   MutableEntry() = delete;
   MutableEntry(short pr, short sub) : Entry(pr, sub) {}
@@ -82,7 +82,7 @@ private:
   CachedStackStringStream cos;
 };
 
-class ConcreteEntry : public Entry {
+class ConcreteEntry final : public Entry {
 public:
   ConcreteEntry() = delete;
   ConcreteEntry(const Entry& e) : Entry(e) {
@@ -115,7 +115,7 @@ private:
   boost::container::small_vector<char, 1024> str;
 };
 
-class StringEntry : public Entry {
+class StringEntry final : public Entry {
 public:
   StringEntry() = delete;
   StringEntry(short pr, short sub, std::string_view prefix)
