@@ -32,7 +32,7 @@ struct denc_traits<health_status_t> {
   static constexpr bool featured = false;
   static constexpr bool bounded = true;
   static constexpr bool need_contiguous = false;
-  static void bound_encode(const ceph::buffer::ptr& v, size_t& p, uint64_t f=0) {
+  static void bound_encode(const health_status_t& v, size_t& p, uint64_t f=0) {
     p++;
   }
   static void encode(const health_status_t& v,
