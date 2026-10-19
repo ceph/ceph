@@ -7,11 +7,9 @@ import cephfs
 from .subvolume_base import SubvolumeBase
 from .subvolume_attrs import SubvolumeTypes
 from .subvolume_v1 import SubvolumeV1
-from .subvolume_v2 import SubvolumeV2
 from .subvolume_v3 import SubvolumeV3
 from .metadata_manager import MetadataManager
 from .op_sm import SubvolumeOpSm
-from ..template import SubvolumeOpType
 from ...exception import MetadataMgrException, OpSmException, VolumeException
 
 log = logging.getLogger(__name__)
@@ -64,37 +62,6 @@ class SubvolumeLoader(object):
 
         return asu
 
-    def upgrade_v1_to_v2(self, subvolume):
-        # legacy mode subvolumes cannot be upgraded to v2
-        if subvolume.legacy_mode:
-            return
-
-        version = int(subvolume.metadata_mgr.get_global_option('version'))
-        if version >= SubvolumeV2.VERSION:
-            return
-
-        if not self.allow_subvolume_upgrade(subvolume):
-            return
-
-        v1_subvolume = self._get_subvolume_class(version)(
-                subvolume.mgr, subvolume.fs, subvolume.vol_spec,
-                subvolume.group, subvolume.subvolname)
-        try:
-            v1_subvolume.open(SubvolumeOpType.SNAP_LIST)
-        except VolumeException as ve:
-            # if volume is not ready for snapshot listing, do not upgrade at present
-            if ve.errno == -errno.EAGAIN:
-                return
-            raise
-
-        # v1 subvolumes with snapshots cannot be upgraded to v2
-        if v1_subvolume.list_snapshots():
-            return
-
-        subvolume.metadata_mgr.update_global_section(
-                MetadataManager.GLOBAL_META_KEY_VERSION, SubvolumeV2.VERSION)
-        subvolume.metadata_mgr.flush()
-
     # v0 = legacy subvol
     def upgrade_v0_to_v1(self, fs, subvolume):
         assert subvolume.legacy_mode
@@ -136,13 +103,8 @@ class SubvolumeLoader(object):
                 subvol_class = self._get_subvolume_class(disc_version)
                 subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
                                           legacy=True)
-            if disc_version == 1:
-                self.upgrade_v1_to_v2(base_subvol)
-                subvol_class = self._get_subvolume_class(disc_version)
-                subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
-                                          legacy=base_subvol.legacy_mode)
-            # opening v3 or upgrade + opening for v2
-            elif disc_version in (3, 2):
+            # opening v3 or upgrade + opening for v2/v1
+            elif disc_version in (3, 2, 1):
                 subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
                                          disc_uuid, disc_version)
             else:
