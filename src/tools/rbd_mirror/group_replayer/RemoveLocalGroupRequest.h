@@ -10,7 +10,9 @@
 #include "librbd/mirror/Types.h"
 #include <deque>
 #include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 struct Context;
 
@@ -77,6 +79,24 @@ private:
    * DISABLE_MIRROR_GROUP
    *    |
    *    v
+   * LIST_GROUP_SNAPSHOTS
+   *    |
+   *    v
+   * OPEN_SNAPSHOT_IMAGES
+   *    |
+   *    v
+   * REMOVE_GROUP_SNAPSHOTS
+   *    |
+   *    v
+   * CLOSE_SNAPSHOT_IMAGES
+   *    |
+   *    v
+   * LIST_GROUP_IMAGES
+   *    |
+   *    v
+   * GET_MIRROR_IMAGES
+   *    |
+   *    v
    * REMOVE_IMAGE_FROM_GROUP <--
    *    |                      |
    *    v                      |  fail
@@ -114,6 +134,9 @@ private:
   int m_ret_val = 0;
 
   bufferlist m_out_bl;
+  std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
+  size_t m_group_snap_index = 0;
+  std::vector<ImageCtxT *> m_snapshot_image_ctxs;
   std::list<cls::rbd::GroupImageStatus> m_images;
   std::deque<std::pair<int64_t, std::string>> m_unmirrored_images;
 
@@ -134,6 +157,18 @@ private:
 
   void disable_mirror_group();
   void handle_disable_mirror_group(int r);
+
+  void list_group_snapshots();
+  void handle_list_group_snapshots(int r);
+
+  void open_snapshot_images();
+  void handle_open_snapshot_images(int r);
+
+  void remove_group_snapshot();
+  void handle_remove_group_snapshot(int r);
+
+  void close_snapshot_images();
+  void handle_close_snapshot_images(int r);
 
   void list_group_images();
   void handle_list_group_images(int r);
