@@ -66,7 +66,6 @@ public:
   MutableEntry& operator=(const MutableEntry&) = delete;
   MutableEntry(MutableEntry&&) = delete;
   MutableEntry& operator=(MutableEntry&&) = delete;
-  ~MutableEntry() override = default;
 
   std::ostream& get_ostream() {
     return *cos;
@@ -104,7 +103,6 @@ public:
     str = std::move(e.str);
     return *this;
   }
-  ~ConcreteEntry() override = default;
 
   std::string_view strv() const override {
     return std::string_view(str.data(), str.size());
@@ -122,7 +120,6 @@ public:
   StringEntry() = delete;
   StringEntry(short pr, short sub, std::string_view prefix)
       : Entry(pr, sub), str(prefix.begin(), prefix.end()) {}
-  ~StringEntry() override = default;
 
   StringEntry(const StringEntry&) = default;
   StringEntry& operator=(const StringEntry&) = default;
