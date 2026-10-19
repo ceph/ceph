@@ -5229,8 +5229,11 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   __u32 numfiles = 0;
   bool start = !offset_hash && offset_str.empty();
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
-  dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
+  dentry_key_t skip_key(snapid, offset_str, offset_hash);
   auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  // Whether the client may hold dentry leases here at all depends only on
+  // the directory, and nothing below changes that, so ask once.
+  const bool dir_leasable = mds->locker->can_lease_dentries_in(diri, mdr);
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5254,7 +5257,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     }
 
     if (!start) {
-      dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
+      dentry_key_t offset_key(dn->last, offset_str, offset_hash);
       if (!(offset_key < dn->key()))
 	continue;
     }
@@ -5306,7 +5309,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     encode(dn->get_name(), dnbl);
-    mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);
+    mds->locker->issue_client_lease(dn, in, mdr, now, dnbl, dir_leasable);
 
     // inode
     dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
@@ -12471,7 +12474,7 @@ void Server::_readdir_diff(
   }
   bool from_the_beginning = !offset_hash && offset_str.empty();
   // skip all dns <= dentry_key_t(*, offset_str, offset_hash)
-  dentry_key_t skip_key(CEPH_NOSNAP, offset_str.c_str(), offset_hash);
+  dentry_key_t skip_key(CEPH_NOSNAP, offset_str, offset_hash);
 
   // We need to rollback all the entries with the same name
   // when some entries with this name don't fit into the same fragment.
@@ -12494,13 +12497,11 @@ void Server::_readdir_diff(
     diff_mask,
     dnbl,
     [&](CDentry* dn, CInode* in, bool exists) {
-      string name;
       snapid_t effective_snapid;
-      const auto& dn_name = dn->get_name();
+      const auto name = dn->get_name();
       // provide the first snapid for removed entries and
       // the last one for existent ones
       effective_snapid = exists ? snapid : snapid_prev;
-      name.append(dn_name);
       if ((int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
 	dout(10) << " ran out of room for name, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
         if (name == last_name) {
@@ -12515,12 +12516,11 @@ void Server::_readdir_diff(
 	return false;
       }
 
-      auto diri = dir->get_inode();
-      auto hash = ceph_frag_value(diri->hash_dentry_name(dn_name));
       unsigned start_len = dnbl.length();
       dout(10) << "inc dn " << *dn << " as " << name
-               << std::hex << " hash 0x" << hash << std::dec
-               << " " << effective_snapid
+               << std::hex << " hash 0x"
+               << ceph_frag_value(dir->get_inode()->hash_dentry_name(name))
+               << std::dec << " " << effective_snapid
                << dendl;
       encode(name, dnbl);
       mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);

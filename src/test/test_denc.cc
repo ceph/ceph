@@ -26,6 +26,10 @@
 #include "gtest/gtest.h"
 
 #include "include/denc.h"
+#include "include/denc_contiguous.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/mempool.h"
+#include "include/utime.h"
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
@@ -884,4 +888,77 @@ TEST(denc, finish_rejects_overread)
   auto bpi = bl.front().begin();
 
   ASSERT_THROW(denc(value, bpi), buffer::malformed_input);
+}
+
+// encode_contiguous() must put the same bytes on the wire as encoding each
+// value on its own: CInode::encode_inodestat() relies on it for every inode
+// it sends to a client.
+template<typename T>
+static T raw_pattern(uint8_t seed)
+{
+  T v;
+  auto p = reinterpret_cast<uint8_t*>(&v);
+  for (size_t i = 0; i < sizeof(T); ++i)
+    p[i] = seed + i;
+  return v;
+}
+
+TEST(denc, encode_contiguous_matches_separate_encodes)
+{
+  using ceph::encode;
+  using ceph::encode_contiguous;
+  using ceph::raw_bytes;
+
+  const auto cap = raw_pattern<ceph_mds_reply_cap>(1);
+  const auto layout = raw_pattern<ceph_file_layout>(101);
+  const auto dir_layout = raw_pattern<ceph_dir_layout>(201);
+  const std::tuple fixed{uint64_t(0x1122334455667788ULL), uint32_t(42),
+                         utime_t(1700000000, 123456789), uint8_t(7)};
+
+  for (bool empty : {false, true}) {
+    SCOPED_TRACE(empty ? "empty containers" : "non-empty containers");
+    const mempool::mds_co::string pool_ns(empty ? "" : "ns-1");
+    const std::string symlink(empty ? "" : std::string(300, 's'));
+    const std::map<std::string, std::string> meta = empty ?
+      std::map<std::string, std::string>{} :
+      std::map<std::string, std::string>{{"a", "1"}, {"key", "value"}};
+    const std::vector<uint8_t> vec = empty ?
+      std::vector<uint8_t>{} : std::vector<uint8_t>{1, 2, 3, 4, 5};
+    const std::vector<uint8_t, mempool::mds_co::pool_allocator<uint8_t>>
+      pvec(vec.begin(), vec.end());
+    const bool flag = !empty;
+
+    // Start both off with the same prefix, so the contiguous append lands at
+    // an odd offset in a buffer that is already in use.
+    bufferlist expected, actual;
+    expected.append("xyz", 3);
+    actual.append("xyz", 3);
+
+    encode(fixed, expected);
+    encode(cap, expected);
+    encode(layout, expected);
+    encode(pool_ns, expected);
+    encode(symlink, expected);
+    encode(dir_layout, expected);
+    encode(meta, expected);
+    encode(flag, expected);
+    encode(vec, expected);
+    encode(pvec, expected);
+
+    encode_contiguous(actual, fixed, raw_bytes(cap), raw_bytes(layout),
+                      pool_ns, symlink, raw_bytes(dir_layout), meta, flag,
+                      vec, pvec);
+
+    ASSERT_EQ(expected.length(), actual.length());
+    ASSERT_TRUE(expected.contents_equal(actual));
+  }
+
+  // A single value, and the raw-struct wrapper on its own.
+  {
+    bufferlist expected, actual;
+    encode(layout, expected);
+    encode_contiguous(actual, raw_bytes(layout));
+    ASSERT_EQ(sizeof(layout), actual.length());
+    ASSERT_TRUE(expected.contents_equal(actual));
+  }
 }
