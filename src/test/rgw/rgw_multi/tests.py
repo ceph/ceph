@@ -1590,6 +1590,52 @@ def test_multi_period_incremental_sync_backlog():
     z3_conn = zonegroup_conns.zones[zonegroup.zones.index(z3)]
     assert check_all_buckets_exist(z3_conn, buckets)
 
+def test_multi_period_incremental_sync_trimmed():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_multi_period_incremental_sync_trimmed skipped. Requires 2 or more zones in master zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    z1, z2 = zonegroup.zones[0:2]
+    assert(z1 == zonegroup.master_zone)
+    if z2.is_read_only() or not z2.has_buckets():
+        raise SkipTest("test_multi_period_incremental_sync_trimmed skipped. Requires zone 2 writable with buckets.")
+    z1_conn = zonegroup_conns.zones[zonegroup.zones.index(z1)]
+    z2_conn = zonegroup_conns.zones[zonegroup.zones.index(z2)]
+
+    # change master to zone 2 -> period 2. zone 2 doesn't run metadata sync while it's
+    # the master, so its sync position stays in period 1
+    set_master_zone(z2)
+    period2 = realm.current_period.id
+
+    buckets = []
+    for _ in range(3):
+        bucket_name = gen_bucket_name()
+        z2_conn.s3_client.create_bucket(Bucket=bucket_name)
+        buckets.append(bucket_name)
+
+    # the other zones sync period 2, then every zone trims it
+    zonegroup_meta_checkpoint(zonegroup)
+    mdlog_autotrim(z2)
+    for zone in zonegroup.zones:
+        if zone != z2:
+            mdlog_autotrim(zone)
+    for zone in zonegroup.zones:
+        assert len(mdlog_list(zone, period2)) == 0
+
+    # change master back to zone 1 -> period 3. zone 2 now has to sync period 2 from a
+    # log whose entries are gone
+    set_master_zone(z1)
+
+    bucket_name = gen_bucket_name()
+    z1_conn.s3_client.create_bucket(Bucket=bucket_name)
+    buckets.append(bucket_name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    assert check_all_buckets_exist(z2_conn, buckets)
+
 def test_datalog_autotrim():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
