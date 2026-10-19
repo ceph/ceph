@@ -45,6 +45,9 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   /// respond to realm notifications by scheduling a reload()
   void handle_notify(RGWRealmNotify type, bufferlist::const_iterator& p) override;
 
+  /// schedule a reload() as if a realm notification arrived
+  void schedule_reload();
+
  private:
   /// pause frontends and replace the RGWRados instance
   void reload();
@@ -56,6 +59,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   std::map<std::string, std::string>& service_map_meta;
   Pauser *const frontends;
   boost::asio::io_context& io_context;
+  CephContext *const cct;
 
   /// reload() takes a significant amount of time, so we don't want to run
   /// it in the handle_notify() thread. we choose a timer thread instead of a

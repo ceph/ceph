@@ -551,6 +551,7 @@ namespace rgw {
 #ifdef WITH_RADOSGW_RADOS
     main.init_dedup();
 #endif
+    main.reload_if_period_changed();
 
     return 0;
   } /* RGWLib::init() */

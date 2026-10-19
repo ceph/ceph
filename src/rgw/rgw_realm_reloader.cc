@@ -40,7 +40,8 @@ RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env,
     service_map_meta(service_map_meta),
     frontends(frontends),
     io_context(io_context),
-    timer(env.driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
+    cct(env.driver->ctx()),
+    timer(cct, mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
 {
@@ -63,12 +64,15 @@ class RGWRealmReloader::C_Reload : public Context {
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
                                      bufferlist::const_iterator& p)
 {
+  schedule_reload();
+}
+
+void RGWRealmReloader::schedule_reload()
+{
   if (!env.driver) {
     /* we're in the middle of reload */
     return;
   }
-
-  CephContext *const cct = env.driver->ctx();
 
   std::lock_guard lock{mutex};
   if (reload_scheduled) {
@@ -88,7 +92,6 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
 
 void RGWRealmReloader::reload()
 {
-  CephContext *const cct = env.driver->ctx();
   const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
   ldpp_dout(&dp, 1) << "Pausing frontends for realm update..." << dendl;
 

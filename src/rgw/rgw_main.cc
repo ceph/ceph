@@ -184,6 +184,7 @@ int main(int argc, char *argv[])
     main.shutdown();
     return r;
   }
+  main.reload_if_period_changed();
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
