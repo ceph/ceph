@@ -4947,10 +4947,8 @@ void RGWListMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("IsTruncated", (truncated ? "true" : "false"));
 
     ACLOwner& owner = policy.get_owner();
+    dump_owner(s, owner.id, owner.display_name, "Initiator");
     dump_owner(s, owner.id, owner.display_name);
-
-    /* TODO: missing initiator:
-       Container element that identifies who initiated the multipart upload. If the initiator is an AWS account, this element provides the same information as the Owner element. If the initiator is an IAM User, this element provides the user ARN and display name, see https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html */
 
     if (cksum && cksum->aws()) {
       s->formatter->dump_string("ChecksumAlgorithm", cksum->uc_type_string());
