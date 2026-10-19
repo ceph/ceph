@@ -99,9 +99,9 @@ public:
     str.assign(strv.begin(), strv.end());
     return *this;
   }
-  ConcreteEntry(ConcreteEntry&& e) noexcept : Entry(e), str(std::move(e.str)) {}
+  ConcreteEntry(ConcreteEntry&& e) noexcept : Entry(std::move(e)), str(std::move(e.str)) {}
   ConcreteEntry& operator=(ConcreteEntry&& e) {
-    Entry::operator=(e);
+    Entry::operator=(std::move(e));
     str = std::move(e.str);
     return *this;
   }
