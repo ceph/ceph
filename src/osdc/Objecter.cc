@@ -2717,8 +2717,9 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   bool check_for_latest_map = false;
   int r = 0;
-  // Avoid duplicating _calc_target for direct reads, where _calc_target has
-  // already been called with this map.
+  // SplitOp has calculated a direct read's target, so skip _calc_target
+  // unless a map has landed since, as one can while an earlier sub-read
+  // relocks.
   if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0 ||
       op->target.epoch != osdmap->get_epoch()) {
     r = _calc_target(&op->target);
@@ -3324,8 +3325,8 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   bool recovery_deletes = osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   pg_t prev_pgid(prev_seed, pgid.pool());
-  // A forced OSD can leave the acting set without the primary changing, and
-  // drops ops sent to it in an earlier interval.
+  // A non-primary OSD drops ops from an earlier interval, so a forced-OSD
+  // target must notice every new interval, not only a primary change.
   if ((any_change || (t->flags & CEPH_OSD_FLAG_FORCE_OSD)) &&
       PastIntervals::is_new_interval(
 	t->acting_primary,
@@ -3399,10 +3400,9 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (t->flags & CEPH_OSD_FLAG_FORCE_OSD) {
-      // A direct read gets one attempt, so fail it back once its PG changes.
-      // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
-      // -EAGAIN to be returned. Otherwise, clear the direct read flags and
-      // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
+      // A forced OSD gets one attempt.  Once the op's PG changes, fail it
+      // with -EAGAIN if the caller asked for that (FAIL_ON_EAGAIN), otherwise
+      // redrive it to the primary as if the OSD had returned -EAGAIN.
       if (t->flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) {
         ldout(cct, 10) << __func__ << " forced osd." << t->osd
                        << " pg changed, acting " << t->acting
