@@ -7658,6 +7658,27 @@ const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
 static constexpr uint64_t CONVERT_REWRITE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE);
 
+/* What the three inherit_ids() calls raise, and nothing else.
+ *
+ * `CAP_CHOWN` alone, and only on an adopted tree.  Conversion gives
+ * every file it writes the uid of the thing it re-expresses;  on a tree
+ * this gateway laid down that is already the gateway's, so
+ * inherit_ids() returns before the `fchown` and the raise costs a
+ * capset pair and nothing else.  On NooBaa's it is whoever NooBaa ran
+ * as, and without this conversion refuses rather than leave an owner
+ * that is wrong.
+ *
+ * No `CAP_DAC_OVERRIDE`:  `fchown` is gated on ownership, not on the
+ * file's mode.  No `CAP_FOWNER` either -- inherit_ids() is called after
+ * the mode is set and while the file is still the gateway's, which is
+ * the whole reason one capability suffices there.
+ *
+ * Raised at each call rather than inside inherit_ids(), which is the
+ * one helper in conversion general enough for a later caller to reach;
+ * a caller that needs the raise should name it (§5.2). */
+static constexpr uint64_t CONVERT_CHOWN_CAPS =
+  nsfs::cap_bit(CAP_CHOWN);
+
 /* Rewrite one file's attributes into the bucket's format.
  *
  * Not through FSEnt::write_attrs(), which does the write and the prune
@@ -8019,7 +8040,9 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
       << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  ret = inherit_ids(dpp, sfd, dstx, no_chown, sname);
+  ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
+    return inherit_ids(dpp, sfd, dstx, no_chown, sname);
+  });
   if (ret < 0) {
     /* The sentinel exists by now, and the whole point of refusing is
      * not to leave a file whose owner is wrong.  Take it back out --
@@ -8421,8 +8444,10 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	  << dendl;
 	return ret;
       }
-      ret = inherit_ids(dpp, mfd, tdstx, driver->no_chown_injected(),
-			mname);
+      ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
+	return inherit_ids(dpp, mfd, tdstx, driver->no_chown_injected(),
+			   mname);
+      });
       if (ret < 0) {
 	if (::unlinkat(ourdir.get_fd(), mname.c_str(), 0) < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << mname
@@ -8444,8 +8469,15 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       const std::string xn = xattr_strategy()->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
       const std::string xv = attr_on_disk(xattr_strategy(),
 					  RGW_NSFS_ATTR_MPUPLOAD, bl);
-      if (::fsetxattr(mfd, xn.c_str(), xv.data(), xv.size(), 0) < 0) {
-	ret = -errno;
+      /* the adopted-tree case, as the object walk's writes:  the record
+       * goes on a file inherit_ids() has just given away. */
+      ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+	if (::fsetxattr(mfd, xn.c_str(), xv.data(), xv.size(), 0) < 0) {
+	  return -errno;
+	}
+	return 0;
+      });
+      if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: writing the upload record for " << meta
 			  << ": " << cpp_strerror(-ret) << dendl;
 	return ret;
@@ -8570,8 +8602,10 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	  << ourname << " its owner: " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
-      ret = inherit_ids(dpp, dfd, pstx, driver->no_chown_injected(),
-			ourname);
+      ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
+	return inherit_ids(dpp, dfd, pstx, driver->no_chown_injected(),
+			   ourname);
+      });
       if (ret < 0) {
 	if (::unlinkat(ourdir.get_fd(), ourname.c_str(), 0) < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << ourname
@@ -8616,8 +8650,16 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	  xattr_strategy()->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
       const std::string pxv = attr_on_disk(xattr_strategy(),
 					   RGW_NSFS_ATTR_MPUPLOAD, pbl);
-      if (::fsetxattr(dfd, pxn.c_str(), pxv.data(), pxv.size(), 0) < 0) {
-	ret = -errno;
+      /* as the upload record above;  a separate raise from the chown
+       * because copy_range() runs between the two and needs none --
+       * dfd was opened before the file changed hands. */
+      ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+	if (::fsetxattr(dfd, pxn.c_str(), pxv.data(), pxv.size(), 0) < 0) {
+	  return -errno;
+	}
+	return 0;
+      });
+      if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: writing the record for part " << *num
 			  << " of " << meta << ": " << cpp_strerror(-ret)
 			  << dendl;
