@@ -180,7 +180,11 @@ Context * override_ctx(int r, Context *ctx) {
 }
 
 std::string unique_lock_name(const std::string &name, void *address) {
+#ifdef CEPH_LOCKSTAT
+  return name;
+#else
   return name + " (" + stringify(address) + ")";
+#endif
 }
 
 } // namespace pwl

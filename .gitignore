@@ -61,8 +61,13 @@ GTAGS
 /examples/librados/librados_hello_world_c
 
 # common cmake build dir
+CMakeUserPresets.json
+cmake/presets/user.json
+cmake/presets/host.json
 /build
 /build.*
+/build-*
+/cmake-build-*
 
 # editor backup files etc.
 \#*\#

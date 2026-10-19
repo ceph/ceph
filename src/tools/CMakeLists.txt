@@ -96,7 +96,8 @@ add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
-install(PROGRAMS crushdiff DESTINATION bin)
+install(PROGRAMS crushdiff ceph-lockstat DESTINATION bin)
+configure_file(ceph-lockstat ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-lockstat COPYONLY)
 
 set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
 add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})

@@ -1,10 +1,12 @@
 #include "condition_variable_debug.h"
+
 #include "common/mutex_debug.h"
 
 namespace ceph {
 
-condition_variable_debug::condition_variable_debug()
-  : waiter_mutex{nullptr}
+template <bool Adaptive>
+condition_variable_debug_impl<Adaptive>::condition_variable_debug_impl() :
+  waiter_mutex{nullptr}
 {
   int r = pthread_cond_init(&cond, nullptr);
   if (r) {
@@ -12,27 +14,42 @@ condition_variable_debug::condition_variable_debug()
   }
 }
 
-condition_variable_debug::~condition_variable_debug()
+template <bool Adaptive>
+condition_variable_debug_impl<Adaptive>::~condition_variable_debug_impl()
 {
   pthread_cond_destroy(&cond);
 }
 
-void condition_variable_debug::wait(std::unique_lock<mutex_debug>& lock)
+template <bool Adaptive>
+void
+condition_variable_debug_impl<Adaptive>::wait(std::unique_lock<mutex_type>& lock)
 {
   // make sure this cond is used with one mutex only
   ceph_assert(waiter_mutex == nullptr ||
          waiter_mutex == lock.mutex());
   waiter_mutex = lock.mutex();
   ceph_assert(waiter_mutex->is_locked());
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+  waiter_mutex->condvar_wait_begin();
+#endif
   waiter_mutex->_pre_unlock();
   if (int r = pthread_cond_wait(&cond, waiter_mutex->native_handle());
       r != 0) {
     throw std::system_error(r, std::generic_category());
   }
   waiter_mutex->_post_lock();
+#ifdef CEPH_LOCKSTAT
+  waiter_mutex->condvar_wait_end(wait_start_clock);
+#endif
 }
 
-void condition_variable_debug::notify_one()
+template <bool Adaptive>
+void
+condition_variable_debug_impl<Adaptive>::notify_one()
 {
   // make sure signaler is holding the waiter's lock.
   ceph_assert(waiter_mutex == nullptr ||
@@ -42,7 +59,9 @@ void condition_variable_debug::notify_one()
   }
 }
 
-void condition_variable_debug::notify_all(bool sloppy)
+template <bool Adaptive>
+void
+condition_variable_debug_impl<Adaptive>::notify_all(bool sloppy)
 {
   if (!sloppy) {
     // make sure signaler is holding the waiter's lock.
@@ -54,8 +73,11 @@ void condition_variable_debug::notify_all(bool sloppy)
   }
 }
 
-std::cv_status condition_variable_debug::_wait_until(mutex_debug* mutex,
-                                                     timespec* ts)
+template <bool Adaptive>
+std::cv_status
+condition_variable_debug_impl<Adaptive>::_wait_until(
+    mutex_type* mutex,
+    timespec* ts)
 {
   // make sure this cond is used with one mutex only
   ceph_assert(waiter_mutex == nullptr ||
@@ -63,9 +85,19 @@ std::cv_status condition_variable_debug::_wait_until(mutex_debug* mutex,
   waiter_mutex = mutex;
   ceph_assert(waiter_mutex->is_locked());
 
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+  waiter_mutex->condvar_wait_begin();
+#endif
   waiter_mutex->_pre_unlock();
   int r = pthread_cond_timedwait(&cond, waiter_mutex->native_handle(), ts);
   waiter_mutex->_post_lock();
+#ifdef CEPH_LOCKSTAT
+  waiter_mutex->condvar_wait_end(wait_start_clock);
+#endif
   switch (r) {
   case 0:
     return std::cv_status::no_timeout;
@@ -75,5 +107,10 @@ std::cv_status condition_variable_debug::_wait_until(mutex_debug* mutex,
     throw std::system_error(r, std::generic_category());
   }
 }
+
+template class condition_variable_debug_impl<false>;
+#ifdef HAVE_PTHREAD_MUTEX_ADAPTIVE_NP
+template class condition_variable_debug_impl<true>;
+#endif
 
 } // namespace ceph
