@@ -8,6 +8,8 @@
 #include "driver/rados/rgw_dedup_cluster.h"
 #include "driver/rados/rgw_dedup_utils.h"
 
+#include <utility> // for std::to_underlying()
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -58,7 +60,7 @@ public:
 
     bufferlist urgent_msg_bl;
     urgent_msg_t urgent_msg = URGENT_MSG_THROTTLE;
-    ceph::encode(urgent_msg, urgent_msg_bl);
+    ceph::encode(std::to_underlying(urgent_msg), urgent_msg_bl);
     throttle_msg_t throttle_msg;
     encode(throttle_msg, urgent_msg_bl);
 
@@ -159,7 +161,7 @@ public:
 
     bufferlist urgent_msg_bl;
     urgent_msg_t urgent_msg = URGENT_MSG_THROTTLE;
-    ceph::encode(urgent_msg, urgent_msg_bl);
+    ceph::encode(std::to_underlying(urgent_msg), urgent_msg_bl);
     throttle_msg_t throttle_msg;
     string err;
 
