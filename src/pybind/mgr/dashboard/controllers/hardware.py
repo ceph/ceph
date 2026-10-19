@@ -19,3 +19,12 @@ class Hardware(RESTController):
         :param hostname: The host to retrieve from, all of them by default
         """
         return HardwareService.get_summary(categories, hostname)
+
+
+@APIRouter('/hardware/compression')
+@APIDoc("Hardware compression API", "Hardware")
+class HardwareCompression(RESTController):
+
+    @EndpointDoc("Retrieve cluster-wide FCM hardware compression statistics")
+    def list(self):
+        return HardwareService.get_compression()
