@@ -5454,9 +5454,12 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     std::unique_ptr<rgw::sal::Writer> processor;
+    // every file needs a tail tag of its own, not the req_id shared by the whole post
+    std::string tag;
+    append_rand_alpha(s->cct, s->req_id, tag, 32);
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 					 s->owner,
-					 &s->dest_placement, 0, s->req_id);
+					 &s->dest_placement, 0, tag);
     op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
       return;
@@ -8983,8 +8986,11 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   dest_placement.inherit_from(bucket->get_placement_rule());
 
   std::unique_ptr<rgw::sal::Writer> processor;
+  // every file needs a tail tag of its own, not the req_id shared by the whole upload
+  std::string tag;
+  append_rand_alpha(s->cct, s->req_id, tag, 32);
   processor = driver->get_atomic_writer(this, s->yield, obj.get(), bowner,
-				       &s->dest_placement, 0, s->req_id);
+				       &s->dest_placement, 0, tag);
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot prepare processor due to ret=" << op_ret << dendl;

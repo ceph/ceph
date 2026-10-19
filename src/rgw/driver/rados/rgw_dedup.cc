@@ -885,7 +885,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::inc_ref_count_by_manifest(const string         &ref_tag,
                                             const string         &oid,
-                                            const RGWObjManifest &manifest)
+                                            const RGWObjManifest &manifest,
+                                            const string         &src_tag)
   {
     std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(cct->_conf->rgw_max_copy_obj_concurrent_io, null_yield);
     rgw::AioResultList all_results;
@@ -907,7 +908,7 @@ namespace rgw::dedup {
       }
 
       ObjectWriteOperation op;
-      cls_refcount_get(op, ref_tag, true);
+      cls_refcount_get(op, ref_tag, true, src_tag);
       d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: "
                          << obj.obj.oid << "::" << raw_obj.to_str() << dendl;
@@ -1121,8 +1122,10 @@ namespace rgw::dedup {
 
     const string &ref_tag = p_tgt_rec->ref_tag;
     ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
+    const string src_tag = p_src_rec->s.flags.is_ref_tag_from_tail() ?
+      p_src_rec->ref_tag : string();
     // src_manifest was updated in split-head case to include the new_tail
-    ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
+    ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest, src_tag);
     if (unlikely(ret != 0)) {
       if (p_src_rec->s.flags.is_split_head()) {
         remove_created_tail_object(p_src_rec, src_manifest, p_stats);
@@ -1554,7 +1557,8 @@ namespace rgw::dedup {
       }
 
       RGWObjManifestRule rule;
-      if (!manifest.get_rule(0, &rule)                              ||
+      if (attrs.count(RGW_ATTR_APPEND_PART_NUM)                     ||
+          !manifest.get_rule(0, &rule)                              ||
           // if not a multi-part must have exactly 1 rule
           (rule.part_size == 0 && manifest.get_rules().size() != 1) ||
           !rule.override_prefix.empty()) {
