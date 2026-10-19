@@ -691,7 +691,7 @@ test_create_group_stop_daemon_then_recreate()
 
   local key_count
   count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
-  test "${key_count}" = 1 || fail "unexpected key count:${key_count}"
+  test "${key_count}" = 2 || fail "unexpected key count:${key_count}"
 
   if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
     wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
@@ -841,6 +841,9 @@ test_mirrored_group_add_and_remove_images()
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" 0
 
   images_create "${primary_cluster}" "${pool}/${image_prefix}" "${group_image_count}"
+  for loop_instance in $(seq 0 $((group_image_count - 1))); do
+    enable_mirror "${primary_cluster}" "${pool}" "${image_prefix}${loop_instance}" snapshot
+  done
   group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${group_image_count}"
 
   if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
@@ -857,6 +860,7 @@ test_mirrored_group_add_and_remove_images()
   # create another image and populate it with some data
   local image_name="test_image"
   image_create "${primary_cluster}" "${pool}/${image_name}" 
+  enable_mirror "${primary_cluster}" "${pool}" "${image_name}" snapshot
   local io_count=10240
   local io_size=4096
   write_image "${primary_cluster}" "${pool}" "${image_name}" "${io_count}" "${io_size}"
@@ -916,6 +920,7 @@ test_mirrored_group_add_and_remove_images()
 
   # remove all images from the group
   group_images_remove "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${group_image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
 
   image_remove "${primary_cluster}" "${pool}/${image_name}"
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${group_image_count}"
@@ -969,6 +974,9 @@ test_mirrored_group_remove_all_images()
   wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" 0
 
   images_create "${primary_cluster}" "${pool}/${image_prefix}" "${group_image_count}"
+  for loop_instance in $(seq 0 $((group_image_count - 1))); do
+    enable_mirror "${primary_cluster}" "${pool}" "${image_prefix}${loop_instance}" snapshot
+  done
   group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${group_image_count}"
 
   if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
@@ -1064,10 +1072,10 @@ test_create_group_mirror_then_add_images()
   images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 
   local standalone_global_id
+  enable_mirror "${primary_cluster}" "${pool}" "${image_prefix}0" snapshot
   if dynamic_groups_enabled; then
     # Preserve a standalone image's existing global ID and snapshot history
     # when it joins the mirrored group.
-    enable_mirror "${primary_cluster}" "${pool}" "${image_prefix}0" snapshot
     stop_mirrors "${secondary_cluster}"
     write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 16 4096
     mirror_image_snapshot "${primary_cluster}" "${pool}" "${image_prefix}0"
@@ -1076,6 +1084,10 @@ test_create_group_mirror_then_add_images()
     get_image_mirroring_global_id "${primary_cluster}" \
       "${pool}/${image_prefix}0" standalone_global_id
   fi
+
+  for loop_instance in $(seq 1 $((image_count - 1))); do
+    enable_mirror "${primary_cluster}" "${pool}" "${image_prefix}${loop_instance}" snapshot
+  done
 
   group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
   if dynamic_groups_enabled; then
@@ -1868,6 +1880,7 @@ test_create_group_with_large_image()
   image_create "${primary_cluster}" "${pool0}/${big_image}" 4G
 
   if dynamic_groups_enabled; then
+    enable_mirror "${primary_cluster}" "${pool0}" "${big_image}" snapshot
     group_image_add "${primary_cluster}" "${pool0}/${group}" "${pool0}/${big_image}"
 
     if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
@@ -2045,6 +2058,7 @@ test_stopped_daemon()
   image_create "${primary_cluster}" "${pool}/${image_name}" 
 
   if dynamic_groups_enabled; then
+    enable_mirror "${primary_cluster}" "${pool}" "${image_name}" snapshot
     group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_name}" 
 
     if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
@@ -2493,6 +2507,7 @@ test_image_move_group()
   group_create "${primary_cluster}" "${pool}/${group1}"
   if dynamic_groups_enabled; then
     group_create "${primary_cluster}" "${pool}/${group2}"
+    mirror_group_enable "${primary_cluster}" "${pool}/${group1}"
     mirror_group_enable "${primary_cluster}" "${pool}/${group2}"
   fi
   images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
@@ -2528,7 +2543,9 @@ test_image_move_group()
   fi
 
   group_image_add "${primary_cluster}" "${pool}/${group1}" "${pool}/${image_prefix}4"
-  mirror_group_enable "${primary_cluster}" "${pool}/${group1}"
+  if ! dynamic_groups_enabled; then
+    mirror_group_enable "${primary_cluster}" "${pool}/${group1}"
+  fi
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group1}" 1
 
   wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group1}" 1
@@ -2737,10 +2754,13 @@ test_force_promote()
   if [ "${scenario}" = 'image_add' ]; then
     new_image=test-image-new
     image_create "${primary_cluster}" "${pool}/${new_image}" 
-    group_image_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${new_image}"
+    enable_mirror "${primary_cluster}" "${pool}" "${new_image}" snapshot
+    wait_for_image_replay_started "${secondary_cluster}" "${pool}" "${new_image}"
+    wait_for_replay_complete "${secondary_cluster}" "${primary_cluster}" "${pool}" "${pool}" "${new_image}"
     get_image_mirroring_global_id "${primary_cluster}" "${pool}/${new_image}" global_id
+    group_image_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${new_image}"
     test_image_with_global_id_present "${primary_cluster}" "${pool}" "${new_image}" "${global_id}"
-    test_image_with_global_id_not_present "${secondary_cluster}" "${pool}" "${new_image}" "${global_id}"
+    test_image_with_global_id_present "${secondary_cluster}" "${pool}" "${new_image}" "${global_id}"
   elif [ "${scenario}" = 'image_remove' ]; then
     get_image_mirroring_global_id "${primary_cluster}" "${pool}/${image_prefix}0" global_id
     test_image_with_global_id_present "${secondary_cluster}" "${pool}" "${image_prefix}0" "${global_id}"
@@ -2839,8 +2859,9 @@ test_force_promote()
 
   # Check that the rollback reverted the state 
   if [ "${scenario}" = 'image_add' ]; then
-    # check that new image is not present
-    test_image_with_global_id_not_present "${primary_cluster}" "${pool}" "${new_image}" "${global_id}"
+    # Rollback detaches the image and preserves its standalone mirroring state.
+    test_image_with_global_id_present "${primary_cluster}" "${pool}" "${new_image}" "${global_id}"
+    test_group_present "${primary_cluster}" "${pool}" "${group0}" 1 "${image_count}"
   elif [ "${scenario}" = 'image_remove' ]; then
     test_image_with_global_id_present "${primary_cluster}" "${pool}" "${image_prefix}0" "${global_id}"
     test_group_present "${primary_cluster}" "${pool}" "${group0}" 1 "${image_count}"
@@ -2882,6 +2903,12 @@ test_force_promote()
 
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+
+  if [ "${scenario}" = 'image_add' ]; then
+    mirror_image_disable "${primary_cluster}" "${pool}/${new_image}" --force
+    wait_for_image_present "${secondary_cluster}" "${pool}" "${new_image}" 'deleted'
+    image_remove "${primary_cluster}" "${pool}/${new_image}"
+  fi
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" $(("${image_count}"-1))
   image_remove "${primary_cluster}" "${pool}/${big_image}"
@@ -4013,6 +4040,10 @@ test_demote_snap_sync()
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
 
+  if [ "${scenario}" = 'image_add' ]; then
+    mirror_image_disable "${primary_cluster}" "${pool}/${new_image}" --force
+    image_remove "${primary_cluster}" "${pool}/${new_image}"
+  fi
   images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
   wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"
@@ -4083,9 +4114,10 @@ test_rollback_after_add_image()
   # Test sequence:
   # 1. Synchronize a group and save a complete snapshot.
   # 2. Add an image, interrupt its group snapshot, and force-promote the peer.
-  # 3. Check rollback and split-brain status, then resync the old primary.
-  # Expected result: the replayer uses the last complete membership, and both
-  # groups converge after resync even if the old primary has the added image.
+  # 3. Promote the detached image for standalone mirroring.
+  # 4. Resync the old primary without first removing the image from its group.
+  # Expected result: group resync removes the old group-owned image, and
+  # standalone mirroring recreates it with the same global image ID.
   local primary_cluster=$1 ; shift
   local secondary_cluster=$1 ; shift
   local pool=$1 ; shift
@@ -4118,9 +4150,12 @@ test_rollback_after_add_image()
   # add image to already enabled group for mirroring
   new_image=test-image-new
   image_create "${primary_cluster}" "${pool}/${new_image}" 1G
+  enable_mirror "${primary_cluster}" "${pool}" "${new_image}" snapshot
+  wait_for_image_replay_started "${secondary_cluster}" "${pool}" "${new_image}"
+  wait_for_replay_complete "${secondary_cluster}" "${primary_cluster}" "${pool}" "${pool}" "${new_image}"
+  get_image_mirroring_global_id "${primary_cluster}" "${pool}/${new_image}" global_id
   group_image_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${new_image}"
   wait_for_image_present "${secondary_cluster}" "${pool}" "${new_image}" 'present'
-  get_image_mirroring_global_id "${primary_cluster}" "${pool}/${new_image}" global_id
   test_image_with_global_id_present "${secondary_cluster}" "${pool}" "${new_image}" "${global_id}"
   local group_snap_id
   get_newest_created_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
@@ -4157,21 +4192,41 @@ test_rollback_after_add_image()
   # check that we rolled back to snap0 state
   compare_image_with_snapshot "${primary_cluster}" "${pool}/${image_prefix}0" "${primary_cluster}" "${pool}/${image_prefix}0@${snap0}"
   compare_image_with_snapshot "${primary_cluster}" "${pool}/${image_prefix}1" "${primary_cluster}" "${pool}/${image_prefix}1@${snap0}"
-  # check that new image is not present
-  test_image_with_global_id_not_present "${primary_cluster}" "${pool}" "${new_image}" "${global_id}"
-  # ensure the new image no longer exists in the pool
-  test_image_not_present "${primary_cluster}" "${pool}" "${new_image}"
+  # The rollback only undoes the group attachment. The image remains enabled
+  # for standalone mirroring with its original global image ID.
+  test_image_with_global_id_present "${primary_cluster}" "${pool}" "${new_image}" "${global_id}"
+  test_group_present "${primary_cluster}" "${pool}" "${group0}" 1 "${image_count}"
 
   # restart daemon and wait for the right status to reflect
   start_mirrors "${primary_cluster}"
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped'
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+stopped'
 
+  # The ImageMap contains the group, its zero-weight member image entries,
+  # and the detached standalone image.
+  local expected_key_count=$((image_count + 2))
+  local key_count
+  for s in 0.1 1 2 4 8 8 16; do
+    sleep "${s}"
+    count_omap_keys_with_filter "${primary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+    test "${key_count}" = "${expected_key_count}" && break
+  done
+  test "${key_count}" = "${expected_key_count}" || fail "unexpected ImageMap key count: ${key_count}"
+
+  # Keep the image attached to the old group. Group resync must remove this
+  # old group-owned copy before standalone mirroring recreates it.
+  local old_image_id
+  old_image_id=$(get_image_id "${secondary_cluster}" "${pool}" "${new_image}")
+  test -n "${old_image_id}" || fail "failed to get the old image ID for ${new_image}"
+
+  # The force-promoted group left the image enabled for standalone mirroring
+  # on the new primary. Promote it so it can be replayed back to the old site.
+  promote_image "${primary_cluster}" "${pool}" "${new_image}" '--force'
+
   # demote and wait for split-brain to follow
   mirror_group_demote "${secondary_cluster}" "${pool}/${group0}"
-  # The old primary still physically contains the added image until resync,
-  # but it is no longer mirrored after the force-promote rollback. Mirror
-  # status therefore reports only the images from the last complete snapshot.
+  # The old primary still has the image attached until resync, while the new
+  # primary keeps it as a standalone mirrored image.
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+error' "${image_count}" 'split-brain'
 
   # resync and verify status of mirror group snapshot
@@ -4180,6 +4235,15 @@ test_rollback_after_add_image()
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
   wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before_resync}"
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+
+  # Resync removes the old group-owned image. Standalone mirroring must then
+  # recreate the image with the same global image ID and a new local image ID.
+  wait_for_image_present "${secondary_cluster}" "${pool}" "${new_image}" 'deleted' "${old_image_id}" || fail "old group-owned image ${new_image} was not removed during resync"
+  wait_for_image_present "${secondary_cluster}" "${pool}" "${new_image}" 'present' || fail "standalone image ${new_image} was not recreated after group resync"
+  test_image_with_global_id_present "${secondary_cluster}" "${pool}" "${new_image}" "${global_id}"
+  local recreated_image_id
+  recreated_image_id=$(get_image_id "${secondary_cluster}" "${pool}" "${new_image}")
+  test "${recreated_image_id}" != "${old_image_id}" || fail "standalone image ${new_image} was not recreated with a new local image ID"
 
   # TEST group membership has 2 images only and the respective groups reflect right mirror status
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
@@ -4190,6 +4254,9 @@ test_rollback_after_add_image()
   group_remove "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  mirror_image_disable "${primary_cluster}" "${pool}/${new_image}" --force
+  wait_for_image_present "${secondary_cluster}" "${pool}" "${new_image}" 'deleted'
+  image_remove "${primary_cluster}" "${pool}/${new_image}"
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 }
 
