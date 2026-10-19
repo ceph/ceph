@@ -107,7 +107,7 @@ int KeyRing::set_modifier(const char *type,
   if (!val)
     return -EINVAL;
 
-  if (strcmp(type, "key") == 0) {
+  auto set_key_from_val = [&](void (KeyRing::*set)(EntityName&, CryptoKey&)) {
     CryptoKey key;
     string l(val);
     try {
@@ -115,7 +115,14 @@ int KeyRing::set_modifier(const char *type,
     } catch (const ceph::buffer::error& err) {
       return -EINVAL;
     }
-    set_key(name, key);
+    (this->*set)(name, key);
+    return 0;
+  };
+
+  if (strcmp(type, "key") == 0) {
+    return set_key_from_val(&KeyRing::set_key);
+  } else if (strcmp(type, "pending key") == 0) {
+    return set_key_from_val(&KeyRing::set_pending_key);
   } else if (strncmp(type, "caps ", 5) == 0) {
     const char *caps_entity = type + 5;
     if (!*caps_entity)

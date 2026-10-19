@@ -96,6 +96,9 @@ public:
   void set_key(EntityName& ename, CryptoKey& key) {
     keys[ename].key = key;
   }
+  void set_pending_key(EntityName& ename, CryptoKey& key) {
+    keys[ename].pending_key = key;
+  }
   void import(CephContext *cct, KeyRing& other);
 
   // decode as plaintext
