@@ -125,9 +125,9 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
 			   stringify(ceph_release()));
   }
 
-  // The bootstrap requested above runs the election; starting one here would
-  // reset all services before post_refresh() acks this commit's waiters.
-  mon.notify_new_monmap(need_bootstrap == nullptr);
+  // An election here would reset all services before post_refresh() acks
+  // this commit's waiters, so tick() calls it if one is needed.
+  mon.notify_new_monmap(false);
 }
 
 void MonmapMonitor::init()
@@ -1700,6 +1700,17 @@ void MonmapMonitor::tick()
   if (!is_active() ||
       !mon.is_leader()) {
     return;
+  }
+
+  if (notified_epoch < mon.monmap->get_epoch()) {
+    notified_epoch = mon.monmap->get_epoch();
+    if (mon.monmap->strategy != MonMap::CLASSIC &&
+        mon.elector.get_disallowed_leaders().count(mon.rank)) {
+      dout(1) << __func__ << " monmap e" << notified_epoch
+              << " disallows us as leader, calling an election" << dendl;
+      mon.start_election();
+      return;
+    }
   }
 
   if (mon.monmap->created.is_zero()) {
