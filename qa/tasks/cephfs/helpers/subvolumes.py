@@ -190,7 +190,8 @@ class SubvolBase(SubvolOps):
 
 
     def __init__(self, mon_manager=None, mount=None, volname=None, name=None,
-                 uuid=None, grp_name=None, snaps=[], retained=False):
+                 uuid=None, grp_name=None, snaps=[], retained=False,
+                 create_opts=None):
         '''
         :params grp_name: None or True, None implies no/default group and True
                           implies gen random str
@@ -205,6 +206,7 @@ class SubvolBase(SubvolOps):
         self.uuid = uuid if uuid else str(uuid4())
         self.snaps = snaps
         self.retained = retained
+        self.create_opts = create_opts
 
         # NOTE subclasses should call these methods at end of their __init__()
         # self._reset_paths()
@@ -280,7 +282,7 @@ class SubvolBase(SubvolOps):
         self.snaps.remove(snap_name)
 
     def snap_getpath(self, snap_name):
-        return super().snap_getpath(self.volnmae, self.name, snap_name,
+        return super().snap_getpath(self.volname, self.name, snap_name,
                                     self.grp_name).strip()
 
     def snap_ls(self):
@@ -370,9 +372,9 @@ class SubvolBase(SubvolOps):
              f'exp_snap_path = {exp_snap_path}')
 
 
-class SubvolV2(SubvolBase):
+class V1V2Base(SubvolBase):
     '''
-    Helper class for v2 subvolumes.
+    Base class for SubvolV1 and SubvolV2.
     '''
 
     def __init__(self, mon_manager=None, mount=None, volname=None, name=None,
@@ -404,7 +406,7 @@ class SubvolV2(SubvolBase):
 
     @property
     def version(self):
-        return 2
+        raise NotImplementedError('derived class should override this method')
 
 
     # ----- v2 helpers -----
@@ -421,9 +423,7 @@ class SubvolV2(SubvolBase):
         return self._meta_path
 
     def build_and_get_snap_base_path(self):
-        if not self._snap_base_path:
-            self._snap_base_path = join(self.build_and_get_base_path(), '.snap')
-        return self._snap_base_path
+        raise NotImplementedError('derived class should override this method')
 
     def build_and_get_snap_path(self, snap_name):
         return join(self.build_and_get_snap_base_path(), snap_name)
@@ -431,6 +431,9 @@ class SubvolV2(SubvolBase):
 
     # ----- create stuff without create command ------
 
+
+    def custom_create(self):
+        raise NotImplementedError('derived class should override this method')
 
     def custom_create_snap(self):
         raise NotImplementedError('derived class should override this method')
@@ -450,7 +453,8 @@ class SubvolV1(V1V2Base):
 
     def build_and_get_snap_base_path(self):
         if not self._snap_base_path:
-            self._snap_base_path = join(self.build_and_get_uuid_path(), '.snap')
+            self._snap_base_path = join(self.build_and_get_uuid_path(),
+                                        self.SNAP_BASE_DIR)
         return self._snap_base_path
 
     def custom_create(self):
@@ -509,7 +513,8 @@ class SubvolV2(V1V2Base):
 
     def build_and_get_snap_base_path(self):
         if not self._snap_base_path:
-            self._snap_base_path = join(self.build_and_get_base_path(), '.snap')
+            self._snap_base_path = join(self.build_and_get_base_path(),
+                                        self.SNAP_BASE_DIR)
         return self._snap_base_path
 
     def custom_create(self):
@@ -571,22 +576,28 @@ class SubvolV3(SubvolBase):
         if subvol:
             assert subvol and not (mon_manager or mount or volname or name or
                                    uuid or grp_name or snaps or retained)
-            assert type(subvol) is SubvolV2
+            assert type(subvol) in (SubvolV2, SubvolV1)
 
             super().__init__(mon_manager=subvol.mon_manager, mount=subvol.mount,
                              volname=subvol.volname, name=subvol.name,
                              uuid=subvol.uuid, grp_name=subvol.grp_name,
                              snaps=subvol.snaps, retained=subvol.retained)
-            self.has_v2_snaps = True if subvol.snaps else False
-            self.uuid = self.fetch_uuid() if self.has_v2_snaps else subvol.uuid
+            if type(subvol) is SubvolV2:
+                self.has_v2_snaps = (self.snaps != [])
+                self.has_v1_snaps = False
+            elif type(subvol) is SubvolV1:
+                self.has_v1_snaps = (self.snaps != [])
+                self.has_v2_snaps = False
+                self._v1_uuid = None
         else:
             assert mount and volname and not subvol
 
             super().__init__(mon_manager, mount=mount, volname=volname,
                              name=name, uuid=uuid, grp_name=grp_name,
                              snaps=snaps, retained=retained)
+
+            self.has_v1_snaps = False
             self.has_v2_snaps = False
-            self.uuuid = str(uuid4())
 
         self._verify_attrs()
 
@@ -604,6 +615,8 @@ class SubvolV3(SubvolBase):
                 f'self.uuid = {self.uuid}'
         assert type(self.has_v2_snaps) is bool, \
                 f'self.has_v2_snaps = {self.has_v2_snaps}'
+        assert type(self.has_v1_snaps) is bool, \
+                f'self.has_v1_snaps = {self.has_v1_snaps}'
 
 
     # ----- subvol helper -----
@@ -648,20 +661,27 @@ class SubvolV3(SubvolBase):
         return join(self.build_and_get_incar_path(uuid), self.MNT_DIR)
 
     def build_and_get_snap_base_path(self, uuid=None):
-        return join(self.build_and_get_incar_path(uuid), '.snap')
+        return join(self.build_and_get_incar_path(uuid), self.SNAP_BASE_DIR)
 
     def build_and_get_snap_path(self, snap_name, uuid=None):
         return join(self.build_and_get_snap_base_path(uuid), snap_name)
 
     def build_and_get_v2_snap_path(self, snap_name, uuid=None):
-        return join(self.build_and_get_base_path(), '.snap', snap_name)
+        return join(self.build_and_get_base_path(), self.SNAP_BASE_DIR,
+                    snap_name)
+
+    def build_and_get_v1_snap_path(self, snap_name, uuid=None):
+        return join(self.build_and_get_base_path(), self.INCAR_BASE_DIR,
+                    self.uuid, self.MNT_DIR, self.SNAP_BASE_DIR, snap_name)
 
     def build_and_get_snap_path(self, snap_name, uuid=None):
-        return join(self.build_and_get_incar_base_path(), self.uuid,
+        return join(self.build_and_get_incar_base_path(), self.SNAP_BASE_DIR)
 
     def sanity_test_snap_getpath(self, snap_name):
         if self.has_v2_snaps:
             exp_snap_path = self.build_and_get_v2_snap_path(snap_name)
+        if self.has_v1_snaps:
+            exp_snap_path = self.build_and_get_v1_snap_path(snap_name)
 
         reported_snap_path = self.snap_getpath(snap_name)
         assert reported_snap_path == exp_snap_path, \
@@ -670,6 +690,24 @@ class SubvolV3(SubvolBase):
 
     # ---- misc methods -----
 
+
+    @property
+    def v1_uuid(self):
+        if not self._v1_uuid:
+            self._v1_uuid = self.fetch_v1_uuid()
+        return self._v1_uuid
+
+    def fetch_v1_uuid(self):
+        meta_content = self.mount.get_shell_stdout(
+            f'sudo cat ./{self.build_and_get_meta_path()}')
+        # splitting ensures we compare line by line, which prevents any
+        # accidental matching due to edge cases
+        meta_content = meta_content.split('\n')
+        for line in meta_content:
+            if 'v1_incar = ' in line:
+                return line.replace('v1_incar = ', '')
+        else:
+            assert False
 
     def fetch_uuid(self):
         meta_file_name = self.mount.get_shell_stdout(
@@ -690,5 +728,7 @@ class SubvolV3(SubvolBase):
         assert f'state = complete' in meta_content
         assert f'type = subvolume' in meta_content
 
+        if self.has_v1_snaps:
+            assert 'has_v1_snaps = True' in meta_content
         if self.has_v2_snaps:
             assert 'has_v2_snaps = True' in meta_content
