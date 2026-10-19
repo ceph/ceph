@@ -13,6 +13,8 @@
  *
  */
 
+#include <linux/capability.h>
+
 #include "fs_strategy.h"
 
 #include <atomic>
@@ -490,24 +492,64 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
                                    bool excl,
-                                   const nsfs::FSIdentity& id)
+                                   const nsfs::FSIdentity& id,
+                                   bool src_as_gateway)
 {
-  /* the whole copy as `id`:  opening the source is its read, checked
-   * against it, and the destination is created as it */
-  return nsfs::with_identity(dpp, id, [&]() -> int {
-  int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
-  if (src_fd < 0) {
-    int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat src=" << src_name
-      << " failed: " << cpp_strerror(err) << dendl;
-    return -err;
-  }
+  /* A copy is a read of the source and a write of the destination,
+   * and only the read is on the access-model axis.  The read can be
+   * an operation S3 authorised against an object the requester does
+   * not own;  the destination is the requester's and must stay so, or
+   * a copy they are entitled to lands owned by the gateway.
+   *
+   * A retry rather than a decision, unlike the publish
+   * (NSFSObject::link_temp_file):  opening the source is idempotent,
+   * so only a refused copy moves to the gateway.  The publish had to
+   * be decided in advance because its first step spends the
+   * O_TMPFILE's one link.
+   *
+   * Hoisted out of the identity block below, because
+   * nsfs::with_capabilities() refuses to raise on a thread that is
+   * impersonating.
+   *
+   * CAP_DAC_OVERRIDE alone:  the open is read-only, so only the
+   * permission check needs bypassing.  with_cross_account_retry()
+   * raises CAP_FOWNER as well because it also serves attribute
+   * writes. */
+  static constexpr uint64_t COPY_SOURCE_CAPS =
+    nsfs::cap_bit(CAP_DAC_OVERRIDE);
 
+  int src_fd = -1;
+  auto open_src = [&]() -> int {
+    src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
+    return (src_fd < 0) ? -errno : 0;
+  };
+  int oret = nsfs::with_identity(dpp, id, open_src);
+  if ((oret == -EACCES) && src_as_gateway) {
+    oret = nsfs::with_capabilities(dpp, COPY_SOURCE_CAPS, open_src);
+    if (oret == 0) {
+      cross_account_sources.fetch_add(1, std::memory_order_relaxed);
+      ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem refused the"
+	" requester the source " << src_name << " and the gateway read it,"
+	" which the access model permits" << dendl;
+    }
+  }
+  if (oret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat src=" << src_name
+      << " failed: " << cpp_strerror(-oret) << dendl;
+    return oret;
+  }
+  auto close_src = make_scope_guard([&src_fd] {
+    if (src_fd >= 0) {
+      ::close(src_fd);
+    }
+  });
+
+  /* the rest as `id`:  the destination is created as the requester */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   struct statx stx;
   int ret = statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
   if (ret < 0) {
     int err = errno;
-    ::close(src_fd);
     ldpp_dout(dpp, 0) << "ERROR: clone_file: statx src=" << src_name
       << " failed: " << cpp_strerror(err) << dendl;
     return -err;
@@ -518,7 +560,6 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 			file_create_mode());
   if (dst_fd < 0) {
     int err = errno;
-    ::close(src_fd);
     if (excl && (err == EEXIST)) {
       /* lost the race;  the caller joins the winner's file */
       return -EEXIST;
@@ -532,7 +573,6 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   if (ret == 0) {
     ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size);
   }
-  ::close(src_fd);
   ::close(dst_fd);
 
   if (ret < 0) {
@@ -547,22 +587,35 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
                                  int gw_src_fd,
                                  int dst_dir_fd, const std::string& dst_name,
-                                 const nsfs::FSIdentity& id)
+                                 const nsfs::FSIdentity& id,
+                                 bool src_as_gateway)
 {
-  return nsfs::with_identity(dpp, id, [&]() -> int {
   /* As `id`, the source reopened through the descriptor:  an open of
    * the magic link checks the file's permissions against the caller,
    * so the read is the requester's and not the gateway's, which holds
-   * `gw_src_fd`. */
+   * `gw_src_fd`.
+   *
+   * Where the filesystem refuses the requester and the access model
+   * permits it, there is nothing to reopen:  `gw_src_fd` is already
+   * the gateway's descriptor, so using it as it stands *is* the
+   * gateway performing the read.  Hoisted out of the identity block
+   * because the reopen is the requester's and the fallback is not. */
   int own_fd = -1;
   if (id.active()) {
     const std::string via = "/proc/self/fd/" + std::to_string(gw_src_fd);
-    own_fd = ::open(via.c_str(), O_RDONLY | O_CLOEXEC);
-    if (own_fd < 0) {
-      int err = errno;
+    int oret = nsfs::with_identity(dpp, id, [&]() -> int {
+      own_fd = ::open(via.c_str(), O_RDONLY | O_CLOEXEC);
+      return (own_fd < 0) ? -errno : 0;
+    });
+    if ((oret == -EACCES) && src_as_gateway) {
+      cross_account_sources.fetch_add(1, std::memory_order_relaxed);
+      ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem refused the"
+	" requester the source and the gateway read it, which the access"
+	" model permits" << dendl;
+    } else if (oret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: clone_fd: reopening the source failed: "
-        << cpp_strerror(err) << dendl;
-      return -err;
+        << cpp_strerror(-oret) << dendl;
+      return oret;
     }
   }
   auto close_own = make_scope_guard([own_fd] {
@@ -571,6 +624,8 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     }
   });
   const int src_fd = (own_fd >= 0) ? own_fd : gw_src_fd;
+
+  return nsfs::with_identity(dpp, id, [&]() -> int {
 
   struct statx stx;
   if (statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
@@ -611,18 +666,21 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
                               int dst_dir_fd, const std::string& dst_name,
-                              bool excl, const nsfs::FSIdentity& id)
+                              bool excl, const nsfs::FSIdentity& id,
+                              bool src_as_gateway)
 {
   return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                            dst_dir_fd, dst_name, excl, id);
+                            dst_dir_fd, dst_name, excl, id, src_as_gateway);
 }
 
 int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
                             int src_fd,
                             int dst_dir_fd, const std::string& dst_name,
-                            const nsfs::FSIdentity& id)
+                            const nsfs::FSIdentity& id,
+                            bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id);
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id,
+                          src_as_gateway);
 }
 
 /* --- GPFSStrategy ----------------------------------------------------- */
@@ -930,20 +988,23 @@ static std::string clone_parent_name(const std::string& name)
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              int src_dir_fd, const std::string& src_name,
                              int dst_dir_fd, const std::string& dst_name,
-                             bool excl, const nsfs::FSIdentity& id)
+                             bool excl, const nsfs::FSIdentity& id,
+                             bool src_as_gateway)
 {
   if (!has_clone()) {
     ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
       << "falling back to copy" << dendl;
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl, id);
+                              dst_dir_fd, dst_name, excl, id,
+                              src_as_gateway);
   }
   /* The clone path makes its parent and child as the gateway.  As a
    * requester, copy instead, so the clone is theirs and the read of the
    * source is checked against them. */
   if (id.active()) {
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl, id);
+                              dst_dir_fd, dst_name, excl, id,
+                              src_as_gateway);
   }
 
   /* gpfs_clone_copy() has no exclusive-create mode, so the best we
@@ -1022,9 +1083,11 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
 int GPFSStrategy::clone_fd(const DoutPrefixProvider* dpp,
                            int src_fd,
                            int dst_dir_fd, const std::string& dst_name,
-                           const nsfs::FSIdentity& id)
+                           const nsfs::FSIdentity& id,
+                           bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id);
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id,
+                          src_as_gateway);
 }
 
 void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,

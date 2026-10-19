@@ -3117,7 +3117,8 @@ int File::rename(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
-                      Directory* dst_dir, const std::string& dst_name)
+                      Directory* dst_dir, const std::string& dst_name,
+                      bool src_as_gateway)
 {
   /* remove any existing target */
   {
@@ -3145,10 +3146,12 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   /* as this entry's identity:  the requester reads the source and
-   * owns the copy */
+   * owns the copy -- except that the access model may let the gateway
+   * read a source the filesystem refuses them, which the caller has
+   * resolved */
   return fs_strategy->clone_file(dpp, src_dir_fd, get_name(),
                                  dst_dir_fd, dst_name, /*excl=*/false,
-                                 identity);
+                                 identity, src_as_gateway);
 }
 
 int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
@@ -3500,7 +3503,8 @@ int Directory::rename(const DoutPrefixProvider* dpp, optional_yield y, Directory
 }
 
 int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
-                      Directory* dst_dir, const std::string& dst_name)
+                      Directory* dst_dir, const std::string& dst_name,
+                      bool src_as_gateway)
 {
   int ret;
 
@@ -3542,7 +3546,8 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   const auto& rn = reserved_or_none(reserved_names);
-  ret = for_each(dpp, [this, &dest, &dpp, &y, &rn](const char* name) {
+  ret = for_each(dpp, [this, &dest, &dpp, &y, &rn,
+		       src_as_gateway](const char* name) {
     std::unique_ptr<FSEnt> sobj;
 
     if (is_reserved_name(name, rn)) {
@@ -3552,7 +3557,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     int r = this->get_ent(dpp, y, name, std::string(), sobj);
     if (r < 0)
       return r;
-    return sobj->copy(dpp, y, dest.get(), name);
+    return sobj->copy(dpp, y, dest.get(), name, src_as_gateway);
   });
 
   return ret;
@@ -3742,10 +3747,11 @@ int NooBaaDirectoryObject::read_attrs(const DoutPrefixProvider* dpp,
 }
 
 int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
-				Directory* dst_dir, const std::string& name)
+				Directory* dst_dir, const std::string& name,
+				bool src_as_gateway)
 {
   if (content) {
-    return content->copy(dpp, y, dst_dir, name);
+    return content->copy(dpp, y, dst_dir, name, src_as_gateway);
   }
 
   /* An empty object copies to an empty file.  The destination's
@@ -10409,7 +10415,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       src_fd = ent->get_fd();
     }
     ret = driver->get_fs_strategy()->clone_fd(
-      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, identity);
+      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, identity,
+      copy_source_as_gateway());
     if (ret < 0) {
       return ret;
     }
@@ -14113,6 +14120,20 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   } /* versioned delete without versionId */
 }
 
+/* The copy's source read is on the access-model axis:  S3 may have
+ * authorised a read of an object the filesystem refuses this
+ * requester, and under a model that permits it the gateway performs
+ * the read.  Resolved here rather than inside FSStrategy, because
+ * whether the model is a daemon setting or a per-bucket one is not
+ * settled (inflight/access-model-axis.md) and the caller is what
+ * knows the bucket. */
+bool NSFSObject::copy_source_as_gateway() const
+{
+  return ent && ent->get_identity().active() &&
+    (driver->get_access_strategy()->refused(nsfs::AccessClass::data) ==
+     nsfs::Refused::as_gateway_raised);
+}
+
 int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
                       NSFSBucket *sb, NSFSBucket *db, NSFSObject *dobj)
 {
@@ -14129,7 +14150,8 @@ int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   if (ret < 0)
     return ret;
 
-  return ent->copy(dpp, y, dst_leaf_dir, dst_leaf_name);
+  return ent->copy(dpp, y, dst_leaf_dir, dst_leaf_name,
+		   copy_source_as_gateway());
 }
 
 void NSFSMPObj::init_gen(NSFSDriver* driver, const std::string& _oid, ACLOwner& _owner)
@@ -17425,6 +17447,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	cross_account_data_served.load(std::memory_order_relaxed));
       (*out)["publishes_as_gateway"] = std::to_string(
 	publishes_as_gateway.load(std::memory_order_relaxed));
+      (*out)["copy_sources_as_gateway"] = std::to_string(
+	get_fs_strategy()->cross_account_source_reads());
     }
     return 0;
   }

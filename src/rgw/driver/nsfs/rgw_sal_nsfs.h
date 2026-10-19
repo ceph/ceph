@@ -382,7 +382,10 @@ public:
 			  int use_fd = -1);
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
 			 int use_fd = -1);
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
+  /* src_as_gateway:  the access model permits the gateway to read a
+   * source the filesystem refuses the requester.  Resolved by the
+   * caller, which knows the bucket;  see clone_file_by_copy(). */
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) = 0;
   /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
@@ -427,7 +430,7 @@ public:
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
 		   int use_fd = -1) override;
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, const std::string& dst_name);
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
@@ -475,7 +478,7 @@ public:
   std::unique_ptr<Directory> clone() {
     return std::make_unique<Directory>(*this);
   }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
 			     bool as_gateway = false) override;
@@ -582,7 +585,7 @@ public:
 			  int use_fd = -1) override;
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
 			 int use_fd = -1) override;
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
 			     bool as_gateway = false) override;
@@ -2495,6 +2498,10 @@ public:
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
            NSFSBucket *db, NSFSObject *dobj);
+  /* Whether the access model lets the gateway read a source the
+   * filesystem refuses this requester.  Resolved here because this is
+   * where the driver and the object are both in hand. */
+  bool copy_source_as_gateway() const;
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
   int stat(const DoutPrefixProvider *dpp);
   int make_ent(nsfs::ObjectType type);
