@@ -14,10 +14,13 @@
  */
 
 #include "common/Readahead.h"
+#include "common/ceph_context.h"
+#include "common/perf_counters.h"
 #include "gtest/gtest.h"
 #include <stdint.h>
 #include <boost/foreach.hpp>
 #include <cstdarg>
+#include <memory>
 
 
 #define ASSERT_RA(expected_offset, expected_length, ra) \
@@ -130,4 +133,35 @@ TEST(Readahead, alignment) {
   ASSERT_RA(0, 0, r.update(1280, 10, Readahead::NO_LIMIT));
   ASSERT_RA(1400, 300, r.update(1290, 10, Readahead::NO_LIMIT)); // internal readahead size 320
   ASSERT_RA(0, 0, r.update(1300, 10, Readahead::NO_LIMIT));
+}
+
+TEST(Readahead, perf_counters) {
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT),
+					false};
+  PerfCountersBuilder bld(cct.get(), "readahead", l_readahead_first,
+			  l_readahead_last);
+  bld.add_u64_counter(l_readahead_observes, "observes");
+  bld.add_u64_counter(l_readahead_resets, "resets");
+  bld.add_u64_counter(l_readahead_sequential, "sequential");
+  bld.add_u64_counter(l_readahead_issued, "issued");
+  bld.add_u64_counter(l_readahead_issued_bytes, "issued_bytes");
+  std::unique_ptr<PerfCounters> logger(bld.create_perf_counters());
+
+  Readahead r;
+  r.set_perf_counters(logger.get());
+  r.set_trigger_requests(2);
+
+  // First read is a reset (m_last_pos starts at 0).
+  ASSERT_RA(0, 0, r.update(1000, 10, Readahead::NO_LIMIT));
+  ASSERT_RA(0, 0, r.update(1010, 10, Readahead::NO_LIMIT));
+  // Third consecutive read triggers readahead of 20 bytes.
+  ASSERT_RA(1030, 20, r.update(1020, 10, Readahead::NO_LIMIT));
+  // Gap resets sequential state.
+  ASSERT_RA(0, 0, r.update(2000, 10, Readahead::NO_LIMIT));
+
+  EXPECT_EQ(4u, logger->get(l_readahead_observes));
+  EXPECT_EQ(2u, logger->get(l_readahead_resets));      // 1000, 2000
+  EXPECT_EQ(2u, logger->get(l_readahead_sequential)); // 1010, 1020
+  EXPECT_EQ(1u, logger->get(l_readahead_issued));
+  EXPECT_EQ(20u, logger->get(l_readahead_issued_bytes));
 }

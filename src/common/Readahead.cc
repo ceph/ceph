@@ -3,6 +3,7 @@
 
 #include "common/Readahead.h"
 #include "common/Cond.h"
+#include "common/perf_counters.h"
 
 using std::vector;
 
@@ -49,16 +50,31 @@ Readahead::extent_t Readahead::update(uint64_t offset, uint64_t length, uint64_t
   return extent;
 }
 
+void Readahead::set_perf_counters(PerfCounters *l) {
+  m_lock.lock();
+  m_logger = l;
+  m_lock.unlock();
+}
+
 void Readahead::_observe_read(uint64_t offset, uint64_t length) {
+  if (m_logger) {
+    m_logger->inc(l_readahead_observes);
+  }
   if (offset == m_last_pos) {
     m_nr_consec_read++;
     m_consec_read_bytes += length;
+    if (m_logger) {
+      m_logger->inc(l_readahead_sequential);
+    }
   } else {
     m_nr_consec_read = 0;
     m_consec_read_bytes = 0;
     m_readahead_trigger_pos = 0;
     m_readahead_size = 0;
     m_readahead_pos = 0;
+    if (m_logger) {
+      m_logger->inc(l_readahead_resets);
+    }
   }
   m_last_pos = offset + length;
 }
@@ -116,6 +132,10 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
       m_readahead_trigger_pos = m_readahead_pos + readahead_length / 2;
       m_readahead_pos += readahead_length;
     }
+  }
+  if (m_logger && readahead_length > 0) {
+    m_logger->inc(l_readahead_issued);
+    m_logger->inc(l_readahead_issued_bytes, readahead_length);
   }
   return extent_t(readahead_offset, readahead_length);
 }
