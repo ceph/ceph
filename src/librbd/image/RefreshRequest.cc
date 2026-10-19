@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/ceph_assert.h"
+#include "include/ceph_release_numbers.h"
 
 #include "librbd/image/RefreshRequest.h"
 #include "common/dout.h"

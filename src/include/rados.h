@@ -187,33 +187,6 @@ extern const char *ceph_osd_state_name(int s);
 					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
 
 /*
- * major ceph release numbers
- */
-#define CEPH_RELEASE_ARGONAUT    1
-#define CEPH_RELEASE_BOBTAIL     2
-#define CEPH_RELEASE_CUTTLEFISH  3
-#define CEPH_RELEASE_DUMPLING    4
-#define CEPH_RELEASE_EMPEROR     5
-#define CEPH_RELEASE_FIREFLY     6
-#define CEPH_RELEASE_GIANT       7
-#define CEPH_RELEASE_HAMMER      8
-#define CEPH_RELEASE_INFERNALIS  9
-#define CEPH_RELEASE_JEWEL      10
-#define CEPH_RELEASE_KRAKEN     11
-#define CEPH_RELEASE_LUMINOUS   12
-#define CEPH_RELEASE_MIMIC      13
-#define CEPH_RELEASE_NAUTILUS   14
-#define CEPH_RELEASE_OCTOPUS    15
-#define CEPH_RELEASE_PACIFIC    16
-#define CEPH_RELEASE_QUINCY     17
-#define CEPH_RELEASE_REEF       18
-#define CEPH_RELEASE_SQUID      19
-#define CEPH_RELEASE_TENTACLE   20
-#define CEPH_RELEASE_UMBRELLA   21
-#define CEPH_RELEASE_VAMPIRE    22
-#define CEPH_RELEASE_MAX        23  /* highest + 1 */
-
-/*
  * The error code to return when an OSD can't handle a write
  * because it is too large.
  */
