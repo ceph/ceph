@@ -35,10 +35,16 @@ public:
   {
     ceph_pthread_getname(m_thread_name.data(), m_thread_name.size());
   }
+
+protected:
+  /* protected because these operators should never be called on a
+   * base class reference */
   Entry(const Entry &) = default;
   Entry& operator=(const Entry &) = default;
   Entry(Entry &&e) = default;
   Entry& operator=(Entry &&e) = default;
+
+public:
   virtual ~Entry() = default;
 
   virtual std::string_view strv() const = 0;
