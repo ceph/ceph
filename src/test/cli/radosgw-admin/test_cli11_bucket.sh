@@ -2815,10 +2815,14 @@ echo "=== integration: full bucket lifecycle (cluster) ==="
 _test_uid="cli11_bucket_test_user"
 _test_bucket="cli11-bucket-test"
 _test_display="CLI11 Bucket Test User"
+_test_account="RGW00000000000000042"  # account IDs must be RGW + 17 digits
 
 if cluster_running; then
   # Create a test user (legacy command, not yet CLI11-migrated)
   "$RGW_ADMIN" user create --uid "$_test_uid" --display-name "$_test_display" \
+    >/dev/null 2>&1
+  # Create a test account for bucket chown --account-id (legacy command, not yet CLI11-migrated)
+  "$RGW_ADMIN" account create --account-id "$_test_account" --account-name cli11-bucket-test \
     >/dev/null 2>&1
 
   # Create a bucket via the S3 API using radosgw-admin bucket link on a
@@ -2948,6 +2952,20 @@ if cluster_running; then
       # change that still exercises the full chown path; exit 0, no output
       check_cluster "integration: bucket chown" 0 "" -- \
         bucket chown --bucket "$_test_bucket" --uid "$_test_uid"
+
+      # bucket chown --account-id: the value reaches chown. A nonexistent account
+      # fails to load (exit 2); a real one becomes the owner, as bucket stats
+      # shows. Then chown back so the later tests see the test user as owner.
+      check_cluster "integration: chown --account-id nonexistent" 2 "failed to load account" -- \
+        bucket chown --bucket "$_test_bucket" --account-id nosuch
+      check_cluster "integration: chown --account-id" 0 "" -- \
+        bucket chown --bucket "$_test_bucket" --account-id "$_test_account"
+      check_cluster "integration: stats shows the account as owner" 0 "\"owner\": \"$_test_account\"" -- \
+        bucket stats --bucket "$_test_bucket"
+      check_cluster "integration: chown back to the test user" 0 "" -- \
+        bucket chown --bucket "$_test_bucket" --uid "$_test_uid"
+      check_cluster "integration: stats shows the test user as owner again" 0 "\"owner\": \"$_test_uid\"" -- \
+        bucket stats --bucket "$_test_bucket"
 
       # bucket limit check for the test user: JSON with user_id + buckets
       check_cluster "integration: limit check --uid" 0 "user_id" -- \
@@ -3093,15 +3111,16 @@ if cluster_running; then
         bucket rm --purge-objects --bucket "$_test_bucket"
     else
       echo "SKIP [integration: lifecycle tests]: could not get credentials for test user"
-      SKIP=$((SKIP+39))
+      SKIP=$((SKIP+44))
     fi
   else
     echo "SKIP [integration: lifecycle tests]: aws CLI not available (needed to create test bucket)"
-    SKIP=$((SKIP+34))
+    SKIP=$((SKIP+39))
   fi
 
-  # Cleanup: remove the test user
+  # Cleanup: remove the test user and account
   "$RGW_ADMIN" user rm --uid "$_test_uid" --purge-data >/dev/null 2>&1
+  "$RGW_ADMIN" account rm --account-id "$_test_account" >/dev/null 2>&1
 fi
 
 # ============================================================

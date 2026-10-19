@@ -2,6 +2,7 @@
 # CLI11 migration tests for cross-cutting global handling:
 #   1. ceph global flags stripped by rgw_global_init before CLI11 parses
 #   2. the --cli11-help "Ceph options" footer (every command, aligned)
+#   3. radosgw-admin's own global --account-id (positions, values)
 #
 # Usage:
 #   ./test_cli11_globals.sh
@@ -146,12 +147,72 @@ check_cluster "global --debug-rgw 5 (space) on bucket list"             0 "" -- 
 check_cluster "global --rgw-zone default before command on bucket list" 0 "" -- --rgw-zone default bucket list
 
 # ============================================================
+# --account-id: radosgw-admin's own global flag, registered once on the root,
+# so it is tested here across command families. Accepted before the command,
+# between the command words, or after them, with no position warning.
+# ============================================================
+WARN_ACCOUNT_ID_DUP="Warning: --account-id specified multiple times, using last value"
+ERR_NO_BUCKET="ERROR: bucket name not specified"
+
+echo ""
+echo "=== --account-id parsing (no cluster) ==="
+check "chown: --account-id missing value"    1 "--account-id: 1 required TEXT missing" \
+  bucket chown --account-id
+check "--account-id missing value (at root)" 1 "--account-id: 1 required TEXT missing" \
+  --account-id
+# another command family: script get is run without its required --context,
+# so it stops with that error (exit 22), which comes after parsing succeeded
+check "script get: --account-id accepted" 22 "ERROR: context was not provided (via --context)" \
+  script get --account-id a
+
+echo ""
+echo "=== --account-id parsing on bucket chown (with cluster) ==="
+# Run without --bucket, so chown stops with "bucket name not specified"
+# (exit 22). That check is in the handler, after parsing succeeded and the
+# driver is up, hence the cluster.
+check_cluster "chown: --account-id after the command"        22 "$ERR_NO_BUCKET" -- \
+  bucket chown --account-id a
+check_cluster "chown: --account-id before the command"       22 "$ERR_NO_BUCKET" -- \
+  --account-id a bucket chown
+check_cluster "chown: --account-id between bucket and chown" 22 "$ERR_NO_BUCKET" -- \
+  bucket --account-id a chown
+check_cluster "chown: --account-id=a (= form)"               22 "$ERR_NO_BUCKET" -- \
+  bucket chown --account-id=a
+check_cluster "chown: --account-id= (empty value)"           22 "$ERR_NO_BUCKET" -- \
+  bucket chown --account-id=
+check_cluster "chown: duplicate --account-id same level"     22 "$WARN_ACCOUNT_ID_DUP" -- \
+  bucket chown --account-id foo --account-id bar
+check_cluster "chown: duplicate --account-id cross level"    22 "$WARN_ACCOUNT_ID_DUP" -- \
+  --account-id foo bucket chown --account-id bar
+
+echo ""
+echo "=== --account-id value reaches the handler (with cluster) ==="
+# bucket stats --account-id loads that account: a nonexistent one fails
+# (exit 2); an empty value means no account, so all buckets are listed (exit 0).
+check_cluster "stats: nonexistent account after the command"  2 "" -- \
+  bucket stats --account-id nosuch
+check_cluster "stats: nonexistent account before the command" 2 "" -- \
+  --account-id nosuch bucket stats
+check_cluster "stats: nonexistent account between bucket and stats" 2 "" -- \
+  bucket --account-id nosuch stats
+check_cluster "stats: nonexistent account (= form)"           2 "" -- \
+  bucket stats --account-id=nosuch
+check_cluster "stats: --account-id= (empty) means no account" 0 "" -- \
+  bucket stats --account-id=
+check_cluster "stats: duplicate, last (empty) wins"           0 "$WARN_ACCOUNT_ID_DUP" -- \
+  bucket stats --account-id nosuch --account-id=
+check_cluster "stats: duplicate, last (nonexistent) wins"     2 "$WARN_ACCOUNT_ID_DUP" -- \
+  bucket stats --account-id= --account-id nosuch
+check_cluster "stats: duplicate cross level, last wins"       0 "$WARN_ACCOUNT_ID_DUP" -- \
+  --account-id nosuch bucket stats --account-id=
+
+# ============================================================
 # --cli11-help footer: ceph globals can't be real CLI11 options (stripped before
 # parse), so they are documented in the footer. Three properties:
 #   everywhere - the "Ceph options" footer is set before the subcommands are
 #                created, so footer_ is copied to every child and each command's
 #                help is self-contained (root and subcommands all show it).
-#   own globals - --tenant/--uid ARE real root options and DO inherit into every
+#   own globals - --tenant/--uid/--account-id ARE real root options and DO inherit into every
 #                subcommand's help.
 #   aligned    - footer paragraph formatting is disabled, so the column padding
 #                is emitted verbatim (multi-space gaps survive).
@@ -174,6 +235,7 @@ check_help_content "root footer aligned (padding kept)" "FILE       read configu
 # radosgw-admin's own globals render as real options at root
 check_help_content "root own-global --tenant" "--tenant"             --cli11-help
 check_help_content "root own-global --uid"     "--uid"                --cli11-help
+check_help_content "root own-global --account-id" "--account-id"     --cli11-help
 
 echo ""
 echo "=== --cli11-help footer on bucket subcommands (no cluster) ==="
@@ -187,6 +249,7 @@ check_help_content "bucket link: footer aligned (padding kept)" "FILE       read
 # ... and own globals inherit into subcommand help as real options
 check_help_content "bucket link: own-global --tenant" "--tenant"    bucket link --cli11-help
 check_help_content "bucket link: own-global --uid"     "--uid"       bucket link --cli11-help
+check_help_content "bucket link: own-global --account-id" "--account-id" bucket link --cli11-help
 
 echo ""
 echo "=== --cli11-help footer on script subcommands (no cluster) ==="
@@ -199,6 +262,7 @@ check_help_content "script rm: footer heading"     "Ceph options:"  script rm --
 # own globals inherit into script subcommand help too
 check_help_content "script get: own-global --tenant" "--tenant"     script get --cli11-help
 check_help_content "script get: own-global --uid"     "--uid"        script get --cli11-help
+check_help_content "script get: own-global --account-id" "--account-id" script get --cli11-help
 check_help_content "script put: own-global --tenant" "--tenant"     script put --cli11-help
 
 # ============================================================

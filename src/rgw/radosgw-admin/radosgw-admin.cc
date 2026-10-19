@@ -4523,10 +4523,12 @@ int main(int argc, const char **argv)
     // command created below inherits the same maximum, and may set its own.
     app.require_subcommand(show_cli11_help ? 0 : -1);
 
-    constexpr std::string_view tenant_desc = "tenant name";  // shared across command families
-    // radosgw-admin's own global flags (category 1, identity) — owned by CLI11 on the
-    // root and declared once here instead of on every command. Matches the legacy parser,
-    // where --tenant and -i/--uid are handled globally for any command.
+    constexpr std::string_view tenant_desc     = "tenant name";
+    constexpr std::string_view account_id_desc = "account id";
+    // radosgw-admin's own global flags (category 1, identity), shared across command
+    // families — owned by CLI11 on the root and declared once here instead of on every
+    // command. Matches the legacy parser, where --tenant, -i/--uid and --account-id are
+    // handled globally for any command.
     app.add_option("--tenant", tenant, std::string(tenant_desc))->take_last();
     // Legacy exits immediately when -i/--uid resolves to an empty user
     // ("no value for uid", e.g. -i "" or -i '$'); run the same check on
@@ -4538,6 +4540,7 @@ int main(int argc, const char **argv)
             throw CLI::RuntimeError(1);
           }
         });
+    app.add_option("--account-id", account_id, std::string(account_id_desc))->take_last();
 
     // Ceph's globals are stripped by rgw_global_init() before CLI11 runs, so document
     // them in the footer (descriptions from generic_usage(), common/ceph_argparse.cc).
