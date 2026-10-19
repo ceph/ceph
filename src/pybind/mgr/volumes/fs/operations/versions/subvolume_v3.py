@@ -798,7 +798,7 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
 
             self.v1.mark_empty()
             should_purge = True
-        if self.v2.is_snap_path(snap_path):
+        elif self.v2.is_snap_path(snap_path):
             if self.v2.has_snap():
                 return False
 
