@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import inspect
 import logging
 from typing import Any, Dict, List, Optional, Union
 
@@ -336,7 +337,7 @@ class Docs(BaseController):
 
                 methods[method.lower()] = {
                     'tags': [cls._get_tag(endpoint)],
-                    'description': func.__doc__,
+                    'description': inspect.getdoc(func),
                     'parameters': params,
                     'responses': cls._gen_responses(method, resp, version)
                 }
