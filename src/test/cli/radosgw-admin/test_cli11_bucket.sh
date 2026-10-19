@@ -2552,6 +2552,10 @@ check_cluster "list: --bucket '' lists all buckets"            0 "" -- \
 # commands CLI11 does not know are parsed by the legacy code
 check_cluster "unmigrated: bucket sync status reaches legacy"          22 "ERROR: bucket not specified" -- \
   bucket sync status
+check_cluster "unmigrated: bucket suspend reaches legacy"              22 "ERROR: bucket not specified" -- \
+  bucket suspend
+check_cluster "unmigrated: bucket unsuspend reaches legacy"            22 "ERROR: bucket not specified" -- \
+  bucket unsuspend
 check_cluster "unmigrated: user info reaches legacy"                   22 "ERROR: --uid or --access-key required" -- \
   user info
 check "unknown command reaches legacy"                         1 "ERROR: Unrecognized argument: 'banana'" \

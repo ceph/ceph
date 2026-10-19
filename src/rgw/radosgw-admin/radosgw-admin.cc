@@ -4481,7 +4481,7 @@ int main(int argc, const char **argv)
         "limit", "logging", "rewrite", "set-min-shards", "object", "shard", "resync",
         "radoslist", "rados"};
     static const std::set<std::string_view> legacy_bucket_words = {
-        "sync", "reshard"};
+        "sync", "reshard", "suspend", "unsuspend"};
     bool route_bucket_to_legacy = false;
     if (!show_cli11_help) {  // keep --cli11-help working for any bucket command
       for (int i = 1; i < new_argc; ++i) {
