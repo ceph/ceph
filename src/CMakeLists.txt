@@ -63,7 +63,7 @@ endif(ENABLE_GIT_VERSION)
 #   <release name, e.g. 'luminous'>
 #   <release type: 'dev' for x.0.z, 'rc' or x.1.z, or 'stable' or x.2.z>
 # note that the release name is semi-redundant and must match CEPH_RELEASE_*
-# definitions in include/rados.h and common/ceph_strings.c.
+# definitions in include/ceph_release_numbers.h and common/ceph_strings.cc.
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/ceph_release CEPH_RELEASE_FILE)
 list(GET CEPH_RELEASE_FILE 0 CEPH_RELEASE)
 list(GET CEPH_RELEASE_FILE 1 CEPH_RELEASE_NAME)
