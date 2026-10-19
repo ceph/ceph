@@ -18,10 +18,18 @@ namespace ceph {
 namespace logging {
 
 class SubsystemMap {
+  static constexpr std::array<uint8_t, ceph_subsys_get_num()> default_gather_levels = []{
+    constexpr auto src = ceph_subsys_get_as_array();
+    std::array<uint8_t, ceph_subsys_get_num()> result;
+    for (std::size_t i = 0; i < result.size(); ++i)
+      result[i] = std::max(src[i].log_level, src[i].gather_level);
+    return result;
+  }();
+
   // Access to the current gathering levels must be *FAST* as they are
   // read over and over from all places in the code (via should_gather()
   // by i.e. dout).
-  std::array<uint8_t, ceph_subsys_get_num()> m_gather_levels;
+  std::array<uint8_t, ceph_subsys_get_num()> m_gather_levels = default_gather_levels;
 
   // The rest. Should be as small as possible to not unnecessarily
   // enlarge md_config_t and spread it other elements across cache
@@ -35,10 +43,8 @@ public:
     constexpr auto s = ceph_subsys_get_as_array();
     m_subsys.reserve(s.size());
 
-    std::size_t i = 0;
     for (const ceph_subsys_item_t& item : s) {
       m_subsys.emplace_back(item);
-      m_gather_levels[i++] = std::max(item.log_level, item.gather_level);
     }
   }
 
