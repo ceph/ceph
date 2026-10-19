@@ -76,6 +76,7 @@ from .staging import (
     rgw_credential_refs,
     tls_refs,
     ug_refs,
+    warn_availability,
 )
 from .utils import checked, ynbool
 
@@ -409,6 +410,14 @@ class ClusterConfigHandler:
                         self.public_store
                     ):
                         results.replace(err)
+                if results.success:
+                    for resource_result in results.resources():
+                        warn_availability(
+                            resource_result.src, staging, resource_result
+                        )
+                    staging.warn_availability_transitions(
+                        self.public_store, results
+                    )
         except ErrorResult as err:
             results.replace(err)
         except Exception as err:

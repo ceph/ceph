@@ -157,6 +157,14 @@ def test_default_reserves_global_support(amodule):
     assert 'availability' not in stored
 
 
+def _persistent_handle_warnings(result):
+    return [
+        warning
+        for warning in result.get('warnings', [])
+        if 'persistent handles' in warning.lower()
+    ]
+
+
 def _config(module, cluster_id='foo'):
     return module._public_store[cluster_id, 'config.smb'].get()
 
@@ -185,12 +193,26 @@ def test_availability_inheritance(
         }
     if share_availability is not None:
         share_data['availability'] = share_availability
-    _apply(amodule, smb.resources.load([share_data, cluster_data]))
+    result = _apply(amodule, smb.resources.load([share_data, cluster_data]))
     cluster_enabled = bool(
         (cluster_availability or {}).get('persistent_handles')
     )
     share_value = (share_availability or {}).get('persistent_handles')
     enabled = cluster_enabled if share_value is None else share_value
+    results_by_type = {
+        item['resource']['resource_type']: item
+        for item in result.to_simplified()['results']
+    }
+    cluster_warnings = _persistent_handle_warnings(
+        results_by_type['ceph.smb.cluster']
+    )
+    share_warnings = _persistent_handle_warnings(
+        results_by_type['ceph.smb.share']
+    )
+    assert bool(cluster_warnings) == cluster_enabled
+    assert bool(share_warnings) == enabled
+    for warning in cluster_warnings + share_warnings:
+        assert 'performance' in warning
     cfg = _config(amodule)
     global_opts = cfg['globals']['foo']['options']
     share_opts = cfg['shares']['s1']['options']
