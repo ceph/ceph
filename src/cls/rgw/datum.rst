@@ -84,8 +84,9 @@ candidate-publication guarantee. Reset-statistics borrows the incoming buffer
 and retains native handling of the accumulated header and update ordering.
 Native leaf codecs, account key ordering and shared storage helpers stay unchanged.
 
-Native callers remain C++23. RGW CLS requires ``WITH_DATUM`` and
-``DATUM_ENABLE_ZPP``. Three private object targets provide four
+Native callers remain C++23. Datum is registered with normal RGW builds;
+RGW CLS requires its zpp adapter (``DATUM_ENABLE_ZPP``).
+Three private object targets provide four
 C++26 translation units: general RGW bindings and OLH log bindings in ``cls_rgw_datum``,
 GC bindings in ``cls_rgw_datum_gc``, and user bindings in ``cls_user_datum``.
 Their language requirements and Datum headers do not propagate through the

@@ -234,7 +234,7 @@ if (WITH_RADOSGW)
   endif()
 
   if(NOT TARGET datum::zpp)
-    message(FATAL_ERROR "RGW CLS requires WITH_DATUM=ON and DATUM_ENABLE_ZPP=ON")
+    message(FATAL_ERROR "RGW CLS requires Datum's zpp adapter (DATUM_ENABLE_ZPP=ON)")
   endif()
   add_subdirectory(rgw)
   add_subdirectory(user)
