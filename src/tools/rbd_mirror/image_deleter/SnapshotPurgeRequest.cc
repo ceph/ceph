@@ -9,6 +9,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/journal/Policy.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 
@@ -150,6 +151,37 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
     return;
   }
   m_image_ctx->image_lock.unlock_shared();
+
+  if (auto group_ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
+        &m_snap_namespace); group_ns != nullptr) {
+    librados::IoCtx group_io_ctx;
+    r = librbd::util::create_ioctx(m_image_ctx->md_ctx, "snapshot group",
+      group_ns->group_pool, {}, &group_io_ctx);
+    cls::rbd::GroupSnapshot group_snap;
+    if (r == 0) {
+      r = librbd::cls_client::group_snap_get_by_id(&group_io_ctx,
+        librbd::util::group_header_name(group_ns->group_id),
+        group_ns->group_snapshot_id, &group_snap);
+    }
+    if (r == 0) {
+      for (const auto& spec : group_snap.snaps) {
+        if (spec.pool == m_image_ctx->md_ctx.get_id() &&
+            spec.image_id == m_image_ctx->id && spec.snap_id == snap_id) {
+          // Keep the image in the trash until group snapshot cleanup removes
+          // this reference. Purging it here would leave an incomplete group.
+          m_ret_val = -EBUSY;
+          close_image();
+          return;
+        }
+      }
+    } else if (r != -ENOENT) {
+      derr << "failed to check user group snapshot: " << cpp_strerror(r)
+           << dendl;
+      m_ret_val = r;
+      close_image();
+      return;
+    }
+  }
 
   if (!is_protected) {
     snap_remove();

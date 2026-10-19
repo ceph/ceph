@@ -124,6 +124,13 @@ private:
    *                            |                                                 v
    *                            + ------------------------------------------> FINISH(r)
    *
+   *  On resync, REMOVE_LOCAL_GROUP first loads remote group snapshots and
+   *  validates user snapshot membership. A dependency outside the current
+   *  remote group returns -EBUSY before any local snapshots are removed.
+   *  It then checks for remote members that already
+   *  exist outside the local group. Clear only this group's snapshot
+   *  references and finish with -EEXIST until the user removes the conflict.
+   *
    *  HANDLE_REMOTE_GROUP_RESULT also calls FINISH directly when the local
    *  group is primary, both groups are missing, the peers are not linked, or
    *  an error prevents bootstrap from continuing.
@@ -153,6 +160,9 @@ private:
    *                                             |
    *                                             v
    *                                 LOAD_REMOTE_GROUP_SNAPSHOTS
+   *                                             |
+   *                                             v
+   *                             VALIDATE_USER_SNAPSHOT_DEPENDENCIES
    *                                             |
    *                                             v
    *                               SELECT_TARGET_GROUP_MEMBERSHIP
@@ -217,6 +227,7 @@ private:
   std::string m_prepare_local_group_name;
   std::string m_prepare_remote_group_name;
   bool m_local_group_removed = false;
+  bool m_resync_snapshots_checked = false;
 
   bufferlist m_out_bl;
 
@@ -239,6 +250,7 @@ private:
   void handle_load_local_group_snapshots(int r);
   void load_remote_group_snapshots();
   void handle_load_remote_group_snapshots(int r);
+  int validate_user_snapshot_dependencies();
   int select_target_group_membership();
 
   void reconcile_local_group_members();

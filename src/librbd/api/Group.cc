@@ -264,7 +264,20 @@ int GroupSnapshot_to_group_snap_info2(
     std::string image_name;
     r = cls_client::dir_get_name(&image_ioctx, RBD_DIRECTORY, snap.image_id,
                                  &image_name);
-    if (r < 0) {
+    if (r == -ENOENT) {
+      // A detached image can be in the trash while its user group snapshots
+      // are still retained. Resolve its original name from the trash entry.
+      cls::rbd::TrashImageSpec trash_spec;
+      r = cls_client::trash_get(&image_ioctx, snap.image_id, &trash_spec);
+      if (r == 0) {
+        image_name = trash_spec.name;
+      }
+    }
+    if (r == -ENOENT) {
+      // A former member can be deleted by standalone image resync after its
+      // group dependencies are gone. Keep listing the remaining saved members.
+      continue;
+    } else if (r < 0) {
       return r;
     }
 
