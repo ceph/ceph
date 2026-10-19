@@ -45,7 +45,13 @@ enum class Refused {
  * bucket could want cross-account policy, and an extended bucket
  * could want strict parity.
  *
- * A third position exists in the tree and is deliberately not
+ * Three values, by which access path is native:  `posix-strict` (the
+ * filesystem;  a side-loading NFS or SMB client is co-equal, so POSIX
+ * permissions must stay truthful), `s3-metadata` (S3 for the
+ * gateway's records *about* objects), `s3-native` (S3;  the
+ * filesystem is storage).
+ *
+ * A further position exists in the tree and is deliberately not
  * expressed here yet:  lifecycle acts as the **bucket owner**
  * (DECISIONS.md §6.3), which is neither the requester nor the
  * gateway.  When it is brought onto this axis it belongs as another
@@ -76,12 +82,16 @@ public:
   const char* name() const override { return "posix-strict"; }
 };
 
-/* S3 decides for an object's metadata, and never for its bytes.
+/* S3 decides for an object's metadata, and not for its bytes.
  *
- * `rgw_nsfs_cross_account_permission`.  The data answer is not an
- * oversight and not a default to be relaxed later:  it is the line
- * the axis is drawn on, and it is enforced here rather than at the
- * call sites, so a reader of this class knows the whole of it. */
+ * The middle value.  It is enforced here rather than at the call
+ * sites, so a reader of this class knows the whole of it.
+ *
+ * The data answer is this value's, not the axis's.  `s3-native`
+ * below answers data differently and is a supported model;  an
+ * earlier version of this comment called the data line "the line the
+ * axis is drawn on", which overstated a description of what was
+ * built as a principle. */
 class S3MetadataAccess final : public AccessStrategy {
 public:
   Refused refused(AccessClass what) const override {
@@ -91,25 +101,33 @@ public:
   const char* name() const override { return "s3-metadata"; }
 };
 
-/* Data on S3's word -- **wrong on purpose, and reachable only from a
- * driver hint.**
+/* S3 is the native access model:  S3 decides, for data as well as
+ * metadata.
  *
- * No configuration selects this.  It exists so that the test which
- * asserts the attribute/byte line can watch itself fail:  a test for
- * an invariant that has only ever seen a correct system proves
- * nothing, and the guard this project wrote for exactly this line
- * once never ran at all, because it keyed on a flag the real path
- * did not set (2026-10-16).
+ * The filesystem is storage, and a side-loading NFS or SMB client is
+ * secondary -- so POSIX permissions no longer describe who can reach
+ * an object's bytes.  A deployment choosing this accepts that;  one
+ * that cannot should run `posix-strict`, which is Spectrum Scale's
+ * default.
  *
- * Selecting it makes the gateway serve another identity's bytes on
- * an S3 grant alone, which is the mistake a future change would
- * make.  The hint restores the configured model afterwards. */
-class DataOnS3sWordAccess final : public AccessStrategy {
+ * This is what `rgw::sal::POSIXDriver` already does.  `rgw_sal_posix.cc`
+ * has no `FSIdentity`, no `run_as` and no identity plumbing:  every
+ * request runs as the gateway and S3 is the only authority.  So nsfs
+ * here and the posix driver should score alike on the same suite, and
+ * a difference means one of them is wrong.
+ *
+ * The invariant test takes its second polarity from here:
+ * `posix-strict` refuses the bytes and `s3-native` serves them, so it
+ * watches itself fail without a source edit and a rebuild.  That was
+ * the only thing this strategy did when it was written (2026-10-16),
+ * reachable from the driver hint alone;  making it selectable was a
+ * rename and a configuration change, not new behaviour. */
+class S3NativeAccess final : public AccessStrategy {
 public:
   Refused refused(AccessClass) const override {
     return Refused::as_gateway_raised;
   }
-  const char* name() const override { return "data-on-s3s-word"; }
+  const char* name() const override { return "s3-native"; }
 };
 
 } } } // namespace rgw::sal::nsfs

@@ -4405,7 +4405,11 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   /* the access model, selected once:  what to do when the filesystem
    * refuses an operation S3 authorised.  Named in the `fs features`
    * map, because no request reveals it. */
-  if (cct->_conf.get_val<bool>("rgw_nsfs_cross_account_permission")) {
+  const auto model =
+    cct->_conf.get_val<std::string>("rgw_nsfs_access_model");
+  if (model == "s3-native") {
+    access_strategy = std::make_unique<nsfs::S3NativeAccess>();
+  } else if (model == "s3-metadata") {
     access_strategy = std::make_unique<nsfs::S3MetadataAccess>();
   } else {
     access_strategy = std::make_unique<nsfs::PosixStrictAccess>();
@@ -17293,12 +17297,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    *   object_attrs=<...>  and for an object's tags and ACL
    *
    * `set=` points it at another model for the rest of the process:
-   * `posix-strict`, `s3-metadata`, `default` (whatever was
-   * configured), or `data-on-s3s-word`, which is **wrong on purpose**
-   * so the invariant test can watch itself fail.  Proving a test can
-   * fail by editing the source and rebuilding is what this project
-   * does not do;  a runtime control that asserts both polarities is
-   * what it does instead.
+   * `posix-strict`, `s3-metadata`, `s3-native`, or `default`
+   * (whatever was configured).  Switching is how the invariant test
+   * gets its second polarity -- `posix-strict` refuses the bytes and
+   * `s3-native` serves them -- rather than by editing the source and
+   * rebuilding, which this project does not do.
    *
    * The suite must put it back.  A model left switched would make
    * every later test in the run meaningless, so a test that sets it
@@ -17306,7 +17309,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   if (hint == "access-model") {
     static const nsfs::PosixStrictAccess strict;
     static const nsfs::S3MetadataAccess metadata;
-    static const nsfs::DataOnS3sWordAccess wrong_on_purpose;
+    static const nsfs::S3NativeAccess native;
 
     if (auto it = params.find("set"); it != params.end()) {
       const nsfs::AccessStrategy* want = nullptr;
@@ -17314,8 +17317,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	want = &strict;
       } else if (it->second == "s3-metadata") {
 	want = &metadata;
-      } else if (it->second == "data-on-s3s-word") {
-	want = &wrong_on_purpose;
+      } else if (it->second == "s3-native") {
+	want = &native;
       } else if (it->second == "default") {
 	want = access_strategy.get();
       } else {
