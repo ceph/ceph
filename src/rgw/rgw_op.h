@@ -1229,9 +1229,10 @@ class RGWCreateBucket : public RGWOp {
 };
 
 class RGWDeleteBucket : public RGWOp {
+private:
+  bool log_op{true};
 protected:
   RGWObjVersionTracker objv_tracker;
-
 public:
   RGWDeleteBucket() {}
 
@@ -1244,6 +1245,7 @@ public:
   std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  bool always_do_bucket_logging() const override { return log_op; }
 };
 
 struct rgw_slo_entry {
