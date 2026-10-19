@@ -163,6 +163,8 @@ struct ECBackend::JournalState final : md_config_obs_t {
     OpRequestRef op;
     ObjectContextRef obc;
     hobject_t object;
+    osd_reqid_t reqid;
+    version_t user_version = 0; // the one the write took (ec_journal_acked)
     // One per record: a write that crosses a stripe boundary has two.
     std::vector<ECWriteJournal::Ticket> tickets;
     unsigned pending = 0; // holders yet to commit
@@ -171,6 +173,13 @@ struct ECBackend::JournalState final : md_config_obs_t {
   };
   std::map<ceph_tid_t, Inflight> inflight;
   std::map<hobject_t, std::deque<ceph_tid_t>> inflight_by_object;
+  // Resends of journaled writes whose record is in flight, answered right
+  // after the original (journal_hold_resend). A resend of a durable one is
+  // answered in do_op at once (journal_find_request); one of a
+  // materialized record by the PG log.
+  std::map<osd_reqid_t, std::vector<OpRequestRef>> resends;
+  uint64_t dup_replies = 0; // resends answered by the journal
+  uint64_t dup_held = 0;    // ... of them held for the record's commit
   // Client reads are served from the journal. Until a stripe flushes, its
   // shards hold the bytes from before the journaled writes, so a read lays
   // the stripe's live blocks over what the shards return, or answers from
@@ -1668,10 +1677,16 @@ void ECBackend::reset_journal()
     s.requeued_records += requeue.size();
     dout(10) << __func__ << " " << requeue.size()
              << " journaled writes in flight at the interval change" << dendl;
+    // Resends held for those writes run again behind them and meet the
+    // new record of their write (journal_find_request).
+    for (auto& [reqid, ops] : s.resends) {
+      requeue.insert(requeue.end(), ops.begin(), ops.end());
+    }
     s.inflight.clear();
     s.inflight_by_object.clear();
     get_parent()->ec_journal_requeue(std::move(requeue));
   }
+  s.resends.clear();
   s.header_reads = 0;
   s.replay_indexed.clear();
   s.replay_fetching.clear();
@@ -1705,6 +1720,14 @@ void ECBackend::dump_journal(Formatter* f) const
   f->dump_unsigned("flushes_in_flight", s.flushes_in_flight);
   f->dump_unsigned("max_flushes", s.max_flushes);
   f->dump_unsigned("records_in_flight", s.inflight.size());
+  f->dump_unsigned("requests", s.journal.request_count());
+  f->dump_unsigned("request_window", s.journal.window_size());
+  f->dump_unsigned("pinned_segments", s.journal.pinned_segments());
+  f->dump_unsigned("dup_replies", s.dup_replies);
+  f->dump_unsigned("dup_held", s.dup_held);
+  f->dump_unsigned("resends_held", s.resends.size());
+  f->dump_unsigned("object_metas", s.journal.object_meta_count());
+  f->dump_unsigned("newest_user_version", s.journal.newest_user_version());
   f->dump_unsigned("header_reads", s.header_reads);
   f->dump_unsigned("admitted", s.admitted);
   f->dump_unsigned("acked", s.acked);
@@ -1906,10 +1929,10 @@ void ECBackend::pump_journal()
     ++s.flushing[object];
     const auto offset = stripe->offset;
     const auto covered = stripe->newest_version;
-    const auto mtime = stripe->newest_mtime;
+    auto reqids = stripe->reqids; // the write logs them (extra_reqids)
     // Runs from eval_repop with the PG lock held.
     get_parent()->ec_journal_flush(object, std::move(runs), offset, covered,
-      mtime, [this, flushed = std::move(*stripe), full] {
+      std::move(reqids), [this, flushed = std::move(*stripe), full] {
         auto& s = *journal_state;
         const int finished = s.journal.finish_flush(flushed, 0);
         ceph_assert(finished == 0);
@@ -2295,6 +2318,12 @@ PGBackend::ec_journal_take_t ECBackend::journal_take_for_write(
   }
   uint64_t dropped = 0;
   take.runs = ECWriteJournal::absorb_runs(taken, written, &dropped);
+  // The write materializes these stripes, so it logs their records'
+  // requests (extra_reqids) and the journal lets go of them at its commit.
+  for (const auto& stripe : taken) {
+    take.reqids.insert(take.reqids.end(), stripe.reqids.begin(),
+                       stripe.reqids.end());
+  }
   ++s.direct_takes;
   s.taken_stripes += taken.size();
   s.dropped_stripes += dropped;
@@ -2416,6 +2445,18 @@ void ECBackend::journal_write(OpRequestRef op, ObjectContextRef obc)
   flight.obc = obc;
   flight.object = hoid;
   flight.bytes = length;
+  flight.reqid = m->get_reqid();
+  // The write takes the next user version, as a logged write would
+  // (PrimaryLogPG::finish_ctx), and the object's cached info shows it and
+  // the client's mtime from here on: stat, assert-version and replies see
+  // the write. The flush persists both; the journal keeps them for an
+  // object context read from disk meanwhile (journal_object_meta).
+  const version_t user_version = std::max({
+    get_parent()->get_info().last_user_version, obc->obs.oi.user_version,
+    s.journal.newest_user_version()}) + 1;
+  obc->obs.oi.user_version = user_version;
+  obc->obs.oi.mtime = m->get_mtime();
+  flight.user_version = user_version;
   // One record per stripe the write lies in: the index, the flushes and
   // replay are per stripe, so a write across a stripe boundary is two
   // records, each judged and materialized on its own. They take consecutive
@@ -2431,8 +2472,12 @@ void ECBackend::journal_write(OpRequestRef op, ObjectContextRef obc)
     ceph::bufferlist piece;
     piece.substr_of(osd_op.indata, at - offset, len);
     ECWriteJournal::Ticket ticket;
+    // The record carries the request and the user version the reply will
+    // report, so a resend is recognized until the stripe is materialized
+    // and a replaying primary rebuilds the object's metadata overlay.
     const int r = s.journal.append(hoid, version, obc->obs.oi.size, at, piece,
-      &placements.emplace_back(), &ticket, m->get_mtime());
+      &placements.emplace_back(), &ticket, m->get_mtime(), m->get_reqid(),
+      user_version);
     ceph_assertf(r == 0, "EC journal POC: admitted write did not append: %d", r);
     ceph_assert(ticket.sequence == version.version);
     s.open_segment = ticket.segment;
@@ -2532,10 +2577,24 @@ void ECBackend::journal_record_committed(pg_shard_t from, ceph_tid_t tid)
       break;
     }
     ++s.acked;
+    const osd_reqid_t reqid = j->second.reqid;
+    ObjectContextRef obc = j->second.obc;
     get_parent()->ec_journal_acked(std::move(j->second.op),
-                                   std::move(j->second.obc), j->second.bytes);
+                                   std::move(j->second.obc), j->second.bytes,
+                                   j->second.user_version);
     s.inflight.erase(j);
     queue.pop_front();
+    // Resends held while the record was in flight get the same answer.
+    if (auto r = s.resends.find(reqid); r != s.resends.end()) {
+      const auto request = s.journal.find_request(reqid);
+      const version_t user_version =
+        request ? request->user_version : obc->obs.oi.user_version;
+      for (auto& resend : r->second) {
+        ++s.dup_replies;
+        get_parent()->ec_journal_dup_acked(std::move(resend), obc, user_version);
+      }
+      s.resends.erase(r);
+    }
   }
   if (queue.empty()) {
     s.inflight_by_object.erase(q);
@@ -2549,6 +2608,45 @@ void ECBackend::journal_record_committed(pg_shard_t from, ceph_tid_t tid)
        s.flushable()) || (was_full && !s.journal.pressure())) {
     schedule_journal();
   }
+}
+
+std::optional<PGBackend::ec_journal_request_t> ECBackend::journal_find_request(
+  const osd_reqid_t& reqid) const
+{
+  if (!journal_state) {
+    return std::nullopt;
+  }
+  const auto request = journal_state->journal.find_request(reqid);
+  if (!request) {
+    return std::nullopt;
+  }
+  return PGBackend::ec_journal_request_t{request->user_version,
+                                         request->durable};
+}
+
+void ECBackend::journal_hold_resend(const osd_reqid_t& reqid, OpRequestRef op)
+{
+  auto& s = *journal_state;
+  ++s.dup_held;
+  s.resends[reqid].push_back(std::move(op));
+}
+
+std::optional<PGBackend::ec_journal_object_meta_t> ECBackend::journal_object_meta(
+  const hobject_t& oid) const
+{
+  if (!journal_state) {
+    return std::nullopt;
+  }
+  const auto meta = journal_state->journal.object_meta(oid);
+  if (!meta) {
+    return std::nullopt;
+  }
+  return PGBackend::ec_journal_object_meta_t{meta->user_version, meta->mtime};
+}
+
+version_t ECBackend::journal_newest_user_version() const
+{
+  return journal_state ? journal_state->journal.newest_user_version() : 0;
 }
 
 eversion_t ECBackend::journal_version_now() const
@@ -2949,6 +3047,8 @@ void ECBackend::judge_replayed(ECWriteJournal::Record record)
     const int r = s.journal.adopt(record);
     ceph_assertf(r == 0, "EC journal replay: cannot adopt %d", r);
     ++s.replay_adopted;
+    // The record's user version and mtime are the object's again.
+    get_parent()->ec_journal_object_meta_changed(record.object);
     break;
   }
   case state_t::dead:

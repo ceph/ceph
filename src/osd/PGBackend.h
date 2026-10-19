@@ -243,20 +243,35 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      // EC journal POC: materialize one stripe of journaled blocks with an
      // ordinary logged write of oid (runs keyed by absolute offset), which
      // also records `covered` for the stripe in the object's materialized
-     // attr. on_commit runs with the PG lock held once every shard committed.
+     // attr and logs the requests of the records it materializes as its
+     // entry's extra_reqids (a resend is then answered from the PG log).
+     // on_commit runs with the PG lock held once every shard committed.
      // Called from the journal's timer, never inside another op's submission.
      virtual void ec_journal_flush(const hobject_t& oid,
                                    std::map<uint64_t, ceph::bufferlist> runs,
                                    uint64_t stripe_offset, eversion_t covered,
-                                   utime_t mtime,
+                                   std::vector<std::pair<osd_reqid_t, version_t>> reqids,
                                    std::function<void()> on_commit) {
        ceph_abort_msg("EC journal flush without a listener implementation");
      }
      // EC journal POC: every holder committed the record of this client
-     // write (ec_journal_write), so it is durable: reply to the client.
+     // write (ec_journal_write), so it is durable: reply to the client with
+     // the user version the write took.
      virtual void ec_journal_acked(OpRequestRef op, ObjectContextRef obc,
-                                   uint64_t bytes_written) {
+                                   uint64_t bytes_written,
+                                   version_t user_version) {
        ceph_abort_msg("EC journal ack without a listener implementation");
+     }
+     // EC journal POC: replay adopted a record of oid, so the object's
+     // metadata overlay (ec_journal_object_meta) changed; a cached object
+     // context has to follow.
+     virtual void ec_journal_object_meta_changed(const hobject_t& oid) {}
+     // EC journal POC: a resend of a journaled write, held
+     // (ec_journal_hold_resend) until the record was durable: answer it as
+     // the original was answered, with the user version that reply reported.
+     virtual void ec_journal_dup_acked(OpRequestRef op, ObjectContextRef obc,
+                                       version_t user_version) {
+       ceph_abort_msg("EC journal dup ack without a listener implementation");
      }
      // EC journal POC: ops parked by ec_journal_admit() or for
      // ec_journal_read_ready() may proceed now.
@@ -524,14 +539,52 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    // oldest_other: the oldest live record of the object's other stripes,
    // for the marker's base (unset: none is live); on_commit: to run once
    // the write has committed on every shard (unset: nothing was taken).
+   // reqids: the requests of the records of the taken stripes, for the
+   // write's log entry (extra_reqids), as a flush logs them.
    struct ec_journal_take_t {
      std::map<uint64_t, ceph::buffer::list> runs;
      std::optional<eversion_t> oldest_other;
      std::function<void()> on_commit;
+     std::vector<std::pair<osd_reqid_t, version_t>> reqids;
    };
    virtual ec_journal_take_t ec_journal_take_for_write(
        const hobject_t& oid, const interval_set<uint64_t>& written) {
      return {};
+   }
+   // EC journal POC: a journaled write of this request is not materialized
+   // yet (the PG log has no entry for it): the user version its reply
+   // reported and whether every holder has its record. A resend is answered
+   // like the original if durable, else held (ec_journal_hold_resend) and
+   // answered through Listener::ec_journal_dup_acked when it is.
+   struct ec_journal_request_t {
+     version_t user_version = 0;
+     bool durable = false;
+   };
+   virtual std::optional<ec_journal_request_t> ec_journal_find_request(
+       const osd_reqid_t& reqid) const {
+     return std::nullopt;
+   }
+   virtual void ec_journal_hold_resend(const osd_reqid_t& reqid,
+                                       OpRequestRef op) {
+     ceph_abort_msg("EC journal resend without a journal");
+   }
+   // EC journal POC: what oid's journaled writes did to its metadata while
+   // it has records: the newest user version one of them took and the
+   // newest client mtime. The primary lays them over the object info it
+   // reads from disk (the write that materializes the last record persists
+   // them), so stat, assert-version and replies see journaled writes.
+   struct ec_journal_object_meta_t {
+     version_t user_version = 0;
+     utime_t mtime;
+   };
+   virtual std::optional<ec_journal_object_meta_t> ec_journal_object_meta(
+       const hobject_t& oid) const {
+     return std::nullopt;
+   }
+   // The newest user version a journaled write took: a logged write of the
+   // PG allocates above it (user versions are a pool-wide sequence).
+   virtual version_t ec_journal_newest_user_version() const {
+     return 0;
    }
    // A parked op of oid may be worth admitting again.
    // EC journal POC: a flush of oid is in flight. A flush takes no object

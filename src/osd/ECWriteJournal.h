@@ -63,15 +63,24 @@ inline constexpr std::string_view slot_name_prefix = "ecj.";
 bool is_slot_object(const hobject_t& object);
 
 // Header: magic, crc32c, header length, header (slot offset, object,
-// version, object_size, offset, payload length, mtime). The crc covers
-// header and payload; decode_header() throws buffer::malformed_input on a
-// bad magic or crc. Its encoded length depends only on the object's name.
+// version, object_size, offset, payload length, mtime, and since header
+// version 3 the client's request id and the user version its reply
+// reported). The crc covers header and payload; decode_header() throws
+// buffer::malformed_input on a bad magic or crc. Its encoded length depends
+// only on the object's name.
 //
 // A record's version is a journal version, not a PG version: the epoch is
 // the interval's start epoch and the version number the primary's append
 // sequence (Journal::next_append_sequence). Records are not PG-logged; the
 // object's own version is unchanged until the flush writes the data. The
 // mtime is the client's, applied by the flush.
+//
+// The request id is what lets a resent write be recognized (RADOS executes a
+// request at most once): until the stripe is materialized the journal
+// answers for it (Journal::find_request), from then on the PG log does, as
+// the materializing write carries the ids of the records it wrote as its
+// log entry's extra_reqids. A record from before header version 3 has no
+// request id and gets no such protection.
 // A record's slot when nothing placed it (Record::slot).
 inline constexpr uint64_t no_slot = std::numeric_limits<uint64_t>::max();
 
@@ -85,6 +94,10 @@ struct Record {
   // The slot replay read it from, the same on every holder
   // (RecordLocator::decode_record); adopt() keeps it in that slot. Not encoded.
   uint64_t slot = no_slot;
+  // The client request this record executed, and the user version the reply
+  // to it reported (the object's, unchanged by a journaled write). Encoded.
+  osd_reqid_t reqid;
+  version_t user_version = 0;
 
   void encode_header(ceph::bufferlist& out, uint64_t slot_offset) const;
   // Fields only, no payload (data stays empty): returns the slot offset and
@@ -220,8 +233,12 @@ struct Stripe {
   // Newest journal version among the snapshot's blocks: every record of
   // this stripe at or below it is materialized once the flush commits.
   eversion_t newest_version;
-  // Newest client mtime among the snapshot's blocks, for the flush to set.
-  utime_t newest_mtime;
+  // The requests of every record the snapshot materializes, live or
+  // superseded, with the user version each reply reported: the write that
+  // materializes the stripe logs them as its entry's extra_reqids, so a
+  // resend is answered from the PG log once the journal has let go of them
+  // (Journal::find_request until then).
+  std::vector<std::pair<osd_reqid_t, version_t>> reqids;
 
   uint64_t dirty_bytes() const { return blocks.size() * block_size; }
   bool full() const { return dirty_bytes() == valid_bytes; }
@@ -289,6 +306,13 @@ struct Limits {
   uint64_t segment_bytes = 4 * 1024 * 1024;
   uint64_t max_bytes = 16 * 1024 * 1024;
   uint64_t max_segments = 4;
+  // How many of the newest requests the journal remembers for duplicate
+  // detection (find_request): the PG log's own window, osd_pg_log_dups_tracked
+  // plus osd_min_pg_log_entries (read_limits). An older resend runs again, as
+  // it does on a logged pool. A dead segment keeps its slot while a request
+  // of its records is still in the window, so a replaying primary rebuilds
+  // the same window from the slots. 0: none remembered.
+  uint64_t request_window = 3250;
 
   bool valid() const;
 };
@@ -334,7 +358,43 @@ class Journal {
   int append(const hobject_t& object, eversion_t version,
              uint64_t object_size, uint64_t offset,
              const ceph::bufferlist& data, Placement* placement,
-             Ticket* ticket, utime_t mtime = {});
+             Ticket* ticket, utime_t mtime = {},
+             const osd_reqid_t& reqid = {}, version_t user_version = 0);
+  // A request a record not yet materialized executed (append, or adopt),
+  // while it is among the request_window newest: the user version its reply
+  // reported and whether every holder has the record. A resend of it must
+  // not run again: answer it like the original once durable, or hold it
+  // until then. Requests of records a flush or a direct write materialized
+  // are gone from here (finish_flush) and in that write's log entry
+  // (Stripe::reqids); older ones than the window are forgotten. Dropped with
+  // everything else at on_reset(); replay adopts them again.
+  struct Request {
+    version_t user_version = 0;
+    bool durable = false;
+    uint64_t segment = 0;  // the record's segment, pinned while this exists
+    uint64_t sequence = 0; // the record's append sequence
+  };
+  std::optional<Request> find_request(const osd_reqid_t& reqid) const;
+  uint64_t request_count() const { return requests.size(); }
+  uint64_t window_size() const { return window.size(); }
+  // Dead segments that keep their slot for requests still in the window.
+  uint64_t pinned_segments() const;
+  // What the object's journaled writes did to its metadata: the user version
+  // handed out to the last of them and that write's mtime, as long as the
+  // object has records (the write that materializes the last of them
+  // persists both in the object info). The primary lays them over the object
+  // info it reads from disk, so stat, assert-version and every reply see the
+  // journaled writes as if they were logged.
+  struct ObjectMeta {
+    version_t user_version = 0;
+    utime_t mtime;
+  };
+  std::optional<ObjectMeta> object_meta(const hobject_t& object) const;
+  uint64_t object_meta_count() const { return metas.size(); }
+  // The newest user version any record ever carried (this interval's
+  // appends and the records replay adopted): a logged write of the PG
+  // allocates above it, so user versions stay a pool-wide sequence.
+  version_t newest_user_version() const { return newest_user_version_; }
   // The sequence the next append takes: the version number of its record.
   uint64_t next_append_sequence() const { return next_sequence; }
   // The journal version current now: every record appended so far, in this
@@ -547,6 +607,7 @@ class Journal {
     uint64_t offset = 0;
     uint32_t length = 0;
     bool durable = false;
+    osd_reqid_t reqid;
   };
   // Budget charge of a record (padded payload, header value and key), and
   // whether a record of that size can be appended now and opens a new
@@ -562,6 +623,9 @@ class Journal {
     uint64_t payload_bytes = 0;
     uint64_t durable_records = 0;
     uint64_t live_blocks = 0;
+    // Records of this segment whose request is in the window and not yet in
+    // a log entry (requests): the segment keeps its slot while any is.
+    uint64_t window_ids = 0;
     std::map<uint64_t, Pending> entries;
 
     Segment(uint64_t id, uint64_t slot) : id(id), slot(slot) {}
@@ -574,10 +638,22 @@ class Journal {
     bool durable = false;
     utime_t mtime;
   };
+  // One record's request, in a stripe's list (Entry::reqids). The sequence
+  // ties it to the snapshot that materializes it (Stripe::newest_sequence).
+  struct Reqid {
+    osd_reqid_t reqid;
+    version_t user_version = 0;
+    uint64_t sequence = 0;
+    uint64_t segment = 0;
+  };
   struct Entry {
     uint64_t object_size = 0;
     uint64_t valid_bytes = 0;
     std::map<uint64_t, Block> blocks; // relative 4 KiB offsets
+    // Every record appended to the stripe since its last materialization
+    // that is still in the request window, live or superseded, oldest
+    // first; the next snapshot takes them (extra_reqids).
+    std::deque<Reqid> reqids;
     uint32_t undurable = 0;
     bool flushing = false;
     // While flushing: the newest sequence of the snapshot the flush or the
@@ -598,6 +674,26 @@ class Journal {
   // adopting is adopting(), which the caller of a loop evaluates once.
   bool must_flush(const Entry& entry, bool every_partial,
                   std::optional<uint64_t> partial_upto, bool adopting) const;
+  // Remember a record's request (append, adopt): the oldest leaves the
+  // window first.
+  void add_request(Entry& entry, const StripeKey& key, const osd_reqid_t& reqid,
+                   version_t user_version, uint64_t sequence, uint64_t segment,
+                   bool durable);
+  void forget_oldest_request();
+  // The request leaves requests (logged, forgotten or unpinned): its
+  // segment is pinned by one request less.
+  void drop_request(const osd_reqid_t& reqid, uint64_t sequence);
+  // Space held only by dead segments that keep their slot for requests in
+  // the window: room_for and pressure count it as free, append takes it
+  // when it needs a slot (unpin_oldest).
+  struct Reclaimable {
+    uint64_t bytes = 0;
+    uint64_t count = 0;
+  };
+  Reclaimable reclaimable() const;
+  bool unpin_oldest();
+  // Remember what a record did to its object's metadata (append, adopt).
+  void note_meta(const hobject_t& object, version_t user_version, utime_t mtime);
   // The index entries of `object` whose stripe overlaps [offset, offset+length).
   std::pair<std::map<StripeKey, Entry>::const_iterator,
             std::map<StripeKey, Entry>::const_iterator>
@@ -619,6 +715,18 @@ class Journal {
   std::map<uint64_t, StripeKey> by_age; // oldest live sequence -> resident stripe
   std::set<StripeKey> ready;            // complete, durable, resident
   std::map<StripeKey, unsigned> readers; // client reads in flight per stripe
+  // Requests of records not yet materialized and within the window, for
+  // find_request (the PG log's mempool: dup-detection state).
+  mempool::osd_pglog::unordered_map<osd_reqid_t, Request> requests;
+  // The request_window newest appends, oldest first, logged or not.
+  struct Remembered {
+    osd_reqid_t reqid;
+    uint64_t sequence = 0;
+    StripeKey stripe;
+  };
+  std::deque<Remembered> window;
+  std::map<hobject_t, ObjectMeta> metas; // objects with records (object_meta)
+  version_t newest_user_version_ = 0;
   uint64_t next_segment = 1;
   uint64_t next_sequence = 1;
   uint64_t used_bytes = 0;

@@ -19,6 +19,9 @@ namespace {
 struct JournalConfig {
   std::map<std::string, Option::value_t> values = {
     {"osd_ec_journal_max_bytes", Option::size_t{16u << 20}},
+    // uint options come back as uint64_t, as from ConfigProxy
+    {"osd_pg_log_dups_tracked", uint64_t{3000}},
+    {"osd_min_pg_log_entries", uint64_t{250}},
   };
   template<typename T> T get_val(const std::string& key) const {
     return std::get<T>(values.at(key));
@@ -34,6 +37,7 @@ TEST(JournalAdmission, SizeOptionVariantAndInvalidLimits)
   EXPECT_EQ(1u << 20, limits.segment_bytes);
   EXPECT_EQ(16u << 20, limits.max_bytes);
   EXPECT_EQ(16u, limits.max_segments);
+  EXPECT_EQ(3250u, limits.request_window); // the PG log's dup window
   conf.values["osd_ec_journal_max_bytes"] = Option::size_t{256u << 20};
   limits = ECWriteJournal::read_limits(conf, 32768);
   EXPECT_TRUE(limits.valid());

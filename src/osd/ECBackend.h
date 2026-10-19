@@ -130,6 +130,17 @@ class ECBackend : public ECCommon {
   std::optional<eversion_t> journal_oldest_live(const hobject_t& oid,
     std::optional<uint64_t> skip_stripe) const;
   bool journal_ready(const hobject_t& oid) const;
+  // A journaled write of this request not yet materialized (PGBackend).
+  std::optional<PGBackend::ec_journal_request_t> journal_find_request(
+    const osd_reqid_t& reqid) const;
+  // Hold a resend of a journaled write whose record is in flight; it is
+  // answered when the record is durable (journal_record_committed).
+  void journal_hold_resend(const osd_reqid_t& reqid, OpRequestRef op);
+  // The metadata overlay of an object with records, and the newest user
+  // version a journaled write took (PGBackend).
+  std::optional<PGBackend::ec_journal_object_meta_t> journal_object_meta(
+    const hobject_t& oid) const;
+  version_t journal_newest_user_version() const;
   // A direct write of these bytes of oid is being built: take the journaled
   // stripes it overlaps (PGBackend::ec_journal_take_for_write).
   PGBackend::ec_journal_take_t journal_take_for_write(

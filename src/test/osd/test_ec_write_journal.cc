@@ -129,6 +129,27 @@ class JournalTest : public testing::TestWithParam<unsigned> {
     }
     return ticket;
   }
+  // An append that carries its client request (as the backend's do): the
+  // request id names the client (entity 1) and the tid.
+  static osd_reqid_t reqid(ceph_tid_t tid, int64_t client = 1) {
+    return osd_reqid_t(entity_name_t::CLIENT(client), 0, tid);
+  }
+  Ticket append_request(Journal& journal, uint64_t off, uint64_t len,
+                        ceph_tid_t tid, version_t user_version = 7,
+                        bool durable = true, const hobject_t& oid = object()) {
+    Transaction t;
+    Placement placement;
+    Ticket ticket;
+    EXPECT_EQ(0, journal.append(oid, eversion_t(1, next_version++), 16 * width(),
+                                off, bytes(len, 'q'), &placement, &ticket, {},
+                                reqid(tid), user_version));
+    journal.emit(placement, coll_t(), prefix().shard_id, t);
+    seen.insert(ticket.segment);
+    if (durable) {
+      EXPECT_EQ(0, journal.committed(ticket, 0));
+    }
+    return ticket;
+  }
   // Flush any durable stripe, oldest first (the drain policy).
   static constexpr bool any() { return true; }
   // Materialize one stripe: begin, simulated durable shard writes, finish.
@@ -193,7 +214,6 @@ TEST_P(JournalTest, AppendVersionsFollowTheSequence)
   auto stripe = j.begin_flush(any());
   ASSERT_TRUE(stripe);
   EXPECT_EQ(eversion_t(7, 3), stripe->newest_version);
-  EXPECT_EQ(utime_t(103, 0), stripe->newest_mtime);
   EXPECT_EQ(0, j.finish_flush(*stripe, 0));
   // Records adopted from an earlier interval keep their versions, below
   // anything this interval appends or marks.
@@ -205,7 +225,6 @@ TEST_P(JournalTest, AppendVersionsFollowTheSequence)
   auto adopted = replayed.begin_flush(any());
   ASSERT_TRUE(adopted);
   EXPECT_EQ(eversion_t(5, 40), adopted->newest_version);
-  EXPECT_EQ(utime_t(50, 0), adopted->newest_mtime);
 }
 
 TEST_P(JournalTest, EmptySealAndDrain)
@@ -2426,6 +2445,370 @@ TEST(ECWriteJournal, RecordDetectsCorruptionAndTornTails)
   ceph::bufferlist zeros;
   zeros.append_zero(record_alignment);
   EXPECT_THROW(decoded.decode_header(zeros, record.data), ceph::buffer::malformed_input);
+}
+
+TEST_P(JournalTest, RequestsAreAnsweredUntilTheStripeIsMaterialized)
+{
+  // RADOS executes a request at most once: a resend is answered from the PG
+  // log. A journaled write has no log entry, so the journal answers for it
+  // until the write that materializes its stripe logs the request as one of
+  // its extra_reqids (Stripe::reqids); then the journal lets go of it.
+  auto j = journal();
+  EXPECT_FALSE(j.find_request(reqid(1)));
+  const auto first = append_request(j, 0, block_size, 1, 70, false);
+  auto found = j.find_request(reqid(1));
+  ASSERT_TRUE(found);
+  EXPECT_EQ(70u, found->user_version);
+  EXPECT_FALSE(found->durable); // a resend waits for the holders
+  EXPECT_EQ(1u, j.request_count());
+  EXPECT_EQ(0, j.committed(first, 0));
+  found = j.find_request(reqid(1));
+  ASSERT_TRUE(found);
+  EXPECT_TRUE(found->durable);
+  // A second write of the same block supersedes the first record. Its
+  // request stays known: a resend of it must not run over the newer data.
+  append_request(j, 0, block_size, 2, 71);
+  append_request(j, block_size, block_size, 3, 72);
+  EXPECT_TRUE(j.find_request(reqid(1)));
+  EXPECT_TRUE(j.find_request(reqid(2)));
+  EXPECT_EQ(3u, j.request_count());
+  // The snapshot hands every request of the stripe, superseded ones too,
+  // with the user version each reply reported, to the materializing write.
+  auto stripe = j.begin_flush_object(object());
+  ASSERT_TRUE(stripe);
+  ASSERT_EQ(3u, stripe->reqids.size());
+  EXPECT_EQ(std::make_pair(reqid(1), version_t(70)), stripe->reqids[0]);
+  EXPECT_EQ(std::make_pair(reqid(2), version_t(71)), stripe->reqids[1]);
+  EXPECT_EQ(std::make_pair(reqid(3), version_t(72)), stripe->reqids[2]);
+  // Until the flush commits the journal still answers (the log entry is
+  // not durable yet); a record appended meanwhile is not in the snapshot.
+  append_request(j, 2 * block_size, block_size, 4, 73);
+  EXPECT_TRUE(j.find_request(reqid(1)));
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_FALSE(j.find_request(reqid(1)));
+  EXPECT_FALSE(j.find_request(reqid(2)));
+  EXPECT_FALSE(j.find_request(reqid(3)));
+  EXPECT_TRUE(j.find_request(reqid(4)));
+  EXPECT_EQ(1u, j.request_count());
+  // The later record flushes with its own request only.
+  stripe = j.begin_flush_object(object());
+  ASSERT_TRUE(stripe);
+  ASSERT_EQ(1u, stripe->reqids.size());
+  EXPECT_EQ(reqid(4), stripe->reqids[0].first);
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_EQ(0u, j.request_count());
+}
+
+TEST_P(JournalTest, AFailedFlushKeepsTheRequests)
+{
+  auto j = journal();
+  append_request(j, 0, block_size, 1);
+  auto stripe = j.begin_flush_object(object());
+  ASSERT_TRUE(stripe);
+  EXPECT_EQ(-EIO, j.finish_flush(*stripe, -EIO));
+  EXPECT_TRUE(j.find_request(reqid(1)));
+  stripe = j.begin_flush_object(object());
+  ASSERT_TRUE(stripe);
+  ASSERT_EQ(1u, stripe->reqids.size());
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_FALSE(j.find_request(reqid(1)));
+}
+
+TEST_P(JournalTest, ADirectWriteTakesTheRequestsOfItsStripes)
+{
+  // A write that takes journaled stripes (take_range) materializes them
+  // itself, so it logs their requests: the snapshots carry them, and the
+  // journal lets go of them when the write commits (finish_flush).
+  auto j = journal();
+  append_request(j, 0, block_size, 1, 70);
+  append_request(j, width(), block_size, 2, 71);
+  std::vector<Stripe> taken;
+  ASSERT_EQ(0, j.take_range(object(), 0, 2 * width(), &taken));
+  ASSERT_EQ(2u, taken.size());
+  ASSERT_EQ(1u, taken[0].reqids.size());
+  ASSERT_EQ(1u, taken[1].reqids.size());
+  EXPECT_EQ(reqid(1), taken[0].reqids[0].first);
+  EXPECT_EQ(reqid(2), taken[1].reqids[0].first);
+  EXPECT_TRUE(j.find_request(reqid(1)));
+  for (const auto& stripe : taken) {
+    EXPECT_EQ(0, j.finish_flush(stripe, 0));
+  }
+  EXPECT_FALSE(j.find_request(reqid(1)));
+  EXPECT_FALSE(j.find_request(reqid(2)));
+}
+
+TEST_P(JournalTest, AWriteAcrossAStripeBoundaryIsOneRequest)
+{
+  // Two records, one request: either stripe's write logs it, and the
+  // journal answers until both have (the newest record stands for it).
+  auto j = journal();
+  const uint64_t off = width() - block_size;
+  const auto pieces = stripe_fragments(off, 2 * block_size, width());
+  ASSERT_EQ(2u, pieces.size());
+  Transaction t;
+  Placement placement;
+  Ticket first, second;
+  ASSERT_EQ(0, j.append(object(), eversion_t(1, j.next_append_sequence()),
+                        16 * width(), pieces[0].first, bytes(block_size, 'c'),
+                        &placement, &first, {}, reqid(9), 70));
+  ASSERT_EQ(0, j.append(object(), eversion_t(1, j.next_append_sequence()),
+                        16 * width(), pieces[1].first, bytes(block_size, 'c'),
+                        &placement, &second, {}, reqid(9), 70));
+  EXPECT_EQ(1u, j.request_count());
+  EXPECT_EQ(0, j.committed(first, 0));
+  EXPECT_EQ(0, j.committed(second, 0));
+  ASSERT_TRUE(j.find_request(reqid(9)));
+  EXPECT_TRUE(j.find_request(reqid(9))->durable);
+  auto stripe = j.begin_flush_object(object(), {}, nullptr, 0, width());
+  ASSERT_TRUE(stripe);
+  ASSERT_EQ(1u, stripe->reqids.size());
+  EXPECT_EQ(reqid(9), stripe->reqids[0].first);
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  // The request's other record is still unmaterialized: the journal keeps
+  // answering for it (the PG log could too).
+  EXPECT_TRUE(j.find_request(reqid(9)));
+  stripe = j.begin_flush_object(object(), {}, nullptr, width(), width());
+  ASSERT_TRUE(stripe);
+  ASSERT_EQ(1u, stripe->reqids.size()); // logged a second time, harmless
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_FALSE(j.find_request(reqid(9)));
+}
+
+TEST_P(JournalTest, TheWindowForgetsTheOldestRequests)
+{
+  // The journal remembers the request_window newest requests, as the PG log
+  // keeps its dup window: an older resend runs again, as it does on a logged
+  // pool. The materializing write logs only the requests still remembered.
+  Limits l = limits();
+  l.request_window = 4;
+  Journal j(prefix(), l);
+  for (ceph_tid_t tid = 1; tid <= 5; ++tid) {
+    append_request(j, 0, block_size, tid, 70 + tid);
+  }
+  EXPECT_FALSE(j.find_request(reqid(1))); // the oldest left the window
+  for (ceph_tid_t tid = 2; tid <= 5; ++tid) {
+    EXPECT_TRUE(j.find_request(reqid(tid)));
+  }
+  EXPECT_EQ(4u, j.request_count());
+  EXPECT_EQ(4u, j.window_size());
+  auto stripe = j.begin_flush_object(object());
+  ASSERT_TRUE(stripe);
+  ASSERT_EQ(4u, stripe->reqids.size());
+  EXPECT_EQ(reqid(2), stripe->reqids.front().first);
+  EXPECT_EQ(reqid(5), stripe->reqids.back().first);
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_EQ(0u, j.request_count());
+  // A request that fell out and is resent runs again as a new record, which
+  // the journal then remembers as that request's record.
+  append_request(j, 0, block_size, 1, 90);
+  auto found = j.find_request(reqid(1));
+  ASSERT_TRUE(found);
+  EXPECT_EQ(90u, found->user_version);
+}
+
+TEST_P(JournalTest, ADeadSegmentKeepsItsSlotWhileItsRequestsAreInTheWindow)
+{
+  // A replaying primary rebuilds the window from the records in the slots,
+  // so a segment whose records are all dead keeps its slot until none of
+  // their requests is in the window any more: then a resend after a
+  // failover meets exactly what the old primary knew. The pinned segment
+  // counts as free room (pressure, room_for).
+  Limits l = limits();
+  l.segment_bytes = 2 * record_bytes();
+  l.max_segments = 8;
+  l.max_bytes = l.max_segments * l.segment_bytes;
+  l.request_window = 6;
+  Journal j(prefix(), l);
+  // Two records fill a segment; the next write of the same block kills both.
+  const auto first = append_request(j, 0, block_size, 1);
+  append_request(j, 0, block_size, 2);
+  append_request(j, 0, block_size, 3); // segment 2 opens; segment 1 is dead
+  EXPECT_EQ(2u, j.segment_count());
+  EXPECT_TRUE(j.resident(first.segment));
+  EXPECT_EQ(1u, j.pinned_segments());
+  EXPECT_FALSE(j.pressure());
+  EXPECT_TRUE(j.find_request(reqid(1)));
+  // Requests 1 and 2 leave the window after six newer ones.
+  for (ceph_tid_t tid = 4; tid <= 8; ++tid) {
+    append_request(j, 0, block_size, tid);
+  }
+  EXPECT_FALSE(j.find_request(reqid(1)));
+  EXPECT_FALSE(j.find_request(reqid(2)));
+  EXPECT_TRUE(j.find_request(reqid(3)));
+  EXPECT_FALSE(j.resident(first.segment)); // released with its last request
+  EXPECT_EQ(6u, j.window_size());
+}
+
+TEST_P(JournalTest, LoggedRequestsUnpinTheirSegmentAtOnce)
+{
+  // Once the materializing write has logged the requests, the PG log
+  // answers for them: their segment is free, whatever the window holds.
+  Limits l = limits();
+  l.segment_bytes = 2 * record_bytes();
+  l.max_segments = 8;
+  l.max_bytes = l.max_segments * l.segment_bytes;
+  Journal j(prefix(), l);
+  const auto first = append_request(j, 0, block_size, 1);
+  append_request(j, 0, block_size, 2);
+  append_request(j, 0, block_size, 3);
+  EXPECT_TRUE(j.resident(first.segment));
+  EXPECT_EQ(1u, j.pinned_segments());
+  auto stripe = j.begin_flush_object(object());
+  ASSERT_TRUE(stripe);
+  EXPECT_EQ(3u, stripe->reqids.size());
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_FALSE(j.resident(first.segment));
+  EXPECT_EQ(0u, j.pinned_segments());
+  EXPECT_EQ(0u, j.request_count());
+  EXPECT_EQ(3u, j.window_size()); // the window itself keeps the order
+}
+
+TEST_P(JournalTest, AnAppendTakesAPinnedSlotWhenNoneIsFree)
+{
+  // Large records and a long window can pin more dead segments than there
+  // are slots: the log stays live by forgetting the oldest pinned segment's
+  // requests, the window's own semantics applied early.
+  Limits l = limits();
+  l.segment_bytes = 2 * record_bytes();
+  l.max_segments = 2;
+  l.max_bytes = l.max_segments * l.segment_bytes;
+  l.request_window = 100;
+  Journal j(prefix(), l);
+  const auto first = append_request(j, 0, block_size, 1);
+  append_request(j, 0, block_size, 2);
+  append_request(j, 0, block_size, 3); // the second slot; segment 1 pinned dead
+  EXPECT_EQ(1u, j.pinned_segments());
+  EXPECT_EQ(0, j.check_append(object(), block_size));
+  append_request(j, 0, block_size, 4); // fills segment 2
+  // Segment 3 needs a slot: only a pinned dead one is there; it is taken
+  // and requests 1 and 2 are forgotten.
+  EXPECT_EQ(0, j.check_append(object(), block_size));
+  append_request(j, 0, block_size, 5);
+  EXPECT_FALSE(j.resident(first.segment));
+  EXPECT_FALSE(j.find_request(reqid(1)));
+  EXPECT_FALSE(j.find_request(reqid(2)));
+  EXPECT_TRUE(j.find_request(reqid(3)));
+  EXPECT_TRUE(j.find_request(reqid(5)));
+  EXPECT_EQ(2u, j.segment_count());
+}
+
+TEST_P(JournalTest, ObjectMetaFollowsTheNewestRecordUntilTheLastFlush)
+{
+  // A journaled write takes a user version and carries the client's mtime
+  // without a log entry; the primary lays both over the object info it
+  // reads from disk while the object has records. The write that
+  // materializes the last of them persists them, and the newest user
+  // version handed out is remembered for the PG's logged writes to allocate
+  // above.
+  auto j = journal();
+  EXPECT_FALSE(j.object_meta(object()));
+  EXPECT_EQ(0u, j.newest_user_version());
+  Transaction t;
+  Placement placement;
+  Ticket ticket;
+  ASSERT_EQ(0, j.append(object(), eversion_t(1, j.next_append_sequence()),
+                        16 * width(), 0, bytes(block_size, 'a'), &placement,
+                        &ticket, utime_t(100, 0), reqid(1), 70));
+  EXPECT_EQ(0, j.committed(ticket, 0));
+  auto meta = j.object_meta(object());
+  ASSERT_TRUE(meta);
+  EXPECT_EQ(70u, meta->user_version);
+  EXPECT_EQ(utime_t(100, 0), meta->mtime);
+  ASSERT_EQ(0, j.append(object(), eversion_t(1, j.next_append_sequence()),
+                        16 * width(), width(), bytes(block_size, 'b'),
+                        &placement, &ticket, utime_t(200, 0), reqid(2), 71));
+  EXPECT_EQ(0, j.committed(ticket, 0));
+  // The last write's timestamp stands even when it is older (a logged pool
+  // does the same); the version always grows.
+  ASSERT_EQ(0, j.append(object(), eversion_t(1, j.next_append_sequence()),
+                        16 * width(), 2 * width(), bytes(block_size, 'c'),
+                        &placement, &ticket, utime_t(150, 0), reqid(3), 72));
+  EXPECT_EQ(0, j.committed(ticket, 0));
+  meta = j.object_meta(object());
+  ASSERT_TRUE(meta);
+  EXPECT_EQ(72u, meta->user_version);
+  EXPECT_EQ(utime_t(150, 0), meta->mtime);
+  EXPECT_EQ(72u, j.newest_user_version());
+  EXPECT_FALSE(j.object_meta(object("b")));
+  // The overlay stays while any stripe of the object has records.
+  auto stripe = j.begin_flush_object(object(), {}, nullptr, 0, width());
+  ASSERT_TRUE(stripe);
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_TRUE(j.object_meta(object()));
+  while ((stripe = j.begin_flush_object(object()))) {
+    EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  }
+  EXPECT_FALSE(j.dirty(object()));
+  EXPECT_FALSE(j.object_meta(object()));
+  EXPECT_EQ(72u, j.newest_user_version()); // the sequence goes on from here
+  // Replay rebuilds it from the records; an interval change drops it.
+  Record replayed{object(), eversion_t(4, 9), 16 * width(), 0,
+                  bytes(block_size, 'r'), utime_t(300, 0), 0, reqid(9), 90};
+  ASSERT_EQ(0, j.adopt(replayed));
+  meta = j.object_meta(object());
+  ASSERT_TRUE(meta);
+  EXPECT_EQ(90u, meta->user_version);
+  EXPECT_EQ(utime_t(300, 0), meta->mtime);
+  EXPECT_EQ(90u, j.newest_user_version());
+  j.on_reset();
+  EXPECT_FALSE(j.object_meta(object()));
+  EXPECT_EQ(0u, j.newest_user_version());
+}
+
+TEST(ECWriteJournal, HeaderCarriesTheClientRequest)
+{
+  // The request id and the user version the reply reported ride in the
+  // header under the crc; a header from before them (version 2) decodes
+  // with neither.
+  const osd_reqid_t reqid(entity_name_t::CLIENT(4711), 2, 99);
+  Record record{object(), eversion_t(5, 9), 32768, 4096, bytes(4096, 'r'),
+                utime_t(), no_slot, reqid, 1234};
+  ceph::bufferlist encoded;
+  record.encode_header(encoded, 8192);
+  Record decoded;
+  EXPECT_EQ(8192u, decoded.decode_header(encoded, record.data, 8192));
+  EXPECT_EQ(reqid, decoded.reqid);
+  EXPECT_EQ(1234u, decoded.user_version);
+  Record fields;
+  fields.decode_fields(encoded);
+  EXPECT_EQ(reqid, fields.reqid);
+  EXPECT_EQ(1234u, fields.user_version);
+  // The header's size depends on the object's name only, as the budget
+  // arithmetic assumes (Journal::record_bytes).
+  Record other{object(), eversion_t(1, 1), 32768, 0, bytes(4096, 'r')};
+  ceph::bufferlist encoded_other;
+  other.encode_header(encoded_other, 0);
+  EXPECT_EQ(encoded.length(), encoded_other.length());
+}
+
+TEST(ECWriteJournal, AdoptRebuildsTheRequests)
+{
+  // Replay reads the records back from the slots and adopts the live ones:
+  // their requests are known again, durable, until their stripe flushes.
+  Limits limits;
+  const uint64_t width = limits.stripe_width;
+  Journal j(prefix(), limits);
+  const osd_reqid_t reqid(entity_name_t::CLIENT(5), 0, 42);
+  Record replayed{object(), eversion_t(4, 9), 4 * width, block_size,
+                  bytes(block_size, 'r'), utime_t(), 0, reqid, 77};
+  ASSERT_EQ(0, j.adopt(replayed));
+  auto found = j.find_request(reqid);
+  ASSERT_TRUE(found);
+  EXPECT_TRUE(found->durable);
+  EXPECT_EQ(77u, found->user_version);
+  auto stripe = j.begin_flush(false);
+  ASSERT_TRUE(stripe);
+  ASSERT_EQ(1u, stripe->reqids.size());
+  EXPECT_EQ(std::make_pair(reqid, version_t(77)), stripe->reqids[0]);
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_FALSE(j.find_request(reqid));
+  // An interval change drops them with everything else.
+  Record again = replayed;
+  ASSERT_EQ(0, j.adopt(again));
+  EXPECT_TRUE(j.find_request(reqid));
+  j.on_reset();
+  EXPECT_FALSE(j.find_request(reqid));
+  EXPECT_EQ(0u, j.request_count());
 }
 
 TEST(ECWriteJournal, HeaderCarriesTheClientMtime)

@@ -1991,10 +1991,16 @@ public:
   void ec_journal_flush(const hobject_t& oid,
                         std::map<uint64_t, ceph::bufferlist> runs,
                         uint64_t stripe_offset, eversion_t covered,
-                        utime_t mtime,
+                        std::vector<std::pair<osd_reqid_t, version_t>> reqids,
                         std::function<void()> on_commit) override;
+  void ec_journal_dup_acked(OpRequestRef op, ObjectContextRef obc,
+                            version_t user_version) override;
+  void ec_journal_object_meta_changed(const hobject_t& oid) override;
+  // Lay the journal's metadata overlay (user version, mtime of journaled
+  // writes) over an object context's info.
+  void ec_journal_apply_meta(const ObjectContextRef& obc);
   void ec_journal_acked(OpRequestRef op, ObjectContextRef obc,
-                        uint64_t bytes_written) override;
+                        uint64_t bytes_written, version_t user_version) override;
   void ec_journal_kick() override;
   void ec_journal_requeue(std::list<OpRequestRef>&& ops) override;
   void ec_journal_flush_committed(const hobject_t& oid) override;

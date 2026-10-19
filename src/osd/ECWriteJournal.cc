@@ -30,7 +30,7 @@ bool is_slot_object(const hobject_t& object)
 void Record::encode_header(ceph::bufferlist& out, uint64_t slot_offset) const
 {
   ceph::bufferlist header;
-  ENCODE_START(2, 2, header);
+  ENCODE_START(3, 2, header);
   encode(slot_offset, header);
   encode(object, header);
   encode(version, header);
@@ -38,6 +38,8 @@ void Record::encode_header(ceph::bufferlist& out, uint64_t slot_offset) const
   encode(offset, header);
   encode(uint32_t(data.length()), header);
   encode(mtime, header);
+  encode(reqid, header);
+  encode(user_version, header);
   ENCODE_FINISH(header);
   ceph::encode(detached_record_magic, out);
   ceph::encode(data.crc32c(header.crc32c(-1)), out);
@@ -67,7 +69,7 @@ HeaderFields parse_header(const ceph::bufferlist& encoded, Record& record)
     throw ceph::buffer::malformed_input("EC journal header: trailing bytes");
   }
   auto fields = parsed.header.cbegin();
-  DECODE_START(2, fields);
+  DECODE_START(3, fields);
   decode(parsed.slot_offset, fields);
   decode(record.object, fields);
   decode(record.version, fields);
@@ -75,6 +77,13 @@ HeaderFields parse_header(const ceph::bufferlist& encoded, Record& record)
   decode(record.offset, fields);
   decode(parsed.length, fields);
   decode(record.mtime, fields);
+  if (struct_v >= 3) {
+    decode(record.reqid, fields);
+    decode(record.user_version, fields);
+  } else {
+    record.reqid = osd_reqid_t();
+    record.user_version = 0;
+  }
   DECODE_FINISH(fields);
   if (!parsed.length || parsed.length % block_size ||
       record.offset % block_size || record.offset > record.object_size ||
@@ -574,16 +583,57 @@ int Journal::room_for(uint64_t bytes, bool* rotate) const
   }
   const bool next = segments.empty() || segments.back().state != State::open ||
     bytes > limits.segment_bytes - segments.back().bytes;
-  if (bytes > limits.max_bytes - used_bytes) {
+  // A dead segment that keeps its slot only for requests in the window
+  // gives both up when the room is needed (append: unpin_oldest).
+  const auto pinned = reclaimable();
+  if (bytes > limits.max_bytes - (used_bytes - pinned.bytes)) {
     return -EAGAIN;
   }
-  if (next && (segments.size() == limits.max_segments || free_slots.empty())) {
+  if (next && (segments.size() - pinned.count == limits.max_segments ||
+               free_slots.size() + pinned.count == 0)) {
     return -EAGAIN;
   }
   if (rotate) {
     *rotate = next;
   }
   return 0;
+}
+
+Journal::Reclaimable Journal::reclaimable() const
+{
+  Reclaimable r;
+  for (const auto& segment : segments) {
+    if (segment.state == State::closed && segment.live_blocks == 0 &&
+        segment.durable_records == segment.entries.size() &&
+        segment.window_ids > 0) {
+      r.bytes += segment.bytes;
+      ++r.count;
+    }
+  }
+  return r;
+}
+
+uint64_t Journal::pinned_segments() const
+{
+  return reclaimable().count;
+}
+
+bool Journal::unpin_oldest()
+{
+  for (auto& segment : segments) {
+    if (segment.state == State::closed && segment.live_blocks == 0 &&
+        segment.durable_records == segment.entries.size() &&
+        segment.window_ids > 0) {
+      // Its requests are forgotten as if they had left the window.
+      for (const auto& [sequence, pending] : segment.entries) {
+        drop_request(pending.reqid, sequence);
+      }
+      ceph_assert(segment.window_ids == 0);
+      collect();
+      return true;
+    }
+  }
+  return false;
 }
 
 int Journal::check_append(const hobject_t& object, uint64_t length) const
@@ -609,9 +659,10 @@ int Journal::check_append(const hobject_t& object,
   // superseding blocks may release dead segments on the way.)
   bool open = !segments.empty() && segments.back().state == State::open;
   uint64_t open_bytes = open ? segments.back().bytes : 0;
-  uint64_t used = used_bytes;
-  uint64_t count = segments.size();
-  uint64_t slots = free_slots.size();
+  const auto pinned = reclaimable();
+  uint64_t used = used_bytes - pinned.bytes;
+  uint64_t count = segments.size() - pinned.count;
+  uint64_t slots = free_slots.size() + pinned.count;
   for (const uint64_t length : lengths) {
     if (!length || length % block_size || length > limits.stripe_width) {
       return -EINVAL;
@@ -642,7 +693,8 @@ int Journal::check_append(const hobject_t& object,
 int Journal::append(const hobject_t& object, eversion_t version,
                     uint64_t object_size, uint64_t offset,
                     const ceph::bufferlist& data, Placement* placement,
-                    Ticket* ticket, utime_t mtime)
+                    Ticket* ticket, utime_t mtime,
+                    const osd_reqid_t& reqid, version_t user_version)
 {
   if (failed) {
     return failed;
@@ -666,13 +718,17 @@ int Journal::append(const hobject_t& object, eversion_t version,
   }
   if (rotate) {
     seal();
+    if (free_slots.empty()) {
+      ceph_assert(unpin_oldest()); // room_for counted it
+    }
     const uint64_t slot = *free_slots.begin();
     free_slots.erase(free_slots.begin());
     segments.push_back(Segment{next_segment++, slot});
   }
   auto& segment = segments.back();
   const uint64_t sequence = next_sequence++;
-  const Record record{object, version, object_size, offset, data, mtime};
+  const Record record{object, version, object_size, offset, data, mtime,
+                      no_slot, reqid, user_version};
   ceph::bufferlist header;
   record.encode_header(header, segment.payload_bytes);
   ceph_assert(padded + header.length() + record_header_key_bytes == bytes);
@@ -683,7 +739,8 @@ int Journal::append(const hobject_t& object, eversion_t version,
                          std::move(payload), std::move(header), {}};
   const SlotHeaders headers{{record_header_key(placement->offset), placement->header}};
   ceph::encode(headers, placement->header_updates);
-  segment.entries.emplace(sequence, Pending{object, offset, uint32_t(len)});
+  segment.entries.emplace(sequence, Pending{object, offset, uint32_t(len),
+                                            false, reqid});
   segment.bytes += bytes;
   segment.payload_bytes += padded;
   used_bytes += bytes;
@@ -715,6 +772,8 @@ int Journal::append(const hobject_t& object, eversion_t version,
     ++live;
     ++segment.live_blocks;
   }
+  add_request(entry, key, reqid, user_version, sequence, segment.id, false);
+  note_meta(object, user_version, mtime);
   reindex(key, entry);
   *ticket = Ticket{segment.id, sequence};
   collect(); // a superseded block can leave an older segment dead
@@ -743,6 +802,9 @@ int Journal::committed(Ticket ticket, int result)
   }
   pending.durable = true;
   ++segment->durable_records;
+  if (auto r = requests.find(pending.reqid); r != requests.end()) {
+    r->second.durable = true;
+  }
   const auto key = key_of(pending.object, pending.offset);
   if (auto e = index.find(key); e != index.end()) {
     auto& entry = e->second;
@@ -771,7 +833,7 @@ void Journal::collect()
 {
   for (auto i = segments.begin(); i != segments.end();) {
     if (i->state == State::closed && i->live_blocks == 0 &&
-        i->durable_records == i->entries.size()) {
+        i->durable_records == i->entries.size() && i->window_ids == 0) {
       used_bytes -= i->bytes;
       used_payload_bytes -= i->payload_bytes;
       used_records -= i->entries.size();
@@ -885,7 +947,8 @@ int Journal::adopt(const Record& record)
     ceph_assert(entry.object_size == record.object_size);
   }
   segment.entries.emplace(sequence, Pending{record.object, offset,
-                                            uint32_t(len), true});
+                                            uint32_t(len), true,
+                                            record.reqid});
   ++segment.durable_records;
   segment.bytes += bytes;
   segment.payload_bytes += padded;
@@ -911,10 +974,98 @@ int Journal::adopt(const Record& record)
   if (entry.blocks.empty()) {
     index.erase(e);
   } else {
+    add_request(entry, key, record.reqid, record.user_version, sequence,
+                segment.id, true);
+    note_meta(record.object, record.user_version, record.mtime);
     reindex(key, entry);
   }
   collect();
   return 0;
+}
+
+void Journal::note_meta(const hobject_t& object, version_t user_version,
+                        utime_t mtime)
+{
+  // The write with the highest user version is the object's last write
+  // (records without one, header version 2, fall back to arrival order).
+  auto& meta = metas[object];
+  if (user_version >= meta.user_version) {
+    meta.user_version = user_version;
+    meta.mtime = mtime;
+  }
+  newest_user_version_ = std::max(newest_user_version_, user_version);
+}
+
+std::optional<Journal::ObjectMeta> Journal::object_meta(
+  const hobject_t& object) const
+{
+  const auto i = metas.find(object);
+  if (i == metas.end()) {
+    return std::nullopt;
+  }
+  return i->second;
+}
+
+void Journal::add_request(Entry& entry, const StripeKey& key,
+                          const osd_reqid_t& reqid, version_t user_version,
+                          uint64_t sequence, uint64_t segment, bool durable)
+{
+  if (reqid == osd_reqid_t() || limits.request_window == 0) {
+    return; // a record without one (header version 2, or a test)
+  }
+  while (window.size() >= limits.request_window) {
+    forget_oldest_request();
+  }
+  entry.reqids.push_back(Reqid{reqid, user_version, sequence, segment});
+  window.push_back(Remembered{reqid, sequence, key});
+  // A write across a stripe boundary is one request in two records (they
+  // commit together), and a resend older than the window runs again as a
+  // new record: the newest record's entry stands for the request.
+  if (auto r = requests.find(reqid); r != requests.end()) {
+    if (auto s = find_segment(r->second.segment)) {
+      --s->window_ids;
+    }
+    r->second = Request{user_version, durable, segment, sequence};
+  } else {
+    requests.emplace(reqid, Request{user_version, durable, segment, sequence});
+  }
+  find_segment(segment)->window_ids++;
+}
+
+void Journal::forget_oldest_request()
+{
+  const Remembered old = window.front();
+  window.pop_front();
+  // The stripe's list is a subsequence of the window in the same order.
+  if (auto e = index.find(old.stripe); e != index.end() &&
+      !e->second.reqids.empty() &&
+      e->second.reqids.front().sequence == old.sequence) {
+    e->second.reqids.pop_front();
+  }
+  drop_request(old.reqid, old.sequence);
+}
+
+void Journal::drop_request(const osd_reqid_t& reqid, uint64_t sequence)
+{
+  auto r = requests.find(reqid);
+  if (r == requests.end() || r->second.sequence != sequence) {
+    return; // logged already, or a newer record of the same request
+  }
+  if (auto s = find_segment(r->second.segment)) {
+    ceph_assert(s->window_ids > 0);
+    --s->window_ids;
+  }
+  requests.erase(r);
+}
+
+std::optional<Journal::Request> Journal::find_request(
+  const osd_reqid_t& reqid) const
+{
+  const auto i = requests.find(reqid);
+  if (i == requests.end()) {
+    return std::nullopt;
+  }
+  return i->second;
 }
 
 // By value: the caller's key is a reference into ready/by_age, which
@@ -940,7 +1091,11 @@ Stripe Journal::take(StripeKey key)
     // covers the newest version among its blocks, whatever its sequence.
     stripe.newest_sequence = std::max(stripe.newest_sequence, block.sequence);
     stripe.newest_version = std::max(stripe.newest_version, block.version);
-    stripe.newest_mtime = std::max(stripe.newest_mtime, block.mtime);
+  }
+  for (const auto& r : entry.reqids) {
+    if (r.sequence <= entry.taken) {
+      stripe.reqids.emplace_back(r.reqid, r.user_version);
+    }
   }
   return stripe;
 }
@@ -1102,9 +1257,21 @@ int Journal::finish_flush(const Stripe& flushed, int result)
       ++b;
     }
   }
+  // The write that materialized the snapshot logged its requests
+  // (Stripe::reqids): the PG log answers for them from here on.
+  while (!entry.reqids.empty() &&
+         entry.reqids.front().sequence <= flushed.newest_sequence) {
+    drop_request(entry.reqids.front().reqid, entry.reqids.front().sequence);
+    entry.reqids.pop_front();
+  }
   reindex(i->first, entry);
   if (entry.blocks.empty()) {
     index.erase(i);
+    // The write that materialized the object's last records persisted its
+    // metadata (the overlay was in the object info it wrote).
+    if (!dirty(flushed.object)) {
+      metas.erase(flushed.object);
+    }
   }
   collect();
   return 0;
@@ -1115,6 +1282,7 @@ void Journal::on_reset()
   index.clear();
   by_age.clear();
   ready.clear();
+  window.clear();
   segments.clear();
   used_bytes = 0;
   used_payload_bytes = 0;
@@ -1122,6 +1290,9 @@ void Journal::on_reset()
   live = 0;
   failed = 0;
   holds.clear();
+  requests.clear();
+  metas.clear();
+  newest_user_version_ = 0;
   // The reads in flight are dropped with the interval and never end.
   readers.clear();
   free_slots.clear();
@@ -1309,9 +1480,10 @@ bool Journal::adopted_ready() const
 
 bool Journal::pressure() const
 {
+  const auto pinned = reclaimable();
   return !segments.empty() &&
-    (segments.size() >= limits.max_segments ||
-     used_bytes + limits.segment_bytes > limits.max_bytes);
+    (segments.size() - pinned.count >= limits.max_segments ||
+     used_bytes - pinned.bytes + limits.segment_bytes > limits.max_bytes);
 }
 
 std::optional<uint64_t> Journal::reclaim_bound() const

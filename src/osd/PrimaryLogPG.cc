@@ -779,7 +779,7 @@ bool PrimaryLogPG::ec_journal_read_ready(OpContext *ctx)
 void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
                                     std::map<uint64_t, ceph::bufferlist> runs,
                                     uint64_t stripe_offset, eversion_t covered,
-                                    utime_t mtime,
+                                    std::vector<std::pair<osd_reqid_t, version_t>> reqids,
                                     std::function<void()> on_commit)
 {
   ceph_assert(is_locked());
@@ -796,9 +796,10 @@ void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
   // op is built and submitted under the PG lock in one go, against the
   // projected state.
   ctx->op_t->ec_journal_flush = true;
-  // The data is the clients': their newest mtime among the stripe's records
-  // (journaled writes leave the object's own mtime alone until here).
-  ctx->mtime = std::max(mtime, obc->obs.oi.mtime);
+  // The object info already shows the last write's user version and mtime
+  // (a journaled write sets them at admission, a logged one in finish_ctx,
+  // ec_journal_apply_meta on a context read from disk): persist them.
+  ctx->mtime = obc->obs.oi.mtime;
   ctx->user_at_version = obc->obs.oi.user_version;
   for (auto& [off, bl] : runs) {
     ceph_assert(off + bl.length() <= obc->obs.oi.size);
@@ -824,6 +825,10 @@ void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
   bufferlist bm;
   encode(materialized, bm);
   ctx->op_t->setattr(oid, std::string(ECWriteJournal::materialized_attr), bm);
+  // The requests of the records this write materializes go into its log
+  // entry (extra_reqids, as a copy-from's do): a resend of one of them is
+  // answered from the PG log from now on, by the journal until now.
+  ctx->extra_reqids.assign(reqids.begin(), reqids.end()); // its mempool vector
   ctx->register_on_commit(std::move(on_commit));
   finish_ctx(ctx.get(), pg_log_entry_t::MODIFY);
   dout(20) << __func__ << " " << oid << " stripe " << stripe_offset
@@ -867,19 +872,61 @@ PrimaryLogPG::ec_journal_record_state(const hobject_t& oid, eversion_t version,
 }
 
 void PrimaryLogPG::ec_journal_acked(OpRequestRef op, ObjectContextRef obc,
-                                    uint64_t bytes_written)
+                                    uint64_t bytes_written,
+                                    version_t user_version)
 {
   ceph_assert(is_locked());
   auto m = op->get_req<MOSDOp>();
-  // Every holder has the record. The object's own versions do not move
-  // until the flush writes the data: the reply carries the current ones.
+  // Every holder has the record. The reply carries the user version the
+  // write took (ECBackend::journal_write) and the object's log version,
+  // which does not move until the flush writes the data.
   MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0, false);
-  reply->set_reply_versions(obc->obs.oi.version, obc->obs.oi.user_version);
+  reply->set_reply_versions(obc->obs.oi.version, user_version);
   reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
   dout(10) << __func__ << " sending reply on " << *m << " " << reply << dendl;
   osd->send_message_osd_client(reply, m->get_connection());
   op->mark_commit_sent();
   log_op_stats(*op, bytes_written, 0);
+}
+
+void PrimaryLogPG::ec_journal_apply_meta(const ObjectContextRef& obc)
+{
+  ceph_assert(is_locked());
+  const auto meta = pgbackend->ec_journal_object_meta(obc->obs.oi.soid);
+  if (!meta) {
+    return;
+  }
+  // The journal's newest write of the object is its last write when its
+  // user version is above the one on disk (a logged write since took a
+  // higher one); the mtime follows the last write, as on a logged pool.
+  auto& oi = obc->obs.oi;
+  if (meta->user_version > oi.user_version) {
+    dout(20) << __func__ << " " << oi.soid << " user_version "
+             << oi.user_version << " -> " << meta->user_version << " mtime "
+             << oi.mtime << " -> " << meta->mtime << dendl;
+    oi.user_version = meta->user_version;
+    oi.mtime = meta->mtime;
+  }
+}
+
+void PrimaryLogPG::ec_journal_object_meta_changed(const hobject_t& oid)
+{
+  ceph_assert(is_locked());
+  if (ObjectContextRef obc = object_contexts.lookup(oid)) {
+    ec_journal_apply_meta(obc);
+  }
+}
+
+void PrimaryLogPG::ec_journal_dup_acked(OpRequestRef op, ObjectContextRef obc,
+                                        version_t user_version)
+{
+  ceph_assert(is_locked());
+  // A resend of a journaled write, held until the record was durable: the
+  // answer the original got (its user version; the object's version as it
+  // is now, which no journaled write moves).
+  dout(10) << __func__ << " dup " << op->get_reqid() << " of "
+           << obc->obs.oi.soid << dendl;
+  osd->reply_op_error(std::move(op), 0, obc->obs.oi.version, user_version, {});
 }
 
 void PrimaryLogPG::ec_journal_kick()
@@ -2771,6 +2818,27 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   // Nothing of this runs on a pool that is not enrolled, not even the
   // snapset copy the call below makes.
   if (pgbackend->ec_journal_enrolled()) {
+    // A resend of a journaled write: the PG log found no entry for it above
+    // (a journaled write has none), the journal knows it until the write
+    // that materializes its stripe has logged it (Stripe::reqids). RADOS
+    // executes a request at most once: answer it as the original was
+    // answered once its record is durable on every holder, hold it until
+    // then.
+    if (op->may_write()) {
+      if (const auto request =
+            pgbackend->ec_journal_find_request(m->get_reqid())) {
+        dout(3) << __func__ << " dup " << m->get_reqid() << " journaled"
+                << (request->durable ? "" : ", record in flight") << dendl;
+        if (request->durable) {
+          osd->reply_op_error(op, 0, obc->obs.oi.version,
+                              request->user_version, {});
+        } else {
+          pgbackend->ec_journal_hold_resend(m->get_reqid(), op);
+          op->mark_delayed("waiting for EC journal commit");
+        }
+        return;
+      }
+    }
     const auto admission = pgbackend->ec_journal_admit(obc->obs.oi.soid,
       obc->obs, obc->ssc ? obc->ssc->snapset : SnapSet(),
       pool.info.is_pool_snaps_mode() ? pool.snapc.seq : m->get_snap_seq(),
@@ -9554,7 +9622,12 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
   // finish and log the op.
   if (ctx->user_modify) {
     // update the user_version for any modify ops, except for the watch op
-    ctx->user_at_version = std::max(info.last_user_version, ctx->new_obs.oi.user_version) + 1;
+    // EC journal POC: journaled writes take user versions without a log
+    // entry (ECBackend::journal_write); a logged write of an enrolled pool
+    // allocates above them too, so the pool's sequence stays monotonic.
+    ctx->user_at_version = std::max({info.last_user_version,
+                                     ctx->new_obs.oi.user_version,
+                                     pgbackend->ec_journal_newest_user_version()}) + 1;
     /* In order for new clients and old clients to interoperate properly
      * when exchanging versions, we need to lower bound the user_version
      * (which our new clients pay proper attention to)
@@ -9637,6 +9710,10 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
           written.union_insert(i.get_off(), i.get_len());
         }
         auto take = pgbackend->ec_journal_take_for_write(soid, written);
+        // It materializes those stripes, so it logs their records' requests
+        // (extra_reqids): a resend of one is answered from the PG log.
+        ctx->extra_reqids.insert(ctx->extra_reqids.end(), take.reqids.begin(),
+                                 take.reqids.end());
         for (auto& [off, bl] : take.runs) {
           ceph_assert(off + bl.length() <= ctx->new_obs.oi.size);
           ctx->clean_regions.mark_data_region_dirty(off, bl.length());
@@ -12597,6 +12674,11 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     obc->destructor_callback = new C_PG_ObjectContext(this, obc.get());
     obc->obs.oi = oi;
     obc->obs.exists = true;
+    // EC journal POC: the info on disk is behind the object's journaled
+    // writes until their flush; the journal has what they did to it.
+    if (pgbackend->ec_journal_enrolled()) {
+      ec_journal_apply_meta(obc);
+    }
 
     obc->ssc = get_snapset_context(
       soid, true,

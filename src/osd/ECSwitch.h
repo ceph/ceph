@@ -235,6 +235,35 @@ public:
     return !is_optimized() || optimized.journal_ready(oid);
   }
 
+  std::optional<ec_journal_request_t> ec_journal_find_request(
+      const osd_reqid_t& reqid) const override
+  {
+    if (!is_optimized()) {
+      return std::nullopt;
+    }
+    return optimized.journal_find_request(reqid);
+  }
+
+  void ec_journal_hold_resend(const osd_reqid_t& reqid, OpRequestRef op) override
+  {
+    ceph_assert(is_optimized());
+    optimized.journal_hold_resend(reqid, std::move(op));
+  }
+
+  std::optional<ec_journal_object_meta_t> ec_journal_object_meta(
+      const hobject_t& oid) const override
+  {
+    if (!is_optimized()) {
+      return std::nullopt;
+    }
+    return optimized.journal_object_meta(oid);
+  }
+
+  version_t ec_journal_newest_user_version() const override
+  {
+    return is_optimized() ? optimized.journal_newest_user_version() : 0;
+  }
+
   bool ec_journal_read_ready(const hobject_t& oid, uint64_t offset,
                              uint64_t length) override
   {

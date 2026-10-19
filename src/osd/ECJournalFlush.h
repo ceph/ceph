@@ -29,6 +29,9 @@ Limits read_limits(const Config& conf, uint64_t stripe_width)
     "osd_ec_journal_max_bytes");
   limits.max_segments = slots_per_pg;
   limits.segment_bytes = limits.max_bytes / slots_per_pg;
+  // Requests remembered for duplicate detection: the PG log's window.
+  limits.request_window = conf.template get_val<uint64_t>("osd_pg_log_dups_tracked") +
+    conf.template get_val<uint64_t>("osd_min_pg_log_entries");
   return limits;
 }
 
