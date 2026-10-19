@@ -4,6 +4,7 @@
 #include "ceph_strings.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_CON_MODE_*
+#include "include/ceph_release_numbers.h"
 #include "include/msgr.h" // for CEPH_ENTITY_TYPE_*
 
 const char *ceph_entity_type_name(int type)

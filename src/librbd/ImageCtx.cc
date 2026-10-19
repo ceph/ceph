@@ -5,6 +5,7 @@
 #include <boost/assign/list_of.hpp>
 #include <stddef.h>
 
+#include "include/ceph_release_numbers.h"
 #include "include/neorados/RADOS.hpp"
 
 #include "common/ceph_context.h"
