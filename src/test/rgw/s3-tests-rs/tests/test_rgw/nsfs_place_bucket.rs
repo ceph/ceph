@@ -9,8 +9,8 @@
 //! base path, and the test needs no access to the gateway's filesystem.
 
 use s3_tests_rs::admin::{admin_request, admin_request_as, as_json, driver_hint,
-                         grant_user_caps, nsfs_delete_identity, nsfs_put_identity,
-                         q};
+                         grant_user_caps, nsfs_put_identity, q,
+                         SavedIdentities};
 use s3_tests_rs::client::get_iam_root_s3client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
@@ -47,23 +47,38 @@ fn owner() -> String {
 /// Under impersonation every request runs as its POSIX identity, and an
 /// identity with none is refused.  The account is given the fixture's
 /// `rgwalice` (70101), as the impersonation tests give the main user,
-/// from `rgw-vstart.sh --with-impersonation`;  and taken away
-/// afterwards.  The nextest group `serial-nsfs-identity` keeps the tests
-/// that write identity rows apart.
+/// from `rgw-vstart.sh --with-impersonation`;  and **put back**
+/// afterwards, not deleted.
+///
+/// Deleting it was wrong, and serialization did not cover for it:  the
+/// `serial-nsfs-identity` group keeps these tests from overlapping, but
+/// a row this module removed stays removed for everything that runs
+/// after, and the fixture provisions this account for the whole run.
+/// `identity::test_every_principal_is_provisioned` failed once in two
+/// baseline runs because of it, depending on which ran first
+/// (2026-10-19).
 const UID_OWNER: &str = "70101";
+
+/// What the account's row was before this module touched it.  Each test
+/// is its own process, so once per test.
+static FOUND: tokio::sync::OnceCell<SavedIdentities> =
+    tokio::sync::OnceCell::const_new();
 
 async fn bind_owner() {
     if !impersonating().await {
         return;
     }
+    FOUND.get_or_init(|| async {
+        SavedIdentities::take(&[&owner()]).await
+    }).await;
     let r = nsfs_put_identity(&[("identity", owner().as_str()),
                                 ("uid", UID_OWNER), ("gid", UID_OWNER)]).await;
     assert_eq!(r.status, 200, "binding the owner failed: {}", r.body);
 }
 
 async fn unbind_owner() {
-    if impersonating().await {
-        let _ = nsfs_delete_identity(&owner()).await;
+    if let Some(found) = FOUND.get() {
+        found.restore().await;
     }
 }
 
