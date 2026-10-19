@@ -14,7 +14,9 @@ When should I use multiple active MDS daemons?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You should configure multiple active MDS daemons when your metadata performance
-is bottlenecked on the single MDS that runs by default.
+is bottlenecked on the single MDS that runs by default. To tell whether that is
+in fact the bottleneck, see :doc:`/cephfs/mds-phase-times`, which reports how
+much of the wall clock a rank spends holding ``mds_lock`` and on what.
 
 Adding more daemons may not increase performance on all workloads.  Typically,
 a single application running on a single client will not benefit from an
