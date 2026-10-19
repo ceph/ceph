@@ -507,6 +507,11 @@ async fn test_credentials_resolve_the_caller() {
      * the endpoint's `identity` field is for. */
     let cfg = get_config();
     let me = cfg.iam_user_id.clone();
+    /* The fixture binds this principal for the whole run, so put it
+     * back.  A row left removed here is a correct 403 for every later
+     * test that authenticates as it, which
+     * `test_every_principal_is_provisioned` now says by name. */
+    let saved = SavedIdentities::take(&[&me]).await;
     scrub(&me).await;
 
     /* no row:  no impersonation, and a 200 saying so rather than an
@@ -548,7 +553,7 @@ async fn test_credentials_resolve_the_caller() {
     assert_eq!(j["outcome"], "refused");
     assert!(j.get("uid").is_none());
 
-    scrub(&me).await;
+    saved.restore().await;
 }
 
 /// Asking about somebody else is the same gate, and reaches rows
@@ -594,20 +599,20 @@ async fn test_credentials_for_another_identity() {
 /// Every other test here runs as a standalone user, for whom
 /// `s->owner` and `s->user` are the same value — so they pass
 /// whichever key the driver uses, and prove nothing about the
-/// choice.  This one runs as a **member of an account**, where the
+/// choice.  This one runs as a **user inside an account**, where the
 /// two differ: `get_aclowner()` reports the account, `s->user`
-/// reports the member.
+/// reports that user.
 ///
-/// On Scale every member of an account runs as the account, so a
-/// member ordinarily has no row and is served the account's.  A row
-/// keyed on the member takes precedence where one exists.  Both
-/// halves are here:  with a row under each, the member is served as
+/// On Scale every user of an account runs as the account, so a
+/// such a user ordinarily has no row and is served the account's.  A row
+/// keyed on the user takes precedence where one exists.  Both
+/// halves are here:  with a row under each, the user is served as
 /// its own (4242, not 9999), which fails if the driver keys on the
-/// ACL owner;  with the member's row removed, it is served as the
-/// account (9999), which fails if it keys on the member alone.
+/// ACL owner;  with the user's row removed, it is served as the
+/// account (9999), which fails if it keys on the user alone.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_credentials_of_an_account_member() {
+async fn test_credentials_of_a_user_in_an_account() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -627,10 +632,10 @@ async fn test_credentials_of_an_account_member() {
         .user_name(&name)
         .path(&cfg.iam_path_prefix)
         .send().await.expect("create_user");
-    /* IAM returns the member's rgw_user directly -- a generated
+    /* IAM returns the user's rgw_user directly -- a generated
      * UUID, unique across accounts.  This is the key. */
-    let member = created.user().unwrap().user_id().to_string();
-    assert_ne!(member, account, "the member's id is its account's");
+    let acct_user = created.user().unwrap().user_id().to_string();
+    assert_ne!(acct_user, account, "the user's id is its account's");
 
     let ak = root.create_access_key().user_name(&name).send().await
         .expect("create_access_key");
@@ -638,18 +643,23 @@ async fn test_credentials_of_an_account_member() {
     let (mak, msk) = (k.access_key_id().to_string(),
                       k.secret_access_key().to_string());
 
-    /* Admin Ops always needs a cap, so the member is given one
+    /* Admin Ops always needs a cap, so the user is given one
      * rather than the endpoint being opened. */
-    let r = grant_user_caps(&member, "nsfs=read").await;
-    assert_eq!(r.status, 200, "granting nsfs to the member failed: {}",
+    let r = grant_user_caps(&acct_user, "nsfs=read").await;
+    assert_eq!(r.status, 200, "granting nsfs to the user failed: {}",
                r.body);
 
-    scrub(&member).await;
+    /* The fixture binds this principal for the whole run, so put it
+     * back.  A row left removed here is a correct 403 for every later
+     * test that authenticates as it, which
+     * `test_every_principal_is_provisioned` now says by name. */
+    let saved = SavedIdentities::take(&[&account]).await;
+    scrub(&acct_user).await;
     scrub(&account).await;
 
     /* two rows, deliberately different */
     assert_eq!(nsfs_put_identity(&[
-        ("identity", &member), ("uid", "4242"), ("gid", "4242"),
+        ("identity", &acct_user), ("uid", "4242"), ("gid", "4242"),
         ("groups", "77")]).await.status, 200);
     assert_eq!(nsfs_put_identity(&[
         ("identity", &account), ("uid", "9999"), ("gid", "9999")])
@@ -662,64 +672,64 @@ async fn test_credentials_of_an_account_member() {
     assert_eq!(j["outcome"], "resolved");
     assert_eq!(j["uid"], 9999);
 
-    /* and now as the member itself, through real authentication */
+    /* and now as the user itself, through real authentication */
     let resp = nsfs_credentials_as(&mak, &msk).await;
-    assert_eq!(resp.status, 200, "member credentials failed: {}", resp.body);
+    assert_eq!(resp.status, 200, "its credentials failed: {}", resp.body);
     let j = as_json(&resp).expect("not JSON");
 
-    assert_eq!(j["identity"], member,
-        "the request resolved under {} rather than the member",
+    assert_eq!(j["identity"], acct_user,
+        "the request resolved under {} rather than the user",
         j["identity"]);
     assert_ne!(j["identity"], serde_json::json!(account),
-        "the member collapsed onto its account");
-    assert_eq!(j["uid"], 4242, "the member was served as the wrong row");
+        "the user collapsed onto its account");
+    assert_eq!(j["uid"], 4242, "the user was served as the wrong row");
     assert_ne!(j["uid"], serde_json::json!(9999),
-        "the member was served as its account");
+        "the user was served as its account");
     assert_eq!(j["groups"], serde_json::json!([77]));
-    assert_eq!(j["row"], member, "the answer did not come from the member's row");
+    assert_eq!(j["row"], acct_user, "the answer did not come from the user's row");
 
-    /* no row of its own:  the member runs as its account, and the
+    /* no row of its own:  the user runs as its account, and the
      * answer says which row it came from */
-    scrub(&member).await;
+    scrub(&acct_user).await;
     let j = as_json(&nsfs_credentials_as(&mak, &msk).await).expect("not JSON");
-    assert_eq!(j["identity"], member,
-        "the request resolved under {} rather than the member",
+    assert_eq!(j["identity"], acct_user,
+        "the request resolved under {} rather than the user",
         j["identity"]);
     assert_eq!(j["outcome"], "resolved",
-        "a member with no row was not served as its account");
+        "a user with no row was not served as its account");
     assert_eq!(j["row"], account,
         "the fallback did not come from the account's row");
     assert_eq!(j["uid"], 9999);
     assert_eq!(j["gid"], 9999);
 
     /* clean up */
-    scrub(&member).await;
-    scrub(&account).await;
+    scrub(&acct_user).await;
+    saved.restore().await;
     let _ = root.delete_access_key().user_name(&name)
         .access_key_id(&mak).send().await;
     let _ = root.delete_user().user_name(&name).send().await;
 }
 
 
-/// An attribute write and a delete run as the **member**, not as its
+/// An attribute write and a delete run as the **user**, not as its
 /// account.
 ///
 /// (n) phase D's validation clause.  Phase C plumbed the
 /// authenticated user to `DeleteOp` and the attribute setters, and
 /// nothing asserted that the *right* one arrives:  the compiler
 /// catches a missing identity, not a wrong one, so a later refactor
-/// can collapse a member onto its account in silence and every status
+/// can collapse a user onto its account in silence and every status
 /// code stays 200.
 ///
-/// A member of an account is the case that discriminates, because it
+/// A user inside an account is the case that discriminates, because it
 /// is the only one where the two differ -- `get_aclowner()` reports
-/// the account and `s->user` the member (see
-/// `test_credentials_of_an_account_member`).
+/// the account and `s->user` the user (see
+/// `test_credentials_of_a_user_in_an_account`).
 ///
 /// **Three arms**, because one assertion proves nothing on its own:
-/// the member's row is used when it has one;  moving that row moves
+/// the user's row is used when it has one;  moving that row moves
 /// what is recorded, so the value tracks the row rather than being
-/// echoed;  and a member with **no** row is served as its account,
+/// echoed;  and such a user with **no** row is served as its account,
 /// which is the Scale case and the one the consumer sites must get
 /// right.
 ///
@@ -734,7 +744,7 @@ async fn test_credentials_of_an_account_member() {
 /// what those two establish.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_attrs_and_delete_run_as_the_member() {
+async fn test_attrs_and_delete_run_as_the_account_user() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -742,7 +752,7 @@ async fn test_attrs_and_delete_run_as_the_member() {
     }
     if features().await.and_then(|f| f.get_bool("impersonate"))
         != Some(true) {
-        eprintln!("impersonation is off;  the member and the gateway \
+        eprintln!("impersonation is off;  the user and the gateway \
                    are the same uid and nothing discriminates");
         return;
     }
@@ -750,7 +760,7 @@ async fn test_attrs_and_delete_run_as_the_member() {
     /* alice's uid, because the fixture already makes her able to write
      * in a bucket directory;  what is under test is which identity is
      * chosen, not whether the filesystem lets it through. */
-    const MEMBER_UID: &str = "70101";
+    const ACCT_USER_UID: &str = "70101";
     const MEMBER_GRP: &str = "70010";
     /* bob's, for the second arm.  Any second value would do;  one the
      * fixture already creates keeps the test from inventing uids. */
@@ -760,7 +770,7 @@ async fn test_attrs_and_delete_run_as_the_member() {
     let cfg = get_config();
     let root = get_iam_root_client();
     let account = cfg.iam_root_user_id.clone();
-    let name = format!("{}ranasmember", cfg.iam_name_prefix);
+    let name = format!("{}ranasacctuser", cfg.iam_name_prefix);
 
     /* Leave nothing from a previous run.  A user with a key or a
      * policy still attached cannot be deleted, and an earlier failure
@@ -786,8 +796,8 @@ async fn test_attrs_and_delete_run_as_the_member() {
         .user_name(&name)
         .path(&cfg.iam_path_prefix)
         .send().await.expect("create_user");
-    let member = created.user().unwrap().user_id().to_string();
-    assert_ne!(member, account, "the member's id is its account's");
+    let acct_user = created.user().unwrap().user_id().to_string();
+    assert_ne!(acct_user, account, "the user's id is its account's");
 
     let ak = root.create_access_key().user_name(&name).send().await
         .expect("create_access_key");
@@ -795,7 +805,7 @@ async fn test_attrs_and_delete_run_as_the_member() {
     let (mak, msk) = (k.access_key_id().to_string(),
                       k.secret_access_key().to_string());
 
-    /* A member has no S3 permissions of its own;  without this every
+    /* Such a user has no S3 permissions of its own;  without this every
      * request below is a 403 from IAM and never reaches the driver. */
     root.put_user_policy()
         .user_name(&name)
@@ -816,13 +826,13 @@ async fn test_attrs_and_delete_run_as_the_member() {
      * careful caller -- but it bounds it to this test. */
     let saved = SavedIdentities::take(&[&account]).await;
 
-    scrub(&member).await;
+    scrub(&acct_user).await;
     scrub(&account).await;
     assert_eq!(nsfs_put_identity(&[
         ("identity", &account), ("uid", ACCOUNT_UID),
         ("gid", ACCOUNT_UID)]).await.status, 200);
     assert_eq!(nsfs_put_identity(&[
-        ("identity", &member), ("uid", MEMBER_UID), ("gid", MEMBER_UID),
+        ("identity", &acct_user), ("uid", ACCT_USER_UID), ("gid", ACCT_USER_UID),
         ("groups", MEMBER_GRP)]).await.status, 200);
 
     let s3 = build_s3_client(&mak, &msk);
@@ -831,20 +841,20 @@ async fn test_attrs_and_delete_run_as_the_member() {
     let _ = s3.delete_object().bucket(&bucket).key(key).send().await;
     let _ = s3.delete_bucket().bucket(&bucket).send().await;
     s3.create_bucket().bucket(&bucket).send().await
-        .expect("the member could not create its bucket");
+        .expect("the user could not create its bucket");
     s3.put_object().bucket(&bucket).key(key)
         .body(b"ran-as".to_vec().into())
-        .send().await.expect("the member could not write its object");
+        .send().await.expect("the user could not write its object");
 
     /* from here on, record what each consumer chooses for the
-     * member's requests.  By requester and not by object:  the
-     * question is whether the member's operations ran as the member,
+     * user's requests.  By requester and not by object:  the
+     * question is whether its operations ran as itself,
      * which no object names. */
     let selecting = driver_hint_results(
-        "ran-as", &[("select", &member)]).await
+        "ran-as", &[("select", &acct_user)]).await
         .expect("selecting ran-as failed;  is rgw_driver_debug_apis on?");
     assert_eq!(selecting.get("selecting").map(String::as_str),
-               Some(member.as_str()));
+               Some(acct_user.as_str()));
 
     /* the attribute write */
     s3.put_object_tagging().bucket(&bucket).key(key)
@@ -852,89 +862,166 @@ async fn test_attrs_and_delete_run_as_the_member() {
             .tag_set(aws_sdk_s3::types::Tag::builder()
                 .key("phase").value("d").build().unwrap())
             .build().unwrap())
-        .send().await.expect("the member could not tag its object");
+        .send().await.expect("the user could not tag its object");
 
     /* and the delete */
     s3.delete_object().bucket(&bucket).key(key).send().await
-        .expect("the member could not delete its object");
+        .expect("the user could not delete its object");
 
     let seen = driver_hint_results("ran-as", &[]).await
         .expect("reading ran-as failed");
 
     /* Nothing recorded is its own failure, and a distinct one:  it
-     * means neither consumer saw the member as its requester, so the
-     * member was collapsed onto its account before these sites were
+     * means neither consumer saw that user as its requester, so the
+     * user was collapsed onto its account before these sites were
      * reached rather than at them. */
     let count: usize = seen.get("count").and_then(|c| c.parse().ok())
         .unwrap_or(0);
     assert!(count >= 2,
-        "ran-as recorded {count} choices for the member;  expected the \
-         attribute write and the delete.  Neither site saw {member} as \
+        "ran-as recorded {count} choices for the user;  expected the \
+         attribute write and the delete.  Neither site saw {acct_user} as \
          its requester");
 
     let attrs = seen.get("ran_as_attrs").map(String::as_str);
     let del = seen.get("ran_as_delete").map(String::as_str);
-    assert_eq!(attrs, Some(MEMBER_UID),
-        "the attribute write chose {attrs:?}, not the member's row");
-    assert_eq!(del, Some(MEMBER_UID),
-        "the delete chose {del:?}, not the member's row");
+    assert_eq!(attrs, Some(ACCT_USER_UID),
+        "the attribute write chose {attrs:?}, not the user's row");
+    assert_eq!(del, Some(ACCT_USER_UID),
+        "the delete chose {del:?}, not the user's row");
 
     /* The other polarity, so a pass here is a discrimination and not
-     * a tautology.  Move the member's row to a different uid and the
+     * a tautology.  Move the user's row to a different uid and the
      * same site must record the new one:  that is what shows the
      * recorded value tracks the row rather than being echoed from
-     * somewhere.  A driver that had collapsed the member onto its
+     * somewhere.  A driver that had collapsed the user onto its
      * account would fail both arms, since neither value would be the
      * account's.  Without this arm the assertions above would hold
-     * against a driver that ignored the member entirely -- the shape
+     * against a driver that ignored the user entirely -- the shape
      * `inject-no-chown` had, one polarity asserted twice.
      *
      * A delete of a key that was never there:  the identity is pinned
      * before anything touches the filesystem, so the choice is
      * recorded whether or not that uid could have written. */
     assert_eq!(nsfs_put_identity(&[
-        ("identity", &member), ("uid", OTHER_UID), ("gid", OTHER_UID)])
+        ("identity", &acct_user), ("uid", OTHER_UID), ("gid", OTHER_UID)])
         .await.status, 200);
-    assert_eq!(driver_hint_results("ran-as", &[("select", &member)])
+    assert_eq!(driver_hint_results("ran-as", &[("select", &acct_user)])
         .await.expect("re-selecting failed")
-        .get("selecting").map(String::as_str), Some(member.as_str()));
+        .get("selecting").map(String::as_str), Some(acct_user.as_str()));
     let _ = s3.delete_object().bucket(&bucket).key("never-here")
         .send().await;
     let moved = driver_hint_results("ran-as", &[]).await
         .expect("reading ran-as failed");
     assert_eq!(moved.get("ran_as_delete").map(String::as_str),
                Some(OTHER_UID),
-        "the member's row moved to {OTHER_UID} and the delete still \
+        "the user's row moved to {OTHER_UID} and the delete still \
          chose {:?};  the assertion above does not track the row",
         moved.get("ran_as_delete"));
 
     /* And the fallback, which is the Scale case and the one the
-     * consumer sites have to get right:  a member with **no row of
+     * consumer sites have to get right:  a user with **no row of
      * its own** is served as its account
-     * (`test_credentials_of_an_account_member` settles the
+     * (`test_credentials_of_a_user_in_an_account` settles the
      * resolution;  this asserts it reaches the consumer).  On Scale
-     * every member ordinarily has no row, so this is the common
+     * every such user ordinarily has no row, so this is the common
      * shape there and not an edge. */
-    scrub(&member).await;
-    assert_eq!(driver_hint_results("ran-as", &[("select", &member)])
+    scrub(&acct_user).await;
+    assert_eq!(driver_hint_results("ran-as", &[("select", &acct_user)])
         .await.expect("re-selecting failed")
-        .get("selecting").map(String::as_str), Some(member.as_str()));
+        .get("selecting").map(String::as_str), Some(acct_user.as_str()));
     let _ = s3.delete_object().bucket(&bucket).key("never-here")
         .send().await;
     let fellback = driver_hint_results("ran-as", &[]).await
         .expect("reading ran-as failed");
     assert_eq!(fellback.get("ran_as_delete").map(String::as_str),
                Some(ACCOUNT_UID),
-        "a member with no row of its own chose {:?};  it should be \
+        "a user with no row of its own chose {:?};  it should be \
          served as its account",
         fellback.get("ran_as_delete"));
 
     let _ = s3.delete_bucket().bucket(&bucket).send().await;
     let _ = root.delete_user_policy().user_name(&name)
         .policy_name("RanAsAllAccess").send().await;
-    scrub(&member).await;
+    scrub(&acct_user).await;
     saved.restore().await;
     let _ = root.delete_access_key().user_name(&name)
         .access_key_id(&mak).send().await;
     let _ = root.delete_user().user_name(&name).send().await;
+}
+
+/// Every principal the suite authenticates as has an identity row.
+///
+/// With impersonation on, a request whose identity has no record is
+/// refused before any file is opened -- correctly, since no identity
+/// means refuse ((n) 6.1).  The refusal lands on whatever test happens
+/// to use that principal, as an `AccessDenied` that looks like the
+/// thing the test was checking, so the cause has been found three
+/// times by excavation rather than by being told:  the tenanted user
+/// (2026-10-16, the cors `_tenant` tests), anonymous (2026-10-19, six
+/// acl and post_object tests), then the IAM user, the policy-only user
+/// and both IAM root accounts (2026-10-19, three `user_policy` tests).
+///
+/// So this asserts the fixture's side of it, and names what is
+/// missing.  It is the cheapest test in the suite to satisfy and the
+/// most expensive failure to diagnose without.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_every_principal_is_provisioned() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let impersonating = match s3_tests_rs::features::features().await {
+        Some(f) => f.get_bool("impersonate").unwrap_or(false),
+        None => false,
+    };
+    if !impersonating {
+        eprintln!("impersonation is off;  a record is not needed");
+        return;
+    }
+    let cfg = get_config();
+    /* Named rather than enumerated:  Rust has no reflection, and a
+     * list that must be extended by hand is exactly the failure this
+     * test exists to make loud rather than to avoid. */
+    let principals: Vec<(&str, &str)> = vec![
+        ("main", &cfg.main_user_id),
+        ("alt", &cfg.alt_user_id),
+        ("quota", &cfg.quota_user_id),
+        ("policy-only", &cfg.policy_only_user_id),
+        ("tenant", &cfg.tenant_user_id),
+        ("iam", &cfg.iam_user_id),
+        ("iam root account", &cfg.iam_root_user_id),
+        ("iam alt root account", &cfg.iam_alt_root_user_id),
+        /* not a configured user:  the identity an unauthenticated
+         * request is served as, which the driver names itself */
+        ("anonymous", "anonymous"),
+    ];
+
+    let mut missing = Vec::new();
+    for (what, who) in &principals {
+        if who.is_empty() {
+            continue;
+        }
+        /* A row with a uid, not `resolves`:  that field says the key
+         * names a real RGW user, and `anonymous` names none -- it is
+         * the identity an unauthenticated request is served as.  What
+         * matters here is that the driver has a uid to run as. */
+        let r = nsfs_get_identity(who).await;
+        let found = (r.status == 200)
+            && as_json(&r).map_or(false, |j| j["uid"].is_number());
+        if !found {
+            missing.push(format!("{what} ({who}) -> {}", r.status));
+        }
+    }
+    assert!(missing.is_empty(),
+        "principals the suite authenticates as with no identity row, so \
+         every request they make is refused before it reaches a file:\n  {}\n\
+         If rgw-vstart.sh's fixture does not bind it, add it there.  If it \
+         does, a test removed the row and did not put it back, and the \
+         absence persists for the rest of the run and every run after -- \
+         restart with --with-impersonation to re-provision, then find the \
+         test.  Note that SavedIdentities::take cannot help once the row \
+         is already gone:  it restores what it found, which is nothing.",
+        missing.join("\n  "));
 }
