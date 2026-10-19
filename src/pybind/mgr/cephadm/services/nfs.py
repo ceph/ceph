@@ -196,6 +196,8 @@ class NFSService(CephService):
                     f'client_object_cache_max_dirty: '
                     f'{nfs_spec.client_object_cache_max_dirty}'
                 )
+        if nfs_spec.mem_stats_disable:
+            deps.append(f'mem_stats_disable: {nfs_spec.mem_stats_disable}')
 
         return sorted(deps)
 
@@ -416,6 +418,7 @@ class NFSService(CephService):
                     with_units_to_int(str(nfs_spec.client_object_cache_max_dirty))
                     if nfs_spec.client_object_cache_max_dirty is not None else None
                 ),
+                "mem_stats_disable": nfs_spec.mem_stats_disable,
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
