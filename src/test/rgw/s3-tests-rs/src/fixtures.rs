@@ -401,16 +401,17 @@ pub struct PrivateUser {
 }
 
 impl PrivateUser {
-    /// A plain RGW user, created through Admin Ops, not an IAM
-    /// account member.
+    /// A plain RGW user, created through Admin Ops, and not a user
+    /// inside an IAM account.
     ///
-    /// The distinction is load-bearing:  a member's buckets are owned
-    /// by its *account*, and the driver keys a custom-bucket-path
-    /// allowlist on the bucket's owner
+    /// The distinction is load-bearing.  A bucket created by a user
+    /// inside an account is owned by the *account*, and the driver
+    /// keys a custom-bucket-path allowlist on the bucket's owner
     /// (`rgw_sal_nsfs.cc:5340`, `get_identity(to_string(owner))`).
-    /// So a member's row is not the one consulted, and a test using
-    /// one would be back to borrowing shared state -- the account's
-    /// row instead of the main user's.  A plain user is its own owner.
+    /// So that user's own row is never the one consulted, and a test
+    /// using one would be back to borrowing shared state -- the
+    /// account's row instead of the main user's.  A plain RGW user is
+    /// its own owner.
     pub async fn create(tag: &str) -> Option<PrivateUser> {
         let cfg = get_config();
         let uid = format!("{}priv{tag}", cfg.iam_name_prefix);

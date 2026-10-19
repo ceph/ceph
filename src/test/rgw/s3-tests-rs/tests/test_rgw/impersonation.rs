@@ -666,7 +666,7 @@ async fn test_impersonation_honours_the_group_vector() {
 /// An identity with no record is refused, not served as the gateway.
 ///
 /// Section 4 of the design makes this an invariant rather than a
-/// policy:  a valid account always has a POSIX record, so one
+/// policy:  a valid account always has an identity row, so one
 /// without is a provisioning fault.  The alternative — falling back
 /// to the gateway's own credentials — would give an unprovisioned
 /// user the daemon's filesystem reach while every provisioned one
@@ -709,14 +709,14 @@ async fn test_impersonation_refuses_an_unprovisioned_identity() {
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"x"))
         .send().await;
     assert!(denied.is_err(),
-        "an identity with no POSIX record was served;  the request ran as \
+        "an identity with no identity row was served;  the request ran as \
          the gateway rather than being refused");
 
     /* and reads too, not only writes */
     let read = alice.get_object().bucket(&bucket).key("provisioned")
         .send().await;
     assert!(read.is_err(),
-        "an identity with no POSIX record read an object");
+        "an identity with no identity row read an object");
 
 }
 
