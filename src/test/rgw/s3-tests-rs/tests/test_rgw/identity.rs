@@ -16,12 +16,12 @@
 //! arm will turn on.
 
 use s3_tests_rs::admin::{
-    admin_request_as, as_json, nsfs_credentials, nsfs_credentials_as,
-    nsfs_credentials_for, nsfs_delete_identity, nsfs_get_identity,
-    grant_user_caps, nsfs_list_identities, nsfs_put_identity, q,
-    SavedIdentities,
+    admin_request_as, as_json, driver_hint_results, nsfs_credentials,
+    nsfs_credentials_as, nsfs_credentials_for, nsfs_delete_identity,
+    nsfs_get_identity, grant_user_caps, nsfs_list_identities,
+    nsfs_put_identity, q, SavedIdentities,
 };
-use s3_tests_rs::client::get_iam_root_client;
+use s3_tests_rs::client::{build_s3_client, get_iam_root_client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
 use s3_tests_rs::fixtures::TestGuard;
@@ -692,6 +692,245 @@ async fn test_credentials_of_an_account_member() {
     /* clean up */
     scrub(&member).await;
     scrub(&account).await;
+    let _ = root.delete_access_key().user_name(&name)
+        .access_key_id(&mak).send().await;
+    let _ = root.delete_user().user_name(&name).send().await;
+}
+
+
+/// An attribute write and a delete run as the **member**, not as its
+/// account.
+///
+/// (n) phase D's validation clause.  Phase C plumbed the
+/// authenticated user to `DeleteOp` and the attribute setters, and
+/// nothing asserted that the *right* one arrives:  the compiler
+/// catches a missing identity, not a wrong one, so a later refactor
+/// can collapse a member onto its account in silence and every status
+/// code stays 200.
+///
+/// A member of an account is the case that discriminates, because it
+/// is the only one where the two differ -- `get_aclowner()` reports
+/// the account and `s->user` the member (see
+/// `test_credentials_of_an_account_member`).
+///
+/// **Three arms**, because one assertion proves nothing on its own:
+/// the member's row is used when it has one;  moving that row moves
+/// what is recorded, so the value tracks the row rather than being
+/// echoed;  and a member with **no** row is served as its account,
+/// which is the Scale case and the one the consumer sites must get
+/// right.
+///
+/// The account's row is shared with the whole run, so it is taken
+/// with `SavedIdentities` and put back.  That bounds the window
+/// rather than closing it -- closing it needs private users, which is
+/// the suite's standing interference defect.
+///
+/// **Asserts the identity and not the status**, as `nested-identity`
+/// and `raise` do.  The `ran-as` hint reports which identity the
+/// driver *chose* at each consumer;  that the switch itself works is
+/// what those two establish.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_attrs_and_delete_run_as_the_member() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if features().await.and_then(|f| f.get_bool("impersonate"))
+        != Some(true) {
+        eprintln!("impersonation is off;  the member and the gateway \
+                   are the same uid and nothing discriminates");
+        return;
+    }
+
+    /* alice's uid, because the fixture already makes her able to write
+     * in a bucket directory;  what is under test is which identity is
+     * chosen, not whether the filesystem lets it through. */
+    const MEMBER_UID: &str = "70101";
+    const MEMBER_GRP: &str = "70010";
+    /* bob's, for the second arm.  Any second value would do;  one the
+     * fixture already creates keeps the test from inventing uids. */
+    const OTHER_UID: &str = "70102";
+    const ACCOUNT_UID: &str = "9999";
+
+    let cfg = get_config();
+    let root = get_iam_root_client();
+    let account = cfg.iam_root_user_id.clone();
+    let name = format!("{}ranasmember", cfg.iam_name_prefix);
+
+    /* Leave nothing from a previous run.  A user with a key or a
+     * policy still attached cannot be deleted, and an earlier failure
+     * leaves both, so each is removed by enumeration rather than by
+     * guessing its name. */
+    if let Ok(keys) = root.list_access_keys().user_name(&name).send().await {
+        for k in keys.access_key_metadata() {
+            if let Some(id) = k.access_key_id() {
+                let _ = root.delete_access_key().user_name(&name)
+                    .access_key_id(id).send().await;
+            }
+        }
+    }
+    if let Ok(pols) = root.list_user_policies().user_name(&name).send().await {
+        for pn in pols.policy_names() {
+            let _ = root.delete_user_policy().user_name(&name)
+                .policy_name(pn).send().await;
+        }
+    }
+    let _ = root.delete_user().user_name(&name).send().await;
+
+    let created = root.create_user()
+        .user_name(&name)
+        .path(&cfg.iam_path_prefix)
+        .send().await.expect("create_user");
+    let member = created.user().unwrap().user_id().to_string();
+    assert_ne!(member, account, "the member's id is its account's");
+
+    let ak = root.create_access_key().user_name(&name).send().await
+        .expect("create_access_key");
+    let k = ak.access_key().unwrap();
+    let (mak, msk) = (k.access_key_id().to_string(),
+                      k.secret_access_key().to_string());
+
+    /* A member has no S3 permissions of its own;  without this every
+     * request below is a 403 from IAM and never reaches the driver. */
+    root.put_user_policy()
+        .user_name(&name)
+        .policy_name("RanAsAllAccess")
+        .policy_document(serde_json::to_string(&serde_json::json!({
+            "Version": "2012-10-17",
+            "Statement": { "Effect": "Allow", "Action": "*",
+                           "Resource": "*" }
+        })).unwrap())
+        .send().await.expect("put_user_policy");
+
+    /* The account's row is shared with the whole run, and the
+     * fallback arm below needs it to hold a known uid.  Saved and put
+     * back rather than left as this test wants it:  the suite's
+     * idiom for a shared record (see `SavedIdentities`).  It does not
+     * close the window while the test runs -- that is the standing
+     * interference defect, which needs private users and not a
+     * careful caller -- but it bounds it to this test. */
+    let saved = SavedIdentities::take(&[&account]).await;
+
+    scrub(&member).await;
+    scrub(&account).await;
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &account), ("uid", ACCOUNT_UID),
+        ("gid", ACCOUNT_UID)]).await.status, 200);
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &member), ("uid", MEMBER_UID), ("gid", MEMBER_UID),
+        ("groups", MEMBER_GRP)]).await.status, 200);
+
+    let s3 = build_s3_client(&mak, &msk);
+    let bucket = format!("{}ranas", cfg.bucket_prefix);
+    let key = "ran-as-object";
+    let _ = s3.delete_object().bucket(&bucket).key(key).send().await;
+    let _ = s3.delete_bucket().bucket(&bucket).send().await;
+    s3.create_bucket().bucket(&bucket).send().await
+        .expect("the member could not create its bucket");
+    s3.put_object().bucket(&bucket).key(key)
+        .body(b"ran-as".to_vec().into())
+        .send().await.expect("the member could not write its object");
+
+    /* from here on, record what each consumer chooses for the
+     * member's requests.  By requester and not by object:  the
+     * question is whether the member's operations ran as the member,
+     * which no object names. */
+    let selecting = driver_hint_results(
+        "ran-as", &[("select", &member)]).await
+        .expect("selecting ran-as failed;  is rgw_driver_debug_apis on?");
+    assert_eq!(selecting.get("selecting").map(String::as_str),
+               Some(member.as_str()));
+
+    /* the attribute write */
+    s3.put_object_tagging().bucket(&bucket).key(key)
+        .tagging(aws_sdk_s3::types::Tagging::builder()
+            .tag_set(aws_sdk_s3::types::Tag::builder()
+                .key("phase").value("d").build().unwrap())
+            .build().unwrap())
+        .send().await.expect("the member could not tag its object");
+
+    /* and the delete */
+    s3.delete_object().bucket(&bucket).key(key).send().await
+        .expect("the member could not delete its object");
+
+    let seen = driver_hint_results("ran-as", &[]).await
+        .expect("reading ran-as failed");
+
+    /* Nothing recorded is its own failure, and a distinct one:  it
+     * means neither consumer saw the member as its requester, so the
+     * member was collapsed onto its account before these sites were
+     * reached rather than at them. */
+    let count: usize = seen.get("count").and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    assert!(count >= 2,
+        "ran-as recorded {count} choices for the member;  expected the \
+         attribute write and the delete.  Neither site saw {member} as \
+         its requester");
+
+    let attrs = seen.get("ran_as_attrs").map(String::as_str);
+    let del = seen.get("ran_as_delete").map(String::as_str);
+    assert_eq!(attrs, Some(MEMBER_UID),
+        "the attribute write chose {attrs:?}, not the member's row");
+    assert_eq!(del, Some(MEMBER_UID),
+        "the delete chose {del:?}, not the member's row");
+
+    /* The other polarity, so a pass here is a discrimination and not
+     * a tautology.  Move the member's row to a different uid and the
+     * same site must record the new one:  that is what shows the
+     * recorded value tracks the row rather than being echoed from
+     * somewhere.  A driver that had collapsed the member onto its
+     * account would fail both arms, since neither value would be the
+     * account's.  Without this arm the assertions above would hold
+     * against a driver that ignored the member entirely -- the shape
+     * `inject-no-chown` had, one polarity asserted twice.
+     *
+     * A delete of a key that was never there:  the identity is pinned
+     * before anything touches the filesystem, so the choice is
+     * recorded whether or not that uid could have written. */
+    assert_eq!(nsfs_put_identity(&[
+        ("identity", &member), ("uid", OTHER_UID), ("gid", OTHER_UID)])
+        .await.status, 200);
+    assert_eq!(driver_hint_results("ran-as", &[("select", &member)])
+        .await.expect("re-selecting failed")
+        .get("selecting").map(String::as_str), Some(member.as_str()));
+    let _ = s3.delete_object().bucket(&bucket).key("never-here")
+        .send().await;
+    let moved = driver_hint_results("ran-as", &[]).await
+        .expect("reading ran-as failed");
+    assert_eq!(moved.get("ran_as_delete").map(String::as_str),
+               Some(OTHER_UID),
+        "the member's row moved to {OTHER_UID} and the delete still \
+         chose {:?};  the assertion above does not track the row",
+        moved.get("ran_as_delete"));
+
+    /* And the fallback, which is the Scale case and the one the
+     * consumer sites have to get right:  a member with **no row of
+     * its own** is served as its account
+     * (`test_credentials_of_an_account_member` settles the
+     * resolution;  this asserts it reaches the consumer).  On Scale
+     * every member ordinarily has no row, so this is the common
+     * shape there and not an edge. */
+    scrub(&member).await;
+    assert_eq!(driver_hint_results("ran-as", &[("select", &member)])
+        .await.expect("re-selecting failed")
+        .get("selecting").map(String::as_str), Some(member.as_str()));
+    let _ = s3.delete_object().bucket(&bucket).key("never-here")
+        .send().await;
+    let fellback = driver_hint_results("ran-as", &[]).await
+        .expect("reading ran-as failed");
+    assert_eq!(fellback.get("ran_as_delete").map(String::as_str),
+               Some(ACCOUNT_UID),
+        "a member with no row of its own chose {:?};  it should be \
+         served as its account",
+        fellback.get("ran_as_delete"));
+
+    let _ = s3.delete_bucket().bucket(&bucket).send().await;
+    let _ = root.delete_user_policy().user_name(&name)
+        .policy_name("RanAsAllAccess").send().await;
+    scrub(&member).await;
+    saved.restore().await;
     let _ = root.delete_access_key().user_name(&name)
         .access_key_id(&mak).send().await;
     let _ = root.delete_user().user_name(&name).send().await;
