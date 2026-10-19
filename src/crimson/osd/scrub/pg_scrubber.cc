@@ -2345,6 +2345,7 @@ void PGScrubber::reset_internal_state()
   m_total_missing_count = 0;
   m_total_inconsistent_count = 0;
   m_total_error_count = 0;
+  m_scrub_start_time.reset();
 }
 
 void PGScrubber::dump_scrub_metrics(ceph::Formatter* f)
@@ -2551,6 +2552,105 @@ void PGScrubber::on_mid_scrub_abort(delay_cause_t issue)
     pg.shard_services.get_scrub_scheduler().enqueue_target(sister);
     sister.queued = true;
   }
+}
+
+ceph::timespan PGScrubber::get_time_scrubbing() const
+{
+  if (!m_scrub_start_time) {
+    return ceph::timespan{};
+  }
+  return ScrubClock::now() - *m_scrub_start_time;
+}
+
+pg_scrubbing_status_t PGScrubber::get_schedule() const
+{
+  if (!m_scrub_job) {
+    return pg_scrubbing_status_t{};
+  }
+
+  LOG_PREFIX(PGScrubber::get_schedule);
+  SUBDEBUGDPP(osd, "active:{} blocked:{}", dpp, m_active_target.has_value(),
+              m_scrub_job->blocked);
+
+  auto now_is = ceph_clock_now();
+
+  const auto maybe_register = machine.get_reservation_status();
+  if (maybe_register) {
+    SUBDEBUGDPP(osd, "maybe_register: osd:{} {}s ({} of {})", dpp,
+                maybe_register->m_osd_to_respond,
+                maybe_register->m_duration_seconds,
+                maybe_register->m_ordinal_of_requested_replica,
+                maybe_register->m_num_to_reserve);
+    return pg_scrubbing_status_t{
+        utime_t{},
+        maybe_register->m_duration_seconds,
+        pg_scrub_sched_status_t::active,
+        true,  // active
+        (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
+        (m_active_target && m_active_target->urgency() == urgency_t::periodic_regular),
+        maybe_register->m_osd_to_respond,
+        maybe_register->m_ordinal_of_requested_replica,
+        maybe_register->m_num_to_reserve};
+  }
+
+  if (m_active_target) {
+    // report current scrub info, including updated duration
+    if (m_scrub_job->blocked) {
+      int32_t blocked_for =
+          (utime_t{now_is} - m_scrub_job->blocked_since).sec();
+      return pg_scrubbing_status_t{
+          utime_t{},
+          blocked_for,
+          pg_scrub_sched_status_t::blocked,
+          true,  // active
+          (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
+          (m_active_target->urgency() == urgency_t::periodic_regular)};
+    } else {
+      int32_t dur_seconds =
+          std::chrono::ceil<std::chrono::seconds>(get_time_scrubbing()).count();
+      return pg_scrubbing_status_t{
+          utime_t{},
+          dur_seconds,
+          pg_scrub_sched_status_t::active,
+          true,  // active
+          (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
+          (m_active_target->urgency() == urgency_t::periodic_regular)};
+    }
+  }
+
+  // not registered to be scrubbed?
+  if (!m_scrub_job->is_registered()) {
+    return pg_scrubbing_status_t{
+        utime_t{},
+        0,
+        pg_scrub_sched_status_t::not_queued,
+        false,
+        scrub_level_t::shallow,
+        false};
+  }
+
+  const auto first_ready = m_scrub_job->earliest_eligible(now_is);
+  // eligible for scrubbing, but not yet selected to be scrubbed?
+  if (first_ready) {
+    const auto& targ = first_ready->get();
+    return pg_scrubbing_status_t{
+        targ.sched_info.schedule.not_before,
+        0,
+        pg_scrub_sched_status_t::queued,
+        false,
+        (targ.is_deep() ? scrub_level_t::deep : scrub_level_t::shallow),
+        !targ.is_high_priority()};
+  }
+
+  // both targets are not ready yet
+  const auto& targ = m_scrub_job->earliest_target();
+  return pg_scrubbing_status_t{
+      targ.sched_info.schedule.not_before,
+      0,
+      pg_scrub_sched_status_t::scheduled,
+      false,
+      (targ.is_deep() ? scrub_level_t::deep : scrub_level_t::shallow),
+      !targ.is_high_priority()};
 }
 
 }

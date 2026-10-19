@@ -586,6 +586,23 @@ PendingTimer::PendingTimer(my_context ctx) : ScrubState(ctx) {
   m_scrbr->start_chunk_sleep();
 }
 
-
+std::optional<pg_scrubbing_status_t> ScrubMachine::get_reservation_status() const
+{
+  const auto resv_state = state_cast<const ReservingReplicas*>();
+  if (!resv_state) {
+    return std::nullopt;
+  }
+  const auto scrubbing = state_cast<const Scrubbing*>();
+  if (!scrubbing || !scrubbing->m_reservations) {
+    return std::nullopt;
+  }
+  const auto req = scrubbing->m_reservations->get_last_sent();
+  pg_scrubbing_status_t s;
+  s.m_osd_to_respond = req ? req->osd : 0;
+  s.m_ordinal_of_requested_replica = scrubbing->m_reservations->active_requests_cnt();
+  s.m_num_to_reserve = m_scrbr->get_pg().get_peering_state().get_actingset().size() - 1;
+  s.m_duration_seconds = std::chrono::ceil<std::chrono::seconds>(m_scrbr->get_time_scrubbing()).count();
+  return s;
+}
 
 };

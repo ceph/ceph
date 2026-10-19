@@ -365,6 +365,8 @@ public:
   PGScrubber* m_scrbr;
   spg_t m_pg_id;
   ScrubMachine(ScrubContext &context, PGScrubber* scrbr) : context(context), m_scrbr(scrbr) {}
+
+  std::optional<pg_scrubbing_status_t> get_reservation_status() const;
 };
 
 /**

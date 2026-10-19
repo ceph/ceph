@@ -255,6 +255,10 @@ public:
   /// Get scrub sleep time in milliseconds (like classic OSD)
   std::chrono::milliseconds get_scrub_sleep_time() const;
 
+  /// Return current scrub scheduling status for PG stats reporting
+  pg_scrubbing_status_t get_schedule() const;
+  ceph::timespan get_time_scrubbing() const;
+
   bool has_pending_digest_updates() const {
     return m_digest_updates_pending != 0;
   }
