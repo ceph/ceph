@@ -939,7 +939,7 @@ bench_async_write_worker(
     ctx->io_info.callback = async_io_callback;
     ctx->io_info.priv = ctx.get();
     ctx->io_info.write = true;
-    ctx->io_info.fsync = config.async_write_fsync;
+    ctx->io_info.fsync = false; // set per submit (--async-write-fsync / --fsync-every)
     ctx->io_info.syncdataonly = false;
     ctx->completed = true;
     ctx->stop_signal_ptr = &stop_signal;
@@ -1015,6 +1015,7 @@ bench_async_write_worker(
     }
 
     uint64_t written = 0;
+    uint64_t last_sync = 0;
     bool write_error = false;
 
     while (written < config.file_size) {
@@ -1062,6 +1063,17 @@ bench_async_write_worker(
         io_offset = written;
         to_write = std::min(config.block_size, config.file_size - written);
       }
+
+      // Mirror sync --fsync-every: attach fsync to this write when the
+      // submitted-byte threshold is crossed (--async-write-fsync => every write).
+      const uint64_t next_written = written + to_write;
+      bool do_fsync = config.async_write_fsync;
+      if (!do_fsync && config.fsync_every_bytes > 0 &&
+          (next_written - last_sync) >= config.fsync_every_bytes) {
+        do_fsync = true;
+        last_sync = next_written;
+      }
+
       available_ctx->fh = fh;
       available_ctx->offset = io_offset;
       available_ctx->completed.store(false, std::memory_order_release);
@@ -1076,6 +1088,7 @@ bench_async_write_worker(
       available_ctx->io_info.iovcnt = 1;
       available_ctx->io_info.off = io_offset;
       available_ctx->io_info.result = 0;
+      available_ctx->io_info.fsync = do_fsync;
       if (config.measure_latencies) {
         available_ctx->issue_ns = mono_ns_now();
       }
@@ -1094,7 +1107,7 @@ bench_async_write_worker(
         break;
       }
 
-      written += to_write;
+      written = next_written;
     }
 
     // Wait for all outstanding I/Os to complete for this file
@@ -1106,8 +1119,12 @@ bench_async_write_worker(
     }
 
     // Flush buffered data before close so files survive the post-write remount.
-    // Skip when each async write already carried fsync (Ganesha-style path).
-    if (!write_error && !stop_signal && !config.async_write_fsync) {
+    // Skip when every write already carried fsync, or --fsync-every covered
+    // the full file (no trailing unsynced bytes).
+    const bool need_final_fsync =
+        !config.async_write_fsync &&
+        (config.fsync_every_bytes == 0 || written > last_sync);
+    if (!write_error && !stop_signal && need_final_fsync) {
       if (int fsync_rc = ceph_ll_fsync(cmount, fh, 0); fsync_rc < 0) {
         ss << "Thread " << thread_id << " fsync error " << fname << ": "
            << strerror(-fsync_rc) << std::endl;
@@ -2315,7 +2332,8 @@ int main(int argc, char **argv) {
     ("files", po::value<int>(&config.num_files)->default_value(100), "Total number of files")
     ("size", po::value<string>(&size_str)->default_value("4MB"), "File size (e.g. 4MB, 0 for creates only)")
     ("block-size", po::value<string>(&block_size_str)->default_value("4MB"), "IO block size (e.g. 1MB)")
-    ("fsync-every", po::value<string>(&fsync_str)->default_value("0"), "Call fsync every N bytes")
+    ("fsync-every", po::value<string>(&fsync_str)->default_value("0"),
+     "Call fsync every N bytes (sync: after write; async: via io_info.fsync on threshold writes)")
     ("prefix", po::value<string>(&config.prefix)->default_value("benchmark_"), "Filename prefix")
     ("dir-prefix", po::value<string>(&config.dir_prefix)->default_value("bench_run_"), "Directory prefix")
     ("root-path", po::value<string>(&config.mount_root)->default_value("/"), "Root path in CephFS")
