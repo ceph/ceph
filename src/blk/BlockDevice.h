@@ -242,6 +242,7 @@ public:
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
   uint64_t get_optimal_io_size() const { return optimal_io_size; }
+  bool is_discard_supported() const { return support_discard; }
 
   /// hook to provide utilization of thinly-provisioned device
   virtual int get_ebd_state(ExtBlkDevState &state) const {
