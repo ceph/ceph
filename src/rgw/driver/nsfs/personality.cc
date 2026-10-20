@@ -67,6 +67,7 @@ PersonalityTable::~PersonalityTable()
 
 void PersonalityTable::unpin(uint32_t slot)
 {
+  ceph_assert(std::this_thread::get_id() == owner);
   ceph_assert(slot < slots.size());
   ceph_assert(slots[slot].pins > 0);
   --slots[slot].pins;

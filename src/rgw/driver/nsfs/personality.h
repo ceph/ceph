@@ -16,6 +16,7 @@
 #pragma once
 
 #include <cstdint>
+#include <thread>
 #include <vector>
 
 #include "common/dout.h"
@@ -228,6 +229,12 @@ private:
   Registrar* registrar;
   const GenerationSource* gen_source;
   Stats stats;
+  /* The thread whose ring this table serves.  A PersonalityRef must be
+   * released where it was taken:  the table has no lock, and a ref
+   * held across a coroutine's yield could otherwise be released from
+   * whichever thread the coroutine resumed on, into a table another
+   * thread is using.  unpin() checks it. */
+  const std::thread::id owner{std::this_thread::get_id()};
 };
 
 } } } // namespace rgw::sal::nsfs
