@@ -385,10 +385,10 @@ values. A daemon reads them only when it starts.
    one libfabric provider, or ``cuobj``. If you leave it empty, the
    gathers of erasure-coded reads stay on the messenger, and RC GETs
    take staged relay.
-#. Give each OSD and each gateway unlimited locked memory:
-   ``LimitMEMLOCK=infinity`` in its systemd unit, or ``--ulimit
-   memlock=-1:-1`` under cephadm. See `Registered memory`_ and
-   `Deploying with cephadm`_.
+#. Give each OSD and each gateway a locked memory limit above
+   ``oob_memory``: ``LimitMEMLOCK`` in its systemd unit, or the ``oob``
+   section of its service specification under cephadm. See `Registered
+   memory`_ and `Deploying with cephadm`_.
 #. Restart the OSDs and the gateways.
 
 This configuration serves libfabric, cuObject and RC clients on
@@ -556,10 +556,11 @@ window`_.
 
 The arena is far above the usual 8 MiB ``memlock`` limit, and each
 registration counts against the daemon's ``RLIMIT_MEMLOCK``. Give the
-OSDs and the gateways an unlimited one. On a host, set
-``LimitMEMLOCK=infinity`` in the systemd unit. Under cephadm, add
-``--ulimit memlock=-1:-1`` to the container arguments (see `Deploying
-with cephadm`_). For a vstart cluster, run ``ulimit -l unlimited``.
+OSDs and the gateways a limit of ``oob_memory`` plus 1 GiB, for the
+provider's own buffers. On a host, set ``LimitMEMLOCK`` in the systemd
+unit (``infinity`` removes the limit). Under cephadm, the ``oob``
+section of the service specification sets it (see `Deploying with
+cephadm`_). For a vstart cluster, run ``ulimit -l unlimited``.
 ``CAP_IPC_LOCK`` does not help, because a daemon that switches to the
 ``ceph`` user (``--setuser ceph``) does not keep it in its effective
 set.
@@ -586,59 +587,110 @@ cuObject. Both are off by default. The image also needs libfabric 1.20
 or later, and the ``cuobjserver`` library for cuObject. See `Build
 options`_.
 
-Add what the daemons need with ``extra_container_args`` in the service
-specification. See :ref:`cephadm-extra-container-args`.
+The ``oob`` section of an RGW or OSD service specification gives the
+containers what the transports need. It has three fields, and each one
+is optional:
 
-* An OSD runs in a privileged container that mounts ``/dev`` and
-  ``/sys``. It needs only ``--ulimit memlock=-1:-1``.
-* A gateway runs in an unprivileged container without the RDMA device
-  nodes. When ``oob_client_transports`` names ``rc`` or ``cuobj``, the
-  gateway needs ``--ulimit memlock=-1:-1`` and
-  ``--device=/dev/infiniband``. A gateway that serves only libfabric
-  clients needs neither.
+``rdma_devices``
+   The RDMA devices to pass into the container, by the names that
+   ``ibv_devices`` lists, or ``all``. cephadm adds the device node of
+   each one (``/dev/infiniband/uverbsN``) and ``/dev/infiniband/rdma_cm``.
+   If a host does not have a device that the list names, the deployment
+   fails. If the host does not have ``rdma_cm``, the deployment also
+   fails. Load the ``rdma_ucm`` kernel module to add it.
+
+``memlock``
+   The locked memory limit of the container, such as ``4G``. The default
+   is the daemon's ``oob_memory`` plus 1 GiB. ``unlimited`` removes the
+   limit, which lets the daemon lock all of the host's memory.
+
+``raw_sockets``
+   ``true`` adds ``CAP_NET_RAW``, for the raw socket that the ``uet``
+   provider opens. The default is ``false``.
+
+What each daemon needs:
+
+* An OSD runs in a privileged container, which has every device and
+  every capability already. cephadm takes only the memory limit and
+  ``raw_sockets`` from its ``oob`` section. Give the section
+  ``rdma_devices: all`` or a ``memlock``.
+* A gateway runs in an unprivileged container. When
+  ``oob_client_transports`` names ``rc`` or ``cuobj``, give it
+  ``rdma_devices``. When its relay windows use ``uet``, set
+  ``raw_sockets``. A gateway that serves only libfabric clients needs no
+  ``oob`` section, because the OSDs move the data.
 
 For example:
 
 .. code-block:: yaml
 
+   service_type: osd
+   service_id: rdma
+   placement:
+     host_pattern: '*'
+   spec:
+     data_devices:
+       all: true
+     oob:
+       rdma_devices: all
+   ---
    service_type: rgw
    service_id: s3
-   extra_container_args:
-     - "--ulimit memlock=-1:-1"
-     - "--device=/dev/infiniband"
+   placement:
+     label: rgw
+   spec:
+     oob:
+       rdma_devices:
+         - mlx5_0
+       memlock: 4G
 
-cephadm splits a plain string at its spaces, so ``--ulimit
-memlock=-1:-1`` becomes two arguments. Give an environment variable,
-such as ``FI_UNIVERSE_SIZE`` for soft-RoCE, as an ``-e`` argument.
+When the ``oob`` section changes, or the ``oob_memory`` that the default
+limit follows, cephadm redeploys the daemons with the new container
+arguments. If an OSD is not ok to stop (see ``ceph osd ok-to-stop``),
+cephadm waits before it redeploys that OSD. cephadm redeploys all the
+gateways of a service at the same time.
 
 cephadm runs each daemon with ``--setuser ceph``. The gateway's
 cuObject server then has the limit that `Limitations`_ describes.
 
-UET works under cephadm when an OSD gets its ``uet`` transport before it
-switches users (see `UET`_). Give ``oob_cluster_transport`` or
-``oob_client_transports`` as an entrypoint argument in the OSD's service
-specification. See :ref:`cephadm-extra-entrypoint-args`. For example:
+An OSD switches to the ``ceph`` user before it reads the configuration
+that the monitors store (see `UET`_). If ``raw_sockets`` is true,
+cephadm starts each OSD with ``--oob-keep-net-raw=true``. The OSD then
+keeps ``CAP_NET_RAW`` whatever the transports are. Set ``uet`` in the
+monitors' configuration as usual.
 
-.. code-block:: yaml
+Each daemon that runs ``uet`` also needs the provider's wrapper in its
+container. Mount the wrapper's directory with ``-v`` in
+``extra_container_args``, and point ``FI_PROVIDER_PATH`` at it with
+``-e``. See :ref:`cephadm-extra-container-args`. Give other environment
+variables, such as ``FI_UNIVERSE_SIZE`` for soft-RoCE, the same way.
 
-   service_type: osd
-   service_id: uet
-   # placement and data_devices as usual
-   extra_entrypoint_args:
-     - "--oob_cluster_transport=uet"
+SELinux
+~~~~~~~
 
-An option on the command line overrides the configuration that the
-monitors store, as ``ceph.conf`` does. So
-``ceph config set osd oob_cluster_transport ...`` has no effect on
-these OSDs. To change the transport, change the service specification
-and redeploy the OSDs.
+SELinux needs no change on a gateway host. cephadm starts each Ceph
+daemon with ``--ipc=host``. Podman does not confine a container that
+uses the host's IPC namespace, so the gateway runs as ``spc_t``, not as
+``container_t``. SELinux then does not limit the devices that the
+gateway opens. The container's device list limits them: the gateway can
+open the RDMA devices that cephadm passes in, but no other RDMA device
+or disk of the host.
 
-The OSD's privileged container holds ``CAP_NET_RAW``. A gateway with
-``uet`` relay windows needs ``--cap-add=NET_RAW`` in its
-``extra_container_args``, because podman's default capabilities do not
-include it. Each daemon also needs the provider's wrapper in its
-container. Mount the wrapper's directory with ``-v``, and point
-``FI_PROVIDER_PATH`` at it with ``-e``.
+A gateway container that you start yourself without ``--ipc=host`` runs
+as ``container_t``. With Podman as root, it can open the devices that
+you pass in. Podman makes a new node in the container for each one,
+with the container's own label. A rootless container sees the
+host's device nodes, which have the ``infiniband_device_t`` label, and
+SELinux does not let ``container_t`` open them.
+
+cephadm's containers use the host's network namespace. If ``rdma
+system`` shows ``netns exclusive``, they can open the RDMA devices all
+the same.
+
+SR-IOV is optional. The kernel keeps the RDMA resources of each process
+apart on a shared device. You can give the gateway a virtual function of
+the adapter as its RDMA device. The gateway's traffic then has its own
+addresses and its own limits on the adapter.
 
 How a read reaches client memory
 ================================
@@ -2119,7 +2171,11 @@ names a libfabric provider, or else the first libfabric provider in
 ``oob_client_transports = tcp, uet`` makes ``tcp`` the provider, and the
 OSD keeps nothing. The OSD switches users before it reads the
 configuration that the monitors store. So the setting must be in
-``ceph.conf``, in ``CEPH_ARGS`` or on the command line.
+``ceph.conf``, in ``CEPH_ARGS`` or on the command line. Otherwise, set
+``oob_keep_net_raw`` in one of these places: the OSD then keeps the
+capability whatever the transports are. cephadm sets it for the OSDs
+of a specification whose ``oob`` section has ``raw_sockets`` (see
+`Deploying with cephadm`_).
 
 When the OSD keeps the capability, it logs
 ``set uid:gid to <uid>:<gid> (ceph:ceph), keeping CAP_NET_RAW for uet``.

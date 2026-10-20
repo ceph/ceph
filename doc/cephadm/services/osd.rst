@@ -1292,6 +1292,30 @@ This also works with explicit device paths and ``osds_per_device``:
     the same result by manually creating the LVs in advance and passing them
     explicitly to ``ceph-volume lvm prepare --bluestore --data <data-vg/lv> --block.db <db-vg/lv>``.
 
+.. _cephadm-osd-oob:
+
+S3 over RDMA
+============
+
+An OSD that serves S3 over RDMA needs a locked memory limit above
+``oob_memory``. The ``oob`` block of an OSD specification sets it:
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: rdma
+    placement:
+      host_pattern: '*'
+    spec:
+      data_devices:
+        all: true
+      oob:
+        rdma_devices: all
+
+When the block changes, cephadm redeploys each OSD as soon as the OSD
+is ok to stop. See "Deploying with cephadm" in :ref:`radosgw_s3_rdma` for the
+fields of the block.
+
 .. _cephadm-osd-activate:
 
 Activate Existing OSDs

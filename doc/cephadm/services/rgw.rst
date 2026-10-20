@@ -282,6 +282,25 @@ compression:
 
 No other keys are currently supported in the ``qat`` block.
 
+S3 over RDMA
+------------
+
+The ``oob`` block of an RGW specification gives the gateway's containers
+what S3 over RDMA needs:
+
+.. code-block:: yaml
+
+  spec:
+    oob:
+      rdma_devices:
+      - mlx5_0
+      memlock: 4G
+      raw_sockets: false
+
+When the block changes, cephadm redeploys the gateways. OSD
+specifications take the same block. See "Deploying with cephadm" in
+:ref:`radosgw_s3_rdma`.
+
 Disabling multisite sync traffic
 --------------------------------
 
