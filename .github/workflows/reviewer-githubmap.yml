@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Hand over to reviewer-githubmap-comment.yml
-        run: echo "review by @${REVIEWER} on #${PR_NUMBER}"
+        run: >
+          echo "review by @${REVIEWER} on #${PR_NUMBER}"
         env:
           REVIEWER: ${{ github.event.review.user.login }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
