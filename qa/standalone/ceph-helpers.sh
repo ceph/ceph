@@ -1494,7 +1494,7 @@ function _objectstore_tool_nowait() {
             ceph_args+="$ceph_osd_args"
 
             echo "Restarting crimson osd.$id" >&2
-            $crimson_osd -i $id $ceph_args & >&2
+            $crimson_osd -i $id $ceph_args >&2 &
 
             # Wait for OSD to come up (unless noup is set)
             if ! ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
