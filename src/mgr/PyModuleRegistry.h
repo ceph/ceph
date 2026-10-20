@@ -23,6 +23,7 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -47,6 +48,10 @@ private:
 
   std::map<std::string, PyModuleRef> modules;
   std::multimap<std::string, entity_addrvec_t> clients;
+
+  // Invoked with no lock held when the client set changes, so the beacon
+  // carrying it can go out without waiting for the next tick.
+  std::function<void()> clients_changed_cb;
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
@@ -230,24 +235,45 @@ public:
     return active_modules->get_services();
   }
 
-  void register_client(std::string_view name, entity_addrvec_t addrs, bool replace)
+  void set_clients_changed_callback(std::function<void()> cb)
   {
     std::lock_guard l(lock);
-    auto n = std::string(name);
-    if (replace) {
-      clients.erase(n);
+    clients_changed_cb = std::move(cb);
+  }
+
+  void register_client(std::string_view name, entity_addrvec_t addrs, bool replace)
+  {
+    std::function<void()> cb;
+    {
+      std::lock_guard l(lock);
+      auto n = std::string(name);
+      if (replace) {
+        clients.erase(n);
+      }
+      clients.emplace(n, std::move(addrs));
+      cb = clients_changed_cb;
     }
-    clients.emplace(n, std::move(addrs));
+    // Outside the lock: the callback sends a beacon, which reads clients.
+    if (cb) {
+      cb();
+    }
   }
   void unregister_client(std::string_view name, const entity_addrvec_t& addrs)
   {
-    std::lock_guard l(lock);
-    auto itp = clients.equal_range(std::string(name));
-    for (auto it = itp.first; it != itp.second; ++it) {
-      if (it->second == addrs) {
-        clients.erase(it);
-        return;
+    std::function<void()> cb;
+    {
+      std::lock_guard l(lock);
+      auto itp = clients.equal_range(std::string(name));
+      for (auto it = itp.first; it != itp.second; ++it) {
+        if (it->second == addrs) {
+          clients.erase(it);
+          cb = clients_changed_cb;
+          break;
+        }
       }
+    }
+    if (cb) {
+      cb();
     }
   }
 

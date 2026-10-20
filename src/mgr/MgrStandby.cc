@@ -201,6 +201,12 @@ int MgrStandby::init()
   // Start finisher
   finisher.start();
 
+  // A module may not use a RADOS client until the monitor has it, so do
+  // not make it wait for the next tick.
+  py_module_registry.set_clients_changed_callback([this]() {
+    request_beacon();
+  });
+
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
   client_messenger->add_dispatcher_head(&objecter);
@@ -381,6 +387,28 @@ void MgrStandby::send_beacon()
   }
 
   monc.send_mon_message(std::move(m));
+}
+
+void MgrStandby::request_beacon()
+{
+  // Called from whichever thread registered the client, which may hold
+  // Mgr::lock while the tick thread takes MgrStandby::lock and then
+  // Mgr::lock. Queue the beacon rather than take MgrStandby::lock here.
+  if (beacon_requested.exchange(true)) {
+    return;
+  }
+  dout(10) << __func__ << dendl;
+  finisher.queue(new LambdaContext([this](int) {
+    auto delay = g_conf().get_val<std::chrono::milliseconds>(
+        "mgr_debug_client_register_delay");
+    if (delay > std::chrono::milliseconds::zero()) {
+      dout(4) << "delaying requested beacon by " << delay << dendl;
+      std::this_thread::sleep_for(delay);
+    }
+    beacon_requested = false;
+    std::lock_guard l(lock);
+    send_beacon();
+  }));
 }
 
 void MgrStandby::tick()
