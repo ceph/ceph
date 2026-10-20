@@ -15,6 +15,7 @@
 
 #include "rgw_common.h"
 #include "rgw_web_idp.h"
+#include "rgw_keystone_scope.h"
 
 #define RGW_USER_ANON_ID "anonymous"
 
@@ -576,6 +577,8 @@ public:
     const uint32_t acct_type;
     const std::string access_key_id;
     const std::string subuser;
+    const std::string keystone_user;
+    const std::optional<rgw::keystone::ScopeInfo> keystone_scope;
 
   public:
     enum class acct_privilege_t {
@@ -592,14 +595,18 @@ public:
              const acct_privilege_t level,
              const std::string access_key_id,
              const std::string subuser,
-             const uint32_t acct_type=TYPE_NONE)
+             const std::string keystone_user,
+             const uint32_t acct_type=TYPE_NONE,
+             std::optional<rgw::keystone::ScopeInfo> keystone_scope=std::nullopt)
     : acct_user(acct_user),
       acct_name(acct_name),
       perm_mask(perm_mask),
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
       acct_type(acct_type),
       access_key_id(access_key_id),
-      subuser(subuser) {
+      subuser(subuser),
+      keystone_user(keystone_user),
+      keystone_scope(std::move(keystone_scope)) {
     }
   };
 
