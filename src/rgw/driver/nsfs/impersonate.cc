@@ -29,8 +29,10 @@
 #include "common/ceph_context.h"
 #include <array>
 #include <atomic>
+#include <sys/xattr.h>
 
 #include "common/code_environment.h"
+#include "common/config_cacher.h"
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/ceph_assert.h"
@@ -46,36 +48,15 @@
 
 namespace rgw { namespace sal { namespace nsfs {
 
-bool impersonation_configured()
-{
-  return g_conf().get_val<bool>("rgw_nsfs_impersonate");
-}
-
 bool impersonation_enabled()
 {
-  if (! impersonation_configured()) {
-    return false;
-  }
-
-  /* Configured is not the same as in effect, and the difference is
-   * not cosmetic:  the callers of this deny a read when no
-   * personality is pinned, because serving it as the daemon is the
-   * escalation the design exists to prevent.  In a process where
-   * nothing will ever pin one, that denies everything.
-   *
-   * Two such processes.  radosgw-admin runs as the operator and
-   * serves no authenticated identity.  An embedding library binds one
-   * uid at mount -- `RGWLibFS` -- and likewise has no per-request
-   * identity;  it needs its own test because librgw initialises with
-   * CODE_ENVIRONMENT_DAEMON and `g_code_env` cannot see it.
-   *
-   * The startup gate asks `impersonation_configured()` instead, so a
-   * gateway missing the capabilities still does not start, rather
-   * than quietly serving every request as itself. */
-  if (g_code_env != CODE_ENVIRONMENT_DAEMON) {
-    return false;
-  }
-  return ! rgw::sal::embedded();
+  /* Through an observer rather than get_val(), which is a locked lookup
+   * by name.  Never destroyed:  a static's destructor runs after the
+   * CephContext has gone, and removing the observer then would touch
+   * the configuration it belonged to. */
+  static md_config_cacher_t<bool>* const enabled =
+      new md_config_cacher_t<bool>(g_conf(), "rgw_nsfs_impersonate");
+  return **enabled;
 }
 
 bool have_credential_capabilities(std::string* missing)
@@ -710,9 +691,23 @@ int hold_thread_capabilities(const DoutPrefixProvider* dpp)
     return -errno;
   }
   tl_holds_read_search = true;
-  ldpp_dout(dpp, 20) << "nsfs: this thread now holds CAP_DAC_READ_SEARCH"
-    << dendl;
+  /* an attribute read has no prefix provider to pass */
+  if (dpp) {
+    ldpp_dout(dpp, 20) << "nsfs: this thread now holds CAP_DAC_READ_SEARCH"
+      << dendl;
+  } else {
+    ldout(g_ceph_context, 20) << "nsfs: this thread now holds "
+      "CAP_DAC_READ_SEARCH" << dendl;
+  }
   return 0;
+}
+
+ssize_t fgetxattr(int fd, const char* name, void* value, size_t size)
+{
+  if (impersonation_enabled()) {
+    (void) hold_thread_capabilities(nullptr);
+  }
+  return ::fgetxattr(fd, name, value, size);
 }
 
 int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,

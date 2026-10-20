@@ -4969,6 +4969,8 @@ options:
     and CAP_SETGID; the gateway does not start without them. Every
     identity that can authenticate must have a record, and a request
     whose identity has none is failed rather than served unimpersonated.
+    Every process that loads the nsfs driver reads it, radosgw-admin
+    included, so set it for the gateway only.
   default: false
   services:
   - rgw

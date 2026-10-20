@@ -441,7 +441,7 @@ static std::string recorded_version_id(int fd, const nsfs::XattrStrategy* xs,
     }
     char buf[256];
     const std::string name = s->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-    const ssize_t len = ::fgetxattr(fd, name.c_str(), buf, sizeof(buf));
+    const ssize_t len = nsfs::fgetxattr(fd, name.c_str(), buf, sizeof(buf));
     if (len > 0) {
       return std::string(buf, len);
     }
@@ -466,7 +466,7 @@ static std::string etag_from_fd(int fd, const nsfs::XattrStrategy* xs)
 {
   char buf[128];
   std::string xattr = xs->disk_name(RGW_ATTR_ETAG);
-  ssize_t len = ::fgetxattr(fd, xattr.c_str(), buf, sizeof(buf));
+  ssize_t len = nsfs::fgetxattr(fd, xattr.c_str(), buf, sizeof(buf));
   if (len <= 0) {
     return {};
   }
@@ -490,11 +490,11 @@ static int owner_from_fd(int fd, const nsfs::XattrStrategy* xs,
   Attrs attrs;
   const std::string xattr = xs->disk_name(RGW_ATTR_ACL);
   if (!xattr.empty()) {
-    ssize_t len = ::fgetxattr(fd, xattr.c_str(), nullptr, 0);
+    ssize_t len = nsfs::fgetxattr(fd, xattr.c_str(), nullptr, 0);
     if (len > 0) {
       bufferlist bl;
       bl.push_back(buffer::create(len));
-      len = ::fgetxattr(fd, xattr.c_str(), bl.c_str(), len);
+      len = nsfs::fgetxattr(fd, xattr.c_str(), bl.c_str(), len);
       if (len > 0) {
 	bl.splice(len, bl.length() - len);
 	attrs[RGW_ATTR_ACL] = std::move(bl);
@@ -1266,7 +1266,7 @@ static bool rename_intent_present_at(const nsfs::XattrStrategy* xs,
 {
   char buf[1024];
   std::string name = rename_intent_xattr(xs);
-  ssize_t len = ::fgetxattr(vfd, name.c_str(), buf, sizeof(buf));
+  ssize_t len = nsfs::fgetxattr(vfd, name.c_str(), buf, sizeof(buf));
   if (len <= 0) {
     return false;
   }
@@ -1724,7 +1724,7 @@ static int copy_xattrs_fd(const DoutPrefixProvider* dpp, int src_fd, int dst_fd)
   const char* p = namebuf;
   while (buflen > 0) {
     ssize_t keylen = strlen(p) + 1;
-    ssize_t vallen = ::fgetxattr(src_fd, p, valbuf, sizeof(valbuf));
+    ssize_t vallen = nsfs::fgetxattr(src_fd, p, valbuf, sizeof(valbuf));
     if (vallen < 0) {
       if (errno == ENODATA) {
 	buflen -= keylen;
@@ -1944,10 +1944,8 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       const nsfs::FSIdentity& id = {},
 		       std::string_view skip = {})
 {
-  /* The whole read as the identity:  the attribute names come
-   * from a listing the gateway may not be permitted to see in
-   * full, and each value needs read permission on the object.
-   * Nested with_identity() calls below are harmless -- a thread
+  /* The whole read as the identity:  each value needs read
+   * permission on the object.  Nested with_identity() calls below are harmless -- a thread
    * already running as the identity makes the call directly. */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
@@ -2005,15 +2003,15 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
      * largest is the encoded ACL, a couple of hundred bytes.  A value that
      * does not fit falls back to the size-then-read pair. */
     char valbuf[INLINE_VALUE_MAX];
-    vallen = fgetxattr(fd, keyptr, valbuf, sizeof(valbuf));
+    vallen = nsfs::fgetxattr(fd, keyptr, valbuf, sizeof(valbuf));
     vp = valbuf;
 
     if (vallen < 0 && errno == ERANGE) {
-      vallen = fgetxattr(fd, keyptr, nullptr, 0);
+      vallen = nsfs::fgetxattr(fd, keyptr, nullptr, 0);
       if (vallen >= 0) {
 	value.resize(vallen);
 	vp = value.data();
-	vallen = fgetxattr(fd, keyptr, vp, vallen);
+	vallen = nsfs::fgetxattr(fd, keyptr, vp, vallen);
       }
     }
 
@@ -2757,7 +2755,7 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
                 rgw_bucket_dir_entry::FLAG_CURRENT;
     std::string dm_xattr = xattr_strategy->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
     char dm_buf[8];
-    ssize_t dm_len = ::fgetxattr(get_fd(), dm_xattr.c_str(),
+    ssize_t dm_len = nsfs::fgetxattr(get_fd(), dm_xattr.c_str(),
                                  dm_buf, sizeof(dm_buf));
     if (dm_len > 0) {
       bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
@@ -4007,7 +4005,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
           if (tfd >= 0) {
             char buf[8];
             std::string dm_xattr = xattr_strategy->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
-            ssize_t xlen = ::fgetxattr(tfd, dm_xattr.c_str(), buf, sizeof(buf));
+            ssize_t xlen = nsfs::fgetxattr(tfd, dm_xattr.c_str(), buf,
+                                           sizeof(buf));
             if (xlen > 0) {
               bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
               /* FLAG_CURRENT for orphaned DMs (no top-level file) is
@@ -4725,26 +4724,13 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
    * failure belongs at startup, as one message, rather than as a
    * flood later.
    *
-   * Only in the daemon.  radosgw-admin and the other tools load
-   * this driver too, and none of them serves a request or registers
-   * a personality, so none of them needs the capability -- and
-   * granting it to them to satisfy a check would be worse than not
-   * checking.  g_code_env is what separates them. */
-  if (nsfs::impersonation_configured()) {
+   * Wherever it is configured.  A tool or library that is not to
+   * impersonate is not configured to;  see impersonation_enabled(). */
+  if (nsfs::impersonation_enabled()) {
     std::string missing;
     const bool have = nsfs::have_credential_capabilities(&missing);
 
-    if (g_code_env != CODE_ENVIRONMENT_DAEMON || rgw::sal::embedded()) {
-      /* Not the gateway, so there is nothing to impersonate for:
-       * radosgw-admin runs as the operator, and librgw binds one uid
-       * at mount and has no per-request identity.  librgw needs the
-       * second test because it initialises with
-       * CODE_ENVIRONMENT_DAEMON and the first does not see it --
-       * failing here would take down every consumer of the library
-       * over a setting that cannot apply to it. */
-      ldpp_dout(dpp, 10) << "nsfs: impersonation is configured but this is"
-	" not the gateway;  operating as the invoking user" << dendl;
-    } else if (! have) {
+    if (! have) {
       ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_impersonate is set but this"
 	" process lacks " << missing << " in its permitted set.  Grant"
 	" them -- setcap cap_setuid,cap_setgid+p on the binary, or a"
@@ -7084,7 +7070,7 @@ bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
     return true;
   }
   char buf[8];
-  ssize_t len = ::fgetxattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR,
+  ssize_t len = nsfs::fgetxattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR,
 			    buf, sizeof(buf));
   if (len <= 0) {
     return true;
@@ -7188,7 +7174,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 
   char buf[32];
   uint32_t extensions = nsfs::EXTENSIONS_NONE;
-  ssize_t len = ::fgetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
+  ssize_t len = nsfs::fgetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
 			    buf, sizeof(buf) - 1);
   if (len < 0) {
     if (errno == ENOTSUP) {
@@ -7274,7 +7260,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
   converting = false;
   if (profile->extended()) {
     char cbuf[32];
-    ssize_t clen = ::fgetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
+    ssize_t clen = nsfs::fgetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
 			       cbuf, sizeof(cbuf) - 1);
     if (clen > 0) {
       std::string from(cbuf, clen);
@@ -11319,8 +11305,8 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 					bucket->get_name(), parent_fd);
 
     /* No requester:  FSIO is the gateway's throughout, because
-     * impersonation_enabled() is false under rgw::sal::embedded()
-     * (deferred, not exempt -- inflight/n-plan.md §9.5).  So this
+     * librgw is not configured with rgw_nsfs_impersonate (deferred,
+     * not exempt -- inflight/n-plan.md §9.5).  So this
      * demote links as the gateway, and it links objects the gateway
      * wrote. */
     demote_current_version(dpp, driver->get_fs_strategy(),
@@ -11537,7 +11523,7 @@ int NSFSObject::NSFSFSIOObject::fgetattr(const DoutPrefixProvider* dpp, const st
     return -EBADF;
   }
   std::string xname = src_obj->xattr_strategy()->disk_name(name);
-  ssize_t len = ::fgetxattr(shadow_fd, xname.c_str(), nullptr, 0);
+  ssize_t len = nsfs::fgetxattr(shadow_fd, xname.c_str(), nullptr, 0);
   if (len < 0) {
     return -errno;
   }
@@ -11546,7 +11532,7 @@ int NSFSObject::NSFSFSIOObject::fgetattr(const DoutPrefixProvider* dpp, const st
     return 0;
   }
   bufferptr bp(len);
-  len = ::fgetxattr(shadow_fd, xname.c_str(), bp.c_str(), len);
+  len = nsfs::fgetxattr(shadow_fd, xname.c_str(), bp.c_str(), len);
   if (len < 0) {
     return -errno;
   }
@@ -12316,7 +12302,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
                   char buf[8];
                   std::string dm_xattr =
                     xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
-                  ssize_t xlen = ::fgetxattr(
+                  ssize_t xlen = nsfs::fgetxattr(
                     dm_fd, dm_xattr.c_str(), buf, sizeof(buf));
                   if (xlen > 0) {
                     state.is_dm = true;
@@ -12384,7 +12370,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
       if (tfd >= 0) {
         char buf[8];
         std::string dm_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
-        ssize_t xlen = ::fgetxattr(tfd, dm_xattr.c_str(), buf, sizeof(buf));
+        ssize_t xlen = nsfs::fgetxattr(tfd, dm_xattr.c_str(), buf, sizeof(buf));
         state.is_dm = (xlen > 0);
         ::close(tfd);
       }
@@ -13672,7 +13658,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           char buf[8];
           std::string dm_xattr =
             source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
-          ssize_t xlen = ::fgetxattr(ver_fd, dm_xattr.c_str(),
+          ssize_t xlen = nsfs::fgetxattr(ver_fd, dm_xattr.c_str(),
                                      buf, sizeof(buf));
           if (xlen > 0) {
             is_dm = true;
@@ -13696,7 +13682,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           if (!is_dm) {
             char ebuf[256];
             std::string etag_x = source->xattr_strategy()->disk_name(RGW_ATTR_ETAG);
-            ssize_t elen = ::fgetxattr(ver_fd, etag_x.c_str(),
+            ssize_t elen = nsfs::fgetxattr(ver_fd, etag_x.c_str(),
                                        ebuf, sizeof(ebuf));
             if (elen > 0) {
               bufferlist bl;
@@ -14772,7 +14758,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     if (target_exists) {
       char buf[256];
       std::string xattr_name = xattr_strategy()->disk_name(RGW_ATTR_ETAG);
-      ssize_t len = ::fgetxattr(existing_fd, xattr_name.c_str(),
+      ssize_t len = nsfs::fgetxattr(existing_fd, xattr_name.c_str(),
                                 buf, sizeof(buf));
       if (len > 0) {
         existing_etag.assign(buf, len);

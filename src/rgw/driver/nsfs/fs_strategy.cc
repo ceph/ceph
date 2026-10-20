@@ -389,10 +389,8 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
 {
   /* The whole read, not each call:  this is a listing plus one
    * fetch per name, and flistxattr has no io_uring opcode -- see
-   * docs/IMPERSONATED_XATTR.md.  Worse, without read permission
-   * it succeeds and silently omits every user.* name, so running
-   * it as the gateway would report an object with no attributes
-   * rather than failing. */
+   * docs/IMPERSONATED_XATTR.md.  Each value needs read permission
+   * on the object, which the identity has and the gateway may not. */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
@@ -423,14 +421,14 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     char valbuf[INLINE_VALUE_MAX];
     std::string spill;
     const char* vp = valbuf;
-    ssize_t vallen = ::fgetxattr(fd, p, valbuf, sizeof(valbuf));
+    ssize_t vallen = nsfs::fgetxattr(fd, p, valbuf, sizeof(valbuf));
 
     if (vallen < 0 && errno == ERANGE) {
-      vallen = ::fgetxattr(fd, p, nullptr, 0);
+      vallen = nsfs::fgetxattr(fd, p, nullptr, 0);
       if (vallen >= 0) {
         spill.resize(vallen);
         vp = spill.data();
-        vallen = ::fgetxattr(fd, p, spill.data(), vallen);
+        vallen = nsfs::fgetxattr(fd, p, spill.data(), vallen);
       }
     }
 

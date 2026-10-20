@@ -216,7 +216,7 @@ bool NooBaaPathStrategy::directory_object(const DoutPrefixProvider* dpp,
 					  DirectoryObject& out) const
 {
   char buf[32];
-  ssize_t len = ::fgetxattr(dir_fd, NB_XATTR_DIR_CONTENT, buf,
+  ssize_t len = nsfs::fgetxattr(dir_fd, NB_XATTR_DIR_CONTENT, buf,
 			    sizeof(buf) - 1);
   if (len < 0) {
     return false;

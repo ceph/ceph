@@ -4407,6 +4407,86 @@ TEST_F(NSFSImpersonatedAssembleTest, StridedInputsAreReadAsTheUploader)
 	    std::string(size, 'b') + std::string(size, 'c'));
 }
 
+/* The gateway's attribute reads take the capability themselves.
+ *
+ * Read permission on a user.* attribute is checked at each
+ * fgetxattr(2), against the calling thread, not at open.  So a
+ * descriptor opened on a thread that held CAP_DAC_READ_SEARCH does not
+ * carry it to the thread a coroutine resumes on.  The case opens the
+ * uploader's object on one thread and reads it on another, after a
+ * raw read there as the control:  it must fail, or the wrapper's
+ * success says nothing.
+ *
+ * Impersonation is on for the length of the case, which is what the
+ * wrapper asks before it takes the capability. */
+class NSFSGatewayAttrReadTest : public NSFSImpersonatedAssembleTest {
+protected:
+  static constexpr const char* attr = "user.nsfs.test";
+  int ofd{-1};
+
+  void SetUp() override {
+    NSFSImpersonatedAssembleTest::SetUp();
+    if (IsSkipped() || HasFatalFailure()) {
+      return;
+    }
+    set_impersonate("true");
+
+    ASSERT_NO_FATAL_FAILURE(give("obj", "body"));
+    const std::string path = (dir / "obj").string();
+    ASSERT_EQ(nsfs::with_capabilities(env->dpp,
+				      nsfs::cap_bit(CAP_DAC_OVERRIDE),
+	[&path]() -> int {
+	  return ::setxattr(path.c_str(), attr, "v", 1, 0) < 0 ? -errno : 0;
+	}), 0) << "could not give the object an attribute";
+
+    /* opened on a thread that holds the capability, as the gateway
+     * opens an object it reads with no identity */
+    std::thread opener([this] {
+      (void) nsfs::hold_thread_capabilities(env->dpp);
+      ofd = ::openat(dfd, "obj", O_RDONLY);
+    });
+    opener.join();
+    ASSERT_GE(ofd, 0) << "the gateway could not open the object";
+  }
+
+  void TearDown() override {
+    if (ofd >= 0) {
+      ::close(ofd);
+    }
+    set_impersonate("false");
+    NSFSImpersonatedAssembleTest::TearDown();
+  }
+
+  static void set_impersonate(const char* v) {
+    g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
+    g_conf().apply_changes(nullptr);
+  }
+};
+
+TEST_F(NSFSGatewayAttrReadTest, AnAttributeIsReadOnAnotherThread)
+{
+  bool had_read_search = true;
+  int control = 0;
+  ssize_t len = -1;
+  int err = 0;
+  char buf[16] = {};
+  std::thread reader([&] {
+    had_read_search = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+    control = (::fgetxattr(ofd, attr, buf, sizeof(buf)) < 0) ? -errno : 0;
+    len = nsfs::fgetxattr(ofd, attr, buf, sizeof(buf));
+    err = errno;
+  });
+  reader.join();
+
+  ASSERT_FALSE(had_read_search)
+      << "a new thread started with CAP_DAC_READ_SEARCH effective";
+  ASSERT_EQ(control, -EACCES)
+      << "the thread could read the attribute without the capability, so "
+	 "the read below does not show the wrapper taking it";
+  ASSERT_EQ(len, 1) << "the attribute was not read: " << cpp_strerror(err);
+  EXPECT_EQ(std::string(buf, len), "v");
+}
+
 /* NooBaa's attribute names.
  *
  * Spelled out here rather than derived from the strategy, for the same

@@ -246,7 +246,7 @@ static std::optional<std::string> nb_read(const DoutPrefixProvider* dpp,
 					  int fd, const std::string& name)
 {
   char buf[512];
-  const ssize_t len = ::fgetxattr(fd, name.c_str(), buf, sizeof(buf));
+  const ssize_t len = nsfs::fgetxattr(fd, name.c_str(), buf, sizeof(buf));
   if (len < 0) {
     return std::nullopt;
   }
@@ -297,7 +297,7 @@ void NooBaaXattrStrategy::parse_disk_attrs(
       continue;
     }
     char buf[1024];
-    const ssize_t len = ::fgetxattr(fd, disk.c_str(), buf, sizeof(buf));
+    const ssize_t len = nsfs::fgetxattr(fd, disk.c_str(), buf, sizeof(buf));
     if (len < 0) {
       /* raced with a delete, or longer than any tag may be -- NooBaa's
        * own limit is far below this.  One tag, not the set. */

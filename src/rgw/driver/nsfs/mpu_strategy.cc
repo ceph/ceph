@@ -938,7 +938,7 @@ namespace {
 std::optional<uint64_t> u64_xattr(int fd, const char* name)
 {
   char buf[32];
-  ssize_t len = ::fgetxattr(fd, name, buf, sizeof(buf) - 1);
+  ssize_t len = nsfs::fgetxattr(fd, name, buf, sizeof(buf) - 1);
   if (len <= 0) {
     return std::nullopt;
   }
@@ -1048,7 +1048,7 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   out.shared = true;
 
   char ebuf[256];
-  ssize_t elen = ::fgetxattr(part_fd, NB_XATTR_CONTENT_MD5, ebuf,
+  ssize_t elen = nsfs::fgetxattr(part_fd, NB_XATTR_CONTENT_MD5, ebuf,
 			     sizeof(ebuf));
   if (elen > 0) {
     out.etag.assign(ebuf, elen);

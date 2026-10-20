@@ -304,10 +304,6 @@ if $NON_MD5_ETAG; then
 	VSTART_OPTS+=(-o 'rgw_non_md5_etag=true')
 fi
 
-if $IMPERSONATE; then
-	VSTART_OPTS+=(-o 'rgw_nsfs_impersonate=true')
-fi
-
 if [[ -n "$BUCKET_PROFILE" ]]; then
 	case "$BUCKET_PROFILE" in
 		shared|strong) ;;
@@ -518,8 +514,9 @@ elif [[ -n "$DATA_ROOT" ]]; then
 	DATA_DIR="$DATA_ROOT/root"
 fi
 
-if ! $GPFS && ! $PERF && [[ -z "$DATA_ROOT" ]]; then
-	# plain non-GPFS: vstart already started the daemon with defaults
+if ! $GPFS && ! $PERF && ! $IMPERSONATE && [[ -z "$DATA_ROOT" ]]; then
+	# plain non-GPFS: vstart already started the daemon with defaults.
+	# Not with impersonation, whose option goes on the command line below.
 	true
 else
 
@@ -625,6 +622,12 @@ RGW_CMD=(
 	--rgw_frontends="$BEAST_OPTS"
 )
 
+# On the gateway's command line, not in ceph.conf:  radosgw-admin reads
+# ceph.conf, and nsfs impersonates wherever it is configured to.
+if $IMPERSONATE; then
+	RGW_CMD+=(--rgw_nsfs_impersonate=true)
+fi
+
 if $FOREGROUND; then
 	# Print the command for the user to run (e.g. as root).
 	# LWE requires root for DMAPI handle operations.
@@ -653,7 +656,9 @@ echo "==> starting radosgw"
 "${RGW_CMD[@]}"
 
 sleep 2
-if ! fuser 8000/tcp >/dev/null 2>&1; then
+# ss, not fuser:  a radosgw given file capabilities is not dumpable, so
+# its /proc/<pid>/fd is root's and fuser cannot see the socket.
+if ! ss -ltnH 'sport = :8000' | grep -q .; then
 	echo "error: radosgw did not start" >&2
 	tail -20 "$BUILD_DIR/out/radosgw.8000.log"
 	exit 1

@@ -51,23 +51,18 @@ namespace rgw { namespace sal { namespace nsfs {
  */
 bool have_credential_capabilities(std::string* missing);
 
-/* Whether the switch is set.  The switch is the hinge, not the
- * presence of identity records:  records arrive and depart over Admin
- * Ops at any time, a deployment's intent does not.
+/* Whether requests are served as their own POSIX identity:
+ * `rgw_nsfs_impersonate`, as configured.  The switch is the hinge, not
+ * the presence of identity records:  records arrive and depart over
+ * Admin Ops at any time, a deployment's intent does not.
  *
- * This is the deployment's intent and not what is in effect here.
- * Only the startup gate wants it, so that a gateway missing the
- * capabilities does not start. */
-bool impersonation_configured();
-
-/* Whether requests in THIS process are served as their own POSIX
- * identity.
+ * A process that will never pin a personality -- radosgw-admin, or an
+ * embedding library that binds one uid at mount -- is not configured
+ * with it.  The callers of this deny a read when no personality is
+ * pinned, so such a process configured with it denies every read.
  *
- * False where nothing will ever pin a personality -- radosgw-admin,
- * and an embedding library, which binds one uid at mount.  The
- * distinction matters because the callers of this deny a read when
- * no personality is pinned, so believing impersonation is on in a
- * process that cannot do it denies every read. */
+ * Followed at runtime, and cheap:  an attribute read asks on every
+ * call. */
 bool impersonation_enabled();
 
 /* The personality table for the calling thread's io_uring ring.
@@ -276,6 +271,20 @@ int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
  * length of an impersonated call, and the flag is not consulted
  * there -- the restore puts back whatever was found. */
 int hold_thread_capabilities(const DoutPrefixProvider* dpp);
+
+/* fgetxattr(2), for an attribute read.
+ *
+ * The kernel checks read permission on a user.* attribute at each
+ * call, not at open, and against the calling thread.  A descriptor
+ * opened on a thread that held CAP_DAC_READ_SEARCH does not carry it
+ * to the thread a coroutine resumes on, so each read takes it first,
+ * through hold_thread_capabilities():  a branch once the thread holds
+ * it, and nothing on a thread running as an identity.  Returns what
+ * the syscall returns, and leaves errno as it set it.
+ *
+ * Listing the names is not checked, so flistxattr(2) needs nothing
+ * (measured 2026-10-20 on xfs, tmpfs and GPFS). */
+ssize_t fgetxattr(int fd, const char* name, void* value, size_t size);
 
 /* Whether `cap` is in this thread's effective set, for tests and for
  * the `raise` driver hint. */
