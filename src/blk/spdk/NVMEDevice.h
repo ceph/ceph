@@ -66,7 +66,8 @@ class NVMEDevice : public BlockDevice {
     uint64_t off,
     uint64_t len,
     bufferlist *pbl,
-    IOContext *ioc) override;
+    IOContext *ioc,
+    bool buffered = false) override;
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
                 bool buffered,
