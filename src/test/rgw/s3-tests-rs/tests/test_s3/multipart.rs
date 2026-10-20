@@ -2666,9 +2666,9 @@ async fn test_multipart_etag_agrees_with_head_warm_cache() {
 }
 
 /// The strided staging layout establishes a stride from part 1, and
-/// refuses to when the bytes stored differ from the bytes accounted.
+/// establishes none when the bytes stored differ from the bytes accounted.
 ///
-/// BOTH POLARITIES, which is the point.  The refusal is guarded by a
+/// BOTH POLARITIES, which is the point.  The negative is guarded by a
 /// comparison that cannot fire in production on nsfs today -- NSFSZone
 /// hardcodes one storage class with no compression, so no filter
 /// between the op layer and the writer ever changes the byte count.  A
@@ -2724,7 +2724,7 @@ async fn test_multipart_strided_stride_establishment() {
         "5242880", "part 1 should have established a stride of its own length");
 
     // negative: the same, with this upload's byte counts made to disagree
-    let key2 = "strided-refused";
+    let key2 = "strided-disagreeing";
     let up2 = client.create_multipart_upload()
         .bucket(&bucket).key(key2).send().await.unwrap();
     let id2 = up2.upload_id().unwrap().to_string();
@@ -2738,13 +2738,13 @@ async fn test_multipart_strided_stride_establishment() {
         .bucket(&bucket).key(key2).upload_id(&id2).part_number(1)
         .body(ByteStream::from(part.clone()))
         .send().await.unwrap();
-    let refused = stride_of(bucket.clone(), key2.into(), id2.clone()).await;
+    let stride2 = stride_of(bucket.clone(), key2.into(), id2.clone()).await;
 
     let _ = s3_tests_rs::admin::driver_hint(
         "inject-stored-size-delta", &[("bytes", "0"), ("upload", &id2)]).await;
 
-    assert_eq!(refused, "",
-        "a byte-count disagreement must refuse to establish a stride");
+    assert_eq!(stride2, "",
+        "a byte-count disagreement must establish no stride");
 
     // the first upload is untouched by the second's injection
     assert_eq!(stride_of(bucket.clone(), key.into(), id.clone()).await,

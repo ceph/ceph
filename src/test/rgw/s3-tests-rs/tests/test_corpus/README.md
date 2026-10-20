@@ -51,7 +51,7 @@ A second one is designed and **not built**:  artifacts written
 straight to the filesystem, which no gateway produced, plus bulk for
 the scale tier.  Its purpose is provenance an S3 request cannot
 supply — a directory object in their layout, a name a gateway would
-refuse.  `docs/NSFS_CORPUS.md` §1 is the design.
+reject.  `docs/NSFS_CORPUS.md` §1 is the design.
 
 ---
 
@@ -164,7 +164,10 @@ defects as the expected result.  Assert instead that a key the gateway
 accepted is listed, that a version id it reported is findable, that a
 size matches the bytes written, that nothing appears twice.
 
-A refusal is a **fact**, not a failure — record the code and carry on.
+The gateway's error code is recorded like any other **fact**, and the
+axis carries on.  Only a broken invariant fails the axis — a listing
+that disagrees with what was written, a version id that cannot be
+found.
 Whether a backend supports a feature is stated by the suite's
 `fails_on_<backend>` gates, not by this corpus.
 

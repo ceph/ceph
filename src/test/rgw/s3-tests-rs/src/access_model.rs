@@ -2,8 +2,8 @@
 //! test can assert.
 //!
 //! `rgw_nsfs_access_model` decides what the gateway does when the
-//! filesystem refuses an operation S3 authorised:  `posix-strict`
-//! refuses it too, `s3-metadata` performs the object's *metadata*
+//! filesystem denies an operation S3 authorised:  `posix-strict`
+//! denies it too, `s3-metadata` performs the object's *metadata*
 //! work itself -- tags and ACL -- and `s3-native` performs the data
 //! work as well, which is what the posix driver and every other RGW
 //! backend do.
@@ -30,7 +30,7 @@ use crate::admin::{driver_hint_results, fs_access, FsAccess};
 /// (`nsfs::AccessClass`):  an object's bytes, or its tags and ACL.
 ///
 /// The classes differ because the models do:  `s3-metadata` performs
-/// an object's metadata work for an identity the filesystem refused
+/// an object's metadata work for an identity the filesystem denied
 /// and leaves its bytes alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
@@ -46,14 +46,14 @@ pub enum Class {
 /// check, got from [`fs_access`], which has the gateway ask the
 /// kernel as that identity -- independent of the access model, so it
 /// is the same answer at every value of it.  The second is whether
-/// the model has the gateway perform what the filesystem refused.
+/// the model has the gateway perform what the filesystem denied.
 ///
 /// **One rule covers both classes and every model**:  where the
 /// filesystem permits it the gateway serves it, and where the
-/// filesystem refuses it the model decides.  A test that consults
+/// filesystem denies it the model decides.  A test that consults
 /// only the filesystem is asserting one model's behaviour against
 /// whatever model the run configured;  a test that consults only the
-/// model is assuming a refusal its fixture may not have arranged.
+/// model is assuming a denial its fixture may not have arranged.
 #[derive(Debug, Clone, Copy)]
 pub struct Access {
     class: Class,
@@ -104,7 +104,7 @@ impl Access {
     }
 
     /// Judge a result against that:  AccessDenied where the
-    /// configuration refuses it, the output where it serves it, and
+    /// configuration denies it, the output where it serves it, and
     /// nothing asserted where it is unknown -- `Some` only where
     /// something was served, so a test checks what it read only where
     /// it read.
@@ -116,7 +116,7 @@ impl Access {
         match self.served() {
             Some(true) => Some(r.unwrap_or_else(|e| panic!(
                 "the configuration serves this {:?} operation and the \
-                 gateway refused it: {e:?}", self.class))),
+                 gateway returned an error: {e:?}", self.class))),
             Some(false) => {
                 crate::assert_s3_err!(r, 403, "AccessDenied");
                 None
@@ -131,8 +131,8 @@ impl Access {
 ///
 /// `posix-strict`, `s3-metadata`, `s3-native`, or `default`.
 /// Switching to `s3-native` is how a test asserting the byte line
-/// gets its other polarity:  the same read the strict models refuse
-/// is served there, so the refusal is shown to be the model's doing
+/// gets its other polarity:  the same read the strict models deny
+/// is served there, so the denial is shown to be the model's doing
 /// and not the fixture's.  `None` means the gateway has no such
 /// hint, which is every backend but nsfs.
 ///
@@ -150,7 +150,7 @@ pub async fn restore_access_model() {
 }
 
 /// How many operations the gateway has performed itself after the
-/// filesystem refused the requester, which the access model permits,
+/// filesystem denied the requester, which the access model permits,
 /// as `(object_attrs, data)`.
 ///
 /// This is what makes a success attributable.  A test that sees a
@@ -179,7 +179,7 @@ pub async fn model_for(class: &str) -> Option<String> {
 ///
 /// The list, not a single GET, is the point: "data" is every path
 /// that moves an object's bytes, and a model that leaked through one
-/// of them while refusing another would be just as wrong.
+/// of them while denying another would be just as wrong.
 #[derive(Debug)]
 pub enum DataOp {
     Get,
@@ -224,7 +224,7 @@ pub async fn assert_data_follows_the_filesystem(
 
     for op in [DataOp::Get, DataOp::RangeGet, DataOp::Overwrite,
                DataOp::CopyFrom] {
-        let refused = match op {
+        let denied = match op {
             DataOp::Get =>
                 other.get_object().bucket(bucket).key(key)
                     .send().await.is_err(),
@@ -242,13 +242,13 @@ pub async fn assert_data_follows_the_filesystem(
                     .copy_source(format!("{bucket}/{key}"))
                     .send().await.is_err(),
         };
-        assert!(refused,
+        assert!(denied,
             "{op:?} moved bytes this identity was denied, \
              access model = {data_model:?};  no strict model permits that");
     }
 
     /* and the owner's object is what the owner wrote.  A write
-     * reported as refused that landed anyway would pass every check
+     * reported as denied that landed anyway would pass every check
      * above. */
     let after = owner.get_object().bucket(bucket).key(key).send().await
         .expect("the owner lost their own object");

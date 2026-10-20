@@ -384,8 +384,8 @@ pub async fn check_configure_versioning_retry(
 /// rewrite the identity row of whichever they took, while 590 other
 /// tests authenticate as those two.  A row absent or changed for the
 /// length of one test is a 403 for whoever else is mid-request, and
-/// that 403 is the gateway behaving correctly:  no identity means
-/// refuse.  The failures rotated between runs and were called noise
+/// that 403 is the gateway behaving correctly:  with no identity the
+/// request is denied.  The failures rotated between runs and were called noise
 /// for a week.  A test that borrows global mutable state is not
 /// flaky, it is wrong.
 ///
@@ -598,7 +598,7 @@ impl Drop for PrivateAccount {
 }
 
 /// Every user the root can see, with the keys and inline policies that
-/// would otherwise refuse its deletion.
+/// would otherwise stop its deletion.
 async fn remove_account_users(root: &aws_sdk_iam::Client) {
     let Ok(users) = root.list_users().send().await else {
         return;

@@ -1325,7 +1325,7 @@ async fn test_bucket_policy_get_obj_tagging_existing_tag() {
 
     let alt_client = get_alt_client();
     /* S3 grants it;  the tags are metadata, so the access model says
-     * whether the gateway performs it once the filesystem refuses */
+     * whether the gateway performs it once the filesystem denies it */
     s3_tests_rs::unless_posix_governs_metadata!(
         s3_tests_rs::features::cross_account_metadata().await, alt_client
         .get_object_tagging()
@@ -1388,7 +1388,7 @@ async fn test_bucket_policy_get_obj_acl_existing_tag() {
 
     let alt_client = get_alt_client();
     /* S3 grants it;  the ACL is metadata, so the access model says
-     * whether the gateway performs it once the filesystem refuses */
+     * whether the gateway performs it once the filesystem denies it */
     s3_tests_rs::unless_posix_governs_metadata!(
         s3_tests_rs::features::cross_account_metadata().await, alt_client
         .get_object_acl()

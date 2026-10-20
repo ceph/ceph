@@ -114,7 +114,7 @@ pub async fn feature_bool(name: &str) -> Option<bool> {
 }
 
 /// Which access model the gateway runs: what it does when the
-/// filesystem refuses an operation S3 authorised.
+/// filesystem denies an operation S3 authorised.
 ///
 /// `"posix-strict"` -- both must allow, which is NooBaa's model.
 /// `"s3-metadata"` -- S3 decides for an object's tags and ACL, never
@@ -143,7 +143,7 @@ pub async fn access_model() -> Option<String> {
 }
 
 /// Whether an S3 grant reaches another identity's object *bytes* on a
-/// backend where the filesystem would refuse.
+/// backend where the filesystem would deny it.
 ///
 /// The data half of the question [`cross_account_metadata`] asks, and
 /// a separate one:  `s3-metadata` answers yes to that and no to this.
@@ -164,7 +164,7 @@ pub async fn cross_account_data() -> Option<bool> {
 }
 
 /// Whether an S3 grant reaches another identity's object *metadata* --
-/// its tags and ACL -- on a backend where the filesystem would refuse.
+/// its tags and ACL -- on a backend where the filesystem would deny it.
 ///
 /// The question nearly every affected test actually asks.  `None` is
 /// unknown; `Some(false)` is a backend that reported a model which

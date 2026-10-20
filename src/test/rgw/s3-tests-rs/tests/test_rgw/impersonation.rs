@@ -34,7 +34,7 @@ async fn nsfs_only() -> bool {
 /// Not the suite's `main`/`alt`.  This module used to rebind *their*
 /// identity rows while 590 other tests authenticate as them, and a row
 /// changed for the length of one test is a 403 for whoever else is
-/// mid-request -- a correct 403, since no identity means refuse, which
+/// mid-request -- a correct 403, since no identity means denial, which
 /// is why it read as noise for a week.
 ///
 /// `tag` names the test, not the module:  nextest runs each test in
@@ -76,10 +76,10 @@ async fn impersonating() -> bool {
 ///
 /// nsfs creates owner-only, so under impersonation a bucket made by
 /// alice is `alice:alice 0700` and its objects `alice:alice 0600`.
-/// bob is then refused by the kernel with nothing seeded.
+/// bob is then denied by the kernel with nothing seeded.
 ///
 /// The bucket policy is the whole reason this test means anything.
-/// Without it bob is refused by RGW's own authorization before any
+/// Without it bob is denied by RGW's own authorization before any
 /// file is opened, and the test would pass identically with
 /// impersonation off — proving nothing.  Granting bob `s3:GetObject`
 /// removes the S3 answer, so a denial can only come from POSIX.
@@ -151,15 +151,15 @@ async fn test_impersonation_isolates_identities() {
 /// `rgw_nsfs_access_model` decides what the gateway does with an
 /// operation S3 authorised and the permission check denied.  For an
 /// object's tags and ACL, `s3-metadata` and `s3-native` perform it
-/// and `posix-strict` refuses;  for the object's bytes, only
+/// and `posix-strict` denies it;  for the object's bytes, only
 /// `s3-native` performs it, which is what the posix driver and every
 /// other RGW backend do.  This test asserts the data line at the
 /// configured model, then switches to `s3-native` and asserts that
-/// the same read succeeds -- so the refusals are evidence of the
+/// the same read succeeds -- so the denials are evidence of the
 /// model rather than of the fixture.
 ///
 /// The data line is asserted here because it has already been broken
-/// once, at a model that was supposed to refuse.  On 2026-10-16 the
+/// once, at a model that was supposed to deny.  On 2026-10-16 the
 /// first implementation opened the object as the gateway for an
 /// attribute read and left that descriptor cached on the entry;  the
 /// data path found it already open and served bob bytes the
@@ -169,7 +169,7 @@ async fn test_impersonation_isolates_identities() {
 /// so that the next person to widen a retry here is told by name.
 ///
 /// Both classes matter.  The metadata half must *succeed* under
-/// `s3-metadata`, or a gateway that simply refuses everything would
+/// `s3-metadata`, or a gateway that simply denies everything would
 /// pass the data half and look correct.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
@@ -225,7 +225,7 @@ async fn test_data_follows_the_access_model() {
     let model = s3_tests_rs::features::cross_account_metadata().await;
 
     /* the metadata half -- succeeds only where the model says so.
-     * Without it a gateway that refused everything would pass the
+     * Without it a gateway that denied everything would pass the
      * data half and look correct. */
     let tags = s3_tests_rs::unless_posix_governs_metadata!(
         model,
@@ -250,9 +250,9 @@ async fn test_data_follows_the_access_model() {
     /* A positive control:  the same client, the same call, on an
      * object bob is entitled to.
      *
-     * Without it, every refusal above is equally explained by "bob
+     * Without it, every denial above is equally explained by "bob
      * cannot read anything" -- a broken client, a broken fixture, a
-     * gateway refusing the whole bucket.  A test that only ever sees
+     * gateway denying the whole bucket.  A test that only ever sees
      * denials cannot tell those apart from the thing it means to
      * assert. */
     let bobs_key = "bobs-own-object";
@@ -263,7 +263,7 @@ async fn test_data_follows_the_access_model() {
         .expect("bob could not write his own object;  the fixture is wrong, \
                  not the model");
     bob.get_object().bucket(&bucket).key(bobs_key).send().await
-        .expect("bob could not read his own object;  a refusal above says \
+        .expect("bob could not read his own object;  a denial above says \
                  nothing");
 
     /* The other polarity, and why it is needed.
@@ -271,9 +271,9 @@ async fn test_data_follows_the_access_model() {
      * An assertion that cannot be made to fail asserts nothing.
      * Under the configured model the gateway must not have performed
      * any of the data operations above itself, and the counts are
-     * what distinguish "refused" from "never asked";  switching to
+     * what distinguish "denied" from "never asked";  switching to
      * `s3-native` and seeing the same read succeed is what makes the
-     * refusals evidence of the model rather than of the fixture.
+     * denials evidence of the model rather than of the fixture.
      *
      * Restored before the assertions, so a failure cannot leave the
      * run measuring a model nobody configured. */
@@ -298,7 +298,7 @@ async fn test_data_follows_the_access_model() {
     s3_tests_rs::access_model::restore_access_model().await;
 
     assert!(permitted.is_ok(),
-        "s3-native did not let bob read the bytes, so the refusals \
+        "s3-native did not let bob read the bytes, so the denials \
          asserted above are not evidence:  they would hold whatever the \
          model said");
     let (_, data_after) = after.expect("the counters went away");
@@ -314,8 +314,8 @@ async fn test_data_follows_the_access_model() {
     assert_eq!(after_restore.as_deref(), Some("refuse"),
         "the configured model was not restored;  every later test in this \
          run is measuring something nobody configured");
-    let refused_again = bob.get_object().bucket(&bucket).key(key).send().await;
-    assert!(refused_again.is_err(),
+    let denied_again = bob.get_object().bucket(&bucket).key(key).send().await;
+    assert!(denied_again.is_err(),
         "the restore did not take:  bob can still read alice's bytes");
 
 }
@@ -327,9 +327,9 @@ async fn test_data_follows_the_access_model() {
 /// impersonation (NSFS_IMPERSONATION.md 8a), so any identity can create
 /// in them.  Only the object belongs to whoever wrote it.  alice's PUT
 /// makes `a/b/`;  bob then writes beside her in a directory made during
-/// her request, which only the gateway's mode permits.  Each is then
-/// refused the other's object by the filesystem, S3 having granted both
-/// reads -- the isolation test's argument, one level down.
+/// her request, which only the gateway's mode permits.  S3 grants each
+/// the other's read, and the filesystem then denies both -- the
+/// isolation test's argument, one level down.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_impersonation_owns_a_nested_key() {
@@ -400,7 +400,7 @@ async fn test_impersonation_owns_a_nested_key() {
         bob.get_object().bucket(&bucket).key(hers).send().await);
 
     /* The other direction is the permission check and nothing else.  The policy above grants *bob* s3:GetObject;  alice has no
-     * grant on bob's object, so a GET of it is refused by RGW's own
+     * grant on bob's object, so a GET of it is denied by RGW's own
      * authorization before any file is opened -- which would pass with
      * impersonation off and prove nothing.  So ask the kernel and do
      * not read:  there is no S3-authorised operation here to judge. */
@@ -416,9 +416,10 @@ async fn test_impersonation_owns_a_nested_key() {
 ///
 /// Completion assembles the parts into a new file, or links in a data
 /// file the parts were written to, and publishes it.  Unless that runs
-/// as the uploader the object is the gateway's, and the uploader is then
-/// refused its own object.  The isolation test's argument again:  bob is
-/// granted the read by bucket policy, so his refusal is the filesystem's.
+/// as the uploader the object is the gateway's, and the filesystem then
+/// denies the uploader's read of it.  The isolation test's argument
+/// again:  bucket policy grants bob the read, so only the filesystem can
+/// deny it.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_impersonation_owns_a_completed_upload() {
@@ -485,13 +486,13 @@ async fn test_impersonation_owns_a_completed_upload() {
 /// A copy is the requester's:  it reads the source as them, and it
 /// belongs to them.
 ///
-/// The read half is the one with teeth.  bob is granted `s3:GetObject`
-/// on alice's object by bucket policy and refused it by the filesystem,
-/// as in the isolation test.  A copy that read the source as the gateway
-/// would hand him the same bytes as an object of his own;  so his copy
-/// of it must be refused too.  The ownership half:  alice's copy of her
-/// own object is hers, so she reads it and bob, granted it by policy, is
-/// refused.
+/// The read half is the one with teeth.  Bucket policy grants bob
+/// `s3:GetObject` on alice's object and the filesystem denies his read
+/// of it, as in the isolation test.  A copy that read the source as the
+/// gateway would hand him the same bytes as an object of his own;  so
+/// the filesystem must deny his copy of it too.  The ownership half:
+/// alice's copy of her own object is hers, so she reads it, and the
+/// filesystem denies bob's read of the copy, which policy grants.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_impersonation_copies_as_the_requester() {
@@ -552,8 +553,8 @@ async fn test_impersonation_copies_as_the_requester() {
     assert!(cp.is_ok(), "bob could not copy his own object: {cp:?}");
 
     /* and the copy follows the same check as the read:  a copy is a
-     * read of the source, so a model that refuses bob the bytes
-     * refuses him the copy, and one that serves them serves it */
+     * read of the source, so a model that denies bob the bytes
+     * denies him the copy, and one that serves them serves it */
     access.judge(bob.copy_object()
         .bucket(&bobs_bucket).key("stolen")
         .copy_source(format!("{bucket}/{key}"))
@@ -663,21 +664,21 @@ async fn test_impersonation_honours_the_group_vector() {
     let _ = main.delete_bucket_policy().bucket(bucket).send().await;
 }
 
-/// An identity with no record is refused, not served as the gateway.
+/// An identity with no record is denied, not served as the gateway.
 ///
 /// Section 4 of the design makes this an invariant rather than a
 /// policy:  a valid account always has an identity row, so one
 /// without is a provisioning fault.  The alternative — falling back
 /// to the gateway's own credentials — would give an unprovisioned
 /// user the daemon's filesystem reach while every provisioned one
-/// was confined, which is the escalation the whole design refuses.
+/// was confined, which is the escalation the whole design rules out.
 ///
 /// Both polarities, and in this order:  the write must succeed with
 /// a record, so that its failure without one is attributable to the
 /// record and not to anything else about the request.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_impersonation_refuses_an_unprovisioned_identity() {
+async fn test_impersonation_denies_an_unprovisioned_identity() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -710,7 +711,7 @@ async fn test_impersonation_refuses_an_unprovisioned_identity() {
         .send().await;
     assert!(denied.is_err(),
         "an identity with no identity row was served;  the request ran as \
-         the gateway rather than being refused");
+         the gateway rather than being denied");
 
     /* and reads too, not only writes */
     let read = alice.get_object().bucket(&bucket).key("provisioned")
@@ -727,8 +728,8 @@ async fn test_impersonation_refuses_an_unprovisioned_identity() {
 /// checks the account's access as the account before it does.
 ///
 /// alice is mapped with `/usr` as her `new_buckets_path`, which is
-/// root-owned and not writable by uid 70101:  refused.  (Not `/`, which
-/// nsfs refuses to store as a path at all.)  The control is
+/// root-owned and not writable by uid 70101:  denied.  (Not `/`, which
+/// nsfs rejects as a path at all.)  The control is
 /// `/tmp`, which anyone may write:  created.  Neither depends on a
 /// fixture directory.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
@@ -768,8 +769,8 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
     };
 
     bind("/usr").await;
-    let refused = s3_tests_rs::fixtures::get_new_bucket_name();
-    let r = status(alice.create_bucket().bucket(&refused).send().await);
+    let denied = s3_tests_rs::fixtures::get_new_bucket_name();
+    let r = status(alice.create_bucket().bucket(&denied).send().await);
 
     bind("/tmp").await;
     let allowed = s3_tests_rs::fixtures::get_new_bucket_name();
@@ -779,7 +780,7 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
     }
 
     assert_eq!(r, 403, "alice created a bucket where she cannot write");
-    assert_eq!(ok, 200, "alice was refused where she can write");
+    assert_eq!(ok, 200, "alice was denied where she can write");
 }
 
 /// A raised capability is effective for one call and gone after it,
@@ -798,7 +799,7 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
 /// `CAP_DAC_OVERRIDE`.  That it is gone after the call is the one
 /// that would otherwise leak:  a thread returning to the frontend's
 /// pool still holding it serves everything that follows with it.  The
-/// last is the refusal while impersonating, where the capability
+/// last is the rejection while impersonating, where the capability
 /// would be the *identity's* rather than the gateway's.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
@@ -844,7 +845,7 @@ async fn test_a_raise_is_effective_for_one_call_and_dropped_after() {
                  thread:  results={m:?}");
             assert_eq!(
                 m.get("after").map(String::as_str), Some("0"),
-                "a refused raise left the capability effective:  \
+                "a failed raise left the capability effective:  \
                  results={m:?}");
         }
         _ => return,
@@ -876,12 +877,12 @@ async fn test_a_raise_is_effective_for_one_call_and_dropped_after() {
 /// Both polarities, from one hint call, and each asserted on the uid
 /// the inner call actually observed rather than on its status alone:
 /// a nested call for the same identity must still run *and see that
-/// identity*, and one for another identity must be refused with
-/// `-EDEADLK`.  Asserting only the refusal would pass against a
+/// identity*, and one for another identity must fail with
+/// `-EDEADLK`.  Asserting only the failure would pass against a
 /// `run_as` that had simply stopped working.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_nested_run_as_refuses_a_different_identity() {
+async fn test_nested_run_as_rejects_a_different_identity() {
     if !nsfs_only().await {
         return;
     }
@@ -910,7 +911,7 @@ async fn test_nested_run_as_refuses_a_different_identity() {
                "a nested run_as for the identity in force must run, and see \
                 it:  outer={outer} inner={inner} results={m:?}");
     assert_eq!(m.get("different").map(String::as_str), Some("-35"),
-               "a nested run_as for another identity must be refused with \
+               "a nested run_as for another identity must fail with \
                 -EDEADLK, not run as the outer one:  outer={outer} \
                 inner={inner} results={m:?}");
 }
@@ -936,7 +937,7 @@ async fn non_md5_etag() -> bool {
 /// persisted the attribute map, by an `fsetxattr` of its own inside
 /// `NSFSObject::link_temp_file()`.  That write used to run on the
 /// calling thread with its result discarded, so under impersonation
-/// the kernel refused it on a 0660 file the gateway does not own.
+/// the kernel denied it on a 0660 file the gateway does not own.
 /// What the object then keeps is not a digest -- with this option on
 /// nothing computes one -- but `RGWPutObj::execute()`'s opaque
 /// `mtime-<ns>-req-<id>` form, which nsfs is supposed to replace.
@@ -1022,7 +1023,7 @@ async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
              comparison below would hold for the wrong reason");
     assert_ne!(bad_put, bad_head,
                "with inject-etag-as-gateway on, the attribute write should \
-                be refused and the object should keep the opaque etag \
+                be denied and the object should keep the opaque etag \
                 RGWPutObj wrote -- \
                 the two agreeing means this test cannot fail:  PUT said \
                 {bad_put}, HEAD says {bad_head}");

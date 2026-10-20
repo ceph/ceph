@@ -230,18 +230,18 @@ async fn test_identity_directory_backed() {
     scrub(key).await;
 }
 
-/// The rejections, each with the accepting control first.  A refusal
+/// The rejections, each with the accepting control first.  A rejection
 /// that cannot be contrasted with an acceptance proves only that the
 /// endpoint says no to something.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_identity_invalid_records_are_refused() {
+async fn test_identity_invalid_records_are_rejected() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
-    let key = "identity-refused";
+    let key = "identity-rejected";
     scrub(key).await;
 
     /* the controls */
@@ -285,18 +285,18 @@ async fn test_identity_invalid_records_are_refused() {
 
     for (what, params) in bad {
         let resp = nsfs_put_identity(params).await;
-        /* 400, not merely "not 200":  a refusal for the wrong
+        /* 400, not merely "not 200":  an error for the wrong
          * reason -- a 403 from the capability gate, a 500 from a
          * crash in the parser -- would otherwise read as success */
         assert_eq!(resp.status, 400,
-            "{what} was not refused as malformed: {} {}",
+            "{what} was not rejected as malformed: {} {}",
             resp.status, resp.body);
         let wrote = params.iter()
             .find(|(k, _)| *k == "identity")
             .map(|(_, v)| *v)
             .unwrap_or(key);
         assert_eq!(nsfs_get_identity(wrote).await.status, 404,
-            "{what} was refused but left a row behind");
+            "{what} was rejected but left a row behind");
     }
 }
 
@@ -425,7 +425,7 @@ async fn test_identity_list_and_delete() {
 /// identity, so an ordinary S3 credential must not be able to read
 /// one or mint one.  The control is the same request signed by the
 /// admin credential, which must succeed;  without it a gate that
-/// refused everyone would pass.
+/// denied everyone would pass.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_identity_requires_the_nsfs_capability() {
@@ -475,11 +475,11 @@ async fn test_identity_requires_the_nsfs_capability() {
     assert_eq!(r.status, 403,
         "an ordinary credential deleted an identity record: {}", r.body);
 
-    /* the refusals changed nothing:  the record is as the control
+    /* the denials changed nothing:  the record is as the control
      * left it, not uid 0 and not gone */
     let j = as_json(&nsfs_get_identity(key).await)
         .expect("the record should still be readable by the admin");
-    assert_eq!(j["uid"], 8, "a refused write took effect anyway");
+    assert_eq!(j["uid"], 8, "a denied write took effect anyway");
 
     scrub(key).await;
 }
@@ -949,8 +949,8 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
 /// Every principal the suite authenticates as has an identity row.
 ///
 /// With impersonation on, a request whose identity has no record is
-/// refused before any file is opened -- correctly, since no identity
-/// means refuse ((n) 6.1).  The refusal lands on whatever test happens
+/// denied before any file is opened -- correctly, since no identity
+/// means denial ((n) 6.1).  The denial lands on whatever test happens
 /// to use that principal, as an `AccessDenied` that looks like the
 /// thing the test was checking, so the cause has been found three
 /// times by excavation rather than by being told:  the tenanted user
@@ -1013,7 +1013,7 @@ async fn test_every_principal_is_provisioned() {
     }
     assert!(missing.is_empty(),
         "principals the suite authenticates as with no identity row, so \
-         every request they make is refused before it reaches a file:\n  {}\n\
+         every request they make is denied before it reaches a file:\n  {}\n\
          If rgw-vstart.sh's fixture does not bind it, add it there.  If it \
          does, a test removed the row and did not put it back, and the \
          absence persists for the rest of the run and every run after -- \

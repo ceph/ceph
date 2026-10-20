@@ -66,7 +66,7 @@ macro_rules! assert_s3_err {
 /// permission check, so it cannot be asked of `admin::fs_access`:
 /// under `s3-metadata` the gateway performs the operation itself once
 /// S3 has authorised it, and under `posix-strict` the filesystem's
-/// refusal stands.  `features::cross_account_metadata()` reports
+/// denial stands.  `features::cross_account_metadata()` reports
 /// which, by interrogating the gateway.
 ///
 /// `None` -- the endpoint reported no model and none was declared --
@@ -90,9 +90,9 @@ macro_rules! unless_posix_governs_metadata {
 /// The result of a *data* request S3 permits on an object another
 /// identity owns -- anything that moves its bytes.
 ///
-/// Two inputs, because both can refuse it.  Under a model where POSIX
+/// Two inputs, because both can deny it.  Under a model where POSIX
 /// governs data the permission check decides, so this defers to
-/// `unless_fs_refuses!`;  under `s3-native` S3 is the authority for
+/// `unless_fs_denies!`;  under `s3-native` S3 is the authority for
 /// bytes as well and the gateway serves what POSIX denied, so the
 /// check says nothing.  `features::cross_account_data()` reports
 /// which, and the caller passes it:  a helper that read the model
@@ -107,24 +107,24 @@ macro_rules! unless_posix_governs_data {
         let result = $result;
         match $model {
             Some(true) => Some(result.unwrap()),
-            Some(false) => $crate::unless_fs_refuses!($check, result),
+            Some(false) => $crate::unless_fs_denies!($check, result),
             None => result.ok(),
         }
     }};
 }
 
 /// The result of a request S3 permits, where the filesystem may still
-/// refuse it:  under impersonation nsfs serves each request as its POSIX
+/// deny it:  under impersonation nsfs serves each request as its POSIX
 /// identity, and the filesystem decides an object's content too
 /// (`admin::fs_access`).  AccessDenied where `check` denied it;  the
 /// output, unwrapped, otherwise -- `Some` in that case, so a test checks
 /// what it read only where it read.
 ///
 /// The primitive under `unless_posix_governs_data!`, which is what a
-/// test asserting a cross-identity data refusal should reach for:  this
+/// test asserting a cross-identity data denial should reach for:  this
 /// one trusts the check whatever the access model says.
 #[macro_export]
-macro_rules! unless_fs_refuses {
+macro_rules! unless_fs_denies {
     ($check:expr, $result:expr) => {{
         let result = $result;
         if $check.denied() {

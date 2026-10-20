@@ -86,7 +86,7 @@ async fn corpus_coverage_objects() {
     note_mode(&mut m, &b);
 
     let mut written: Vec<String> = Vec::new();
-    let mut refused: Vec<(String, String)> = Vec::new();
+    let mut errors: Vec<(String, String)> = Vec::new();
 
     /* size */
     for sc in SizeClass::COVERAGE {
@@ -102,7 +102,7 @@ async fn corpus_coverage_objects() {
                 .send()
                 .await)
         };
-        record(&mut m, &mut written, &mut refused, &key, r, |m| {
+        record(&mut m, &mut written, &mut errors, &key, r, |m| {
             m.object(&key, "class", &format!("{sc:?}"));
             m.object(&key, "declared-len", &sc.len().to_string());
         });
@@ -120,7 +120,7 @@ async fn corpus_coverage_objects() {
             req = req.metadata(k, v);
         }
         let r = if observing() { None } else { Some(req.send().await) };
-        record(&mut m, &mut written, &mut refused, &key, r, |m| {
+        record(&mut m, &mut written, &mut errors, &key, r, |m| {
             m.object(&key, "class", &format!("{mc:?}"));
             m.object(&key, "rationale", mc.rationale());
             m.object(&key, "declared-headers",
@@ -140,7 +140,7 @@ async fn corpus_coverage_objects() {
             req = req.tagging(h);
         }
         let r = if observing() { None } else { Some(req.send().await) };
-        record(&mut m, &mut written, &mut refused, &key, r, |m| {
+        record(&mut m, &mut written, &mut errors, &key, r, |m| {
             m.object(&key, "class", &format!("{tc:?}"));
             m.object(&key, "declared-tags", &tc.count().to_string());
         });
@@ -161,7 +161,7 @@ async fn corpus_coverage_objects() {
             req = req.metadata(k, v);
         }
         let r = if observing() { None } else { Some(req.send().await) };
-        record(&mut m, &mut written, &mut refused, &key, r, |m| {
+        record(&mut m, &mut written, &mut errors, &key, r, |m| {
             m.object(&key, "class", &format!("{dc:?}"));
             m.object(&key, "rationale", dc.rationale());
             m.object(&key, "declared-len", &dc.body().len().to_string());
@@ -181,14 +181,14 @@ async fn corpus_coverage_objects() {
         crate::inventory::capture(&b, &dir, &format!("{tier}-objects"));
 
     eprintln!(
-        "corpus {tier}/objects: {} written, {} refused, {} facts -> {}",
+        "corpus {tier}/objects: {} written, {} errors, {} facts -> {}",
         written.len(),
-        refused.len(),
+        errors.len(),
         m.len(),
         path.display()
     );
-    for (k, c) in &refused {
-        eprintln!("  refused {k:?}: {c}");
+    for (k, c) in &errors {
+        eprintln!("  error {k:?}: {c}");
     }
 
     assert!(!m.is_empty(), "the corpus produced no facts");
@@ -201,8 +201,8 @@ async fn corpus_coverage_objects() {
     for key in &written {
         /* A writer's invariant, so not an observing pass's:  `written`
          * there is the derived key list, and a key the first gateway
-         * refused is legitimately absent from the tree.  Whether one is
-         * missing is the diff's question. */
+         * returned an error for is legitimately absent from the tree.
+         * Whether one is missing is the diff's question. */
         if observing() {
             continue;
         }
@@ -221,12 +221,12 @@ async fn corpus_coverage_objects() {
     );
 }
 
-/// Record a put's outcome:  facts on success, the error as a fact on
-/// refusal.  A refusal is something the corpus is here to capture.
+/// Record a put's outcome:  facts on success, and the error code as a
+/// fact otherwise, which is something the corpus is here to capture.
 fn record<T, E>(
     m: &mut Manifest,
     written: &mut Vec<String>,
-    refused: &mut Vec<(String, String)>,
+    errors: &mut Vec<(String, String)>,
     key: &str,
     /* `None` when observing:  nothing was written, so there is no
      * outcome to report -- but the model facts `on_ok` carries are the
@@ -241,9 +241,9 @@ fn record<T, E>(
      *
      * They say what the axis asked for -- the class, the declared
      * length, the headers it meant to send -- so they are true whether
-     * the gateway accepted it, refused it, or was never asked because
-     * this pass is observing.  Recording them only on success made a
-     * refused key's class appear in an observing capture and not in a
+     * the gateway accepted it, returned an error, or was never asked
+     * because this pass is observing.  Recording them only on success
+     * made a failed key's class appear in an observing capture and not in a
      * generating one, which is a difference about the recorder rather
      * than about the tree. */
     on_ok(m);
@@ -254,9 +254,9 @@ fn record<T, E>(
         }
         Some(Err(e)) => {
             let info = extract_s3_error(&e);
-            m.object(key, "put-refused", &info.error_code);
+            m.object(key, "put-error", &info.error_code);
             m.object(key, "put-status", &info.status.to_string());
-            refused.push((
+            errors.push((
                 key.to_string(),
                 format!("{} {}", info.status, info.error_code),
             ));

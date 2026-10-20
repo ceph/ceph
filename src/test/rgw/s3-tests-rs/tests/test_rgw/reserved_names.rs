@@ -9,7 +9,7 @@
 //! (`root_object.rs`).
 //!
 //! The reserved file is real:  PUT `x/` first and `x/.folder` exists on
-//! disk as its storage, so a refusal here is the rule and not an absent
+//! disk as its storage, so a rejection here is the rule and not an absent
 //! file.  `x/` itself is the control, and must survive everything.
 
 use aws_sdk_s3::primitives::ByteStream;
@@ -32,7 +32,7 @@ async fn test_reserved_names_are_not_objects() {
         .body(ByteStream::from_static(b"directory object"))
         .send().await.expect("a directory object should write");
 
-    /* creates are refused */
+    /* creates are rejected */
     for k in [".folder", "x/.folder", ".versions/v"] {
         s3_tests_rs::assert_s3_err!(
             client.put_object().bucket(&b).key(k)
@@ -57,7 +57,7 @@ async fn test_reserved_names_are_not_objects() {
         client.head_object().bucket(&b).key("x/.folder").send().await);
     assert_eq!(head.status, 404, "HEAD of x/.folder found something");
 
-    /* copy:  from a reserved name finds nothing, to one is refused */
+    /* copy:  from a reserved name finds nothing, to one is rejected */
     s3_tests_rs::assert_s3_err!(
         client.copy_object().bucket(&b).key("copied")
             .copy_source(format!("{b}/x/.folder")).send().await,
@@ -67,17 +67,17 @@ async fn test_reserved_names_are_not_objects() {
             .copy_source(format!("{b}/x/")).send().await,
         400, "InvalidObjectName");
 
-    /* a multipart upload to a reserved name cannot succeed:  refused at
+    /* a multipart upload to a reserved name cannot succeed:  rejected at
      * initiation, or else at completion, which is where the key becomes
      * a path.  Both arms assert, so neither can pass by being skipped. */
     let up = client.create_multipart_upload().bucket(&b).key(".folder")
         .send().await;
     if up.is_err() {
         s3_tests_rs::assert_s3_err!(up, 400, "InvalidObjectName");
-        eprintln!("multipart to .folder:  refused at initiation");
+        eprintln!("multipart to .folder:  rejected at initiation");
     }
     if let Ok(up) = up {
-        eprintln!("multipart to .folder:  initiated;  completion must be refused");
+        eprintln!("multipart to .folder:  initiated;  completion must be rejected");
         let id = up.upload_id().unwrap_or_default().to_string();
         let part = client.upload_part().bucket(&b).key(".folder")
             .upload_id(&id).part_number(1)

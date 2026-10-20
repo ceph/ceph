@@ -34,9 +34,9 @@ pub enum KeyClass {
     /// multi-byte characters in the key
     Unicode,
     /// at S3's 1024-byte key limit, in one path component.  **A
-    /// filesystem backend refuses this**:  a component is bounded by
-    /// NAME_MAX, 255 on Linux, so the key is unwritable and the corpus
-    /// records the refusal rather than the object
+    /// filesystem backend cannot store this**:  a component is bounded
+    /// by NAME_MAX, 255 on Linux, so the key is unwritable and the corpus
+    /// records the error code rather than the object
     MaxLengthOneComponent,
     /// at S3's 1024-byte limit, spread over components short enough to
     /// be path names.  The writable form of the same limit
@@ -138,7 +138,7 @@ impl KeyClass {
             }
             KeyClass::Unicode => "multi-byte key",
             KeyClass::MaxLengthOneComponent => {
-                "S3's 1024-byte key limit in one component, which NAME_MAX refuses"
+                "S3's 1024-byte key limit in one component, over NAME_MAX"
             }
             KeyClass::MaxLengthSplit => {
                 "the same limit split into components a path can hold"

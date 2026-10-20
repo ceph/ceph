@@ -129,7 +129,7 @@ impl MetaClass {
 /// **The boundary is ten, not fifty.**  S3 permits ten tags on an
 /// *object*;  fifty is the limit for a *bucket*, and conflating the two
 /// is how an earlier version of this axis generated a case that was
-/// refused for being wrong rather than for being interesting.  RGW's
+/// rejected for being wrong rather than for being interesting.  RGW's
 /// own limit agrees -- `RGWObjTags::max_obj_tags` defaults to ten.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TagClass {
@@ -137,7 +137,7 @@ pub enum TagClass {
     One,
     /// ten:  S3's limit for an object, so the last accepted value
     AtLimit,
-    /// eleven:  expected to be refused, which is the fact recorded
+    /// eleven:  expected to be rejected, which is the fact recorded
     OverLimit,
 }
 
@@ -323,7 +323,7 @@ impl CopySource {
 
 /// Where the copy lands.
 ///
-/// `SelfSame` is the degenerate one S3 refuses unless the metadata
+/// `SelfSame` is the degenerate one S3 rejects unless the metadata
 /// directive is REPLACE, and it is a recorded gap on this backend, so
 /// the corpus captures whatever comes back rather than asserting.
 /// `Versioned` is its own value because the driver's copy path forks on

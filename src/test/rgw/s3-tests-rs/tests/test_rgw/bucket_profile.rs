@@ -62,7 +62,7 @@ async fn test_profile_moves_between_base_and_strong() {
     }
     let f = features().await.unwrap();
     if f.get_bool("extensions_default") != Some(true) {
-        eprintln!("reversible mode;  extending a bucket is refused by design");
+        eprintln!("reversible mode;  extending a bucket is rejected by design");
         return;
     }
 
@@ -113,7 +113,7 @@ async fn test_profile_shared_is_distinct_from_base() {
     }
     let f = features().await.unwrap();
     if f.get_bool("extensions_default") != Some(true) {
-        eprintln!("reversible mode;  extending a bucket is refused by design");
+        eprintln!("reversible mode;  extending a bucket is rejected by design");
         return;
     }
 
@@ -141,7 +141,7 @@ async fn test_profile_shared_is_distinct_from_base() {
     assert_eq!(base.get("extensions").map(String::as_str), Some("0"));
 }
 
-/// Reducing a profile is refused once the bucket holds content, because
+/// Reducing a profile is rejected once the bucket holds content, because
 /// the structures the dropped extensions allowed stay in the tree.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
@@ -155,8 +155,8 @@ async fn test_profile_cannot_be_reduced_with_content() {
     let client = get_client();
     let bucket = get_new_bucket(Some(&client)).await;
 
-    /* empty, so the reduction is allowed:  the control for the refusal
-     * below, which would otherwise pass against a setter that refused
+    /* empty, so the reduction is allowed:  the control for the rejection
+     * below, which would otherwise pass against a setter that rejected
      * everything */
     if nsfs_set_profile(&bucket, "base").await.is_none() {
         eprintln!("profile endpoint unavailable;  nothing to check");
@@ -174,7 +174,7 @@ async fn test_profile_cannot_be_reduced_with_content() {
 
     let still = nsfs_get_profile(&bucket).await.expect("profile should answer");
     assert_eq!(still.get("profile").map(String::as_str), Some("strong"),
-        "the refused reduction changed the profile anyway");
+        "the rejected reduction changed the profile anyway");
 }
 
 /// A base bucket still serves S3.  The extensions are what it lacks, not
@@ -344,7 +344,7 @@ async fn test_conversion_records_the_bucket_owner() {
     }
     let f = features().await.unwrap();
     if f.get_bool("extensions_default") != Some(true) {
-        eprintln!("reversible mode;  extending a bucket is refused by design");
+        eprintln!("reversible mode;  extending a bucket is rejected by design");
         return;
     }
 

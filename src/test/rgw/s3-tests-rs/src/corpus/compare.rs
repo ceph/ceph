@@ -405,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn rows_parse_and_refuse_what_is_malformed() {
+    fn rows_parse_and_reject_what_is_malformed() {
         let ok = "# c\n\np\t\tmanifest\t\tetag\trecognize:synthetic-identity\twhy\n";
         assert_eq!(parse_rows(ok).unwrap().len(), 1);
         assert!(parse_rows("p\t\tmanifest\tetag\tequal\twhy\n").is_err(), "6 columns");

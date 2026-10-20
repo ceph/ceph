@@ -2780,7 +2780,7 @@ async fn test_account_usage() {
 /// The control is an object of a configured non-default class, whose
 /// class must be reported:  without it the first half would pass
 /// against a gateway that never sends the header.  A deployment with no
-/// non-default class configured, which refuses one, skips the control.
+/// non-default class configured, which rejects one, skips the control.
 #[tokio::test]
 async fn test_object_standard_storage_class_not_reported() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
@@ -2830,7 +2830,8 @@ async fn test_object_standard_storage_class_not_reported() {
         .send()
         .await;
     if put.is_err() {
-        eprintln!("storage class {other} refused;  the control is skipped");
+        eprintln!("the PUT of storage class {other} failed;  \
+                   the control is skipped");
         return;
     }
     let head = client
@@ -2849,11 +2850,11 @@ async fn test_object_standard_storage_class_not_reported() {
  * is not what is tested.
  *
  * nsfs serves listings from an LMDB cache whose maximum key size is
- * about half that, and refuses such a key with KeyTooLongError rather
+ * about half that, and rejects such a key with KeyTooLongError rather
  * than store one it could not list (PUNCHLIST.md, OPEN:  "one over-long
  * name in a foreign tree empties the whole listing").  The gate goes
  * when LMDB is built with a larger key size;
- * test_rgw::key_limit pins the refusal until then. */
+ * test_rgw::key_limit pins the rejection until then. */
 #[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: the LMDB listing cache holds about 510 bytes of key")]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: such a PUT returns 500")]
 #[tokio::test]

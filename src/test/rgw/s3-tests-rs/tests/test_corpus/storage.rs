@@ -135,7 +135,7 @@ async fn corpus_coverage_storage_class() {
                     .code()
                     .unwrap_or("Unknown")
                     .to_string();
-                m.object(&key, "refused", &code);
+                m.object(&key, "error", &code);
             }
         }
     }
@@ -145,8 +145,8 @@ async fn corpus_coverage_storage_class() {
      * because they can disagree.
      *
      * An observing pass did not make the writes, so an object it derived
-     * may never have been written:  NooBaa refuses a class it does not
-     * support, and its manifest records `refused`.  Such an object is
+     * may never have been written:  NooBaa rejects a class it does not
+     * support, and its manifest records `error`.  Such an object is
      * recorded absent here and not asserted on;  comparing the two
      * manifests is the diff stage's job. */
     let mut absent = std::collections::BTreeSet::new();

@@ -964,7 +964,7 @@ async fn setup_access(
 /// Under impersonation nsfs serves the read as alt's POSIX identity,
 /// and alt is a different identity from the main user who wrote the
 /// object -- so under a model where POSIX governs data the
-/// filesystem's refusal stands, and under `s3-native` the gateway
+/// filesystem's denial stands, and under `s3-native` the gateway
 /// serves it anyway.  Either way the body, where there is one, is the
 /// one written.
 async fn check_alt_read(alt_client: &aws_sdk_s3::Client, bucket: &str,

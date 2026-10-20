@@ -39,7 +39,7 @@ struct Copied {
     dst_bucket: String,
     declared_size: usize,
     meta: Directive,
-    refused: Option<String>,
+    error: Option<String>,
 }
 
 /// Write the source object for one case and return its size.
@@ -245,7 +245,7 @@ async fn corpus_coverage_copy() {
          * descriptor has to reach `copies` so the destinations the
          * first gateway left are still read back below.  Skipping it
          * emptied that list and silently dropped 47 facts. */
-        let refused = if crate::generate::observing() {
+        let error = if crate::generate::observing() {
             None
         } else {
             match req.send().await {
@@ -263,7 +263,7 @@ async fn corpus_coverage_copy() {
             Err(e) => {
                 let svc = e.into_service_error();
                 let code = svc.meta().code().unwrap_or("Unknown").to_string();
-                m.object(&dst_key, "copy.refused", &code);
+                m.object(&dst_key, "copy.error", &code);
                 Some(code)
             }
             }
@@ -275,7 +275,7 @@ async fn corpus_coverage_copy() {
             dst_bucket,
             declared_size: size,
             meta,
-            refused,
+            error,
         });
     }
 
@@ -302,7 +302,7 @@ async fn corpus_coverage_copy() {
     /* and what HEAD says about each copy, which is where the
      * directives show up */
     for c in &copies {
-        if c.refused.is_some() {
+        if c.error.is_some() {
             continue;
         }
         if let Ok(h) = client
@@ -351,15 +351,15 @@ async fn corpus_coverage_copy() {
         .extend(crate::inventory::capture(&versioned, &dir, &format!("{tier}-copy-ver")));
 
     eprintln!(
-        "corpus {tier}/copy: {} copies, {} refused, {} facts -> {}",
+        "corpus {tier}/copy: {} copies, {} errors, {} facts -> {}",
         copies.len(),
-        copies.iter().filter(|c| c.refused.is_some()).count(),
+        copies.iter().filter(|c| c.error.is_some()).count(),
         m.len(),
         path.display()
     );
     for c in &copies {
-        if let Some(code) = &c.refused {
-            eprintln!("  refused {:?} -> {:?}: {code}", c.src_key, c.dst_key);
+        if let Some(code) = &c.error {
+            eprintln!("  error {:?} -> {:?}: {code}", c.src_key, c.dst_key);
         }
     }
 
@@ -367,10 +367,11 @@ async fn corpus_coverage_copy() {
     let mut problems = mode_problems;
     problems.extend(ownership_problems);
     for c in &copies {
-        if c.refused.is_some() {
-            /* A refusal is a fact, not a failure -- self-copy without
-             * REPLACE is refused by S3 itself, and this backend has a
-             * recorded gap there.  The manifest records the code. */
+        if c.error.is_some() {
+            /* The gateway's error code is recorded like any other
+             * fact, and the axis carries on -- self-copy without
+             * REPLACE is rejected by S3 itself, and this backend has a
+             * recorded gap there. */
             continue;
         }
         let Some((size, owner)) = listed.get(&(c.dst_bucket.clone(), c.dst_key.clone()))

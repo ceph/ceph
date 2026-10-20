@@ -56,7 +56,7 @@ async fn corpus_imported_iam_user_runs_as_its_account() {
     assert!(!account.is_empty(), "the IAM user {user} was imported outside any account");
 
     /* The account's own user is its root;  without that it is an
-     * ordinary user with no policy, and RGW refuses it everything the
+     * ordinary user with no policy, and RGW denies it everything the
      * account owns.  The IAM user, by the same lookup, is not. */
     let (status, root) = user_by_key(&cfg.main_access_key).await;
     assert_eq!(status, 200, "the gateway does not know the account's key:\n{root}");

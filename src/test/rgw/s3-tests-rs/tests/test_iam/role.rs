@@ -446,7 +446,7 @@ async fn test_account_role_name_scoped_to_account() {
         .unwrap();
 
     /* The same name in a different account must be accepted, not
-     * refused as a duplicate. */
+     * rejected as a duplicate. */
     let in_alt = alt_root
         .create_role()
         .role_name(&name)
@@ -493,7 +493,7 @@ async fn test_account_role_name_scoped_to_account() {
         assert_eq!(matching[0].arn(), want_arn);
     }
 
-    /* A duplicate *within* an account is still refused. */
+    /* A duplicate *within* an account is still rejected. */
     let dup = root
         .create_role()
         .role_name(&name)

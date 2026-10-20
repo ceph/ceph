@@ -728,13 +728,13 @@ pub async fn post_object_form_with_filename(
 /// `Content-Length: 0` on a request the SDK leaves without one.
 ///
 /// The SDK omits the header on an operation whose body is empty.  A
-/// gateway is then entitled to refuse it:  `upload_part_copy` and
+/// gateway is then entitled to reject it:  `upload_part_copy` and
 /// `create_multipart_upload` both carry their input in the URI and
-/// headers, so both arrive bodyless, and both are refused by at least
+/// headers, so both arrive bodyless, and both are rejected by at least
 /// one implementation we test against.
 ///
-///   * RGW refuses `upload_part_copy` without it.
-///   * NooBaa refuses `create_multipart_upload` without it, with
+///   * RGW rejects `upload_part_copy` without it.
+///   * NooBaa rejects `create_multipart_upload` without it, with
 ///     `411 MissingContentLength`.
 ///
 /// The header is correct HTTP for a bodyless request either way, so

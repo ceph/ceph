@@ -5,7 +5,7 @@
 //! and a bucket abandoned before its import is not served once it has, so
 //! the shared `nsfs` cap must not open it.  A gateway with no NooBaa store
 //! -- the ordinary suite setup -- has nothing to abandon, so what is
-//! checked here is the gate and the refusals;  the abandon and un-abandon
+//! checked here is the gate and the rejections;  the abandon and un-abandon
 //! cycle is the unit suite's, which has a store.
 
 use s3_tests_rs::admin::{admin_request, admin_request_as, grant_user_caps, q};
@@ -33,9 +33,9 @@ async fn grant_admin() {
 
 /// Every verb is gated on `nsfs-adoption`, and `nsfs=*` does not carry
 /// it.  The main test user holds `nsfs=*` from the gateway's bootstrap
-/// and is refused;  the alt user holds nothing and is refused;  the
+/// and is denied;  the alt user holds nothing and is denied;  the
 /// control is the admin credential once granted the cap, which must get
-/// through, or a gate refusing everyone would pass.
+/// through, or a gate denying everyone would pass.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_rados", ignore = "fails on rados")]
@@ -53,7 +53,7 @@ async fn test_abandoned_requires_the_nsfs_adoption_capability() {
 
     /* the control */
     let r = admin_request(reqwest::Method::GET, PATH, "", None).await;
-    assert_eq!(r.status, 200, "the admin, granted the cap, was refused: {}",
+    assert_eq!(r.status, 200, "the admin, granted the cap, was denied: {}",
                r.body);
 
     for (who, ak, sk) in [
@@ -73,7 +73,7 @@ async fn test_abandoned_requires_the_nsfs_adoption_capability() {
     }
 }
 
-/// The refusals a caller holding the cap can reach without a store:  no
+/// The rejections a caller holding the cap can reach without a store:  no
 /// reason is 400, an `_id` nothing holds is 404, and taking back what
 /// was never abandoned is 404.  The listing is an array.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
@@ -82,7 +82,7 @@ async fn test_abandoned_requires_the_nsfs_adoption_capability() {
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[cfg_attr(feature = "fails_on_posix", ignore = "fails on posix")]
 #[tokio::test]
-async fn test_abandoned_refuses_what_it_should() {
+async fn test_abandoned_rejects_what_it_should() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");

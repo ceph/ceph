@@ -141,7 +141,7 @@ async fn corpus_coverage_bucket_config() {
              * the thing being described.
              *
              * `gained` is meaningless without an apply -- before and
-             * after are the same read -- and `accepted` and `refused`
+             * after are the same read -- and `accepted` and `error`
              * are outcomes of applying.  What survives is the
              * read-back, which is the fact about the tree. */
             if observing() {
@@ -185,12 +185,12 @@ async fn corpus_coverage_bucket_config() {
                 .map(|(n, _)| n.clone())
                 .collect();
             m.bucket(&b, concat!($name, ".accepted"), &accepted.to_string());
-            /* Emitted whether or not it was refused.  A field that
+            /* Emitted whether or not the apply returned an error.  A field that
              * appears only on failure makes a capability divergence
              * read as a removed line plus an added line rather than a
              * changed value, so the manifests of two gateways stop
              * diffing where they differ most. */
-            m.bucket(&b, concat!($name, ".refused"),
+            m.bucket(&b, concat!($name, ".error"),
                      if accepted { "<none>" } else { code.as_str() });
             for g in &gained {
                 m.bucket(&b, concat!($name, ".gained"), g);
@@ -445,10 +445,10 @@ async fn corpus_coverage_bucket_config() {
      * requires the log-delivery service to be granted s3:PutObject on
      * it, and RGW implements that check --
      * `verify_target_bucket_policy()` in rgw_bucket_logging.cc, which
-     * cites the AWS page it comes from.  A bare target is refused with
+     * cites the AWS page it comes from.  A bare target is rejected with
      * 403, correctly, and reading that as "logging is unimplemented"
      * is how this axis first mis-reported it:  the permission check
-     * had in fact *granted*, and the refusal was the op's own.
+     * had in fact *granted*, and the rejection was the op's own.
      *
      * Same statement the suite's own logging tests use, so the
      * condition keys match what the check wants rather than what I
@@ -476,17 +476,17 @@ async fn corpus_coverage_bucket_config() {
             /* Both names every time, for the reason in step!():  this
              * site previously changed the *field* with the outcome,
              * `log-target-policy` on success and
-             * `log-target-policy.refused` on failure, so neither line
+             * `log-target-policy.error` on failure, so neither line
              * had a counterpart on the other side. */
             Ok(_) => {
                 m.bucket(&log_target, "log-target-policy", "set");
-                m.bucket(&log_target, "log-target-policy.refused", "<none>");
+                m.bucket(&log_target, "log-target-policy.error", "<none>");
             }
             Err(e) => {
-                m.bucket(&log_target, "log-target-policy", "refused");
+                m.bucket(&log_target, "log-target-policy", "error");
                 m.bucket(
                     &log_target,
-                    "log-target-policy.refused",
+                    "log-target-policy.error",
                     e.into_service_error().meta().code().unwrap_or("Unknown"),
                 );
             }
@@ -542,7 +542,7 @@ async fn corpus_coverage_bucket_config() {
     );
     for s in &steps {
         if !s.accepted {
-            eprintln!("  refused {}: {}", s.name, s.code);
+            eprintln!("  error {}: {}", s.name, s.code);
         } else {
             eprintln!(
                 "  {}: reads-back={} gained {:?}",
@@ -555,7 +555,8 @@ async fn corpus_coverage_bucket_config() {
     let mut problems = mode_problems;
     for s in &steps {
         if !s.accepted {
-            /* A refusal is a fact.  Which configurations this backend
+            /* The error code is recorded as a fact, and the axis
+             * carries on.  Which configurations this backend
              * supports is not this corpus's to assert -- the suite's
              * fails_on_nsfs gates are where that is stated. */
             continue;

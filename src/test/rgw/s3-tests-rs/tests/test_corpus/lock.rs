@@ -74,7 +74,7 @@ fn default_mode_of(s: &str) -> ObjectLockRetentionMode {
  * the pin, so the axis cannot create the bucket it needs and reaches
  * none of its assertions.  Per-object retention is a different
  * surface -- NooBaa does keep that in xattrs -- and only the
- * bucket-level configuration is refused. */
+ * bucket-level configuration returns 501. */
 #[cfg_attr(feature = "fails_on_noobaa",
            ignore = "noobaa: PutObjectLockConfiguration is NotImplemented")]
 #[tokio::test]
@@ -158,7 +158,7 @@ async fn corpus_coverage_object_lock() {
         .build();
     /* Observing is not available here, and saying so beats half-doing
      * it.  The axis's subject is a bucket-level configuration, and a
-     * bucket NooBaa refused to create -- it answers 501 to
+     * bucket NooBaa fails to create -- it returns 501 to
      * PutObjectLockConfiguration -- is not in the tree to be
      * described.  The expected-difference list carries that as
      * `run coverage-lock absent`. */
@@ -289,7 +289,7 @@ async fn corpus_coverage_object_lock() {
                             .code()
                             .unwrap_or("Unknown")
                             .to_string();
-                        m.object(key, "protected-delete.refused", &code);
+                        m.object(key, "protected-delete.error", &code);
                     }
                 }
             }

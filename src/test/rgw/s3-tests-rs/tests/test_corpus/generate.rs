@@ -38,7 +38,7 @@ pub fn note_mode(m: &mut Manifest, bucket: &str) {
 /// The second half of a comparison reads the tree the *first* gateway
 /// wrote.  An axis that created its objects first would describe its
 /// own, which says nothing about that tree -- and over a tree being
-/// served read-only the creation is refused outright.
+/// served read-only the creation fails outright.
 ///
 /// **The model stays the driver.**  The alternative was to take the
 /// first capture's manifest as a work list and re-ask each fact of the
@@ -173,7 +173,7 @@ pub async fn ensure_bucket(client: &aws_sdk_s3::Client, name: &str) {
  * no listing shows it.  Reproducible either way:  it fails on a
  * freshly cleaned tree and passes on the next run against the same
  * one, because fill_cache() filters those names and add_entry() does
- * not.  nsfs refuses the same keys with InvalidObjectName. */
+ * not.  nsfs rejects the same keys with InvalidObjectName. */
 #[cfg_attr(feature = "fails_on_posix",
            ignore = "posix: dot-prefixed key accepted, then not listed")]
 #[tokio::test]
@@ -205,7 +205,7 @@ async fn keys_axis(name: &str, classes: &[KeyClass]) {
     note_mode(&mut m, &b);
 
     let mut written: Vec<String> = Vec::new();
-    let mut refused = Vec::new();
+    let mut errors = Vec::new();
     /* What was written, so what is read back can be compared to it.
      * The bodies are derived from the class, so this is knowledge the
      * axis already has rather than state it has to keep. */
@@ -245,18 +245,18 @@ async fn keys_axis(name: &str, classes: &[KeyClass]) {
                 written.push(key.clone());
             }
             Err(e) => {
-                /* A refusal is a fact about the gateway, not a failure
-                 * of the corpus:  a key that is also a prefix cannot be
-                 * written to nsfs at all, and a 1024-byte key in one
-                 * component exceeds NAME_MAX.  Recording the refusal is
-                 * the point of generating them. */
+                /* The gateway's error code is recorded like any other
+                 * fact, and the axis carries on:  a key that is also a
+                 * prefix cannot be written to nsfs at all, and a
+                 * 1024-byte key in one component exceeds NAME_MAX.
+                 * Recording the code is the point of generating them. */
                 let info = extract_s3_error(&e);
-                m.object(&key, "put-refused", &info.error_code);
+                m.object(&key, "put-error", &info.error_code);
                 m.object(&key, "put-status", &info.status.to_string());
                 if let Some(msg) = &info.message {
                     m.object(&key, "put-message", msg);
                 }
-                refused.push((
+                errors.push((
                     key.clone(),
                     format!("{} {}", info.status, info.error_code),
                 ));
@@ -352,15 +352,15 @@ async fn keys_axis(name: &str, classes: &[KeyClass]) {
 
 
     eprintln!(
-        "corpus {tier}/{name}: {} of {} keys written, {} refused, {} facts -> {}",
+        "corpus {tier}/{name}: {} of {} keys written, {} errors, {} facts -> {}",
         written.len(),
         classes.len(),
-        refused.len(),
+        errors.len(),
         m.len(),
         path.display()
     );
-    for (k, c) in &refused {
-        eprintln!("  refused {k:?}: {c}");
+    for (k, c) in &errors {
+        eprintln!("  error {k:?}: {c}");
     }
 
     /* An empty manifest means nothing was generated and any later
@@ -380,9 +380,10 @@ async fn keys_axis(name: &str, classes: &[KeyClass]) {
 /// Properties true of any S3 implementation, so they need no reference
 /// gateway and hold before the NooBaa half of the harness exists.
 ///
-/// This is what separates the corpus from a recorder.  A *refusal* is a
-/// fact about a backend and is recorded rather than failed -- a key a
-/// gateway cannot write is something the corpus exists to capture.  A
+/// This is what separates the corpus from a recorder.  A gateway's error
+/// code is a fact about a backend:  it is recorded, and the axis carries
+/// on -- a key a gateway cannot write is something the corpus exists to
+/// capture.  A
 /// listing that disagrees with what was written is not a fact about
 /// anything;  it is a defect, and the run should say so without waiting
 /// for a second gateway to compare against.

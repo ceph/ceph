@@ -597,7 +597,7 @@ async fn test_get_tags_acl_public() {
         .unwrap();
 
     /* alt owns none of this object.  S3 grants the read; whether the
-     * filesystem's refusal stands is the gateway's access model. */
+     * filesystem's denial stands is the gateway's access model. */
     let model = s3_tests_rs::features::cross_account_metadata().await;
     let alt_client = get_alt_client();
     let read = s3_tests_rs::unless_posix_governs_metadata!(
@@ -653,7 +653,7 @@ async fn test_put_tags_acl_public() {
             .send()
             .await);
     if wrote.is_none() {
-        /* the filesystem's refusal stood, so there is nothing to read
+        /* the filesystem's denial stood, so there is nothing to read
          * back and the rest of the test is about what was written */
         return;
     }

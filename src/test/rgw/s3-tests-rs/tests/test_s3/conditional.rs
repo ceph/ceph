@@ -1449,12 +1449,12 @@ async fn test_put_object_if_none_match_star_is_atomic() {
         }
 
         let mut winners = 0usize;
-        let mut refused = 0usize;
+        let mut rejected = 0usize;
         let mut unexpected = Vec::new();
         for t in tasks {
             match t.await.expect("writer task panicked") {
                 Ok(()) => winners += 1,
-                Err(412) => refused += 1,
+                Err(412) => rejected += 1,
                 Err(status) => unexpected.push(status),
             }
         }
@@ -1468,7 +1468,7 @@ async fn test_put_object_if_none_match_star_is_atomic() {
             winners, 1,
             "trial {trial}: {winners} of {WRITERS} concurrent \
              If-None-Match:* writers succeeded, expected exactly 1 \
-             ({refused} were refused) -- the later winner silently \
+             ({rejected} were rejected) -- the later winner silently \
              overwrote the earlier one"
         );
     }

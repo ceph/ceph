@@ -6,8 +6,8 @@
 //!
 //! Where the bucket lands is the unit suite's to check, which can look;
 //! what is checked here is that the header reaches the gateway's
-//! decision through a real request:  refused with no allowlist, admitted
-//! with one, refused outside it.
+//! decision through a real request:  denied with no allowlist, admitted
+//! with one, denied outside it.
 
 use s3_tests_rs::admin::{as_json, driver_hint, nsfs_delete_identity,
                          nsfs_put_identity};
@@ -73,7 +73,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     }
     /* A user of this module's own.  This test deletes the identity
      * row of whoever it names, to show that a request with no
-     * allowlist is refused -- and 590 tests authenticate as the main
+     * allowlist is denied -- and 590 tests authenticate as the main
      * user, for whom a missing row is a correct 403. */
     let Some(user) = PrivateUser::create("custompath").await else {
         eprintln!("no IAM root credentials;  nothing to check");
@@ -86,7 +86,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     let bucket = get_new_bucket_name();
     let at = format!("{base}/custom-{bucket}");
 
-    /* no allowlist:  refused, which shows the header was read */
+    /* no allowlist:  denied, which shows the header was read */
     nsfs_delete_identity(&me).await;
     assert_eq!(create_at(&user.client, &bucket, &at).await, 403,
                "a custom path was admitted with no allowlist");
@@ -94,7 +94,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     /* An allowlist admitting it, and deliberately no uid.  nsfs
      * checks the requester's own access to the path before it makes
      * the directory as the gateway, so a row carrying a uid is
-     * refused for any path that uid cannot write.  A row carrying
+     * denied for any path that uid cannot write.  A row carrying
      * only an allowlist is served as the gateway, which is what makes
      * this independent of who owns the path -- and nsfs assumes no
      * single root of its own (DECISIONS.md 2026-10-13: a bucket
@@ -114,6 +114,6 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
         let _ = user.client.delete_bucket().bucket(&bucket).send().await;
     }
 
-    assert_eq!(created, 200, "a custom path the allowlist admits was refused");
+    assert_eq!(created, 200, "a custom path the allowlist admits was denied");
     assert_eq!(outside, 403, "a custom path outside the allowlist was admitted");
 }

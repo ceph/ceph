@@ -47,7 +47,7 @@ fn owner() -> String {
  * `rgw-vstart.sh --with-impersonation` provisions for it, `rgwacct1`
  * (70107), for the whole run.  Nothing here changes that row:  every
  * IAM test running as the account at the same time would be served as
- * whatever this module set it to, or refused while it was absent. */
+ * whatever this module set it to, or denied while it was absent. */
 
 async fn grant_admin() {
     let cfg = get_config();
@@ -81,9 +81,9 @@ async fn place(name: &str, path: &str, owner: &str) -> RawResponse {
                   None).await
 }
 
-/// The main user holds `nsfs=*` and is refused;  the control is the
+/// The main user holds `nsfs=*` and is denied;  the control is the
 /// admin credential granted `nsfs-adoption`, which must get through to
-/// the endpoint's own refusal of a missing argument.
+/// the endpoint's own rejection of a missing argument.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_rados", ignore = "fails on rados")]
@@ -113,8 +113,8 @@ async fn test_place_bucket_requires_the_nsfs_adoption_capability() {
 
 /// A directory with a file in it becomes a bucket the owning account can
 /// read through S3;  the bucket's name is then taken;  deleting the bucket
-/// leaves the directory.  Under impersonation, a directory the owner
-/// cannot write is refused first.
+/// leaves the directory.  Under impersonation, placement on a directory
+/// the owner cannot write is denied first.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_rados", ignore = "fails on rados")]
@@ -135,7 +135,7 @@ async fn test_place_bucket_serves_a_directory_that_is_there() {
     let dir = make_unplaced(&bucket, "0755").await;
 
     if impersonating().await {
-        /* the gateway made it, so the owner cannot write it:  refused,
+        /* the gateway made it, so the owner cannot write it:  denied,
          * then admitted once it is opened, as an operator would */
         let r = place(&bucket, &dir, me).await;
         assert_eq!(r.status, 403, "placed where the owner cannot write: {}",
@@ -165,7 +165,7 @@ async fn test_place_bucket_serves_a_directory_that_is_there() {
     let r = place(&bucket, &dir, me).await;
     assert_eq!(r.status, 409, "placed twice: {}", r.body);
 
-    /* emptied, as S3 refuses a non-empty bucket, and deleted */
+    /* emptied, as S3 rejects deleting a non-empty bucket, and deleted */
     client.delete_object().bucket(&bucket).key("already.txt").send().await
         .expect("deleting the file through S3");
     client.delete_bucket().bucket(&bucket).send().await
@@ -178,7 +178,7 @@ async fn test_place_bucket_serves_a_directory_that_is_there() {
                r.body);
 }
 
-/// The refusals:  a path that does not exist and an unknown owner are
+/// The rejections:  a path that does not exist and an unknown owner are
 /// 404;  a path that is not canonical, an owner who is a user in no
 /// account, and a bad bucket name are 400.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
@@ -187,7 +187,7 @@ async fn test_place_bucket_serves_a_directory_that_is_there() {
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[cfg_attr(feature = "fails_on_posix", ignore = "fails on posix")]
 #[tokio::test]
-async fn test_place_bucket_refusals() {
+async fn test_place_bucket_rejections() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -198,7 +198,7 @@ async fn test_place_bucket_refusals() {
     let me = me.as_str();
 
     let bucket = get_new_bucket_name();
-    /* open to the owner, so the access check is not what refuses */
+    /* open to the owner, so the access check does not deny it */
     let dir = make_unplaced(&bucket, "0777").await;
 
     let r = place(&bucket, &format!("{dir}-absent"), me).await;
@@ -215,7 +215,7 @@ async fn test_place_bucket_refusals() {
 
     /* the control:  the same directory, owner and name are accepted */
     let r = place(&bucket, &dir, me).await;
-    assert_eq!(r.status, 200, "the control was refused: {}", r.body);
+    assert_eq!(r.status, 200, "the control was rejected: {}", r.body);
 
     let client = get_iam_root_s3client();
     client.delete_object().bucket(&bucket).key("already.txt").send().await
@@ -238,7 +238,7 @@ where
 }
 
 /// What an account does with its own bucket, step by step, each step
-/// recorded rather than asserted, so that one refusal does not hide the
+/// recorded rather than asserted, so that one failure does not hide the
 /// rest.
 async fn owners_sequence(client: &aws_sdk_s3::Client, bucket: &str)
                          -> Vec<(&'static str, String)> {
@@ -315,12 +315,12 @@ async fn owners_sequence(client: &aws_sdk_s3::Client, bucket: &str)
 /// made as it by the `unplaced-directory` hint's `as`, in a sticky
 /// directory the gateway makes for it under the base path.
 ///
-/// **Refused today, which is the point of it.**  Run 2026-10-16 on an
+/// **It fails today, which is the point of it.**  Run 2026-10-16 on an
 /// unprivileged impersonating gateway, both columns fail, for
 /// different reasons.
 ///
-/// *The owned column fails at the first step.*  Placement is refused
-/// -- `writing user.nsfs.extensions on bucket ...: (13) Permission
+/// *The owned column fails at the first step.*  Placement fails with
+/// EACCES -- `writing user.nsfs.extensions on bucket ...: (13) Permission
 /// denied`, after which the bucket is rolled back -- so the account
 /// never reaches one S3 operation on its own directory, and every
 /// later step reads `NoSuchBucket`.  Marking a directory the gateway
@@ -340,7 +340,7 @@ async fn owners_sequence(client: &aws_sdk_s3::Client, bucket: &str)
 /// Ignored until both land;  run it with `--run-ignored all`, and
 /// every step prints its outcome beside the control's, so the table
 /// says how much of (n) has arrived.
-#[ignore = "two steps are refused until (n) phases D and E land"]
+#[ignore = "two steps fail until (n) phases D and E land"]
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_rados", ignore = "fails on rados")]
@@ -393,11 +393,12 @@ async fn test_place_bucket_serves_an_account_owned_directory() {
     let _ = s3_tests_rs::cleanup::nuke_bucket(&client, &owned).await;
     let removed = unplaced(&[("op", "remove"), ("name", &owned), ("as", me)]).await;
 
-    let refused = |v: &[(&str, String)]| v.iter().filter(|(_, o)| o != "ok")
+    let failures = |v: &[(&str, String)]| v.iter().filter(|(_, o)| o != "ok")
         .map(|(n, o)| format!("{n}: {o}")).collect::<Vec<_>>();
-    assert!(refused(&rc).is_empty(), "the control failed: {:?}", refused(&rc));
+    assert!(failures(&rc).is_empty(), "the control failed: {:?}", failures(&rc));
     assert_eq!(placed.status, 200, "placing {dir}: {}", placed.body);
-    assert!(refused(&ro).is_empty(),
-            "the account was refused on its own directory: {:?}", refused(&ro));
+    assert!(failures(&ro).is_empty(),
+            "the account's steps failed on its own directory: {:?}",
+            failures(&ro));
     assert_eq!(removed.status, 200, "removing {dir}: {}", removed.body);
 }
