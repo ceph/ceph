@@ -3,3 +3,4 @@ tasks:
       clients:
         client.0:
           - mgr/test_localpool.sh
+          - mgr/test_client_registration.sh
