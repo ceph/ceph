@@ -18,6 +18,7 @@
 #include <map>
 #include <string>
 #include <include/types.h>
+#include "include/str_list.h"
 
 #define RGW_CORS_GET    0x1
 #define RGW_CORS_PUT    0x2
@@ -88,6 +89,11 @@ public:
   void dump_origins(); 
   void dump(Formatter *f) const;
   bool is_header_allowed(const char *hdr, size_t len);
+  bool matches_method(const char *req_meth);
+  bool matches_preflight_headers(const char *req_hdrs);
+  bool matches(const char *origin,
+               const char *req_meth,
+               const char *req_hdrs);
 };
 WRITE_CLASS_ENCODER(RGWCORSRule)
 
@@ -118,6 +124,9 @@ class RGWCORSConfiguration
   }
   void get_origins_list(const char *origin, std::list<std::string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
+  RGWCORSRule * match_rule(const char *origin,
+                           const char *req_meth,
+                           const char *req_hdrs);
   void erase_host_name_rule(std::string& origin);
   void dump();
   void stack_rule(RGWCORSRule& r) {
@@ -142,6 +151,23 @@ static inline uint8_t get_cors_method_flags(const char *req_meth) {
   else if (strcmp(req_meth, "PUT") == 0) flags = RGW_CORS_PUT;
   else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
   else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
+  else if (strcmp(req_meth, "COPY") == 0) flags = RGW_CORS_COPY;
+
+  return flags;
+}
+
+static inline uint8_t get_multi_cors_method_flags(const char *req_meth) {
+  uint8_t flags = 0;
+  const std::string allowed_methods(req_meth);
+  auto apply_flag = [&flags] (std::string_view method) {
+    if (method == "GET") flags |= RGW_CORS_GET;
+    else if (method == "POST") flags |= RGW_CORS_POST;
+    else if (method == "PUT") flags |= RGW_CORS_PUT;
+    else if (method == "DELETE") flags |= RGW_CORS_DELETE;
+    else if (method == "HEAD") flags |= RGW_CORS_HEAD;
+    else if (method == "COPY") flags |= RGW_CORS_COPY;
+  };
+  ceph::for_each_substr(allowed_methods, ";,= \t", apply_flag);
 
   return flags;
 }
