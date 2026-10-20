@@ -158,7 +158,12 @@ PurgeQueue::PurgeQueue(
   ceph_assert(cct != nullptr);
   ceph_assert(on_error != nullptr);
   ceph_assert(objecter != nullptr);
-  journaler.set_write_error_handler(on_error);
+  // _report_error() queues on_error at most once for the finisher to
+  // complete and free, so the journaler needs a separate handler.
+  journaler.set_write_error_handler(new LambdaContext([this](int r) {
+    std::lock_guard l(lock);
+    _report_error(r);
+  }));
 }
 
 PurgeQueue::~PurgeQueue()
@@ -249,12 +254,12 @@ void PurgeQueue::open(Context *completion)
     waiting_for_recovery.push_back(completion);
 
   journaler.recover(new LambdaContext([this](int r){
+    std::lock_guard l(lock);
     if (r == -ENOENT) {
       dout(1) << "Purge Queue not found, assuming this is an upgrade and "
                  "creating it." << dendl;
-      create(NULL);
+      _create(NULL);
     } else if (r == 0) {
-      std::lock_guard l(lock);
       dout(4) << "open complete" << dendl;
 
       // Journaler only guarantees entries before head write_pos have been
@@ -333,8 +338,14 @@ void PurgeQueue::_recover()
 
 void PurgeQueue::create(Context *fin)
 {
-  dout(4) << "creating" << dendl;
   std::lock_guard l(lock);
+  _create(fin);
+}
+
+void PurgeQueue::_create(Context *fin)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+  dout(4) << "creating" << dendl;
 
   if (fin)
     waiting_for_recovery.push_back(fin);
@@ -460,13 +471,21 @@ bool PurgeQueue::_can_consume()
   }
 }
 
+void PurgeQueue::_report_error(int r)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+  if (on_error) {
+    finisher.queue(on_error, r);
+    on_error = nullptr;
+  }
+}
+
 void PurgeQueue::_go_readonly(int r)
 {
   if (readonly) return;
   dout(1) << "going readonly because internal IO failed: " << strerror(-r) << dendl;
   readonly = true;
-  finisher.queue(on_error, r);
-  on_error = nullptr;
+  _report_error(r);
   journaler.set_readonly();
   finish_contexts(g_ceph_context, waiting_for_recovery, r);
 }
@@ -606,8 +625,7 @@ void PurgeQueue::_commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_ve
     std::lock_guard l(lock);
 
     if (r == -EBLOCKLISTED) {
-      finisher.queue(on_error, r);
-      on_error = nullptr;
+      _report_error(r);
       return;
     }
 
