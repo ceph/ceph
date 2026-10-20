@@ -332,7 +332,7 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
 
     struct statx stx;
-    int ret = statx(part_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
+    int ret = nsfs::statx(part_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
     if (ret < 0) {
       ret = errno;
       return -ret;
@@ -1055,7 +1055,8 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   }
 
   struct statx stx;
-  if (statx(part_fd, "", AT_EMPTY_PATH, STATX_MTIME | STATX_INO, &stx) == 0) {
+  if (nsfs::statx(part_fd, "", AT_EMPTY_PATH, STATX_MTIME | STATX_INO,
+		  &stx) == 0) {
     out.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec) +
 		std::chrono::nanoseconds(stx.stx_mtime.tv_nsec);
     if (out.etag.empty()) {

@@ -1444,13 +1444,17 @@ public:
      * the source's history -- unversioned, when the source has non-current
      * versions -- is refused unless FLAG_SLICE_VERSIONS is given, in which
      * case the current version moves and the history is dropped.
+     *
+     * `authenticated_user` names who the rename is for, as for
+     * set_obj_attrs():  undefaulted, so a caller with nobody says so with
+     * `rgw::sal::no_authenticated_user`.
      */
     static constexpr uint32_t FLAG_RENAME_NONE = 0x0000;
     static constexpr uint32_t FLAG_SLICE_VERSIONS = 0x0001;
 
     virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
 		       Bucket* dest_bucket, const rgw_obj_key& dest_key,
-		       uint32_t flags) {
+		       uint32_t flags, const rgw_user& authenticated_user) {
       return -ENOTSUP;
     }
 

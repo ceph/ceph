@@ -4487,6 +4487,235 @@ TEST_F(NSFSGatewayAttrReadTest, AnAttributeIsReadOnAnotherThread)
   EXPECT_EQ(std::string(buf, len), "v");
 }
 
+/* An object rename runs as its requester.
+ *
+ * Under impersonation a key's directory and its `.versions` are made
+ * by the requester at `0770`, so the gateway can neither walk them
+ * nor move a name out of them.  The rename has to run as the
+ * requester:  the walks on both sides, the version lock, the intent
+ * record on `.versions`, each version's move and the leaf's.  The
+ * control is the gateway's own open of the source key directory, on
+ * a thread that has never taken read-search:  it must fail, or the
+ * rename's success says nothing about whose credentials did it. */
+class NSFSImpersonatedRenameTest : public NSFSBucketTest {
+protected:
+  static constexpr uid_t owner_uid = 70160;
+  static constexpr uid_t other_uid = 70161;
+  const rgw_user alice{"", "rename-alice"};
+  const rgw_user bob{"", "rename-bob"};
+
+  void SetUp() override {
+    if (::geteuid() == 0) {
+      GTEST_SKIP() << "root walks every directory whatever the owner";
+    }
+    std::string missing;
+    if (! nsfs::have_credential_capabilities(&missing)) {
+      GTEST_SKIP() << "the binary cannot assume an identity (" << missing
+		   << ");  run the setcap step";
+    }
+    NSFSBucketTest::SetUp();
+    if (HasFailure()) {
+      return;
+    }
+    /* NooBaa's modes:  key directories 0770, objects 0660 */
+    g_conf().set_val("rgw_nsfs_umask", "0007");
+    nsfs::init_create_modes(env->dpp, env->cct.get());
+    /* the bucket directory stays the gateway's, writable by every
+     * identity, so each can make its own key directories in it */
+    ASSERT_EQ(::chmod(bucket_path().c_str(), 01777), 0);
+
+    bucket->get_info().flags |= BUCKET_VERSIONED;
+    ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+
+    for (const auto& [who, uid] : {std::pair{alice, owner_uid},
+				   std::pair{bob, other_uid}}) {
+      nsfs::Identity row;
+      row.key = to_string(rgw_owner{who});
+      row.uid = uid;
+      row.gid = uid;
+      ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+    }
+    set_impersonate("true");
+  }
+
+  void TearDown() override {
+    set_impersonate("false");
+    /* Always, unlike the suite's other trees:  the key directories are
+     * the identities' 0770, which the next run's clean_first cannot
+     * empty without the capability. */
+    {
+      (void) nsfs::with_capabilities(env->dpp,
+				     nsfs::cap_bit(CAP_DAC_OVERRIDE),
+	[this]() -> int {
+	  std::error_code ec;
+	  sf::remove_all(bp, ec);
+	  return ec ? -ec.value() : 0;
+	});
+    }
+    NSFSBucketTest::TearDown();
+  }
+
+  static void set_impersonate(const char* v) {
+    g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
+    g_conf().apply_changes(nullptr);
+  }
+
+  /* On a thread of its own:  the write holds read-search for the life
+   * of the thread it runs on, and a thread created after that inherits
+   * it, which would spoil the control below and other tests' controls
+   * on this binary's main thread. */
+  void put_as(const rgw_user& who, const std::string& key,
+	      const std::string& body) {
+    std::thread writer([&] { put_on_this_thread(who, key, body); });
+    writer.join();
+    /* the writer's failures are the test's, but only this thread's
+     * stop it */
+    ASSERT_FALSE(HasFatalFailure()) << "could not write " << key;
+  }
+
+  void put_on_this_thread(const rgw_user& who, const std::string& key,
+			  const std::string& body) {
+    auto obj = bucket->get_object(rgw_obj_key(key));
+    auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					    acl_owner, nullptr, 0, "put");
+    writer->set_authenticated_user(who);
+    ASSERT_EQ(writer->prepare(null_yield), 0) << key;
+    bufferlist bl;
+    bl.append(body);
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process({}, body.size()), 0);
+    Attrs attrs;
+    ceph::real_time mtime;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
+			       std::nullopt, real_time(), nullptr, nullptr,
+			       nullptr, nullptr, nullptr, rctx, 0), 0) << key;
+  }
+
+  /* On a thread of its own too:  the rename's gateway listings hold
+   * read-search for the life of the thread they run on, and this
+   * binary's main thread runs the other tests' controls. */
+  int rename_as(const rgw_user& who, const std::string& from,
+		const std::string& to) {
+    int ret = 0;
+    std::thread renamer([&] {
+      auto obj = bucket->get_object(rgw_obj_key(from));
+      ret = obj->rename(env->dpp, null_yield, bucket.get(), rgw_obj_key(to),
+			rgw::sal::Object::FLAG_RENAME_NONE, who);
+    });
+    renamer.join();
+    return ret;
+  }
+
+  /* the gateway's open of `rel`, on a thread that has never taken
+   * read-search */
+  int gateway_open_on_a_fresh_thread(const std::string& rel) {
+    int r = 0;
+    bool had_read_search = true;
+    const sf::path p = bucket_path() / rel;
+    std::thread fresh([&] {
+      had_read_search = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+      const int fd = ::open(p.c_str(), O_RDONLY | O_DIRECTORY);
+      r = (fd < 0) ? -errno : 0;
+      if (fd >= 0) {
+	::close(fd);
+      }
+    });
+    fresh.join();
+    EXPECT_FALSE(had_read_search)
+	<< "a new thread started with CAP_DAC_READ_SEARCH effective";
+    return r;
+  }
+
+  /* the tree is the identities', so it is read with the capability */
+  struct Owned {
+    int err{0};
+    uid_t uid{0};
+    mode_t mode{0};
+  };
+  Owned owned(const std::string& rel) {
+    Owned o;
+    const sf::path p = bucket_path() / rel;
+    EXPECT_EQ(nsfs::with_capabilities(env->dpp,
+				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  struct stat st{};
+	  o.err = (::lstat(p.c_str(), &st) < 0) ? -errno : 0;
+	  o.uid = st.st_uid;
+	  o.mode = st.st_mode & 07777;
+	  return 0;
+	}), 0);
+    return o;
+  }
+
+  std::vector<std::string> versions_in(const std::string& keydir) {
+    std::vector<std::string> out;
+    const sf::path p = bucket_path() / keydir / ".versions";
+    EXPECT_EQ(nsfs::with_capabilities(env->dpp,
+				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  std::error_code ec;
+	  for (const auto& e : sf::directory_iterator(p, ec)) {
+	    const std::string n = e.path().filename().string();
+	    if (n.rfind(".", 0) != 0) {
+	      out.push_back(n);
+	    }
+	  }
+	  return 0;
+	}), 0);
+    return out;
+  }
+};
+
+/* The owner's rename moves the leaf and its history, and everything it
+ * makes on the destination side is the owner's. */
+TEST_F(NSFSImpersonatedRenameTest, TheOwnersRenameRunsAsTheOwner)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  ASSERT_EQ(versions_in("src").size(), 1u) << "no history to move";
+
+  ASSERT_EQ(owned("src").uid, owner_uid);
+  ASSERT_EQ(gateway_open_on_a_fresh_thread("src"), -EACCES)
+      << "the gateway could walk the owner's key directory itself, so the "
+	 "rename does not show whose credentials ran it";
+
+  const int ret = rename_as(alice, "src/k", "dst/k");
+  ASSERT_EQ(ret, 0) << "the owner's rename failed: " << cpp_strerror(-ret);
+
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the leaf was not moved";
+  const Owned leaf = owned("dst/k");
+  ASSERT_EQ(leaf.err, 0) << "the leaf did not arrive";
+  EXPECT_EQ(leaf.uid, owner_uid);
+
+  const Owned ddir = owned("dst");
+  EXPECT_EQ(ddir.uid, owner_uid) << "the destination key directory";
+  EXPECT_EQ(ddir.mode, 0770u) << "the destination key directory";
+  const Owned dvers = owned("dst/.versions");
+  ASSERT_EQ(dvers.err, 0) << "the destination has no .versions";
+  EXPECT_EQ(dvers.uid, owner_uid) << "the destination .versions";
+
+  EXPECT_TRUE(versions_in("src").empty()) << "the history stayed behind";
+  const auto moved = versions_in("dst");
+  ASSERT_EQ(moved.size(), 1u) << "the history did not follow the leaf";
+  EXPECT_EQ(owned("dst/.versions/" + moved[0]).uid, owner_uid);
+}
+
+/* posix-strict:  another identity's rename out of the owner's key
+ * directory is denied, and nothing moves. */
+TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
+{
+  ASSERT_STREQ(driver->get_access_strategy()->name(), "posix-strict");
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "body"));
+
+  const int ret = rename_as(bob, "src/k", "dst/k");
+  EXPECT_TRUE(ret == -EACCES || ret == -EPERM)
+      << "another identity's rename was not denied: " << cpp_strerror(-ret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the leaf moved";
+  EXPECT_EQ(owned("dst/k").err, -ENOENT) << "the leaf arrived";
+}
+
 /* NooBaa's attribute names.
  *
  * Spelled out here rather than derived from the strategy, for the same

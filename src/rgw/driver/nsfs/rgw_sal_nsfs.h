@@ -445,6 +445,10 @@ public:
 
 class Directory : public FSEnt {
 protected:
+  /* Whether a walk denied as this directory's identity may go on as
+   * the gateway:  the access model's permits(AccessClass::path), set
+   * by resolve_path(). */
+  bool walk_fallback{false};
 
 public:
   Directory(std::string _name, Directory* _parent, CephContext* _ctx, FSStrategy* _strat = nullptr) : FSEnt(_name, _parent, _ctx, _strat)
@@ -457,6 +461,8 @@ public:
   virtual ObjectType get_type() override { return ObjectType::DIRECTORY; };
 
   virtual bool file_exists(std::string& name);
+
+  void set_walk_fallback(bool b) { walk_fallback = b; }
 
   virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int open(const DoutPrefixProvider *dpp) override;
@@ -595,6 +601,15 @@ public:
 };
 
 
+/* Walk `key_path` from `root`, making missing directories when
+ * `create_dirs`.
+ *
+ * As `id`:  each directory is opened as it, and one the walk makes is
+ * its, at dir_create_mode().  An inactive `id` is the gateway.  When
+ * `id` is denied on the way, `model` decides
+ * (`permits(AccessClass::path)`):  the denial stands, or the walk goes
+ * on as the gateway.  A null `model` lets no denial through, which is
+ * what a gateway walk needs, having none. */
 int resolve_path(const DoutPrefixProvider* dpp,
                  Directory* root,
                  const std::string& key_path,
@@ -602,7 +617,9 @@ int resolve_path(const DoutPrefixProvider* dpp,
                  CephContext* cct,
                  std::vector<std::unique_ptr<Directory>>& dir_chain,
                  Directory*& leaf_dir,
-                 std::string& leaf_name);
+                 std::string& leaf_name,
+                 const FSIdentity& id,
+                 const AccessStrategy* model);
 
 /* Resolve a client's S3 key to its path:  the one way a key reaches the
  * tree.  `key_path` is the key's on-disk name (object_name()).
@@ -630,7 +647,9 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
                      CephContext* cct,
                      std::vector<std::unique_ptr<Directory>>& dir_chain,
                      Directory*& leaf_dir,
-                     std::string& leaf_name);
+                     std::string& leaf_name,
+                     const FSIdentity& id,
+                     const AccessStrategy* model);
 
 } // namespace nsfs
 
@@ -2258,6 +2277,10 @@ private:
     ent->set_read_only(pending_read_only);
     if (pending_identity.active()) {
       ent->set_identity(pending_identity);
+      /* and the key's directories, which a delete prunes */
+      for (auto& d : dir_chain) {
+	d->set_identity(pending_identity);
+      }
     }
   }
 
@@ -2382,7 +2405,8 @@ public:
 			    RGWObjVersionTracker* objv) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
   		     rgw::sal::Bucket* dest_bucket,
-  		     const rgw_obj_key& dest_key, uint32_t flags) override;
+  		     const rgw_obj_key& dest_key, uint32_t flags,
+		     const rgw_user& authenticated_user) override;
 
   virtual int copy_object(const ACLOwner& owner,
                const rgw_user& remote_user,

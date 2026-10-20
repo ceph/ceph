@@ -53,7 +53,7 @@ static bool stat_matches(int fd, const std::string& name,
                          uint64_t expected_mtime_ns, uint64_t expected_ino)
 {
   struct statx stx;
-  int ret = statx(fd, name.c_str(), 0, STATX_INO | STATX_MTIME, &stx);
+  int ret = nsfs::statx(fd, name.c_str(), 0, STATX_INO | STATX_MTIME, &stx);
   if (ret < 0) {
     return false;
   }
@@ -554,7 +554,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   /* the rest as `id`:  the destination is created as the requester */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   struct statx stx;
-  int ret = statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
+  int ret = nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
   if (ret < 0) {
     int err = errno;
     ldpp_dout(dpp, 0) << "ERROR: clone_file: statx src=" << src_name
@@ -636,7 +636,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
   return nsfs::with_identity(dpp, id, [&]() -> int {
 
   struct statx stx;
-  if (statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
+  if (nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
     int err = errno;
     ldpp_dout(dpp, 0) << "ERROR: clone_fd: statx src failed: "
       << cpp_strerror(err) << dendl;
@@ -951,7 +951,7 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
 
   /* verify inode+mtime before attempting the unlink */
   struct statx stx;
-  int ret = statx(fd, "", AT_EMPTY_PATH, STATX_INO | STATX_MTIME, &stx);
+  int ret = nsfs::statx(fd, "", AT_EMPTY_PATH, STATX_INO | STATX_MTIME, &stx);
   if (ret < 0 ||
       statx_mtime_ns(stx) != expected_mtime_ns ||
       stx.stx_ino != expected_ino) {
@@ -1608,7 +1608,7 @@ int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,
     return 0;
   }
   struct stat st;
-  if ((::fstatat(dirfd, name, &st, AT_SYMLINK_NOFOLLOW) < 0) ||
+  if ((nsfs::fstatat(dirfd, name, &st, AT_SYMLINK_NOFOLLOW) < 0) ||
       ((st.st_mode & 07777) != masked)) {
     return 0;
   }

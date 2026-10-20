@@ -199,6 +199,14 @@ struct FSIdentity {
   Credentials cred;
 
   bool active() const { return !key.empty(); }
+
+  /* No identity:  the gateway's own credentials.  A reference to bind,
+   * where `FSIdentity{}` in a ternary would be a temporary and the
+   * reference would dangle. */
+  static const FSIdentity& none() {
+    static const FSIdentity n;
+    return n;
+  }
 };
 
 /* openat2 through the ring as `id`.  The personality is looked up on
@@ -285,6 +293,19 @@ int hold_thread_capabilities(const DoutPrefixProvider* dpp);
  * Listing the names is not checked, so flistxattr(2) needs nothing
  * (measured 2026-10-20 on xfs, tmpfs and GPFS). */
 ssize_t fgetxattr(int fd, const char* name, void* value, size_t size);
+
+/* statx(2) and fstatat(2), for a gateway stat inside an identity's tree.
+ *
+ * A key's directories are its requester's at `0770`, so the gateway can
+ * search them only holding CAP_DAC_READ_SEARCH -- and holds it only on
+ * a thread that took it, which a coroutine resumed elsewhere is not.
+ * Each stat takes it first, as fgetxattr() does.  Metadata only:  a
+ * gateway open of a file is decided at its site, because read-search
+ * would also hand the gateway the identity's bytes.  Returns what the
+ * syscall returns, and leaves errno as it set it. */
+int statx(int dirfd, const char* path, int flags, unsigned int mask,
+	  struct ::statx* buf);
+int fstatat(int dirfd, const char* path, struct ::stat* buf, int flags);
 
 /* Whether `cap` is in this thread's effective set, for tests and for
  * the `raise` driver hint. */

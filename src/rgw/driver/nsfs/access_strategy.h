@@ -25,16 +25,12 @@ enum class AccessClass {
    * ACLs at all, so there is no "the filesystem should govern this"
    * story behind them. */
   object_attrs,
-};
-
-/* And what to do about it. */
-enum class Refused {
-  /* both S3 and the filesystem must allow.  Cross-identity sharing
-   * is arranged in the filesystem, with a supplementary group */
-  refuse,
-  /* S3 decides:  the gateway performs the operation under a raise,
-   * having already authorised it */
-  as_gateway_raised,
+  /* the directories on the way to an object, which the walk opens
+   * before the object's own open.  A path is namespace, which the
+   * gateway reads whatever the model (the listing rule), so permitting
+   * it lets the walk go on as the gateway holding read-search;  the
+   * content is still decided at the object, by its own class. */
+  path,
 };
 
 /* The access model this gateway runs.
@@ -51,20 +47,23 @@ enum class Refused {
  * gateway's records *about* objects), `s3-native` (S3;  the
  * filesystem is storage).
  *
- * A further position exists in the tree and is deliberately not
- * expressed here yet:  lifecycle acts as the **bucket owner**
- * (DECISIONS.md §6.3), which is neither the requester nor the
- * gateway.  When it is brought onto this axis it belongs as another
- * `Refused` value rather than as another branch at its call site --
- * see inflight/access-model-axis.md, which catalogues the positions
- * found so far. */
+ * It answers one question:  whether the gateway performs an operation
+ * itself.  A further position exists in the tree and is a different
+ * question:  lifecycle acts as the **bucket owner** (DECISIONS.md
+ * §6.3), which is neither the requester nor the gateway -- *who*
+ * performs it, not *whether* the gateway does.  See
+ * inflight/access-model-axis.md, which catalogues the positions found
+ * so far. */
 class AccessStrategy {
 public:
   virtual ~AccessStrategy() = default;
 
-  /* What to do when the filesystem denies this class of operation
-   * to an identity S3 authorised. */
-  virtual Refused refused(AccessClass what) const = 0;
+  /* Whether the model permits the gateway to perform this class of
+   * operation itself, once S3 has authorised it and the filesystem has
+   * denied the requester.  Where it does not, the denial stands, and
+   * cross-identity sharing is arranged in the filesystem, with a
+   * supplementary group. */
+  virtual bool permits(AccessClass what) const = 0;
 
   /* For the `fs features` map.  A test cannot infer the model from
    * any request -- every model answers alike wherever S3 and POSIX
@@ -75,10 +74,10 @@ public:
 /* Both must allow.  The default, and NooBaa's model:  they perform
  * every operation as the requesting account, and their IAM users and
  * roles carry their account's uid, so S3 and POSIX cannot disagree
- * inside an account. */
+ * inside an account.  NooBaa walks as the requester, too. */
 class PosixStrictAccess final : public AccessStrategy {
 public:
-  Refused refused(AccessClass) const override { return Refused::refuse; }
+  bool permits(AccessClass) const override { return false; }
   const char* name() const override { return "posix-strict"; }
 };
 
@@ -94,9 +93,8 @@ public:
  * built as a principle. */
 class S3MetadataAccess final : public AccessStrategy {
 public:
-  Refused refused(AccessClass what) const override {
-    return (what == AccessClass::object_attrs) ? Refused::as_gateway_raised
-					       : Refused::refuse;
+  bool permits(AccessClass what) const override {
+    return what != AccessClass::data;
   }
   const char* name() const override { return "s3-metadata"; }
 };
@@ -124,9 +122,7 @@ public:
  * rename and a configuration change, not new behaviour. */
 class S3NativeAccess final : public AccessStrategy {
 public:
-  Refused refused(AccessClass) const override {
-    return Refused::as_gateway_raised;
-  }
+  bool permits(AccessClass) const override { return true; }
   const char* name() const override { return "s3-native"; }
 };
 

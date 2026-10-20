@@ -705,7 +705,8 @@ namespace rgw {
 	  sal_flags |= rgw::sal::Object::FLAG_SLICE_VERSIONS;
 	}
 	sr = sal_obj->rename(&dp, null_yield, sal_dst.get(),
-			     rgw_obj_key(dst_obj_name), sal_flags);
+			     rgw_obj_key(dst_obj_name), sal_flags,
+			     user->get_id());
       }
 
       if (sr == 0) {

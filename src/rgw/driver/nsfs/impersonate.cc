@@ -29,6 +29,8 @@
 #include "common/ceph_context.h"
 #include <array>
 #include <atomic>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/xattr.h>
 
 #include "common/code_environment.h"
@@ -700,6 +702,23 @@ int hold_thread_capabilities(const DoutPrefixProvider* dpp)
       "CAP_DAC_READ_SEARCH" << dendl;
   }
   return 0;
+}
+
+int statx(int dirfd, const char* path, int flags, unsigned int mask,
+	  struct ::statx* buf)
+{
+  if (impersonation_enabled()) {
+    (void) hold_thread_capabilities(nullptr);
+  }
+  return ::statx(dirfd, path, flags, mask, buf);
+}
+
+int fstatat(int dirfd, const char* path, struct ::stat* buf, int flags)
+{
+  if (impersonation_enabled()) {
+    (void) hold_thread_capabilities(nullptr);
+  }
+  return ::fstatat(dirfd, path, buf, flags);
 }
 
 ssize_t fgetxattr(int fd, const char* name, void* value, size_t size)
