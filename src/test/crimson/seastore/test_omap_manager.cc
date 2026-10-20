@@ -1041,7 +1041,7 @@ struct log_manager_fastinfo_test_t : omap_manager_test_t {
     size_t n = 0;
     for (auto addr = root.addr; addr != L_ADDR_NULL; ++n) {
       auto node = read_node(*t, addr);
-      auto bitmap = node->get_cur_bitmap();
+      auto bitmap = node->get_live_bitmap();
       size_t live = 0;
       uint32_t index = 0;
       out << "  node " << n << ":";
@@ -1070,7 +1070,7 @@ struct log_manager_fastinfo_test_t : omap_manager_test_t {
     size_t n = 0;
     for (auto addr = root.addr; addr != L_ADDR_NULL; ++n) {
       auto node = read_node(*t, addr);
-      auto bitmap = node->get_cur_bitmap();
+      auto bitmap = node->get_live_bitmap();
       for (uint32_t index = 0; index < node->get_size(); ++index) {
 	EXPECT_FALSE(bitmap.is_set(index))
 	  << "node " << n << ": entry " << index << " is removed";
