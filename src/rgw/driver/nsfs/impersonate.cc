@@ -669,6 +669,16 @@ static thread_local bool tl_holds_read_search;
 
 int hold_thread_capabilities(const DoutPrefixProvider* dpp)
 {
+  /* Not while the thread is somebody else.  A helper running an
+   * impersonated call that opens something with no identity would
+   * otherwise raise the capability for the identity, and the restore
+   * puts back the set saved before the switch, leaving the thread
+   * without it and the flag below saying otherwise.  The open goes
+   * ahead on the identity's own rights, which is what an
+   * impersonated operation should have. */
+  if (tl_impersonating) {
+    return 0;
+  }
   if (tl_holds_read_search) {
     return 0;
   }
