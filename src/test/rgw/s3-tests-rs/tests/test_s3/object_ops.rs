@@ -5,6 +5,7 @@ use s3_tests_rs::fixtures::{
     check_configure_versioning_retry, create_objects_in_new_bucket, get_new_bucket,
     get_new_bucket_name,
 };
+use s3_tests_rs::admin::fs_access;
 use s3_tests_rs::assert_s3_err;
 
 async fn get_body(
@@ -1093,13 +1094,17 @@ async fn test_object_raw_get() {
     .await;
 
     let unauth = get_unauthenticated_client();
-    unauth
+    /* the ACL grants anonymous the read;  foo is main's, so under
+     * impersonation the filesystem decides anonymous's read of it */
+    let check = fs_access(&bucket_name, "foo", "", "r").await;
+    s3_tests_rs::unless_posix_governs_data!(
+        s3_tests_rs::features::cross_account_data().await, check,
+        unauth
         .get_object()
         .bucket(&bucket_name)
         .key("foo")
         .send()
-        .await
-        .unwrap();
+        .await);
 }
 
 #[tokio::test]
@@ -1208,13 +1213,17 @@ async fn test_object_raw_get_bucket_acl() {
     .await;
 
     let unauth = get_unauthenticated_client();
-    unauth
+    /* the ACL grants anonymous the read;  foo is main's, so under
+     * impersonation the filesystem decides anonymous's read of it */
+    let check = fs_access(&bucket_name, "foo", "", "r").await;
+    s3_tests_rs::unless_posix_governs_data!(
+        s3_tests_rs::features::cross_account_data().await, check,
+        unauth
         .get_object()
         .bucket(&bucket_name)
         .key("foo")
         .send()
-        .await
-        .unwrap();
+        .await);
 }
 
 #[tokio::test]

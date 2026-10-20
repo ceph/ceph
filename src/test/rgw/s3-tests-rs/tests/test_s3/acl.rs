@@ -663,26 +663,32 @@ async fn test_object_acl_full_control_verify_owner() {
         .grants(grant_ra)
         .build();
 
-    alt_client
+    /* foo is main's, so alt's ACL write and read are another
+     * identity's metadata:  the access model decides them where the
+     * filesystem denies alt. */
+    let write = Access::ask(Class::ObjectAttrs, &bucket_name, "foo",
+                            &cfg.alt_user_id, "w").await;
+    write.judge(alt_client
         .put_object_acl()
         .bucket(&bucket_name)
         .key("foo")
         .access_control_policy(acp2)
         .send()
-        .await
-        .unwrap();
+        .await);
 
-    let response = alt_client
+    let read = Access::ask(Class::ObjectAttrs, &bucket_name, "foo",
+                           &cfg.alt_user_id, "r").await;
+    if let Some(response) = read.judge(alt_client
         .get_object_acl()
         .bucket(&bucket_name)
         .key("foo")
         .send()
-        .await
-        .unwrap();
-    assert_eq!(
-        response.owner().unwrap().id().unwrap_or_default(),
-        &cfg.main_user_id
-    );
+        .await) {
+        assert_eq!(
+            response.owner().unwrap().id().unwrap_or_default(),
+            &cfg.main_user_id
+        );
+    }
 }
 
 #[tokio::test]

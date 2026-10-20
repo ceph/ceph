@@ -1,4 +1,5 @@
 use aws_sdk_s3::primitives::ByteStream;
+use s3_tests_rs::access_model::{Access, Class};
 use s3_tests_rs::client::{get_alt_client, get_iam_client, get_policy_only_client, get_iam_s3client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::get_new_bucket;
@@ -1005,24 +1006,30 @@ async fn test_allow_tagging_actions_in_user_policy() {
         .await
         .unwrap();
 
-    s3_client_alt
+    /* The IAM user wrote the object, so alt's tag write and read are
+     * another identity's metadata:  the access model decides them
+     * where the filesystem denies alt. */
+    let tagging = Access::ask(Class::ObjectAttrs, &bucket, obj_key,
+                              &cfg.alt_user_id, "w").await;
+    let tagged = tagging.judge(s3_client_alt
         .put_object_tagging()
         .bucket(&bucket)
         .key(obj_key)
         .tagging(tags)
         .send()
-        .await
-        .unwrap();
+        .await);
 
-    let response = s3_client_alt
-        .get_object_tagging()
-        .bucket(&bucket)
-        .key(obj_key)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.tag_set()[0].key(), "Hello");
-    assert_eq!(response.tag_set()[0].value(), "World");
+    if tagged.is_some() {
+        let response = s3_client_alt
+            .get_object_tagging()
+            .bucket(&bucket)
+            .key(obj_key)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.tag_set()[0].key(), "Hello");
+        assert_eq!(response.tag_set()[0].value(), "World");
+    }
 
     s3_client_iam
         .delete_object()

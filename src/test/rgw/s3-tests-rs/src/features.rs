@@ -166,12 +166,14 @@ pub async fn cross_account_data() -> Option<bool> {
 /// Whether an S3 grant reaches another identity's object *metadata* --
 /// its tags and ACL -- on a backend where the filesystem would deny it.
 ///
-/// The question nearly every affected test actually asks.  `None` is
-/// unknown; `Some(false)` is a backend that reported a model which
-/// does not do this.
+/// The question nearly every affected test actually asks.  Both
+/// `s3-metadata` and `s3-native` do this, S3 policy governing it;
+/// `posix-strict` does not, as NooBaa does not.  `None` is unknown;
+/// `Some(false)` is a backend that reported a model which does not do
+/// this.
 pub async fn cross_account_metadata() -> Option<bool> {
     match access_model().await.as_deref() {
-        Some("s3-metadata") => Some(true),
+        Some("s3-metadata") | Some("s3-native") => Some(true),
         Some("posix-strict") => Some(false),
         /* a model this suite has not heard of: unknown, not false */
         Some(_) => None,

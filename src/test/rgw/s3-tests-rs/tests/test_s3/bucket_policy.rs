@@ -483,41 +483,32 @@ async fn test_bucket_policy_put_obj_copy_source() {
 
     let alt_client = get_alt_client();
 
-    alt_client
-        .copy_object()
-        .bucket(&bucket_name2)
-        .key("new_foo")
-        .copy_source(format!("{bucket_name}/public/foo"))
-        .send()
-        .await
-        .unwrap();
-
-    let response = alt_client
-        .get_object()
-        .bucket(&bucket_name2)
-        .key("new_foo")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(get_body(response).await, "public/foo");
-
-    alt_client
-        .copy_object()
-        .bucket(&bucket_name2)
-        .key("new_foo2")
-        .copy_source(format!("{bucket_name}/public/bar"))
-        .send()
-        .await
-        .unwrap();
-
-    let response = alt_client
-        .get_object()
-        .bucket(&bucket_name2)
-        .key("new_foo2")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(get_body(response).await, "public/bar");
+    /* S3 grants both copies;  the sources are main's, so under
+     * impersonation the filesystem decides alt's read of each, and
+     * where it denies there is no copy to read back */
+    for (src, dst) in [("public/foo", "new_foo"), ("public/bar", "new_foo2")] {
+        let check = fs_access(&bucket_name, src,
+                              &get_config().alt_user_id, "r").await;
+        let copied = s3_tests_rs::unless_posix_governs_data!(
+            s3_tests_rs::features::cross_account_data().await, check,
+            alt_client
+            .copy_object()
+            .bucket(&bucket_name2)
+            .key(dst)
+            .copy_source(format!("{bucket_name}/{src}"))
+            .send()
+            .await);
+        if copied.is_some() {
+            let response = alt_client
+                .get_object()
+                .bucket(&bucket_name2)
+                .key(dst)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(get_body(response).await, src);
+        }
+    }
 
     let result = alt_client
         .copy_object()
@@ -1079,15 +1070,20 @@ async fn test_block_public_restrict_public_buckets() {
         .unwrap();
 
     let unauth_client = get_unauthenticated_client();
-    let resp = unauth_client
+    /* the policy grants anonymous the read;  foo is main's, so under
+     * impersonation the filesystem decides anonymous's read of it */
+    let check = fs_access(&bucket_name, "foo", "", "r").await;
+    if let Some(resp) = s3_tests_rs::unless_posix_governs_data!(
+        s3_tests_rs::features::cross_account_data().await, check,
+        unauth_client
         .get_object()
         .bucket(&bucket_name)
         .key("foo")
         .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"bar");
+        .await) {
+        let body = resp.body.collect().await.unwrap().into_bytes();
+        assert_eq!(&body[..], b"bar");
+    }
 
     let access_conf = aws_sdk_s3::types::PublicAccessBlockConfiguration::builder()
         .block_public_acls(false)
@@ -1687,14 +1683,17 @@ async fn test_bucket_policy_put_obj_tagging_existing_tag() {
         .tag_set(aws_sdk_s3::types::Tag::builder().key("foo").value("bar").build().unwrap())
         .build()
         .unwrap();
-    alt_client
+    /* publictag is main's, so alt's tag writes are another identity's
+     * metadata:  where S3 allows them, the access model says whether
+     * the gateway performs them once the filesystem denies them */
+    let metadata = s3_tests_rs::features::cross_account_metadata().await;
+    s3_tests_rs::unless_posix_governs_metadata!(metadata, alt_client
         .put_object_tagging()
         .bucket(&bucket_name)
         .key("publictag")
         .tagging(new_public_tags.clone())
         .send()
-        .await
-        .unwrap();
+        .await);
 
     let result = alt_client
         .put_object_tagging()
@@ -1709,14 +1708,13 @@ async fn test_bucket_policy_put_obj_tagging_existing_tag() {
         .tag_set(aws_sdk_s3::types::Tag::builder().key("security").value("private").build().unwrap())
         .build()
         .unwrap();
-    alt_client
+    s3_tests_rs::unless_posix_governs_metadata!(metadata, alt_client
         .put_object_tagging()
         .bucket(&bucket_name)
         .key("publictag")
         .tagging(override_tags)
         .send()
-        .await
-        .unwrap();
+        .await);
 
     let retry_tags = aws_sdk_s3::types::Tagging::builder()
         .tag_set(aws_sdk_s3::types::Tag::builder().key("security").value("public").build().unwrap())
@@ -2232,8 +2230,14 @@ async fn test_bucket_policy_put_obj_grant() {
         .unwrap();
 
     // main user can read ACL for key1 (was granted full control)
-    let acl1 = client.get_object_acl().bucket(&bucket1).key("key1").send().await.unwrap();
-    assert_eq!(acl1.grants()[0].grantee().unwrap().id().unwrap(), &cfg.main_user_id);
+    /* key1 is alt's, so main's ACL read is another identity's metadata:
+     * the access model says whether the gateway performs it once the
+     * filesystem denies it */
+    if let Some(acl1) = s3_tests_rs::unless_posix_governs_metadata!(
+        s3_tests_rs::features::cross_account_metadata().await,
+        client.get_object_acl().bucket(&bucket1).key("key1").send().await) {
+        assert_eq!(acl1.grants()[0].grantee().unwrap().id().unwrap(), &cfg.main_user_id);
+    }
 
     // main user cannot read ACL for key2 (ownership not transferred)
     let result = client.get_object_acl().bucket(&bucket2).key("key2").send().await;
