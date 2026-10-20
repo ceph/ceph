@@ -32,10 +32,16 @@ The ``localpool`` module understands the following options:
 .. confval:: min_size
 .. confval:: prefix
 
-The default is ``by-$subtreetype-``.
+If ``prefix`` is empty (the default), each pool is named
+``by-<subtree type>-<CRUSH bucket name>``, for example ``by-rack-rack1``.
 
-These options are set via the ``config-key`` interface. For example, to change
-the replication level to 2x with 64 PGs, run the following two commands:
+These are Manager module options. They are stored in the Ceph configuration
+database and are set with ``ceph config set mgr mgr/localpool/<option> <value>``.
+The module applies them only when it creates a pool, and it does not change or
+remove pools that it has already created. Because the module creates pools as
+soon as it is enabled, set the options before you enable it. For example, to
+have new pools created with two replicas and 64 PGs, run the following two
+commands:
 
 .. prompt:: bash #
 
