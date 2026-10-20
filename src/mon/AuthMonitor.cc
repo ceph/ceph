@@ -606,14 +606,17 @@ bool AuthMonitor::check_health()
   }
 
   struct report_t {
-    size_t count = 0;
+    uint64_t max;
+    uint64_t count = 0;
     std::list<std::string> detail;
     void add(const std::list<std::string>& lines) {
-      ++count;
-      detail.insert(detail.end(), lines.begin(), lines.end());
+      if (count++ < max) {
+        detail.insert(detail.end(), lines.begin(), lines.end());
+      }
     }
   };
-  report_t bad_caps, bad_key_client, bad_key_service;
+  const auto max = g_conf().get_val<uint64_t>("mon_health_max_detail");
+  report_t bad_caps{max}, bad_key_client{max}, bad_key_service{max};
   auto report = [&](const EntityName& entity, const entity_health_t& h) {
     if (!h.bad_caps.empty()) {
       bad_caps.add(h.bad_caps);
@@ -644,6 +647,9 @@ bool AuthMonitor::check_health()
                        const std::string& summary, report_t& r) {
     auto& check = next.add(code, severity, summary, r.count);
     check.detail = std::move(r.detail);
+    if (r.count > r.max) {
+      check.detail.push_back(std::to_string(r.count - r.max) + " more entities...");
+    }
   };
   if (bad_caps.count) {
     add_check("AUTH_BAD_CAPS", HEALTH_ERR,

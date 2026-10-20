@@ -162,6 +162,33 @@ function TEST_auth_bad_caps_across_monitors() {
     wait_for_health_detail 'AUTH_BAD_CAPS: [0-9]+' 'AUTH_BAD_CAPS: 2' || return 1
 }
 
+function insecure_client_keys() {
+    ceph health detail --format=json |
+        jq -r '.checks.AUTH_INSECURE_CLIENT_KEY_TYPE.summary.count // 0'
+}
+
+function TEST_auth_health_detail_bound() {
+    local dir=$1
+
+    run_mons $dir --mon-health-max-detail=3 || return 1
+    local before=$(insecure_client_keys)
+    for i in 1 2 3 4 5; do
+        # without a key: an insecure key type
+        printf '[client.nokey%s]\n  caps mon = "allow r"\n' $i | ceph auth import -i - || return 1
+    done
+    local count=$((before + 5))
+    for i in $(seq 1 30); do
+        test "$(insecure_client_keys)" == $count && break
+        sleep 1
+    done
+    test "$(insecure_client_keys)" == $count || return 1
+    ceph health detail --format=json | jq -r '.checks.AUTH_INSECURE_CLIENT_KEY_TYPE.detail[].message' > $dir/detail
+    cat $dir/detail
+    test $(grep -c 'using insecure key type' $dir/detail) == 3 || return 1
+    grep -qx "$((count - 3)) more entities..." $dir/detail || return 1
+    test $(wc -l < $dir/detail) == 4 || return 1
+}
+
 main auth-health "$@"
 
 # Local Variables:
