@@ -14,6 +14,10 @@ SMB Service
     is developed it will be the preferred method for managing
     SMB on ceph.
 
+.. important::
+
+    If using Podman, the SMB service requires Podman release 4.1.0 or later.
+
 
 Deploying Samba Containers
 ==========================
