@@ -343,12 +343,16 @@ struct IoSlot {
 
   static void handle_cqe(io_uring_cqe* cqe, void* arg) {
     auto* slot = static_cast<IoSlot*>(arg);
-    std::unique_lock lock(slot->mutex);
+    /* Everything under the lock, and nothing after it.  The submitter
+     * frees the slot as soon as it sees `done` -- an open's slot is a
+     * local of the submitting frame -- so once the lock is released
+     * the slot may be gone.  Completing under it is safe because this
+     * is the reaper, not an executor thread:  complete() posts the
+     * handler, which takes the lock again before it resumes. */
+    std::lock_guard lock(slot->mutex);
     slot->result = cqe->res;
     slot->done = true;
-    const bool waiting = static_cast<bool>(slot->waiter);
-    lock.unlock();
-    if (waiting) {
+    if (slot->waiter) {
       slot->waiter.complete(boost::system::error_code{}, slot->result);
     }
     /* harmless when nobody is blocked;  the reaper is a separate
