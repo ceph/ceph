@@ -1007,6 +1007,7 @@ function TEST_corrupt_scrub_replicated() {
 
     ERRORS=0
     declare -a err_strings
+    err_strings=()
     err_strings[0]=".*[0-9]*[.]0 shard 1 soid 3:30259878:::ROBJ15:head : candidate had a missing info key"
     err_strings[1]=".*[0-9]*[.]0 shard 0 soid 3:33aca486:::ROBJ18:head : object info inconsistent "
     err_strings[2]=".*[0-9]*[.]0 shard 1 soid 3:5c7b2c47:::ROBJ16:head : candidate had a corrupt snapset"
@@ -3984,6 +3985,7 @@ EOF
 
     ERRORS=0
     declare -a err_strings
+    err_strings=()
     # Crimson uses ERRORDPP format instead of log_channel format
     err_strings[0]="ERROR.*PGScrubber::log_object_errors: 3.0 soid [0-9]*:.*:::ROBJ1:head : snapset inconsistent"
     err_strings[1]="ERROR.*PGScrubber::log_object_errors: 3.0 soid [0-9]*:.*:::ROBJ2:head : snapset inconsistent"

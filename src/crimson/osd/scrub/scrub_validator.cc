@@ -4,6 +4,9 @@
 #include <set>
 #include <ranges>
 
+#include "include/utime.h"
+#include "common/Clock.h"
+#include "common/ceph_time.h"
 #include "osd/osd_types_fmt.h"
 
 #include "crimson/common/log.h"
@@ -865,6 +868,7 @@ snapset_evaluation_result_t evaluate_snapset(
         // Classic: "on disk size (X) does not match object info size (Y)..."
         // emitted when the on-disk size differs from the OI-recorded size.
         if (it->oi && *it->size != it->oi->size) {
+          size_mismatch = true;
           result.log_messages.emplace_back('E',
             fmt::format("{} {} {} : on disk size ({}) does not match object info size ({}) "
                         "adjusted for ondisk to ({})",
@@ -899,6 +903,9 @@ snapset_evaluation_result_t evaluate_snapset(
         for (auto it2 = overlap_it->second.begin(); it2 != overlap_it->second.end(); ++it2) {
           if (remaining < it2.get_len()) {
             clone_error = true;
+            result.log_messages.emplace_back('E',
+              fmt::format("{} {} {} : bad interval_set in clone_overlap",
+                          mode_desc, pgid, it->hoid));
             break;
           }
           remaining -= it2.get_len();
@@ -1063,10 +1070,18 @@ chunk_result_t validate_chunk(
       digest_update_t du;
       du.oid = oid;
       bool needs_update = false;
+      bool is_aged = true;
+      if (policy.deep_scrub_update_digest_min_age > 0) {
+        utime_t now = policy.chunk_started.is_zero() ? ceph_clock_now() : policy.chunk_started;
+        if (now >= eval.object_info->local_mtime &&
+            now - eval.object_info->local_mtime <= policy.deep_scrub_update_digest_min_age) {
+          is_aged = false;
+        }
+      }
 
       if (eval.auth_data_digest_present) {
-        if (!eval.object_info->is_data_digest()) {
-          // OI has no digest yet — always fill it in (if_aged case).
+        if (!eval.object_info->is_data_digest() && is_aged) {
+          // OI has no digest yet — fill it in (if_aged case).
           du.data_digest = eval.auth_data_digest;
           needs_update = true;
         } else if (eval.object_info->data_digest != eval.auth_data_digest &&
@@ -1077,8 +1092,8 @@ chunk_result_t validate_chunk(
         }
       }
       if (eval.auth_omap_digest_present) {
-        if (!eval.object_info->is_omap_digest()) {
-          // OI has no digest yet — always fill it in (if_aged case).
+        if (!eval.object_info->is_omap_digest() && is_aged) {
+          // OI has no digest yet — fill it in (if_aged case).
           du.omap_digest = eval.auth_omap_digest;
           needs_update = true;
         } else if (eval.object_info->omap_digest != eval.auth_omap_digest &&

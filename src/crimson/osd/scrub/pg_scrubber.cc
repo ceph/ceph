@@ -109,6 +109,7 @@ PGScrubber::PGScrubber(PG &pg) : pg(pg), dpp(pg), machine(*this, this), m_mode_d
 
 PGScrubber::~PGScrubber()
 {
+  machine.terminate();
   // Clean up any queued scrub jobs to prevent memory leaks
   // Do this directly without logging to avoid issues during destruction
   if (m_scrub_job && m_scrub_job->is_registered() && m_scrub_job->is_queued()) {
@@ -902,7 +903,7 @@ void PGScrubber::handle_scrub_message(Message &_m)
     MOSDRepScrub &m = *static_cast<MOSDRepScrub*>(&_m);
     DEBUGDPP("MOSDRepScrub: {}", pg, m);
     handle_event(events::replica_scan_t{
-	m.start, m.end, m.scrub_from, m.deep
+ m.start, m.end, m.scrub_to, m.deep
       });
     break;
   }
@@ -1055,13 +1056,16 @@ chunk_validation_policy_t PGScrubber::get_policy() const
       "osd_max_object_size"),
     crimson::common::local_conf().get_val<std::string>(
       "osd_hit_set_namespace"),
-    crimson::common::local_conf().get_val<Option::size_t>(
-      "osd_deep_scrub_large_omap_object_value_sum_threshold"),
     crimson::common::local_conf().get_val<uint64_t>(
       "osd_deep_scrub_large_omap_object_key_threshold"),
+    crimson::common::local_conf().get_val<Option::size_t>(
+      "osd_deep_scrub_large_omap_object_value_sum_threshold"),
     pg.get_pgid(),
     m_is_deep ? std::string("deep-scrub") : std::string("scrub"),
-    m_is_repair
+    m_is_repair,
+    crimson::common::local_conf().get_val<int64_t>(
+      "osd_deep_scrub_update_digest_min_age"),
+    ceph_clock_now()
   };
 }
 
@@ -2079,13 +2083,30 @@ void PGScrubber::emit_scrub_result(
           // classic OSD's PrimaryLogScrub::_scrub_finish().
           ERRORDPP("{}", pg, mismatch_msg);
           pg.get_clog_error() << mismatch_msg;
-          ++pg_stats.stats.sum.num_shallow_scrub_errors;
+          ++in_stats.num_shallow_scrub_errors;
+          if (m_is_repair) {
+            ++m_fixed_count;
+            pg_stats.stats.sum = in_stats;
+            pg_stats.dirty_stats_invalid = false;
+            pg_stats.omap_stats_invalid = false;
+            pg_stats.hitset_stats_invalid = false;
+            pg_stats.hitset_bytes_stats_invalid = false;
+            pg_stats.pin_stats_invalid = false;
+            pg_stats.manifest_stats_invalid = false;
+          }
         } else {
           // No object-level inconsistencies: this is just a bookkeeping
           // mismatch (e.g. after a PG split, whose stats are only an
           // estimate).  Fix it silently, matching classic OSD.
           DEBUGDPP("fixing stat mismatch (no object errors): {}", pg,
                    mismatch_msg);
+          pg_stats.stats.sum = in_stats;
+          pg_stats.dirty_stats_invalid = false;
+          pg_stats.omap_stats_invalid = false;
+          pg_stats.hitset_stats_invalid = false;
+          pg_stats.hitset_bytes_stats_invalid = false;
+          pg_stats.pin_stats_invalid = false;
+          pg_stats.manifest_stats_invalid = false;
         }
       }
 

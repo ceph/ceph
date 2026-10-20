@@ -1351,11 +1351,11 @@ private:
   const std::set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();
   }
-  void add_local_next_event(const pg_log_entry_t& e) override final {
+  void add_local_next_event(const pg_log_entry_t& e) override {
     peering_state.add_local_next_event(e);
   }
-  void op_applied(const eversion_t &applied_version) override final;
-  void on_sub_write_applied(const eversion_t &at_version) override final {
+  void op_applied(const eversion_t &applied_version) override;
+  void on_sub_write_applied(const eversion_t &at_version) override {
     scrubber.on_log_update(at_version);
   }
 

@@ -575,6 +575,8 @@ public:
   using reactions = boost::mpl::list<
     sc::transition<events::reset_t, Inactive>,
     sc::transition<events::abort_t, AwaitScrub>,
+    sc::custom_reaction<events::primary_activate_t>,
+    sc::custom_reaction<events::start_scrub_t>,
     sc::custom_reaction<events::op_stats_t>,
     // Discard stale replica messages that arrive while in any PrimaryActive
     // substate that doesn't handle them (e.g. AwaitScrub, WaitUpdate,
@@ -601,6 +603,12 @@ public:
     sc::transition< boost::statechart::event_base, Crash >
     >;
 
+  sc::result react(const events::primary_activate_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::start_scrub_t &) {
+    return discard_event();
+  }
   sc::result react(const events::op_stats_t &) {
     return discard_event();
   }

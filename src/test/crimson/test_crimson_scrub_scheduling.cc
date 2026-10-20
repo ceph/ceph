@@ -190,12 +190,12 @@ static int write_test_data(rados_ioctx_t io_ctx) {
         int ret = rados_write_full(io_ctx, oid, data, OBJ_SIZE);
         if (ret < 0) {
             fprintf(stderr, "failed to write object %s: %s\n", oid, strerror(-ret));
-            free(data);
+            delete[] data;
             return ret;
         }
         if ((i + 1) % 10 == 0) printf("  already writen %d/%d objects...\n", i + 1, NUM_OBJS);
     }
-    free(data);
+    delete[] data;
     printf("data written complete! \n\n");
     return 0;
 }
@@ -281,7 +281,7 @@ static int verify_test_data(rados_ioctx_t io_ctx) {
     memset(expected_data, 'X', OBJ_SIZE);
     char *read_buf = new char[OBJ_SIZE];
     if (!read_buf) {
-        free(expected_data);
+        delete[] expected_data;
         return -ENOMEM;
     }
 
@@ -301,8 +301,8 @@ static int verify_test_data(rados_ioctx_t io_ctx) {
         }
         if ((i + 1) % 10 == 0) printf("  already verify %d/%d objects...\n", i+1, NUM_OBJS);
     }
-    free(expected_data);
-    free(read_buf);
+    delete[] expected_data;
+    delete[] read_buf;
 
     if (error_count == 0) {
         printf("All data verification passed! Scrub test successful.\n\n");

@@ -13,11 +13,11 @@
 #include "common/Formatter.h"
 
 #ifdef WITH_CRIMSON
-#define Scrub crimson::osd::scrub
 #define get_conf() crimson::common::local_conf()
 SET_SUBSYS(osd);
 #define CRIMSON_LOG_PREFIX(...) LOG_PREFIX(__VA_ARGS__)
 #define CRIMSON_DEBUG(...) DEBUG(__VA_ARGS__)
+using namespace crimson::osd::scrub;
 #else
 #define get_conf() cct->_conf
 #define CRIMSON_LOG_PREFIX(...)
@@ -168,9 +168,10 @@ void ScrubJob::adjust_shallow_schedule(
     // the target time is already set. Make sure to reset the n.b.
     sh_times.not_before = sh_times.scheduled_at;
   }
+
   CRIMSON_DEBUG(
     "adjusted: nb:{:s} target:{:s} ({})", sh_times.not_before,
-		  sh_times.scheduled_at, state_desc());
+    sh_times.scheduled_at, state_desc());
 }
 
 
@@ -236,6 +237,7 @@ ScrubJob::earliest_eligible(utime_t scrub_clock_now) const
   }
   return std::nullopt;
 }
+
 
 SchedTarget& ScrubJob::earliest_target()
 {
@@ -306,9 +308,10 @@ void ScrubJob::adjust_deep_schedule(
     // the target time is already set. The n.b. is set to same
     dp_times.not_before = dp_times.scheduled_at;
   }
+
   CRIMSON_DEBUG(
     "adjusted: nb:{:s} target:{:s} ({})", dp_times.not_before,
-		 dp_times.scheduled_at, state_desc());
+   dp_times.scheduled_at, state_desc());
 }
 
 

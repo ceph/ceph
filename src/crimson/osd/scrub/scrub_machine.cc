@@ -498,6 +498,9 @@ seastar::future<> ReplicaActive::clear_remote_reservation(bool warn_if_no_reserv
     reservation_granted);
 
   if (m_reservation_status != reservation_status_t::unreserved) {
+    m_reservation_status = reservation_status_t::unreserved;
+    reservation_granted = false;
+    pending_reservation_nonce = 0;
     return m_pg.get_shard_services().scrub_local_cancel_reservation(
       m_pg_id
     ).then([this, alive = m_alive] {
@@ -506,10 +509,6 @@ seastar::future<> ReplicaActive::clear_remote_reservation(bool warn_if_no_reserv
       if (!*alive) {
         return;
       }
-      reservation_granted = false;
-      pending_reservation_nonce = 0;
-      ceph_assert(m_reservation_status != reservation_status_t::unreserved);
-      m_reservation_status = reservation_status_t::unreserved;
     });
   }
   if (warn_if_no_reservation) {
