@@ -5354,6 +5354,15 @@ void RGWPutObj::execute(optional_yield y)
 			(user_data.empty() ? nullptr : &user_data),
 			nullptr, nullptr, rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
+
+  if (op_ret == -ECANCELED) {
+    // a newer write replaced the head the put read. an unconditional
+    // put counts as ordered before that write; a conditional one cannot
+    // claim its condition held, and answers a conflict for the client to
+    // retry
+    const bool conditional = if_match || if_nomatch;
+    op_ret = conditional ? -ERR_CONDITIONAL_REQUEST_CONFLICT : 0;
+  }
   if (op_ret < 0) {
     return;
   }
@@ -6768,6 +6777,15 @@ void RGWCopyObj::execute(optional_yield y)
   int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->src_object.get(), s, "REST.COPY.OBJECT_GET", etag, obj_size, this, y, true, true);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: COPY operation ignores bucket logging failure of the GET part: " << ret << dendl;
+  }
+
+  if (op_ret == -ECANCELED) {
+    // a newer write replaced the head the copy read. an unconditional
+    // copy counts as ordered before that write; a conditional one cannot
+    // claim its condition held, and answers a conflict for the client to
+    // retry
+    const bool conditional = if_match || if_nomatch || mod_ptr || unmod_ptr;
+    op_ret = conditional ? -ERR_CONDITIONAL_REQUEST_CONFLICT : 0;
   }
   if (op_ret < 0) {
     return;
