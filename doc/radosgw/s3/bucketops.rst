@@ -67,14 +67,21 @@ HTTP Response
 If the bucket name is unique, within constraints and unused, the operation will succeed.
 If a bucket with the same name already exists and the user is the
 bucket owner, the operation will succeed unless non-default option
-``rgw_bucket_eexist_override`` is `true`.
-If the bucket name is already in use, the operation will fail.
+``rgw_bucket_eexist_override`` is `true`, or the request asks for a
+different zonegroup, placement, index type or shard count, object lock
+setting or ACL than the existing bucket has; the existing bucket is not
+modified.
+If the bucket name is already in use by another user, the operation will fail.
 
-+---------------+-----------------------+----------------------------------------------------------+
-| HTTP Status   | Status Code           | Description                                              |
-+===============+=======================+==========================================================+
-| ``409``       | BucketAlreadyExists   | Bucket already exists under different user's ownership.  |
-+---------------+-----------------------+----------------------------------------------------------+
++---------------+-------------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code             | Description                                              |
++===============+=========================+==========================================================+
+| ``409``       | BucketAlreadyExists     | Bucket already exists under different user's ownership.  |
++---------------+-------------------------+----------------------------------------------------------+
+| ``409``       | BucketAlreadyOwnedByYou | Bucket already exists and is owned by the user, and      |
+|               |                         | ``rgw_bucket_eexist_override`` is `true` or the request  |
+|               |                         | would change the existing bucket's configuration.        |
++---------------+-------------------------+----------------------------------------------------------+
 
 DELETE Bucket
 -------------
