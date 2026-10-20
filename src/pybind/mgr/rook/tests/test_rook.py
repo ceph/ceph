@@ -118,3 +118,25 @@ class TestRook(object):
                     assert dds[i].last_deployed == pods[i]['created']
                     assert dds[i].started == pods[i]['started']
                     assert dds[i].last_refresh == pods[i]['refreshed']
+
+
+class TestFetchK8sItems(object):
+    class FakeResponse:
+        def __init__(self, items):
+            self.items = items
+
+    def test_fetch_spawns_no_watcher_thread(self):
+        from rook.rook_cluster import fetch_k8s_items
+        # one-shot fetches must not spawn watcher threads: a watcher
+        # outlives a short-lived caller and leaks the thread and its
+        # connection. Fail deterministically if a thread is constructed
+        # instead of comparing the process-global active_count(), which
+        # is racy against unrelated threads.
+        def _fail_on_thread(*args, **kwargs):
+            raise AssertionError("fetch_k8s_items must not spawn a thread")
+        with patch('rook.rook_cluster.threading.Thread', _fail_on_thread):
+            items = fetch_k8s_items(lambda: self.FakeResponse(['pod0']))
+            assert items == ['pod0']
+            # the custom-object api returns a plain dict
+            items = fetch_k8s_items(lambda: {'items': ['cr0', 'cr1']})
+            assert items == ['cr0', 'cr1']
