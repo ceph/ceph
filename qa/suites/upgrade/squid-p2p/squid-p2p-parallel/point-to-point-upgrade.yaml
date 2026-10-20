@@ -3,13 +3,13 @@ meta:
    Run ceph on two nodes, using one of them as a client,
    with a separate client-only node.
    Use xfs beneath the osds.
-   install ceph/squid v19.2.1 and the subsequent v19.2.x point versions
+   install ceph/squid v19.2.0 and the subsequent v19.2.x point versions
    run workload and upgrade-sequence in parallel
    (every point release should be tested)
    run workload and upgrade-sequence in parallel
-   install ceph/squid  latest version
+   install ceph/squid latest version
    run workload and upgrade-sequence in parallel
-   Overall upgrade path is - squid-latest.point-1 => squid-latest.point => squid-latest
+   Overall upgrade path is - v19.2.0 => v19.2.1 => v19.2.2 => v19.2.3 => v19.2.4 => v19.2.5 => v19.2.6 => squid-latest
 overrides:
   ceph:
     log-ignorelist:
@@ -84,7 +84,29 @@ tasks:
    - workload
 - print: "**** done workload v19.2.0"
 
+#######  upgrade to v19.2.1
+- install.upgrade:
+    mon.a:
+      tag: v19.2.1
+    mon.b:
+      tag: v19.2.1
+- parallel:
+   - workload_squid
+   - upgrade-sequence_squid
+- print: "**** done parallel squid v19.2.1"
+
 #######  upgrade to v19.2.2
+- install.upgrade:
+    mon.a:
+      tag: v19.2.2
+    mon.b:
+      tag: v19.2.2
+- parallel:
+   - workload_squid
+   - upgrade-sequence_squid
+- print: "**** done parallel squid v19.2.2"
+
+#######  upgrade to v19.2.3
 - install.upgrade:
     mon.a:
       tag: v19.2.3
@@ -93,7 +115,40 @@ tasks:
 - parallel:
    - workload_squid
    - upgrade-sequence_squid
-- print: "**** done parallel squid v19.2.2"
+- print: "**** done parallel squid v19.2.3"
+
+#######  upgrade to v19.2.4
+- install.upgrade:
+    mon.a:
+      tag: v19.2.4
+    mon.b:
+      tag: v19.2.4
+- parallel:
+   - workload_squid
+   - upgrade-sequence_squid
+- print: "**** done parallel squid v19.2.4"
+
+#######  upgrade to v19.2.5
+- install.upgrade:
+    mon.a:
+      tag: v19.2.5
+    mon.b:
+      tag: v19.2.5
+- parallel:
+   - workload_squid
+   - upgrade-sequence_squid
+- print: "**** done parallel squid v19.2.5"
+
+#######  upgrade to v19.2.6
+- install.upgrade:
+    mon.a:
+      tag: v19.2.6
+    mon.b:
+      tag: v19.2.6
+- parallel:
+   - workload_squid
+   - upgrade-sequence_squid
+- print: "**** done parallel squid v19.2.6"
 
 ####  upgrade to latest squid
 - install.upgrade:
