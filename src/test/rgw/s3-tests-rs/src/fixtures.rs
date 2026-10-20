@@ -397,6 +397,8 @@ pub struct PrivateUser {
     /// Its owner key:  what a bucket it creates is owned by, and what
     /// an identity row is keyed on.
     pub id: String,
+    pub access_key: String,
+    pub secret_key: String,
     pub client: aws_sdk_s3::Client,
 }
 
@@ -439,6 +441,8 @@ impl PrivateUser {
             name: uid.clone(),
             id: uid,
             client: crate::client::build_s3_client(&akid, &sk),
+            access_key: akid,
+            secret_key: sk,
         })
     }
 
@@ -474,5 +478,148 @@ impl Drop for PrivateUser {
                     None).await;
             });
         }).join().ok();
+    }
+}
+
+/* --- PrivateAccount --------------------------------------------------- */
+
+/// An IAM account of one test's own, with an account root whose IAM
+/// client creates the users the test needs inside it.
+///
+/// For the tests that turn on a user inside an account being served as
+/// the account.  They set the account's identity row, and the suite's
+/// `[iam root]` account is provisioned for the whole run and used by
+/// every IAM test at once, so setting its row is the interference
+/// [`PrivateUser`] exists to remove, one level up.
+///
+/// The IAM credential is given the `accounts` cap, which Admin Ops
+/// requires to create one.  Granting is additive and idempotent, as
+/// `grant_user_caps` says.
+pub struct PrivateAccount {
+    /// The account id:  what its buckets are owned by, and what its
+    /// identity row is keyed on.
+    pub id: String,
+    pub name: String,
+    root_uid: String,
+    root_access_key: String,
+    root_secret_key: String,
+    /// The account root's IAM client.
+    pub root: aws_sdk_iam::Client,
+}
+
+impl PrivateAccount {
+    /// `tag` names the test, as for [`PrivateUser`].  `None` where
+    /// accounts cannot be made, so the caller skips.
+    pub async fn create(tag: &str) -> Option<PrivateAccount> {
+        let cfg = get_config();
+        let r = crate::admin::grant_user_caps(&cfg.iam_user_id, "accounts=*")
+            .await;
+        if r.status != 200 {
+            eprintln!("PrivateAccount({tag}): granting accounts returned {}: {}",
+                      r.status, r.body);
+            return None;
+        }
+
+        /* POST creates and PUT modifies here, the reverse of
+         * /admin/user (rgw_rest_account.cc, adminops.rst "Create
+         * Account");  a PUT of an absent account is a 404. */
+        let name = format!("{}acct{tag}", cfg.iam_name_prefix);
+        let r = crate::admin::admin_request(
+            reqwest::Method::POST, "/admin/account",
+            &format!("name={}", crate::admin::q(&name)), None).await;
+        if r.status != 200 {
+            eprintln!("PrivateAccount({tag}): create returned {}: {}",
+                      r.status, r.body);
+            return None;
+        }
+        let j: serde_json::Value = serde_json::from_str(&r.body).ok()?;
+        let id = j.get("id")?.as_str()?.to_string();
+
+        let root_uid = format!("{}acct{tag}root", cfg.iam_name_prefix);
+        let r = crate::admin::admin_request(
+            reqwest::Method::PUT, "/admin/user",
+            &format!("uid={}&display-name={}&account-id={}&account-root=true",
+                     crate::admin::q(&root_uid), crate::admin::q(&root_uid),
+                     crate::admin::q(&id)), None).await;
+        let keys = (r.status == 200)
+            .then(|| serde_json::from_str::<serde_json::Value>(&r.body).ok())
+            .flatten()
+            .and_then(|j| {
+                let k = j.get("keys")?.get(0)?;
+                Some((k.get("access_key")?.as_str()?.to_string(),
+                      k.get("secret_key")?.as_str()?.to_string()))
+            });
+        let (akid, sk) = keys.clone().unwrap_or_default();
+        let account = PrivateAccount {
+            id, name, root_uid,
+            root: crate::client::build_iam_client(&akid, &sk),
+            root_access_key: akid,
+            root_secret_key: sk,
+        };
+        if keys.is_none() {
+            eprintln!("PrivateAccount({tag}): creating its root returned {}: {}",
+                      r.status, r.body);
+            return None;		/* dropping it removes the account */
+        }
+        Some(account)
+    }
+}
+
+impl Drop for PrivateAccount {
+    fn drop(&mut self) {
+        if std::env::var("S3TEST_NO_CLEANUP").is_ok() {
+            return;
+        }
+        /* An account with users in it cannot be removed, and the REST
+         * delete has no purge, so the users go first:  those a failed
+         * test left behind, through the root, then the root itself. */
+        let (id, root_uid) = (self.id.clone(), self.root_uid.clone());
+        let (akid, sk) = (self.root_access_key.clone(),
+                          self.root_secret_key.clone());
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all().build().expect("cleanup runtime");
+            rt.block_on(async {
+                if !akid.is_empty() {
+                    let root = crate::client::build_iam_client(&akid, &sk);
+                    remove_account_users(&root).await;
+                }
+                let _ = crate::admin::admin_request(
+                    reqwest::Method::DELETE, "/admin/user",
+                    &format!("uid={}&purge-data", crate::admin::q(&root_uid)),
+                    None).await;
+                let _ = crate::admin::nsfs_delete_identity(&id).await;
+                let _ = crate::admin::admin_request(
+                    reqwest::Method::DELETE, "/admin/account",
+                    &format!("id={}", crate::admin::q(&id)), None).await;
+            });
+        }).join().ok();
+    }
+}
+
+/// Every user the root can see, with the keys and inline policies that
+/// would otherwise refuse its deletion.
+async fn remove_account_users(root: &aws_sdk_iam::Client) {
+    let Ok(users) = root.list_users().send().await else {
+        return;
+    };
+    for u in users.users() {
+        let name = u.user_name();
+        let _ = crate::admin::nsfs_delete_identity(u.user_id()).await;
+        if let Ok(keys) = root.list_access_keys().user_name(name).send().await {
+            for k in keys.access_key_metadata() {
+                if let Some(kid) = k.access_key_id() {
+                    let _ = root.delete_access_key().user_name(name)
+                        .access_key_id(kid).send().await;
+                }
+            }
+        }
+        if let Ok(pols) = root.list_user_policies().user_name(name).send().await {
+            for pn in pols.policy_names() {
+                let _ = root.delete_user_policy().user_name(name)
+                    .policy_name(pn).send().await;
+            }
+        }
+        let _ = root.delete_user().user_name(name).send().await;
     }
 }

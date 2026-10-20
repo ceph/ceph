@@ -220,60 +220,6 @@ pub async fn driver_hint_results(
     Some(out)
 }
 
-/// Identity records as a test found them, to put back when it is done.
-///
-/// `rgw-vstart.sh --with-impersonation` binds the suite's main and alt
-/// users for the whole run, and tests across the suite read across
-/// identities on the strength of it.  A test that rewrites or removes one
-/// of those records takes this first and restores it after, rather than
-/// deleting, so the run's binding survives it.
-pub struct SavedIdentities(Vec<(String, Option<serde_json::Value>)>);
-
-impl SavedIdentities {
-    pub async fn take(keys: &[&str]) -> Self {
-        let mut found = Vec::new();
-        for key in keys {
-            let r = nsfs_get_identity(key).await;
-            let rec = if r.status == 200 {
-                serde_json::from_str::<serde_json::Value>(&r.body).ok()
-            } else {
-                None
-            };
-            found.push((key.to_string(), rec));
-        }
-        SavedIdentities(found)
-    }
-
-    /// Each record as it was:  absent stays absent;  present is
-    /// rewritten fresh with its uid, gid and groups, so a field a test
-    /// added does not survive.
-    pub async fn restore(&self) {
-        for (key, rec) in &self.0 {
-            let _ = nsfs_delete_identity(key).await;
-            let Some(rec) = rec else {
-                continue;
-            };
-            let (Some(uid), Some(gid)) = (rec["uid"].as_u64(), rec["gid"].as_u64())
-            else {
-                continue;
-            };
-            let (uid, gid) = (uid.to_string(), gid.to_string());
-            let groups = rec["groups"].as_array().map(|g| {
-                g.iter().filter_map(|v| v.as_u64()).map(|v| v.to_string())
-                    .collect::<Vec<_>>().join(",")
-            });
-            let mut params: Vec<(&str, &str)> =
-                vec![("identity", key.as_str()), ("uid", &uid), ("gid", &gid)];
-            if let Some(g) = groups.as_deref() {
-                params.push(("groups", g));
-            }
-            let r = nsfs_put_identity(&params).await;
-            assert_eq!(r.status, 200, "restoring {key}'s record failed: {}",
-                       r.body);
-        }
-    }
-}
-
 /// The result of a permission check, which impersonation adds to a
 /// request.
 ///

@@ -9,8 +9,7 @@
 //! base path, and the test needs no access to the gateway's filesystem.
 
 use s3_tests_rs::admin::{admin_request, admin_request_as, as_json, driver_hint,
-                         grant_user_caps, nsfs_put_identity, q,
-                         SavedIdentities};
+                         grant_user_caps, q};
 use s3_tests_rs::client::get_iam_root_s3client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
@@ -44,43 +43,11 @@ fn owner() -> String {
     get_config().iam_root_user_id.clone()
 }
 
-/// Under impersonation every request runs as its POSIX identity, and an
-/// identity with none is refused.  The account is given the fixture's
-/// `rgwalice` (70101), as the impersonation tests give the main user,
-/// from `rgw-vstart.sh --with-impersonation`;  and **put back**
-/// afterwards, not deleted.
-///
-/// Deleting it was wrong, and serialization did not cover for it:  the
-/// `serial-nsfs-identity` group keeps these tests from overlapping, but
-/// a row this module removed stays removed for everything that runs
-/// after, and the fixture provisions this account for the whole run.
-/// `identity::test_every_principal_is_provisioned` failed once in two
-/// baseline runs because of it, depending on which ran first
-/// (2026-10-19).
-const UID_OWNER: &str = "70101";
-
-/// What the account's row was before this module touched it.  Each test
-/// is its own process, so once per test.
-static FOUND: tokio::sync::OnceCell<SavedIdentities> =
-    tokio::sync::OnceCell::const_new();
-
-async fn bind_owner() {
-    if !impersonating().await {
-        return;
-    }
-    FOUND.get_or_init(|| async {
-        SavedIdentities::take(&[&owner()]).await
-    }).await;
-    let r = nsfs_put_identity(&[("identity", owner().as_str()),
-                                ("uid", UID_OWNER), ("gid", UID_OWNER)]).await;
-    assert_eq!(r.status, 200, "binding the owner failed: {}", r.body);
-}
-
-async fn unbind_owner() {
-    if let Some(found) = FOUND.get() {
-        found.restore().await;
-    }
-}
+/* Under impersonation the account is served as the row
+ * `rgw-vstart.sh --with-impersonation` provisions for it, `rgwacct1`
+ * (70107), for the whole run.  Nothing here changes that row:  every
+ * IAM test running as the account at the same time would be served as
+ * whatever this module set it to, or refused while it was absent. */
 
 async fn grant_admin() {
     let cfg = get_config();
@@ -164,7 +131,6 @@ async fn test_place_bucket_serves_a_directory_that_is_there() {
     let me = owner();
     let me = me.as_str();
 
-    bind_owner().await;
     let bucket = get_new_bucket_name();
     let dir = make_unplaced(&bucket, "0755").await;
 
@@ -207,7 +173,6 @@ async fn test_place_bucket_serves_a_directory_that_is_there() {
 
     /* the directory is still there to remove, and carries nothing */
     let r = unplaced(&[("op", "remove"), ("name", &bucket)]).await;
-    unbind_owner().await;
     assert_eq!(r.status, 200,
                "deleting the bucket did not leave its directory as it was: {}",
                r.body);
@@ -232,7 +197,6 @@ async fn test_place_bucket_refusals() {
     let me = owner();
     let me = me.as_str();
 
-    bind_owner().await;
     let bucket = get_new_bucket_name();
     /* open to the owner, so the access check is not what refuses */
     let dir = make_unplaced(&bucket, "0777").await;
@@ -259,7 +223,6 @@ async fn test_place_bucket_refusals() {
     client.delete_bucket().bucket(&bucket).send().await
         .expect("deleting the placed bucket");
     let r = unplaced(&[("op", "remove"), ("name", &bucket)]).await;
-    unbind_owner().await;
     assert_eq!(r.status, 200, "removing {dir}: {}", r.body);
 }
 
@@ -393,7 +356,6 @@ async fn test_place_bucket_serves_an_account_owned_directory() {
     grant_admin().await;
     let me = owner();
     let me = me.as_str();
-    bind_owner().await;
 
     let client = get_iam_root_s3client();
     let control = get_new_bucket_name();
@@ -430,7 +392,6 @@ async fn test_place_bucket_serves_an_account_owned_directory() {
     let _ = s3_tests_rs::cleanup::nuke_bucket(&client, &control).await;
     let _ = s3_tests_rs::cleanup::nuke_bucket(&client, &owned).await;
     let removed = unplaced(&[("op", "remove"), ("name", &owned), ("as", me)]).await;
-    unbind_owner().await;
 
     let refused = |v: &[(&str, String)]| v.iter().filter(|(_, o)| o != "ok")
         .map(|(n, o)| format!("{n}: {o}")).collect::<Vec<_>>();

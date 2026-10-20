@@ -9,8 +9,7 @@
 //! (70010), `rgwalice` (70101) in it, `rgwbob` (70102) not.
 
 use s3_tests_rs::access_model::{Access, Class};
-use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity,
-                         SavedIdentities};
+use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity};
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
@@ -608,24 +607,27 @@ async fn test_impersonation_honours_the_group_vector() {
 
     let bucket = "impersonate-fixture";
 
-    /* The one test here that cannot have a user of its own.  It reads
-     * `impersonate-fixture`, which rgw-vstart.sh creates as the main
-     * user, and it needs `grouped.txt` at `0040 root:rgwfix` -- files
-     * only root can place, at fixture time, which no test can make for
-     * itself.  A private user has no S3 grant on that bucket and
-     * nothing to read.
-     *
-     * So this one borrows the main user's row, and is the residual of
-     * the interference the rest of the module stopped causing.  It is
-     * bounded:  one test, in the serial group, rebinding one row. */
-    let cfg = get_config();
-    let alice = get_client();
-    let main_id = cfg.main_user_id.clone();
-    let saved = SavedIdentities::take(&[&main_id]).await;
-    assert_eq!(nsfs_put_identity(&[
-        ("identity", main_id.as_str()), ("uid", UID_ALICE),
-        ("gid", UID_ALICE), ("groups", GID_SHARED)]).await.status, 200,
-        "binding the main user with the gating group failed");
+    /* `impersonate-fixture` and its files are made by rgw-vstart.sh as
+     * the main user -- `grouped.txt` at `0040 root:rgwfix` needs root,
+     * which no test has -- and no other test reads that bucket.  So
+     * the main user grants a user of this test's own the read, and the
+     * row this test rebinds is that user's, not the main user's. */
+    let Some(reader) = PrivateUser::create("impgroups").await else {
+        eprintln!("could not make this test's own user");
+        return;
+    };
+    let resource = make_arn_resource(&format!("{bucket}/*"));
+    let doc = make_json_policy(
+        "s3:GetObject", &resource,
+        Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
+                                                reader.id)]})),
+        None, None);
+    let main = get_client();
+    main.put_bucket_policy().bucket(bucket).policy(&doc).send().await
+        .expect("could not grant the reader s3:GetObject");
+    assert!(reader.bind(UID_ALICE, UID_ALICE, Some(GID_SHARED)).await,
+        "binding the reader with the gating group failed");
+    let alice = &reader.client;
     let open = alice.get_object().bucket(bucket).key("open.txt")
         .send().await;
     assert!(open.is_ok(),
@@ -635,24 +637,22 @@ async fn test_impersonation_honours_the_group_vector() {
      * the same answer at every access model -- so this reads the
      * vector itself and not what the gateway does about it */
     let gated = Access::ask(Class::Data, bucket, "grouped.txt",
-                            &main_id, "r").await;
+                            &reader.id, "r").await;
     assert!(!gated.denied(),
         "holding gid {GID_SHARED} did not grant the read");
     gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
         .send().await);
 
     /* the same identity, no group */
-    assert_eq!(nsfs_put_identity(&[
-        ("identity", main_id.as_str()), ("uid", UID_ALICE),
-        ("gid", UID_ALICE)]).await.status, 200,
-        "rebinding the main user without the group failed");
+    assert!(reader.bind(UID_ALICE, UID_ALICE, None).await,
+        "rebinding the reader without the group failed");
     let open = alice.get_object().bucket(bucket).key("open.txt")
         .send().await;
     assert!(open.is_ok(),
         "the control object became unreadable without the group; \
          something other than the group vector changed: {open:?}");
     let gated = Access::ask(Class::Data, bucket, "grouped.txt",
-                            &main_id, "r").await;
+                            &reader.id, "r").await;
     assert!(gated.denied(),
         "the filesystem permitted the read without the group in the \
          vector — an absent list left the gateway's own groups in place \
@@ -660,7 +660,7 @@ async fn test_impersonation_honours_the_group_vector() {
     gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
         .send().await);
 
-    saved.restore().await;
+    let _ = main.delete_bucket_policy().bucket(bucket).send().await;
 }
 
 /// An identity with no record is refused, not served as the gateway.

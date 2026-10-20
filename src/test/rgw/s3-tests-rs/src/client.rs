@@ -81,7 +81,7 @@ pub fn build_s3_client_with_session_token(
     S3Client::from_conf(config)
 }
 
-fn build_iam_client(access_key: &str, secret_key: &str) -> IamClient {
+pub fn build_iam_client(access_key: &str, secret_key: &str) -> IamClient {
     let cfg = get_config();
     let creds = Credentials::new(access_key, secret_key, None, None, "s3tests");
     let config = aws_sdk_iam::Config::builder()

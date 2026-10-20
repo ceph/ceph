@@ -19,12 +19,12 @@ use s3_tests_rs::admin::{
     admin_request_as, as_json, driver_hint_results, nsfs_credentials,
     nsfs_credentials_as, nsfs_credentials_for, nsfs_delete_identity,
     nsfs_get_identity, grant_user_caps, nsfs_list_identities,
-    nsfs_put_identity, q, SavedIdentities,
+    nsfs_put_identity, q,
 };
-use s3_tests_rs::client::{build_s3_client, get_iam_root_client};
+use s3_tests_rs::client::build_s3_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::features;
-use s3_tests_rs::fixtures::{PrivateUser, TestGuard};
+use s3_tests_rs::fixtures::{PrivateAccount, PrivateUser, TestGuard};
 
 /// `None` from the accessor means unknown, so skip rather than assert.
 async fn nsfs_only() -> bool {
@@ -502,21 +502,23 @@ async fn test_credentials_resolve_the_caller() {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
-    /* the caller is whoever admin_request() signs as -- the iam
-     * user, not `main`.  Getting this wrong the first time is what
-     * the endpoint's `identity` field is for. */
-    let cfg = get_config();
-    let me = cfg.iam_user_id.clone();
-    /* The fixture binds this principal for the whole run, so put it
-     * back.  A row left removed here is a correct 403 for every later
-     * test that authenticates as it, which
-     * `test_every_principal_is_provisioned` now says by name. */
-    let saved = SavedIdentities::take(&[&me]).await;
+    /* The caller is whoever signs the request:  here a user of this
+     * test's own, so the row it removes and rewrites is nobody else's.
+     * Getting the caller wrong the first time is what the endpoint's
+     * `identity` field is for. */
+    let Some(user) = PrivateUser::create("resolvecaller").await else {
+        eprintln!("could not make this test's own user");
+        return;
+    };
+    let r = grant_user_caps(&user.id, "nsfs=read").await;
+    assert_eq!(r.status, 200, "granting nsfs to the user failed: {}", r.body);
+    let me = user.id.clone();
+    let ask = || nsfs_credentials_as(&user.access_key, &user.secret_key);
     scrub(&me).await;
 
     /* no row:  no impersonation, and a 200 saying so rather than an
      * error -- the diagnostic has to work in the broken case */
-    let resp = nsfs_credentials().await;
+    let resp = ask().await;
     assert_eq!(resp.status, 200, "credentials failed: {}", resp.body);
     let j = as_json(&resp).expect("not JSON");
     assert_eq!(j["outcome"], "none");
@@ -528,7 +530,7 @@ async fn test_credentials_resolve_the_caller() {
     assert_eq!(nsfs_put_identity(&[
         ("identity", &me), ("uid", "1001"), ("gid", "2002"),
         ("groups", "10,20,30")]).await.status, 200);
-    let j = as_json(&nsfs_credentials().await).unwrap();
+    let j = as_json(&ask().await).unwrap();
     assert_eq!(j["outcome"], "resolved");
     assert_eq!(j["uid"], 1001);
     assert_eq!(j["gid"], 2002);
@@ -539,7 +541,7 @@ async fn test_credentials_resolve_the_caller() {
     assert_eq!(nsfs_put_identity(&[
         ("identity", &me), ("uid", "1001"), ("gid", "2002")]).await.status,
         200);
-    let j = as_json(&nsfs_credentials().await).unwrap();
+    let j = as_json(&ask().await).unwrap();
     assert_eq!(j["groups"], serde_json::json!([]),
         "an absent list resolved to something");
 
@@ -549,11 +551,10 @@ async fn test_credentials_resolve_the_caller() {
         ("identity", &me),
         ("distinguished_name", "uid=someone,dc=example,dc=com")])
         .await.status, 200);
-    let j = as_json(&nsfs_credentials().await).unwrap();
+    let j = as_json(&ask().await).unwrap();
     assert_eq!(j["outcome"], "refused");
     assert!(j.get("uid").is_none());
 
-    saved.restore().await;
 }
 
 /// Asking about somebody else is the same gate, and reaches rows
@@ -619,8 +620,15 @@ async fn test_credentials_of_a_user_in_an_account() {
         return;
     }
     let cfg = get_config();
-    let root = get_iam_root_client();
-    let account = cfg.iam_root_user_id.clone();      /* "RGW1111..." */
+    /* An account of this test's own:  both arms set the account's row,
+     * and the suite's `[iam root]` account is in use by every IAM test
+     * at once. */
+    let Some(acct) = PrivateAccount::create("nsfscred").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let root = &acct.root;
+    let account = acct.id.clone();
     let name = format!("{}nsfscred", cfg.iam_name_prefix);
 
     /* leave nothing from a previous run */
@@ -649,11 +657,6 @@ async fn test_credentials_of_a_user_in_an_account() {
     assert_eq!(r.status, 200, "granting nsfs to the user failed: {}",
                r.body);
 
-    /* The fixture binds this principal for the whole run, so put it
-     * back.  A row left removed here is a correct 403 for every later
-     * test that authenticates as it, which
-     * `test_every_principal_is_provisioned` now says by name. */
-    let saved = SavedIdentities::take(&[&account]).await;
     scrub(&acct_user).await;
     scrub(&account).await;
 
@@ -704,7 +707,6 @@ async fn test_credentials_of_a_user_in_an_account() {
 
     /* clean up */
     scrub(&acct_user).await;
-    saved.restore().await;
     let _ = root.delete_access_key().user_name(&name)
         .access_key_id(&mak).send().await;
     let _ = root.delete_user().user_name(&name).send().await;
@@ -733,10 +735,9 @@ async fn test_credentials_of_a_user_in_an_account() {
 /// which is the Scale case and the one the consumer sites must get
 /// right.
 ///
-/// The account's row is shared with the whole run, so it is taken
-/// with `SavedIdentities` and put back.  That bounds the window
-/// rather than closing it -- closing it needs private users, which is
-/// the suite's standing interference defect.
+/// The account is the test's own ([`PrivateAccount`]), so its row can
+/// hold whatever the fallback arm needs without touching a principal
+/// another test is using.
 ///
 /// **Asserts the identity and not the status**, as `nested-identity`
 /// and `raise` do.  The `ran-as` hint reports which identity the
@@ -768,8 +769,12 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
     const ACCOUNT_UID: &str = "9999";
 
     let cfg = get_config();
-    let root = get_iam_root_client();
-    let account = cfg.iam_root_user_id.clone();
+    let Some(acct) = PrivateAccount::create("ranas").await else {
+        eprintln!("could not make this test's own account");
+        return;
+    };
+    let root = &acct.root;
+    let account = acct.id.clone();
     let name = format!("{}ranasacctuser", cfg.iam_name_prefix);
 
     /* Leave nothing from a previous run.  A user with a key or a
@@ -817,15 +822,8 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
         })).unwrap())
         .send().await.expect("put_user_policy");
 
-    /* The account's row is shared with the whole run, and the
-     * fallback arm below needs it to hold a known uid.  Saved and put
-     * back rather than left as this test wants it:  the suite's
-     * idiom for a shared record (see `SavedIdentities`).  It does not
-     * close the window while the test runs -- that is the standing
-     * interference defect, which needs private users and not a
-     * careful caller -- but it bounds it to this test. */
-    let saved = SavedIdentities::take(&[&account]).await;
-
+    /* the fallback arm below needs the account's row to hold a known
+     * uid */
     scrub(&acct_user).await;
     scrub(&account).await;
     assert_eq!(nsfs_put_identity(&[
@@ -943,7 +941,6 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
     let _ = root.delete_user_policy().user_name(&name)
         .policy_name("RanAsAllAccess").send().await;
     scrub(&acct_user).await;
-    saved.restore().await;
     let _ = root.delete_access_key().user_name(&name)
         .access_key_id(&mak).send().await;
     let _ = root.delete_user().user_name(&name).send().await;
@@ -1021,7 +1018,6 @@ async fn test_every_principal_is_provisioned() {
          does, a test removed the row and did not put it back, and the \
          absence persists for the rest of the run and every run after -- \
          restart with --with-impersonation to re-provision, then find the \
-         test.  Note that SavedIdentities::take cannot help once the row \
-         is already gone:  it restores what it found, which is nothing.",
+         test.",
         missing.join("\n  "));
 }
