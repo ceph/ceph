@@ -1233,6 +1233,7 @@ std::ostream& operator<<(std::ostream& out, write_policy_t w)
   case write_policy_t::WRITE_THROUGH:
     return out << "WRITE_THROUGH";
   }
+  std::unreachable();
 }
 
 bool can_delay_allocation(device_type_t type) {
@@ -1294,6 +1295,7 @@ std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
   case backend_type_t::RANDOM_BLOCK:
     return out << "RANDOM_BLOCK";
   }
+  return out << "INVALID_BACKEND_TYPE(" << static_cast<int>(btype) << ")";
 }
 
 std::ostream& operator<<(std::ostream& out, const write_result_t& w)
