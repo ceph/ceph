@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <set>
+#include <thread>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -4247,6 +4248,97 @@ TEST(NooBaaMPU, AssembleSparseNumberingCopies)
   const std::string out = read_all(st.upload / "final");
   EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'f'));
   EXPECT_EQ(sf::hard_link_count(st.upload / "final"), 1u);
+}
+
+/* Completion reads the parts as their uploader.
+ *
+ * The parts are the uploader's files, and the gateway can read them
+ * only with CAP_DAC_READ_SEARCH, which a thread takes the first time
+ * it opens something with no identity and not before.  A completion
+ * coroutine that resumed on a thread which had not yet done that read
+ * its parts as the gateway without the capability, and failed with
+ * EACCES (measured in the baseline, 2026-10-20).  So this assembles on
+ * a fresh thread.
+ *
+ * The control is on that thread too:  the gateway's own open of a part
+ * must fail, or the assembly's success says nothing about whose
+ * credentials read it. */
+class NSFSImpersonatedAssembleTest : public NSFSRaiseTest {};
+
+TEST_F(NSFSImpersonatedAssembleTest, PartsAreReadAsTheUploader)
+{
+  if (::geteuid() == 0) {
+    GTEST_SKIP() << "root reads every part whatever the owner";
+  }
+  if (!permitted(CAP_SETUID) || !permitted(CAP_SETGID) ||
+      !permitted(CAP_CHOWN)) {
+    GTEST_SKIP() << "the binary cannot assume an identity or give it a "
+		    "file;  run the setcap step";
+  }
+
+  const sf::path dir = base_path / get_test_name();
+  sf::create_directories(dir);
+  ASSERT_EQ(::chmod(dir.c_str(), 01777), 0);
+  int dfd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
+  ASSERT_GE(dfd, 0);
+  auto close_dir = make_scope_guard([dfd] { ::close(dfd); });
+
+  const uid_t uploader = 70150;
+  nsfs::FSIdentity id{rgw_user{"", "uploader"}, creds_for(uploader)};
+  nsfs::PerPartMPUStrategy mpu;
+  nsfs::POSIXStrategy fs;
+
+  /* two parts, the uploader's and 0660, as completion finds them */
+  const uint64_t size = 16;
+  std::vector<nsfs::MPUStrategy::PartPlacement> parts;
+  for (uint32_t n = 1; n <= 2; ++n) {
+    const std::string pname = mpu.part_name(n);
+    int fd = ::openat(dfd, pname.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0660);
+    ASSERT_GE(fd, 0) << pname;
+    const std::string body(size, static_cast<char>('a' + n));
+    ASSERT_EQ(::write(fd, body.data(), body.size()), (ssize_t)body.size());
+    ASSERT_EQ(::fchmod(fd, 0660), 0);
+    ASSERT_EQ(nsfs::with_capabilities(env->dpp, nsfs::cap_bit(CAP_CHOWN),
+	[fd]() -> int {
+	  return ::fchown(fd, uploader, uploader) < 0 ? -errno : 0;
+	}), 0) << "could not give " << pname << " to the uploader";
+    ::close(fd);
+    parts.push_back({n, false, 0, size});
+  }
+
+  bool had_read_search = true;
+  int control = 0;
+  int assembled = 0;
+  std::thread fresh([&] {
+    had_read_search = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+    const int fd = ::openat(dfd, mpu.part_name(1).c_str(), O_RDONLY);
+    control = (fd < 0) ? -errno : 0;
+    if (fd >= 0) {
+      ::close(fd);
+    }
+    assembled = mpu.assemble(env->dpp, &fs, dfd, parts, "final", size,
+			     null_yield, id);
+  });
+  fresh.join();
+
+  ASSERT_FALSE(had_read_search)
+      << "a new thread started with CAP_DAC_READ_SEARCH effective";
+  ASSERT_EQ(control, -EACCES)
+      << "the gateway could open the uploader's part itself, so the "
+	 "assembly below does not show whose credentials read it";
+  ASSERT_EQ(assembled, 0)
+      << "the parts were not read as their uploader: "
+      << cpp_strerror(-assembled);
+
+  /* the object is the uploader's, so it is read back as the uploader */
+  std::string out;
+  ASSERT_EQ(nsfs::with_capabilities(env->dpp,
+				    nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  out = read_all(dir / "final");
+	  return 0;
+	}), 0);
+  EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'c'));
 }
 
 /* NooBaa's attribute names.

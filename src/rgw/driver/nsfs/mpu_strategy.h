@@ -410,7 +410,7 @@ public:
    * `id` is who the output belongs to, since it becomes the object:  it
    * is created as `id`, and a data file linked in as the output was
    * written as `id` and is linked and trimmed as it.  Parts are read as
-   * the caller. */
+   * `id` too:  they are the uploader's data. */
   virtual int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
                        int dir_fd,
                        const std::vector<PartPlacement>& parts,

@@ -280,6 +280,19 @@ static int create_output(const DoutPrefixProvider* dpp, const FSIdentity& id,
   return (fd < 0) ? -errno : fd;
 }
 
+/* A part, or the shared file, opened to be read into an assembly, as
+ * `id`:  they are the uploader's data, and the gateway's read-search
+ * capability is not for data.  A descriptor, or -errno. */
+static int open_input(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		      int dir_fd, const std::string& name)
+{
+  if (id.active()) {
+    return open_as(dpp, id, dir_fd, name.c_str(), O_RDONLY, 0);
+  }
+  const int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
+  return (fd < 0) ? -errno : fd;
+}
+
 int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 			     int dir_fd,
 			     const std::vector<PartPlacement>& parts,
@@ -310,12 +323,11 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   off_t out_offset = 0;
   for (const auto& part : parts) {
     const std::string pname = part_name(part.num);
-    int part_fd = openat(dir_fd, pname.c_str(), O_RDONLY);
+    int part_fd = open_input(dpp, id, dir_fd, pname);
     if (part_fd < 0) {
-      int ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not open part " << pname
-			<< ": " << cpp_strerror(ret) << dendl;
-      return -ret;
+			<< ": " << cpp_strerror(-part_fd) << dendl;
+      return part_fd;
     }
     auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
 
@@ -518,23 +530,21 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 
     if (part.shared) {
       if (shared_fd < 0) {
-	shared_fd = openat(dir_fd, sname.c_str(), O_RDONLY);
+	shared_fd = open_input(dpp, id, dir_fd, sname);
 	if (shared_fd < 0) {
-	  int ret = errno;
 	  ldpp_dout(dpp, 0) << "ERROR: could not open " << sname
-			    << ": " << cpp_strerror(ret) << dendl;
-	  return -ret;
+			    << ": " << cpp_strerror(-shared_fd) << dendl;
+	  return shared_fd;
 	}
       }
       src_fd = shared_fd;
     } else {
       const std::string pname = part_name(part.num);
-      own_fd = openat(dir_fd, pname.c_str(), O_RDONLY);
+      own_fd = open_input(dpp, id, dir_fd, pname);
       if (own_fd < 0) {
-	int ret = errno;
 	ldpp_dout(dpp, 0) << "ERROR: could not open part " << pname << ": "
-			  << cpp_strerror(ret) << dendl;
-	return -ret;
+			  << cpp_strerror(-own_fd) << dendl;
+	return own_fd;
       }
       src_fd = own_fd;
     }
