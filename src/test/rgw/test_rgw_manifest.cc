@@ -12,10 +12,16 @@
  * Foundation. See file COPYING.
  *
  */
+#include <cerrno>
+#include <cstdlib>
 #include <iostream>
+
+#include <sys/resource.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "rgw_common.h"
+#include "rgw_crypt.h"
+#include "rgw_etag_verifier.h"
 #include "rgw_rados.h"
 #include "test_rgw_common.h"
 #include <gtest/gtest.h>
@@ -204,6 +210,138 @@ static void gen_old_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_
     manifest->append(ofs, part);
 
     test_objs->push_back(loc);
+  }
+}
+
+TEST(TestRGWManifestDeathTest, zero_stripe_generator) {
+  ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+  // Keep a divide-by-zero regression in a child so it cannot kill the suite.
+  ASSERT_EXIT({
+    const rlimit core_limit{};
+    setrlimit(RLIMIT_CORE, &core_limit);
+    test_rgw_env env;
+    RGWObjManifest manifest;
+    manifest.set_prefix("zero-stripe");
+    manifest.set_multipart_part_rule(0, 1);
+    rgw_bucket bucket;
+    test_rgw_init_bucket(&bucket, "bucket");
+    rgw_obj head(bucket, "object");
+    RGWObjManifest::generator gen;
+    int r = gen.create_begin(g_ceph_context, &manifest,
+                            env.zonegroup.default_placement, nullptr,
+                            bucket, head);
+    if (r == 0) {
+      r = gen.create_next(1);
+    }
+    std::_Exit(r == -EINVAL ? EXIT_SUCCESS : EXIT_FAILURE);
+  }, ::testing::ExitedWithCode(EXIT_SUCCESS), "");
+}
+
+static RGWObjManifest round_trip_manifest(const RGWObjManifest& source) {
+  buffer::list bl;
+  encode(source, bl);
+  auto input = bl.cbegin();
+  RGWObjManifest manifest;
+  decode(manifest, input);
+  return manifest;
+}
+
+TEST(TestRGWManifest, zero_stripe_decoded_tail) {
+  test_rgw_env env;
+  rgw_bucket bucket;
+  test_rgw_init_bucket(&bucket, "bucket");
+  rgw_obj head(bucket, "object");
+  const uint64_t head_size = 512 * 1024;
+
+  // Size fields cannot exempt a zero-stripe rule from validation, even if they
+  // claim an empty or head-only object before the stored head size is corrected.
+  for (const uint64_t obj_size : {uint64_t{0}, head_size, head_size + 1}) {
+    SCOPED_TRACE(obj_size);
+    for (const uint64_t max_head_size : {head_size, head_size + 1}) {
+      SCOPED_TRACE(max_head_size);
+      RGWObjManifest source;
+      source.set_trivial_rule(head_size, 0);
+      source.set_max_head_size(max_head_size);
+      source.set_head(env.zonegroup.default_placement, head, head_size);
+      source.set_obj_size(obj_size);
+      EXPECT_THROW(round_trip_manifest(source), buffer::malformed_input);
+    }
+  }
+}
+
+TEST(TestRGWManifest, zero_stripe_later_rule) {
+  test_rgw_env env;
+  RGWObjManifest source;
+  source.set_multipart_part_rule(4 * 1024 * 1024, 1);
+  source.set_obj_size(1);
+  RGWObjManifest part;
+  part.set_multipart_part_rule(0, 2);
+  part.set_obj_size(1);
+  ASSERT_EQ(0, source.append(&dp, part, env.zonegroup, env.zone_params));
+  EXPECT_THROW(round_trip_manifest(source), buffer::malformed_input);
+}
+
+TEST(TestRGWManifest, decode_valid_layouts) {
+  EXPECT_TRUE(round_trip_manifest(RGWObjManifest{}).empty());
+  test_rgw_env env;
+  rgw_bucket bucket;
+  test_rgw_init_bucket(&bucket, "bucket");
+  rgw_obj head(bucket, "object");
+  const uint64_t head_size = 512 * 1024;
+
+  for (const uint64_t obj_size : {uint64_t{0}, head_size, head_size + 1}) {
+    SCOPED_TRACE(obj_size);
+    RGWObjManifest source;
+    source.set_trivial_rule(head_size, 4 * 1024 * 1024);
+    source.set_head(env.zonegroup.default_placement, head, std::min(obj_size, head_size));
+    source.set_obj_size(obj_size);
+    auto manifest = round_trip_manifest(source);
+    auto iter = manifest.obj_begin(&dp);
+    for (int step = 0; step < 2 && iter != manifest.obj_end(&dp); ++step) {
+      ++iter;
+    }
+    EXPECT_TRUE(iter == manifest.obj_end(&dp));
+  }
+}
+
+TEST(TestRGWManifest, explicit_manifest_ignores_implicit_rules) {
+  RGWObjManifest source;
+  source.set_trivial_rule(0, 0);
+  map<uint64_t, RGWObjManifestPart> parts;
+  parts[0].size = 1;
+  source.set_explicit(1, parts);
+  auto manifest = round_trip_manifest(source);
+  EXPECT_TRUE(manifest.has_explicit_objs());
+  auto iter = manifest.obj_begin(&dp);
+  ++iter;
+  EXPECT_TRUE(iter == manifest.obj_end(&dp));
+}
+
+TEST(TestRGWManifest, manifest_consumers_reject_zero_stripes) {
+  for (const uint64_t stripe_size : {uint64_t{0}, uint64_t{4 * 1024 * 1024}}) {
+    SCOPED_TRACE(stripe_size);
+    RGWObjManifest source;
+    source.set_multipart_part_rule(stripe_size, 1);
+    source.set_obj_size(1);
+    if (0 == stripe_size) {
+      // Fail before entering a walker if decode validation regresses.
+      ASSERT_THROW(round_trip_manifest(source), buffer::malformed_input);
+    }
+    buffer::list bl;
+    encode(source, bl);
+    const int expected = 0 == stripe_size ? -EIO : 0;
+
+    vector<uint64_t> parts_len;
+    EXPECT_EQ(expected, RGWGetObj_BlockDecrypt::read_manifest_parts(&dp, bl, parts_len));
+    EXPECT_EQ(0 == stripe_size ? 0u : 1u, parts_len.size());
+    if (!parts_len.empty()) {
+      EXPECT_EQ(1u, parts_len.front());
+    }
+
+    rgw::putobj::etag_verifier_ptr verifier;
+    EXPECT_EQ(expected, rgw::putobj::create_etag_verifier(
+        &dp, g_ceph_context, nullptr, bl, std::nullopt, verifier));
+    EXPECT_EQ(0 != stripe_size, bool(verifier));
   }
 }
 
