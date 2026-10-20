@@ -20,15 +20,52 @@ class LoadJSON(enum.Enum):
 
 
 class JSONResult:
-    def __init__(self, returncode, output, error):
+    def __init__(self, returncode, output, error, how=None):
         self.returncode = returncode
         self.raw_out = output
-        self.out = None if output is None else json.loads(output)
         self.raw_err = error
+        self._how = how
+        self._json_out = None
+        self._json_err = None
 
     @property
     def obj(self):
-        return self.out
+        if self._json_out is not None:
+            return self._json_out
+        if self._how == LoadJSON.ERROR:
+            return None
+        self._json_out = json.loads(self.raw_out)
+        return self._json_out
+
+    @property
+    def err_obj(self):
+        if self._json_err is not None:
+            return self._json_err
+        if self._how == LoadJSON.OUTPUT:
+            return None
+        self._json_err = json.loads(self.raw_err)
+        return self._json_err
+
+    @classmethod
+    def load(cls, how, proc):
+        return cls(
+            proc.returncode,
+            _pstr(proc.stdout),
+            _pstr(proc.stderr),
+            how,
+        )
+
+
+def _pstr(value):
+    return value.decode() if isinstance(value, bytes) else value
+
+
+class ProcessError(subprocess.CalledProcessError):
+    def __str__(self):
+        return (
+            f'ProcessError: returncode={self.returncode}; command={self.cmd};'
+            f' stdout={self.stdout!r}; stderr={self.stderr!r}'
+        )
 
 
 def cephadm_shell_cmd(
@@ -60,15 +97,13 @@ def cephadm_shell_cmd(
     for v in volumes:
         cmd.extend(['-v', v])
     cmd += list(args)
-    proc = subprocess.run(cmd, **kwargs)
-    if load is LoadJSON.BOTH:
-        return JSONResult(
-            proc.returncode, proc.stdout.decode(), proc.stderr.decode()
-        )
-    elif load is LoadJSON.OUTPUT:
-        return JSONResult(proc.returncode, proc.stdout.decode(), None)
-    elif load is LoadJSON.ERROR:
-        return JSONResult(proc.returncode, None, proc.stderr.decode())
+    try:
+        proc = subprocess.run(cmd, **kwargs)
+    except subprocess.CalledProcessError as err:
+        err.__class__ = ProcessError
+        raise err
+    if load is not LoadJSON.NONE:
+        return JSONResult.load(load, proc)
     return proc
 
 
