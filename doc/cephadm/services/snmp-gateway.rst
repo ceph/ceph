@@ -52,6 +52,8 @@ Usage Notes
 - the ``--destination`` parameter must be of the format hostname:port (no default)
 - you may omit ``--port``. It defaults to 9464
 - the ``--engine-id`` is a unique identifier for the device (in hex) and required for SNMP v3 only.
+  The value must be 10 to 64 hexadecimal characters, and the number of
+  characters must be even.
   Suggested value: 8000C53F<fsid> where the fsid is from your cluster, without the '-' symbols
 - for SNMP V3, the ``--auth-protocol`` setting defaults to **SHA**
 - for SNMP V3, with encryption you must define the ``--privacy-protocol``
@@ -103,7 +105,7 @@ Deploying an snmp-gateway service supporting SNMP V3 with authentication only wo
 
 .. prompt:: bash #
 
-   ceph orch apply snmp-gateway --snmp-version=V3 --engine-id=800C53F000000 --destination=192.168.122.1:162 -i ./snmpv3_creds.yml
+   ceph orch apply snmp-gateway --snmp-version=V3 --engine-id=8000C53F00000000 --destination=192.168.122.1:162 -i ./snmpv3_creds.yml
 
 with a credentials file of the following form:
 
@@ -125,7 +127,7 @@ Alternately a ``ceph orch`` service configuration file of the following form:
      credentials:
        snmp_v3_auth_password: mypassword
        snmp_v3_auth_username: myuser
-     engine_id: 800C53F000000
+     engine_id: 8000C53F00000000
      port: 9464
      snmp_destination: 192.168.122.1:162
      snmp_version: V3
@@ -138,7 +140,7 @@ To define an SNMP V3 gateway service that implements authentication and privacy 
 
 .. prompt:: bash #
 
-   ceph orch apply snmp-gateway --snmp-version=V3 --engine-id=800C53F000000 --destination=192.168.122.1:162 --privacy-protocol=AES -i ./snmpv3_creds.yml
+   ceph orch apply snmp-gateway --snmp-version=V3 --engine-id=8000C53F00000000 --destination=192.168.122.1:162 --privacy-protocol=AES -i ./snmpv3_creds.yml
 
 with a credentials file of the following form:
 
@@ -168,4 +170,4 @@ Implementing the MIB
 To make sense of SNMP notifications and traps, you'll need to apply the MIB to your SNMP management platform. The MIB (``CEPH-MIB.txt``) can
 be downloaded from the main Ceph GitHub `repository`_.
 
-.. _repository: https://github.com/ceph/ceph/tree/master/monitoring/snmp
+.. _repository: https://github.com/ceph/ceph/tree/main/monitoring/snmp
