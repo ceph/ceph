@@ -1757,9 +1757,9 @@ TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsIgnoresRowsWithoutIds)
   EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
 }
 
-/* The raise primitive, on a process that holds no capabilities --
- * which is what the unit test is, and what makes the refusals
- * testable here.  The other polarity, a raise that works and is
+/* The raise primitive.  The refusals need a process not permitted
+ * the capability, which the unit test is unless it was given the
+ * gateway's file capabilities.  The other polarity, a raise that works and is
  * dropped again, needs the file capabilities and is the `raise`
  * driver hint's job on a real gateway.
  *
@@ -1778,6 +1778,21 @@ protected:
     }
     return (static_cast<uint64_t>(data[1].effective) << 32) |
 	   data[0].effective;
+  }
+
+  /* The refusals need the capability absent from the permitted set,
+   * not merely from the effective one:  nothing starts effective, so
+   * a binary given the gateway's file capabilities raises it and the
+   * refusal cannot happen.  Such a binary skips them. */
+  static bool permitted(int cap) {
+    struct __user_cap_header_struct hdr = {};
+    struct __user_cap_data_struct data[2] = {};
+    hdr.version = _LINUX_CAPABILITY_VERSION_3;
+    hdr.pid = 0;
+    if (::syscall(SYS_capget, &hdr, data) < 0) {
+      return true;			/* unreadable:  assume the worst */
+    }
+    return data[cap / 32].permitted & (1u << (cap % 32));
   }
 };
 
@@ -1801,11 +1816,12 @@ TEST_F(NSFSRaiseTest, AnEmptyMaskRunsTheCall)
  * capabilities. */
 TEST_F(NSFSRaiseTest, AnUnpermittedCapabilityIsRefusedAndTheCallDoesNotRun)
 {
+  if (permitted(CAP_DAC_OVERRIDE)) {
+    GTEST_SKIP() << "CAP_DAC_OVERRIDE is permitted, so the refusal "
+		    "cannot happen";
+  }
   const uint64_t before = effective_set();
   ASSERT_NE(before, ~0ull) << "the effective set could not be read";
-  ASSERT_EQ(before & nsfs::cap_bit(CAP_DAC_OVERRIDE), 0u)
-      << "this test process holds CAP_DAC_OVERRIDE, so the refusal it "
-	 "asserts cannot happen";
 
   bool ran = false;
   EXPECT_EQ(nsfs::with_capabilities(env->dpp,
@@ -1821,6 +1837,10 @@ TEST_F(NSFSRaiseTest, AnUnpermittedCapabilityIsRefusedAndTheCallDoesNotRun)
  * was asked for. */
 TEST_F(NSFSRaiseTest, SeveralUnpermittedCapabilitiesAreRefusedTogether)
 {
+  if (permitted(CAP_DAC_OVERRIDE) && permitted(CAP_FOWNER)) {
+    GTEST_SKIP() << "CAP_DAC_OVERRIDE and CAP_FOWNER are permitted, so "
+		    "the refusal cannot happen";
+  }
   const uint64_t before = effective_set();
   bool ran = false;
   EXPECT_EQ(nsfs::with_capabilities(
