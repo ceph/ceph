@@ -27,7 +27,6 @@
 #include "osd/osd_types.h"
 
 #define DEFAULT_RULE_ROOT "default"
-#define DEFAULT_RULE_ZONE_FAILURE_DOMAIN "datacenter"
 #define DEFAULT_RULE_OSD_FAILURE_DOMAIN "host"
 
 using std::make_pair;
@@ -51,9 +50,6 @@ int ErasureCode::init(
   err |= to_string("crush-root", profile,
 		   &rule_root,
 		   DEFAULT_RULE_ROOT, ss);
-  err |= to_string("crush-zone-failure-domain", profile,
-                   &rule_zone_failure_domain,
-                   DEFAULT_RULE_ZONE_FAILURE_DOMAIN, ss);
   // Try new key first, fall back to old key for backward compatibility
   if (profile.find("crush-osd-failure-domain") != profile.end()) {
     err |= to_string("crush-osd-failure-domain", profile,
@@ -96,12 +92,18 @@ int ErasureCode::create_rule(
   std::ostream *ss) const
 {
   if (num_zones > 1) {
+    // the Monitor resolves the zone type of a pool over zones
+    if (zone_failure_domain.empty()) {
+      if (ss)
+        *ss << "a rule over " << num_zones << " zones needs a zone failure domain";
+      return -EINVAL;
+    }
     unsigned int k = get_data_chunk_count();
     unsigned int m = get_chunk_count() - k;
     return crush.add_simple_stretch_rule(
       name,
       root.empty() ? rule_root : root,
-      zone_failure_domain.empty() ? rule_zone_failure_domain : zone_failure_domain,
+      zone_failure_domain,
       osd_failure_domain.empty() ? rule_osd_failure_domain : osd_failure_domain,
       num_zones,
       k + m,
