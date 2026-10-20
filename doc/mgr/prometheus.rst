@@ -286,6 +286,7 @@ encountered since the last ``clear`` command was issued:
 
 
 .. _prometheus-rbd-io-statistics:
+.. _rbd-io-statistics:
 
 RBD I/O statistics
 ------------------
