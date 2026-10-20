@@ -482,25 +482,16 @@ function wait_end_of_scrub() { # osd# pg
 
 function TEST_auto_repair_seastore_basic() {
     local dir=$1
-    local poolname=testpool
+    local -A cluster_conf=(
+        ['osds_num']="3"
+        ['pgs_in_pool']="1"
+        ['pool_name']="testpool"
+        ['extras']=" --osd_scrub_auto_repair=true"
+    )
+    crimson_standard_scrub_cluster $dir cluster_conf || return 1
+    local poolid=${cluster_conf['pool_id']}
+    local poolname=${cluster_conf['pool_name']}
 
-    # Launch a cluster with 3 seconds scrub interval
-    run_mon $dir a || return 1
-    apply_crimson_config || return 1
-    run_mgr $dir x || return 1
-    # Set scheduler to "wpq" until there's a reliable way to query scrub states
-    # with "--osd-scrub-sleep" set to 0. The "mclock_scheduler" overrides the
-    # scrub sleep to 0 and as a result the checks in the test fail.
-    local ceph_osd_args="--osd_objectstore=seastore \
-            --osd-scrub-auto-repair=true \
-            --osd_deep_scrub_randomize_ratio=0 \
-            --osd-scrub-interval-randomize-ratio=0 \
-            --osd-op-queue=wpq"
-    for id in $(seq 0 2) ; do
-        run_crimson_osd $dir $id $ceph_osd_args || return 1
-    done
-
-    create_pool $poolname 1 1 || return 1
     ceph osd pool set $poolname size 2
     wait_for_clean || return 1
 
@@ -512,22 +503,21 @@ function TEST_auto_repair_seastore_basic() {
     # Remove the object from one shard physically
     # Restarted osd get $ceph_osd_args passed
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
+    # Crimson does not support 'ceph tell osd.* config set'
+    ceph config set osd osd_scrub_auto_repair true
 
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
-    echo "Affected PG " $pgid " w/ primary " $primary
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    initiate_and_fetch_state $primary $pgid "3.0"
-    r=$?
-    echo "initiate_and_fetch_state ret: " $r
-    set_config "osd"  "$1"  "osd_scrub_sleep"  "0"
-    if [ $r -ne 0 ]; then
-        return 1
-    fi
+    # note: the scrub initiated must be a "regular" (periodic) deep scrub - not an
+    # operator-initiated one (as there's no 'auto-repair' for the latter)
+    # Crimson does not support 'ceph tell <pgid>'
+    ceph pg $pgid schedule-deep-scrub
 
-    wait_end_of_scrub "$primary" "$pgid" || return 1
+    # Wait for auto repair
+    wait_for_scrub $pgid "$last_scrub_stamp" || return 1
+    wait_for_clean || return 1
     ceph pg dump pgs
-
     # Verify - the file should be back
     # Restarted osd get $ceph_osd_args passed
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING list-attrs || return 1
@@ -1016,7 +1006,7 @@ function TEST_corrupt_scrub_replicated() {
     pg_scrub $pg
 
     ERRORS=0
-    declare -a s_err_strings
+    declare -a err_strings
     err_strings[0]=".*[0-9]*[.]0 shard 1 soid 3:30259878:::ROBJ15:head : candidate had a missing info key"
     err_strings[1]=".*[0-9]*[.]0 shard 0 soid 3:33aca486:::ROBJ18:head : object info inconsistent "
     err_strings[2]=".*[0-9]*[.]0 shard 1 soid 3:5c7b2c47:::ROBJ16:head : candidate had a corrupt snapset"
