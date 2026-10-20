@@ -23,6 +23,7 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
+#include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
@@ -52,6 +53,9 @@ private:
   // Invoked with no lock held when the client set changes, so the beacon
   // carrying it can go out without waiting for the next tick.
   std::function<void()> clients_changed_cb;
+
+  // Wakes wait_client_registered() to re-check its client.
+  ceph::condition_variable clients_cond;
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
@@ -247,8 +251,10 @@ public:
     {
       std::lock_guard l(lock);
       auto n = std::string(name);
-      if (replace) {
-        clients.erase(n);
+      if (replace && clients.erase(n) > 0) {
+        // Dropped another address under this name; whoever was waiting
+        // on it will never see it in the MgrMap.
+        clients_cond.notify_all();
       }
       clients.emplace(n, std::move(addrs));
       cb = clients_changed_cb;
@@ -268,6 +274,7 @@ public:
         if (it->second == addrs) {
           clients.erase(it);
           cb = clients_changed_cb;
+          clients_cond.notify_all();
           break;
         }
       }
@@ -282,6 +289,19 @@ public:
     std::lock_guard l(lock);
     return clients;
   }
+
+  /**
+   * Block until the monitor has <name, addrs> in the MgrMap, so a module
+   * that is about to use the client cannot outrun the registration that
+   * makes it blocklistable on failover.
+   *
+   * Returns 0 once the client is in the MgrMap, -ECANCELED if it was
+   * unregistered while waiting (another module replacing a shared
+   * address, say), or -ETIMEDOUT.
+   */
+  int wait_client_registered(std::string_view name,
+                             const entity_addrvec_t& addrs,
+                             std::chrono::seconds timeout);
 
   bool is_module_active(const std::string &name) {
     ceph_assert(active_modules);

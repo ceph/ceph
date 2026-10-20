@@ -474,6 +474,19 @@ options:
   - runtime
   services:
   - mgr
+- name: mgr_client_register_timeout
+  type: secs
+  level: advanced
+  desc: How long a module waits for a RADOS client it registered to reach the MgrMap
+  long_desc: A module must not use a RADOS client until the monitor has it in the
+    MgrMap, otherwise the client cannot be blocklisted if the mgr is failed over.
+    Registration blocks until then, or until this timeout, after which the
+    registration fails and the module sees an exception. 0 waits indefinitely.
+  default: 30
+  flags:
+  - runtime
+  services:
+  - mgr
 - name: mgr_tick_period
   type: secs
   level: advanced

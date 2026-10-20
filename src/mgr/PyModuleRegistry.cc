@@ -133,6 +133,38 @@ void PyModuleRegistry::init()
   }
 }
 
+int PyModuleRegistry::wait_client_registered(std::string_view name,
+                                             const entity_addrvec_t& addrs,
+                                             std::chrono::seconds timeout)
+{
+  auto n = std::string(name);
+  auto contains = [&n, &addrs](const auto& m) {
+    auto itp = m.equal_range(n);
+    return std::any_of(itp.first, itp.second,
+                       [&addrs](const auto& i) { return i.second == addrs; });
+  };
+
+  std::unique_lock l(lock);
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (!contains(mgr_map.clients)) {
+    if (!contains(clients)) {
+      // No beacon will ever carry it, so the caller must not use it.
+      derr << "client " << n << " " << addrs
+           << " was unregistered while waiting for the MgrMap" << dendl;
+      return -ECANCELED;
+    }
+    if (timeout <= std::chrono::seconds::zero()) {
+      clients_cond.wait(l);
+    } else if (clients_cond.wait_until(l, deadline) == std::cv_status::timeout) {
+      derr << "timed out waiting for client " << n << " " << addrs
+           << " to appear in the MgrMap" << dendl;
+      return -ETIMEDOUT;
+    }
+  }
+  dout(10) << "client " << n << " " << addrs << " is in the MgrMap" << dendl;
+  return 0;
+}
+
 bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
 {
   std::lock_guard l(lock);
@@ -160,6 +192,8 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
     if (standby_modules != nullptr) {
       standby_modules->handle_mgr_map(mgr_map_);
     }
+
+    clients_cond.notify_all();
 
     return modules_changed;
   }
