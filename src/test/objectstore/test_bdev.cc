@@ -14,6 +14,7 @@
 
 #include "libaio_probe.h"
 #include "blk/BlockDevice.h"
+#include "blk/aio/aio.h"
 
 using namespace std;
 
@@ -240,6 +241,214 @@ TEST(KernelDevice, PosixAioConcurrentCompletion) {
 }
 
 #endif // HAVE_POSIXAIO
+
+#if defined(HAVE_POSIXAIO)
+// aio_t::advance() splits a request that the kernel completed short, so that
+// the rest can be resubmitted. It cannot be reached through BlockDevice: a
+// short return cannot be provoked from userspace, it is what a raw device
+// does on its own. So test the splitting itself, where an off-by-one or a
+// missed alignment check would corrupt whatever is written next.
+//
+// The rest of the request is direct IO again, so advance() must refuse any
+// split that would leave the start of the first iovec, or the file offset,
+// unaligned, and it must leave the request untouched when it refuses.
+namespace {
+
+// A page-aligned buffer to carve iovecs out of, so that the aligned cases
+// really are aligned.
+class AlignedBuf {
+public:
+  explicit AlignedBuf(size_t len) : length(len) {
+    void *p = nullptr;
+    ceph_assert(::posix_memalign(&p, 4096, len) == 0);
+    ::memset(p, 0, len);
+    base = static_cast<char*>(p);
+  }
+  ~AlignedBuf() { ::free(base); }
+  char *base;
+  size_t length;
+};
+
+// An aio_t that writes nseg segments of seglen bytes, starting at offset.
+void make_write(aio_t &a, AlignedBuf &buf, size_t nseg, size_t seglen,
+                uint64_t offset) {
+  for (size_t i = 0; i < nseg; i++) {
+    a.iov.push_back(iovec{buf.base + i * seglen, seglen});
+  }
+  a.pwritev(offset, nseg * seglen);
+}
+
+// Total of the iovec lengths, which must always equal length.
+uint64_t iov_total(const aio_t &a) {
+  uint64_t t = 0;
+  for (const auto &v : a.iov) {
+    t += v.iov_len;
+  }
+  return t;
+}
+
+} // namespace
+
+TEST(KernelDevice, PosixAioShortReturnRejectsWhatItCannotSplit) {
+  AlignedBuf buf{32768};
+  const uint64_t align = 4096;
+
+  // Each case must be refused, and must leave the request as it was.
+  struct {
+    const char *what;
+    uint64_t n;
+    uint64_t align;
+  } cases[] = {
+    { "nothing transferred",      0,     align },
+    { "the whole request",        16384, align },
+    { "more than the request",    20480, align },
+    { "no alignment given",       4096,  0     },
+    { "not a multiple of align",  4095,  align },
+    { "not a multiple of align",  6144,  align * 2 },
+  };
+
+  for (const auto &c : cases) {
+    aio_t a{nullptr, 7};
+    make_write(a, buf, 4, 4096, 8192);
+    const auto before = a.iov;
+
+    ASSERT_FALSE(a.advance(c.n, c.align)) << c.what << " (n=" << c.n << ")";
+    ASSERT_EQ(a.offset, 8192u) << c.what;
+    ASSERT_EQ(a.length, 16384u) << c.what;
+    ASSERT_EQ(a.iov.size(), before.size()) << c.what;
+    for (size_t i = 0; i < before.size(); i++) {
+      ASSERT_EQ(a.iov[i].iov_base, before[i].iov_base) << c.what << " iov " << i;
+      ASSERT_EQ(a.iov[i].iov_len, before[i].iov_len) << c.what << " iov " << i;
+    }
+  }
+}
+
+TEST(KernelDevice, PosixAioShortReturnOnIovecBoundary) {
+  AlignedBuf buf{32768};
+  aio_t a{nullptr, 7};
+  make_write(a, buf, 4, 4096, 8192);
+  // What a short completion left behind: advance() has to clear it, or the
+  // reaper would take the resubmitted request for one that is already done.
+  a.rval = 8192;
+
+  // Two whole iovecs went out: drop them, keep the other two.
+  ASSERT_TRUE(a.advance(8192, 4096));
+  ASSERT_EQ(a.offset, 8192u + 8192u);
+  ASSERT_EQ(a.length, 8192u);
+  ASSERT_EQ(a.iov.size(), 2u);
+  ASSERT_EQ(a.iov[0].iov_base, buf.base + 8192);
+  ASSERT_EQ(a.iov[0].iov_len, 4096u);
+  ASSERT_EQ(a.iov[1].iov_base, buf.base + 12288);
+  ASSERT_EQ(iov_total(a), a.length);
+  // Re-prepared, so the next completion is not mistaken for this one.
+  ASSERT_EQ(a.get_return_value(), -1000);
+  ASSERT_EQ(a.aio.aio_offset, (off_t)a.offset);
+  ASSERT_EQ(a.aio.aio_iovcnt, 2);
+  ASSERT_EQ(a.aio.aio_iov, a.iov.data());
+  ASSERT_EQ(a.aio.aio_lio_opcode, LIO_WRITE);
+}
+
+TEST(KernelDevice, PosixAioShortReturnInsideIovec) {
+  AlignedBuf buf{32768};
+  aio_t a{nullptr, 7};
+  // One 16K segment: a short return has to cut it in two.
+  a.iov.push_back(iovec{buf.base, 16384});
+  a.pwritev(0, 16384);
+
+  ASSERT_TRUE(a.advance(4096, 4096));
+  ASSERT_EQ(a.offset, 4096u);
+  ASSERT_EQ(a.length, 12288u);
+  ASSERT_EQ(a.iov.size(), 1u);
+  ASSERT_EQ(a.iov[0].iov_base, buf.base + 4096);
+  ASSERT_EQ(a.iov[0].iov_len, 12288u);
+  ASSERT_EQ(iov_total(a), a.length);
+}
+
+TEST(KernelDevice, PosixAioShortReturnRefusesUnalignedRemainder) {
+  AlignedBuf buf{32768};
+  aio_t a{nullptr, 7};
+  // Segments that are not a multiple of the alignment: cutting inside the
+  // second one would leave its remainder starting at an unaligned address,
+  // which direct IO cannot submit.
+  a.iov.push_back(iovec{buf.base, 4096});
+  a.iov.push_back(iovec{buf.base + 4096, 6144});
+  a.pwritev(0, 10240);
+  const auto before = a.iov;
+
+  // 8192 lands 4096 into the second iovec, at buf.base + 8192: aligned, so
+  // this one is allowed.
+  aio_t ok{nullptr, 7};
+  ok.iov = before;
+  ok.pwritev(0, 10240);
+  ASSERT_TRUE(ok.advance(8192, 4096));
+  ASSERT_EQ(ok.iov.size(), 1u);
+  ASSERT_EQ(ok.iov[0].iov_base, buf.base + 8192);
+  ASSERT_EQ(ok.iov[0].iov_len, 2048u);
+
+  // The same split with a 8192-byte alignment is not: 8192 % 8192 == 0, but
+  // the remainder would start 4096 into the iovec, which is not a multiple
+  // of 8192.
+  ASSERT_FALSE(a.advance(8192, 8192));
+  ASSERT_EQ(a.iov.size(), before.size());
+  ASSERT_EQ(a.length, 10240u);
+}
+
+TEST(KernelDevice, PosixAioShortReturnRefusesUnalignedBase) {
+  AlignedBuf buf{32768};
+  aio_t a{nullptr, 7};
+  // An iovec that does not start on an alignment boundary. The split itself
+  // is a multiple of the alignment, so only checking that is not enough:
+  // what matters is where the remainder would start.
+  a.iov.push_back(iovec{buf.base + 512, 8192});
+  a.pwritev(0, 8192);
+  const auto before = a.iov;
+
+  // 4096 % 4096 == 0, but the rest would begin at buf.base + 4608.
+  ASSERT_FALSE(a.advance(4096, 4096));
+  ASSERT_EQ(a.iov.size(), before.size());
+  ASSERT_EQ(a.iov[0].iov_base, before[0].iov_base);
+  ASSERT_EQ(a.iov[0].iov_len, before[0].iov_len);
+  ASSERT_EQ(a.offset, 0u);
+  ASSERT_EQ(a.length, 8192u);
+}
+
+TEST(KernelDevice, PosixAioShortReturnKeepsReadOpcode) {
+  AlignedBuf buf{32768};
+  aio_t a{nullptr, 7};
+  for (size_t i = 0; i < 4; i++) {
+    a.iov.push_back(iovec{buf.base + i * 4096, 4096});
+  }
+  a.preadv(4096, 16384);
+
+  ASSERT_TRUE(a.advance(4096, 4096));
+  ASSERT_EQ(a.offset, 8192u);
+  ASSERT_EQ(a.length, 12288u);
+  // A read that is split must stay a read.
+  ASSERT_EQ(a.aio.aio_lio_opcode, LIO_READ);
+}
+
+TEST(KernelDevice, PosixAioShortReturnTwice) {
+  AlignedBuf buf{32768};
+  aio_t a{nullptr, 7};
+  make_write(a, buf, 4, 4096, 0);
+
+  // A device that keeps completing short must not leave the request in a
+  // state where the second split loses or repeats bytes.
+  ASSERT_TRUE(a.advance(4096, 4096));
+  ASSERT_EQ(a.offset, 4096u);
+  ASSERT_EQ(a.length, 12288u);
+  ASSERT_TRUE(a.advance(8192, 4096));
+  ASSERT_EQ(a.offset, 12288u);
+  ASSERT_EQ(a.length, 4096u);
+  ASSERT_EQ(a.iov.size(), 1u);
+  ASSERT_EQ(a.iov[0].iov_base, buf.base + 12288);
+  ASSERT_EQ(a.iov[0].iov_len, 4096u);
+  ASSERT_EQ(iov_total(a), a.length);
+  // And the last of it cannot be split again.
+  ASSERT_FALSE(a.advance(4096, 4096));
+}
+#endif // HAVE_POSIXAIO
+
 
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
