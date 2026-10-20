@@ -247,10 +247,12 @@ class CephfsConnectionPool(object):
             self.fs.conf_set("client_fscrypt_as", "false")
             logger.debug("CephFS initializing...")
             self.fs.init()
+            # Register before mounting: the mount is this client's first
+            # I/O, and only a registered client can be blocklisted.
+            self.mgr._ceph_register_client(None, self.fs.get_addrs(), False)
             logger.debug("CephFS mounting...")
             self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
             logger.debug("Connection to cephfs '{0}' complete".format(self.fs_name))
-            self.mgr._ceph_register_client(None, self.fs.get_addrs(), False)
 
         def disconnect(self) -> None:
             try:
