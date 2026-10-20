@@ -4046,6 +4046,12 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     for (auto &it : crypt_http_responses)
       dump_header(s, it.first, it.second);
 
+    // the destination version is chosen before the copy starts, so it is
+    // known even when headers go out early with a progress update
+    if (op_ret == 0) {
+      dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+    }
+
     // Explicitly use chunked transfer encoding so that we can stream the result
     // to the user without having to wait for the full length of it.
     end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
