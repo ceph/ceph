@@ -16125,6 +16125,16 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    * from the shape of an etag it has no second opinion about. */
   features["non_md5_etag"] =
     ctx()->_conf->rgw_non_md5_etag ? "true" : "false";
+  /* Whether lifecycle runs, and how long its day is:  with
+   * rgw_lc_debug_interval positive, that many seconds stand for a day,
+   * and otherwise a day is a day.  A test that waits for an expiry has
+   * to be told both by the gateway rather than by how it was started --
+   * s3tests.conf defaults the interval when it says nothing, so a run
+   * without fast lifecycle looks like one with it. */
+  features["lc_threads"] =
+    ctx()->_conf.get_val<bool>("rgw_enable_lc_threads") ? "true" : "false";
+  features["lc_debug_interval"] =
+    std::to_string(ctx()->_conf->rgw_lc_debug_interval);
   /* Which access model this gateway runs:  whether an S3 grant the
    * filesystem denies takes effect on an object's metadata.  A test
    * cannot infer it -- both models answer the same for every request
