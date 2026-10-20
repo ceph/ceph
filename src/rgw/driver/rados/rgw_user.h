@@ -787,6 +787,7 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time mtime;
     bool exclusive{false};
+    bool from_remote_zone{false};
     std::map<std::string, bufferlist> *attrs{nullptr};
 
     PutParams() {}
