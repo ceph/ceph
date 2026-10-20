@@ -142,6 +142,21 @@ pub async fn access_model() -> Option<String> {
     std::env::var("S3TEST_ACCESS_MODEL").ok().filter(|v| !v.is_empty())
 }
 
+/// How many seconds a lifecycle day lasts on this gateway, as it
+/// reports it.
+///
+/// `Some(Some(n))`:  lifecycle runs and `n` seconds stand for a day.
+/// `Some(None)`:  the gateway reports lifecycle off, or running on real
+/// days, so a test waiting for an expiry cannot see one.  `None`:  not
+/// reported, as on every backend but nsfs, and the caller keeps
+/// s3tests.conf's `lc_debug_interval`.
+pub async fn lifecycle_day_secs() -> Option<Option<u64>> {
+    let f = features().await?;
+    let threads = f.get_bool("lc_threads")?;
+    let interval: i64 = f.get_str("lc_debug_interval")?.parse().ok()?;
+    Some((threads && interval > 0).then_some(interval as u64))
+}
+
 /// Whether an S3 grant reaches another identity's object *bytes* on a
 /// backend where the filesystem would deny it.
 ///

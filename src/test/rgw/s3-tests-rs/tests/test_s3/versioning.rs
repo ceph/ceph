@@ -1335,13 +1335,24 @@ async fn test_delete_marker_suspended() {
  * it reasonable to assume no lifecycle dependency is left in a
  * baseline run.  This is the exception, and it is in `versioning::`
  * because delete-marker expiration is a versioning behaviour that
- * lifecycle happens to drive.  Without the flag it fails on the
- * marker still being there, which reads as a versioning defect. */
+ * lifecycle happens to drive.  Without the flag it failed on the
+ * marker still being there, which read as a versioning defect;  it
+ * now skips where the gateway reports lifecycle not running on a
+ * debug day, and waits on the day the gateway reports. */
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn test_delete_marker_expiration() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let lc_interval = match s3_tests_rs::features::lifecycle_day_secs().await {
+        Some(Some(secs)) => secs,
+        Some(None) => {
+            eprintln!("lifecycle is not running on a debug day;  the \
+                       expiry cannot arrive -- start with --with-lifecycle");
+            return;
+        }
+        None => get_config().lc_debug_interval,
+    };
     let client = get_client();
     let bucket_name = get_new_bucket(Some(&client)).await;
     let key = "nugent.ted";
@@ -1403,7 +1414,6 @@ async fn test_delete_marker_expiration() {
         .await
         .unwrap();
 
-    let lc_interval = get_config().lc_debug_interval;
     tokio::time::sleep(std::time::Duration::from_secs(6 * lc_interval)).await;
 
     check_delete_marker(&client, &bucket_name, key, "false").await;
