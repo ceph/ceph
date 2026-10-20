@@ -70,7 +70,7 @@ example spec file:
       label: rgw
       count_per_host: 2
     networks:
-    - 192.169.142.0/24
+    - 192.168.142.0/24
     spec:
       rgw_frontend_port: 8080
 
