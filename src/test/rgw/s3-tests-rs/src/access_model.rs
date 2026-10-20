@@ -68,8 +68,13 @@ pub struct Access {
 
 impl Access {
     /// Ask the gateway about `user`'s access to `key` in `bucket`,
-    /// `mode` being `r` or `w`.  `user` is the request's user,
-    /// `tenant$id` for a tenant's, empty for anonymous.
+    /// `mode` being `r` or `w` on the object, or `c` -- whether `user`
+    /// may create `key`, which asks about the key's directory and is
+    /// what decides a PUT of a key that does not exist yet -- or `d`,
+    /// whether `user` may delete it:  the same, and in a sticky
+    /// directory owning the file or the directory.  `user` is
+    /// the request's user, `tenant$id` for a tenant's, empty for
+    /// anonymous.
     ///
     /// Ask after the object exists:  there is nothing to check on a
     /// file that is not there.

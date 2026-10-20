@@ -873,13 +873,23 @@ async fn test_allow_multipart_actions_in_user_policy() {
         .await
         .unwrap();
 
-    s3_client_iam
+    /* alt wrote the object, so the IAM user's delete is a
+     * cross-identity data operation:  denied where the filesystem
+     * denies it and the access model lets that stand (DECISIONS
+     * 2026-10-20), and performed under s3-native */
+    let delete = Access::ask(Class::Data, &bucket, key,
+                             &cfg.iam_user_id, "d").await;
+    let deleted = delete.judge(s3_client_iam
         .delete_object()
         .bucket(&bucket)
         .key(key)
         .send()
-        .await
-        .unwrap();
+        .await).is_some();
+    if !deleted {
+        /* its writer removes it, so the bucket can go */
+        let _ = s3_client_alt.delete_object().bucket(&bucket).key(key)
+            .send().await;
+    }
 
     iam_client
         .delete_user_policy()

@@ -320,16 +320,18 @@ async fn test_data_follows_the_access_model() {
 
 }
 
-/// A nested key:  its directories are the gateway's, its object the
-/// identity's.
+/// A nested key:  its directories belong to the identity that made
+/// them, and writing beside another is the access model's.
 ///
-/// The directories a key needs are made by the gateway, `1777` under
-/// impersonation (NSFS_IMPERSONATION.md 8a), so any identity can create
-/// in them.  Only the object belongs to whoever wrote it.  alice's PUT
-/// makes `a/b/`;  bob then writes beside her in a directory made during
-/// her request, which only the gateway's mode permits.  S3 grants each
-/// the other's read, and the filesystem then denies both -- the
-/// isolation test's argument, one level down.
+/// A key's directories are made by the requester at NooBaa's mode,
+/// `0770` (DECISIONS 2026-10-20), so alice's PUT makes `a/b/` hers.
+/// bob, granted the write by bucket policy, then writes beside her, and
+/// the filesystem denies him creating there whatever the model, because
+/// the directory is hers.  What the gateway does about it is the access
+/// model's:  `posix-strict` and `s3-metadata` let the denial stand, as
+/// NooBaa does, and `s3-native` performs the write.  Where bob's write
+/// is served, S3 grants each the other's read and the filesystem then
+/// denies both -- the isolation test's argument, one level down.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_impersonation_owns_a_nested_key() {
@@ -375,19 +377,24 @@ async fn test_impersonation_owns_a_nested_key() {
         .bucket(&bucket).policy(&doc).send().await;
     assert!(pol.is_ok(), "could not grant bob read and write: {pol:?}");
 
-    let put = bob.put_object()
+    /* a/b/ is alice's, so the filesystem denies bob creating in it at
+     * every access model;  only what the gateway does next varies */
+    let create = Access::ask(Class::Data, &bucket, his, &bob_u.id, "c").await;
+    assert!(create.denied(),
+        "the filesystem permits bob to create in a/b/;  the directory \
+         was made by alice's request, so it should be hers");
+    let wrote = create.judge(bob.put_object()
         .bucket(&bucket).key(his)
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"bob wrote this"))
-        .send().await;
-    assert!(put.is_ok(),
-        "bob could not write in a directory made during alice's request;  \
-         the key's directories are not the gateway's: {put:?}");
+        .send().await).is_some();
 
     /* the controls:  each reads back what they wrote */
     let mine = alice.get_object().bucket(&bucket).key(hers).send().await;
     assert!(mine.is_ok(), "alice could not read her own nested object: {mine:?}");
-    let mine = bob.get_object().bucket(&bucket).key(his).send().await;
-    assert!(mine.is_ok(), "bob could not read his own nested object: {mine:?}");
+    if wrote {
+        let mine = bob.get_object().bucket(&bucket).key(his).send().await;
+        assert!(mine.is_ok(), "bob could not read his own nested object: {mine:?}");
+    }
 
     /* each is owned by whoever wrote it, which the filesystem says
      * and no access model changes */
@@ -404,11 +411,13 @@ async fn test_impersonation_owns_a_nested_key() {
      * authorization before any file is opened -- which would pass with
      * impersonation off and prove nothing.  So ask the kernel and do
      * not read:  there is no S3-authorised operation here to judge. */
-    let his_to_alice = Access::ask(Class::Data, &bucket, his,
-                                   &alice_u.id, "r").await;
-    assert!(his_to_alice.denied(),
-        "the filesystem permits alice to read bob's nested object;  it is \
-         owned by him");
+    if wrote {
+        let his_to_alice = Access::ask(Class::Data, &bucket, his,
+                                       &alice_u.id, "r").await;
+        assert!(his_to_alice.denied(),
+            "the filesystem permits alice to read bob's nested object;  it \
+             is owned by him");
+    }
 
 }
 
