@@ -398,13 +398,13 @@ public:
       auto &iov = p.iov;
       return io_device[supported_stream].dma_write(off, std::move(iov)
       ).handle_exception(
-        [this, off, len, has_error, device_id, FNAME](auto e) -> seastar::future<size_t>
+        [off, len, has_error, device_id, FNAME](auto e) -> seastar::future<size_t>
       {
         ERROR("{} poffset={}~{} dma_write got error -- {}",
           device_id_printer_t{device_id}, off, len, e);
         *has_error = true;
         return seastar::make_ready_future<size_t>(0);
-      }).then([this, off, len, has_error, device_id, FNAME](size_t written) {
+      }).then([off, len, has_error, device_id, FNAME](size_t written) {
         if (written != len) {
           ERROR("{} poffset={}~{} dma_write len={} inconsistent",
             device_id_printer_t{device_id}, off, len, written);
