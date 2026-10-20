@@ -237,10 +237,14 @@ void PurgeQueue::activate()
 
 void PurgeQueue::shutdown()
 {
-  std::lock_guard l(lock);
+  {
+    std::lock_guard l(lock);
 
-  journaler.shutdown();
-  timer.shutdown();
+    journaler.shutdown();
+    timer.shutdown();
+  }
+  // Contexts on the finisher take `lock`, and Journaler::shutdown() has
+  // just queued its waiters there: join the finisher without holding it.
   finisher.stop();
 }
 
