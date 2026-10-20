@@ -38,6 +38,9 @@ struct chunk_validation_policy_t {
   // back (matches classic OSD should_fix_digest: force only in repair mode).
   bool is_repair{false};
 
+  int64_t deep_scrub_update_digest_min_age{0};
+  utime_t chunk_started{};
+
   bool is_ec() const {
     // FIXME: See scrub_backend in classic for reference.
     return false;

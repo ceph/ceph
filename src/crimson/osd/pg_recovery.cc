@@ -824,10 +824,6 @@ void PGRecovery::all_replicas_recovered()
   DEBUGDPP("posting AllReplicasRecovered event", *pg->get_dpp());
   start_peering_event_operation_listener(PeeringState::AllReplicasRecovered());
 
-  // Notify scrubber that recovery is complete so it can schedule after_repair scrub if needed
-  if (auto* scrubber = pg->get_scrubber()) {
-    scrubber->recovery_completed();
-  }
 }
 
 void PGRecovery::backfill_suspended()

@@ -2073,6 +2073,7 @@ void PG::C_PG_FinishRecovery::finish(int r) {
   if (this == pg.recovery_finisher) {
     peering_state.purge_strays();
     pg.recovery_finisher = nullptr;
+    pg.scrubber.recovery_completed();
   } else {
     DEBUGDPP("stale recovery finsher", pg);
   }

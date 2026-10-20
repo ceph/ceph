@@ -1156,6 +1156,8 @@ void OSD::handle_conf_change(
     "osd_scrub_max_interval",
     "osd_scrub_interval_randomize_ratio",
     "osd_deep_scrub_interval",
+    "osd_deep_scrub_interval_cv",
+    "osd_deep_scrub_randomize_ratio",
     "osd_scrub_begin_hour",
     "osd_scrub_end_hour",
     "osd_scrub_begin_week_day",
@@ -1167,7 +1169,9 @@ void OSD::handle_conf_change(
     if (changed.contains(config)) {
       INFO("Scrub config changed: {}, updating scrub schedules", config);
       if (shard_services.local_is_initialized()) {
-        get_shard_services().get_scrub_scheduler().on_config_change();
+        (void)shard_services.invoke_on_all([](auto &local_service) {
+          local_service.get_scrub_scheduler().on_config_change();
+        });
       }
       break;
     }

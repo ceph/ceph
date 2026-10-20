@@ -13,11 +13,7 @@
 #include "common/Formatter.h"
 #include "osd/osd_types.h"
 
-#ifdef WITH_CRIMSON
-namespace crimson::osd::scrub {
-#else
 namespace Scrub {
-#endif
 /**
  * an interface allowing the ScrubResources to log directly into its
  * owner's log. This way, we do not need the full dout() mechanism
@@ -102,3 +98,9 @@ class LocalResourceWrapper {
 };
 
 }  // namespace Scrub
+
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+using namespace ::Scrub;
+}
+#endif

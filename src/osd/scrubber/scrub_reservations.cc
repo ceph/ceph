@@ -25,6 +25,7 @@ using namespace crimson::osd::scrub;
 SET_SUBSYS(osd);
 #define CRIMSON_LOG_PREFIX(...) LOG_PREFIX(__VA_ARGS__)
 #define CRIMSON_DEBUG(...) DEBUG(__VA_ARGS__)
+#define CRIMSON_INFO(...) INFO(__VA_ARGS__)
 #define CRIMSON_CLOG_ERROR() m_pg->get_clog_error()
 #define CRIMSON_CLOG_WARN() m_pg->get_clog_warn()
 #else
@@ -32,6 +33,7 @@ using namespace Scrub;
 #define CRIMSON_LOG_PREFIX(...)
 #undef CRIMSON_DEBUG
 #define CRIMSON_DEBUG(...) dout(10) << fmt::format(__VA_ARGS__) << dendl
+#define CRIMSON_INFO(...) dout(1) << fmt::format(__VA_ARGS__) << dendl
 #define CRIMSON_CLOG_ERROR() m_osds->clog->error()
 #define CRIMSON_CLOG_WARN() m_osds->clog->warn()
 #endif
@@ -232,10 +234,10 @@ bool ReplicaReservations::handle_reserve_grant(
   if (!is_reservation_response_relevant(msg.reservation_nonce)) {
     // this is a stale response to a previous request (e.g. one that
     // timed-out). See m_last_request_sent_nonce for details.
-    CRIMSON_DEBUG("stale reservation response from {} with nonce {} vs. "
-		   "expected {} (e:{})",
-		   from, msg.reservation_nonce, m_last_request_sent_nonce,
-		   msg.map_epoch);
+    CRIMSON_INFO("stale reservation response from {} with nonce {} vs. "
+     "expected {} (e:{})",
+     from, msg.reservation_nonce, m_last_request_sent_nonce,
+     msg.map_epoch);
 
     return false;
   }
@@ -251,7 +253,7 @@ bool ReplicaReservations::handle_reserve_grant(
       "message nonce:{})",
       from, get_last_sent().value_or(pg_shard_t{}), msg.map_epoch,
       msg.reservation_nonce);
-    CRIMSON_DEBUG("{}", error_text.c_str());
+    CRIMSON_INFO("{}", error_text.c_str());
     if (msg.reservation_nonce != 0) {
       CRIMSON_CLOG_ERROR() << error_text;
       ceph_abort_msg(error_text.c_str());

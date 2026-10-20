@@ -116,11 +116,11 @@ class AsyncReserver {
       }
       in_progress[p.item] = p;
       if (p.preempt) {
-	preempt_by_prio.insert(std::make_pair(p.prio, p.item));
+ preempt_by_prio.insert(std::make_pair(p.prio, p.item));
       }
       if (p.grant) {
-	f->queue(p.grant);
-	p.grant = nullptr;
+ f->queue(p.grant);
+ p.grant = nullptr;
       }
     }
   }

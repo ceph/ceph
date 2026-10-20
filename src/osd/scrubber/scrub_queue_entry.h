@@ -14,12 +14,7 @@ namespace ceph {
 class Formatter;
 }  // namespace ceph
 
-#ifdef WITH_CRIMSON
-namespace crimson::osd::scrub {
-#define Scrub crimson::osd::scrub
-#else
 namespace Scrub {
-#endif
 
 /**
  * Possible urgency levels for a specific scheduling target (shallow or deep):
@@ -228,3 +223,9 @@ struct formatter<Scrub::SchedEntry> {
   }
 };
 }  // namespace fmt
+
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+using namespace ::Scrub;
+}
+#endif

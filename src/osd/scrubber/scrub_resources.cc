@@ -7,8 +7,8 @@
 #include <fmt/ranges.h>
 #ifdef WITH_CRIMSON
 #include "crimson/common/log.h"
-#define Scrub crimson::osd::scrub
 SET_SUBSYS(osd);
+using namespace crimson::osd::scrub;
 #else
 #include "common/debug.h"
 #endif

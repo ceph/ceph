@@ -18,12 +18,7 @@
 #include "osd/scrubber_common.h"
 #include "scrub_queue_entry.h"
 
-#ifdef WITH_CRIMSON
-namespace crimson::osd::scrub {
-#define Scrub crimson::osd::scrub
-#else
 namespace Scrub {
-#endif
 
 enum class must_scrub_t { not_mandatory, mandatory };
 
@@ -262,7 +257,6 @@ class ScrubJob {
   double guaranteed_offset(
       scrub_level_t s_or_d,
       const Scrub::sched_conf_t& app_conf);
-  void dump(ceph::Formatter* f) const;
 
   bool is_registered() const { return registered; }
 
@@ -429,3 +423,9 @@ struct formatter<Scrub::sched_conf_t> {
   }
 };
 }  // namespace fmt
+
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+using namespace ::Scrub;
+}
+#endif
