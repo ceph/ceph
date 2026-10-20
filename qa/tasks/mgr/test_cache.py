@@ -34,7 +34,7 @@ class TestCache(MgrTestCase):
     def test_init_cache(self):
         get_ttl = "config get mgr mgr_ttl_cache_expire_seconds"
         res = self.cluster_cmd(get_ttl)
-        self.assertEquals(int(res), 10)
+        self.assertEqual(int(res), 10)
 
     def test_health_not_cached(self):
         get_health = "mgr api get health"
@@ -43,8 +43,8 @@ class TestCache(MgrTestCase):
         self.cluster_cmd(get_health)
         h, m = self.get_hit_miss_ratio()
 
-        self.assertEquals(h, h_start)
-        self.assertEquals(m, m_start)
+        self.assertEqual(h, h_start)
+        self.assertEqual(m, m_start)
 
     def test_osdmap(self):
         get_osdmap = "mgr api get osd_map"
@@ -73,11 +73,11 @@ class TestCache(MgrTestCase):
         # Miss, add osd_map to cache
         self.wait_until_true(wait_miss, self.ttl + 5)
         h, m = self.get_hit_miss_ratio()
-        self.assertEquals(h, hit_start)
-        self.assertEquals(m, miss_start+1)
+        self.assertEqual(h, hit_start)
+        self.assertEqual(m, miss_start+1)
 
         # Hit, get osd_map from cache
         self.cluster_cmd(get_osdmap)
         h, m = self.get_hit_miss_ratio()
-        self.assertEquals(h, hit_start+1)
-        self.assertEquals(m, miss_start+1)
+        self.assertEqual(h, hit_start+1)
+        self.assertEqual(m, miss_start+1)
