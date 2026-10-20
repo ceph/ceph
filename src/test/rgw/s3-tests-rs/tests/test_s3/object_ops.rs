@@ -141,8 +141,7 @@ async fn test_object_write_check_etag() {
         .unwrap();
     let etag = response.e_tag().unwrap_or_default().to_string();
 
-    let cfg = s3_tests_rs::config::get_config();
-    if cfg.non_md5_etag {
+    if s3_tests_rs::features::non_md5_etag().await {
         /* The ETag is a unique-per-write token, not a digest.  Assert what
          * the option actually promises rather than skipping:  the value is
          * not the content MD5, it carries a dash (which is what makes an

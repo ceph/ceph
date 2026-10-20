@@ -1900,9 +1900,8 @@ async fn test_multipart_reupload_checksum_and_etag() {
      * and cannot be pinned to a literal.  Assert the form instead, which
      * is what proves the fold happened at all.  The SHA256 checksums are
      * client-supplied and unaffected either way. */
-    let cfg = s3_tests_rs::config::get_config();
     let seen_etag = res1.e_tag().unwrap().trim_matches('"').to_string();
-    if cfg.non_md5_etag {
+    if s3_tests_rs::features::non_md5_etag().await {
         let (digest, nparts) = seen_etag.rsplit_once('-')
             .unwrap_or_else(|| panic!("composite ETag is not <hex>-<parts>: {seen_etag}"));
         assert_eq!(nparts, "3", "composite ETag part count: {seen_etag}");

@@ -391,7 +391,7 @@ async fn corpus_coverage_multipart() {
                      * check on the assembly rather than on the shape
                      * of the string.  Only in the digest regime:  a
                      * synthetic ETag has no digest to agree with. */
-                    if crate::integrity::digest_regime() {
+                    if crate::integrity::digest_regime().await {
                         let want = crate::integrity::expected_multipart_etag(
                             &u.sizes, FILL,
                         );

@@ -348,7 +348,6 @@ async fn test_put_object_if_match() {
         .unwrap()
         .to_string();
 
-    let cfg = s3_tests_rs::config::get_config();
 
     let result = client.put_object().bucket(&bucket).key(key).if_none_match("*").send().await;
     assert_s3_err!(result, 412, "PreconditionFailed");
@@ -367,7 +366,7 @@ async fn test_put_object_if_match() {
         .if_none_match("badetag").send().await.unwrap()
         .e_tag().unwrap().to_string();
 
-    if cfg.non_md5_etag {
+    if s3_tests_rs::features::non_md5_etag().await {
         assert_ne!(overwritten, etag,
                    "rgw_non_md5_etag must mint a new ETag for each write");
         let result = client.put_object().bucket(&bucket).key(key)
@@ -420,10 +419,9 @@ async fn test_multipart_put_object_if_match() {
      * new one and a superseded value must stop satisfying If-Match.
      * Carry the current ETag forward so the conditions below mean the
      * same thing in both modes. */
-    let cfg = s3_tests_rs::config::get_config();
     let resp = successful_conditional_multipart_upload(&client, &bucket, key, body, None, Some("badetag")).await;
     let overwritten = resp.e_tag().unwrap().to_string();
-    if cfg.non_md5_etag {
+    if s3_tests_rs::features::non_md5_etag().await {
         assert_ne!(overwritten, etag,
                    "rgw_non_md5_etag must mint a new ETag for each upload");
         failing_conditional_multipart_upload(&client, &bucket, key, body, Some(&etag), None, 412, "PreconditionFailed").await;

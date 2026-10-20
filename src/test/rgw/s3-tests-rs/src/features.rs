@@ -142,6 +142,21 @@ pub async fn access_model() -> Option<String> {
     std::env::var("S3TEST_ACCESS_MODEL").ok().filter(|v| !v.is_empty())
 }
 
+/// Whether ETags are unique-per-write tokens rather than content
+/// MD5s -- `rgw_non_md5_etag`.
+///
+/// The gateway's report where it makes one, since it is what does the
+/// hashing;  s3tests.conf's `non_md5_etag` otherwise, which is every
+/// endpoint but nsfs and defaults to the digest regime.  So an S3
+/// endpoint this suite knows nothing about is tested for MD5 ETags, and
+/// a gateway that says it is in the other regime is believed.
+pub async fn non_md5_etag() -> bool {
+    match feature_bool("non_md5_etag").await {
+        Some(v) => v,
+        None => crate::config::get_config().non_md5_etag,
+    }
+}
+
 /// How many seconds a lifecycle day lasts on this gateway, as it
 /// reports it.
 ///

@@ -918,15 +918,6 @@ async fn test_nested_run_as_rejects_a_different_identity() {
 
 /// Is the gateway producing mtime-ino etags rather than digests?
 ///
-/// Asked of the gateway, not inferred:  `rgw_non_md5_etag` is off by
-/// default, and an etag's shape is not something a client has a
-/// second opinion about.
-async fn non_md5_etag() -> bool {
-    match features().await {
-        Some(f) => f.get_bool("non_md5_etag").unwrap_or(false),
-        None => false,
-    }
-}
 
 
 /// The non-md5 etag is *recorded on the object*, not just reported.
@@ -970,7 +961,7 @@ async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
                    --with-impersonation");
         return;
     }
-    if !non_md5_etag().await {
+    if !s3_tests_rs::features::non_md5_etag().await {
         eprintln!("rgw_non_md5_etag is off;  start with \
                    --with-non-md5-etag");
         return;

@@ -14,27 +14,27 @@
 //! upgrade.  That is why it lives here and why conversion has no
 //! validation pass:  `DECISIONS.md` 2026-10-09.
 //!
-//! The regime comes from `non_md5_etag` in the suite's own config,
-//! which already means exactly this -- "ETags are unique-per-write
-//! tokens rather than content MD5s" (`config.rs:44`) -- rather than
-//! from a second setting of the corpus's own.
+//! The regime comes from `features::non_md5_etag()`:  the gateway's
+//! report where it makes one, and the suite's own `non_md5_etag`
+//! config otherwise, which already means exactly this -- "ETags are
+//! unique-per-write tokens rather than content MD5s" (`config.rs:44`)
+//! -- rather than from a second setting of the corpus's own.
 
 use md5::{Digest, Md5};
-use s3_tests_rs::config::get_config;
 
 use crate::manifest::Manifest;
 
 /// `true` when the gateway promises a digest.
-pub fn digest_regime() -> bool {
-    !get_config().non_md5_etag
+pub async fn digest_regime() -> bool {
+    !s3_tests_rs::features::non_md5_etag().await
 }
 
 /// A one-line name for the regime, recorded so a capture carries its
 /// own provenance.  Two captures taken under different regimes are not
 /// comparable, and the manifest should say which it is rather than
 /// leave it to be inferred from the values.
-pub fn regime() -> &'static str {
-    if digest_regime() { "digest" } else { "synthetic" }
+pub async fn regime() -> &'static str {
+    if digest_regime().await { "digest" } else { "synthetic" }
 }
 
 /// Whether the ETag is this function's business.
@@ -127,7 +127,7 @@ pub async fn check_body_digest(
         }
     };
 
-    if digest_regime() {
+    if digest_regime().await {
         if tag != digest {
             problems.push(format!(
                 "{key:?} reports ETag {tag:?} and its body digests to \

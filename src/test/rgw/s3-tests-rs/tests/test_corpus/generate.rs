@@ -304,7 +304,7 @@ async fn keys_axis(name: &str, classes: &[KeyClass]) {
      * is the only read of an object's content anywhere in the corpus.
      * Recorded into the manifest before it is rendered, and the
      * failures folded into the axis's own assertion below. */
-    m.bucket(&b, "etag-regime", crate::integrity::regime());
+    m.bucket(&b, "etag-regime", crate::integrity::regime().await);
     let mut integrity: Vec<String> = Vec::new();
     for (key, etag) in &reported {
         crate::integrity::check_body_digest(
