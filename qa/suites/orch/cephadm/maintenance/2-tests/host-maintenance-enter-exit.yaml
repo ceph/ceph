@@ -1,0 +1,24 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - OSD_DOWN
+      - OSD_HOST_DOWN
+      - OSDMAP_FLAGS
+      - OSD_FLAGS
+      - HOST_IN_MAINTENANCE
+      - MON_DOWN
+      - PG_DEGRADED
+      - PG_AVAILABILITY
+      - noup
+      - osds down
+      - is down
+      - mons down
+      - mon down
+      - out of quorum
+      - Degraded data redundancy
+      - pg .*? is stuck
+      - pg .* is stuck peering
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.maintenance.test_maintenance_enter_exit.TestMaintenanceEnterExit

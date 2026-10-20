@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - OSD_DOWN
+      - OSDMAP_FLAGS
+      - OSD_FLAGS
+      - PG_DEGRADED
+      - PG_AVAILABILITY
+      - noup
+      - osds down
+      - is down
+      - Degraded data redundancy
+      - pg .*? is stuck
+      - pg .* is stuck peering
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.maintenance.test_ok_to_stop.TestOkToStop
