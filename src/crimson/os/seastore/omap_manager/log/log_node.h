@@ -863,7 +863,6 @@ struct LogNode
   void remove_last_entry();
 
   void set_cur_bitmap(uint32_t begin, uint32_t end);
-  d_bitmap_t get_cur_bitmap();
   void set_bitmap(d_bitmap_t map);
 
   // start and end should exist in the node
@@ -884,7 +883,7 @@ struct LogNode
     uint32_t index = 0;
     bool remove = false;
     std::string last;
-    d_bitmap_t map = get_cur_bitmap();
+    d_bitmap_t map = get_live_bitmap();
     while(iter != iter_end()) {
       auto key = iter->get_key();
       if (s <= key && key <= e) {

@@ -120,32 +120,11 @@ bool LogNode::is_removable() {
 }
 
 void LogNode::set_cur_bitmap(uint32_t begin, uint32_t end) {
-  d_bitmap_t bitmap = get_d_bitmap();
-  auto p = maybe_get_delta_buffer();
-  if (p) {
-    auto ret = p->get_latest_d_bitmap();
-    if (ret) {
-      auto biter = (*ret).cbegin();
-      decode(bitmap, biter);
-    }
-  } 
+  d_bitmap_t bitmap = get_live_bitmap();
   bitmap.set_bitmap_range(begin, end);
   bufferlist bl;
   encode(bitmap, bl);
   append_remove(bl);
-}
-
-d_bitmap_t LogNode::get_cur_bitmap() {
-  d_bitmap_t bitmap = get_d_bitmap();
-  auto p = maybe_get_delta_buffer();
-  if (p) {
-    auto ret = p->get_latest_d_bitmap();
-    if (ret) {
-      auto biter = (*ret).cbegin();
-      decode(bitmap, biter);
-    } 
-  } 
-  return bitmap;
 }
 
 void LogNode::set_bitmap(d_bitmap_t map) {
@@ -155,14 +134,12 @@ void LogNode::set_bitmap(d_bitmap_t map) {
 }
 
 d_bitmap_t LogNode::get_live_bitmap() const {
-  d_bitmap_t bitmap;
+  d_bitmap_t bitmap = get_d_bitmap();
   if (auto p = maybe_get_delta_buffer()) {
     if (auto ret = p->get_latest_d_bitmap()) {
       auto it = (*ret).cbegin();
       decode(bitmap, it);
     }
-  } else {
-    bitmap = get_d_bitmap();
   }
   return bitmap;
 }
