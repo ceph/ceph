@@ -699,6 +699,10 @@ public:
     return cleaner ? cleaner->is_storage_full() : false;
   }
 
+  void account_conflict_pending_free(paddr_t addr, extent_len_t len) {
+    background_process.account_conflict_pending_free(addr, len);
+  }
+
   backend_type_t get_main_backend_type() const {
     if (!background_process.is_no_background()) {
       return background_process.get_main_backend_type();
@@ -1043,6 +1047,22 @@ private:
         auto cleaner = cleaners_by_device_id[id];
         assert(cleaner);
         cleaner->mark_space_free(addr, len);
+      }
+    }
+
+    // Routed like mark_space_free(), so it reaches the cleaner of the
+    // writer that later deaccounts it. Not gated on state: the deaccount
+    // side is not either.
+    void account_conflict_pending_free(paddr_t addr, extent_len_t len) {
+      if (!has_cold_tier()) {
+        assert(main_cleaner);
+        main_cleaner->account_conflict_pending_free(len);
+      } else {
+        auto id = addr.get_device_id();
+        assert(id < cleaners_by_device_id.size());
+        auto cleaner = cleaners_by_device_id[id];
+        assert(cleaner);
+        cleaner->account_conflict_pending_free(len);
       }
     }
 
