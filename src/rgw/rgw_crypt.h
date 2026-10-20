@@ -147,6 +147,8 @@ public:
 }; /* RGWPutObj_BlockEncrypt */
 
 
+int rgw_s3_check_sse_c_blocked(req_state* s);
+
 int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
