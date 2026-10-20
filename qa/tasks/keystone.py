@@ -278,7 +278,10 @@ def run_keystone(ctx, config):
         public_host, public_port = ctx.keystone.public_endpoints[client]
         run_cmd = get_keystone_venved_cmd(ctx, 'uwsgi',
             [
-                '--http-socket', f"{public_host}:{public_port}",
+                '--master', # needs to address RemoteDisconnected
+                '--processes', '4',
+                '--http-keepalive',
+                '--http', f"{public_host}:{public_port}",
                 '--module', 'keystone.wsgi.api:application',
                 # Let's put the Keystone in background, wait for EOF
                 # and after receiving it, send SIGTERM to the daemon.
