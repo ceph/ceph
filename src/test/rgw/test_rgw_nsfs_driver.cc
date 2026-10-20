@@ -281,7 +281,7 @@ TEST(FSEnt, DirCreate)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testdir->create(env->dpp, &existed);
+  int ret = testdir->create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -299,7 +299,7 @@ TEST(FSEnt, DirBase)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testdir->create(env->dpp, &existed);
+  int ret = testdir->create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -418,7 +418,7 @@ TEST(FSEnt, DirAddDir)
   sf::path tp{base_path / dirname};
   std::unique_ptr<nsfs::Directory> testdir =
     std::make_unique<nsfs::Directory>(dirname, root.get(), env->cct.get());
-  int ret = testdir->create(env->dpp, &existed);
+  int ret = testdir->create(env->dpp, null_yield, &existed);
   EXPECT_EQ(ret, 0);
 
   ret = testdir->open(env->dpp);
@@ -428,7 +428,7 @@ TEST(FSEnt, DirAddDir)
   sf::path sp{base_path / dirname / subdirname};
   std::unique_ptr<nsfs::Directory> subdir =
     std::make_unique<nsfs::Directory>(subdirname, testdir.get(), env->cct.get());
-  ret = subdir->create(env->dpp, &existed);
+  ret = subdir->create(env->dpp, null_yield, &existed);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
   EXPECT_TRUE(sf::exists(sp));
@@ -441,7 +441,7 @@ TEST(FSEnt, DirAddDir)
   sf::path ssp{base_path / dirname / subdirname / subsubdirname};
   std::unique_ptr<nsfs::Directory> subsubdir =
     std::make_unique<nsfs::Directory>(subsubdirname, subdir.get(), env->cct.get());
-  ret = subsubdir->create(env->dpp, &existed);
+  ret = subsubdir->create(env->dpp, null_yield, &existed);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
   EXPECT_TRUE(sf::exists(ssp));
@@ -460,7 +460,7 @@ TEST(FSEnt, FileCreateReal)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testfile.create(env->dpp, &existed);
+  int ret = testfile.create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -477,7 +477,7 @@ TEST(FSEnt, FileCreateTemp)
   EXPECT_FALSE(sf::exists(tp));
 
   bool existed{false};
-  int ret = testfile.create(env->dpp, &existed, true);
+  int ret = testfile.create(env->dpp, null_yield, &existed, true);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
   EXPECT_FALSE(sf::exists(tp));
@@ -500,7 +500,7 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(testfile->get_fd(), -1);
 
   bool existed{false};
-  int ret = testfile->create(env->dpp, &existed);
+  int ret = testfile->create(env->dpp, null_yield, &existed);
 
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -570,7 +570,7 @@ TEST(FSEnt, FileReadWrite)
   std::unique_ptr<nsfs::File> testfile{
     std::make_unique<nsfs::File>(fname, root.get(), env->cct.get())};
 
-  int ret = testfile->create(env->dpp);
+  int ret = testfile->create(env->dpp, null_yield);
   EXPECT_EQ(ret, 0);
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_regular_file(tp));
@@ -4171,7 +4171,7 @@ TEST(NooBaaMPU, AssembleUniformLinks)
   std::vector<nsfs::MPUStrategy::PartPlacement> parts{
     {1, true, 0, size}, {2, true, size, size}, {3, true, 2 * size, size}};
 
-  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size), 0);
+  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size, null_yield), 0);
 
   const std::string out = read_all(st.upload / "final");
   EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'c') +
@@ -4198,7 +4198,7 @@ TEST(NooBaaMPU, AssembleShortTailCopiesTheTail)
   std::vector<nsfs::MPUStrategy::PartPlacement> parts{
     {1, true, 0, size}, {2, true, size, size}, {3, true, 2 * tail, tail}};
 
-  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size), 0);
+  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size, null_yield), 0);
 
   const std::string out = read_all(st.upload / "final");
   EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'c') +
@@ -4222,7 +4222,7 @@ TEST(NooBaaMPU, AssembleSparseNumberingCopies)
   std::vector<nsfs::MPUStrategy::PartPlacement> parts{
     {1, true, 0, size}, {5, true, 4 * size, size}};
 
-  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size), 0);
+  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size, null_yield), 0);
 
   const std::string out = read_all(st.upload / "final");
   EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'f'));

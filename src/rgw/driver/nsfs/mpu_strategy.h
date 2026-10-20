@@ -416,6 +416,7 @@ public:
                        const std::vector<PartPlacement>& parts,
                        const std::string& output_name,
                        std::optional<uint64_t> stride,
+                       optional_yield y,
                        const FSIdentity& id = {}) const = 0;
 
   /* The shared data file for an upload running at this stride, if the
@@ -486,6 +487,7 @@ public:
                int dir_fd, const std::vector<PartPlacement>& parts,
                const std::string& output_name,
                std::optional<uint64_t> stride,
+               optional_yield y,
                const FSIdentity& id = {}) const override;
 
   const char* name() const override { return "rgw"; }
@@ -528,6 +530,7 @@ public:
 	       int dir_fd, const std::vector<PartPlacement>& parts,
 	       const std::string& output_name,
 	       std::optional<uint64_t> stride,
+	       optional_yield y,
 	       const FSIdentity& id = {}) const override;
 
   std::optional<std::string> shared_name(uint64_t stride) const override;
@@ -602,6 +605,7 @@ public:
 	       int dir_fd, const std::vector<PartPlacement>& parts,
 	       const std::string& output_name,
 	       std::optional<uint64_t> stride,
+	       optional_yield y,
 	       const FSIdentity& id = {}) const override;
 
   std::optional<std::string> shared_name(uint64_t stride) const override;

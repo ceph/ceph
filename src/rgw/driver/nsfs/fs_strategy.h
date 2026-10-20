@@ -131,6 +131,7 @@ public:
   virtual int link_temp_file(int temp_fd, int dir_fd,
                              const std::string& name,
                              const DoutPrefixProvider* dpp,
+                             optional_yield y,
                              const nsfs::FSIdentity& id = {}) = 0;
 
   /* publish only if the name is free, returning -EEXIST if it is not.
@@ -149,6 +150,7 @@ public:
   virtual int link_temp_file_excl(int temp_fd, int dir_fd,
                                   const std::string& name,
                                   const DoutPrefixProvider* dpp,
+                                  optional_yield y,
                                   const nsfs::FSIdentity& id = {});
 
   /* CAS link: link src to dst, verify inode+mtime match expected;
@@ -158,6 +160,7 @@ public:
                                int dst_dir_fd, const std::string& dst_name,
                                uint64_t expected_mtime_ns,
                                uint64_t expected_ino,
+                               optional_yield y,
                                const nsfs::FSIdentity& id = {}) = 0;
 
   /* CAS unlink: remove entry only if it matches expected inode+mtime */
@@ -166,6 +169,7 @@ public:
                                  int tmp_dir_fd,
                                  uint64_t expected_mtime_ns,
                                  uint64_t expected_ino,
+                                 optional_yield y,
                                  const nsfs::FSIdentity& id = {}) = 0;
 
   /* copy a byte range between two files, by the cheapest means the
@@ -241,11 +245,13 @@ protected:
   int clone_file_by_copy(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
+                         optional_yield y,
                          bool excl, const nsfs::FSIdentity& id = {},
                          bool src_as_gateway = false);
 
   int clone_fd_by_copy(const DoutPrefixProvider* dpp, int src_fd,
                        int dst_dir_fd, const std::string& dst_name,
+                       optional_yield y,
                        const nsfs::FSIdentity& id = {},
                        bool src_as_gateway = false);
 
@@ -282,6 +288,7 @@ public:
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
+                         optional_yield y,
                          bool excl = false,
                          const nsfs::FSIdentity& id = {},
                          bool src_as_gateway = false) = 0;
@@ -293,6 +300,7 @@ public:
   virtual int clone_fd(const DoutPrefixProvider* dpp,
                        int src_fd,
                        int dst_dir_fd, const std::string& dst_name,
+                       optional_yield y,
                        const nsfs::FSIdentity& id = {},
                        bool src_as_gateway = false) = 0;
 
@@ -330,14 +338,17 @@ public:
    * is every caller that has not been told otherwise. */
   virtual int get_xattrs(const DoutPrefixProvider* dpp, int fd,
                          xattr_map_t& attrs,
+                         optional_yield y,
                          const nsfs::FSIdentity& id = {}) = 0;
 
   virtual int set_xattrs(const DoutPrefixProvider* dpp, int fd,
                          const xattr_map_t& attrs,
+                         optional_yield y,
                          const nsfs::FSIdentity& id = {}) = 0;
 
   virtual int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
                             const std::vector<std::string>& names,
+                            optional_yield y,
                             const nsfs::FSIdentity& id = {}) = 0;
 
   virtual const char* name() const = 0;
@@ -356,6 +367,7 @@ public:
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
                      const DoutPrefixProvider* dpp,
+                     optional_yield y,
                      const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_link(const DoutPrefixProvider* dpp,
@@ -363,6 +375,7 @@ public:
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
                        uint64_t expected_ino,
+                       optional_yield y,
                        const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_unlink(const DoutPrefixProvider* dpp,
@@ -370,11 +383,13 @@ public:
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
                          uint64_t expected_ino,
+                         optional_yield y,
                          const nsfs::FSIdentity& id = {}) override;
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
+                 optional_yield y,
                  bool excl = false,
                  const nsfs::FSIdentity& id = {},
                  bool src_as_gateway = false) override;
@@ -382,6 +397,7 @@ public:
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
                int dst_dir_fd, const std::string& dst_name,
+               optional_yield y,
                const nsfs::FSIdentity& id = {},
                bool src_as_gateway = false) override;
 
@@ -393,12 +409,15 @@ public:
 
   int get_xattrs(const DoutPrefixProvider* dpp, int fd,
                  xattr_map_t& attrs,
+                 optional_yield y,
                  const nsfs::FSIdentity& id = {}) override;
   int set_xattrs(const DoutPrefixProvider* dpp, int fd,
                  const xattr_map_t& attrs,
+                 optional_yield y,
                  const nsfs::FSIdentity& id = {}) override;
   int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
                     const std::vector<std::string>& names,
+                    optional_yield y,
                     const nsfs::FSIdentity& id = {}) override;
 
   const char* name() const override { return "posix"; }
@@ -477,6 +496,7 @@ public:
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
                      const DoutPrefixProvider* dpp,
+                     optional_yield y,
                      const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_link(const DoutPrefixProvider* dpp,
@@ -484,6 +504,7 @@ public:
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
                        uint64_t expected_ino,
+                       optional_yield y,
                        const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_unlink(const DoutPrefixProvider* dpp,
@@ -491,11 +512,13 @@ public:
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
                          uint64_t expected_ino,
+                         optional_yield y,
                          const nsfs::FSIdentity& id = {}) override;
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
+                 optional_yield y,
                  bool excl = false,
                  const nsfs::FSIdentity& id = {},
                  bool src_as_gateway = false) override;
@@ -503,6 +526,7 @@ public:
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
                int dst_dir_fd, const std::string& dst_name,
+               optional_yield y,
                const nsfs::FSIdentity& id = {},
                bool src_as_gateway = false) override;
 
@@ -514,12 +538,15 @@ public:
 
   int get_xattrs(const DoutPrefixProvider* dpp, int fd,
                  xattr_map_t& attrs,
+                 optional_yield y,
                  const nsfs::FSIdentity& id = {}) override;
   int set_xattrs(const DoutPrefixProvider* dpp, int fd,
                  const xattr_map_t& attrs,
+                 optional_yield y,
                  const nsfs::FSIdentity& id = {}) override;
   int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
                     const std::vector<std::string>& names,
+                    optional_yield y,
                     const nsfs::FSIdentity& id = {}) override;
 
   const char* name() const override { return "gpfs"; }
@@ -557,6 +584,7 @@ mode_t dir_create_mode();
  * umask took some of it.  As `id`, because a file created under a
  * personality is the requester's and only its owner may chmod it. */
 int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
+		      optional_yield y,
 		      const FSIdentity& id = {});
 /* The same, for a directory created by name. */
 int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,

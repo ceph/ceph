@@ -164,6 +164,19 @@ int find_personality(const rgw_user& key, PersonalityRef* out,
  * arise -- which is the same reasoning that lets registration
  * briefly assume an identity.
  *
+ * **The caller suspends rather than blocks** when `y` is a coroutine:
+ * its frontend thread serves other requests while the helper works,
+ * which matters most where the work is long -- a copy of a whole
+ * object, on a filesystem with no range clone.  With `null_yield` it
+ * blocks, which is what a caller with no coroutine -- librgw,
+ * startup, a driver hint -- already does for every syscall.
+ *
+ * `fn` runs on the helper, so it must not use `y` or anything else
+ * that would suspend the caller's coroutine:  that coroutine is not
+ * running on the helper's thread.  A nested with_identity() inside
+ * `fn` passes `null_yield`;  it takes the fast path below and never
+ * waits.
+ *
  * Returns what `fn` returned, or -errno if the credentials could
  * not be assumed.
  */
@@ -175,7 +188,7 @@ int find_personality(const rgw_user& key, PersonalityRef* out,
 using ImpersonatedFn = fu2::unique_function<int() const>;
 
 int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
-	   const ImpersonatedFn& fn);
+	   const ImpersonatedFn& fn, optional_yield y);
 
 /* What an operation needs to be performed as somebody.
  *
@@ -213,7 +226,8 @@ public:
   int acquire(const DoutPrefixProvider* dpp, uint16_t* out) override;
   void release() override { ref.reset(); }
   int run_as(const DoutPrefixProvider* dpp,
-	     fu2::unique_function<int() const> fn) override;
+	     fu2::unique_function<int() const> fn,
+	     optional_yield y) override;
 };
 
 /* Perform `fn` as this identity.
@@ -230,7 +244,7 @@ public:
  * This is the one place that decides *how* something is
  * impersonated.  Callers say what they want done. */
 int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
-		  const ImpersonatedFn& fn);
+		  const ImpersonatedFn& fn, optional_yield y);
 
 /* Put `CAP_DAC_READ_SEARCH` in this thread's effective set, once.
  *
@@ -326,13 +340,13 @@ constexpr uint64_t cap_bit(int cap) { return 1ull << cap; }
  * leaving the caller its default-constructed result. */
 template <typename F>
 auto with_identity_r(const DoutPrefixProvider* dpp, const FSIdentity& id,
-		     F&& fn) -> decltype(fn())
+		     F&& fn, optional_yield y) -> decltype(fn())
 {
   if (! id.active()) {
     return fn();
   }
   decltype(fn()) result{};
-  run_as(dpp, id.cred, [&]() -> int { result = fn(); return 0; });
+  run_as(dpp, id.cred, [&]() -> int { result = fn(); return 0; }, y);
   return result;
 }
 

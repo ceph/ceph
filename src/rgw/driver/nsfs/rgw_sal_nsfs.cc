@@ -579,7 +579,8 @@ static int nsfs_record_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
                                     const struct statx& stx,
                                     const nsfs::XattrStrategy* xs,
                                     const nsfs::FSIdentity& id,
-                                    bool inject_as_gateway)
+                                    bool inject_as_gateway,
+                                    optional_yield y)
 {
   if (fd < 0) {
     return -EBADF;
@@ -597,7 +598,7 @@ static int nsfs_record_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
       return -errno;
     }
     return 0;
-  });
+  }, y);
 }
 
 /* The uid and gid of an open descriptor.
@@ -774,7 +775,8 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
 					    const std::string& name,
 					    const nsfs::XattrStrategy* xs,
 					    const nsfs::IdentityDB& db,
-					    nsfs::Credentials& inout)
+					    nsfs::Credentials& inout,
+					    optional_yield y)
 {
   ACLOwner recorded;
   const nsfs::Credentials reader = inout;	/* the file's own owner */
@@ -788,7 +790,7 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
   };
 
   const int ret = nsfs::impersonation_enabled()
-    ? nsfs::run_as(dpp, reader, read_owner) : read_owner();
+    ? nsfs::run_as(dpp, reader, read_owner, y) : read_owner();
   if (ret < 0) {
     ldpp_dout(dpp, 10) << "credentials_from_recorded_owner: " << name
       << " records no usable owner: " << cpp_strerror(-ret) << dendl;
@@ -832,6 +834,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
                            FSStrategy* fs_strategy,
                            const nsfs::XattrStrategy* xs,
                            const nsfs::IdentityDB* idb,
+                           optional_yield y,
                            PromoteResult* out = nullptr)
 {
   ldpp_dout(dpp, 10) << "promote_version: enter leaf=" << leaf
@@ -967,7 +970,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
 	/* rung 3:  several rows carry the uid and disagree, so ask the
 	 * object who it belongs to */
 	named = credentials_from_recorded_owner(dpp, vfd, max_name, xs,
-						*idb, cand_owner);
+						*idb, cand_owner, y);
       }
     }
 
@@ -977,7 +980,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
       sr = fs_strategy->safe_link(dpp, vfd, max_name,
                                   parent_fd, leaf,
                                   statx_mtime_ns(cand_stx),
-                                  cand_stx.stx_ino);
+                                  cand_stx.stx_ino, null_yield);
       ldpp_dout(dpp, 10) << "promote_version: safe_link " << max_name
         << " → " << leaf << " result=" << (int)sr << dendl;
       if (sr != SafeResult::OK) {
@@ -1014,7 +1017,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
     };
 
     const int aret = nsfs::impersonation_enabled()
-      ? nsfs::run_as(dpp, cand_owner, publish) : publish();
+      ? nsfs::run_as(dpp, cand_owner, publish, y) : publish();
     if (aret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
         << " cannot run as uid " << cand_owner.uid << ", the owner of "
@@ -1473,7 +1476,7 @@ static int open_versions_lockfile(int parent_fd)
     return -errno;
   }
   /* in the tree like any object, so the same mode */
-  (void) nsfs::apply_create_mode(nullptr, fd, nsfs::file_create_mode());
+  (void) nsfs::apply_create_mode(nullptr, fd, nsfs::file_create_mode(), null_yield);
   return fd;
 }
 
@@ -1593,6 +1596,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 				  bool ver_enabled,
 				  DemoteResult& result,
 				  const nsfs::FSIdentity& id,
+				  optional_yield y,
 				  const nsfs::XattrStrategy* alt = nullptr)
 {
   ldpp_dout(dpp, 10) << "nsfs: demote enter leaf=" << leaf
@@ -1640,7 +1644,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
   SafeResult sr = fs_strategy->safe_link(
     dpp, parent_fd, leaf,
     vfd, ver_name,
-    statx_mtime_ns(cur_stx), cur_stx.stx_ino, id);
+    statx_mtime_ns(cur_stx), cur_stx.stx_ino, y, id);
   ldpp_dout(dpp, 10) << "nsfs: demote " << leaf << " -> " << ver_name
     << " result=" << (int)sr << dendl;
 
@@ -1791,7 +1795,7 @@ int resolve_path(const DoutPrefixProvider* dpp,
       if (!create_dirs || ret != -ENOENT) {
         return ret;
       }
-      ret = dir->create(dpp);
+      ret = dir->create(dpp, null_yield);
       if (ret < 0) {
         return ret;
       }
@@ -2061,7 +2065,7 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
   }
 
   return 0;
-  });
+  }, y);
 }
 
 /* The on-disk form of an attribute value.
@@ -2136,7 +2140,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
     std::vector<std::string> current;
     if (fs) {
       nsfs::xattr_map_t raw;
-      ret = fs->get_xattrs(dpp, fd, raw, id);
+      ret = fs->get_xattrs(dpp, fd, raw, y, id);
       if (ret < 0) {
 	return ret;
       }
@@ -2158,7 +2162,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
       }
     }
     if (fs) {
-      return fs->remove_xattrs(dpp, fd, names, id);
+      return fs->remove_xattrs(dpp, fd, names, y, id);
     }
     for (const auto& n : names) {
       /* no strategy here, so the identity is applied directly */
@@ -2167,7 +2171,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
 	  return -errno;
 	}
 	return 0;
-      });
+      }, y);
       if (rret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << n
 	  << " for " << display << ": " << cpp_strerror(-rret) << dendl;
@@ -2183,7 +2187,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
    * format the same way a write is, with nothing to write. */
   if (fs) {
     nsfs::xattr_map_t raw;
-    if (fs->get_xattrs(dpp, fd, raw, id) >= 0) {
+    if (fs->get_xattrs(dpp, fd, raw, y, id) >= 0) {
       std::vector<std::string> current;
       current.reserve(raw.size());
       for (auto& [n, _] : raw) {
@@ -2199,7 +2203,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
 	   * swallows it too (`namespace_fs.js:2794`) */
 	  return 0;
 	}
-	return fs->remove_xattrs(dpp, fd, spread, id);
+	return fs->remove_xattrs(dpp, fd, spread, y, id);
       }
     }
   }
@@ -2219,7 +2223,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
    * identity's own object. */
   if (fs) {
     std::vector<std::string> one{attrname};
-    return fs->remove_xattrs(dpp, fd, one, id);
+    return fs->remove_xattrs(dpp, fd, one, y, id);
   }
 
   ret = nsfs::with_identity(dpp, id, [&]() -> int {
@@ -2227,7 +2231,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
       return -errno;
     }
     return 0;
-  });
+  }, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove attribute " << attrname
       << " for " << display << ": " << cpp_strerror(-ret) << dendl;
@@ -2463,7 +2467,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       if (!have_current) {
 	have_current = true;
 	nsfs::xattr_map_t raw;
-	if (fs_strategy->get_xattrs(dpp, afd, raw, aid) >= 0) {
+	if (fs_strategy->get_xattrs(dpp, afd, raw, y, aid) >= 0) {
 	  current.reserve(raw.size());
 	  for (auto& [n, _] : raw) {
 	    current.emplace_back(n);
@@ -2511,7 +2515,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
     if (mode == AttrWriteMode::REPLACE_ALL) {
       nsfs::xattr_map_t old_raw;
-      fs_strategy->get_xattrs(dpp, afd, old_raw, aid);
+      fs_strategy->get_xattrs(dpp, afd, old_raw, y, aid);
 
       for (auto& [disk_name, _] : old_raw) {
         /* Facts about the bucket that no attribute write owns.  Each
@@ -2602,13 +2606,13 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     }
 
     if (!to_remove.empty()) {
-      ret = fs_strategy->remove_xattrs(dpp, afd, to_remove, aid);
+      ret = fs_strategy->remove_xattrs(dpp, afd, to_remove, y, aid);
       if (ret < 0) {
         return ret;
       }
     }
 
-    return fs_strategy->set_xattrs(dpp, afd, to_write, aid);
+    return fs_strategy->set_xattrs(dpp, afd, to_write, y, aid);
   }
 
   /* per-attr syscalls */
@@ -2763,7 +2767,8 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
-int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
+int File::create(const DoutPrefixProvider *dpp, optional_yield y,
+		   bool* existed, bool temp_file)
 {
   int flags, ret;
   std::string path;
@@ -2815,7 +2820,7 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
   fd = ret;
   need_fsync = true;
 
-  ret = nsfs::apply_create_mode(dpp, fd, mode, identity);
+  ret = nsfs::apply_create_mode(dpp, fd, mode, y, identity);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
 		      << ": " << cpp_strerror(-ret) << dendl;
@@ -3150,7 +3155,7 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
    * read a source the filesystem refuses them, which the caller has
    * resolved */
   return fs_strategy->clone_file(dpp, src_dir_fd, get_name(),
-                                 dst_dir_fd, dst_name, /*excl=*/false,
+                                 dst_dir_fd, dst_name, /*excl=*/y, false,
                                  identity, src_as_gateway);
 }
 
@@ -3196,9 +3201,9 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
   const FSIdentity& who = as_gateway ? FSIdentity_none() : identity;
   int ret = excl
     ? fs_strategy->link_temp_file_excl(fd, parent->get_fd(), get_name(),
-				       dpp, who)
+				       dpp, y, who)
     : fs_strategy->link_temp_file(fd, parent->get_fd(), get_name(),
-				  dpp, who);
+				  dpp, y, who);
   if (ret < 0) {
     return ret;
   }
@@ -3227,7 +3232,8 @@ bool Directory::file_exists(std::string& name)
   return (ret >= 0);
 }
 
-int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
+int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
+			 bool* existed, bool temp_file)
 {
   if (temp_file) {
     ldpp_dout(dpp, 0) << "ERROR: cannot create directory with temp_file " << get_name() << dendl;
@@ -3527,7 +3533,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   dest->parent = dst_dir;
   dest->fname = dst_name;
 
-  ret = dest->create(dpp);
+  ret = dest->create(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not create dest " << dest->get_name() << dendl;
     return ret;
@@ -3766,7 +3772,7 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
   File dst(name, dst_dir, ctx);
-  return dst.create(dpp);
+  return dst.create(dpp, y);
 }
 
 /* Changing such an object has to convert it -- move it into the nsfs
@@ -3783,6 +3789,7 @@ static int refuse_noobaa_directory_object_change(const DoutPrefixProvider* dpp,
 }
 
 int NooBaaDirectoryObject::create(const DoutPrefixProvider* dpp,
+				  optional_yield y,
 				  bool* existed, bool temp_file)
 {
   return refuse_noobaa_directory_object_change(dpp, parent->get_name());
@@ -4057,7 +4064,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
-int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
+int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
+			 bool* existed, bool temp_file)
 {
   std::string path;
 
@@ -4678,7 +4686,7 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	    if (!nsfs::impersonation_enabled()) {
 	      wret = write_record();
 	    } else {
-	      wret = nsfs::run_as(&dp, owner, write_record);
+	      wret = nsfs::run_as(&dp, owner, write_record, null_yield);
 	    }
 	    if (wret < 0) {
 	      ldpp_dout(&dp, 0) << "ERROR: could not write the record for part "
@@ -4888,7 +4896,7 @@ int NSFSDriver::open_base_path(const DoutPrefixProvider* dpp)
       return ret;
     }
     if (ret == -ENOENT) {
-      ret = d.create(dpp);
+      ret = d.create(dpp, null_yield);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: could not create base path ("
 	  << base_path_ << "): " << cpp_strerror(-ret) << dendl;
@@ -5369,7 +5377,8 @@ int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
 
 int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
 				   const rgw_owner& owner,
-				   const std::string& path, int mode)
+				   const std::string& path, int mode,
+				   optional_yield y)
 {
   /* Only when the gateway writes as identities:  without impersonation
    * an account's uid never touches the filesystem, and a gateway that
@@ -5398,7 +5407,7 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
     ret = nsfs::run_as(dpp, cred, [fd, mode]() -> int {
 	return (::faccessat(fd, "", mode, AT_EMPTY_PATH | AT_EACCESS) < 0)
 	  ? -errno : 0;
-      });
+      }, y);
     ::close(fd);
   }
   if (ret < 0) {
@@ -5411,11 +5420,12 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
 
 int NSFSDriver::check_owner_can_create_at(const DoutPrefixProvider* dpp,
 					  const rgw_owner& owner,
-					  const std::string& path)
+					  const std::string& path,
+					  optional_yield y)
 {
   return check_owner_access(
     dpp, owner, std::filesystem::path(path).parent_path().string(),
-    W_OK | X_OK);
+    W_OK | X_OK, y);
 }
 
 /* Whether `path` carries any user.nsfs.* attribute:  1 if it does, 0 if
@@ -5538,7 +5548,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* NooBaa checks the owner can read and write the directory, as the
    * owner (`is_dir_accessible`);  here the kernel decides */
-  int ret = check_owner_access(dpp, owner, path, R_OK | W_OK);
+  int ret = check_owner_access(dpp, owner, path, R_OK | W_OK, y);
   if (ret < 0) {
     return ret;
   }
@@ -5949,7 +5959,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
      * chose.  The base path is the gateway's default, not the
      * account's. */
     if (owners_path || custom) {
-      ret = driver->check_owner_can_create_at(dpp, params.owner, bp.path);
+      ret = driver->check_owner_can_create_at(dpp, params.owner, bp.path, y);
       if (ret < 0) {
 	return ret;
       }
@@ -7127,7 +7137,7 @@ int NSFSBucket::unadopt(const DoutPrefixProvider* dpp)
 
   nsfs::xattr_map_t present;
   ret = driver->get_fs_strategy()->get_xattrs(dpp, dir->get_fd(), present,
-					      nsfs::FSIdentity{});
+					      null_yield, nsfs::FSIdentity{});
   if (ret < 0) {
     return ret;
   }
@@ -7797,7 +7807,7 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 
   if (!to_write.empty()) {
     ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
-      return fs->set_xattrs(dpp, fd, to_write);
+      return fs->set_xattrs(dpp, fd, to_write, y);
     });
     if (ret < 0) {
       return ret;
@@ -7818,7 +7828,7 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
      * an operator's instruction across objects of many identities,
      * so it uses the gateway's credentials deliberately */
     ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
-      return fs->remove_xattrs(dpp, fd, to_remove);
+      return fs->remove_xattrs(dpp, fd, to_remove, y);
     });
     if (ret < 0) {
       return ret;
@@ -8034,7 +8044,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     return ret;
   }
   auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
-  ret = nsfs::apply_create_mode(dpp, sfd, nsfs::file_create_mode());
+  ret = nsfs::apply_create_mode(dpp, sfd, nsfs::file_create_mode(), y);
   if (ret < 0) {
     return ret;
   }
@@ -8142,7 +8152,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
      * theirs at `0660` by the time this runs and the write fails as an
      * object's does. */
     ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
-      return fs->set_xattrs(dpp, sfd, to_write);
+      return fs->set_xattrs(dpp, sfd, to_write, y);
     });
     if (ret < 0) {
       return ret;
@@ -8171,7 +8181,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   }
   if (!gone.empty()) {
     /* upgrade command;  see convert_attrs */
-    ret = fs->remove_xattrs(dpp, dir_fd, gone);
+    ret = fs->remove_xattrs(dpp, dir_fd, gone, y);
     if (ret < 0) {
       return ret;
     }
@@ -8427,7 +8437,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     nsfs::Directory ourdir(ours->staging_dir_name(meta), dir.get(),
 			   driver->ctx());
     bool existed = false;
-    ret = ourdir.create(dpp, &existed);
+    ret = ourdir.create(dpp, y, &existed);
     if (ret < 0) {
       return ret;
     }
@@ -8451,7 +8461,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	return ret;
       }
       auto close_mfd = make_scope_guard([mfd] { ::close(mfd); });
-      ret = nsfs::apply_create_mode(dpp, mfd, nsfs::file_create_mode());
+      ret = nsfs::apply_create_mode(dpp, mfd, nsfs::file_create_mode(), y);
       if (ret < 0) {
 	return ret;
       }
@@ -8610,7 +8620,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	return ret;
       }
       auto close_dfd = make_scope_guard([dfd] { ::close(dfd); });
-      ret = nsfs::apply_create_mode(dpp, dfd, nsfs::file_create_mode());
+      ret = nsfs::apply_create_mode(dpp, dfd, nsfs::file_create_mode(), y);
       if (ret < 0) {
 	return ret;
       }
@@ -9754,7 +9764,7 @@ int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct
 
 int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* existed)
 {
-  int ret = dir->create(dpp, existed);
+  int ret = dir->create(dpp, y, existed);
   if (ret < 0) {
     return ret;
   }
@@ -9826,7 +9836,7 @@ int NSFSBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object* 
   if (!target_obj->get_instance().empty()) {
     /* This is a versioned object.  Need to handle versioneddirectory */
     NSFSObject *to = static_cast<NSFSObject *>(target_obj);
-    ret = to->open(dpp, true, false);
+    ret = to->open(dpp, y, true, false);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not open target obj " << to->get_name() << dendl;
       return ret;
@@ -10375,7 +10385,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       int dret2 = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 					 dest_parent_fd, dest_leaf,
-					 dest_ver_enabled, demote, identity,
+					 dest_ver_enabled, demote, identity, y,
 					 static_cast<NSFSBucket*>(dest_bucket)
 					   ->xattr_fallback());
       if (dret2 < 0) {
@@ -10415,7 +10425,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       src_fd = ent->get_fd();
     }
     ret = driver->get_fs_strategy()->clone_fd(
-      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, identity,
+      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, y, identity,
       copy_source_as_gateway());
     if (ret < 0) {
       return ret;
@@ -10544,7 +10554,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
         ::fsetxattr(obj_fd, vid_xattr.c_str(),
                     new_ver_id.c_str(), new_ver_id.size(), 0);
         return 0;
-      });
+      }, y);
     }
 
     auto* bcache = driver->get_bucket_cache();
@@ -11058,7 +11068,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
       "_" + std::to_string(fsio_build_seq.fetch_add(1));
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf, sdir_fd, tmp_name, true /* excl */);
+      dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield, true /* excl */);
     if (ret < 0) {
       return FSIOResult{ret, nullptr};
     }
@@ -11092,7 +11102,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
       return FSIOResult{-errno, nullptr};
     }
     if (int mret = nsfs::apply_create_mode(dpp, build_fd,
-					   nsfs::file_create_mode());
+					   nsfs::file_create_mode(), null_yield);
 	mret < 0) {
       ::close(build_fd);
       return FSIOResult{mret, nullptr};
@@ -11314,7 +11324,7 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
     demote_current_version(dpp, driver->get_fs_strategy(),
 			   src_obj->xattr_strategy(),
 			   parent_fd, leaf_name,
-			   binfo.versioning_enabled(), demote, {},
+			   binfo.versioning_enabled(), demote, {}, null_yield,
 			   src_obj->xattr_fallback());
   }
   {
@@ -11454,7 +11464,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
 
   if (src_exists) {
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, true /* excl */);
+      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, null_yield, true /* excl */);
     if (ret == -EEXIST) {
       joined = true;
     } else if (ret < 0) {
@@ -11469,7 +11479,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
       joined = true;
     } else if (new_fd >= 0) {
       int mret = nsfs::apply_create_mode(dpp, new_fd,
-					 nsfs::file_create_mode());
+					 nsfs::file_create_mode(), null_yield);
       if (mret < 0) {
 	::close(new_fd);
 	return mret;
@@ -11760,7 +11770,7 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
   int ret = with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
 				     [&](int use_fd) -> int {
     if (use_fd < 0) {
-      const int oret = open(dpp, false);
+      const int oret = open(dpp, y, false);
       if (oret < 0) {
 	open_failed = true;
 	return oret;
@@ -11945,7 +11955,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   ret = with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
 				 [&](int use_fd) -> int {
     if (use_fd < 0) {
-      const int oret = open(dpp);
+      const int oret = open(dpp, y);
       if (oret < 0) {
 	return oret;
       }
@@ -12502,7 +12512,8 @@ std::unique_ptr<Object::DeleteOp> NSFSObject::get_delete_op()
   return std::make_unique<NSFSDeleteOp>(this);
 }
 
-int NSFSObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file)
+int NSFSObject::open(const DoutPrefixProvider* dpp, optional_yield y,
+		     bool create, bool temp_file)
 {
   int ret{0};
 
@@ -12520,7 +12531,7 @@ int NSFSObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file)
   }
 
   if (create) {
-    ret = ent->create(dpp, nullptr, temp_file);
+    ret = ent->create(dpp, y, nullptr, temp_file);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not create " << ent->get_name() << dendl;
       return ret;
@@ -12605,7 +12616,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
     return -EINVAL;
   }
 
-  ret = open(dpp);
+  ret = open(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20)
         << "ERROR: NSFSAtomicWriter failed opening file" << dendl;
@@ -12630,7 +12641,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
   if (nsfs_non_md5_etag_into_attrs(dpp, ent->get_stx(), get_attrs())) {
     const int eret = nsfs_record_non_md5_etag(
       dpp, ent->get_fd(), ent->get_stx(), xattr_strategy(),
-      ent->get_identity(), driver->etag_as_gateway_injected());
+      ent->get_identity(), driver->etag_as_gateway_injected(), y);
     if (eret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not record the etag on "
         << get_name() << ": " << cpp_strerror(-eret)
@@ -12669,7 +12680,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
 	  return -errno;
 	}
 	return 0;
-      });
+      }, y);
       if (vret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
           << get_name() << ": " << cpp_strerror(-vret)
@@ -13592,7 +13603,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           (void) promote_version(promote_fd, promote_leaf, dpp,
                           source->driver->get_fs_strategy(),
 			  source->xattr_strategy(),
-			  source->driver->get_identity_db(), &promoted);
+			  source->driver->get_identity_db(), y, &promoted);
           struct statx pstx;
           if (statx(promote_fd, promote_leaf.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
@@ -13722,7 +13733,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           (void) promote_version(parent_fd, leaf_name, dpp,
                           source->driver->get_fs_strategy(),
 			  source->xattr_strategy(),
-			  source->driver->get_identity_db(), &promoted);
+			  source->driver->get_identity_db(), y, &promoted);
           /* update cache for the promoted version */
           struct statx pstx;
           if (statx(parent_fd, leaf_name.c_str(),
@@ -13881,7 +13892,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       SafeResult sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
                                 vfd, ver_name,
-                                cur_mtime, cur_ino, identity);
+                                cur_mtime, cur_ino, y, identity);
       if (sr == SafeResult::OK) {
         int demoted_fd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
         if (demoted_fd >= 0) {
@@ -13898,7 +13909,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
          * directory, which phase D hands to the account. */
         source->driver->get_fs_strategy()->safe_unlink(
                     dpp, parent_fd, dm_leaf, vfd,
-                    cur_mtime, cur_ino, identity);
+                    cur_mtime, cur_ino, y, identity);
         demoted_ver_id = cur_ver_id;
         did_demote = true;
         break;
@@ -13963,7 +13974,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       return -errno;
     }
     return 0;
-  });
+  }, y);
   if (dmret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: delete_obj: could not create the delete"
       " marker for " << dm_leaf << ": " << cpp_strerror(-dmret) << dendl;
@@ -13971,7 +13982,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return dmret;
   }
   if (dm_fd >= 0) {
-    (void) nsfs::apply_create_mode(dpp, dm_fd, nsfs::file_create_mode());
+    (void) nsfs::apply_create_mode(dpp, dm_fd, nsfs::file_create_mode(), y);
     /* Every attribute on the marker is written as its owner, for the
      * reason the version id is:  a `user.*` write is tested against
      * the calling thread, so the gateway writing to the requester's
@@ -14024,7 +14035,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                     acl_v.data(), acl_v.size(), 0);
       }
       return 0;
-    });
+    }, y);
     ::close(dm_fd);
 
     /* rename to final name */
@@ -14312,7 +14323,7 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   meta_obj = get_meta_obj();
 
-  ret = static_cast<NSFSObject*>(meta_obj.get())->open(dpp, true);
+  ret = static_cast<NSFSObject*>(meta_obj.get())->open(dpp, y, true);
   if (ret < 0) {
     return ret;
   }
@@ -14702,7 +14713,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 					    staging_fd, placements,
 					    assembled_name,
 					    established_stride(dpp, y),
-					    identity);
+					    y, identity);
   if (ret < 0) {
     return ret;
   }
@@ -14729,7 +14740,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
     ::close(afd);
     return 0;
-  });
+  }, y);
   if (ret < 0) {
     return ret;
   }
@@ -14806,7 +14817,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     int dret = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 				      leaf_fd, leaf_name,
-				      ver_enabled, demote, identity,
+				      ver_enabled, demote, identity, y,
 				      xattr_fallback());
     if (dret < 0) {
       return dret;
@@ -14845,7 +14856,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
           ::close(obj_fd);
         }
         return 0;
-      });
+      }, y);
 
       auto* bcache = driver->get_bucket_cache();
       std::string obj_name = target_obj->get_key().get_index_key_name();
@@ -15248,7 +15259,7 @@ int NSFSMultipartWriter::prepare(optional_yield y)
   if (identity.active()) {
     part_file->set_identity(identity);
   }
-  int ret = part_file->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
+  int ret = part_file->create(dpp, /*existed=*/y, nullptr, /*tempfile=*/false);
   if (ret < 0) {
     return ret;
   }
@@ -15270,7 +15281,7 @@ int NSFSMultipartWriter::prepare(optional_yield y)
   if (identity.active()) {
     shared_file->set_identity(identity);
   }
-  ret = shared_file->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
+  ret = shared_file->create(dpp, /*existed=*/y, nullptr, /*tempfile=*/false);
   if (ret < 0) {
     return ret;
   }
@@ -15328,7 +15339,7 @@ int NSFSMultipartWriter::divert(uint64_t written)
  * returns nothing here and this does not run.  S3 requires every part
  * but the last to be equal, so at most one part per upload moves.
  */
-int NSFSMultipartWriter::relocate()
+int NSFSMultipartWriter::relocate(optional_yield y)
 {
   if (!shared_file || !shared_target || (high_water == 0)) {
     return 0;
@@ -15358,7 +15369,7 @@ int NSFSMultipartWriter::relocate()
   /* create() opens O_CREAT|O_RDWR without truncating, which is what a
    * shared file needs:  another part of this size may already be in
    * it */
-  ret = dst->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
+  ret = dst->create(dpp, /*existed=*/y, nullptr, /*tempfile=*/false);
   if (ret < 0) {
     return ret;
   }
@@ -15520,7 +15531,7 @@ int NSFSMultipartWriter::complete(
   /* The part's true length is known now, and the file it was written
    * into was chosen from the stride.  Where those disagree and the
    * layout cares, the bytes move before the record is written. */
-  ret = relocate();
+  ret = relocate(rctx.y);
   if (ret < 0) {
     return ret;
   }
@@ -15561,7 +15572,7 @@ int NSFSMultipartWriter::complete(
       const int lret = nsfs::with_identity(dpp, identity, [&]() -> int {
 	return (linkat(dfd, part_file->get_name().c_str(), dfd,
 		       tgt->name.c_str(), 0) < 0) ? -errno : 0;
-      });
+      }, rctx.y);
       if (lret == 0 || lret == -EEXIST) {
 	promoted = true;
 	ldpp_dout(dpp, 15) << "NSFSMultipartWriter::complete: established"
@@ -15622,7 +15633,7 @@ int NSFSMultipartWriter::complete(
     ret = nsfs::with_identity(rctx.dpp, identity, [&]() -> int {
       return mpu_strat->write_part_record(rctx.dpp, upload_dir->get_fd(),
 					  part_file->get_name(), rec);
-    });
+    }, rctx.y);
     if (ret < 0) {
       return ret;
     }
@@ -15722,7 +15733,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
   }
   obj->get_obj_attrs(y, dpp);
   obj->close();
-  return obj->open(dpp, true, true);
+  return obj->open(dpp, y, true, true);
 }
 
 int NSFSAtomicWriter::process(bufferlist&& data, uint64_t offset)
@@ -15945,7 +15956,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 					obj->xattr_strategy(),
 					parent_fd,
 					obj->get_fsent()->get_name(),
-					ver_enabled, demote, identity,
+					ver_enabled, demote, identity, rctx.y,
 					obj->xattr_fallback());
       if (dret < 0) {
         return dret;
@@ -17187,7 +17198,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     };
     /* `fn` as the `as` user, or as the gateway */
     auto acting = [&](const nsfs::ImpersonatedFn& fn) -> int {
-      return as ? nsfs::run_as(dpp, *as, fn) : fn();
+      return as ? nsfs::run_as(dpp, *as, fn, null_yield) : fn();
     };
 
     if (op->second == "create") {
@@ -17537,7 +17548,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	    refused = nsfs::with_capabilities(dpp, want,
 					      []() -> int { return 0; });
 	    return 0;
-	  });
+	  }, null_yield);
 	  if (out) {
 	    (*out)["impersonating"] = std::to_string(refused);
 	  }
@@ -17629,10 +17640,10 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     };
     int same = 0, different = 0;
     (void) nsfs::run_as(dpp, outer, [&]() -> int {
-      same = nsfs::run_as(dpp, outer, who);
-      different = nsfs::run_as(dpp, inner, who);
+      same = nsfs::run_as(dpp, outer, who, null_yield);
+      different = nsfs::run_as(dpp, inner, who, null_yield);
       return 0;
-    });
+    }, null_yield);
     if (out) {
       (*out)["result"] = "ran";
       (*out)["outer_uid"] = std::to_string(outer.uid);
@@ -17719,7 +17730,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     ret = nsfs::run_as(dpp, cred, [pfd, &name, amode]() -> int {
       return (::faccessat(pfd, name.c_str(), amode, AT_EACCESS) < 0)
 	  ? -errno : 0;
-    });
+    }, null_yield);
     if (ret == 0) {
       put("permitted");
     } else if (ret == -EACCES) {

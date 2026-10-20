@@ -34,6 +34,7 @@
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/ceph_assert.h"
+#include "common/async/yield_waiter.h"
 
 #include "driver/posix/posix_io_uring.h"
 
@@ -484,7 +485,9 @@ bool same_identity(const Credentials& a, const Credentials& b)
  * express listxattr and removexattr on a ring (see the header, and
  * docs/IMPERSONATED_XATTR.md), so it is not worth more machinery
  * than it takes to be correct.  One thread per concurrent call, up
- * to a bound;  callers block.
+ * to a bound.  A caller with a coroutine suspends while its call
+ * runs, so its frontend thread serves other requests;  one without
+ * blocks.
  */
 class ImpersonationPool {
   struct Job {
@@ -493,7 +496,8 @@ class ImpersonationPool {
     int result{0};
     bool done{false};
     std::mutex m;
-    std::condition_variable cv;
+    ceph::async::yield_waiter<int> waiter;	/* a caller that suspends */
+    std::condition_variable cv;			/* one that blocks */
   };
 
   std::mutex mtx;
@@ -531,14 +535,19 @@ class ImpersonationPool {
 	  tl_impersonating = false;
 	}
       }
-      /* Notify under the lock, not after it.  `job` is a local of
-       * run(), so dropping the lock first lets the caller wake on
-       * its own, see `done`, return and destroy the mutex and the
-       * condition variable before this thread touches them. */
+      /* Wake the caller under the lock, and touch nothing after it.
+       * `job` is a local of run(), so once the lock is released the
+       * caller may have seen `done`, returned and destroyed it.
+       * Completing the waiter under the lock is safe because this is
+       * not an executor thread:  complete() posts the handler, which
+       * takes the lock again before the coroutine resumes. */
       {
 	std::lock_guard lock(job->m);
 	job->result = ret;
 	job->done = true;
+	if (job->waiter) {
+	  job->waiter.complete(boost::system::error_code{}, ret);
+	}
 	job->cv.notify_one();
       }
     }
@@ -566,7 +575,8 @@ public:
     }
   }
 
-  int run(const Credentials& cred, const ImpersonatedFn& fn) {
+  int run(const Credentials& cred, const ImpersonatedFn& fn,
+	  optional_yield y) {
     Job job;
     job.cred = &cred;
     job.fn = &fn;
@@ -581,7 +591,19 @@ public:
     work.notify_one();
 
     std::unique_lock lock(job.m);
-    job.cv.wait(lock, [&job] { return job.done; });
+    if (! job.done) {
+      /* Suspend only where nothing can cancel the wait.  `fn`
+       * captures the caller's frame, and a cancelled wait would
+       * unwind that frame while a helper is still running `fn` in
+       * it.  The frontend spawns requests with no cancellation slot,
+       * so this is the path they take;  a coroutine that has one
+       * blocks instead, which is safe. */
+      if (y && ! y.get_yield_context().get_cancellation_slot().is_connected()) {
+	job.result = job.waiter.async_wait(lock, y.get_yield_context());
+      } else {
+	job.cv.wait(lock, [&job] { return job.done; });
+      }
+    }
     return job.result;
   }
 };
@@ -595,7 +617,7 @@ public:
  * to take.  A thread already running as the identity simply makes
  * the call. */
 int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
-	   const ImpersonatedFn& fn)
+	   const ImpersonatedFn& fn, optional_yield y)
 {
   if (tl_impersonating) {
     /* The fast path is only correct for the identity in force.  For
@@ -611,7 +633,7 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
     return -EDEADLK;
   }
   static ImpersonationPool pool;
-  const int ret = pool.run(cred, fn);
+  const int ret = pool.run(cred, fn, y);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << "impersonated call as uid " << cred.uid
       << " returned " << cpp_strerror(-ret) << dendl;
@@ -620,12 +642,12 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
 }
 
 int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
-		  const ImpersonatedFn& fn)
+		  const ImpersonatedFn& fn, optional_yield y)
 {
   if (! id.active()) {
     return fn();
   }
-  return run_as(dpp, id.cred, fn);
+  return run_as(dpp, id.cred, fn, y);
 }
 
 bool capability_is_effective(int cap)
@@ -756,9 +778,10 @@ int IdentityPersonality::acquire(const DoutPrefixProvider* dpp, uint16_t* out)
 }
 
 int IdentityPersonality::run_as(const DoutPrefixProvider* dpp,
-				fu2::unique_function<int() const> fn)
+				fu2::unique_function<int() const> fn,
+				optional_yield y)
 {
-  return nsfs::run_as(dpp, id.cred, fn);
+  return nsfs::run_as(dpp, id.cred, fn, y);
 }
 
 } } } // namespace rgw::sal::nsfs

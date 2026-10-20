@@ -285,6 +285,7 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 			     const std::vector<PartPlacement>& parts,
 			     const std::string& output_name,
 			     std::optional<uint64_t> stride,
+			     optional_yield y,
 			     const FSIdentity& id) const
 {
   if (! fs) {
@@ -298,7 +299,7 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
-  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), id);
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), y, id);
       mret < 0) {
     return mret;
   }
@@ -397,6 +398,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				 const std::vector<PartPlacement>& parts,
 				 const std::string& output_name,
 				 std::optional<uint64_t> stride,
+				 optional_yield y,
 				 const FSIdentity& id) const
 {
   if (!fs) {
@@ -411,7 +413,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   const std::string sname = stride ? *shared_name(*stride) : std::string();
   if (sname.empty()) {
     return PerPartMPUStrategy::assemble(dpp, fs, dir_fd, parts, output_name,
-					stride, id);
+					stride, y, id);
   }
 
   /* Can the shared file be the object as it stands?
@@ -478,7 +480,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 			 << parts.size() << " parts, " << total
 			 << " bytes, no copy" << dendl;
       return 0;
-    });
+    }, y);
   }
 
   /* Some part is not where the object wants it.  Copy each one from
@@ -492,7 +494,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     return out_fd;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
-  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), id);
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), y, id);
       mret < 0) {
     return mret;
   }
@@ -1136,7 +1138,8 @@ int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
     return ret;
   }
   auto close_fd = make_scope_guard([fd] { ::close(fd); });
-  if (int mret = apply_create_mode(dpp, fd, file_create_mode()); mret < 0) {
+  if (int mret = apply_create_mode(dpp, fd, file_create_mode(), null_yield);
+      mret < 0) {
     return mret;
   }
 
@@ -1304,6 +1307,7 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				const std::vector<PartPlacement>& parts,
 				const std::string& output_name,
 				std::optional<uint64_t> stride,
+				optional_yield y,
 				const FSIdentity& id) const
 {
   if (!fs || parts.empty()) {
@@ -1348,7 +1352,7 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 	return -ret;
       }
       return 0;
-    });
+    }, y);
   };
 
   /* every part the same size, in order:  the size file is the object */
@@ -1373,7 +1377,7 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     out_fd = with_identity(dpp, id, [&]() -> int {
       const int fd = ::openat(dir_fd, output_name.c_str(), O_WRONLY);
       return (fd < 0) ? -errno : fd;
-    });
+    }, y);
   } else {
     out_fd = create_output(dpp, id, dir_fd, output_name);
   }
@@ -1382,7 +1386,7 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 		      << cpp_strerror(-out_fd) << dendl;
     return out_fd;
   }
-  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), id);
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), y, id);
       mret < 0) {
     ::close(out_fd);
     return mret;

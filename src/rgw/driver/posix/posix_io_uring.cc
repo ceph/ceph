@@ -475,7 +475,7 @@ void run_sync(IoSlot& slot, int fd, bool write)
 
 /* run_sync() as the window's identity, where it has one. */
 void run_sync_as(const DoutPrefixProvider* dpp, UringPersonality* who,
-		 IoSlot& slot, int fd, bool write)
+		 IoSlot& slot, int fd, bool write, optional_yield y)
 {
   if (!who) {
     run_sync(slot, fd, write);
@@ -484,7 +484,7 @@ void run_sync_as(const DoutPrefixProvider* dpp, UringPersonality* who,
   const int r = who->run_as(dpp, [&slot, fd, write]() -> int {
     run_sync(slot, fd, write);
     return 0;
-  });
+  }, y);
   if (r < 0) {
     /* the identity could not be assumed, so nothing ran:  the slot
      * completes with the error rather than being waited on for ever */
@@ -777,7 +777,7 @@ struct UringReadWindow::Impl {
     int r = ring ? prep_rw(dpp, *slot, fd, /*write=*/false, nsfs, pid)
 		 : -ENXIO;
     if (r == -ENXIO) {
-      run_sync_as(dpp, personality, *slot, fd, /*write=*/false);
+      run_sync_as(dpp, personality, *slot, fd, /*write=*/false, y);
       inflight.push_back(std::move(slot));
       return 0;
     }
@@ -1015,7 +1015,7 @@ struct UringWriteWindow::Impl {
     r = ring ? prep_rw(dpp, *slot, fd, /*write=*/true, nsfs, who.id())
 	     : -ENXIO;
     if (r == -ENXIO) {
-      run_sync_as(dpp, personality, *slot, fd, /*write=*/true);
+      run_sync_as(dpp, personality, *slot, fd, /*write=*/true, y);
       inflight.push_back(std::move(slot));
       return 0;
     }

@@ -66,6 +66,7 @@ static bool stat_matches(int fd, const std::string& name,
 int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
                                   const std::string& name,
                                   const DoutPrefixProvider* dpp,
+                                  optional_yield y,
                                   const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity(dpp, id, [&]() -> int {
@@ -97,7 +98,7 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   }
 
   return 0;
-  });
+  }, y);
 }
 
 SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
@@ -107,6 +108,7 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
                                     const std::string& dst_name,
                                     uint64_t expected_mtime_ns,
                                     uint64_t expected_ino,
+                                     optional_yield y,
                                      const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
@@ -126,7 +128,7 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
   }
   ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
   return SafeResult::MISMATCH;
-  });
+  }, y);
 }
 
 SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
@@ -134,6 +136,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                       int tmp_dir_fd,
                                       uint64_t expected_mtime_ns,
                                       uint64_t expected_ino,
+                                       optional_yield y,
                                        const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
@@ -158,7 +161,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   }
   ::renameat(tmp_dir_fd, tmp_name.c_str(), dir_fd, name.c_str());
   return SafeResult::MISMATCH;
-  });
+  }, y);
 }
 
 /* --- FSStrategy ------------------------------------------------------- */
@@ -233,6 +236,7 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
 int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
 				    const std::string& name,
 				    const DoutPrefixProvider* dpp,
+				    optional_yield y,
 				    const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity(dpp, id, [&]() -> int {
@@ -250,7 +254,7 @@ int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
     return -ret;
   }
   return 0;
-  });
+  }, y);
 }
 
 size_t FSStrategy::preferred_io_size(int fd) const
@@ -380,6 +384,7 @@ std::unique_ptr<VersionLockHandle> POSIXStrategy::version_lock(
 
 int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
                               xattr_map_t& attrs,
+                              optional_yield y,
                               const nsfs::FSIdentity& id)
 {
   /* The whole read, not each call:  this is a listing plus one
@@ -447,11 +452,12 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     p += keylen;
   }
   return 0;
-  });
+  }, y);
 }
 
 int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
                               const xattr_map_t& attrs,
+                              optional_yield y,
                               const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity(dpp, id, [&]() -> int {
@@ -465,11 +471,12 @@ int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
     }
   }
   return 0;
-  });
+  }, y);
 }
 
 int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
                                  const std::vector<std::string>& names,
+                                 optional_yield y,
                                  const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity(dpp, id, [&]() -> int {
@@ -483,7 +490,7 @@ int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
     }
   }
   return 0;
-  });
+  }, y);
 }
 
 int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
@@ -491,6 +498,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
                                    const std::string& src_name,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
+                                   optional_yield y,
                                    bool excl,
                                    const nsfs::FSIdentity& id,
                                    bool src_as_gateway)
@@ -523,7 +531,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
     return (src_fd < 0) ? -errno : 0;
   };
-  int oret = nsfs::with_identity(dpp, id, open_src);
+  int oret = nsfs::with_identity(dpp, id, open_src, y);
   if ((oret == -EACCES) && src_as_gateway) {
     oret = nsfs::with_capabilities(dpp, COPY_SOURCE_CAPS, open_src);
     if (oret == 0) {
@@ -569,7 +577,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  ret = apply_create_mode(dpp, dst_fd, file_create_mode());
+  ret = apply_create_mode(dpp, dst_fd, file_create_mode(), null_yield);
   if (ret == 0) {
     ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size);
   }
@@ -581,12 +589,13 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
   }
   return ret;
-  });
+  }, y);
 }
 
 int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
                                  int gw_src_fd,
                                  int dst_dir_fd, const std::string& dst_name,
+                                 optional_yield y,
                                  const nsfs::FSIdentity& id,
                                  bool src_as_gateway)
 {
@@ -606,7 +615,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     int oret = nsfs::with_identity(dpp, id, [&]() -> int {
       own_fd = ::open(via.c_str(), O_RDONLY | O_CLOEXEC);
       return (own_fd < 0) ? -errno : 0;
-    });
+    }, y);
     if ((oret == -EACCES) && src_as_gateway) {
       cross_account_sources.fetch_add(1, std::memory_order_relaxed);
       ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem refused the"
@@ -643,7 +652,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
       << cpp_strerror(err) << dendl;
     return -err;
   }
-  if (int mret = apply_create_mode(dpp, tmp_fd, file_create_mode());
+  if (int mret = apply_create_mode(dpp, tmp_fd, file_create_mode(), null_yield);
       mret < 0) {
     ::close(tmp_fd);
     return mret;
@@ -657,29 +666,31 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  ret = link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp);
+  ret = link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp, null_yield);
   ::close(tmp_fd);
   return ret;
-  });
+  }, y);
 }
 
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
                               int dst_dir_fd, const std::string& dst_name,
+                              optional_yield y,
                               bool excl, const nsfs::FSIdentity& id,
                               bool src_as_gateway)
 {
   return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                            dst_dir_fd, dst_name, excl, id, src_as_gateway);
+                            dst_dir_fd, dst_name, y, excl, id, src_as_gateway);
 }
 
 int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
                             int src_fd,
                             int dst_dir_fd, const std::string& dst_name,
+                            optional_yield y,
                             const nsfs::FSIdentity& id,
                             bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id,
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, id,
                           src_as_gateway);
 }
 
@@ -844,6 +855,7 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
 int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
                                  const std::string& name,
                                  const DoutPrefixProvider* dpp,
+                                 optional_yield y,
                                  const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity(dpp, id, [&]() -> int {
@@ -857,7 +869,7 @@ int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
     return -ret;
   }
   return 0;
-  });
+  }, y);
 }
 
 SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
@@ -867,6 +879,7 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
                                    const std::string& dst_name,
                                    uint64_t expected_mtime_ns,
                                    uint64_t expected_ino,
+                                    optional_yield y,
                                     const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
@@ -909,7 +922,7 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
   }
   ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
   return SafeResult::MISMATCH;
-  });
+  }, y);
 }
 
 SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
@@ -917,6 +930,7 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                      int tmp_dir_fd,
                                      uint64_t expected_mtime_ns,
                                      uint64_t expected_ino,
+                                      optional_yield y,
                                       const nsfs::FSIdentity& id)
 {
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
@@ -962,7 +976,7 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
     return SafeResult::ERROR;
   }
   return SafeResult::OK;
-  });
+  }, y);
 }
 
 static std::string fd_path(int dir_fd, const std::string& name)
@@ -988,6 +1002,7 @@ static std::string clone_parent_name(const std::string& name)
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              int src_dir_fd, const std::string& src_name,
                              int dst_dir_fd, const std::string& dst_name,
+                             optional_yield y,
                              bool excl, const nsfs::FSIdentity& id,
                              bool src_as_gateway)
 {
@@ -995,7 +1010,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
       << "falling back to copy" << dendl;
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl, id,
+                              dst_dir_fd, dst_name, y, excl, id,
                               src_as_gateway);
   }
   /* The clone path makes its parent and child as the gateway.  As a
@@ -1003,7 +1018,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
    * source is checked against them. */
   if (id.active()) {
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl, id,
+                              dst_dir_fd, dst_name, y, excl, id,
                               src_as_gateway);
   }
 
@@ -1061,7 +1076,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
       << " failed: " << cpp_strerror(err)
       << ", falling back to copy" << dendl;
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl);
+                              dst_dir_fd, dst_name, y, excl);
   }
 
   ret = fn_clone_copy(snap_path.c_str(), dst_path.c_str());
@@ -1072,7 +1087,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
       << ", falling back to copy" << dendl;
     cleanup_clone(dpp, dst_dir_fd, dst_name);
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, excl);
+                              dst_dir_fd, dst_name, y, excl);
   }
 
   ldpp_dout(dpp, 10) << "gpfs clone_file: cloned " << src_name
@@ -1083,10 +1098,11 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
 int GPFSStrategy::clone_fd(const DoutPrefixProvider* dpp,
                            int src_fd,
                            int dst_dir_fd, const std::string& dst_name,
+                           optional_yield y,
                            const nsfs::FSIdentity& id,
                            bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, id,
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, id,
                           src_as_gateway);
 }
 
@@ -1147,6 +1163,7 @@ static size_t align8(size_t n) { return (n + 7) & ~7; }
 
 int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
                              xattr_map_t& attrs,
+                             optional_yield y,
                              const nsfs::FSIdentity& id)
 {
   /* The whole batch under one identity.
@@ -1159,7 +1176,7 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
    * attribute.  docs/IMPERSONATED_XATTR.md section 6a. */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs()) {
-    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+    return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
   }
 
   /* first, list xattr names via gpfs_fcntl LIST_XATTR */
@@ -1181,7 +1198,7 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     int err = errno;
     ldpp_dout(dpp, 5) << "gpfs get_xattrs: LIST_XATTR failed: "
       << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-    return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+    return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
   }
 
   /* parse the length-prefixed name list */
@@ -1260,7 +1277,7 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
       int err = errno;
       ldpp_dout(dpp, 5) << "gpfs get_xattrs: batch GET_XATTR failed: "
         << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-      return POSIXStrategy().get_xattrs(dpp, fd, attrs);
+      return POSIXStrategy().get_xattrs(dpp, fd, attrs, null_yield);
     }
 
     for (auto& slot : slots) {
@@ -1305,17 +1322,18 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
   ldpp_dout(dpp, 20) << "gpfs get_xattrs: batch read "
     << attrs.size() << " xattrs" << dendl;
   return 0;
-  });
+  }, y);
 }
 
 int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
                              const xattr_map_t& attrs,
+                             optional_yield y,
                              const nsfs::FSIdentity& id)
 {
   /* see get_xattrs on why the whole batch */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs() || attrs.empty()) {
-    return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+    return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
   }
 
   char buf[GPFS_MAX_FCNTL_LENGTH];
@@ -1339,7 +1357,7 @@ int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
         int err = errno;
         ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
           << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-        return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+        return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
       }
       off = sizeof(gpfsFcntlHeader_t);
       memset(hdr, 0, sizeof(*hdr));
@@ -1365,23 +1383,24 @@ int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
     int err = errno;
     ldpp_dout(dpp, 5) << "gpfs set_xattrs: batch SET_XATTR failed: "
       << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-    return POSIXStrategy().set_xattrs(dpp, fd, attrs);
+    return POSIXStrategy().set_xattrs(dpp, fd, attrs, null_yield);
   }
 
   ldpp_dout(dpp, 20) << "gpfs set_xattrs: batch wrote "
     << attrs.size() << " xattrs" << dendl;
   return 0;
-  });
+  }, y);
 }
 
 int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
                                 const std::vector<std::string>& names,
+                                optional_yield y,
                                 const nsfs::FSIdentity& id)
 {
   /* see get_xattrs on why the whole batch */
   return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs() || names.empty()) {
-    return POSIXStrategy().remove_xattrs(dpp, fd, names);
+    return POSIXStrategy().remove_xattrs(dpp, fd, names, null_yield);
   }
 
   char buf[GPFS_MAX_FCNTL_LENGTH];
@@ -1416,13 +1435,13 @@ int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
     int err = errno;
     ldpp_dout(dpp, 5) << "gpfs remove_xattrs: batch delete failed: "
       << cpp_strerror(err) << ", falling back to POSIX" << dendl;
-    return POSIXStrategy().remove_xattrs(dpp, fd, names);
+    return POSIXStrategy().remove_xattrs(dpp, fd, names, null_yield);
   }
 
   ldpp_dout(dpp, 20) << "gpfs remove_xattrs: batch deleted "
     << names.size() << " xattrs" << dendl;
   return 0;
-  });
+  }, y);
 }
 
 /* LWE lock handle — holds a cluster-wide exclusive right via the
@@ -1566,6 +1585,7 @@ mode_t dir_create_mode()
  * object being overwritten -- has its own mode and is left alone, and
  * under impersonation its owner may not be the requester. */
 int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
+		      optional_yield y,
 		      const FSIdentity& id)
 {
   const mode_t masked = mode & ~process_umask();
@@ -1578,7 +1598,7 @@ int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
   }
   return with_identity(dpp, id, [fd, mode]() -> int {
     return (::fchmod(fd, mode) < 0) ? -errno : 0;
-  });
+  }, y);
 }
 
 int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,

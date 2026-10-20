@@ -341,7 +341,7 @@ public:
    * keeps its signature and its call sites. */
   void set_read_only(bool ro) { read_only = ro; }
 
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) = 0;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) = 0;
   virtual int open(const DoutPrefixProvider *dpp) = 0;
   virtual int close() = 0;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false);
@@ -422,7 +422,7 @@ public:
   virtual ObjectType get_type() override { return ObjectType::FILE; };
 
 
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int open(const DoutPrefixProvider *dpp) override;
   virtual int close() override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
@@ -458,7 +458,7 @@ public:
 
   virtual bool file_exists(std::string& name);
 
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int open(const DoutPrefixProvider *dpp) override;
   virtual int close() override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
@@ -513,7 +513,7 @@ public:
   virtual ~MPDirectory() { close(); }
 
   virtual ObjectType get_type() override { return ObjectType::MULTIPART; };
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
 		   int use_fd = -1) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
@@ -571,7 +571,7 @@ public:
 
   virtual ObjectType get_type() override { return ObjectType::FILE; };
 
-  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int open(const DoutPrefixProvider *dpp) override;
   virtual int close() override;
   virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
@@ -1231,13 +1231,14 @@ public:
    * `path`'s parent, the parent itself and not the path to it
    * (DECISIONS.md 2026-10-14, 2026-10-15). */
   int check_owner_can_create_at(const DoutPrefixProvider* dpp,
-				const rgw_owner& owner, const std::string& path);
+				const rgw_owner& owner, const std::string& path,
+				optional_yield y);
   /* `mode` on the directory `path` itself as the owner, the directories
    * above it not consulted;  under impersonation only.  -EACCES when
    * refused */
   int check_owner_access(const DoutPrefixProvider* dpp,
 			 const rgw_owner& owner, const std::string& path,
-			 int mode);
+			 int mode, optional_yield y);
 
   /* Place a directory nobody created through S3 or NooBaa as a bucket,
    * as NooBaa's `manage_nsfs bucket add --path` does (DECISIONS.md
@@ -2485,7 +2486,8 @@ public:
   }
 
   nsfs::FSEnt* get_fsent() { return ent.get(); }
-  int open(const DoutPrefixProvider *dpp, bool create = false, bool temp_file = false);
+  int open(const DoutPrefixProvider *dpp, optional_yield y, bool create = false,
+	   bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
@@ -2864,7 +2866,7 @@ private:
    * Asked of the layout, which is the only thing that knows whether a
    * file's identity depends on the size it holds;  see
    * MPUStrategy::relocation_target().  A no-op for the nsfs layout. */
-  int relocate();
+  int relocate(optional_yield y);
   /* the upload this part belongs to, as the client knows it.  The
    * injection map is keyed by this rather than by the internal meta,
    * so a test can arm exactly the upload it created. */

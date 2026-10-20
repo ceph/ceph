@@ -141,10 +141,12 @@ struct UringPersonality {
   virtual int acquire(const DoutPrefixProvider* dpp, uint16_t* id) = 0;
   virtual void release() = 0;
   /* Run `fn` as this identity:  the transfer a thread with no ring
-   * does synchronously.  Returns what `fn` returned, or -errno if the
-   * identity could not be assumed and `fn` did not run. */
+   * does synchronously.  `y` is the window's, so a coroutine can be
+   * suspended while it runs.  Returns what `fn` returned, or -errno
+   * if the identity could not be assumed and `fn` did not run. */
   virtual int run_as(const DoutPrefixProvider* dpp,
-                     fu2::unique_function<int() const> fn) = 0;
+                     fu2::unique_function<int() const> fn,
+                     optional_yield y) = 0;
 };
 
 class UringReadWindow {
