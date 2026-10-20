@@ -222,8 +222,9 @@ public:
       eligible_queue.begin(), eligible_queue.end(),
       [&pred](const auto &i) {
       CRIMSON_LOG_PREFIX(not_before_queue_t::dequeue_by_pred);
-      CRIMSON_DEBUG("checking item: {}, pred(item): {}", i.v, pred(i.v));
-      return pred(i.v);
+      const auto res = pred(i.v);
+      CRIMSON_DEBUG("checking item: {}, pred(item): {}", i.v, res);
+      return res;
     });
 
     if (iter == eligible_queue.end()) {
