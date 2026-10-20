@@ -262,9 +262,10 @@ options:
     register it, and take their staging buffers, gather windows and session
     buffers from it, each buffer at most 64 MiB. Each OSD allocates its own,
     so a host with many OSDs needs a smaller value in the osd section. The
-    memory is locked, so give the daemons LimitMEMLOCK=infinity. It is
-    mapped outside the heap, so the OSD's cache autotuner does not count it,
-    and an OSD uses up to osd_memory_target plus oob_memory.
+    memory is locked, so give the daemons a locked memory limit above it
+    (LimitMEMLOCK, or the oob section of a cephadm service specification).
+    It is mapped outside the heap, so the OSD's cache autotuner does not
+    count it, and an OSD uses up to osd_memory_target plus oob_memory.
   default: 2_G
   services:
   - osd
@@ -286,7 +287,8 @@ options:
     But the OSD switches before it reads the monitor configuration, so it
     sees uet only when ceph.conf, the environment or the command line selects
     it. Set this option for an OSD whose transports are only in the monitor
-    configuration, as under cephadm.
+    configuration. cephadm sets it on the command line of the OSDs of a spec
+    whose oob section has raw_sockets.
   default: false
   services:
   - osd
