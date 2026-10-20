@@ -22,7 +22,10 @@ In order to deploy the ``mgmt-gateway`` service, use the following command:
     ceph orch apply mgmt-gateway [--placement ...] ...
 
 Once applied cephadm will reconfigure specific running daemons (such as monitoring) to run behind the
-newly created service. External access to those services will not be possible anymore. Access will be
+newly created service. Prometheus, Alertmanager and node-exporter then accept
+only TLS connections that present a client certificate signed by the cephadm
+root CA, so they can no longer be reached directly. The Grafana configuration
+that cephadm generates has no such restriction. Access will be
 consolidated behind the new service endpoint: ``https://<node-ip>:<port>``.
 
 
@@ -36,8 +39,13 @@ Benefits of the mgmt-gateway service
 Security enhancements
 =====================
 
-Once the ``mgmt-gateway`` service is deployed, users cannot access monitoring services without authentication through the
-Ceph dashboard.
+Once the ``mgmt-gateway`` service is deployed, each application behind it
+still does its own authentication. Prometheus and Alertmanager ask for their
+user name and password (see :ref:`mgr-cephadm-monitoring`). Grafana allows
+anonymous read-only access unless ``anonymous_access`` is ``false`` in the
+Grafana specification. To require a login with an identity provider for all of
+them, deploy the ``oauth2-proxy`` service. See
+:ref:`deploy-cephadm-oauth2-proxy`.
 
 
 High availability enhancements
@@ -111,7 +119,8 @@ the ``mgmt-gateway`` daemons are replicated to the corresponding keepalived inst
 Accessing services with mgmt-gateway
 ====================================
 
-Once the ``mgmt-gateway`` service is deployed, direct access to the monitoring services will not be allowed anymore.
+Once the ``mgmt-gateway`` service is deployed, Prometheus and Alertmanager can
+no longer be reached directly.
 Applications including: Prometheus, Grafana and Alertmanager are now accessible through links
 from ``Administration > Services``.
 
@@ -124,7 +133,6 @@ A ``mgmt-gateway`` service can be applied using a specification. An example in Y
 .. code-block:: yaml
 
     service_type: mgmt-gateway
-    service_id: gateway
     placement:
       hosts:
         - ceph0
@@ -134,11 +142,9 @@ A ``mgmt-gateway`` service can be applied using a specification. An example in Y
      ssl_protocols:
        - TLSv1.2
        - TLSv1.3
-       - ...
      ssl_ciphers:
-       - AES128-SHA
-       - AES256-SHA
-       - ...
+       - ECDHE-ECDSA-AES128-GCM-SHA256
+       - ECDHE-RSA-AES128-GCM-SHA256
      ssl_cert: |
        -----BEGIN CERTIFICATE-----
        MIIDtTCCAp2gAwIBAgIYMC4xNzc1NDQxNjEzMzc2MjMyXzxvQ7EcMA0GCSqGSIb3
@@ -151,6 +157,8 @@ A ``mgmt-gateway`` service can be applied using a specification. An example in Y
        /CwQr/7wOiLGzVxChn3mmCIF3DwbL/qvTFTX2d8bDf6LjGwLYloXHscRfxszX/4h
        [...]
        -----END PRIVATE KEY-----
+
+``TLSv1.2`` and ``TLSv1.3`` are the only accepted values for ``ssl_protocols``.
 
 Fields specific to the ``spec`` section of the ``mgmt-gateway`` service are described below.
 
@@ -188,7 +196,7 @@ Limitations
 
 
 Default images
-~~~~~~~~~~~~~~
+==============
 
 The ``mgmt-gateway`` service internally makes use of NGINX reverse proxy. The following container image is used by default:
 
