@@ -37,6 +37,8 @@ Notable Changes
 * :ref:`CVE-2026-54330` is a flaw in RGW not properly verifying its SigV4 cryptographic signatures in RGW's SigV4 verifier.
 
 
+.. _tentacle-20-2-4-critical-upgrade-steps:
+
 Critical Upgrade Steps
 ----------------------
 
@@ -1308,6 +1310,11 @@ Telemetry
 
 Upgrading from Reef or Squid
 ----------------------------
+
+.. warning::
+
+   Review the :ref:`tentacle-20-2-4-critical-upgrade-steps` before upgrading
+   from Reef or Squid to 20.2.4 or later.
 
 Before starting, ensure that your cluster is stable and healthy with no
 ``down``, ``recovering``, ``incomplete``, ``undersized`` or ``backfilling`` PGs.
