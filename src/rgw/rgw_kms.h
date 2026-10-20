@@ -22,6 +22,10 @@ static const std::string RGW_SSE_KMS_VAULT_SE_KV = "kv";
 
 static const std::string RGW_SSE_KMS_KMIP_SE_KV = "kv";
 
+namespace rgw::kms {
+  class KMSCache;
+}
+
 /**
  * Retrieves the actual server-side encryption key from a KMS system given a
  * key ID. Currently supported KMS systems are OpenStack Barbican and HashiCorp
@@ -34,10 +38,12 @@ static const std::string RGW_SSE_KMS_KMIP_SE_KV = "kv";
  */
 int make_actual_key_from_kms(const DoutPrefixProvider *dpp,
                              std::map<std::string, bufferlist>& attrs,
+                             rgw::kms::KMSCache* kms_cache,
                              optional_yield y,
                              std::string& actual_key);
 int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
                                      std::map<std::string, bufferlist>& attrs,
+                                     rgw::kms::KMSCache* kms_cache,
                                      optional_yield y,
                                      std::string& actual_key);
 int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
