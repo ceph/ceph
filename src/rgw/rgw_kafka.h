@@ -29,13 +29,15 @@ struct connection_id_t {
   std::string ca_location;
   std::string mechanism;
   bool ssl = false;
+  bool verify_ssl = true;
   connection_id_t() = default;
   connection_id_t(const std::string& _broker,
                   const std::string& _user,
                   const std::string& _password,
                   const boost::optional<const std::string&>& _ca_location,
                   const boost::optional<const std::string&>& _mechanism,
-                  bool _ssl);
+                  bool _ssl,
+                  bool _verify_ssl);
 };
 
 std::string to_string(const connection_id_t& id);

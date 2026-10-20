@@ -4839,7 +4839,8 @@ def test_ps_s3_topic_no_permissions():
     conn2.delete_bucket(bucket_name)
 
 
-def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=False):
+def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=False,
+                   verify_ssl=True, include_ca_location=True):
     """ test pushing kafka s3 notification securly to master """
     conn = connection()
     zonegroup = get_config_zonegroup()
@@ -4865,12 +4866,19 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=false&mechanism='+mechanism
     elif security_type == 'SASL_SSL':
         KAFKA_DIR = os.environ['KAFKA_DIR']
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt&mechanism='+mechanism
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&mechanism='+mechanism
+        if include_ca_location:
+            endpoint_args += '&ca-location='+KAFKA_DIR+'/y-ca.crt'
         if use_topic_attrs_for_creds:
             endpoint_args += '&user-name=alice&password=alice-secret'
     else:
         KAFKA_DIR = os.environ['KAFKA_DIR']
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt'
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true'
+        if include_ca_location:
+            endpoint_args += '&ca-location='+KAFKA_DIR+'/y-ca.crt'
+
+    if security_type in ('SSL', 'SASL_SSL') and not verify_ssl:
+        endpoint_args += '&verify-ssl=false'
 
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     
@@ -4933,6 +4941,11 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
 @attr('kafka_security_test')
 def test_ps_s3_notification_push_kafka_security_ssl():
     kafka_security('SSL')
+
+
+@attr('kafka_security_test')
+def test_ps_s3_notification_push_kafka_security_ssl_skip_verification_without_ca():
+    kafka_security('SSL', verify_ssl=False, include_ca_location=False)
 
 
 @attr('kafka_security_test')
