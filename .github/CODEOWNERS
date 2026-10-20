@@ -237,6 +237,15 @@ README*                                         @ceph/doc-writers
 /src/test/rgw                                   @ceph/rgw
 /src/test/test_rgw*                             @ceph/rgw
 
+# releases
+/PendingReleaseNotes                            @ceph/ceph-release-manager
+/doc/releases                                   @ceph/ceph-release-manager @ceph/doc-writers
+/qa/distros                                     @ceph/ceph-release-manager
+/qa/overrides/upgrade_ignorelist_health.yaml    @ceph/core @ceph/ceph-release-manager
+/qa/releases                                    @ceph/ceph-release-manager
+/qa/suites/upgrade                              @ceph/core @ceph/ceph-release-manager
+/src/ceph_release                               @ceph/ceph-release-manager
+
 # build scripts and tools
 /ceph.spec.in                                   @ceph/build-sig
 /container                                      @ceph/build-sig
