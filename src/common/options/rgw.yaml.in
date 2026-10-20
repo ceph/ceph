@@ -4679,7 +4679,7 @@ options:
   long_desc: The default new_buckets_path for an owner created in RGW.  Read at
     bucket creation only, and only once a custom bucket path and the owner's own
     new_buckets_path have both been considered;  an owner imported from NooBaa
-    with no path is refused rather than placed here, as NooBaa refuses it.  Nothing
+    with no path is rejected rather than placed here, as NooBaa rejects it.  Nothing
     else consults it, because a bucket is found through the record that places it
     and the record carries its path, so no operation is relative to this.  It is
     not a root that buckets live under.
@@ -4757,7 +4757,7 @@ options:
   long_desc: The allowlist for an owner whose identity carries none of its own,
     as NooBaa's NSFS_CUSTOM_BUCKET_PATH_ALLOWED_LIST is.  A custom path is
     admitted when it starts with one of these, as a string prefix, as NooBaa
-    matches.  Empty refuses every custom path.
+    matches.  When this is empty, every custom path is denied.
   services:
   - rgw
 - name: rgw_nsfs_bucket_profile
@@ -4767,7 +4767,7 @@ options:
   long_desc: The default, shared, is the nsfs model, an S3 view of a native
     filesystem namespace, and the profile a NooBaa bucket is adopted into.
     Strong adds the shadow subtree that FSIO, the librgw file interface,
-    writes through;  FSIO is refused on a bucket that is not strong.
+    writes through;  FSIO is rejected on a bucket that is not strong.
     Ignored when rgw_nsfs_extensions is false, since new buckets are then
     unmarked.
   default: shared
@@ -4788,7 +4788,7 @@ options:
     Setting this false leaves new buckets unmarked and converts no bucket,
     so no NooBaa bucket is adopted;  importing a bucket's NooBaa record is
     still allowed, and does not mark it. The extension-only interfaces,
-    FSIO among them, are refused on an unmarked bucket whatever this is
+    FSIO among them, are rejected on an unmarked bucket whatever this is
     set to.
   default: true
   services:
@@ -4966,7 +4966,7 @@ options:
   long_desc: When set, filesystem operations are performed with the uid,
     gid and supplementary groups recorded for the authenticated identity
     rather than with the gateway's own credentials. Requires CAP_SETUID
-    and CAP_SETGID; the gateway refuses to start without them. Every
+    and CAP_SETGID; the gateway does not start without them. Every
     identity that can authenticate must have a record, and a request
     whose identity has none is failed rather than served unimpersonated.
   default: false
@@ -4976,7 +4976,7 @@ options:
   type: str
   level: advanced
   desc: Which access path is native, when S3 and the filesystem disagree
-  long_desc: An operation S3 authorises may be one the filesystem refuses
+  long_desc: An operation S3 authorises may be one the filesystem denies
     the requester, because nsfs serves each request as its POSIX identity.
     This selects what happens then. posix-strict, the default, requires
     both to allow - so cross-identity sharing is arranged in the

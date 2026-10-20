@@ -199,7 +199,7 @@ category as the `check_empty` decision.
 receive delete markers.  Exactly correct S3 semantics, and it discards
 every advantage in §2.  This is today's behaviour.
 
-**(c) Refuse under versioning.**  Rename on unversioned buckets only,
+**(c) Reject under versioning.**  Rename on unversioned buckets only,
 `-EPERM` otherwise.  Honest, cheap, and leaves versioned buckets — the
 configuration this driver is being built for — without the operation.
 
@@ -215,13 +215,13 @@ somewhere able to hold it.
 
 - source has no history -> any target;
 - source has history -> target **versioned or suspended**:  history moves;
-- source has history -> target **unversioned**:  refuse, *unless* the
+- source has history -> target **unversioned**:  reject, *unless* the
   caller asks for it explicitly.
 
 Suspended qualifies because such a bucket still holds non-current
 versions, it merely stops minting new ones.
 
-The explicit case is worth having rather than a flat refusal:  flattening
+The explicit case is worth having rather than a flat rejection:  flattening
 an object to its current version is a legitimate thing to want, and what
 makes it dangerous is doing it *silently*.  So gate it on a flag —
 `rgw_rename()` already takes a `uint32_t flags` and defines only
@@ -279,8 +279,8 @@ than landing the novel machinery with the seam.
    rekeyed in the `FHCache` rather than retired, and `set_times()` still
    moves both parents' change attributes, which is what makes a Linux
    client re-resolve.
-4. **The open-file refusal is kept.**  Whether it extends to a subtree is
-   still open;  see §5.3.
+4. **Rejecting a rename of an open file is kept.**  Whether it extends to
+   a subtree is still open;  see §5.3.
 5. **Directory rename remains `-EPERM`.**  It is the prefix case, and §6
    argues the prefix interface should not be derived from the single-object
    one.  A directory object resolves to `nsfs::Directory` and
@@ -349,16 +349,16 @@ Present at both keys, or at neither, is not a state the sequence can
 produce:  `renameat()` is atomic and the version lock excludes the other
 mutations.  It means something outside the driver has been at the directory
 — most plausibly a client recreating the source key after the crash.
-Recovery refuses and keeps the record rather than guess, because destroying
+Recovery stops and keeps the record rather than guess, because destroying
 real data is worse than staying stuck.
 
 **When recovery runs.**  At version-lock acquisition, in
 `version_lock_recovering()`, which all eight lock sites now go through.  So
 the next write to *any* object in that directory repairs it — not only the
 next rename, which might never come.  A failed recovery does not fail the
-caller:  the record may describe a different object, and refusing every
+caller:  the record may describe a different object, and failing every
 write to a directory because one object's move is stuck is worse than the
-delta.  `rename()` is the exception and refuses, because there is one
+delta.  `rename()` is the exception and fails, because there is one
 record per directory and writing a new one would lose the only pointer to
 the stranded versions.
 
@@ -431,7 +431,7 @@ the number of objects, and is memory-only.  That is still categorically
 better than rados's O(N) index rewrite, but it is not free, and it is the
 part that needs care.
 
-### 5.3 Why open files are refused — the guard is correct
+### 5.3 Why a rename of an open file is rejected — the guard is correct
 
 An earlier revision of this note called the `-EPERM` on open files an
 artefact of copy-then-unlink with no semantic behind it.  That is wrong,
@@ -449,7 +449,7 @@ of the path.  There is no transformation the client can follow:
 
 So re-keying an open handle repairs librgw's internal view while leaving
 the client's reference dead.  It fixes the half that does not matter.
-Refusing the rename is the correct behaviour for a content-addressed
+Rejecting the rename is the correct behaviour for a content-addressed
 handle, and the guard should stay.
 
 **This is the real constraint on directory rename**, more than any
@@ -457,7 +457,7 @@ bookkeeping cost.  Moving a subtree changes the filehandle of every object
 beneath it, so it cannot be done while any of them are open without
 handing those clients ESTALE.  The options are:
 
-- **Refuse when anything beneath is open.**  Extends the existing
+- **Reject when anything beneath is open.**  Extends the existing
   file-level guard to a subtree.  librgw knows its own open handles, so
   the test is a bounded scan;  the cost is that a single open file
   anywhere beneath blocks the rename.
@@ -494,8 +494,8 @@ The net is now in `ceph_test_librgw_file_write2` (`OPEN2.RENAME_*`), which
 runs through open2 against a filesystem-backed driver:  source absent
 afterwards, content identical, etag unchanged, **inode equality across the
 move** — the control that distinguishes `renameat` from copy-then-delete —
-cross-bucket, over an existing key, directory refused, open file refused,
-history moved with the object, a versioned source refused into a bucket
+cross-bucket, over an existing key, directory rejected, open file rejected,
+history moved with the object, a versioned source rejected into a bucket
 that cannot hold history, slicing when asked, rollback when a move fails
 partway, and the three recovery cases below.
 
@@ -603,8 +603,8 @@ whole open-by-handle direction;  see HANDLE_IDENTITY.md.
 - **Directory (prefix) rename.**  §6 argues it should not be derived from
   the single-object interface, so this is a decision outstanding rather
   than a missing implementation.  Deferred to a later level-up of this work,
-  along with **whether the open-file refusal should extend to a subtree**
-  (§5.3), which only matters once prefix rename exists.
+  along with **whether rejecting a rename of an open file should extend
+  to a subtree** (§5.3), which only matters once prefix rename exists.
 - **`FLAG_CREATING`** patches the same seam late identity would (§3.2).  If
   open-by-handle is ever unparked, the inference should be *replaced* by it
   rather than living alongside it — two mechanisms for one window is how

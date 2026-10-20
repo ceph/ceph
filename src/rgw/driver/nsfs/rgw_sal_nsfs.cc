@@ -156,7 +156,7 @@ static const nsfs::ReservedNames& reserved_or_none(
  * sentinel, `foo/.folder` names the sentinel inside `foo`, and
  * `.versions/x` puts an object where version entries live.
  *
- * Used to refuse such a write rather than accept it.  The listing skips
+ * Used to reject such a write rather than accept it.  The listing skips
  * reserved names, so accepting one produces an object that is on disk
  * and in no listing -- the client is told the write succeeded and can
  * never find it again. */
@@ -194,13 +194,13 @@ static bool is_reserved_name(std::string_view name,
  *   - an unpublished shadow (.shadow/<leaf>)
  *   - an incomplete multipart upload (.multipart_*)
  *
- * S3 refuses to delete a bucket holding an incomplete multipart upload
+ * S3 rejects the delete of a bucket holding an incomplete multipart upload
  * even though the bucket lists as empty, and a shadow is the NFS-side
  * equivalent of one.  Treating either as ignorable does not merely permit
  * the delete -- delete_directory() then recurses into it, destroying a
  * write the client believes is still in progress.  The client can see and
  * abort an upload (ListMultipartUploads) and can close or discard a write,
- * so refusing costs nothing it cannot resolve.
+ * so rejecting the delete costs nothing it cannot resolve.
  *
  * .versions/ and .shadow/ are containers:  scaffolding when they hold
  * nothing of their own, content when they do.  .folder is content -- it
@@ -569,7 +569,7 @@ static bool nsfs_non_md5_etag_into_attrs(const DoutPrefixProvider* dpp,
  * The attribute is the requester's.  A `user.*` attribute needs write
  * permission tested against the *calling* thread rather than against
  * whoever opened the descriptor, so the gateway writing through the
- * requester's fd is refused on a 0660 file it does not own.  `id` is
+ * requester's fd fails on a 0660 file it does not own.  `id` is
  * undefaulted so a new caller cannot become the gateway by leaving it
  * out.
  *
@@ -630,7 +630,7 @@ static int statx_ids(int fd, struct statx& stx)
  * A no-op when the source is already the gateway's, which is every file on a
  * tree this gateway wrote, and which needs no capability.  Otherwise
  * it needs CAP_CHOWN -- a fourth beyond the three the daemon is given
- * -- and without it conversion refuses rather than leaving behind a
+ * -- and without it conversion fails rather than leaving behind a
  * file whose owner is wrong.
  *
  * **Call this after the mode is set, never before.**  A file's mode is
@@ -646,7 +646,7 @@ static int inherit_ids(const DoutPrefixProvider* dpp, int fd,
     return 0;
   }
   if (no_chown) {
-    ldpp_dout(dpp, 0) << "ERROR: refusing to create " << what
+    ldpp_dout(dpp, 0) << "ERROR: not creating " << what
       << " for uid " << src.stx_uid << ":" << src.stx_gid
       << ":  chown is unavailable (injected)" << dendl;
     return -EPERM;
@@ -932,13 +932,13 @@ static int promote_version(int parent_fd, const std::string& leaf,
 
     /* As the owner of the version being promoted.
      *
-     * Each of the three steps below is refused to the gateway against
+     * Each of the three steps below fails for the gateway against
      * a version an identity wrote:  fs.protected_hardlinks permits a
      * link only to the target's owner, a sticky .versions/ entry is
      * the file owner's to unlink, and the timestamp comes off the
      * owner's file.  Nobody configures a promote, so neither the
      * requester nor the bucket owner has a claim to perform it, and
-     * either is refused the same way unless it happens to be the
+     * either fails the same way unless it happens to be the
      * writer.  The file says who wrote it, and a hard link preserves
      * the inode's owner, so publishing it under the current name
      * grants nobody access they did not already have
@@ -948,8 +948,8 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * because the bucket directory is reachable by group for everyone
      * but its owner and `stat()` cannot see a group list (§5.3).  No
      * row, or rows that disagree, leaves the file owner's own rights,
-     * which is what this did before and is reported where it is
-     * refused rather than passing silently.
+     * which is what this did before and is reported where it fails
+     * rather than passing silently.
      *
      * run_as() decides whether a switch is needed, because it is the
      * only thing that knows who this thread already is;  a geteuid()
@@ -959,9 +959,9 @@ static int promote_version(int parent_fd, const std::string& leaf,
     cand_owner.uid = cand_stx.stx_uid;
     cand_owner.gid = cand_stx.stx_gid;
     /* whether an identity record names this file's owner at all.  It
-     * decides the last rung:  a refusal of an identity we could name
-     * is the tree's answer about that identity and is reported, while
-     * a refusal with no identity to name is what the raise is for. */
+     * decides the last rung:  a denial of an identity we could name
+     * is the tree's decision about that identity and is reported, while
+     * a denial with no identity to name is what the raise is for. */
     bool named = false;
     if (idb) {
       const int cret = nsfs::complete_file_credentials(dpp, *idb, cand_owner);
@@ -1029,13 +1029,13 @@ static int promote_version(int parent_fd, const std::string& leaf,
     /* The ladder's last rung.  No identity record names this file's
      * owner -- a version written over NFS or SMB, where there is no
      * row to complete from and no recorded owner to read -- so there
-     * is no identity whose rights the refusal describes.  Raise, as
+     * is no identity whose rights the denial describes.  Raise, as
      * the gateway and not as anybody:  CAP_DAC_OVERRIDE for the
      * bucket directory and the promoted file's attribute,
      * CAP_FOWNER for protected_hardlinks' check on the source inode
      * and for the sticky `.versions` entry.
      *
-     * After the refusal and never before it, so a tree whose bucket
+     * After the denial and never before it, so a tree whose bucket
      * directories need no group never pays for this.  `SafeResult`
      * cannot yet say *denied* rather than *failed* -- that is phase
      * D's third piece -- so an I/O error reaches here too and is
@@ -1043,7 +1043,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * the same thing twice. */
     if (((sr == SafeResult::ERROR) || (sr == SafeResult::DENIED)) &&
         !named) {
-      ldpp_dout(dpp, 4) << "promote_version: " << leaf << " refused as uid "
+      ldpp_dout(dpp, 4) << "promote_version: " << leaf << " failed as uid "
         << cand_owner.uid << ", which no identity record names;  retrying "
         "as the gateway with DAC_OVERRIDE and FOWNER raised" << dendl;
       const int rret = nsfs::with_capabilities(dpp, PROMOTE_RESIDUE_CAPS,
@@ -1066,7 +1066,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
 
     ::close(vfd);
     if ((sr == SafeResult::ERROR) || (sr == SafeResult::DENIED)) {
-      /* The link was refused, and a retry is refused the same way --
+      /* The link failed, and a retry fails the same way --
        * the strategy logged the errno.  What an operator needs is the
        * consequence, which no other line states. */
       ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
@@ -1301,7 +1301,7 @@ static bool rename_intent_present(const nsfs::XattrStrategy* xs,
  * produce -- renameat() is atomic and the version lock excludes the other
  * mutations -- so it means something outside this code has been at the
  * directory, most likely a client recreating the source key after the crash.
- * Recovery refuses and leaves the record rather than guess;  destroying real
+ * Recovery stops and leaves the record rather than guess;  destroying real
  * data is worse than staying stuck.
  *
  * The caller must hold the source version lock.
@@ -1497,7 +1497,7 @@ static int open_versions_lockfile(int parent_fd)
  * listing can show the delta until the next write to that directory.
  *
  * By default a failed recovery does not fail the caller.  The record may well
- * describe a different object, and refusing every write to a directory
+ * describe a different object, and failing every write to a directory
  * because one object's move is stuck is worse than the delta.  Callers which
  * cannot tolerate it -- rename(), which would overwrite the record and lose
  * the only pointer to the stranded versions -- pass recovery_ret and check
@@ -1581,7 +1581,7 @@ struct DemoteResult {
  */
 /* `id` is who the demote links as, and it is not defaulted:  the link
  * moves the current object, which belongs to whoever wrote it, and
- * fs.protected_hardlinks(5) refuses a link to a file the linker
+ * fs.protected_hardlinks(5) denies a link to a file the linker
  * neither owns nor can write.  As the gateway that is every object an
  * identity wrote -- a 500 on an account overwriting its own object
  * (PUNCHLIST, run 2026-10-16).  As the requester it succeeds exactly
@@ -1671,11 +1671,11 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
   } else if (sr == SafeResult::MISMATCH && cur_is_null) {
     /* null version already demoted by a concurrent writer */
   } else if (sr == SafeResult::DENIED) {
-    /* the filesystem refused this identity, which S3 reports as a
+    /* the filesystem denied this identity, which S3 reports as a
      * 403:  the request passed the bucket's policy and not the
      * tree's permissions, and saying 500 would name the gateway for
      * the tree's answer */
-    ldpp_dout(dpp, 4) << "version demote refused for " << leaf
+    ldpp_dout(dpp, 4) << "version demote failed for " << leaf
       << ":  the filesystem denied the writer" << dendl;
     return -EACCES;
   } else if (sr != SafeResult::OK) {
@@ -1759,7 +1759,7 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
   if (!internal_bucket && key.ns.empty() &&
       key_hits_reserved_name(key.name, rn)) {
     if (dpp) {
-      ldpp_dout(dpp, 4) << "nsfs: refusing key " << key.name
+      ldpp_dout(dpp, 4) << "nsfs: rejecting key " << key.name
 	<< ":  a component names driver scaffolding" << dendl;
     }
     return create_dirs ? -ERR_INVALID_OBJECT_NAME : -ENOENT;
@@ -2842,8 +2842,8 @@ int File::open(const DoutPrefixProvider* dpp)
      * not own -- reading an ACL to authorise a request, or an xattr
      * to compose a listing row.  It holds CAP_DAC_READ_SEARCH and
      * nothing else by deliberate choice, so it must ask for a read
-     * and stop there.  The data paths refuse rather than arrive
-     * here without an identity;  see NSFSReadOp::iterate(). */
+     * and stop there.  The data paths deny the request rather than
+     * arrive here without an identity;  see NSFSReadOp::iterate(). */
     ro = true;
     /* and holding it is this thread's own business now:  no thread
      * starts with a capability effective, so the one that reads
@@ -3000,12 +3000,12 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
   /* Open, or say why not.
    *
    * This read the member descriptor without checking it, so a
-   * refused open earlier in the request left `fd` at -1 and the
+   * failed open earlier in the request left `fd` at -1 and the
    * pread that followed returned EBADF -- which reached the client
    * as a 500.  The filesystem had said EACCES, which is a 403:  a
    * permission the tree does not grant, reported as a gateway
    * failure.  Measured 2026-10-16, eight acl tests, reachable once
-   * the authorisation pass stopped refusing first. */
+   * the authorisation pass stopped denying first. */
   if ((use_fd < 0) && (fd < 0)) {
     const int oret = open(dpp);
     if (oret < 0) {
@@ -3152,7 +3152,7 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
 
   /* as this entry's identity:  the requester reads the source and
    * owns the copy -- except that the access model may let the gateway
-   * read a source the filesystem refuses them, which the caller has
+   * read a source the filesystem denies them, which the caller has
    * resolved */
   return fs_strategy->clone_file(dpp, src_dir_fd, get_name(),
                                  dst_dir_fd, dst_name, /*excl=*/y, false,
@@ -3778,11 +3778,11 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
 /* Changing such an object has to convert it -- move it into the nsfs
  * format and clear NooBaa's marker -- or the change is read back
  * through the marker as if it had not happened.  Not built yet, so a
- * change is refused rather than half made. */
-static int refuse_noobaa_directory_object_change(const DoutPrefixProvider* dpp,
+ * change is rejected rather than half made. */
+static int reject_noobaa_directory_object_change(const DoutPrefixProvider* dpp,
 						 const std::string& dir)
 {
-  ldpp_dout(dpp, 1) << "nsfs: refusing to change the directory object at "
+  ldpp_dout(dpp, 1) << "nsfs: rejecting a change to the directory object at "
     << dir << ":  it is in NooBaa's format, and converting it on write "
     << "is not built" << dendl;
   return -EOPNOTSUPP;
@@ -3792,19 +3792,19 @@ int NooBaaDirectoryObject::create(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  bool* existed, bool temp_file)
 {
-  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
 }
 
 int NooBaaDirectoryObject::remove(const DoutPrefixProvider* dpp,
 				  optional_yield y, bool delete_children)
 {
-  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
 }
 
 int NooBaaDirectoryObject::write(int64_t ofs, bufferlist& bl,
 				 const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
 }
 
 int NooBaaDirectoryObject::write_attrs(const DoutPrefixProvider* dpp,
@@ -3813,7 +3813,7 @@ int NooBaaDirectoryObject::write_attrs(const DoutPrefixProvider* dpp,
 				       const std::vector<std::string>* rmattrs,
 				       int use_fd)
 {
-  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
 }
 
 int NooBaaDirectoryObject::link_temp_file(const DoutPrefixProvider* dpp,
@@ -3821,7 +3821,7 @@ int NooBaaDirectoryObject::link_temp_file(const DoutPrefixProvider* dpp,
 					  std::string target_fname, bool excl,
 					  bool)
 {
-  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+  return reject_noobaa_directory_object_change(dpp, parent->get_name());
 }
 
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
@@ -4428,7 +4428,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   }
 
   /* the access model, selected once:  what to do when the filesystem
-   * refuses an operation S3 authorised.  Named in the `fs features`
+   * denies an operation S3 authorised.  Named in the `fs features`
    * map, because no request reveals it. */
   const auto model =
     cct->_conf.get_val<std::string>("rgw_nsfs_access_model");
@@ -4680,7 +4680,7 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	     *
 	     * The result is not discarded.  A record that cannot be
 	     * written is a part the upload will not see, so say so here:
-	     * the inner failures report themselves, but a refusal to
+	     * the inner failures report themselves, but a failure to
 	     * assume the owner never reaches them. */
 	    int wret;
 	    if (!nsfs::impersonation_enabled()) {
@@ -4716,7 +4716,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path_ << dendl;
 
-  /* Refuse rather than run in a mode we cannot honour.
+  /* Do not start in a mode we cannot honour.
    *
    * With impersonation on, a request whose credentials cannot be
    * applied must not fall back to the gateway's own -- the daemon
@@ -4740,7 +4740,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
        * at mount and has no per-request identity.  librgw needs the
        * second test because it initialises with
        * CODE_ENVIRONMENT_DAEMON and the first does not see it --
-       * refusing here would take down every consumer of the library
+       * failing here would take down every consumer of the library
        * over a setting that cannot apply to it. */
       ldpp_dout(dpp, 10) << "nsfs: impersonation is configured but this is"
 	" not the gateway;  operating as the invoking user" << dendl;
@@ -4859,7 +4859,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
    *
    * **A failed import does not fail startup.**  It reports to the log
    * and the gateway comes up, because the tree is still readable and
-   * refusing to start would take away the one thing an operator can
+   * not starting would take away the one thing an operator can
    * use to see what went wrong.  Re-running is the recovery, and the
    * mode still says to, so a restart retries it. */
   if (int r = load_adoption_completion(dpp); r < 0) {
@@ -5356,18 +5356,18 @@ int NSFSDriver::custom_bucket_path(const DoutPrefixProvider* dpp,
 	  list, bad) < 0) {
       ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_custom_bucket_path_allowed_list "
 	<< "entry \"" << bad << "\" is not an absolute canonical path;  "
-	<< "refusing custom bucket paths" << dendl;
+	<< "denying custom bucket paths" << dendl;
       return -EACCES;
     }
   }
   if (list.empty() || !nsfs::allowed_list_admits(list, asked)) {
-    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " refused:  "
+    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " denied:  "
       << (list.empty() ? "no allowlist" : "not in the allowlist " + list)
       << dendl;
     return -EACCES;
   }
   if (!nsfs::placement_path_is_acceptable(asked)) {
-    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " refused:  "
+    ldpp_dout(dpp, 1) << "nsfs: custom bucket path " << asked << " rejected:  "
       << "not an absolute canonical path" << dendl;
     return -EINVAL;
   }
@@ -5447,7 +5447,7 @@ static int carries_nsfs_state(const std::string& path)
 }
 
 /* Until adoption is complete a NooBaa bucket not yet imported has no
- * row, so the rows cannot refuse a bucket at its directory or nested
+ * row, so no row insert rejects a bucket at its directory or nested
  * with it;  its record's path is checked here instead, for creation
  * and placement alike.  Only the bucket records are read. */
 int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
@@ -5536,7 +5536,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
      * 2026-10-15).  A user in no account has no place in NooBaa's model,
      * where every bucket belongs to an account, and a BucketOwnerEnforced
      * bucket would leave it unable to read its objects without a policy.
-     * A user in an account is refused as NooBaa's `bucket add` refuses
+     * A user in an account is rejected as NooBaa's `bucket add` rejects
      * an IAM user:  the caller names the account. */
     const auto& account = user->get_info().account_id;
     ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name << ":  "
@@ -5554,7 +5554,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   /* The name is taken by a row, or by a NooBaa record until adoption
-   * is complete -- the same refusal creation makes.  Nesting with
+   * is complete -- the same rejection creation makes.  Nesting with
    * another bucket's directory is the row insert's. */
   if (nb_bucket_state_strategy && !adoption_complete()) {
     auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
@@ -5569,7 +5569,7 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* Never over an existing bucket.  A directory carrying nsfs state is
    * one, or was one;  and until adoption is complete a NooBaa record
-   * not yet imported serves its directory with no row to refuse it, so
+   * not yet imported serves its directory with no row to stop it, so
    * its path is checked here as the rows are, nesting included. */
   ret = carries_nsfs_state(path);
   if (ret < 0) {
@@ -6656,8 +6656,8 @@ int NSFSDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
                                      const std::string& section,
                                      const std::string& marker, void** phandle)
 {
-  /* A section this driver does not list is refused here, as RADOS's
-   * metadata manager refuses one it has no handler for;  an empty
+  /* A section this driver does not list is rejected here, as RADOS's
+   * metadata manager rejects one it has no handler for;  an empty
    * listing would read as "there are none". */
   if ((section != "user") && (section != "bucket") &&
       (section != "account") && (section != "topic")) {
@@ -7021,8 +7021,8 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   if (mg.result() < 0) {
     return mg.result();
   }
-  /* A non-empty bucket is refused whether or not it owns its
-   * directory, as S3 refuses one and as NooBaa refuses one over a
+  /* A non-empty bucket is rejected whether or not it owns its
+   * directory, as S3 rejects one and as NooBaa rejects one over a
    * supplied directory.  Ownership decides only what an allowed delete
    * removes:  the directory, or just the bucket's record.
    *
@@ -7196,11 +7196,11 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
        * would resolve to base -- including a strong one, whose shadow
        * subtree we would then expose as a key and whose attributes we
        * would write under NooBaa's names.  A filesystem without xattrs
-       * cannot hold the nsfs format at all, so refusing costs nothing
+       * cannot hold the nsfs format at all, so rejecting it costs nothing
        * that could have been served. */
       ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is on a "
 	<< "filesystem which does not support " << nsfs::EXTENSIONS_XATTR
-	<< ";  refusing to serve it, because every profile would read as "
+	<< ";  not serving it, because every profile would read as "
 	<< "base" << dendl;
       return -ERR_NOT_IMPLEMENTED;
     }
@@ -7236,11 +7236,11 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
     if (errno || (end == buf) || (*end != '\0') || (v > UINT32_MAX)) {
       ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " carries an "
 	<< "unreadable " << nsfs::EXTENSIONS_XATTR << " (\"" << buf
-	<< "\");  refusing to serve it" << dendl;
+	<< "\");  not serving it" << dendl;
       /* ERR_NOT_IMPLEMENTED, not ENOTSUP:  the latter has no entry in
        * rgw_common.cc's table and falls through to 500/UnknownError,
        * which tells a client we malfunctioned.  This is a deliberate
-       * refusal and 501 says so. */
+       * rejection and 501 says so. */
       return -ERR_NOT_IMPLEMENTED;
     }
     extensions = (uint32_t)v;
@@ -7251,7 +7251,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
     ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " was written with "
       << "extension set " << extensions << ", which this gateway does not "
       << "implement (it implements " << nsfs::EXTENSIONS_KNOWN
-      << ");  refusing to serve it" << dendl;
+      << ");  not serving it" << dendl;
     /* 501 NotImplemented, and terminal.  Not -ENOTSUP:  it has no entry
      * in rgw_common.cc's table, falls through to 500/UnknownError, and
      * that is malformed enough that clients abend rather than report --
@@ -7286,7 +7286,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 	 * the wrong parser turns that into wrong results. */
 	ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is being "
 	  << "converted from \"" << from << "\", which this gateway "
-	  << "cannot read;  refusing to serve it" << dendl;
+	  << "cannot read;  not serving it" << dendl;
 	profile = nullptr;
 	return -ERR_NOT_IMPLEMENTED;
       }
@@ -7311,7 +7311,7 @@ int NSFSBucket::mark_converting(const DoutPrefixProvider* dpp)
   }
 
   /* The value is the format being converted FROM, and NooBaa's is the
-   * only other format there is;  `load()` refuses a value it has no
+   * only other format there is;  `load()` rejects a value it has no
    * reader for rather than guessing. */
   const std::string v{nsfs::CONVERTING_FROM_NOOBAA};
   if (::fsetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
@@ -7390,7 +7390,7 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
  * profile while holding structure the profile does not describe.
  *
  * Leaving base takes a tree nsfs did not write into its management.  It is
- * refused while rgw_nsfs_extensions is off, and it is never inferred
+ * rejected while rgw_nsfs_extensions is off, and it is never inferred
  * from access.
  */
 nsfs::XattrStrategy* NSFSBucket::xattr_strategy() const
@@ -7477,7 +7477,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 			    nsfs::ConvertProgress* progress)
 {
   if (! nsfs::is_named_profile(target)) {
-    ldpp_dout(dpp, 0) << "ERROR: refusing to set bucket " << get_name()
+    ldpp_dout(dpp, 0) << "ERROR: not setting bucket " << get_name()
       << " to extension set " << target << ":  no profile names it"
       << dendl;
     return -EINVAL;
@@ -7510,7 +7510,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 
   if (target & ~current) {
     if (! driver->extensions_enabled()) {
-      ldpp_dout(dpp, 0) << "ERROR: refusing to extend bucket " << get_name()
+      ldpp_dout(dpp, 0) << "ERROR: not extending bucket " << get_name()
 	<< ":  rgw_nsfs_extensions is false, and extending a bucket is what "
 	<< "ends its ability to go back" << dendl;
       return -EPERM;
@@ -7530,7 +7530,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 	<< " leaves the base profile for extension set " << target << dendl;
       ret = driver->import_noobaa_bucket(dpp, y, get_name(), nullptr);
       if ((ret < 0) && (ret != -ENOENT)) {
-	ldpp_dout(dpp, 0) << "ERROR: refusing to convert bucket "
+	ldpp_dout(dpp, 0) << "ERROR: not converting bucket "
 	  << get_name() << ":  its NooBaa record could not be imported: "
 	  << cpp_strerror(-ret) << dendl;
 	return ret;
@@ -7548,7 +7548,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   if (current & ~target) {
     ret = check_empty(dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: refusing to reduce bucket " << get_name()
+      ldpp_dout(dpp, 0) << "ERROR: not reducing bucket " << get_name()
 	<< " from " << profile->name() << " to extension set " << target
 	<< ":  it holds content, and the structures the dropped extensions "
 	<< "allowed stay in the tree" << dendl;
@@ -7613,7 +7613,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   if (current == nsfs::EXTENSIONS_BASE) {
     ret = write_attrs(dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: refusing to convert bucket " << get_name()
+      ldpp_dout(dpp, 0) << "ERROR: not converting bucket " << get_name()
 	<< ":  its state could not be written, and converting would lose "
 	<< "what NooBaa's record was supplying: " << cpp_strerror(-ret)
 	<< dendl;
@@ -7696,7 +7696,7 @@ static constexpr uint64_t CONVERT_REWRITE_CAPS =
  * this gateway laid down that is already the gateway's, so
  * inherit_ids() returns before the `fchown` and the raise costs a
  * capset pair and nothing else.  On NooBaa's it is whoever NooBaa ran
- * as, and without this conversion refuses rather than leave an owner
+ * as, and without this conversion fails rather than leave an owner
  * that is wrong.
  *
  * No `CAP_DAC_OVERRIDE`:  `fchown` is gated on ownership, not on the
@@ -8075,14 +8075,14 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     return inherit_ids(dpp, sfd, dstx, no_chown, sname);
   });
   if (ret < 0) {
-    /* The sentinel exists by now, and the whole point of refusing is
+    /* The sentinel exists by now, and the whole point of failing is
      * not to leave a file whose owner is wrong.  Take it back out --
      * the directory object is still in NooBaa's format and still readable
      * through the fallback, which is where a stopped conversion
      * leaves everything else. */
     if (::unlinkat(dir_fd, sname.c_str(), 0) < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
-	<< " after refusing to create it: " << cpp_strerror(errno)
+	<< " after its creation failed: " << cpp_strerror(errno)
 	<< dendl;
     }
     return ret;
@@ -8351,7 +8351,7 @@ int NSFSBucket::convert_before_write(const DoutPrefixProvider* dpp,
   auto* theirs = xattr_fallback();
   auto* their_paths = path_fallback();
   if (!converting || !theirs || !their_paths) {
-    ldpp_dout(dpp, 1) << "nsfs: refusing to change the directory object "
+    ldpp_dout(dpp, 1) << "nsfs: rejecting a change to the directory object "
       << key << " in bucket " << get_name() << ":  it is in NooBaa's "
       << "format, and the bucket is not being converted" << dendl;
     return -EOPNOTSUPP;
@@ -8482,7 +8482,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       if (ret < 0) {
 	if (::unlinkat(ourdir.get_fd(), mname.c_str(), 0) < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << mname
-	    << " after refusing to create it: " << cpp_strerror(errno)
+	    << " after its creation failed: " << cpp_strerror(errno)
 	    << dendl;
 	}
 	return ret;
@@ -8640,7 +8640,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       if (ret < 0) {
 	if (::unlinkat(ourdir.get_fd(), ourname.c_str(), 0) < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << ourname
-	    << " after refusing to create it: " << cpp_strerror(errno)
+	    << " after its creation failed: " << cpp_strerror(errno)
 	    << dendl;
 	}
 	return ret;
@@ -8817,7 +8817,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  * slot is taken in get_fsio_handle() and held for the handle's life.
  * A bucket with an NFS client holding a write handle open therefore
  * does not drain until that handle is released, and the conversion
- * refuses to start rather than running beside it.  That is the
+ * does not start rather than run beside it.  That is the
  * intent, not a shortcoming:  converting under an open write handle
  * is the thing being prevented.
  */
@@ -8832,7 +8832,7 @@ int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
 					   [&g] { return !g.closed; });
     if (!opened) {
       ldpp_dout(dpp, 4) << "nsfs: bucket " << bucket << " is being rewritten;"
-	<< "  refusing a mutation after waiting "
+	<< "  rejecting a mutation after waiting "
 	<< mutation_gate_wait.count() << "ms" << dendl;
       return -ERR_SERVICE_UNAVAILABLE;
     }
@@ -9299,7 +9299,7 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
     return mg.result();
   }
 
-  /* The new owner's POSIX identity, resolved first so that a refusal
+  /* The new owner's POSIX identity, resolved first so that a rejection
    * changes nothing.  An account by its row;  a user by its own row,
    * else its account's, as a request resolves. */
   nsfs::Credentials cred;
@@ -9325,7 +9325,7 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
 	<< "owner " << to_string(new_owner) << " has "
 	<< ((ret == -EPERM) ? "a directory-backed identity, which is not "
 	    "consulted" : "no POSIX identity")
-	<< ";  refusing the chown" << dendl;
+	<< ";  rejecting the chown" << dendl;
       return ret;
     }
   }
@@ -9771,7 +9771,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
 
   /* A client's bucket is never created over a directory that is already
    * there:  NooBaa's mkdir fails and the bucket with it, and a directory
-   * nobody recorded is not ours to take.  Refused before anything is
+   * nobody recorded is not ours to take.  Rejected before anything is
    * written to it. */
   if (!is_internal() && existed && *existed) {
     ldpp_dout(dpp, 1) << "nsfs: not creating bucket " << get_name()
@@ -9800,7 +9800,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
 
   /* A client's bucket that failed here is taken back whole:  the
    * directory this call made goes, and the caller then removes the row.
-   * Left in place it would hold the name, since creation refuses a
+   * Left in place it would hold the name, since creation rejects a
    * directory that already exists. */
   if ((ret < 0) && made && !is_internal()) {
     int r = dir->remove(dpp, y, true);
@@ -9967,14 +9967,14 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   }
   const std::string src_leaf = sent->get_name();
 
-  /* Refuse before deciding how to do it.
+  /* Reject before deciding how to do it.
    *
-   * Moving history into a bucket that cannot hold it is refused further
+   * Moving history into a bucket that cannot hold it is rejected further
    * down, under the version lock, where the list is authoritative.  But
    * that check used to sit behind the mechanism gates below:  a driver
    * which cannot move a name returns -ENOTSUP first, and RGWLibFS::rename
    * then emulates the rename by copy-and-delete (rgw_file.cc), performing
-   * the very operation this refuses and dropping the history silently.  On
+   * the very operation this rejects and dropping the history silently.  On
    * GPFS that is every rename.  So the policy is asked first and the
    * mechanism second.  The check under the lock stays and remains the
    * authoritative one;  this one exists to precede the gates. */
@@ -9984,8 +9984,9 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
 	! pre_versions.empty()) {
       ldpp_dout(dpp, 4) << "rename: source has " << pre_versions.size()
 	<< " non-current version(s) and " << db->get_name()
-	<< " cannot hold them;  refusing.  FLAG_SLICE_VERSIONS moves the "
-	<< "current version and drops the history" << dendl;
+	<< " cannot hold them;  rejecting the rename.  "
+	<< "FLAG_SLICE_VERSIONS moves the current version and drops the "
+	<< "history" << dendl;
       return -EINVAL;
     }
   }
@@ -10015,7 +10016,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     /* one intent record per directory:  writing a new one over a stuck
      * one would lose the only pointer to the stranded versions.
      * Unlike the other mutations, this caller cannot proceed. */
-    ldpp_dout(dpp, 0) << "ERROR: rename: refusing while an earlier move out "
+    ldpp_dout(dpp, 0) << "ERROR: rename: failing while an earlier move out "
       << "of this directory is unrecovered" << dendl;
     return recovered;
   }
@@ -10055,8 +10056,9 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   if (! versions.empty() && ! dst_holds_history && ! slice) {
     ldpp_dout(dpp, 4) << "rename: source has " << versions.size()
       << " non-current version(s) and " << db->get_name()
-      << " cannot hold them;  refusing.  FLAG_SLICE_VERSIONS moves the "
-      << "current version and drops the history" << dendl;
+      << " cannot hold them;  rejecting the rename.  "
+      << "FLAG_SLICE_VERSIONS moves the current version and drops the "
+      << "history" << dendl;
     return -EINVAL;
   }
   const bool slicing = (! versions.empty() && ! dst_holds_history && slice);
@@ -10282,8 +10284,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
 
   /* Who copies:  the requester reads the source and owns the copy, as
    * NooBaa's copy runs as its requester.  `remote_user` is the
-   * authenticated user (rgw_op.cc).  Refused where it cannot be
-   * applied, as the writers refuse. */
+   * authenticated user (rgw_op.cc).  Denied where it cannot be
+   * applied, as the writers deny it. */
   nsfs::FSIdentity identity;
   {
     const int pret = pin_personality_for(dpp, driver, remote_user, &identity);
@@ -10714,14 +10716,14 @@ int NSFSObject::resolve_parent_dir(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-/* FSIO is an extension, so it is refused on a bucket that does not carry
+/* FSIO is an extension, so it is rejected on a bucket that does not carry
  * the marker.
  *
  * The shadow model puts a .shadow subtree and attributes into the bucket
  * which NooBaa has no reading of.  Serving it on an unmarked bucket would
  * add exactly the structure whose absence is that bucket's whole claim,
  * and would do it silently, on a bucket nobody has asked to convert.
- * Refuse rather than degrade:  a caller handed a handle whose
+ * Reject rather than degrade:  a caller handed a handle whose
  * semantics are missing is worse off than one told the bucket does not
  * offer them. */
 int NSFSObject::fsio_allowed(const DoutPrefixProvider* dpp)
@@ -10739,7 +10741,7 @@ int NSFSObject::fsio_allowed(const DoutPrefixProvider* dpp)
    * and not whether the bucket is marked.  Shared is marked, with
    * EXT_RGW_META and no shadow subtree. */
   if (! b->has_extension(nsfs::EXT_SHADOW)) {
-    ldpp_dout(dpp, 4) << "FSIO refused on bucket " << b->get_name()
+    ldpp_dout(dpp, 4) << "FSIO rejected on bucket " << b->get_name()
       << " (profile " << b->profile_name() << "):  it does not carry "
       << "EXT_SHADOW, so it must not acquire a shadow tree" << dendl;
     return -ENOTSUP;
@@ -10909,7 +10911,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
    * until the handle is destroyed, and a bucket drains as its write
    * handles are released.
    *
-   * Taken before anything is resolved or created, so a refusal costs
+   * Taken before anything is resolved or created, so a rejection costs
    * nothing and leaves nothing behind.  A read handle takes none --
    * reads are served throughout a conversion, which is what the
    * fallback strategies are for. */
@@ -11743,7 +11745,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
   /* An attribute read, so it is on the access-model axis:  where the
-   * filesystem refuses an identity S3 authorised, the gateway reads
+   * filesystem denies an identity S3 authorised, the gateway reads
    * the attributes if the deployment has said so.  Only the
    * attributes -- this function never touches the object's bytes. */
   /* The open *and* the read, inside one retry.
@@ -11751,7 +11753,7 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
    * Scoping it to the open alone does not work, and the way it fails
    * is quiet:  the open is retried as the gateway and succeeds, the
    * entry's identity is restored on the way out, and the attribute
-   * read that follows runs as the requester and is refused again --
+   * read that follows runs as the requester and is denied again --
    * then swallowed into has_attrs=false, so the caller sees an object
    * with no ACL rather than an error.  Both halves are the operation. */
   /* Two failures, and they are not the same answer.
@@ -11762,8 +11764,8 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
    * always left has_attrs false and returned 0, because a caller
    * decides for itself what a missing attribute means.
    *
-   * Collapsing the two returned 0 for a refused open, so the caller
-   * saw an object with no etag and answered 400:  "could not open
+   * Collapsing the two returned 0 for a failed open, so the caller
+   * saw an object with no etag and returned 400:  "could not open
    * ... Permission denied" followed by "has no etag after
    * get_obj_attrs()".  Thirteen acl tests, measured 2026-10-16. */
   bool open_failed = false;
@@ -11857,7 +11859,7 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  /* The filesystem refused an identity S3 authorised, and this
+  /* The filesystem denied an identity S3 authorised, and this
    * deployment says S3 decides for this class of operation.  Perform
    * it on a descriptor of our own, opened as the gateway under a
    * raise, and close it before returning.
@@ -11894,7 +11896,7 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
     driver->cross_account_attrs_served.fetch_add(1, std::memory_order_relaxed);
   }
   ldpp_dout(dpp, 10) << "nsfs: " << get_name()
-    << ": the filesystem refused the requester and S3 authorised it,"
+    << ": the filesystem denied the requester and S3 authorised it,"
     " so the gateway performed it (access model "
     << driver->get_access_strategy()->name() << ")" << dendl;
   return rret;
@@ -11937,7 +11939,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   }
   state.attrset.erase(attr_name);
 
-  /* No open here.  One outside the retry refuses as the requester and
+  /* No open here.  One outside the retry fails as the requester and
    * returns before the cross-account path is reached -- which it did,
    * leaving DeleteObjectTagging a 403 while the same deployment let a
    * put through.  The retry's own attempt opens, both times. */
@@ -11948,7 +11950,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 
   /* with the identity:  fremovexattr of a `user.*` name needs write
    * permission on the file, tested against the calling thread, so as
-   * the gateway this is refused on an identity's 0660 object --
+   * the gateway this fails on an identity's 0660 object --
    * "could not remove attribute user.nsfs.rgw.x-amz-tagging ...
    * Permission denied", a 403 from DeleteObjectTagging.  The
    * parameter has been here all along and no caller passed one. */
@@ -12546,7 +12548,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
   std::string temp_fname = gen_temp_fname();
 
   /* The publish is on the access-model axis, and the model decides it
-   * before the first syscall rather than after a refusal.
+   * before the first syscall rather than after a denial.
    *
    * A bucket directory is `1777` under impersonation, so a requester
    * may create a new entry in it but may not rename over one it does
@@ -12558,8 +12560,8 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    *
    * It cannot be a retry.  The publish links the `O_TMPFILE` into the
    * directory under a temp name and then renames it onto the object,
-   * and the strategy unlinks that temp name when the rename is
-   * refused -- so a first attempt spends the inode's one link.  An
+   * and the strategy unlinks that temp name when the rename
+   * fails -- so a first attempt spends the inode's one link.  An
    * `O_TMPFILE` is linkable exactly once:  the kernel sets
    * `I_LINKABLE` at creation and clears it on the first `linkat`, and
    * `vfs_link()` then returns `ENOENT` for an inode at `nlink == 0`
@@ -12567,7 +12569,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    * (probes/tmpfile/relinkprobe.c).
    *
    * So under a model that permits it the whole publish is the
-   * gateway's, for every write and not only a refused one.  The bucket
+   * gateway's, for every write and not only a denied one.  The bucket
    * directory is the gateway's property under that model, and the
    * published inode is still the requester's `O_TMPFILE` -- only the
    * directory operations move.
@@ -12578,7 +12580,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    * inode, and `fs.protected_hardlinks` allows a hardlink to another's
    * inode only to its owner or to someone holding read *and* write on
    * it.  The gateway holds `CAP_DAC_READ_SEARCH`, so
-   * `safe_hardlink_source()` refuses and the kernel falls to
+   * `safe_hardlink_source()` returns false and the kernel falls to
    * `inode_owner_or_capable(CAP_FOWNER)`.  Measured 2026-10-19:
    * without the raise the publish runs as uid 1000 and `linkat`
    * returns EPERM.  The same rule bit the demote from the other side
@@ -12665,7 +12667,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
        * A `user.*` attribute needs write permission on the file,
        * tested against the *calling* thread rather than against
        * whoever opened the descriptor -- so the gateway writing
-       * through the requester's fd is refused on a 0660 file it does
+       * through the requester's fd fails on a 0660 file it does
        * not own.  This ignored its result, so under impersonation
        * every versioned PUT published an object carrying no recorded
        * version id while reporting the derived one to the client.
@@ -12726,9 +12728,9 @@ int NSFSObject::read(int64_t ofs, int64_t left, bufferlist& bl,
   if (!ent)
     return -ENOENT;
   /* Data asks the access model too.  `posix-strict` and
-   * `s3-metadata` refuse;  `s3-native` performs the read as the
+   * `s3-metadata` deny it;  `s3-native` performs the read as the
    * gateway, which is what that model is for.  An earlier version of
-   * this comment said every configured model refuses, which was true
+   * this comment said every configured model denies it, which was true
    * when it was written and is why only this path was wired up --
    * the publish was not, and an overwrite under `s3-native` failed at
    * the rename until 2026-10-19. */
@@ -12764,16 +12766,16 @@ static bool reads_staging(rgw::sal::Object* obj)
 
 int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  /* Pin here if an identity was specified, but do not refuse here
+  /* Pin here if an identity was specified, but do not deny here
    * if one was not.
    *
    * Not every read op is a request reading data.  The
    * authorisation path builds one to read an object's ACL
    * attribute -- and must, since that attribute is what decides
-   * whether the requester may read anything at all.  Refusing it
+   * whether the requester may read anything at all.  Denying it
    * for having no identity would make authorisation impossible.
    *
-   * The refusal therefore sits on the data entry points, iterate()
+   * The denial therefore sits on the data entry points, iterate()
    * and read(), which is where serving an object as the gateway
    * would actually be the escalation. */
   if (!reads_staging(source)) {
@@ -12784,7 +12786,7 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
     /* The identity this read will run as, and whether one was
      * obtained.  An empty user is the authorisation pass or an
      * unauthenticated caller;  resolved=0 with a non-empty user means
-     * the request will be refused at iterate(). */
+     * the request will be denied at iterate(). */
     ldpp_dout(dpp, 20) << "nsfs: read " << source->get_name()
       << " as '" << auth_user << "' resolved=" << identity.active()
       << dendl;
@@ -12926,11 +12928,11 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 				     optional_yield y, const DoutPrefixProvider* dpp)
 {
-  /* see iterate():  the refusal deferred in prepare() lands on the
+  /* see iterate():  the denial deferred in prepare() lands on the
    * data entry points */
   if (nsfs::impersonation_enabled() && !identity.active() &&
       !reads_staging(source)) {
-    ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
+    ldpp_dout(dpp, 0) << "ERROR: not reading " << source->get_name()
       << " as the gateway;  no POSIX identity resolved for this request"
       << dendl;
     return -EACCES;
@@ -13008,7 +13010,7 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
  * failure:  the caller submits with no personality and the request
  * is served exactly as it was before any of this existed.
  *
- * Every other negative is a refusal.  With the switch on, a request
+ * Every other negative is a denial.  With the switch on, a request
  * whose credentials cannot be applied must not fall back to the
  * gateway's own -- the daemon reaches more of the filesystem than
  * the user it would be acting for.
@@ -13070,7 +13072,7 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
      * is a provisioning fault, reported rather than repaired. */
     ldpp_dout(dpp, 0) << "ERROR: no POSIX identity recorded for " << who
       << (account.empty() ? "" : " or its account ") << account
-      << ";  impersonation is enabled, so the request is refused rather"
+      << ";  impersonation is enabled, so the request is denied rather"
       " than served as the gateway" << dendl;
     return -EACCES;
   }
@@ -13112,11 +13114,11 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
   /* Serving object data as the gateway is the escalation this
-   * exists to prevent, so the refusal deferred in prepare() lands
+   * exists to prevent, so the denial deferred in prepare() lands
    * here.  A metadata-only read op never reaches this. */
   if (nsfs::impersonation_enabled() && !identity.active() &&
       !reads_staging(source)) {
-    ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
+    ldpp_dout(dpp, 0) << "ERROR: not reading " << source->get_name()
       << " as the gateway;  no POSIX identity resolved for this request"
       << dendl;
     return -EACCES;
@@ -13399,7 +13401,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    *
    * -ENODATA is impersonation off, which is not a failure -- the
    * identity stays inactive and every call below runs exactly as it
-   * did before.  Any other refusal fails the delete rather than
+   * did before.  Any other error fails the delete rather than
    * falling back to the gateway. */
   nsfs::FSIdentity identity;
   {
@@ -13886,8 +13888,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
       /* As the requester, which phase C's DeleteOp parameter now
        * supplies.  The link's target is the current version, which an
-       * identity wrote, and fs.protected_hardlinks refuses it to the
-       * gateway -- the same refusal the writer's demote had before it
+       * identity wrote, and fs.protected_hardlinks denies it to the
+       * gateway -- the same denial the writer's demote had before it
        * carried one. */
       SafeResult sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
@@ -13915,12 +13917,12 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         break;
       }
       if (sr == SafeResult::DENIED) {
-        /* the tree refused the requester, which is a 403 and not the
+        /* the tree denied the requester, which is a 403 and not the
          * silent give-up this used to be:  without it the delete
          * marker is written over a current version that was never
          * demoted, and the version history loses an entry */
         ldpp_dout(dpp, 4) << "delete_obj: demote of " << dm_leaf
-          << " refused by the filesystem" << dendl;
+          << " denied by the filesystem" << dendl;
         /* vfd is this function's;  parent_fd is the Directory's and
          * is not ours to close */
         ::close(vfd);
@@ -13958,13 +13960,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * demote hard-links the file it demotes, which
    * fs.protected_hardlinks permits only to the source inode's owner.
    * A gateway-owned marker is therefore undemotable by the identity
-   * that made it -- `delete_obj: demote of <key> refused by the
+   * that made it -- `delete_obj: demote of <key> denied by the
    * filesystem`, a 403 on the second delete of a key.
    *
    * The attribute writes are inside the same switch for the reason
    * the version id is (`0dcf4a191f6`):  a `user.*` write is tested
    * against the calling thread, so the gateway writing to the
-   * requester's file would be refused, and these are unchecked. */
+   * requester's file would fail, and these are unchecked. */
   int dm_fd = -1;
   const int dmret = nsfs::with_identity(dpp, identity, [&]() -> int {
     dm_fd = ::openat(vfd, dm_tmp.c_str(),
@@ -13986,7 +13988,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     /* Every attribute on the marker is written as its owner, for the
      * reason the version id is:  a `user.*` write is tested against
      * the calling thread, so the gateway writing to the requester's
-     * file is refused, and none of these is checked. */
+     * file fails, and none of these is checked. */
     std::string dm_ver_id;
     (void) nsfs::with_identity(dpp, identity, [&]() -> int {
       /* set delete_marker xattr */
@@ -14132,7 +14134,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 }
 
 /* The copy's source read is on the access-model axis:  S3 may have
- * authorised a read of an object the filesystem refuses this
+ * authorised a read of an object the filesystem denies this
  * requester, and under a model that permits it the gateway performs
  * the read.  Resolved here rather than inside FSStrategy, because
  * whether the model is a daemon setting or a per-bucket one is not
@@ -14220,7 +14222,7 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
      * down, under a temp directory whose name carries a bucket id from
      * NooBaa's config store -- so it is found and never invented.
      * Nothing gives nsfs that id, so a format which wants a root and
-     * has none is refused rather than served somewhere else. */
+     * has none is rejected rather than served somewhere else. */
     /* Placing an upload asks where staging WOULD go, which may create
      * the intermediate directory;  reading asks where it IS, which
      * must not name one that is absent. */
@@ -14231,7 +14233,7 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
     if (!root) {
       ldpp_dout(dpp, 4) << "no staging root for bucket " << pb->get_name()
 			<< " in format " << pb->profile_name()
-			<< ";  refusing to place an upload" << dendl;
+			<< ";  not placing an upload" << dendl;
       return -ENOTSUP;
     }
 
@@ -14351,8 +14353,8 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   /* The gateway's, deliberately.  Staging and the meta object stay
    * the gateway's (DECISIONS.md 2026-10-15), so naming the uploader
    * here makes the attribute write run as them -- and the meta
-   * object is a file they do not own, so the kernel refuses it:
-   * CreateMultipartUpload with a tagging header answered 403.
+   * object is a file they do not own, so the kernel denies it:
+   * CreateMultipartUpload with a tagging header returned 403.
    *
    * The parameter says who a write is *for*, and for this file the
    * answer is nobody:  it is the gateway's own bookkeeping, not the
@@ -14562,8 +14564,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       return cret;
     }
   }
-  /* who the object will belong to.  Refused where it cannot be applied,
-   * as the writers refuse, rather than made as the gateway. */
+  /* who the object will belong to.  Denied where it cannot be applied,
+   * as the writers deny it, rather than made as the gateway. */
   {
     const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
     if ((pret < 0) && (pret != -ENODATA)) {
@@ -15128,7 +15130,7 @@ std::string NSFSMultipartUpload::get_fname()
  * which matters because parts arrive concurrently.
  *
  * Part 1's record is consulted only as an index, to learn which name
- * to look for;  the faccessat then confirms or denies it.  A stale or
+ * to look for;  the faccessat then confirms it or finds it absent.  A stale or
  * wrong record therefore costs a failed lookup and the per-part
  * layout, not a wrong offset.  That is the difference from reading a
  * recorded flag and trusting it.
@@ -15239,7 +15241,7 @@ int NSFSMultipartWriter::prepare(optional_yield y)
    *
    * Here rather than where the SQE is built, because that is one
    * branch of one path:  with the sync engine, or on a small
-   * transfer, no window is ever constructed, and a refusal placed
+   * transfer, no window is ever constructed, and a denial placed
    * there simply never fires.  An operation whose identity cannot
    * be resolved must fail wherever it would otherwise have been
    * served as the gateway. */
@@ -15409,7 +15411,8 @@ int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
   const uint64_t written = high_water;
   high_water = std::max(high_water, offset + data.length());
 
-  /* Refuse to cross the extent, before submitting rather than after.
+  /* Reject a write that crosses the extent, before submitting rather
+   * than after.
    * With io_uring a check at drain would come too late:  the writes
    * that overran would already have landed in the next part's
    * region. */
@@ -15659,7 +15662,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
    *
    * Here rather than where the SQE is built, because that is one
    * branch of one path:  with the sync engine, or on a small
-   * transfer, no window is ever constructed, and a refusal placed
+   * transfer, no window is ever constructed, and a denial placed
    * there simply never fires.  An operation whose identity cannot
    * be resolved must fail wherever it would otherwise have been
    * served as the gateway. */
@@ -15670,7 +15673,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
     }
   }
 
-  /* Refuse a key the listing cache cannot hold, before anything is
+  /* Reject a key the listing cache cannot hold, before anything is
    * written.
    *
    * A listing is served from the cache, so a key LMDB will not accept
@@ -15680,23 +15683,23 @@ int NSFSAtomicWriter::prepare(optional_yield y)
    * default, against S3's 1024;  the cache key is `name \0 instance`,
    * so the name itself has one byte less.
    *
-   * Refusing is a divergence from S3, and a smaller one than it looks:
-   * nsfs already cannot store a path component longer than NAME_MAX,
-   * so many legal S3 keys are refused already.  What this fixes is
+   * Rejecting it is a divergence from S3, and a smaller one than it
+   * looks:  nsfs already cannot store a path component longer than
+   * NAME_MAX, so many legal S3 keys are rejected already.  What this fixes is
    * that the limit was silent.  It goes away if LMDB is ever built
    * with ceph, where MDB_MAXKEYSIZE is ceph's to raise. */
   if (auto* bc = driver->get_bucket_cache(); bc) {
     const int cap = bc->max_key_size();
     const size_t klen = obj->get_name().size();
     if ((cap > 0) && (klen + 1 > static_cast<size_t>(cap))) {
-      ldpp_dout(dpp, 4) << "nsfs: refusing key of " << klen
+      ldpp_dout(dpp, 4) << "nsfs: rejecting key of " << klen
 	<< " bytes;  the listing cache holds at most " << (cap - 1)
 	<< dendl;
       return -ERR_KEY_TOO_LONG;
     }
   }
 
-  /* A key whose components collide with nsfs scaffolding is refused by
+  /* A key whose components collide with nsfs scaffolding is rejected by
    * resolve_key_path(), which make_ent() below goes through, as every
    * operation's key does. */
 
@@ -15720,7 +15723,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
      * 409 and an nsfs code, because the client's recourse is to
      * delete the occupying object -- a 500 invites a retry that can
      * never succeed, and a 404 invites a write that will not land. */
-    ldpp_dout(dpp, 4) << "nsfs: refusing key " << obj->get_name()
+    ldpp_dout(dpp, 4) << "nsfs: rejecting key " << obj->get_name()
       << ":  a component of it is an existing object" << dendl;
     return -ERR_KEY_PATH_CONFLICT;
   }
@@ -15850,10 +15853,10 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
    * stored it -- a client asking for GLACIER got a 200, HEAD reported
    * no class at all, and the listing said STANDARD.
    *
-   * Stored rather than refused, because interop requires us to hold
+   * Stored rather than rejected, because interop requires us to hold
    * it:  NooBaa keeps a class per object in `user.storage_class` --
    * including the unmigrated `GLACIER_DA` -- so an adopted tree
-   * carries classes we must be able to serve, and refusing to set one
+   * carries classes we must be able to serve, and rejecting one
    * would leave us able to read a class we could never write.
    *
    * dbstore is the precedent for a driver storing it
@@ -16091,7 +16094,7 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *   extensions      the extension set this build implements, as the
    *                   integer it writes into user.nsfs.extensions.  A
    *                   bucket without that marker is read as NooBaa wrote
-   *                   it and the extension-only interfaces are refused
+   *                   it and the extension-only interfaces are rejected
    *                   on it.
    *   extensions_default
    *                   whether a bucket created here is marked
@@ -16137,7 +16140,7 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   features["non_md5_etag"] =
     ctx()->_conf->rgw_non_md5_etag ? "true" : "false";
   /* Which access model this gateway runs:  whether an S3 grant the
-   * filesystem refuses takes effect on an object's metadata.  A test
+   * filesystem denies takes effect on an object's metadata.  A test
    * cannot infer it -- both models answer the same for every request
    * where S3 and POSIX agree, which is nearly all of them -- so the
    * gateway says which it is and the suite asserts accordingly. */
@@ -16302,10 +16305,10 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
     put_report("error", "master keys");
     return ret;
   }
-  std::vector<std::string> rejected;
-  ret = nsfs::decrypt_store_secrets(dpp, keys, contents, rejected);
+  std::vector<std::string> failures;
+  ret = nsfs::decrypt_store_secrets(dpp, keys, contents, failures);
   if (ret < 0) {
-    for (const auto& r : rejected) {
+    for (const auto& r : failures) {
       ldpp_dout(dpp, 0) << "ERROR: adoption: " << r << dendl;
     }
     put_report("ran", "false");
@@ -16692,7 +16695,7 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
     return -ENOENT;
   }
   /* an operator decided this record goes no further;  a profile change
-   * that would import it is refused with it, not quietly converted
+   * that would import it is rejected with it, not quietly converted
    * without its state */
   if (nsfs::AbandonedRecord ab; abandoned_bucket(dpp, bucket_name, ab) == 0) {
     put_report("why", "abandoned:  " + ab.reason);
@@ -16771,7 +16774,7 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   }
 
   /* An operator decided this record goes no further, so adopting it by
-   * name is refused as the full pass skips it.  Take the abandonment
+   * name is rejected as the full pass skips it.  Take the abandonment
    * back first to adopt it. */
   if (nsfs::AbandonedRecord ab; abandoned_bucket(dpp, bucket_name, ab) == 0) {
     put_report("adopted", "false");
@@ -16899,7 +16902,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
     }
     /* Re-read, so that a record another gateway wrote is seen before a
-     * command acts;  once it is there every command refuses, since
+     * command acts;  once it is there every command is rejected, since
      * NooBaa's store is no longer an input. */
     if (int r = load_adoption_completion(dpp); r < 0) {
       return r;
@@ -17113,7 +17116,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 
   if (hint == "inject-no-chown") {
     /* behave as a daemon without CAP_CHOWN, so a test can assert that
-     * conversion refuses rather than creating a file owned by the
+     * conversion fails rather than creating a file owned by the
      * gateway.  The capability cannot be dropped in a test process --
      * a thread that drops it cannot regain it, which would poison
      * every later test -- so the condition is injected instead. */
@@ -17149,11 +17152,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * no access to the gateway's filesystem, and the gateway owns it, as
      * it owns the base path.
      *
-     *   op=create name= [mode=] [file= content=]   refused if it exists
+     *   op=create name= [mode=] [file= content=]   rejected if it exists
      *   op=mode name= mode=
      *   op=remove name=   its regular files and empty directories, then it
      *
-     * `mode` and `remove` refuse a directory carrying nsfs state, so
+     * `mode` and `remove` reject a directory carrying nsfs state, so
      * neither touches a bucket's.
      *
      * as=<user>:  the directory is that user's, as a NooBaa bucket's is
@@ -17327,8 +17330,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 
   if (hint == "inject-skip-reclone") {
     /* make reclone() a no-op, so a write open stays bound to the
-     * published object.  the guards which refuse to mutate or publish
-     * a non-shadow binding are otherwise unreachable--every caller
+     * published object.  the guards which reject a mutation or publish
+     * of a non-shadow binding are otherwise unreachable--every caller
      * reclones first */
     auto it = params.find("enable");
     if (it == params.end()) {
@@ -17344,7 +17347,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   if (hint == "inject-etag-as-gateway") {
     /* reproduce the non-md5 etag defect in a running gateway:  the
      * attribute is written by the calling thread and the result is
-     * discarded, so under impersonation it is refused on a file the
+     * discarded, so under impersonation it fails on a file the
      * gateway does not own and the object keeps the md5 etag
      * write_attrs() put there before the link.  The suite asserts both
      * polarities against one build */
@@ -17366,7 +17369,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * interlock are unreachable and a test asserting them would prove
      * nothing.
      *
-     * It goes through set_profile() and gets the same refusals as the
+     * It goes through set_profile() and gets the same rejections as the
      * REST path, so a suite cannot arrive at a state an operator
      * cannot. */
     auto it = params.find("bucket");
@@ -17397,7 +17400,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   }
 
   /* `access-model` -- read, and briefly change, what the gateway does
-   * when the filesystem refuses something S3 authorised.
+   * when the filesystem denies something S3 authorised.
    *
    *   model=<name>        the model in force
    *   data=<result>      what it does for object *bytes*
@@ -17406,7 +17409,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    * `set=` points it at another model for the rest of the process:
    * `posix-strict`, `s3-metadata`, `s3-native`, or `default`
    * (whatever was configured).  Switching is how the invariant test
-   * gets its second polarity -- `posix-strict` refuses the bytes and
+   * gets its second polarity -- `posix-strict` denies the bytes and
    * `s3-native` serves them -- rather than by editing the source and
    * rebuilding, which this project does not do.
    *
@@ -17475,7 +17478,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    *   inside=1          the capability is effective inside the call
    *   after=0           and is gone when it returns
    *   impersonating=-1  a raise on a thread already running as an
-   *                     identity is refused, -EPERM:  the capability
+   *                     identity is rejected, -EPERM:  the capability
    *                     would be the identity's
    *
    * `cap` names what to raise, `dac_override` by default;  `user` is
@@ -17530,7 +17533,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["after"] = std::to_string((after & want) ? 1 : 0);
     }
 
-    /* and that it is refused where it would be the identity's */
+    /* and that it is rejected where it would be the identity's */
     if (auto u_it = params.find("user"); u_it != params.end()) {
       if (!nsfs::impersonation_enabled()) {
 	if (out) {
@@ -17543,14 +17546,14 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	    (*out)["impersonating"] = "no-identity";
 	  }
 	} else {
-	  int refused = 0;
+	  int raise_ret = 0;
 	  (void) nsfs::run_as(dpp, cred, [&]() -> int {
-	    refused = nsfs::with_capabilities(dpp, want,
-					      []() -> int { return 0; });
+	    raise_ret = nsfs::with_capabilities(dpp, want,
+						[]() -> int { return 0; });
 	    return 0;
 	  }, null_yield);
 	  if (out) {
-	    (*out)["impersonating"] = std::to_string(refused);
+	    (*out)["impersonating"] = std::to_string(raise_ret);
 	  }
 	}
       }
@@ -17574,7 +17577,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    *
    *   same=<uid>        nested as the same identity still runs, and
    *                     the uid is the outer one
-   *   different=-35     nested as another identity is refused, -EDEADLK
+   *   different=-35     nested as another identity is rejected, -EDEADLK
    *
    * Only reachable on a gateway that can assume an identity, so the
    * suite skips it when `result=not-impersonating`. */

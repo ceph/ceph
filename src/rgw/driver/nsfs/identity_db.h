@@ -267,8 +267,8 @@ public:
 
   /* Bucket placement.  Write, read, and remove;  enumeration is P3's.
    *
-   * Both writers refuse a path `placement_path_is_acceptable()` rejects,
-   * with -EINVAL.  `insert` is creation's:  -EEXIST when the name is
+   * Both writers reject a path `placement_path_is_acceptable()` does
+   * not accept, with -EINVAL.  `insert` is creation's:  -EEXIST when the name is
    * taken, so of two creations of one name exactly one succeeds.  `put`
    * repoints an existing row instead.  Both return -EADDRINUSE when
    * another bucket's directory is this path, contains it, or lies inside
@@ -453,7 +453,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  * identity it cannot be given.
  *
  * `row`, if given, receives the key of the row that resolved, on
- * success or refusal;  it is left alone otherwise. */
+ * success or on -EPERM;  it is left alone otherwise. */
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const rgw_user& user, const rgw_account_id& account,
 			Credentials& out, std::string* row = nullptr);
@@ -505,10 +505,10 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  * Where several rows carry the uid and agree on the groups there is
  * no ambiguity in fact, so the groups are returned and `key` is left
  * alone:  the rows are distinct identities and only their credentials
- * coincide.  Guessing between rows that disagree is what -ENODATA
- * refuses -- it would lend one identity's reach to another identity's
- * file, which is the error docs/ACCOUNT_IMPORT.md section 2.5 calls
- * the sharpest, in a second place.
+ * coincide.  Guessing between rows that disagree is what the -ENODATA
+ * return prevents -- it would lend one identity's reach to another
+ * identity's file, which is the error docs/ACCOUNT_IMPORT.md section
+ * 2.5 calls the sharpest, in a second place.
  */
 int complete_file_credentials(const DoutPrefixProvider* dpp,
 			      const IdentityDB& db, Credentials& inout,

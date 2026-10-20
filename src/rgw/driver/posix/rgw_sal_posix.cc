@@ -1351,7 +1351,7 @@ int Symlink::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file
    * readlinkat() path, taken when the target name is empty -- and the
    * dereference below then faulted.  The copy constructor does not
    * copy the target either, so a cloned Symlink reaches here with
-   * none.  Refusing is what the caller can act on. */
+   * none.  Rejecting the call is what the caller can act on. */
   if (! target) {
     ldpp_dout(dpp, 0) << "ERROR: Symlink::create: " << fname
 		      << " has no target:  fill_target() returned "

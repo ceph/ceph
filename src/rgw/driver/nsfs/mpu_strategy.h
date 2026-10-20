@@ -245,7 +245,7 @@ public:
    * used, always:  the id is then NooBaa's, and an upload nsfs starts
    * is one NooBaa's gateway can find.  One is created only where the tree
    * has none, because there is nothing to conflict with;  and more
-   * than one is still refused, because which holds the uploads is not
+   * than one is still rejected, because which holds the uploads is not
    * decidable.
    *
    * The residual risk is narrow and named:  a tree with no temp
@@ -282,9 +282,9 @@ public:
    *
    * extent bounds what the part may write.  A shared file gives a part
    * one stride and no more, because exceeding it would overrun the next
-   * part's region;  the writer refuses and diverts rather than
-   * discovering the damage afterwards.  std::nullopt is unbounded,
-   * which is what a part with its own file gets. */
+   * part's region;  the writer rejects the overrun and diverts rather
+   * than discovering the damage afterwards.  std::nullopt is
+   * unbounded, which is what a part with its own file gets. */
   struct PartTarget {
     std::string name;                /* file within the staging directory */
     uint64_t offset{0};              /* where this part's bytes begin */

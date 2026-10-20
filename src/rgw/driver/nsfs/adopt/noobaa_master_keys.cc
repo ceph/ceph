@@ -329,26 +329,26 @@ int NooBaaMasterKeys::decrypt(const DoutPrefixProvider* dpp,
 int decrypt_store_secrets(const DoutPrefixProvider* dpp,
 			  const NooBaaMasterKeys& keys,
 			  NooBaaStoreContents& contents,
-			  std::vector<std::string>& rejected)
+			  std::vector<std::string>& failures)
 {
   for (auto& id : contents.identities) {
     for (auto& ak : id.access_keys) {
       if (ak.encrypted_secret_key.empty()) {
 	/* the anonymous account has an empty key list rather than an
 	 * empty key, so this is a record shape we do not expect */
-	rejected.push_back(id.name + "/" + ak.access_key +
+	failures.push_back(id.name + "/" + ak.access_key +
 			   ": no encrypted_secret_key");
 	continue;
       }
       if (id.master_key_id.empty()) {
-	rejected.push_back(id.name + ": no master_key_id");
+	failures.push_back(id.name + ": no master_key_id");
 	continue;
       }
       std::string secret;
       int ret = keys.decrypt(dpp, id.master_key_id,
 			     ak.encrypted_secret_key, secret);
       if (ret < 0) {
-	rejected.push_back(id.name + "/" + ak.access_key + ": " +
+	failures.push_back(id.name + "/" + ak.access_key + ": " +
 			   cpp_strerror(-ret));
 	continue;
       }
@@ -356,11 +356,11 @@ int decrypt_store_secrets(const DoutPrefixProvider* dpp,
     }
   }
 
-  /* Collected, then refused.  Every failure is reported for the same
+  /* Collected, then returned as one error.  Every failure is reported for the same
    * reason I1 reports every unreadable record -- one run should say
    * everything that is wrong -- and the return is still an error, so
    * no caller proceeds past a wrong key by ignoring the list. */
-  return rejected.empty() ? 0 : -EKEYREJECTED;
+  return failures.empty() ? 0 : -EKEYREJECTED;
 }
 
 }}} // namespace rgw::sal::nsfs

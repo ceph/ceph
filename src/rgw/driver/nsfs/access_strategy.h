@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * nsfs:  what to do when the filesystem refuses an operation S3
+ * nsfs:  what to do when the filesystem denies an operation S3
  * authorised.
  */
 
@@ -11,7 +11,7 @@
 
 namespace rgw { namespace sal { namespace nsfs {
 
-/* What a refused operation was touching.
+/* What a denied operation was touching.
  *
  * The axis has different answers for different things, which is why
  * this is a parameter and not one switch:  nobody wants the gateway
@@ -62,7 +62,7 @@ class AccessStrategy {
 public:
   virtual ~AccessStrategy() = default;
 
-  /* What to do when the filesystem refuses this class of operation
+  /* What to do when the filesystem denies this class of operation
    * to an identity S3 authorised. */
   virtual Refused refused(AccessClass what) const = 0;
 
@@ -117,7 +117,7 @@ public:
  * a difference means one of them is wrong.
  *
  * The invariant test takes its second polarity from here:
- * `posix-strict` refuses the bytes and `s3-native` serves them, so it
+ * `posix-strict` denies the bytes and `s3-native` serves them, so it
  * watches itself fail without a source edit and a rebuild.  That was
  * the only thing this strategy did when it was written (2026-10-16),
  * reachable from the driver hint alone;  making it selectable was a

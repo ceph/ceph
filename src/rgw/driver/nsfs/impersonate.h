@@ -46,8 +46,8 @@ namespace rgw { namespace sal { namespace nsfs {
  * effective -- see hold_thread_capabilities() -- and permitted is
  * what a thread raises from, so permitted is the question that
  * matters:  can this process assume an identity when it comes to it?
- * Asking about effective refused to start a correctly configured
- * gateway (run 2026-10-16).
+ * Asking about effective kept a correctly configured gateway from
+ * starting (run 2026-10-16).
  */
 bool have_credential_capabilities(std::string* missing);
 
@@ -57,7 +57,7 @@ bool have_credential_capabilities(std::string* missing);
  *
  * This is the deployment's intent and not what is in effect here.
  * Only the startup gate wants it, so that a gateway missing the
- * capabilities refuses to start. */
+ * capabilities does not start. */
 bool impersonation_configured();
 
 /* Whether requests in THIS process are served as their own POSIX
@@ -65,7 +65,7 @@ bool impersonation_configured();
  *
  * False where nothing will ever pin a personality -- radosgw-admin,
  * and an embedding library, which binds one uid at mount.  The
- * distinction matters because the callers of this refuse a read when
+ * distinction matters because the callers of this deny a read when
  * no personality is pinned, so believing impersonation is on in a
  * process that cannot do it denies every read. */
 bool impersonation_enabled();
@@ -293,7 +293,7 @@ bool capability_is_effective(int cap);
  * `caps` is a mask of `1ull << CAP_*` bits.  An empty mask runs `fn`
  * and touches nothing.
  *
- * Three refusals, all of them before `fn` runs:
+ * Three rejections, all of them before `fn` runs:
  *
  *   -EPERM    a requested capability is not in the permitted set.
  *             Fails closed:  a gateway started without the file

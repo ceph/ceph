@@ -205,10 +205,10 @@ public:
  * gateway does -- `s3_put_object_acl.js` says so:  "we only handle
  * canned acl, the rest is deprecated in favor of bucket policy.
  * however we do not fail the request because there are still clients
- * that call it."  Refusing would make base stricter than the format it
- * emulates and break the clients that comment protects.  Losing an ACL
- * in *translation* is a different matter and is the export manifest's
- * job;  a base bucket never held one.
+ * that call it."  Rejecting the write would make base stricter than
+ * the format it emulates and break the clients that comment protects.
+ * Losing an ACL in *translation* is a different matter and is the
+ * export manifest's job;  a base bucket never held one.
  *
  * Object tags and the object-lock family.  Not renames:  the nsfs format
  * is one encoded blob for every tag and two encoded attributes for the

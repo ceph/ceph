@@ -64,7 +64,7 @@ struct Format {
  * unmarked by construction, because NooBaa never wrote a marker, so the
  * correct reading of it is the default rather than something an operator
  * has to remember to configure.  And a tree we have not extended can go
- * back:  rollback after cutover is refusing to mark, not undoing a
+ * back:  rollback after cutover is never marking it, not undoing a
  * conversion.  See project_noobaa_interchange.
  *
  * It also means every nsfs tree written before this existed reads as
@@ -144,12 +144,12 @@ inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs.owns_storage";
  * profile one at a time -- a mask says that by defining a bit, where an
  * ordinal would say it by renumbering every level above.
  *
- * A bucket carrying ANY bit this build does not implement is refused
+ * A bucket carrying ANY bit this build does not implement is rejected
  * rather than served on a guess.  Not a fallback and not a warning:  the
  * bits we do not know are the ones whose structure we would corrupt.
  *
  * We only ever write the named profiles below, so a combination nobody
- * named is something to refuse, not something we produce. */
+ * named is something to reject, not something we produce. */
 
 /* 0 is not a value;  it is the absence of the attribute, and it means
  * the bucket is NooBaa-native. */
@@ -164,7 +164,7 @@ inline constexpr uint32_t EXTENSIONS_NONE = 0;
  * A bit is declared here as soon as it is named, but it belongs in
  * EXTENSIONS_KNOWN only once this build can actually serve a bucket
  * that carries it;  a bucket carrying a bit we cannot serve is
- * refused rather than served wrongly.  No bit is in that state
+ * rejected rather than served wrongly.  No bit is in that state
  * today.
  *
  * 0x4 was EXT_POSITIONAL, reserved for a "positional IO layout" that
@@ -202,7 +202,7 @@ inline constexpr uint32_t EXT_RGW_META    = 0x8;
  * representation in this driver, and mapping them put them in shared
  * on their own. */
 
-/* The bits this build can serve.  The refusal test, and the reason a
+/* The bits this build can serve.  The rejection test, and the reason a
  * declared-but-unbuilt extension must stay out of it:  accepting a bit
  * we cannot honour is exactly the corruption the rule exists to
  * prevent. */

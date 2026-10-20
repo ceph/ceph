@@ -39,7 +39,7 @@
 #                       is skipped if already done.  Also makes two
 #                       unplaced, account-owned directories for
 #                       placement tests, afresh on every start.
-#                       Refuses to run as root.
+#                       Exits with an error if run as root.
 #   --with-inotify      Enable inotify watcher on bucket directories
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
@@ -60,7 +60,7 @@
 #                       directory (e.g. --data-root /mnt/nvme for fast
 #                       storage, or a tree another gateway wrote).
 #                       The LMDB cache and userdb stay in the build dir.
-#                       Refuses --clean:  DIR/root is not ours to wipe.
+#                       Rejects --clean:  DIR/root is not ours to wipe.
 #   --perf              Performance tuning: NUMA pinning, tcmalloc
 #                       thread cache, tcp_nodelay, no request timeout
 #   -o 'key=value'      Pass extra config option through to vstart.sh
@@ -361,7 +361,7 @@ IMP_UID_B=70102
 # that serves public buckets has an anonymous account
 # (ACCOUNT_IMPORT.md 6.8;  NooBaa provisions one with
 # `account add --anonymous`), and with impersonation on a request whose
-# identity has no record is refused rather than served as the gateway.
+# identity has no record is denied rather than served as the gateway.
 # Its own uid, not the gateway's:  anonymous is then a distinct
 # principal on the filesystem, which is what lets a test assert it
 # cannot reach what alice can.
@@ -369,7 +369,7 @@ IMP_USER_N=rgwanon
 IMP_UID_N=70103
 # the suite's *tenanted* user is a principal like any other, and under
 # impersonation a principal with no identity row cannot be served -- so
-# the cors `_tenant` tests refused with "no POSIX identity recorded for
+# the cors `_tenant` tests failed with "no POSIX identity recorded for
 # testx$..." and were measuring that rather than CORS (2026-10-16).
 IMP_USER_T=rgwtenant
 IMP_UID_T=70104
@@ -681,7 +681,7 @@ export S3TEST_CONF="$S3CONF"
 # The bucket is created over S3 rather than placed in the data root.
 # An unmarked directory has no owner RGW can resolve -- a base
 # bucket's owner waits on the account import -- so a sideloaded one
-# is refused with AccessDenied before any permission question is
+# is denied (AccessDenied) before any permission question is
 # reached.  Creating it through the gateway gives it an owner;  only
 # the ownership and mode of the gated object need root.
 #
@@ -705,7 +705,7 @@ if $IMPERSONATE; then
 
 	# testid is bound to the fixture uid so the seeded objects are
 	# owned by a real identity rather than by the gateway -- and so
-	# that the writes are not refused, since with impersonation on
+	# that the writes are not denied, since with impersonation on
 	# an identity with no record cannot be served.
 	# The suite's alt user is bound to the other fixture uid for the
 	# whole run, so a test that reads testid's object as the alt user
@@ -777,7 +777,7 @@ if $IMPERSONATE; then
 	# Two unplaced directories under the base path, for tests that
 	# place them as buckets through /admin/nsfs/bucket.  Neither is a
 	# bucket until placed, and a placed one carries nsfs state, which
-	# placement then refuses, so both are made afresh on every start.
+	# placement then rejects, so both are made afresh on every start.
 	#
 	# $IMP_OWNED is what an account's bucket looks like after NooBaa
 	# made it, or after adoption:  the account's uid throughout, and

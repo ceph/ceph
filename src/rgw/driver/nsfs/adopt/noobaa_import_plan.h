@@ -33,10 +33,10 @@
  * Discarding the value is not available:  it is a matchable principal
  * in NooBaa's trust policies, so dropping it changes authorization.
  *
- * **Every collision is reported and the plan is refused.**  Not the
+ * **Every collision is reported and the plan is rejected.**  Not the
  * first one -- an operator needs the list, because fixing them one
  * import at a time means one failed import per collision.  And
- * refused rather than reported, because a partial import leaves a
+ * rejected rather than reported, because a partial import leaves a
  * state nobody asked for (§6.1a).
  *
  * WHAT THIS DOES NOT CHECK:  collisions against **RGW's existing
@@ -94,9 +94,9 @@ struct ImportEntry {
   /* For a root account, the limits RGW's IAM API enforces on it,
    * raised where the store carries more than RGW's defaults allow.
    * RGW's admin path, which the import writes through, does not check
-   * them;  CreateUser and CreateAccessKey do, so an account imported
-   * above its limit would refuse every later one.  Unset keeps the
-   * default. */
+   * them;  CreateUser and CreateAccessKey do, so for an account
+   * imported above its limit they would reject every later one.
+   * Unset keeps the default. */
   std::optional<int32_t> max_users;
   std::optional<int32_t> max_access_keys;
 
@@ -104,12 +104,13 @@ struct ImportEntry {
   bool anonymous{false};
 };
 
-/* The plan, and what refuses it. */
+/* The plan, and its collisions. */
 struct ImportPlan {
   std::vector<ImportEntry> entries;
 
   /* Every collision, each naming the identities involved and the
-   * constraint.  Non-empty refuses the plan. */
+   * constraint.  build_import_plan() returns -EEXIST when this is
+   * non-empty, and nothing is imported. */
   std::vector<std::string> collisions;
 
   /* Every IAM user whose POSIX block differs from its account's,
@@ -130,7 +131,7 @@ struct ImportPlan {
    * retention.  As RGW's account root it can, since a root is allowed
    * every action on what its account owns unless a policy denies it.
    * RGW's root semantics were accepted over NooBaa's restriction
-   * (DECISIONS.md 2026-10-10), so this is reported, not refused. */
+   * (DECISIONS.md 2026-10-10), so this is reported, not rejected. */
   std::vector<std::string> widened;
 
   size_t accounts() const;
@@ -142,8 +143,8 @@ struct ImportPlan {
  * Returns 0 only when the plan is clean.  -EEXIST when a constraint
  * is violated, with every violation in `collisions`;  -EINVAL when a
  * record cannot be mapped at all.  The plan is returned either way,
- * because an operator reading a refusal wants to see what would have
- * been imported.
+ * because an operator reading a rejected plan wants to see what would
+ * have been imported.
  *
  * `cct` is for RGW's account id generator and nothing else. */
 /* `stored`, when given, is consulted before an account id is minted:

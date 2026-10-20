@@ -204,8 +204,8 @@ First, a correction to the framing this document originally used.  An NFS
 filehandle is contractually a fixed mapping from opaque bytes to a
 particular file.  NFSv4.1 introduced **volatile filehandles**, which appear
 to have been intended for exactly our situation — but the industry did not
-adopt them, and Linux clients, which is to say nearly all of them, refuse
-them.  So we cannot *declare* our handles volatile;  we are obliged to
+adopt them, and Linux clients, which is to say nearly all of them, do not
+support them.  So we cannot *declare* our handles volatile;  we are obliged to
 present them as persistent whether they are or not.
 
 Open-by-handle is therefore not an optimisation.  It is the only honest way
@@ -327,8 +327,8 @@ would be reusable by any backend that assigns identity at creation,
 including a metadata-schema rados.
 
 **It does not make rename free.**  It makes the handle survive one, which
-removes the ESTALE exposure that currently justifies refusing to rename
-open files, and removes the O(cached handles) re-keying.  The listing-cache
+removes the ESTALE exposure that currently justifies rejecting a rename of
+an open file, and removes the O(cached handles) re-keying.  The listing-cache
 invalidation and the S3 semantic question in `RENAME_DESIGN.md` §4 are
 untouched.
 

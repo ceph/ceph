@@ -92,7 +92,7 @@ public:
    * record will not parse must not be served as though it had none,
    * because unset is permissive for lock, policy, public access block
    * and encryption alike.  Distinguishing absent from unreadable is
-   * what lets the caller fail closed on the second without refusing the
+   * what lets the caller fail closed on the second and still serve the
    * first. */
   virtual int load(const DoutPrefixProvider* dpp, int dir_fd,
 		   const std::string& bucket_name,

@@ -126,7 +126,7 @@ std::optional<ceph::real_time> noobaa_time(const std::string& text)
 
 /* One access key, through the path `radosgw-admin key create` runs.
  *
- * That path refuses a key id another RGW user holds.  It creates every
+ * That path rejects a key id another RGW user holds.  It creates every
  * key active, so a key NooBaa holds deactivated is made inactive by a
  * second operation, a modify, which is how RGW deactivates one. */
 int add_access_key(const DoutPrefixProvider* dpp, optional_yield y,
@@ -210,7 +210,7 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
 	  "is shared across users and accounts, so _id " + e.noobaa_id +
 	  " cannot take it");
     }
-    /* An access key is unique across RGW.  The user-add path refuses
+    /* An access key is unique across RGW.  The user-add path rejects
      * one already held, but only when it reaches that key -- after the
      * account and the user exist -- so it is checked here, before
      * anything is written. */
@@ -337,7 +337,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     /* The decrypted keys.  I2 opened them;  an empty secret here
-     * means I2 was not run or refused, and a user written with no
+     * means I2 was not run or failed, and a user written with no
      * usable credential is worse than one not written. */
     bool usable = true;
     for (const auto& ak : src->access_keys) {
@@ -373,9 +373,9 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     op.path = e.iam_user && !src->iam_path.empty() ? src->iam_path : "/";
     op.create_date = noobaa_time(src->creation_date);
     /* NooBaa's `allow_bucket_creation`, as RGW expresses it:  a negative
-     * bucket limit refuses CreateBucket to this user, whoever owns the
-     * bucket (`rgw_op.cc`).  NooBaa refuses an identity whose record
-     * lacks the flag, and so does this. */
+     * bucket limit denies CreateBucket to this user, whoever owns the
+     * bucket (`rgw_op.cc`, -EPERM).  NooBaa denies bucket creation to
+     * an identity whose record lacks the flag, and so does this. */
     if (!src->allow_bucket_creation) {
       op.set_max_buckets(-1);
     }

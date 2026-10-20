@@ -3,7 +3,7 @@
 
 The bucket cannot simply be a directory placed in the data root: an
 unmarked directory has no owner RGW can resolve, so every request
-against it is refused with AccessDenied before any of this is
+against it is denied (AccessDenied) before any of this is
 reached.  Creating it through S3 gives it an owner the gateway
 recognises;  the caller then adjusts ownership and mode on disk,
 which is the part that needs root.
@@ -133,7 +133,7 @@ def main():
 
     # With impersonation on, every identity that can authenticate
     # needs a POSIX record -- including this one, or the object
-    # writes below are refused before they reach the filesystem.
+    # writes below are denied before they reach the filesystem.
     # vstart grants testid the nsfs capability, so it can provision
     # itself.  Bound to the uid the fixture user owns, so the seeded
     # objects come out owned by a real identity rather than by the

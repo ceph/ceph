@@ -377,7 +377,7 @@ struct BucketCache : public Notifiable
 	 *
 	 * A listing is served from this cache, so this is also the real
 	 * ceiling on an object name:  an entry that will not fit cannot
-	 * be listed.  Callers compare against max_key_size() and refuse
+	 * be listed.  Callers compare against max_key_size() and reject
 	 * the write, because the alternative is an object on disk that
 	 * no listing shows. */
 	if (max_key_sz == 0) {

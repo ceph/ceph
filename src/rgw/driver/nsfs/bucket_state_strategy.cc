@@ -365,12 +365,12 @@ int from_noobaa_website(const DoutPrefixProvider* dpp, JSONObj* web,
  * An algorithm that is neither of NooBaa's is stored anyway, and that is
  * deliberate.  The string becomes the x-amz-server-side-encryption
  * header value on every PUT (rgw_rest_s3.cc, get_encryption_defaults),
- * so RGW already refuses writes into a bucket configured with one it
- * does not know.  That is fail-closed at the granularity the gap
- * actually has.  Failing the bucket at load instead would also deny
+ * so writes into a bucket configured with one RGW does not know
+ * already fail.  That is fail-closed at the granularity the gap
+ * actually has.  Failing the bucket at load instead would also fail
  * reads of objects sitting there perfectly readable, which the gap
  * does not justify -- unlike versioning, where there is no safe
- * default, or a retention period, where RGW itself refuses the same
+ * default, or a retention period, where RGW itself rejects the same
  * input. */
 int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
 			   Attrs& attrs)
@@ -385,8 +385,8 @@ int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
      * will fail and the reason should be findable without reading the
      * record by hand */
     ldpp_dout(dpp, 1) << "nsfs: bucket encryption names algorithm \""
-      << algorithm << "\", which is neither of theirs;  RGW will refuse "
-      << "writes into this bucket" << dendl;
+      << algorithm << "\", which is neither of theirs;  writes into this "
+      << "bucket will fail" << dendl;
   }
 
   std::string key_id;
@@ -408,11 +408,11 @@ int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
  * entry and constrains neither.
  *
  * Stored whatever the set looks like.  RGW's own S3 path builds an
- * RGWObjTags(50) and refuses a request breaking that or the 128/256
+ * RGWObjTags(50) and rejects a request breaking that or the 128/256
  * byte key and value limits, but NooBaa's schema imposes none of it, so a
  * NooBaa bucket may legitimately carry more or longer tags than the
- * API would accept.  Refusing to serve such a bucket would deny
- * everything over metadata that gates nothing and destroys nothing --
+ * API would accept.  Rejecting such a bucket would fail every request
+ * to it over metadata that gates nothing and destroys nothing --
  * the same disproportion as failing a bucket over an encryption
  * algorithm.  A set that exceeds what the API would take is warned
  * about, because that is the only signal there will be. */
@@ -466,7 +466,7 @@ int from_noobaa_tags(const DoutPrefixProvider* dpp, JSONObj* tagging,
  * check_date() additionally requires to be exact midnight UTC.  The
  * conversion is here;  the midnight rule is not, because the parser
  * enforces it and a date that breaks it is a rule PutBucketLifecycle
- * would refuse. */
+ * would reject. */
 bool idate_iso8601(JSONObj* parent, const char* name, std::string& out)
 {
   int64_t ms = 0;
@@ -497,7 +497,7 @@ bool idate_iso8601(JSONObj* parent, const char* name, std::string& out)
  * check_date() insists.  Each of those is a rule of NooBaa's that RGW
  * cannot express, and none has a safe reading -- guessing which of
  * days or date wins deletes objects on the wrong day -- so the parser
- * refusing it fails the bucket closed.
+ * rejects it, which fails the bucket closed.
  *
  * Transitions are rendered like everything else.  The parser takes
  * them, so we take them;  whether this driver has anywhere to
@@ -662,7 +662,7 @@ int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
     RGWXMLDecoder::decode_xml("LifecycleConfiguration", config, &parser);
   } catch (RGWXMLDecoder::err& e) {
     ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a "
-      << "lifecycle rule PutBucketLifecycle would refuse: "
+      << "lifecycle rule PutBucketLifecycle would reject: "
       << e.what() << dendl;
     return -EBADMSG;
   }
@@ -693,7 +693,7 @@ int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
  *
  * The rule-count limit is the op's rather than the parser's, and is
  * applied here too:  a configuration past it is one PutBucketCors
- * refuses, and CORS decides which origins a browser may reach. */
+ * rejects, and CORS decides which origins a browser may reach. */
 int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
 		     JSONObj* rules, const std::string& bucket_name,
 		     Attrs& attrs)
@@ -758,7 +758,7 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
   }
   if (!parser.parse(xml.c_str(), xml.length(), 1)) {
     ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a CORS "
-      << "rule PutBucketCors would refuse" << dendl;
+      << "rule PutBucketCors would reject" << dendl;
     return -EBADMSG;
   }
 

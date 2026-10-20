@@ -511,12 +511,13 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
    *
    * A retry rather than a decision, unlike the publish
    * (NSFSObject::link_temp_file):  opening the source is idempotent,
-   * so only a refused copy moves to the gateway.  The publish had to
+   * so only a copy whose source open fails with EACCES moves to the
+   * gateway.  The publish had to
    * be decided in advance because its first step spends the
    * O_TMPFILE's one link.
    *
    * Hoisted out of the identity block below, because
-   * nsfs::with_capabilities() refuses to raise on a thread that is
+   * nsfs::with_capabilities() rejects a raise on a thread that is
    * impersonating.
    *
    * CAP_DAC_OVERRIDE alone:  the open is read-only, so only the
@@ -536,7 +537,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     oret = nsfs::with_capabilities(dpp, COPY_SOURCE_CAPS, open_src);
     if (oret == 0) {
       cross_account_sources.fetch_add(1, std::memory_order_relaxed);
-      ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem refused the"
+      ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem denied the"
 	" requester the source " << src_name << " and the gateway read it,"
 	" which the access model permits" << dendl;
     }
@@ -604,7 +605,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
    * so the read is the requester's and not the gateway's, which holds
    * `gw_src_fd`.
    *
-   * Where the filesystem refuses the requester and the access model
+   * Where the filesystem denies the requester and the access model
    * permits it, there is nothing to reopen:  `gw_src_fd` is already
    * the gateway's descriptor, so using it as it stands *is* the
    * gateway performing the read.  Hoisted out of the identity block
@@ -618,7 +619,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     }, y);
     if ((oret == -EACCES) && src_as_gateway) {
       cross_account_sources.fetch_add(1, std::memory_order_relaxed);
-      ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem refused the"
+      ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem denied the"
 	" requester the source and the gateway read it, which the access"
 	" model permits" << dendl;
     } else if (oret < 0) {

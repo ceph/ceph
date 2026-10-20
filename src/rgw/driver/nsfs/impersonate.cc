@@ -58,10 +58,10 @@ bool impersonation_enabled()
   }
 
   /* Configured is not the same as in effect, and the difference is
-   * not cosmetic:  the callers of this refuse a read when no
+   * not cosmetic:  the callers of this deny a read when no
    * personality is pinned, because serving it as the daemon is the
    * escalation the design exists to prevent.  In a process where
-   * nothing will ever pin one, that refusal denies everything.
+   * nothing will ever pin one, that denies everything.
    *
    * Two such processes.  radosgw-admin runs as the operator and
    * serves no authenticated identity.  An embedding library binds one
@@ -70,7 +70,7 @@ bool impersonation_enabled()
    * CODE_ENVIRONMENT_DAEMON and `g_code_env` cannot see it.
    *
    * The startup gate asks `impersonation_configured()` instead, so a
-   * gateway missing the capabilities still refuses to start rather
+   * gateway missing the capabilities still does not start, rather
    * than quietly serving every request as itself. */
   if (g_code_env != CODE_ENVIRONMENT_DAEMON) {
     return false;
@@ -103,8 +103,8 @@ bool have_credential_capabilities(std::string* missing)
    * capabilities are granted `+p` so that no thread begins able to
    * bypass DAC -- and permitted is what makes a raise possible, so
    * it is the right question:  can this process assume an identity
-   * when it comes to it?  Asking about effective refused to start a
-   * correctly configured gateway (run 2026-10-16). */
+   * when it comes to it?  Asking about effective kept a correctly
+   * configured gateway from starting (run 2026-10-16). */
   const uint32_t permitted = data[0].permitted;
   const bool setuid = permitted & (1u << CAP_SETUID);
   const bool setgid = permitted & (1u << CAP_SETGID);
@@ -621,12 +621,13 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
 {
   if (tl_impersonating) {
     /* The fast path is only correct for the identity in force.  For
-     * any other it would run the work as the wrong one, so refuse:
-     * enqueueing instead is what the comment above rules out. */
+     * any other it would run the work as the wrong one, so reject
+     * the call:  enqueueing instead is what the comment above rules
+     * out. */
     if (tl_current_cred && same_identity(*tl_current_cred, cred)) {
       return fn();
     }
-    ldpp_dout(dpp, 0) << "ERROR: refusing to run as uid " << cred.uid
+    ldpp_dout(dpp, 0) << "ERROR: rejecting a call as uid " << cred.uid
       << " on a thread already running as uid "
       << (tl_current_cred ? tl_current_cred->uid : (uid_t)-1)
       << ";  the work would have run as the wrong identity" << dendl;
@@ -694,8 +695,8 @@ int hold_thread_capabilities(const DoutPrefixProvider* dpp)
   const uint32_t want = 1u << CAP_DAC_READ_SEARCH;
   if (!(data[0].permitted & want)) {
     /* not granted at all.  Not an error here:  a gateway may run
-     * without it and refuse the reads that need it, which is what
-     * the open's own error says. */
+     * without it, and the reads that need it fail with the open's
+     * own error. */
     tl_holds_read_search = true;
     return 0;
   }
@@ -722,7 +723,7 @@ int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
   }
 
   if (tl_impersonating) {
-    ldpp_dout(dpp, 0) << "ERROR: refusing to raise capabilities 0x"
+    ldpp_dout(dpp, 0) << "ERROR: rejecting a raise of capabilities 0x"
       << std::hex << caps << std::dec << " on a thread running as uid "
       << (tl_current_cred ? tl_current_cred->uid : (uid_t)-1)
       << ";  the capability would be the identity's" << dendl;

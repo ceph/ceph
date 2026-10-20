@@ -70,7 +70,7 @@ inline bool is_canonical_owner_key(const std::string& key)
  *
  * Reported, never enforced.  A record may legitimately be written
  * before the account it names -- an operator staging a deployment,
- * an importer resuming after a failure -- and refusing that would
+ * an importer resuming after a failure -- and rejecting that would
  * make the order of two independent operations load-bearing.  What
  * an operator actually lacks is any sign that a key matched nothing,
  * so the result travels in the response. */
@@ -256,8 +256,9 @@ public:
       op_ret = -EINVAL;
       return;
     }
-    /* (uid_t)-1 is what chown() reads as "leave alone" and what
-     * setresuid() refuses;  it is never an identity to serve as */
+    /* (uid_t)-1 is setresuid()'s "leave unchanged":  the switch passes
+     * cred.uid as the effective uid, so a row carrying it would switch
+     * nothing, succeed, and serve the request as the gateway */
     if (have_uid && ((uid == static_cast<uint32_t>(-1)) ||
 		     (gid == static_cast<uint32_t>(-1)))) {
       op_ret = -EINVAL;

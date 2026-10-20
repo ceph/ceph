@@ -47,7 +47,8 @@
  * the text would have risked rewriting a resource or a condition
  * value that happened to equal a principal.
  *
- * **An unresolved principal refuses the policy, not the bucket.**
+ * **A policy with an unresolved principal is rejected;  the bucket is
+ * not.**
  * The bucket's other state is correct and worth having;  the policy
  * is not, and writing a policy whose principals point at nothing is
  * worse than writing none and saying so (§6.1a).  Reported either way
@@ -157,7 +158,7 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
  * that needs something should be given it.
  *
  * `mapping` comes from the identities this run imported.  Returns 0
- * when every bucket's state was written -- a refused policy is not a
+ * when every bucket's state was written -- a rejected policy is not a
  * failure of the bucket -- and -EIO otherwise. */
 int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 			NSFSDriver* driver,

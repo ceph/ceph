@@ -264,7 +264,7 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
 
     /* Provenance:  NooBaa's `_id` to the owner it was imported as.
      * The primary key is the whole uniqueness rule, and nothing writes
-     * here with OR REPLACE, so a second import of one id is refused
+     * here with OR REPLACE, so a second import of one id is rejected
      * rather than repointed. */
     "CREATE TABLE IF NOT EXISTS '" + noobaa_id_table + "' ("
     "  NoobaaId TEXT NOT NULL PRIMARY KEY,"
@@ -288,7 +288,7 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
      *
      * Every row carries a path, and no two rows share one:  two
      * buckets in one directory would be one tree served twice.  That a
-     * path lies inside another row's is refused by the writers, since
+     * path lies inside another row's is rejected by the writers, since
      * a CHECK cannot see other rows. */
     "CREATE TABLE IF NOT EXISTS '" + placement_table + "' ("
     "  BucketName TEXT NOT NULL,"
@@ -352,12 +352,12 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     return -EINVAL;
   }
   /* The custom-bucket-path allowlist is checked here, where it is stored,
-   * so a bad entry is refused with a message rather than found by a
+   * so a bad entry is rejected with a message rather than found by a
    * CreateBucket later.  Both writers come through here:  the import and
    * the identity Admin Ops. */
   /* new_buckets_path, the same way:  its form is checked here, where it
    * is stored (DECISIONS.md 2026-10-14).  A trailing slash, which an
-   * operator may well write, is dropped rather than refused.  Whether the
+   * operator may well write, is dropped rather than rejected.  Whether the
    * directory exists is not asked:  storage on Scale is attachable later,
    * and a missing parent fails CreateBucket plainly. */
   std::string nbp = id.new_buckets_path;
@@ -365,7 +365,7 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     nbp.pop_back();
   }
   if (!nbp.empty() && !placement_path_is_acceptable(nbp)) {
-    ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " refused:  its "
+    ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " rejected:  its "
       << "new_buckets_path \"" << id.new_buckets_path << "\" is not an "
       << "absolute canonical path" << dendl;
     return -EINVAL;
@@ -375,7 +375,7 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
     std::string bad;
     if (normalize_allowed_list(id.custom_bucket_path_allowed_list, allowed,
 			       bad) < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " refused:  its "
+      ldpp_dout(dpp, 0) << "ERROR: identity " << id.key << " rejected:  its "
 	<< "custom_bucket_path_allowed_list entry \"" << bad << "\" is not "
 	<< "an absolute canonical path" << dendl;
       return -EINVAL;
@@ -415,8 +415,8 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
 
   if (sqlite3_step(st) != SQLITE_DONE) {
     /* a CHECK violation lands here, and it is the expected way an
-     * invalid record is refused */
-    ldpp_dout(dpp, 4) << "identity " << id.key << " refused: "
+     * invalid record is rejected */
+    ldpp_dout(dpp, 4) << "identity " << id.key << " rejected: "
       << sqlite3_errmsg(handle()) << dendl;
     return -EINVAL;
   }
@@ -625,7 +625,7 @@ int IdentityDB::put_abandoned(const DoutPrefixProvider* dpp,
     if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
       return -EEXIST;
     }
-    ldpp_dout(dpp, 4) << "abandoning " << r.noobaa_id << " refused: "
+    ldpp_dout(dpp, 4) << "abandoning " << r.noobaa_id << " failed: "
       << sqlite3_errmsg(handle()) << dendl;
     return -EINVAL;
   }
@@ -863,7 +863,8 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
   if (id.directory_backed()) {
     ldpp_dout(dpp, 4) << "identity " << key << " is directory-backed ("
       << id.distinguished_name << ") and the directory is not"
-      " consulted;  refusing to serve it unimpersonated" << dendl;
+      " consulted;  denying it rather than serving it unimpersonated"
+      << dendl;
     return -EPERM;
   }
 
@@ -940,7 +941,7 @@ BucketPlacement row_to_placement(sqlite3_stmt* st)
 } // namespace
 
 /* Both writers.  `repoint` is put's:  an existing row for the key
- * takes the new path.  Without it a second row for the key is refused,
+ * takes the new path.  Without it a second row for the key is rejected,
  * which is what makes creation exclusive.
  *
  * Neither uses OR REPLACE.  With UNIQUE (Path) it would delete
@@ -952,12 +953,12 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   if (bp.bucket_name.empty() || bp.owner.empty()) {
     return -EINVAL;
   }
-  /* Refused here with a message rather than left to the CHECK, so an
+  /* Rejected here with a message rather than left to the CHECK, so an
    * operator learns what was wrong with it
    * (`NSFS_BUCKET_PLACEMENT_PLAN.md` §9). */
   if (!placement_path_is_acceptable(bp.path)) {
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name
-      << " refused: \"" << bp.path
+      << " rejected: \"" << bp.path
       << "\" is not an absolute canonical path" << dendl;
     return -EINVAL;
   }
@@ -995,7 +996,7 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   if (sqlite3_step(st) != SQLITE_DONE) {
     const int ext = sqlite3_extended_errcode(handle());
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "
-      << bp.path << " refused: " << sqlite3_errmsg(handle()) << dendl;
+      << bp.path << " failed: " << sqlite3_errmsg(handle()) << dendl;
     if ((ext != SQLITE_CONSTRAINT_PRIMARYKEY) &&
 	(ext != SQLITE_CONSTRAINT_UNIQUE)) {
       return -EINVAL;
@@ -1011,7 +1012,7 @@ int IdentityDB::write_bucket_placement(const DoutPrefixProvider* dpp,
   }
   if (sqlite3_changes(handle()) == 0) {
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name << " at "
-      << bp.path << " refused: another bucket's directory contains it or "
+      << bp.path << " rejected: another bucket's directory contains it or "
       << "lies inside it" << dendl;
     return -EADDRINUSE;
   }

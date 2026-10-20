@@ -359,7 +359,7 @@ public:
    *
    * Not the entry's `fd`, and deliberately:  a descriptor the gateway
    * obtained must not be reachable from the object, or a data path
-   * finds it already open and serves bytes the filesystem refused
+   * finds it already open and serves bytes the filesystem denied
    * this identity -- measured 2026-10-16, and the reason this exists
    * rather than a flag on the entry.
    *
@@ -383,7 +383,7 @@ public:
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
 			 int use_fd = -1);
   /* src_as_gateway:  the access model permits the gateway to read a
-   * source the filesystem refuses the requester.  Resolved by the
+   * source the filesystem denies the requester.  Resolved by the
    * caller, which knows the bucket;  see clone_file_by_copy(). */
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) = 0;
   /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
@@ -556,7 +556,7 @@ public:
  *
  * `parent` is the directory, and `fname` the sentinel's name.  Read
  * only:  a write to such an object has to convert it, which this does
- * not do, so the mutators refuse. */
+ * not do, so the mutators reject it. */
 class NooBaaDirectoryObject : public FSEnt {
   PathStrategy::DirectoryObject dobj;
   /* the sentinel, present only when the object has content */
@@ -608,9 +608,9 @@ int resolve_path(const DoutPrefixProvider* dpp,
  * tree.  `key_path` is the key's on-disk name (object_name()).
  *
  * A key with a component the driver reserves -- `.folder`, `.versions`
- * -- is refused here, for every operation:  such a name is schema, not
+ * -- is rejected here, for every operation:  such a name is schema, not
  * an object (DECISIONS.md 2026-10-12).  A key of slashes alone is not
- * refused:  it is the root object, stored in the root's `.folder`
+ * rejected:  it is the root object, stored in the root's `.folder`
  * (DECISIONS.md 2026-10-13).  A lookup
  * (`create_dirs` false) returns -ENOENT, so a read is NoSuchKey and a
  * delete deletes nothing;  a create returns -ERR_INVALID_OBJECT_NAME.
@@ -817,7 +817,7 @@ protected:
   std::unique_ptr<nsfs::AccessStrategy> access_strategy;
   std::atomic<const nsfs::AccessStrategy*> access_strategy_live{nullptr};
   /* How many operations the access model let the gateway perform
-   * after the filesystem refused the requester, by class.
+   * after the filesystem denied the requester, by class.
    *
    * Reported by the `access-model` hint.  Without it a test that
    * sees a read succeed cannot tell *why*:  because the model
@@ -871,7 +871,7 @@ protected:
   /* Added to the accounted size before the multipart writer compares it
    * against the bytes it actually stored.
    *
-   * The strided staging layout refuses to establish a stride when those
+   * The strided staging layout does not establish a stride when those
    * two disagree, because a disagreement means a filter between the op
    * layer and the writer changed the byte count and the client's length
    * cannot place anything.  Compression and AEAD are the real causes,
@@ -918,7 +918,7 @@ protected:
    * in a hand-edited build */
   bool inject_fsio_skip_cleanup{false};
   /* make conversion behave as a daemon without CAP_CHOWN, so a test can
-   * assert that it refuses rather than creating a file whose owner is
+   * assert that it fails rather than creating a file whose owner is
    * wrong.  The capability is not droppable in a test process -- a
    * thread cannot regain it -- so the condition has to be injected */
   bool inject_no_chown{false};
@@ -1214,7 +1214,7 @@ public:
    * owner's allowlist, or rgw_nsfs_custom_bucket_path_allowed_list when the
    * owner has none, as a string prefix (DECISIONS.md 2026-10-14).  0 with
    * `path` unset when there is no header;  -EACCES when no allowlist
-   * admits it, as NooBaa refuses with UNAUTHORIZED;  -EINVAL for a path
+   * admits it, as NooBaa denies it with UNAUTHORIZED;  -EINVAL for a path
    * nsfs would not store. */
   int custom_bucket_path(const DoutPrefixProvider* dpp, const rgw_owner& owner,
 			 const RGWEnv* env, std::optional<std::string>& path);
@@ -1235,7 +1235,7 @@ public:
 				optional_yield y);
   /* `mode` on the directory `path` itself as the owner, the directories
    * above it not consulted;  under impersonation only.  -EACCES when
-   * refused */
+   * denied */
   int check_owner_access(const DoutPrefixProvider* dpp,
 			 const rgw_owner& owner, const std::string& path,
 			 int mode, optional_yield y);
@@ -1457,7 +1457,7 @@ public:
   void gate_open(const std::string& bucket);
   bool gate_is_closed(const std::string& bucket);
 
-  /* Test support.  A test which means to observe a refused mutation
+  /* Test support.  A test which means to observe a rejected mutation
    * would otherwise wait out the production timeout, and shortening
    * the constant would shorten it for a deployment too. */
   void set_gate_waits(std::chrono::milliseconds mutation,
@@ -1609,7 +1609,7 @@ public:
   }
 
   /* How many operations the access model let the gateway perform
-   * after the filesystem refused the requester, by class.
+   * after the filesystem denied the requester, by class.
    *
    * Reported by the `access-model` hint.  Without it a test that
    * sees a read succeed cannot tell *why*:  because the model
@@ -1622,8 +1622,8 @@ public:
   /* How many publishes the gateway performed itself, which the
    * access model permits.
    *
-   * Separate from the two counts above, which record a refusal the
-   * model turned into service.  The publish never learns of a refusal
+   * Separate from the two counts above, which record a denial the
+   * model turned into service.  The publish never learns of a denial
    * -- it is decided from the model before the first syscall, because
    * its first step spends the O_TMPFILE's one link
    * (NSFSObject::link_temp_file) -- so this counts what the gateway
@@ -1682,7 +1682,7 @@ public:
   const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
 
   /* The profile an extension set selects, or nullptr for a bucket this
-   * build cannot serve -- refused rather than guessed.  Base is not
+   * build cannot serve -- rejected rather than guessed.  Base is not
    * reachable from here:  it is the absence of the attribute, and
    * load_bucket resolves it without asking.
    *
@@ -1885,7 +1885,7 @@ private:
 public:
   /* Whether this is a bucket of RGW's own, such as an upload's staging
    * directory, rather than a client's:  its keys are not clients'
-   * names, so nsfs::resolve_key_path() does not refuse reserved ones. */
+   * names, so nsfs::resolve_key_path() does not reject reserved ones. */
   bool is_internal() const { return ns.has_value(); }
 
   NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
@@ -1955,14 +1955,14 @@ public:
 
   /* Read the extensions marker and resolve it, if that has not happened
    * already.  Returns -ENOTSUP for a marker this build does not
-   * implement:  a bucket written by a newer gateway is refused, not
+   * implement:  a bucket written by a newer gateway is rejected, not
    * served on the assumption that its additions are ignorable. */
   int resolve_profile(const DoutPrefixProvider* dpp);
   const nsfs::BucketProfile* get_profile() const { return profile; }
 
   /* Whether this bucket carries the nsfs extensions at all -- shared or
    * strong, not base.  Unresolved reads as base, which is the safe
-   * direction:  the interlocks refuse. */
+   * direction:  the interlocks reject. */
   bool extended() const { return profile && profile->extended(); }
 
   /* Whether it carries one particular extension.  What an interlock
@@ -2143,13 +2143,13 @@ public:
    * nothing on disk:  no file's uid, gid or mode moves.  That is what
    * NooBaa's `bucket update --owner` does, and what every RGW path
    * gets -- the SAL chown() above calls it.  A new owner whose POSIX
-   * identity differs is not refused;  the files are left to the
+   * identity differs is not rejected;  the files are left to the
    * operator, as NooBaa leaves them.
    *
    * `posix` is the same and then gives the new owner's POSIX identity
    * every file and directory under the bucket, the bucket directory
    * excepted, which is the gateway's (NSFS_IMPERSONATION.md 8a).  It
-   * refuses, before changing anything, a new owner with no identity
+   * rejects, before changing anything, a new owner with no identity
    * row or a directory-backed one.  Nothing calls it yet:  it is the
    * full chown with a model shift, kept where the next reader finds it
    * beside the one in use. */
@@ -2267,7 +2267,8 @@ public:
    * An inactive identity means the gateway's own credentials.
    * read_only is what a read op always wants:  asking for write
    * access it does not need is the difference between serving an
-   * object readable through a supplementary group and refusing it. */
+   * object readable through a supplementary group and the open failing
+   * with EACCES. */
   void set_access(const nsfs::FSIdentity& id, bool ro) {
     pending_identity = id;
     pending_read_only = ro;
@@ -2335,13 +2336,13 @@ public:
     /* A delete of a current version in a versioned bucket *writes*:
      * it links the current name into `.versions` and unlinks it from
      * the bucket directory, against an object an identity wrote.  As
-     * the gateway that link is refused by fs.protected_hardlinks, so
-     * the requester is what those two calls need
-     * (inflight/n-plan.md phase D).
+     * the gateway that link fails with EPERM under
+     * fs.protected_hardlinks, so the requester is what those two calls
+     * need (inflight/n-plan.md phase D).
      *
      * Not the promote that may follow them.  That publishes as the
      * version file's own owner (§5) and must stay outside any
-     * `with_identity` here:  `run_as` refuses to act as one identity
+     * `with_identity` here:  `run_as` rejects a call as one identity
      * on a thread already acting as another. */
     void set_authenticated_user(const rgw_user& user) override {
       auth_user = user;
@@ -2501,7 +2502,7 @@ public:
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
            NSFSBucket *db, NSFSObject *dobj);
   /* Whether the access model lets the gateway read a source the
-   * filesystem refuses this requester.  Resolved here because this is
+   * filesystem denies this requester.  Resolved here because this is
    * where the driver and the object are both in hand. */
   bool copy_source_as_gateway() const;
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
@@ -2519,7 +2520,7 @@ public:
    *
    * An attribute write opens the object O_RDWR and sets a `user.*`
    * name on it, and both are tested against the calling thread:  as
-   * the gateway, on an identity's 0660 object, both are refused.
+   * the gateway, on an identity's 0660 object, both fail.
    * That used to pass silently and now returns (`09bf3d2b9ea`), so
    * PutObjectTagging and friends answered 403.
    *
@@ -2529,7 +2530,7 @@ public:
   int pin_identity_for_attrs(const DoutPrefixProvider* dpp,
 			     const rgw_user& who);
 
-  /* Run an attribute operation, and where the filesystem refused the
+  /* Run an attribute operation, and where the filesystem denied the
    * requester an operation S3 had authorised, run it again as the
    * gateway with a raise.
    *
@@ -2544,11 +2545,11 @@ public:
    * On, an S3 grant to another account takes effect on the object's
    * tags and ACL -- the gateway's own records about the object.  Not
    * on its bytes:  no value of this setting makes the gateway read
-   * out or overwrite data for an identity the filesystem refuses.
+   * out or overwrite data for an identity the filesystem denies.
    *
    * The retry is the promote's last rung in miniature, and for the
    * same reason:  attempt as the identity, and raise only where that
-   * is refused, so a tree that needs no raise never pays for one. */
+   * is denied, so a tree that needs no raise never pays for one. */
   int with_cross_account_retry(const DoutPrefixProvider* dpp,
 			       nsfs::AccessClass what,
 			       std::function<int(int use_fd)> fn);

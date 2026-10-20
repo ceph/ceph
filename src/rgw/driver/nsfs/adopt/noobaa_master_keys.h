@@ -26,10 +26,10 @@
  * successful `EVP_DecryptUpdate` as success -- silently imports
  * credentials that will not authenticate, and nobody learns why.
  *
- * A REJECTED SECRET REFUSES THE IMPORT.  It is not skipped.  §5 makes
- * a missing or rotated-out key a hard failure, and §6.1a makes
- * skipping worse than refusing:  an account imported with a garbage
- * secret is a credential that silently stops working.
+ * THE IMPORT FAILS ON A SECRET THAT CANNOT BE DECRYPTED.  The secret
+ * is not skipped.  §5 makes a missing or rotated-out key a hard failure,
+ * and §6.1a makes skipping worse than failing:  an account imported
+ * with a garbage secret is a credential that silently stops working.
  *
  * TWO THINGS ABOUT THE CIPHER PARAMETERS.  The IV is **16 bytes**,
  * not GCM's usual 12, so the IV length has to be set explicitly on the
@@ -121,13 +121,13 @@ public:
 /* Open every secret in the store, in place.
  *
  * Fills each `NooBaaAccessKey::secret_key`.  Every failure is
- * collected into `rejected` rather than stopping at the first, for the
+ * collected into `failures` rather than stopping at the first, for the
  * same reason I1 collects unreadable records:  one run should say
  * everything that is wrong.  Returns 0 only when every secret opened,
  * so a caller cannot proceed past a wrong key by ignoring a list. */
 int decrypt_store_secrets(const DoutPrefixProvider* dpp,
 			  const NooBaaMasterKeys& keys,
 			  NooBaaStoreContents& contents,
-			  std::vector<std::string>& rejected);
+			  std::vector<std::string>& failures);
 
 }}} // namespace rgw::sal::nsfs

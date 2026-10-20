@@ -916,7 +916,7 @@ public:
 /* A bucket created strong, for the tests that exercise FSIO.
  *
  * New buckets are shared by default (rgw_nsfs_bucket_profile), and FSIO
- * is refused on a bucket without the shadow subtree.  The option is
+ * is rejected on a bucket without the shadow subtree.  The option is
  * read when the bucket is created and marked, so it is restored as soon
  * as the fixture's bucket exists. */
 class NSFSStrongBucketTest : public NSFSBucketTest {
@@ -1174,10 +1174,10 @@ TEST_F(NSFSBucketTest, APosixChownGivesTheFilesTheNewOwnersIdentity)
   EXPECT_EQ(b->get_info().owner, rgw_owner{acct});
 }
 
-/* The full chown refuses, before changing anything, a new owner it
+/* The full chown rejects, before changing anything, a new owner it
  * cannot give the files to:  none with no identity row, and none with
  * a directory-backed one, whose ids live in a directory not consulted. */
-TEST_F(NSFSBucketTest, APosixChownRefusesWithoutAUsableIdentity)
+TEST_F(NSFSBucketTest, APosixChownRejectsWithoutAUsableIdentity)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   const rgw_owner was = b->get_info().owner;
@@ -1186,7 +1186,7 @@ TEST_F(NSFSBucketTest, APosixChownRefusesWithoutAUsableIdentity)
   EXPECT_EQ(b->chown(env->dpp, rgw_owner{none}, "none",
 		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield),
 	    -ENOENT);
-  EXPECT_EQ(b->get_info().owner, was) << "a refused chown moved the owner";
+  EXPECT_EQ(b->get_info().owner, was) << "a rejected chown moved the owner";
 
   const rgw_account_id dirbacked{"RGW55555555555555555"};
   nsfs::Identity row;
@@ -1196,7 +1196,7 @@ TEST_F(NSFSBucketTest, APosixChownRefusesWithoutAUsableIdentity)
   EXPECT_EQ(b->chown(env->dpp, rgw_owner{dirbacked}, "dirbacked",
 		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield),
 	    -EPERM);
-  EXPECT_EQ(b->get_info().owner, was) << "a refused chown moved the owner";
+  EXPECT_EQ(b->get_info().owner, was) << "a rejected chown moved the owner";
 }
 
 /* Stored state that will not decode fails the bucket closed.
@@ -1417,7 +1417,7 @@ TEST_F(NSFSIdentityDBTest, FieldsUpdateIndependently)
  * NooBaa's own schema will not validate a record holding both arms,
  * so neither may this one -- otherwise an importer could produce a
  * record NooBaa's tooling would reject. */
-TEST_F(NSFSIdentityDBTest, BothIdentityArmsAreRefused)
+TEST_F(NSFSIdentityDBTest, BothIdentityArmsAreRejected)
 {
   /* the control:  each arm alone is accepted */
   nsfs::Identity local;
@@ -1438,11 +1438,11 @@ TEST_F(NSFSIdentityDBTest, BothIdentityArmsAreRefused)
 
   nsfs::Identity got;
   EXPECT_EQ(db->get_identity(env->dpp, "user$both", got), -ENOENT)
-      << "a refused record was stored anyway";
+      << "a rejected record was stored anyway";
 }
 
-/* A uid without a gid is half an identity and is refused. */
-TEST_F(NSFSIdentityDBTest, AUidWithoutAGidIsRefused)
+/* A uid without a gid is half an identity and is rejected. */
+TEST_F(NSFSIdentityDBTest, AUidWithoutAGidIsRejected)
 {
   nsfs::Identity id;
   id.key = "user$halfway";
@@ -1467,7 +1467,7 @@ TEST_F(NSFSIdentityDBTest, LookupByNoobaaId)
   EXPECT_EQ(db->get_owner_by_noobaa_id(env->dpp, "nosuchid", owner), -ENOENT);
 }
 
-/* Recording an id twice is refused, and the first record survives.
+/* Recording an id twice is rejected, and the first record survives.
  *
  * The table is written with a plain INSERT for exactly this:  under
  * OR REPLACE a second import of one id would silently repoint it,
@@ -1484,7 +1484,7 @@ TEST_F(NSFSIdentityDBTest, ANoobaaIdIsRecordedOnce)
 	      env->dpp, "6a2bdeabf5c8e167f92cb079", owner), 0);
   EXPECT_EQ(owner, "RGW12345678901234567") << "the second put repointed it";
 
-  /* the control:  a different id is accepted, so the refusal above is
+  /* the control:  a different id is accepted, so the rejection above is
    * about the id and not about the table */
   EXPECT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb07a",
 			      "RGW76543210987654321"), 0);
@@ -1642,7 +1642,7 @@ TEST_F(NSFSIdentityDBTest, ResolvePlacementOnlyRowAsksForNothing)
  * it fails closed.
  *
  * The control is the same key carrying the local arm, which must
- * resolve -- without it a resolver that refused everything would
+ * resolve -- without it a resolver that denied everything would
  * pass. */
 TEST_F(NSFSIdentityDBTest, ResolveDirectoryBackedFailsClosed)
 {
@@ -1709,7 +1709,7 @@ TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsAgreeingRowsAreNotAmbiguous)
  * between -- a file names its owner by uid alone -- and guessing
  * would lend one identity's reach to another identity's file.  The
  * caller is left with the file owner's own rights. */
-TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsDisagreeingRowsRefuse)
+TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsFailsOnDisagreeingRows)
 {
   auto a = local_identity("user$member1");
   auto b = local_identity("user$member2");
@@ -1723,7 +1723,7 @@ TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsDisagreeingRowsRefuse)
   EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred),
 	    -ENODATA);
   EXPECT_EQ(cred.groups, (std::vector<gid_t>{7}))
-      << "a refused completion wrote to its output";
+      << "a failed completion wrote to its output";
 }
 
 /* No row carrying the uid is not an error:  a uid no account maps to
@@ -1757,7 +1757,7 @@ TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsIgnoresRowsWithoutIds)
   EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
 }
 
-/* The raise primitive.  The refusals need a process not permitted
+/* The raise primitive.  The rejections need a process not permitted
  * the capability, which the unit test is unless it was given the
  * gateway's file capabilities.  The other polarity, a raise that works and is
  * dropped again, needs the file capabilities and is the `raise`
@@ -1780,10 +1780,10 @@ protected:
 	   data[0].effective;
   }
 
-  /* The refusals need the capability absent from the permitted set,
+  /* The rejections need the capability absent from the permitted set,
    * not merely from the effective one:  nothing starts effective, so
    * a binary given the gateway's file capabilities raises it and the
-   * refusal cannot happen.  Such a binary skips them. */
+   * rejection cannot happen.  Such a binary skips them. */
   static bool permitted(int cap) {
     struct __user_cap_header_struct hdr = {};
     struct __user_cap_data_struct data[2] = {};
@@ -1814,10 +1814,10 @@ TEST_F(NSFSRaiseTest, AnEmptyMaskRunsTheCall)
  * whatever the kernel said about an ordinary call, which reads as a
  * permission bug rather than as a gateway started without its
  * capabilities. */
-TEST_F(NSFSRaiseTest, AnUnpermittedCapabilityIsRefusedAndTheCallDoesNotRun)
+TEST_F(NSFSRaiseTest, AnUnpermittedCapabilityIsRejectedAndTheCallDoesNotRun)
 {
   if (permitted(CAP_DAC_OVERRIDE)) {
-    GTEST_SKIP() << "CAP_DAC_OVERRIDE is permitted, so the refusal "
+    GTEST_SKIP() << "CAP_DAC_OVERRIDE is permitted, so the rejection "
 		    "cannot happen";
   }
   const uint64_t before = effective_set();
@@ -1829,17 +1829,17 @@ TEST_F(NSFSRaiseTest, AnUnpermittedCapabilityIsRefusedAndTheCallDoesNotRun)
 				    [&ran]() -> int { ran = true; return 0; }),
 	    -EPERM);
   EXPECT_FALSE(ran) << "the call ran without the capability it asked for";
-  EXPECT_EQ(effective_set(), before) << "a refused raise changed the set";
+  EXPECT_EQ(effective_set(), before) << "a rejected raise changed the set";
 }
 
-/* Several at once are refused on the first that is absent, and the
+/* Several at once are rejected on the first that is absent, and the
  * mask the operator is shown names what was missing rather than what
  * was asked for. */
-TEST_F(NSFSRaiseTest, SeveralUnpermittedCapabilitiesAreRefusedTogether)
+TEST_F(NSFSRaiseTest, SeveralUnpermittedCapabilitiesAreRejectedTogether)
 {
   if (permitted(CAP_DAC_OVERRIDE) && permitted(CAP_FOWNER)) {
     GTEST_SKIP() << "CAP_DAC_OVERRIDE and CAP_FOWNER are permitted, so "
-		    "the refusal cannot happen";
+		    "the rejection cannot happen";
   }
   const uint64_t before = effective_set();
   bool ran = false;
@@ -2002,12 +2002,12 @@ TEST_F(NSFSIdentityDBTest, AUserOutsideAnAccountResolvesUnderItsOwnKey)
 }
 
 /* A member row that asks for an identity it cannot be given is
- * refused, not replaced by its account's.
+ * denied, not replaced by its account's.
  *
  * -EPERM is a directory-backed row whose directory is not consulted;
  * serving the account instead would run the request as someone the
  * row did not name. */
-TEST_F(NSFSIdentityDBTest, ARefusedMemberRowDoesNotFallBack)
+TEST_F(NSFSIdentityDBTest, ADeniedMemberRowDoesNotFallBack)
 {
   const char* acct = "RGW12345678901234567";
   const rgw_user erin{"", "erin"};
@@ -2030,8 +2030,8 @@ TEST_F(NSFSIdentityDBTest, ARefusedMemberRowDoesNotFallBack)
   std::string row;
   EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
 				      rgw_account_id{acct}, cred, &row), -EPERM)
-      << "a refused row fell through to the account";
-  EXPECT_EQ(row, erin.to_str()) << "the refusal named another row";
+      << "a denied row fell through to the account";
+  EXPECT_EQ(row, erin.to_str()) << "the denial named another row";
 }
 
 /* Changing an account's row reaches every member's cached
@@ -2071,7 +2071,7 @@ TEST_F(NSFSIdentityDBTest, AnAccountRowChangeReachesItsMembers)
 class CountingRegistrar : public nsfs::PersonalityTable::Registrar {
 public:
   int next_id{1};
-  int fail_with{0};			/* non-zero: refuse with this */
+  int fail_with{0};			/* non-zero: fail with this */
   std::vector<int> registered;		/* ids handed out, in order */
   std::vector<int> released;		/* ids taken back, in order */
   std::vector<nsfs::Credentials> creds;	/* what each registration saw */
@@ -2376,12 +2376,12 @@ TEST_F(NSFSPersonalityTest, PinnedSlotsAreNotReused)
   EXPECT_TRUE(reg.live(held_id)) << "a pinned personality was unregistered";
 }
 
-/* Every slot pinned is a denial, not an improvisation.
+/* Every slot pinned is a failure, not an improvisation.
  *
  * Serving the request unimpersonated would give it the gateway's
  * reach;  evicting a pinned slot would pull credentials out from
  * under a live operation.  Neither is acceptable, so it fails. */
-TEST_F(NSFSPersonalityTest, AllSlotsPinnedIsRefused)
+TEST_F(NSFSPersonalityTest, AllSlotsPinnedFails)
 {
   nsfs::PersonalityTable t{2, &reg};
 
@@ -2397,7 +2397,7 @@ TEST_F(NSFSPersonalityTest, AllSlotsPinnedIsRefused)
   EXPECT_FALSE(denied.valid());
   EXPECT_EQ(t.get_stats().exhausted, 1u);
   EXPECT_EQ(reg.registered.size(), 2u)
-      << "a refused insert registered a personality anyway";
+      << "a failed insert registered a personality anyway";
 
   /* and it recovers:  release one and the next insert succeeds */
   pins[0].reset();
@@ -2428,13 +2428,13 @@ TEST_F(NSFSPersonalityTest, PinsNest)
 		     &now), 0);
 }
 
-/* A registrar that refuses leaves nothing behind. */
+/* A registrar that fails leaves nothing behind. */
 TEST_F(NSFSPersonalityTest, AFailedRegistrationStoresNothing)
 {
   nsfs::PersonalityTable t{4, &reg};
   const rgw_user u{"", "nope"};
 
-  /* the control:  it works before the registrar starts refusing */
+  /* the control:  it works before the registrar starts failing */
   nsfs::PersonalityRef ok;
   ASSERT_EQ(t.insert(env->dpp, rgw_user{"", "fine"}, creds_for(1), &ok), 0);
   ok.reset();
@@ -3460,9 +3460,9 @@ TEST_F(NSFSBucketTest, DeletingABucketTheGatewayMadeRemovesTheDirectory)
  * which returns the directory to the state it was in before it was
  * adopted.
  *
- * The bucket is emptied first:  a non-empty one is refused whatever it
+ * The bucket is emptied first:  a non-empty one is rejected whatever it
  * owns (DECISIONS.md 2026-10-13), which
- * ABucketThatDoesNotOwnItsDirectoryIsStillRefusedWhileNotEmpty covers.
+ * ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotEmpty covers.
  * Until then this test deleted the bucket with the file still in it. */
 TEST_F(NSFSBucketTest, DeletingAnAdoptedBucketLeavesItsDirectory)
 {
@@ -4080,7 +4080,7 @@ TEST(NooBaaMPU, StagingRootIsFoundByContent)
   EXPECT_EQ(*r, ".noobaa-nsfs_abc123/multipart-uploads");
 
   /* But two directories BOTH holding uploads is undecidable, and it
-   * refuses rather than picking. */
+   * rejects the write rather than picking. */
   NBStaging other(test, "def456", "u2");
   ASSERT_GE(other.fd, 0);
   EXPECT_EQ(nb.staging_root(env->dpp, bfd), std::nullopt);
@@ -5519,10 +5519,10 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryWithoutTheMarkerIsNotItsObject)
 }
 
 /* On a base bucket nothing converts, so a write to a NooBaa directory
- * object is refused rather than put in the nsfs format beside NooBaa's.
+ * object is rejected rather than put in the nsfs format beside NooBaa's.
  * What such a bucket should allow is open (DECISIONS.md 2026-10-11, the
  * command mode). */
-TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRefused)
+TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRejected)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
 
@@ -5638,7 +5638,7 @@ TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
  * last upload completes.  Matched by name alone it counted as an upload
  * in flight forever, and a bucket that listed empty answered
  * BucketNotEmpty.  An upload that is still open is content, as S3 has
- * it, and must still refuse the delete. */
+ * it, and the delete must still be rejected. */
 TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
 {
   sf::create_directories(bucket_path() / ".noobaa-nsfs_6ace0000aaaabbbbccccdddd"
@@ -6090,16 +6090,16 @@ TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelTheDirectorysGroup)
       "directory's";
 }
 
-/* Without the capability, conversion refuses and leaves nothing behind.
+/* Without the capability, conversion fails and leaves nothing behind.
  *
  * `CAP_CHOWN` cannot be dropped in a test process -- a thread that
  * drops it cannot regain it, which would poison every later test -- so
  * the condition is injected through the same hint the suite uses.
  *
- * Both halves matter.  Refusing is the point, and so is removing the
+ * Both halves matter.  Failing is the point, and so is removing the
  * file it had already created:  a sentinel left behind with the
- * gateway's ownership is the outcome the refusal exists to prevent. */
-TEST_F(NSFSNooBaaBucketTest, ConversionRefusesWhenItCannotInheritOwnership)
+ * gateway's ownership is the outcome the failure exists to prevent. */
+TEST_F(NSFSNooBaaBucketTest, ConversionFailsWhenItCannotInheritOwnership)
 {
   const auto alt = other_group();
   if (!alt) {
@@ -6127,11 +6127,11 @@ TEST_F(NSFSNooBaaBucketTest, ConversionRefusesWhenItCannotInheritOwnership)
       << "conversion proceeded without being able to set ownership";
 
   EXPECT_FALSE(sf::exists(dir / ".folder"))
-      << "the refusal left a sentinel owned by the gateway, which is the "
-	 "state it exists to prevent";
+      << "the failed conversion left a sentinel owned by the gateway, which "
+	 "is the state failing is meant to prevent";
 
   /* and the other polarity:  with the injection off the same tree
-   * converts, so the refusal above was the injection and not some
+   * converts, so the failure above was the injection and not some
    * unrelated failure */
   params["enable"] = "false";
   ASSERT_EQ(driver->driver_hint(env->dpp, "inject-no-chown", params, &out), 0);
@@ -6509,14 +6509,14 @@ TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
   EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY), attrs.end());
 }
 
-/* An algorithm that is neither of NooBaa's is kept, not refused.
+/* An algorithm that is neither of NooBaa's is kept, not rejected.
  *
  * The string becomes the x-amz-server-side-encryption header value on
- * every PUT, so RGW already refuses writes into a bucket configured
- * with one it does not know -- fail-closed at the granularity the gap
- * has.  Refusing the bucket at load would also deny reads of objects
+ * every PUT, so writes into a bucket configured with one RGW does not
+ * know already fail -- fail-closed at the granularity the gap
+ * has.  Rejecting the bucket at load would also fail reads of objects
  * that are sitting there perfectly readable. */
-TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRefused)
+TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRejected)
 {
   RGWBucketInfo info;
   Attrs attrs;
@@ -6524,7 +6524,7 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRefused)
   write_their_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
 
   ASSERT_EQ(read_their_record(info, attrs), 0)
-      << "the bucket was refused over an algorithm that only affects writes";
+      << "the bucket was rejected over an algorithm that only affects writes";
 
   auto i = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
   ASSERT_NE(i, attrs.end());
@@ -6567,8 +6567,8 @@ TEST_F(NSFSNooBaaStateTest, BucketTagsComeFromTheirRecord)
 /* A set larger than PutBucketTagging would accept is kept.
  *
  * NooBaa's schema constrains neither the count nor the sizes, so a
- * NooBaa bucket may carry more than fifty.  Refusing to serve it
- * would deny everything over metadata that gates nothing. */
+ * NooBaa bucket may carry more than fifty.  Rejecting it would fail
+ * every request to it over metadata that gates nothing. */
 TEST_F(NSFSNooBaaStateTest, ATagSetOverTheApiLimitIsKept)
 {
   RGWBucketInfo info;
@@ -6585,7 +6585,7 @@ TEST_F(NSFSNooBaaStateTest, ATagSetOverTheApiLimitIsKept)
   write_their_record("ENABLED", arr);
 
   ASSERT_EQ(read_their_record(info, attrs), 0)
-      << "the bucket was refused over a tag count";
+      << "the bucket was rejected over a tag count";
 
   auto i = attrs.find(RGW_ATTR_TAGS);
   ASSERT_NE(i, attrs.end());
@@ -6692,7 +6692,7 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleDateKeepsItsDay)
 	       R"("expiration":{"date":1767225600000}}])");
 
   ASSERT_EQ(read_their_record(info, attrs), 0)
-      << "a midnight date was refused";
+      << "a midnight date was rejected";
 
   auto i = attrs.find(RGW_ATTR_LC);
   ASSERT_NE(i, attrs.end());
@@ -6706,13 +6706,13 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleDateKeepsItsDay)
   EXPECT_EQ(date.substr(0, 10), "2026-01-01") << "stored date: " << date;
 }
 
-/* A rule NooBaa's schema allows and PutBucketLifecycle refuses fails the
+/* A rule NooBaa's schema allows and PutBucketLifecycle rejects fails the
  * bucket closed.
  *
  * NooBaa's expiration may carry days and a date together;
  * LCExpiration_S3 requires exactly one, and guessing which wins
  * deletes objects on the wrong day. */
-TEST_F(NSFSNooBaaStateTest, ALifecycleRuleRgwWouldRefuseFailsClosed)
+TEST_F(NSFSNooBaaStateTest, ALifecycleRuleRgwWouldRejectFailsClosed)
 {
   RGWBucketInfo info;
   Attrs attrs;
@@ -6725,7 +6725,7 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleRuleRgwWouldRefuseFailsClosed)
   EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
-/* A rule with no action at all is one RGW refuses too. */
+/* A rule with no action at all is one RGW rejects too. */
 TEST_F(NSFSNooBaaStateTest, ALifecycleRuleWithNoActionFailsClosed)
 {
   RGWBucketInfo info;
@@ -6776,7 +6776,7 @@ TEST_F(NSFSNooBaaStateTest, CorsComesFromTheirRecord)
 /* A method outside the set RGW knows fails the bucket closed.
  *
  * NooBaa's schema constrains allowed_methods to nothing at all, while
- * RGWCORSRule_S3 refuses anything but GET, POST, DELETE, HEAD, PUT
+ * RGWCORSRule_S3 rejects anything but GET, POST, DELETE, HEAD, PUT
  * and COPY -- and a CORS rule decides which origins a browser may
  * reach. */
 TEST_F(NSFSNooBaaStateTest, AnUnknownCorsMethodFailsClosed)
@@ -6793,7 +6793,7 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownCorsMethodFailsClosed)
 }
 
 /* A rule with no origin is one NooBaa's own schema requires and RGW
- * refuses, so an empty list fails closed rather than becoming a rule
+ * rejects, so an empty list fails closed rather than becoming a rule
  * that matches nothing. */
 TEST_F(NSFSNooBaaStateTest, ACorsRuleWithNoOriginFailsClosed)
 {
@@ -6815,7 +6815,7 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
   Attrs attrs;
 
   /* A well-formed record is read first, so the -EBADMSG below is this
-   * record being rejected rather than the reader refusing everything
+   * record being rejected rather than the reader rejecting everything
    * it is given. */
   write_their_record("ENABLED");
   ASSERT_EQ(read_their_record(info, attrs), 0);
@@ -7679,7 +7679,7 @@ TEST_F(NSFSConvertingBucketTest, AnUnreachedVersionKeepsItsRecordedId)
  * empties the whole listing").
  *
  * The listing is served from the LMDB cache, which holds at most
- * max_key_size() - 1 bytes of name.  A PUT of a longer key is refused,
+ * max_key_size() - 1 bytes of name.  A PUT of a longer key is rejected,
  * but NooBaa accepts S3's 1024 bytes, so an adopted tree can hold one.
  * Today the cache fill fails on it and the listing comes back empty --
  * every object in the bucket, not only the long one.
@@ -7721,16 +7721,16 @@ TEST_F(NSFSBucketTest, DISABLED_AnOverLongNameDoesNotHideItsBucket)
   EXPECT_TRUE(names.contains("b")) << "an over-long name hid its bucket";
 }
 
-/* A bucket that does not own its directory is still refused deletion
- * while it holds an object, as S3 refuses any non-empty bucket and as
- * NooBaa refuses one over a supplied directory (`bucketspace_fs.js`
+/* A bucket that does not own its directory still has its deletion
+ * rejected while it holds an object, as S3 rejects any non-empty bucket
+ * and as NooBaa rejects one over a supplied directory (`bucketspace_fs.js`
  * delete_bucket, NOT_EMPTY).  Only the outcome of an allowed delete
  * differs:  the directory, and anything in it, stays.
  *
  * Before, remove() checked emptiness only for a bucket that owns its
  * directory, so this one was unadopted with its object in it and its
  * record gone. */
-TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRefusedWhileNotEmpty)
+TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotEmpty)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->set_owns_storage(env->dpp, false), 0);
@@ -7741,7 +7741,7 @@ TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRefusedWhileNotEm
       << "a non-empty bucket was deleted";
   EXPECT_GT(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
 		       nullptr, 0), 0)
-      << "the refused delete unadopted the bucket anyway";
+      << "the rejected delete unadopted the bucket anyway";
 
   /* the control:  emptied, it is removed, and its directory is left */
   sf::remove(bucket_path() / "kept.txt");
@@ -9336,7 +9336,7 @@ TEST_F(NSFSUpgradeTest, AnUploadIsListedThroughoutTheConversion)
  */
 TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
 {
-  /* the refusal is what is under test, not how long it takes to
+  /* the rejection is what is under test, not how long it takes to
    * arrive;  the production wait would put five seconds in the suite */
   driver->set_gate_waits(std::chrono::milliseconds(20),
 			 std::chrono::milliseconds(60000));
@@ -9419,9 +9419,9 @@ TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
 /* Two conversions of one bucket do not run together.
  *
  * Each would read what the other had half written.  The second is
- * refused rather than queued:  it has nothing to wait for that the
+ * rejected rather than queued:  it has nothing to wait for that the
  * first is not already doing. */
-TEST_F(NSFSUpgradeTest, RefusesASecondConversion)
+TEST_F(NSFSUpgradeTest, RejectsASecondConversion)
 {
   their_object("a.bin", "text/plain");
 
@@ -9483,9 +9483,9 @@ TEST_F(NSFSStrongBucketTest, AWriteHandleHoldsTheGateOpen)
   driver->gate_open(testname);
 }
 
-/* And a closed gate refuses a new write handle while serving a read
+/* And a closed gate rejects a new write handle while serving a read
  * one. */
-TEST_F(NSFSStrongBucketTest, AClosedGateRefusesAWriteHandle)
+TEST_F(NSFSStrongBucketTest, AClosedGateRejectsAWriteHandle)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->resolve_profile(env->dpp), 0);
@@ -9509,19 +9509,19 @@ TEST_F(NSFSStrongBucketTest, AClosedGateRefusesAWriteHandle)
   ASSERT_EQ(driver->gate_close(env->dpp, testname), 0);
 
   {
-    auto obj = bucket->get_object(rgw_obj_key("refused.bin"));
+    auto obj = bucket->get_object(rgw_obj_key("rejected.bin"));
     auto [rc, hdl] = obj->get_fsio_handle(
 	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
 		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
     EXPECT_EQ(rc, -ERR_SERVICE_UNAVAILABLE);
-    EXPECT_EQ(hdl.get(), nullptr) << "a refused open left a handle behind";
+    EXPECT_EQ(hdl.get(), nullptr) << "a rejected open left a handle behind";
   }
 
   {
     auto obj = bucket->get_object(rgw_obj_key("there.bin"));
     auto [rc, hdl] = obj->get_fsio_handle(
 	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
-    EXPECT_EQ(rc, 0) << "a read handle was refused";
+    EXPECT_EQ(rc, 0) << "a read handle was rejected";
     if (hdl) {
       hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
     }
@@ -9863,9 +9863,9 @@ TEST_F(NSFSNooBaaBucketTest, CreatesATempDirectoryWhenThereIsNone)
 }
 
 /* Two temp directories means two bucket ids have written here, and
- * which holds the uploads is not decidable.  Refused rather than
+ * which holds the uploads is not decidable.  Rejected rather than
  * guessed -- and no third is created. */
-TEST_F(NSFSNooBaaBucketTest, RefusesAnAmbiguousTree)
+TEST_F(NSFSNooBaaBucketTest, RejectsAnAmbiguousTree)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
@@ -10450,7 +10450,7 @@ TEST_F(NooBaaStoreTest, AnIamUserIsTheOneWithAnOwner)
  * Distinguished, because they mean different things to an operator:
  * one is a path that was never created, the other is a path that names
  * something else. */
-TEST_F(NooBaaStoreTest, ADirectoryThatIsNotAStoreIsRefused)
+TEST_F(NooBaaStoreTest, ADirectoryThatIsNotAStoreIsRejected)
 {
   nsfs::NooBaaStoreContents out;
 
@@ -10675,7 +10675,7 @@ TEST_F(NooBaaKeysTest, TheirKeyOpensTheirSecret)
  * The cipher cannot report it -- no tag is computed -- so the only
  * thing that can is what came out.  Both polarities against one
  * ciphertext:  the right key yields the secret, a key of the right
- * shape and the wrong bytes is refused with -EKEYREJECTED rather than
+ * shape and the wrong bytes fails with -EKEYREJECTED rather than
  * returning garbage a caller would store. */
 TEST_F(NooBaaKeysTest, AWrongKeyIsDetectedRatherThanReturned)
 {
@@ -10748,7 +10748,7 @@ TEST_F(NooBaaKeysTest, TheKeysMayComeFromAProgram)
  * not implement is a deployment we cannot import, a corrupt file is a
  * file, and a key a record names and the store lacks is §5's hard
  * failure with nothing to fall back to. */
-TEST_F(NooBaaKeysTest, AStoreThisCannotUseIsRefusedSpecifically)
+TEST_F(NooBaaKeysTest, AStoreThisCannotUseFailsSpecifically)
 {
   nsfs::NooBaaMasterKeys keys;
 
@@ -10760,7 +10760,7 @@ TEST_F(NooBaaKeysTest, AStoreThisCannotUseIsRefusedSpecifically)
   write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
   EXPECT_EQ(keys.load(env->dpp, file_store(), store), -ENOKEY);
 
-  /* a cipher we do not implement.  Refused rather than attempted:
+  /* a cipher we do not implement.  Rejected rather than attempted:
    * decrypting it as though it were NooBaa's would produce garbage, and
    * then the plausibility check would be the only thing to notice. */
   std::string other{NB_MASTER_KEYS};
@@ -10798,7 +10798,7 @@ TEST_F(NooBaaKeysTest, AStoreThisCannotUseIsRefusedSpecifically)
  * collects unreadable records -- one run should say everything that is
  * wrong -- and still an error, so no caller proceeds past a wrong key
  * by ignoring the list. */
-TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportRefuses)
+TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportFails)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
   add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
@@ -10808,10 +10808,10 @@ TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportRefuses)
   ASSERT_EQ(c.identities.size(), 2u);
   auto keys = load(file_store());
 
-  std::vector<std::string> rejected;
-  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected), 0)
-      << rejected.size() << " rejected, first: "
-      << (rejected.empty() ? std::string{} : rejected[0]);
+  std::vector<std::string> failures;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), 0)
+      << failures.size() << " failed, first: "
+      << (failures.empty() ? std::string{} : failures[0]);
 
   const auto* plain = by_name(c, "interchange");
   ASSERT_NE(plain, nullptr);
@@ -10826,7 +10826,7 @@ TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportRefuses)
   ASSERT_NE(anon, nullptr);
   EXPECT_TRUE(anon->access_keys.empty());
 
-  /* and the negative case:  the wrong key refuses the whole store
+  /* and the negative case:  with the wrong key the whole store fails,
    * rather than importing two accounts with garbage credentials */
   std::string wrong{NB_MASTER_KEYS};
   auto at = wrong.find("I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=");
@@ -10836,16 +10836,16 @@ TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportRefuses)
 
   auto c2 = read_store();
   auto badkeys = load(file_store());
-  std::vector<std::string> rejected2;
-  EXPECT_EQ(nsfs::decrypt_store_secrets(env->dpp, badkeys, c2, rejected2),
+  std::vector<std::string> failures2;
+  EXPECT_EQ(nsfs::decrypt_store_secrets(env->dpp, badkeys, c2, failures2),
 	    -EKEYREJECTED);
-  ASSERT_EQ(rejected2.size(), 1u);
-  EXPECT_NE(rejected2[0].find("interchange"), std::string::npos)
-      << "the report does not name the identity: " << rejected2[0];
+  ASSERT_EQ(failures2.size(), 1u);
+  EXPECT_NE(failures2[0].find("interchange"), std::string::npos)
+      << "the report does not name the identity: " << failures2[0];
   for (const auto& i : c2.identities) {
     for (const auto& ak : i.access_keys) {
       EXPECT_TRUE(ak.secret_key.empty())
-	  << i.name << " was given a secret from a rejected key";
+	  << i.name << " was given a secret from the wrong key";
     }
   }
 }
@@ -11029,7 +11029,7 @@ TEST_F(NooBaaStoreTest, ABucketStatingItAloneIsReported)
  *
  * Nothing reads a path yet.  Resolution is P2 and enumeration is P3,
  * so what is asserted here is that the row survives a round trip and
- * that a path we will not accept is refused where it is stored --
+ * that a path we will not accept is rejected where it is stored --
  * never on the request path, where it is a row we wrote.
  * ------------------------------------------------------------------ */
 
@@ -11045,7 +11045,7 @@ TEST(NSFSPlacementPath, OnlyAnAbsoluteCanonicalPathIsStorable)
   EXPECT_TRUE(nsfs::placement_path_is_acceptable("/ibm/gpfs/fs1/bucket"));
   EXPECT_TRUE(nsfs::placement_path_is_acceptable("/a"));
   EXPECT_TRUE(nsfs::placement_path_is_acceptable("/a/b-c_d.e"));
-  /* a space is legal in a path and is not a reason to refuse one */
+  /* a space is legal in a path and is not a reason to reject one */
   EXPECT_TRUE(nsfs::placement_path_is_acceptable("/mnt/some where"));
 
   /* the empty path is the default location, which is not a path */
@@ -11093,7 +11093,7 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   EXPECT_EQ(got.tenant, "");
   EXPECT_EQ(got.path, "/ibm/gpfs/fs1/elsewhere");
 
-  /* every row carries a path:  an empty one is refused, and there is
+  /* every row carries a path:  an empty one is rejected, and there is
    * no row meaning "the default" */
   nsfs::BucketPlacement deflt;
   deflt.owner = "RGW00000000000000001";
@@ -11157,7 +11157,7 @@ TEST_F(NSFSIdentityDBTest, TheTenantIsPartOfTheKey)
  *
  * Two buckets in one tree would be one tree served twice.  `/a/bc`
  * beside `/a/b` is the control:  it shares a prefix and is not nested,
- * so a check that compared raw prefixes would refuse it. */
+ * so a check that compared raw prefixes would reject it. */
 TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
 {
   nsfs::BucketPlacement x;
@@ -11184,7 +11184,7 @@ TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
   nsfs::BucketPlacement got;
   EXPECT_EQ(db->get_bucket_placement(env->dpp, "y", "", got), -ENOENT);
   ASSERT_EQ(db->get_bucket_placement(env->dpp, "x", "", got), 0);
-  EXPECT_EQ(got.path, "/ibm/gpfs/fs1/a/b") << "a refused write moved x";
+  EXPECT_EQ(got.path, "/ibm/gpfs/fs1/a/b") << "a rejected write moved x";
 
   y.path = "/ibm/gpfs/fs1/a/bc";
   EXPECT_EQ(db->insert_bucket_placement(env->dpp, y), 0)
@@ -11197,13 +11197,13 @@ TEST_F(NSFSIdentityDBTest, NoTwoBucketsShareOrNestADirectory)
   EXPECT_EQ(db->put_bucket_placement(env->dpp, x), 0);
 }
 
-/* A path we will not accept is refused where it is stored.
+/* A path we will not accept is rejected where it is stored.
  *
  * Both the accessor's check and the schema's, because the schema is
  * the only place a guard survives a caller written later -- the same
  * reason the group list carries a GLOB.  The second half here writes
  * a row behind the accessor's back to prove the CHECK is live. */
-TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
+TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRejectedWhereItIsStored)
 {
   nsfs::BucketPlacement place;
   place.owner = "RGW00000000000000001";
@@ -11217,7 +11217,7 @@ TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
   }
   nsfs::BucketPlacement got;
   EXPECT_EQ(db->get_bucket_placement(env->dpp, "b", "", got), -ENOENT)
-      << "a refused path left a row behind";
+      << "a rejected path left a row behind";
 
   /* a nameless bucket is not a row either */
   nsfs::BucketPlacement noname;
@@ -11421,8 +11421,8 @@ TEST_F(NooBaaPlanTest, TwoUsersOfOneNameUnderDifferentAccountsCollide)
   EXPECT_TRUE(said("both carry the email \"alice\"")) << why();
   EXPECT_TRUE(said("u1")) << why();
   EXPECT_TRUE(said("u2")) << why();
-  /* the plan is still returned, because an operator reading a refusal
-   * wants to see what would have been imported */
+  /* the plan is still returned, because an operator reading a rejected
+   * plan wants to see what would have been imported */
   EXPECT_EQ(plan.entries.size(), 4u);
 }
 
@@ -11458,7 +11458,7 @@ TEST_F(NooBaaPlanTest, EveryCollisionIsReportedTogether)
  * NooBaa validates only *new* names and says so, so a legacy name may
  * contain anything.  Rewriting one silently invalidates every
  * name-form principal referring to it, so this reports. */
-TEST_F(NooBaaPlanTest, ANameRgwRefusesIsReportedNotRewritten)
+TEST_F(NooBaaPlanTest, ANameRgwRejectsIsReportedNotRewritten)
 {
   add_identity("a", R"({"_id":"a","name":"has:colon","email":"a"})");
   EXPECT_EQ(build(1), -EINVAL);
@@ -11467,7 +11467,7 @@ TEST_F(NooBaaPlanTest, ANameRgwRefusesIsReportedNotRewritten)
   /* the name is carried through unchanged */
   EXPECT_EQ(plan.entries[0].name, "has:colon");
 
-  /* and a plain name is accepted, so the check is not refusing
+  /* and a plain name is accepted, so the check is not rejecting
    * everything */
   nsfs::ImportPlan clean;
   std::filesystem::remove_all(store + "/identities");
@@ -11477,12 +11477,12 @@ TEST_F(NooBaaPlanTest, ANameRgwRefusesIsReportedNotRewritten)
   EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, clean), 0);
 }
 
-/* A duplicated NooBaa id is refused, because re-import depends on it.
+/* A duplicated NooBaa id is rejected, because re-import depends on it.
  *
  * The id is what a second pass recognises an identity by -- the name
  * is not, since a rename rewrites the name and leaves the id -- so two
  * records claiming one id make that recognition ambiguous. */
-TEST_F(NooBaaPlanTest, ADuplicatedNooBaaIdIsRefused)
+TEST_F(NooBaaPlanTest, ADuplicatedNooBaaIdIsRejected)
 {
   /* two directories, one `_id` inside both */
   add_identity("dir-one", R"({"_id":"same","name":"one","email":"one"})");
@@ -11495,8 +11495,8 @@ TEST_F(NooBaaPlanTest, ADuplicatedNooBaaIdIsRefused)
 /* An account user's name is held to the IAM UserName rules.
  *
  * RGW's user-add path applies them to every account user, the root
- * included, so a name the account rules accept -- they refuse only
- * `$` and `:` -- can still be refused when the user is written.  The
+ * included, so a name the account rules accept -- they reject only
+ * `$` and `:` -- can still be rejected when the user is written.  The
  * plan reports it before anything is. */
 TEST_F(NooBaaPlanTest, AnAccountUsersNameFollowsTheIamRules)
 {
@@ -11505,7 +11505,7 @@ TEST_F(NooBaaPlanTest, AnAccountUsersNameFollowsTheIamRules)
   EXPECT_TRUE(said("has space")) << why();
   EXPECT_TRUE(said("as an account user's")) << why();
 
-  /* and an IAM path RGW would refuse */
+  /* and an IAM path RGW would reject */
   std::filesystem::remove_all(store + "/identities");
   std::filesystem::create_directories(store + "/identities");
   add_identity("a", R"({"_id":"a","name":"acct","email":"a"})");
@@ -11523,8 +11523,8 @@ TEST_F(NooBaaPlanTest, AnAccountUsersNameFollowsTheIamRules)
 /* An account above RGW's default limits is created with them raised.
  *
  * The admin path does not check `max_users` or `max_access_keys`;
- * RGW's IAM API does, so an account imported above either would
- * refuse every later CreateUser or CreateAccessKey.  RGW counts the
+ * RGW's IAM API does, so for an account imported above either, every
+ * later CreateUser or CreateAccessKey would be rejected.  RGW counts the
  * root among an account's users.  The control is the boundary:  an
  * account holding exactly the default fits, and nothing is raised. */
 TEST_F(NooBaaPlanTest, LimitsAreRaisedToFit)
@@ -11629,8 +11629,8 @@ public:
     nsfs::NooBaaSettings fs;
     fs.master_keys_store_type = "file";
     if (keys.load(env->dpp, fs, store) == 0) {
-      std::vector<std::string> rejected;
-      nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected);
+      std::vector<std::string> failures;
+      nsfs::decrypt_store_secrets(env->dpp, keys, c, failures);
     }
     plan = nsfs::ImportPlan{};
     result = nsfs::ImportResult{};
@@ -11706,7 +11706,7 @@ TEST_F(NooBaaImportTest, AnAccountBecomesAnAccountAUserAndARow)
   EXPECT_EQ(user->get_display_name(), "interchange");
   /* the account's root, which is what carries the account's implicit
    * grant (`evaluate_iam_policies`);  without it the credential
-   * authenticates and is refused everything the account owns */
+   * authenticates and is denied everything the account owns */
   EXPECT_EQ(user->get_info().type, TYPE_ROOT);
   /* NooBaa's creation date, not the import's */
   ceph::real_time made;
@@ -11763,13 +11763,13 @@ TEST_F(NooBaaImportTest, AllowBucketCreationBecomesTheBucketLimit)
     return rec;
   };
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
-  const std::string refused = edit(NB_ACCOUNT_PLAIN, {
+  const std::string no_buckets = edit(NB_ACCOUNT_PLAIN, {
       {"\"6ac7cb27fd4af356919110a3\"", "\"6ac7cb27fd4af356919110b4\""},
       {"\"name\": \"interchange\"", "\"name\": \"no-buckets\""},
       {"\"email\": \"interchange\"", "\"email\": \"no-buckets\""},
       {"INTERCHANGEACCESSKEY", "NOBUCKETSACCESSKEY01"},
       {"\"allow_bucket_creation\": true", "\"allow_bucket_creation\": false"}});
-  add_identity("6ac7cb27fd4af356919110b4", refused.c_str());
+  add_identity("6ac7cb27fd4af356919110b4", no_buckets.c_str());
   write_file(store + "/master_keys.json", NB_MASTER_KEYS);
 
   ASSERT_EQ(run(), 0) << why();
@@ -11780,7 +11780,7 @@ TEST_F(NooBaaImportTest, AllowBucketCreationBecomesTheBucketLimit)
   ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "NOBUCKETSACCESSKEY01",
 					   null_yield, &denied), 0);
   EXPECT_GE(allowed->get_info().max_buckets, 0)
-      << "allow_bucket_creation true still refused buckets";
+      << "allow_bucket_creation true still denied buckets";
   EXPECT_LT(denied->get_info().max_buckets, 0)
       << "allow_bucket_creation false still allowed buckets";
 }
@@ -11935,7 +11935,7 @@ TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
   EXPECT_NE(user->get_info().type, TYPE_ROOT)
       << "an IAM user was made its account's root";
   /* its record carries no allow_bucket_creation, which NooBaa reads as
-   * refused, and RGW expresses as a negative bucket limit */
+   * denied, and RGW expresses as a negative bucket limit */
   EXPECT_LT(user->get_info().max_buckets, 0);
   /* and the root of the same account is the root */
   std::unique_ptr<rgw::sal::User> root;
@@ -12043,13 +12043,13 @@ TEST_F(NooBaaImportTest, ReplanningWithAnIamUserKeepsTheAccountId)
   }
 }
 
-/* A key with no decrypted secret is refused, not written.
+/* A key with no decrypted secret is rejected, not written.
  *
  * A user written with an unusable credential is worse than one not
  * written:  the credential silently does not authenticate and nothing
  * says why.  So the master-key step comes first and this is what
  * happens when it did not. */
-TEST_F(NooBaaImportTest, AnUndecryptedSecretRefusesTheIdentity)
+TEST_F(NooBaaImportTest, AnIdentityWithAnUndecryptedSecretIsRejected)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
   /* no master_keys.json, so no secret is opened */
@@ -12259,9 +12259,9 @@ TEST_F(NooBaaImportTest, ADeactivatedKeyStaysInactive)
 
 /* A key another RGW user already holds is caught before writing.
  *
- * Access keys are unique across RGW.  The user-add path would refuse
+ * Access keys are unique across RGW.  The user-add path would reject
  * the key, but only after the account and the user exist;  the check
- * against RGW's state refuses it first. */
+ * against RGW's state rejects it first. */
 TEST_F(NooBaaImportTest, AKeyRgwAlreadyHoldsIsCaught)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
@@ -12312,8 +12312,8 @@ TEST_F(NooBaaImportTest, AStoreOnDiskImports)
 
   nsfs::NooBaaMasterKeys keys;
   ASSERT_EQ(keys.load(env->dpp, c.settings, dir), 0);
-  std::vector<std::string> rejected;
-  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected), 0);
+  std::vector<std::string> failures;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, failures), 0);
 
   nsfs::ImportPlan p;
   ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
@@ -12487,12 +12487,13 @@ TEST_F(NooBaaPolicyTest, EveryPrincipalShapeIsRewritten)
 		.find("user/alice"), std::string::npos);
 }
 
-/* An unresolved principal refuses the policy and names every one.
+/* A policy with an unresolved principal is rejected, and every such
+ * principal is named.
  *
  * A principal resolving to nothing is a grant or a denial that will
  * not take effect.  Every one is listed, because an operator fixing
  * them needs the list rather than the first. */
-TEST_F(NooBaaPolicyTest, AnUnresolvedPrincipalRefusesThePolicy)
+TEST_F(NooBaaPolicyTest, APolicyWithAnUnresolvedPrincipalIsRejected)
 {
   std::string out{"untouched"};
   std::vector<std::string> unresolved;
@@ -12637,7 +12638,7 @@ TEST_F(NooBaaBucketImportTest, AnImportedBucketIsBucketOwnerEnforced)
   EXPECT_EQ(load(), rgw::s3::ObjectOwnership::BucketOwnerEnforced);
 }
 
-/* A bucket whose owner this import did not write is refused, not
+/* A bucket whose owner this import did not write is rejected, not
  * guessed.  There is no correct account to invent. */
 /* Whether deleting the bucket deletes its directory comes across from
  * NooBaa's should_create_underlying_storage, onto the directory, which is
@@ -12669,7 +12670,7 @@ TEST_F(NooBaaBucketImportTest, ItRecordsWhetherTheBucketOwnsItsStorage)
 /* A name NooBaa's store holds is not created again in RGW:  that bucket
  * is visible already, served from its record.  The control is a name
  * the store does not hold. */
-TEST_F(NooBaaBucketImportTest, CreationRefusesANameNooBaaHolds)
+TEST_F(NooBaaBucketImportTest, CreationRejectsANameNooBaaHolds)
 {
   write_file(conf_root() / "buckets" / "held.json",
 	     R"({"_id":"6560e1f1c0ffee00000000bb","name":"held",)"
@@ -12691,10 +12692,10 @@ TEST_F(NooBaaBucketImportTest, CreationRefusesANameNooBaaHolds)
   EXPECT_EQ(create("not-held"), 0);
 }
 
-/* A record whose name nsfs already holds at another path is refused,
+/* A record whose name nsfs already holds at another path is rejected,
  * not merged into the bucket nsfs has.  The control is the same record
  * with nsfs's row at the record's own path, which imports. */
-TEST_F(NooBaaBucketImportTest, ARecordForANameNsfsHoldsElsewhereIsRefused)
+TEST_F(NooBaaBucketImportTest, ARecordForANameNsfsHoldsElsewhereIsRejected)
 {
   write_their_record("DISABLED");
   nsfs::BucketPlacement row;
@@ -12754,7 +12755,7 @@ TEST_F(NooBaaBucketImportTest, TheMetadataListingIsRowsAndUnimportedRecords)
       << "after import:  the row and the record are one bucket";
 }
 
-TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
+TEST_F(NooBaaBucketImportTest, ABucketWithAnUnknownOwnerIsRejected)
 {
   write_their_record("DISABLED");
   mapping.account_by_noobaa_id.clear();
@@ -12769,7 +12770,7 @@ TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
   }
   EXPECT_TRUE(said) << why();
 
-  /* the row is written last, so a refused bucket has none, and is still
+  /* the row is written last, so a rejected bucket has none, and is still
    * placed by their record */
   nsfs::BucketPlacement row;
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
@@ -12777,11 +12778,11 @@ TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
 }
 
 /* A policy whose principals do not resolve is dropped, the rest of
- * the bucket is written, and the refusal is reported.
+ * the bucket is written, and the rejection is reported.
  *
  * The bucket's other state is correct and worth having;  a policy
  * pointing at nothing is not. */
-TEST_F(NooBaaBucketImportTest, ARefusedPolicyDoesNotRefuseTheBucket)
+TEST_F(NooBaaBucketImportTest, TheBucketIsWrittenWhenItsPolicyIsRejected)
 {
   write_their_record("ENABLED",
       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
@@ -12790,7 +12791,7 @@ TEST_F(NooBaaBucketImportTest, ARefusedPolicyDoesNotRefuseTheBucket)
         "Resource":["arn:aws:s3:::b/*"]}]})");
 
   ASSERT_EQ(run(), 0) << why();
-  EXPECT_EQ(result.buckets_written, 1u) << "the bucket was refused too";
+  EXPECT_EQ(result.buckets_written, 1u) << "the bucket was rejected too";
   EXPECT_EQ(result.policies_rewritten, 0u);
   ASSERT_EQ(result.policies_refused.size(), 1u);
   EXPECT_NE(result.policies_refused[0].find("ghost"), std::string::npos)
@@ -12896,9 +12897,9 @@ TEST_F(NooBaaBucketImportTest, TheImportRecordsTheBucketsPath)
   EXPECT_EQ(row.path, bucket_path().string());
 }
 
-/* A record that names no path places nothing, and is refused before
+/* A record that names no path places nothing, and is rejected before
  * anything is written;  NooBaa's schema requires the field. */
-TEST_F(NooBaaBucketImportTest, ARecordWithoutAPathIsRefused)
+TEST_F(NooBaaBucketImportTest, ARecordWithoutAPathIsRejected)
 {
   write_file(conf_root() / "buckets" / (testname + ".json"),
 	     std::string(R"({"_id":"6560e1f1c0ffee0000000001","name":")") +
@@ -12920,8 +12921,8 @@ TEST_F(NooBaaBucketImportTest, ARecordWithoutAPathIsRefused)
 }
 
 /* A record whose path is another bucket's directory, or nested with
- * one, is refused, naming the path. */
-TEST_F(NooBaaBucketImportTest, ARecordNestedWithAnotherBucketIsRefused)
+ * one, is rejected, naming the path. */
+TEST_F(NooBaaBucketImportTest, ARecordNestedWithAnotherBucketIsRejected)
 {
   write_their_record("DISABLED");
   nsfs::BucketPlacement other;
@@ -12982,7 +12983,7 @@ public:
   }
 };
 
-TEST_F(NSFSPlaceOverNooBaaTest, ANooBaaBucketsDirectoryIsRefused)
+TEST_F(NSFSPlaceOverNooBaaTest, ANooBaaBucketsDirectoryIsRejected)
 {
   const sf::path theirs = bp / "noobaa-data" / "theirs";
   sf::create_directories(theirs / "inside");
@@ -13008,7 +13009,7 @@ TEST_F(NSFSPlaceOverNooBaaTest, ANooBaaBucketsDirectoryIsRefused)
  * lies inside an unimported NooBaa bucket's directory cannot create a
  * bucket there, and nothing is made.  Before this, mkdir succeeded and
  * the row insert saw no row to nest with. */
-TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRefused)
+TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRejected)
 {
   const sf::path theirs = bp / "noobaa-data" / "theirs";
   sf::create_directories(theirs);
@@ -13062,7 +13063,7 @@ public:
   /* The account `write_their_record()`'s bucket is owned by.
    *
    * NooBaa's bucket record names its owner by `_id`, and the bucket
-   * import refuses a bucket whose owner this run did not write -- so
+   * import rejects a bucket whose owner this run did not write -- so
    * the account has to carry the id the record names, not an
    * arbitrary one. */
   static constexpr const char* THEIR_OWNER_ID =
@@ -13175,7 +13176,7 @@ TEST_F(NooBaaModeTest, IdentitiesAreImportedByCommand)
   EXPECT_EQ(again["accounts_present"], "1");
 }
 
-/* A store that will not preflight is refused before anything is
+/* A store that will not preflight is rejected before anything is
  * written, which is the point of phase 0. */
 TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
 {
@@ -13280,12 +13281,12 @@ TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
  *
  * Adoption is a bucket's import and the conversion of its tree, and
  * with extensions off the tree cannot be converted, so the bucket is
- * refused and nothing is written -- not even its record.  Both
- * polarities on one bucket:  refused with extensions off, adopted once
- * they are on.  And `run=true`, what `automatic` runs, is refused once
+ * rejected and nothing is written -- not even its record.  Both
+ * polarities on one bucket:  rejected with extensions off, adopted once
+ * they are on.  And `run=true`, what `automatic` runs, is rejected once
  * up front rather than failing every bucket, before any identity is
  * imported. */
-TEST_F(NooBaaModeTest, AdoptionIsRefusedWithExtensionsOff)
+TEST_F(NooBaaModeTest, AdoptionIsRejectedWithExtensionsOff)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
@@ -13317,7 +13318,7 @@ TEST_F(NooBaaModeTest, AdoptionIsRefusedWithExtensionsOff)
   EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
 		 ->profile_name(), "base");
   EXPECT_FALSE(loaded->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
-      << "a refused adoption imported the record";
+      << "a rejected adoption imported the record";
 
   g_conf().set_val("rgw_nsfs_extensions", "true");
   g_conf().apply_changes(nullptr);
@@ -13393,7 +13394,7 @@ TEST_F(NooBaaCompletionTest, AnUnadoptedRecordKeepsItIncomplete)
 
 /* After completion NooBaa's store is not read:  a record that appears
  * places no bucket, lists none, holds no name, and the commands
- * refuse. */
+ * are rejected. */
 TEST_F(NooBaaCompletionTest, AfterCompletionTheStoreIsNotRead)
 {
   ASSERT_EQ(ask({{"run", "true"}})["complete"], "true");
@@ -13485,9 +13486,9 @@ public:
   }
 };
 
-/* What abandoning refuses:  no reason, an `_id` the store does not
+/* What abandoning rejects:  no reason, an `_id` the store does not
  * hold, and a record already consumed. */
-TEST_F(NooBaaAbandonTest, AbandoningRefusesWhatItShould)
+TEST_F(NooBaaAbandonTest, AbandoningRejectsWhatItShould)
 {
   EXPECT_EQ(abandon(THEIR_BUCKET_ID, ""), -EINVAL);
   EXPECT_EQ(abandon("6560e1f1c0ffee0000000bad", "gone"), -ENOENT);
@@ -13554,7 +13555,7 @@ TEST_F(NooBaaAbandonTest, AnUnconvertedBucketAbandonedStaysServed)
       << "the pass converted a bucket whose conversion was abandoned";
 }
 
-/* Adopting or importing an abandoned record by name is refused, as the
+/* Adopting or importing an abandoned record by name is rejected, as the
  * full pass skips it;  so is the profile change that would import it.
  * Taking the abandonment back is the way to adopt it after all, and is
  * the control. */
@@ -13761,9 +13762,9 @@ TEST_F(NooBaaModeTest, ConversionKeepsTheVersioningTheirRecordSupplied)
       << "versioned but not enabled after the conversion";
 }
 
-/* An unknown mode is refused rather than guessed -- including the
+/* An unknown mode is rejected rather than guessed -- including the
  * three this option once took. */
-TEST_F(NooBaaModeTest, AnUnknownModeIsRefused)
+TEST_F(NooBaaModeTest, AnUnknownModeIsRejected)
 {
   for (const char* m : {"sideways", "serve", "adopt", "convert"}) {
     std::map<std::string, std::string> out;
@@ -13976,7 +13977,7 @@ TEST_F(NSFSPlacedBucketTest, AnOwnerWithAPathGetsItsBucketsThere)
 /* An owner imported from NooBaa without a path cannot create buckets,
  * as it could not in NooBaa.  The control is the same owner before it
  * is marked imported, which creates at the base path. */
-TEST_F(NSFSPlacedBucketTest, AnImportedOwnerWithoutAPathIsRefused)
+TEST_F(NSFSPlacedBucketTest, AnImportedOwnerWithoutAPathIsRejected)
 {
   auto before = make_bucket("allowed");
   ASSERT_TRUE(sf::is_directory(bp / "root" / "allowed"));
@@ -13985,16 +13986,16 @@ TEST_F(NSFSPlacedBucketTest, AnImportedOwnerWithoutAPathIsRefused)
 		env->dpp, "6560e1f1c0ffee00000000aa", to_string(owner)), 0);
 
   RGWBucketInfo info;
-  info.bucket.name = "refused";
+  info.bucket.name = "rejected";
   info.owner = owner;
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
   EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EACCES);
-  EXPECT_FALSE(sf::exists(bp / "root" / "refused"));
+  EXPECT_FALSE(sf::exists(bp / "root" / "rejected"));
   nsfs::BucketPlacement row;
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
-		env->dpp, "refused", "", row), -ENOENT);
+		env->dpp, "rejected", "", row), -ENOENT);
 }
 
 /* A tenant's bucket at the base path is `<tenant>$<name>`, so two
@@ -14022,7 +14023,7 @@ TEST_F(NSFSPlacedBucketTest, ATenantsBucketIsNamedForItsTenant)
 
 /* Of two creations of one name, one succeeds:  the row is the
  * exclusive step, as NooBaa's exclusive create of its record is. */
-TEST_F(NSFSPlacedBucketTest, ATakenNameIsRefused)
+TEST_F(NSFSPlacedBucketTest, ATakenNameIsRejected)
 {
   auto first = make_bucket("once");
 
@@ -14038,7 +14039,7 @@ TEST_F(NSFSPlacedBucketTest, ATakenNameIsRefused)
 /* A bucket is not created over a directory that is already there, as
  * NooBaa's mkdir fails;  the directory is left as it was, and the row
  * is taken back.  The control is a name with no directory. */
-TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRefused)
+TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRejected)
 {
   const sf::path pre = bp / "root" / "pre";
   sf::create_directories(pre);
@@ -14052,7 +14053,7 @@ TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRefused)
   EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EEXIST);
 
   EXPECT_LT(::getxattr(pre.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
-      << "the refused creation wrote to the directory";
+      << "the rejected creation wrote to the directory";
   nsfs::BucketPlacement row;
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
 		env->dpp, "pre", "", row), -ENOENT);
@@ -14063,7 +14064,7 @@ TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRefused)
 
 /* A creation that fails after its directory is made takes back both:
  * the directory, then the row.  A directory left behind would hold the
- * name, since creation refuses one that already exists, so the retry
+ * name, since creation rejects one that already exists, so the retry
  * is the proof.  The failure is injected, since nothing in an ordinary
  * setup fails after mkdir;  the control is the same retry with the
  * hint off. */
@@ -14394,19 +14395,19 @@ TEST_F(NSFSCustomPathTest, TheGlobalAllowlistAdmitsForAnOwnerWithNone)
   EXPECT_EQ(row_path("global"), at.string());
 }
 
-/* A path no list admits is refused, as NooBaa refuses it, and so is
+/* A path no list admits is denied, as NooBaa denies it, and so is
  * every path when there is no list at all.  Nothing is made. */
-TEST_F(NSFSCustomPathTest, APathNoAllowlistAdmitsIsRefused)
+TEST_F(NSFSCustomPathTest, APathNoAllowlistAdmitsIsDenied)
 {
   sf::create_directories(elsewhere());
-  const sf::path at = elsewhere() / "refused";
+  const sf::path at = elsewhere() / "denied";
   env_.set("HTTP_X_NOOBAA_CUSTOM_BUCKET_PATH", at.string());
 
-  EXPECT_EQ(create("refused"), -EACCES) << "no allowlist at all";
+  EXPECT_EQ(create("denied"), -EACCES) << "no allowlist at all";
   owner_allows("/somewhere/else");
-  EXPECT_EQ(create("refused"), -EACCES) << "an allowlist not admitting it";
+  EXPECT_EQ(create("denied"), -EACCES) << "an allowlist not admitting it";
   EXPECT_FALSE(sf::exists(at));
-  EXPECT_TRUE(row_path("refused").empty());
+  EXPECT_TRUE(row_path("denied").empty());
 }
 
 /* The match is NooBaa's:  a string prefix, so a sibling sharing the
@@ -14441,7 +14442,7 @@ TEST_F(NSFSCustomPathTest, TheHeaderNameIsConfiguration)
   EXPECT_EQ(row_path("new-name"), (elsewhere() / "new-name").string());
 }
 
-/* The allowlist is checked where it is stored:  a bad entry is refused,
+/* The allowlist is checked where it is stored:  a bad entry is rejected,
  * and a good list is kept normalised. */
 TEST_F(NSFSCustomPathTest, TheAllowlistIsCheckedWhereItIsStored)
 {
@@ -14460,7 +14461,7 @@ TEST_F(NSFSCustomPathTest, TheAllowlistIsCheckedWhereItIsStored)
 }
 
 /* new_buckets_path is checked where it is stored:  a path nsfs would not
- * store is refused, and a trailing slash an operator might write is
+ * store is rejected, and a trailing slash an operator might write is
  * dropped.  Whether it exists is not asked, since storage can be
  * attached later (DECISIONS.md 2026-10-14). */
 TEST_F(NSFSPlacedBucketTest, NewBucketsPathIsCheckedWhereItIsStored)
@@ -14474,7 +14475,7 @@ TEST_F(NSFSPlacedBucketTest, NewBucketsPathIsCheckedWhereItIsStored)
   }
   id.new_buckets_path = "/not/there/yet/";
   ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0)
-      << "a path that does not exist yet was refused";
+      << "a path that does not exist yet was rejected";
   nsfs::Identity got;
   ASSERT_EQ(driver->get_identity_db()->get_identity(env->dpp, id.key, got), 0);
   EXPECT_EQ(got.new_buckets_path, "/not/there/yet");
@@ -14498,7 +14499,7 @@ public:
   }
 
   /* the owner of every placed bucket here;  `owner`, a user in no
-   * account, is what placement refuses */
+   * account, is what placement rejects */
   rgw_owner account;
 
   int place(const std::string& name, const sf::path& at) {
@@ -14631,7 +14632,7 @@ TEST_F(NSFSPlaceBucketTest, AFailedPlacementIsTakenBack)
 
 /* A directory carrying nsfs state is, or was, a bucket's, and is never
  * placed over. */
-TEST_F(NSFSPlaceBucketTest, ADirectoryCarryingNsfsStateIsRefused)
+TEST_F(NSFSPlaceBucketTest, ADirectoryCarryingNsfsStateIsRejected)
 {
   const sf::path at = elsewhere() / "was-a-bucket";
   sf::create_directories(at);
@@ -14672,7 +14673,7 @@ TEST_F(NSFSPlaceBucketTest, TheUnplacedDirectoryHintStaysOffBuckets)
   EXPECT_EQ(hint({{"op", "remove"}, {"name", "lent"}}), -EEXIST);
   EXPECT_TRUE(sf::is_directory(at));
 
-  /* a bucket made through RGW is refused the same way */
+  /* a bucket made through RGW is rejected the same way */
   auto made = make_bucket("ordinary");
   EXPECT_EQ(hint({{"op", "remove"}, {"name", "ordinary"}}), -EEXIST);
 
@@ -14688,8 +14689,8 @@ TEST_F(NSFSPlaceBucketTest, TheUnplacedDirectoryHintStaysOffBuckets)
 
 /* An owner is an account, never a user (DECISIONS.md 2026-10-15):  a
  * user in no account has no place in NooBaa's model, and a user in an
- * account is refused as NooBaa's `bucket add` refuses an IAM user. */
-TEST_F(NSFSPlaceBucketTest, AUserIsRefusedAsOwner)
+ * account is rejected as NooBaa's `bucket add` rejects an IAM user. */
+TEST_F(NSFSPlaceBucketTest, AUserIsRejectedAsOwner)
 {
   const sf::path at = elsewhere() / "user-owned";
   sf::create_directories(at);
@@ -14715,8 +14716,8 @@ TEST_F(NSFSPlaceBucketTest, AUserIsRefusedAsOwner)
       << "the control:  the account may own it";
 }
 
-/* Each refusal writes nothing:  no row, and nothing on the directory. */
-TEST_F(NSFSPlaceBucketTest, RefusalsWriteNothing)
+/* Each rejection writes nothing:  no row, and nothing on the directory. */
+TEST_F(NSFSPlaceBucketTest, RejectionsWriteNothing)
 {
   const sf::path at = elsewhere() / "candidate";
   sf::create_directories(at);
@@ -14798,10 +14799,10 @@ TEST_F(NSFSDriverTest, MetadataListsAccounts)
       << "a full first page did not say another follows";
 }
 
-/* A section this driver does not list is refused at init with -ENOENT,
- * as RADOS refuses one it has no handler for, and no handle is made;
+/* A section this driver does not list is rejected at init with -ENOENT,
+ * as RADOS rejects one it has no handler for, and no handle is made;
  * the sections it lists are accepted. */
-TEST_F(NSFSDriverTest, MetadataRefusesASectionItDoesNotList)
+TEST_F(NSFSDriverTest, MetadataRejectsASectionItDoesNotList)
 {
   for (const char* section : {"bucket.instance", "roles", "group", "otp",
 			      "no-such-section"}) {
@@ -15059,7 +15060,7 @@ public:
 
   /* Where a bucket resolved to, read rather than written.
    *
-   * These tests are about `serve` mode, which refuses mutations -- so
+   * These tests are about `serve` mode, which rejects mutations -- so
    * probing by writing would contradict the thing under test.  The
    * directory's own name is the result and asking for it changes
    * nothing;  intrusive inspection is the right tool here. */
@@ -15143,7 +15144,7 @@ TEST_F(NSFSRecordedPathTest, ResolvingTheirPathDoesNotAdoptTheBucket)
       << "resolution wrote a placement row, so it adopted";
 
   /* The comparison can fail, shown without going through the driver:
-   * serve mode refuses a write, which is the point, so the negative
+   * serve mode rejects a write, which is the point, so the negative
    * case is made by touching the tree directly. */
   write_file(at / "probe", "x");
   EXPECT_NE(snapshot(), before)
@@ -15204,7 +15205,7 @@ TEST_F(NSFSRecordedPathTest, ARowForTheBasePathDoesNotFallThrough)
       << "a row for the base path fell through to their record";
 }
 
-/* A path NooBaa's record names that we would not store is refused.
+/* A path NooBaa's record names that we would not store is rejected.
  *
  * NooBaa's store is one this driver did not write, so its contents are
  * input -- and a path we would reject at the point of storing is one

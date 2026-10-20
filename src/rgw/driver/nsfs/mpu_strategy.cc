@@ -362,9 +362,9 @@ StridedMPUStrategy::part_target(uint32_t part_num,
   }
 
   /* Part K occupies [(K-1) * stride, K * stride).  The extent is what
-   * makes an overrun refusable:  a part longer than the stride would
-   * write into part K+1's region, so the writer stops at the boundary
-   * and diverts instead of discovering the damage later.  Writing LESS
+   * lets the writer reject an overrun:  a part longer than the stride
+   * would write into part K+1's region, so the writer stops at the
+   * boundary and diverts instead of discovering the damage later.  Writing LESS
    * is ordinary -- the final part is normally short, and it is the one
    * case that needs no handling at all. */
   return PartTarget{RGW_MP_SHARED_PREFIX + std::to_string(*stride),
@@ -693,7 +693,7 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
 }
 
 /* Use the temp directory that is there;  create one only where the
- * tree has none;  refuse more than one.  See the header. */
+ * tree has none;  reject more than one.  See the header. */
 std::optional<std::string>
 NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const
@@ -827,10 +827,11 @@ static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
     if (!found.empty()) {
       /* Two temp directories means two bucket ids have written here.
        * Which one holds the uploads is not decidable from the tree, so
-       * refuse rather than pick -- and do not create a third. */
+       * reject the write rather than pick -- and do not create a
+       * third. */
       ldpp_dout(dpp, 0) << "ERROR: bucket holds more than one NooBaa temp "
 			<< "directory (" << found << ", " << n << ");  "
-			<< "refusing to guess which holds multipart uploads"
+			<< "not guessing which holds multipart uploads"
 			<< dendl;
       if (ambiguous) {
 	*ambiguous = true;

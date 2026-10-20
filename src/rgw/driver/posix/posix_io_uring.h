@@ -88,8 +88,8 @@ void posix_uring_unregister_personality(const DoutPrefixProvider* dpp,
  * context, use the same path.
  *
  *   >= 0  the descriptor
- *   < 0   -errno, including -EACCES when the identity is refused,
- *         which is the answer the whole mechanism exists to get
+ *   < 0   -errno, including -EACCES when the identity is denied,
+ *         which is the result the whole mechanism exists to get
  */
 int posix_uring_openat2(const DoutPrefixProvider* dpp, int dirfd,
                         const char* path, uint64_t flags, uint64_t mode,

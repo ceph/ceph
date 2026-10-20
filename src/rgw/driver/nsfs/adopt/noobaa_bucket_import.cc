@@ -408,7 +408,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     /* `path`, which places the bucket (P6).  NooBaa's schema requires
-     * it, and a bucket with none has nowhere to be, so it is refused
+     * it, and a bucket with none has nowhere to be, so it is rejected
      * before anything is written. */
     std::string their_path;
     try {
@@ -427,8 +427,8 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
     /* A bucket nsfs already holds under this name, somewhere else, is a
-     * different bucket:  creation refuses a name NooBaa's store holds,
-     * so this is a record that appeared after the bucket did.  Refused,
+     * different bucket:  creation rejects a name NooBaa's store holds,
+     * so this is a record that appeared after the bucket did.  Rejected,
      * not merged into it. */
     {
       nsfs::BucketPlacement row;
@@ -502,7 +502,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     /* The row, last:  it is what makes nsfs the authority for where the
      * bucket is, so an import that failed above leaves the bucket served
      * from their record exactly as before.  Importing again finds the
-     * row it wrote, at the same path;  a different path was refused
+     * row it wrote, at the same path;  a different path was rejected
      * above. */
     {
       nsfs::BucketPlacement row;
@@ -527,7 +527,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 
   ldpp_dout(dpp, 4) << "nsfs: imported " << result.buckets_written
     << " buckets, " << result.policies_rewritten << " policies rewritten, "
-    << result.policies_refused.size() << " refused, "
+    << result.policies_refused.size() << " rejected, "
     << result.logging_carried << " logging configurations, "
     << result.deferred.size() << " deferred, "
     << result.failures.size() << " failures" << dendl;

@@ -93,11 +93,11 @@ enum class SafeResult {
   OK = 0,
   MISMATCH = 1,
   ERROR = 2,
-  /* The filesystem refused this identity:  EACCES or EPERM, as
+  /* The filesystem denied this identity:  EACCES or EPERM, as
    * distinct from an I/O failure.
    *
    * Separate because the two mean opposite things to a client.  A
-   * refusal is the intersection rule working -- S3 allowed the
+   * denial is the intersection rule working -- S3 allowed the
    * request and POSIX did not -- and it is a 403;  an I/O failure is
    * a 500.  With one ERROR for both, a cross-identity overwrite
    * reached the client as `-ERR_INTERNAL_ERROR`, which reads as a
@@ -211,7 +211,7 @@ public:
   uint64_t take_buffered_bytes() { return buffered_copy_bytes.exchange(0); }
 
   /* How many copy sources the gateway read because the access model
-   * permits it, the filesystem having refused the requester.  Read,
+   * permits it, the filesystem having denied the requester.  Read,
    * not drained:  a test compares it across an operation, since the
    * gateway is shared.  Reported by the `access-model` driver hint. */
   uint64_t cross_account_source_reads() const {
