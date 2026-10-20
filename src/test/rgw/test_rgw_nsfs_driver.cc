@@ -7596,7 +7596,7 @@ TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepSurvivesIt)
   v.append("changed");
   attrs[RGW_ATTR_META_PREFIX "probe"] = v;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   const ClientView v0 = client_view(bucket.get(), env->dpp, "e/");
   ASSERT_TRUE(v0.exists);
@@ -7772,7 +7772,7 @@ TEST_F(NSFSConvertingBucketTest, WritingPrunesTheForeignSpelling)
   ct.append("application/octet-stream");
   attrs[RGW_ATTR_CONTENT_TYPE] = ct;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   char buf[8192];
   ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
@@ -7822,7 +7822,8 @@ TEST_F(NSFSConvertingBucketTest, TagsDeletedBeforeTheSweepStayDeleted)
 
   auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
   ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-  EXPECT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield), 0);
+  EXPECT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
+				  rgw_user()), 0);
   EXPECT_EQ(tags_of("after the removal"), 0u)
       << "the removed tags read back through the fallback";
 
@@ -7863,7 +7864,7 @@ TEST_F(NSFSConvertingBucketTest, TagsRemovedByAnAttributeWriteStayRemoved)
   Attrs del;
   del[RGW_ATTR_TAGS] = bufferlist{};
   EXPECT_EQ(obj->set_obj_attrs(env->dpp, nullptr, &del, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
   EXPECT_EQ(tags_of("after the removal"), 0u)
       << "the removed tags read back through the fallback";
 
@@ -8056,7 +8057,7 @@ TEST_F(NSFSNooBaaBucketTest, WritesObjectLockInTheirShape)
   set[RGW_ATTR_OBJECT_RETENTION] = rb;
   set[RGW_ATTR_OBJECT_LEGAL_HOLD] = hb;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   auto xattr = [&p](const char* n) {
     char buf[256];
@@ -8096,7 +8097,7 @@ TEST_F(NSFSBucketTest, ObjectLockInAMarkedBucketStaysEncoded)
   hold.encode(hb);
   set[RGW_ATTR_OBJECT_LEGAL_HOLD] = hb;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   char buf[8192];
   ssize_t len = ::listxattr(p.c_str(), buf, sizeof(buf));
@@ -8156,7 +8157,7 @@ TEST_F(NSFSNooBaaBucketTest, WritesStorageClassUnderTheirName)
   bl.append("GLACIER");
   set[RGW_ATTR_STORAGE_CLASS] = bl;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   char buf[256];
   ssize_t len = ::getxattr(p.c_str(), "user.storage_class", buf, sizeof(buf));
@@ -8260,7 +8261,7 @@ TEST_F(NSFSTagTest, WritesTagsInTheirShape)
   Attrs set;
   set[RGW_ATTR_TAGS] = bl;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   auto names = xattr_names(p);
   EXPECT_TRUE(names.contains("user.noobaa.tag.colour"));
@@ -8294,7 +8295,7 @@ TEST_F(NSFSTagTest, WritingTheSetReplacesIt)
   Attrs set;
   set[RGW_ATTR_TAGS] = bl;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   auto names = xattr_names(bucket_path() / "tagged.bin");
   EXPECT_TRUE(names.contains("user.noobaa.tag.fresh"));
@@ -8311,7 +8312,8 @@ TEST_F(NSFSTagTest, DeletingTagsRemovesTheirAttributes)
 
   auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
   ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-  ASSERT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield), 0);
+  ASSERT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
+				  rgw_user()), 0);
 
   auto names = xattr_names(p);
   EXPECT_FALSE(names.contains("user.noobaa.tag.a"));
@@ -8342,7 +8344,7 @@ TEST_F(NSFSBucketTest, TagsInAMarkedBucketAreOneAttribute)
   Attrs set;
   set[RGW_ATTR_TAGS] = bl;
   ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP), 0);
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 
   char buf[8192];
   ssize_t len = ::listxattr(p.c_str(), buf, sizeof(buf));
@@ -9344,7 +9346,7 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
       v.append("text/html");
       a[RGW_ATTR_CONTENT_TYPE] = v;
       EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
-				  rgw::sal::FLAG_LOG_OP),
+				  rgw::sal::FLAG_LOG_OP, rgw_user()),
 		-ERR_SERVICE_UNAVAILABLE);
       return 0;
     };
@@ -9361,7 +9363,7 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
   v.append("text/html");
   a[RGW_ATTR_CONTENT_TYPE] = v;
   EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
-			      rgw::sal::FLAG_LOG_OP), 0);
+			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 }
 
 /* A stopped conversion reopens the gate.
@@ -9391,7 +9393,7 @@ TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
   v.append("text/html");
   a[RGW_ATTR_CONTENT_TYPE] = v;
   EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
-			      rgw::sal::FLAG_LOG_OP), 0);
+			      rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
 }
 
 /* Two conversions of one bucket do not run together.
