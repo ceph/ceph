@@ -25,8 +25,11 @@ README*                                         @ceph/doc-writers
 /src/pybind/mgr/cephadm/services/smb.py         @ceph/orchestrators @ceph/smb
 /src/pybind/mgr/test_orchestrator               @ceph/orchestrators
 /src/pybind/mgr/smb                             @ceph/orchestrators @ceph/smb
+/src/pybind/mgr/ceph_secrets                    @ceph/orchestrators
+/src/pybind/mgr/nfs                             @ceph/orchestrators @ceph/cephfs
 /src/python-common                              @ceph/orchestrators
 /src/python-common/ceph/smb                     @ceph/orchestrators @ceph/smb
+/src/ceph-node-proxy                            @ceph/orchestrators
 /qa/workunits/cephadm                           @ceph/orchestrators
 /qa/tasks/cephadm.py                            @ceph/orchestrators
 /qa/tasks/cephadm_cases                         @ceph/orchestrators
@@ -49,7 +52,9 @@ README*                                         @ceph/doc-writers
 /doc/ceph-volume                                @ceph/ceph-volume @ceph/doc-writers
 
 # crimson
+/qa/objectstore_crimson                         @ceph/crimson
 /qa/suites/crimson-rados                        @ceph/crimson
+/qa/suites/crimson-rados-experimental           @ceph/crimson
 /src/crimson                                    @ceph/crimson
 /src/test/crimson                               @ceph/crimson
 
@@ -70,6 +75,8 @@ README*                                         @ceph/doc-writers
 /doc/man/8/rados.rst                            @ceph/core @ceph/doc-writers
 /doc/rados                                      @ceph/core @ceph/doc-writers
 /examples/librados                              @ceph/core
+/qa/objectstore                                 @ceph/core
+/qa/objectstore_debug                           @ceph/core
 /qa/standalone                                  @ceph/core
 /qa/suites/rados                                @ceph/core
 /qa/workunits/erasure-code                      @ceph/core
@@ -81,8 +88,11 @@ README*                                         @ceph/doc-writers
 /src/ceph_osd.cc                                @ceph/core
 /src/ceph_mon.cc                                @ceph/core
 /src/blk                                        @ceph/core
+/src/compressor                                 @ceph/core
 /src/crush                                      @ceph/core
+/src/crypto                                     @ceph/core
 /src/erasure-code                               @ceph/core
+/src/extblkdev                                  @ceph/core
 /src/kv                                         @ceph/core
 /src/librados                                   @ceph/core
 /src/mgr                                        @ceph/core
@@ -90,6 +100,7 @@ README*                                         @ceph/doc-writers
 /src/msg                                        @ceph/core
 /src/os                                         @ceph/core
 /src/osd                                        @ceph/core
+/src/osdc                                       @ceph/core
 /src/pybind/mgr/balancer                        @ceph/core
 /src/pybind/mgr/ceph_module.pyi                 @ceph/core
 /src/pybind/mgr/cherrypy_mgr.py                 @ceph/core
@@ -109,6 +120,7 @@ README*                                         @ceph/doc-writers
 /src/test/librados                              @ceph/core
 /src/test/mgr                                   @ceph/core
 /src/test/mon                                   @ceph/core
+/src/test/objectstore                           @ceph/core
 /src/tools/ceph_kvstore_tool.cc                 @ceph/core
 /src/tools/ceph_monstore_tool.cc                @ceph/core
 /src/tools/ceph_objectstore_tool.*              @ceph/core
