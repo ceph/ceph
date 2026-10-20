@@ -1,0 +1,45 @@
+---
+name: "Check for new QA log ignorelist entries"
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - edited
+      - opened
+      - reopened
+      - synchronize
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  qa-ignorelist:
+    name: "Check for new QA log ignorelist entries"
+    runs-on: ubuntu-latest
+    if: github.repository == 'ceph/ceph'
+    steps:
+      # the script comes from main; the PR's files are only read through
+      # the API, never checked out or run
+      - name: Checkout script from main branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: 'refs/heads/main'
+          path: main
+          sparse-checkout: |
+            .github/workflows/scripts/qa-ignorelist-check.py
+          sparse-checkout-cone-mode: false
+
+      - name: Install Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: "3.13"
+
+      - name: Install PyYAML
+        run: pip install pyyaml==6.0.2
+
+      - name: Check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 main/.github/workflows/scripts/qa-ignorelist-check.py
