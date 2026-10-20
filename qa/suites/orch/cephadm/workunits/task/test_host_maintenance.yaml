@@ -1,0 +1,175 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - OSD_DOWN
+      - OSD_HOST_DOWN
+      - OSDMAP_FLAGS
+      - OSD_FLAGS
+      - HOST_IN_MAINTENANCE
+      - MON_DOWN
+      - PG_DEGRADED
+      - PG_AVAILABILITY
+      - noup
+      - osds down
+      - is down
+      - mons down
+      - mon down
+      - out of quorum
+      - Degraded data redundancy
+      - pg .*? is stuck
+      - pg .* is stuck peering
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - osd.1
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        # host.c has no mgr, so ok-to-stop on it doesn't depend on mgr redundancy
+        for host in $(ceph orch host ls --format json | jq -r '.[] | .hostname'); do
+          if [ "$(ceph orch ps --hostname ${host} --format json | jq 'any(.daemon_type == "mgr")')" == "false" ]; then
+            HOST_C="${host}"
+          fi
+        done
+        ACTIVE_MGR=$(ceph mgr dump | jq -r .active_name)
+        ACTIVE_MGR_HOST=$(ceph orch ps --daemon_type mgr --format json | jq -r --arg m "$ACTIVE_MGR" '.[] | select(.daemon_id == $m) | .hostname')
+        OTHER_HOST=$(ceph orch host ls --format json | jq -r --arg a "$ACTIVE_MGR_HOST" --arg c "$HOST_C" '.[] | .hostname | select(. != $a and . != $c)')
+
+        # size 3 pool so every PG keeps one replica per host
+        ceph osd pool create test_pool 32
+        ceph osd pool set test_pool size 3
+        ceph osd pool set test_pool min_size 2
+        ceph osd pool application enable test_pool rados
+        
+        # wait until ALL PGs across all pools reach active+clean
+        timeout 300 bash -c '
+          until
+            CLEAN=$(ceph pg stat -f json | jq -r ".pg_summary.num_pg_by_state[] | select(.name==\"active+clean\").num")
+            TOTAL=$(ceph pg stat -f json | jq -r ".pg_summary.num_pgs")
+            [ "$CLEAN" -eq "$TOTAL" ] 2>/dev/null
+          do
+            sleep 5
+          done
+        '
+
+        # positive: healthy cluster, host.c is safe to stop
+        ceph orch host ok-to-stop $HOST_C
+
+        # negative: host running the active mgr is refused
+        if out=$(ceph orch host ok-to-stop $ACTIVE_MGR_HOST 2>&1); then
+          echo "ok-to-stop unexpectedly succeeded on active mgr host: $out"
+          exit 1
+        fi
+        grep -q "Cannot stop active Mgr daemon" <<< "$out"
+
+        # negative: with OTHER_HOST's OSDs down, stopping host.c would leave 1/3 replicas < min_size
+        ceph osd set noup
+        for osd in $(ceph osd ls-tree $OTHER_HOST); do
+          ceph osd down osd.$osd
+        done
+
+        # wait for the OSDs to be marked as down
+        timeout 300 bash -c '
+          OSD_COUNT=$(ceph osd ls-tree "$1" | wc -l)
+          until [ $(ceph osd tree down -f json | jq "[.nodes[] | select(.type == \"osd\")] | length") -eq "$OSD_COUNT" ]; do
+            sleep 5
+          done
+        ' _ "$OTHER_HOST"
+        
+        # Wait for the PGs to enter the active+undersized+degraded state
+        timeout 300 bash -c '
+          until ceph pg stat --format json | jq -e ".pg_summary.num_pg_by_state[] | select(.name == \"active+undersized+degraded\")" > /dev/null 2>&1; do
+            sleep 2
+          done
+          echo "active+undersized+degraded state detected!"
+        '        
+        if out=$(ceph orch host ok-to-stop $HOST_C 2>&1); then
+          echo "ok-to-stop unexpectedly succeeded with reduced redundancy: $out"
+          exit 1
+        fi
+        grep -q "unsafe to stop osd" <<< "$out"
+
+        # restore and verify ok-to-stop flips back to success
+        ceph osd unset noup
+        timeout 300 bash -c 'until ceph health | grep -q HEALTH_OK; do sleep 10; done'
+        ceph orch host ok-to-stop $HOST_C
+- cephadm.shell:
+    host.a:
+    - |
+      set -ex
+
+      # find host.c which has no mgr
+      HOSTNAMES=$(ceph orch host ls --format json | jq -r '.[] | .hostname')
+      for host in $HOSTNAMES; do
+        # find the hostname for "host.c" which will have no mgr
+        HAS_MGRS=$(ceph orch ps --hostname ${host} --format json | jq 'any(.daemon_type == "mgr")')
+        if [ "$HAS_MGRS" == "false" ]; then
+          HOST_C="${host}"
+        fi
+      done
+
+      ceph orch host maintenance enter $HOST_C
+
+      # validate that the host is flagged with maintenance in orch host ls
+      timeout 300 bash -c '
+        host_c="$1"
+        until ceph orch host ls --format json | jq -e --arg h "$host_c" ".[] | select(.hostname == \$h) | .status == \"maintenance\""; do
+          sleep 5
+        done
+      ' _ "$HOST_C"
+
+      # noout is set on the host's crush node
+      ceph osd dump --format json | jq -e --arg h "$HOST_C" '.crush_node_flags[$h] | index("noout")'
+
+      # wait until all daemons on the host are inactive
+      timeout 300 bash -c '
+        host_c="$1"
+        until ceph orch ps "$host_c" --format json | jq -e "length > 0 and all(.[]; .is_active == false)" > /dev/null; do
+          sleep 5
+        done
+      ' _ "$HOST_C"
+- exec:
+    host.c:
+    - |
+      set -ex
+      FSID=$($TESTDIR/cephadm shell -- ceph fsid 2> /dev/null)
+      
+      # validate that the systemd target is disabled and stopped
+      ! systemctl is-enabled ceph-$FSID.target
+      ! systemctl is-active ceph-$FSID.target
+      # validate that no ceph units of this cluster are running on the host
+      [ -z "$(systemctl list-units "ceph-$FSID@*" --state=active --no-legend)" ]
+
+# TODO: reboot before this ??
+# - cephadm.shell:
+#     host.a:
+#     - |
+#       set -ex
+#       HOST_C={{'host.c'|role_to_remote|attr('shortname')}}
+#       ceph orch host maintenance exit $HOST_C
+
+#       ceph orch host ls --format json | jq -e --arg h "$HOST_C" '.[] | select(.hostname == $h) | .status != "maintenance"'
+#       ceph osd dump --format json | jq -e --arg h "$HOST_C" '(.crush_node_flags[$h] // []) | index("noout") | not'
+#       timeout 300 bash -c 'until ceph health | grep -q HEALTH_OK; do sleep 10; done'
+# - exec:
+#     host.c:
+#     - |
+#       set -ex
+#       FSID=$($TESTDIR/cephadm shell -- ceph fsid)
+#       systemctl is-enabled ceph-$FSID.target
+#       systemctl is-active ceph-$FSID.target
