@@ -773,7 +773,7 @@ class RbdTest(DashboardTestCase):
         self.assertStatus(201)
 
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M',
-                       'rbd/coimg'])
+                       '--pattern-byte', '1', 'rbd/coimg'])  # zeros would copy sparse
 
         self.copy_image('rbd', None, 'coimg', 'rbd_iscsi', None, 'coimg-copy',
                         features=["layering", "fast-diff", "exclusive-lock",
