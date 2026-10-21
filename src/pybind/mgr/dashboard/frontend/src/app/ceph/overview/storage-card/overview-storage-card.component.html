@@ -8,6 +8,7 @@
       Storage overview
     </h2>
   </ng-template>
+
   <!-- CAPACITY USAGE TEXT -->
   @if (!storageEmptyState) {
     <div class="overview-storage-card-usage-text">
@@ -89,13 +90,14 @@
       }
     </cd-empty-state>
   }
+
   <!-- CAPACITY BREAKDOWN CHART -->
   @if (!prometheusEmptyState && !storageEmptyState) {
     @if (isBreakdownLoaded) {
       <ibm-meter-chart
         [options]="options"
         [data]="breakdownData"
-        class="overview-storage-card-chart"
+        class="overview-storage-card-chart cds-mb-5"
       ></ibm-meter-chart>
     } @else {
       <cds-skeleton-text
@@ -105,80 +107,69 @@
       >
       </cds-skeleton-text>
     }
-    <!-- DATA CONSUMPTION TREND -->
-    @if (consumptionTrendData.length) {
-      <div
-        cdsRow
-        class="align-items-center cds-ml-2 cds-mt-6"
-      >
-        <div
-          cdsCol
-          [columnNumbers]="{ lg: 14, md: 10, sm: 16 }"
+  }
+
+  @if (!isSavingsLoaded()) {
+    <ng-container *ngTemplateOutlet="skeletonTabs"></ng-container>
+  } @else if (!prometheusEmptyState && !storageEmptyState) {
+    @if (!consumptionTrendData.length) {
+      <ng-container *ngTemplateOutlet="skeletonTabs"></ng-container>
+    } @else if (savings(); as savingsVm) {
+      <cds-tabs type="line">
+        <cds-tab
+          heading="Savings"
+          i18n-heading
+          [active]="true"
         >
-          <cd-area-chart
-            chartTitle="Consumption trend"
-            [chartKey]="'Consumption trend'"
-            [dataUnit]="'B'"
-            [legendEnabled]="false"
-            [rawData]="consumptionTrendData"
-            [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'"
-            [height]="'200px'"
-            [decimals]="2"
-            [chartType]="'area'"
-          >
-          </cd-area-chart>
-        </div>
-        <div
-          cdsCol
-          [columnNumbers]="{ lg: 2, md: 8, sm: 8 }"
+          <cd-overview-storage-savings [savings]="savingsVm"></cd-overview-storage-savings>
+        </cds-tab>
+        <cds-tab
+          heading="Consumption"
+          i18n-heading
         >
-          <div
-            cdsStack="vertical"
-            gap="4"
-          >
-            <div
-              cdsStack="vertical"
-              gap="1"
-            >
-              <span class="cds--type-heading-03">{{ estimatedTimeUntilFull }}</span>
-              <div class="consumption-stats-wrapper">
-                <cds-tooltip-definition
-                  [autoAlign]="true"
-                  [highContrast]="true"
-                  [openOnHover]="false"
-                  [dropShadow]="true"
-                  [caret]="true"
-                  description="Based on recent average consumption. Actual time until full may vary based on changes in consumption patterns."
-                  i18n-description
-                  i18n
-                >
-                  Estimated time until full
-                </cds-tooltip-definition>
-              </div>
-            </div>
-            <div
-              cdsStack="vertical"
-              gap="1"
-            >
-              <span class="cds--type-heading-03">{{ averageDailyConsumption }}</span>
-              <div class="consumption-stats-wrapper">
-                <cds-tooltip-definition
-                  [autoAlign]="true"
-                  [highContrast]="true"
-                  [openOnHover]="false"
-                  [dropShadow]="true"
-                  [caret]="true"
-                  description="Based on the average daily consumption over the last 7 days"
-                  i18n-description
-                  i18n
-                >
-                  Average consumption
-                </cds-tooltip-definition>
-              </div>
-            </div>
-          </div>
-        </div>
+          <ng-container *ngTemplateOutlet="consumptionTrend"></ng-container>
+        </cds-tab>
+      </cds-tabs>
+    } @else {
+      <div class="cds-mt-6">
+        <ng-container *ngTemplateOutlet="consumptionTrend"></ng-container>
       </div>
     }
   }
+
+  <ng-template #skeletonTabs>
+    <cds-tabs-skeleton [numOftabs]="2"></cds-tabs-skeleton>
+  </ng-template>
+
+  <!-- Consumption trend template -->
+  <ng-template #consumptionTrend>
+    <div
+      cdsRow
+      class="align-items-center cds-ml-2 cds-mt-4"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 14, md: 10, sm: 16 }"
+      >
+        <cd-area-chart
+          chartTitle="Consumption trend"
+          [chartKey]="'Consumption trend'"
+          [dataUnit]="'B'"
+          [legendEnabled]="false"
+          [rawData]="consumptionTrendData"
+          [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'"
+          [height]="'200px'"
+          [decimals]="2"
+          [chartType]="'area'"
+        >
+        </cd-area-chart>
+      </div>
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 2, md: 8, sm: 8 }"
+      >
+        <cd-overview-stats [stats]="consumptionStats()"></cd-overview-stats>
+      </div>
+    </div>
+  </ng-template>
 </cd-productive-card>

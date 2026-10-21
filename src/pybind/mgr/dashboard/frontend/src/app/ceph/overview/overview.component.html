@@ -9,6 +9,7 @@
 @let health = healthCardVm$ | async;
 @let storageEmptyState = storageEmptyState$ | async;
 @let prometheusEmptyState = prometheusEmptyState$ | async;
+@let savingsState = savingsState$ | async;
 <main
   cdsGrid
   [fullWidth]="true"
@@ -51,11 +52,12 @@
         [totalCapacity]="storageCard?.totalCapacity"
         [usedCapacity]="storageCard?.usedCapacity"
         [consumptionTrendData]="storageCard?.consumptionTrendData ?? []"
-        [averageDailyConsumption]="storageCard?.averageDailyConsumption ?? ''"
-        [estimatedTimeUntilFull]="storageCard?.estimatedTimeUntilFull ?? ''"
+        [consumptionStats]="storageCard?.consumptionStats ?? []"
         [breakdownData]="storageCard?.breakdownData ?? []"
         [isBreakdownLoaded]="storageCard?.isBreakdownLoaded ?? false"
         [threshold]="storageCard?.threshold"
+        [savings]="savingsState?.savings ?? null"
+        [isSavingsLoaded]="savingsState?.isSavingsLoaded ?? false"
         [storageEmptyState]="storageEmptyState"
         [prometheusEmptyState]="prometheusEmptyState"
       >

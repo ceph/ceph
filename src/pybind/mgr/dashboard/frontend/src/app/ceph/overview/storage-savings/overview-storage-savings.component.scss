@@ -1,0 +1,13 @@
+cd-overview-storage-savings {
+  display: block;
+}
+
+.savings-header {
+  cd-icon {
+    vertical-align: middle;
+  }
+}
+
+.savings-no-data {
+  color: var(--cds-text-secondary);
+}
