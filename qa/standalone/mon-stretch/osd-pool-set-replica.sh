@@ -203,7 +203,7 @@ function TEST_pool_replica_crush_rule_name() {
         '.num_zones == 2 and .size == 6 and .min_size == 2 and
         .crush_rule == $rule' "$dir/ec-pool.json" || return 1
     ceph osd pool set "$ec_poolname" num_zones 2 || return 1
-    ceph osd pool set "$ec_poolname" num_zones 1 || return 1
+    ceph osd pool set "$ec_poolname" num_zones 1 --yes-i-really-mean-it || return 1
     ceph osd pool get "$ec_poolname" all --format json > "$dir/ec-pool.json" || return 1
     jq -e --arg rule "$ec_poolname-single-zone" \
         '.num_zones == 1 and .size == 3 and .min_size == 2 and

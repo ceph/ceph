@@ -294,7 +294,7 @@ function TEST_disable_resets_defaults_without_stretch_mode() {
 
     # unstretching every pool leaves stretch mode but not its defaults
     for pool in $(ceph osd pool ls); do
-        ceph osd pool set $pool num_zones 1 || return 1
+        ceph osd pool set $pool num_zones 1 --yes-i-really-mean-it || return 1
     done
     for i in $(seq 60); do
         test "$(ceph osd dump -f json | jq .stretch_mode.stretch_mode_enabled)" = false && break

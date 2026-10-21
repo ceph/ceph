@@ -48,7 +48,7 @@ function TEST_rm_last_stretch_pool_while_recovering() {
 
 function TEST_unstretch_last_pool_while_recovering() {
     leave_stretch_mode_while_recovering $1 \
-        ceph osd pool set data0 num_zones 1
+        ceph osd pool set data0 num_zones 1 --yes-i-really-mean-it
 }
 
 main mon-stretch-leave-in-recovery "$@"
