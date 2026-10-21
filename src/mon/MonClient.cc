@@ -766,6 +766,7 @@ void MonClient::handle_auth(MAuthReply *m)
     auto& mc = found->second;
     ceph_assert(mc.have_session());
     active_con.reset(new MonConnection(std::move(mc)));
+    active_con_not_ready_since = ceph_clock_now();
     pending_cons.clear();
   }
 
@@ -1060,8 +1061,25 @@ void MonClient::tick()
     ldout(cct, 1) << "continuing hunt" << dendl;
     return _reopen_session();
   } else if (active_con) {
-    // just renew as needed
     auto cur_con = active_con->get_con();
+    // active_con is adopted before the msgr2 session handshake completes, so
+    // time out a session that never becomes ready.
+    if (cur_con->is_connected()) {
+      active_con_not_ready_since = utime_t();
+    } else if (!active_con_not_ready_since.is_zero() &&
+	       cct->_conf->mon_client_ping_timeout > 0) {
+      utime_t interval = now - active_con_not_ready_since;
+      if (interval > cct->_conf->mon_client_ping_timeout) {
+	ldout(cct, 1) << "session with mon."
+		      << monmap.get_name(cur_con->get_peer_addr())
+		      << " at " << cur_con->get_peer_addr()
+		      << " not ready after " << interval
+		      << " seconds, reconnecting" << dendl;
+	return _reopen_session();
+      }
+    }
+
+    // just renew as needed
     if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
       const bool maybe_renew = sub.need_renew();
       ldout(cct, 10) << "renew subs? -- " << (maybe_renew ? "yes" : "no")
@@ -1715,6 +1733,7 @@ int MonClient::handle_auth_done(
 	  }
 	} else {
 	  active_con.reset(new MonConnection(std::move(i.second)));
+	  active_con_not_ready_since = ceph_clock_now();
 	  pending_cons.clear();
 	  ceph_assert(active_con->have_session());
 	}
