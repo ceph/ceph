@@ -1,0 +1,4625 @@
+{
+   "__inputs": [ ],
+   "__requires": [ ],
+   "annotations": {
+      "list": [
+         {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "showIn": 0,
+            "tags": [ ],
+            "type": "dashboard"
+         }
+      ]
+   },
+   "description": "Combined per-user and per-bucket S3 usage and performance. Filters: RGW instance, user and bucket. Usage and quota panels (stored/used bytes, objects, compression, bucket and user quotas) come from the usage and quota metrics and respect all three filters. User-level performance panels respect RGW instance and user, and are narrowed to the owners of the selected bucket(s). Bucket-level performance panels respect RGW instance and bucket, and are narrowed to the buckets of the selected user(s).",
+   "editable": false,
+   "gnetId": null,
+   "graphTooltip": 0,
+   "hideControls": false,
+   "id": null,
+   "links": [
+      {
+         "asDropdown": true,
+         "icon": "external link",
+         "includeVars": true,
+         "keepTime": true,
+         "tags": [ ],
+         "targetBlank": false,
+         "title": "Browse Dashboards",
+         "tooltip": "",
+         "type": "dashboards",
+         "url": ""
+      }
+   ],
+   "panels": [
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+         },
+         "id": 2,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Overview",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Number of buckets in the selection (usage metric). Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 0,
+            "y": 1
+         },
+         "id": 3,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "count((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Buckets",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Number of users owning at least one bucket in the selection (usage metric). Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 3,
+            "y": 1
+         },
+         "id": 4,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "count(count by (owner) ((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Users",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Bytes currently stored by the selected users/buckets (usage metric). Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 6,
+            "y": 1
+         },
+         "id": 5,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Used Bytes",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Number of objects currently stored by the selected users/buckets (usage metric). Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 9,
+            "y": 1
+         },
+         "id": 6,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_usage_objects{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Object Count",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Average size per stored object (used bytes / object count, usage metrics). Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 12,
+            "y": 1
+         },
+         "id": 7,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) / (sum((ceph_rgw_bucket_usage_objects{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) > 0)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Avg Object Size",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Cumulative bytes uploaded (PUT) and downloaded (GET) in the selected buckets (per-bucket performance counters). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 15,
+            "y": 1
+         },
+         "id": 8,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "vertical",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "value_and_name"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((((ceph_rgw_op_per_bucket_put_obj_bytes{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "PUT",
+               "range": true,
+               "refId": "A"
+            },
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((((ceph_rgw_op_per_bucket_get_obj_bytes{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "GET",
+               "range": true,
+               "refId": "B"
+            }
+         ],
+         "title": "PUT / GET Bytes",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Cumulative PUT and GET object operation counts in the selected buckets (per-bucket performance counters). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 18,
+            "y": 1
+         },
+         "id": 9,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "vertical",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "value_and_name"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((((ceph_rgw_op_per_bucket_put_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "PUT",
+               "range": true,
+               "refId": "A"
+            },
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((((ceph_rgw_op_per_bucket_get_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "GET",
+               "range": true,
+               "refId": "B"
+            }
+         ],
+         "title": "PUT / GET Ops",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Used Bytes : Utilized Bytes (size after compression and encryption), shown as N:1. Values above 1:1 mean data is compressed. Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "suffix::1"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 21,
+            "y": 1
+         },
+         "id": 10,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) / (sum((ceph_rgw_bucket_usage_bytes_utilized{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) > 0)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Compression Ratio",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 5
+         },
+         "id": 11,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Quota Summary",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Sum of the byte quotas of the selected buckets that have a quota enabled (ceph_rgw_bucket_quota_bytes). Buckets without a quota are not counted. Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 0,
+            "y": 6
+         },
+         "id": 12,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_quota_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Bucket Max Bytes",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Sum of the object quotas of the selected buckets that have a quota enabled (ceph_rgw_bucket_quota_objects). Buckets without a quota are not counted. Respects RGW instance, user and bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 3,
+            "y": 6
+         },
+         "id": 13,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_quota_objects{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Bucket Max Objects",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Used Bytes / byte quota, over the selected buckets that have a byte quota.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 1,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "orange",
+                        "value": 0.80000000000000004
+                     },
+                     {
+                        "color": "red",
+                        "value": 0.94999999999999996
+                     }
+                  ]
+               },
+               "unit": "percentunit"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 6,
+            "y": 6
+         },
+         "id": 14,
+         "links": [ ],
+         "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (zone, tenant, owner, bucket) (ceph_rgw_bucket_quota_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) / sum((ceph_rgw_bucket_quota_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Bucket Used (Bytes)",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Object Count / object quota, over the selected buckets that have an object quota.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 1,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "orange",
+                        "value": 0.80000000000000004
+                     },
+                     {
+                        "color": "red",
+                        "value": 0.94999999999999996
+                     }
+                  ]
+               },
+               "unit": "percentunit"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 9,
+            "y": 6
+         },
+         "id": 15,
+         "links": [ ],
+         "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_bucket_usage_objects{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (zone, tenant, owner, bucket) (ceph_rgw_bucket_quota_objects{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) / sum((ceph_rgw_bucket_quota_objects{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Bucket Used (Objects)",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Sum of the user/account byte quotas (ceph_rgw_owner_quota_bytes) of the selected users, or of the owners of the selected buckets. Users without a quota are not counted. Owner quotas have no bucket label, so the bucket filter only narrows the list of owners.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 12,
+            "y": 6
+         },
+         "id": 16,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_owner_quota_bytes{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\") and on (zone, tenant, owner) ceph_rgw_bucket_usage_bytes{bucket=~\"$bucket\"}))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "User Max Bytes",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Sum of the user/account object quotas (ceph_rgw_owner_quota_objects) of the selected users, or of the owners of the selected buckets. Users without a quota are not counted. Owner quotas have no bucket label, so the bucket filter only narrows the list of owners.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 15,
+            "y": 6
+         },
+         "id": 17,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum((ceph_rgw_owner_quota_objects{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\") and on (zone, tenant, owner) ceph_rgw_bucket_usage_bytes{bucket=~\"$bucket\"}))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "User Max Objects",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Bytes stored in all buckets of the user(s) / user byte quota, over the users that have a byte quota. Not narrowed to the selected buckets, because the user quota applies to all of the user's buckets.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 1,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "orange",
+                        "value": 0.80000000000000004
+                     },
+                     {
+                        "color": "red",
+                        "value": 0.94999999999999996
+                     }
+                  ]
+               },
+               "unit": "percentunit"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 18,
+            "y": 6
+         },
+         "id": 18,
+         "links": [ ],
+         "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(sum by (zone, tenant, owner) ((ceph_rgw_bucket_usage_bytes{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) and on (zone, tenant, owner) (ceph_rgw_owner_quota_bytes{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\") and on (zone, tenant, owner) ceph_rgw_bucket_usage_bytes{bucket=~\"$bucket\"})) / sum((ceph_rgw_owner_quota_bytes{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\") and on (zone, tenant, owner) ceph_rgw_bucket_usage_bytes{bucket=~\"$bucket\"}))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "User Used (Bytes)",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Objects in all buckets of the user(s) / user object quota, over the users that have an object quota. Not narrowed to the selected buckets, because the user quota applies to all of the user's buckets.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 1,
+               "links": [ ],
+               "mappings": [ ],
+               "noValue": "N/A",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "orange",
+                        "value": 0.80000000000000004
+                     },
+                     {
+                        "color": "red",
+                        "value": 0.94999999999999996
+                     }
+                  ]
+               },
+               "unit": "percentunit"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 21,
+            "y": 6
+         },
+         "id": 19,
+         "links": [ ],
+         "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(sum by (zone, tenant, owner) ((ceph_rgw_bucket_usage_objects{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) and on (zone, tenant, owner) (ceph_rgw_owner_quota_objects{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\") and on (zone, tenant, owner) ceph_rgw_bucket_usage_bytes{bucket=~\"$bucket\"})) / sum((ceph_rgw_owner_quota_objects{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\") and on (zone, tenant, owner) ceph_rgw_bucket_usage_bytes{bucket=~\"$bucket\"}))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "User Used (Objects)",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 9
+         },
+         "id": 20,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Usage Trends",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "datasource": "${datasource}",
+         "description": "Used Bytes per bucket over time (usage metric, gauge).",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 2,
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            },
+            "overrides": [ ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 10
+         },
+         "id": 21,
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "desc"
+            }
+         },
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum by (owner, bucket) ((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "{{bucket}}",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Storage Usage Trend",
+         "type": "timeseries"
+      },
+      {
+         "datasource": "${datasource}",
+         "description": "Objects per bucket over time (usage metric, gauge).",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 0,
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     }
+                  ]
+               },
+               "unit": "short"
+            },
+            "overrides": [ ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 10
+         },
+         "id": 22,
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "desc"
+            }
+         },
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum by (owner, bucket) ((ceph_rgw_bucket_usage_objects{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "{{bucket}}",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Object Count Trend",
+         "type": "timeseries"
+      },
+      {
+         "datasource": "${datasource}",
+         "description": "Used Bytes : Utilized Bytes per bucket over time.",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 2,
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     }
+                  ]
+               },
+               "unit": "suffix::1"
+            },
+            "overrides": [ ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 10
+         },
+         "id": 23,
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "desc"
+            }
+         },
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum by (owner, bucket) ((ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) / (sum by (owner, bucket) ((ceph_rgw_bucket_usage_bytes_utilized{owner=~\"$user\", bucket=~\"$bucket\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))) > 0)",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "{{bucket}}",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Compression Ratio Trend",
+         "type": "timeseries"
+      },
+      {
+         "collapse": false,
+         "collapsed": true,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 18
+         },
+         "id": 24,
+         "panels": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "description": "Cumulative operation counts per user (per-user performance counters, summed over the selected RGW instance). Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                           "type": "auto"
+                        },
+                        "filterable": false,
+                        "inspect": false
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     }
+                  },
+                  "overrides": [
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "PUT"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "GET"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "List"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "DELETE"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "COPY"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "User"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&${rgw_instance:queryparam}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
+                     }
+                  ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 19
+               },
+               "id": 25,
+               "options": {
+                  "footer": {
+                     "countRows": false,
+                     "enablePagination": false,
+                     "fields": "",
+                     "reducer": [
+                        "sum"
+                     ],
+                     "show": false
+                  },
+                  "frameIndex": 0,
+                  "showHeader": true,
+                  "sortBy": [
+                     {
+                        "desc": true,
+                        "displayName": "PUT"
+                     }
+                  ]
+               },
+               "pluginVersion": "9.4.7",
+               "targets": [
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (user) ((((ceph_rgw_op_per_user_put_obj_ops) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "A"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (user) ((((ceph_rgw_op_per_user_get_obj_ops) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "B"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (user) ((((ceph_rgw_op_per_user_list_obj_ops) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "C"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (user) ((((ceph_rgw_op_per_user_del_obj_ops) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "D"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (user) ((((ceph_rgw_op_per_user_copy_obj_ops) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "E"
+                  }
+               ],
+               "title": "User Operation Summary",
+               "transformations": [
+                  {
+                     "id": "merge",
+                     "options": { }
+                  },
+                  {
+                     "id": "groupBy",
+                     "options": {
+                        "fields": {
+                           "Value #A": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #B": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #C": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #D": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #E": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "user": {
+                              "aggregations": [ ],
+                              "operation": "groupby"
+                           }
+                        }
+                     }
+                  },
+                  {
+                     "id": "organize",
+                     "options": {
+                        "excludeByName": { },
+                        "indexByName": {
+                           "Value #A (max)": 1,
+                           "Value #B (max)": 2,
+                           "Value #C (max)": 3,
+                           "Value #D (max)": 4,
+                           "Value #E (max)": 5,
+                           "user": 0
+                        },
+                        "renameByName": {
+                           "Value #A (max)": "PUT",
+                           "Value #B (max)": "GET",
+                           "Value #C (max)": "List",
+                           "Value #D (max)": "DELETE",
+                           "Value #E (max)": "COPY",
+                           "user": "User"
+                        }
+                     }
+                  },
+                  {
+                     "id": "filterFieldsByName",
+                     "options": {
+                        "include": {
+                           "names": [
+                              "User",
+                              "PUT",
+                              "GET",
+                              "List",
+                              "DELETE",
+                              "COPY"
+                           ]
+                        }
+                     }
+                  },
+                  {
+                     "id": "sortBy",
+                     "options": {
+                        "fields": [
+                           {
+                              "desc": true,
+                              "displayName": "PUT"
+                           }
+                        ]
+                     }
+                  }
+               ],
+               "type": "table"
+            },
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "description": "Average latency per operation (lat_sum / lat_count of the per-user performance counters, converted to milliseconds) per user. Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                           "type": "auto"
+                        },
+                        "filterable": false,
+                        "inspect": false
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     }
+                  },
+                  "overrides": [
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "PUT (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "GET (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "List (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "DELETE (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "COPY (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "User"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&${rgw_instance:queryparam}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
+                     }
+                  ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 19
+               },
+               "id": 26,
+               "options": {
+                  "footer": {
+                     "countRows": false,
+                     "enablePagination": false,
+                     "fields": "",
+                     "reducer": [
+                        "sum"
+                     ],
+                     "show": false
+                  },
+                  "frameIndex": 0,
+                  "showHeader": true,
+                  "sortBy": [
+                     {
+                        "desc": true,
+                        "displayName": "PUT (ms)"
+                     }
+                  ]
+               },
+               "pluginVersion": "9.4.7",
+               "targets": [
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (user) ((((ceph_rgw_op_per_user_put_obj_lat_sum) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) / (sum by (user) ((((ceph_rgw_op_per_user_put_obj_lat_count) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "A"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (user) ((((ceph_rgw_op_per_user_get_obj_lat_sum) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) / (sum by (user) ((((ceph_rgw_op_per_user_get_obj_lat_count) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "B"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (user) ((((ceph_rgw_op_per_user_list_obj_lat_sum) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) / (sum by (user) ((((ceph_rgw_op_per_user_list_obj_lat_count) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "C"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (user) ((((ceph_rgw_op_per_user_del_obj_lat_sum) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) / (sum by (user) ((((ceph_rgw_op_per_user_del_obj_lat_count) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "D"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (user) ((((ceph_rgw_op_per_user_copy_obj_lat_sum) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) / (sum by (user) ((((ceph_rgw_op_per_user_copy_obj_lat_count) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "E"
+                  }
+               ],
+               "title": "User Average Latency (ms)",
+               "transformations": [
+                  {
+                     "id": "merge",
+                     "options": { }
+                  },
+                  {
+                     "id": "groupBy",
+                     "options": {
+                        "fields": {
+                           "Value #A": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #B": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #C": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #D": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #E": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "user": {
+                              "aggregations": [ ],
+                              "operation": "groupby"
+                           }
+                        }
+                     }
+                  },
+                  {
+                     "id": "organize",
+                     "options": {
+                        "excludeByName": { },
+                        "indexByName": {
+                           "Value #A (max)": 1,
+                           "Value #B (max)": 2,
+                           "Value #C (max)": 3,
+                           "Value #D (max)": 4,
+                           "Value #E (max)": 5,
+                           "user": 0
+                        },
+                        "renameByName": {
+                           "Value #A (max)": "PUT (ms)",
+                           "Value #B (max)": "GET (ms)",
+                           "Value #C (max)": "List (ms)",
+                           "Value #D (max)": "DELETE (ms)",
+                           "Value #E (max)": "COPY (ms)",
+                           "user": "User"
+                        }
+                     }
+                  },
+                  {
+                     "id": "filterFieldsByName",
+                     "options": {
+                        "include": {
+                           "names": [
+                              "User",
+                              "PUT (ms)",
+                              "GET (ms)",
+                              "List (ms)",
+                              "DELETE (ms)",
+                              "COPY (ms)"
+                           ]
+                        }
+                     }
+                  },
+                  {
+                     "id": "sortBy",
+                     "options": {
+                        "fields": [
+                           {
+                              "desc": true,
+                              "displayName": "PUT (ms)"
+                           }
+                        ]
+                     }
+                  }
+               ],
+               "type": "table"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Cumulative PUT operations per user (per-user performance counters). Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "thresholds"
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 27
+               },
+               "id": 27,
+               "options": {
+                  "displayMode": "gradient",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ]
+                  }
+               },
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "topk(5, sum by (user) ((((ceph_rgw_op_per_user_put_obj_ops) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))))",
+                     "format": "time_series",
+                     "instant": true,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": false,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Top 5 User PUTs by Operations",
+               "type": "bargauge"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Cumulative GET operations per user (per-user performance counters). Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "thresholds"
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 27
+               },
+               "id": 28,
+               "options": {
+                  "displayMode": "gradient",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ]
+                  }
+               },
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "topk(5, sum by (user) ((((ceph_rgw_op_per_user_get_obj_ops) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\"))))",
+                     "format": "time_series",
+                     "instant": true,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": false,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Top 5 User GETs by Operations",
+               "type": "bargauge"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Upload throughput (bytes/s) per user from per-user performance counters. This is traffic, not stored capacity. Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 0,
+                  "y": 35
+               },
+               "id": 29,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_put_obj_bytes[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User PUT Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Download throughput (bytes/s) per user from per-user performance counters. This is traffic, not stored capacity. Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 6,
+                  "y": 35
+               },
+               "id": 30,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_get_obj_bytes[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User GET Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "PUT operations per second per user from per-user performance counters. Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 12,
+                  "y": 35
+               },
+               "id": 31,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_put_obj_ops[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User PUT Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "GET operations per second per user from per-user performance counters. Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 18,
+                  "y": 35
+               },
+               "id": 32,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_get_obj_ops[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User GET Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Copy throughput (bytes/s) per user (per-user performance counters). Traffic, not stored capacity. Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 12,
+                  "x": 0,
+                  "y": 42
+               },
+               "id": 33,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_copy_obj_bytes[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User Copy Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Delete throughput (bytes/s) per user (per-user performance counters). Traffic, not stored capacity. Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 12,
+                  "x": 12,
+                  "y": 42
+               },
+               "id": 34,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_del_obj_bytes[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User Delete Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "List operations per second per user (per-user performance counters). Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 8,
+                  "x": 0,
+                  "y": 49
+               },
+               "id": 35,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_list_obj_ops[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User List Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Delete operations per second per user (per-user performance counters). Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 8,
+                  "x": 8,
+                  "y": 49
+               },
+               "id": 36,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_del_obj_ops[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User Delete Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Copy operations per second per user (per-user performance counters). Respects RGW instance and user; when a bucket is selected only the owners of that bucket are shown, with their totals over all of their buckets.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 8,
+                  "x": 16,
+                  "y": 49
+               },
+               "id": 37,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (user) ((((rate(ceph_rgw_op_per_user_copy_obj_ops[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) and on (user, tenant, zone) label_replace(ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}, \"user\", \"$1\", \"owner\", \"(?:[^$]*\\\\$)?(.+)\")))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{user}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "User Copy Request Rate",
+               "type": "timeseries"
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "User Operations and Performance",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "collapse": false,
+         "collapsed": true,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 19
+         },
+         "id": 38,
+         "panels": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "description": "Cumulative operation counts per bucket (per-bucket performance counters, summed over the selected RGW instance). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                           "type": "auto"
+                        },
+                        "filterable": false,
+                        "inspect": false
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     }
+                  },
+                  "overrides": [
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "PUT"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "GET"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "List"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "DELETE"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "COPY"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "short"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "Bucket"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.User}&${rgw_instance:queryparam}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "User"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&${rgw_instance:queryparam}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
+                     }
+                  ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 20
+               },
+               "id": 39,
+               "options": {
+                  "footer": {
+                     "countRows": false,
+                     "enablePagination": false,
+                     "fields": "",
+                     "reducer": [
+                        "sum"
+                     ],
+                     "show": false
+                  },
+                  "frameIndex": 0,
+                  "showHeader": true,
+                  "sortBy": [
+                     {
+                        "desc": true,
+                        "displayName": "PUT"
+                     }
+                  ]
+               },
+               "pluginVersion": "9.4.7",
+               "targets": [
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_put_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "A"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_get_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "B"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_list_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "C"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_del_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "D"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_copy_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "E"
+                  }
+               ],
+               "title": "Bucket Operation Summary",
+               "transformations": [
+                  {
+                     "id": "merge",
+                     "options": { }
+                  },
+                  {
+                     "id": "groupBy",
+                     "options": {
+                        "fields": {
+                           "Value #A": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #B": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #C": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #D": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #E": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "bucket": {
+                              "aggregations": [ ],
+                              "operation": "groupby"
+                           },
+                           "owner": {
+                              "aggregations": [ ],
+                              "operation": "groupby"
+                           }
+                        }
+                     }
+                  },
+                  {
+                     "id": "organize",
+                     "options": {
+                        "excludeByName": { },
+                        "indexByName": {
+                           "Value #A (max)": 2,
+                           "Value #B (max)": 3,
+                           "Value #C (max)": 4,
+                           "Value #D (max)": 5,
+                           "Value #E (max)": 6,
+                           "bucket": 0,
+                           "owner": 1
+                        },
+                        "renameByName": {
+                           "Value #A (max)": "PUT",
+                           "Value #B (max)": "GET",
+                           "Value #C (max)": "List",
+                           "Value #D (max)": "DELETE",
+                           "Value #E (max)": "COPY",
+                           "bucket": "Bucket",
+                           "owner": "User"
+                        }
+                     }
+                  },
+                  {
+                     "id": "filterFieldsByName",
+                     "options": {
+                        "include": {
+                           "names": [
+                              "Bucket",
+                              "User",
+                              "PUT",
+                              "GET",
+                              "List",
+                              "DELETE",
+                              "COPY"
+                           ]
+                        }
+                     }
+                  },
+                  {
+                     "id": "sortBy",
+                     "options": {
+                        "fields": [
+                           {
+                              "desc": true,
+                              "displayName": "PUT"
+                           }
+                        ]
+                     }
+                  }
+               ],
+               "type": "table"
+            },
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "description": "Average latency per operation (lat_sum / lat_count of the per-bucket performance counters, converted to milliseconds) per bucket. Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                           "type": "auto"
+                        },
+                        "filterable": false,
+                        "inspect": false
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     }
+                  },
+                  "overrides": [
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "PUT (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "GET (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "List (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "DELETE (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "COPY (ms)"
+                        },
+                        "properties": [
+                           {
+                              "id": "unit",
+                              "value": "ms"
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "Bucket"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.User}&${rgw_instance:queryparam}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
+                     },
+                     {
+                        "matcher": {
+                           "id": "byName",
+                           "options": "User"
+                        },
+                        "properties": [
+                           {
+                              "id": "links",
+                              "value": [
+                                 {
+                                    "targetBlank": false,
+                                    "title": "Open ${__value.raw}",
+                                    "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&${rgw_instance:queryparam}&${__url_time_range}"
+                                 }
+                              ]
+                           }
+                        ]
+                     }
+                  ]
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 20
+               },
+               "id": 40,
+               "options": {
+                  "footer": {
+                     "countRows": false,
+                     "enablePagination": false,
+                     "fields": "",
+                     "reducer": [
+                        "sum"
+                     ],
+                     "show": false
+                  },
+                  "frameIndex": 0,
+                  "showHeader": true,
+                  "sortBy": [
+                     {
+                        "desc": true,
+                        "displayName": "PUT (ms)"
+                     }
+                  ]
+               },
+               "pluginVersion": "9.4.7",
+               "targets": [
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_put_obj_lat_sum{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) / (sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_put_obj_lat_count{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "A"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_get_obj_lat_sum{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) / (sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_get_obj_lat_count{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "B"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_list_obj_lat_sum{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) / (sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_list_obj_lat_count{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "C"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_del_obj_lat_sum{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) / (sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_del_obj_lat_count{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "D"
+                  },
+                  {
+                     "datasource": {
+                        "type": "prometheus",
+                        "uid": "${datasource}"
+                     },
+                     "exemplar": false,
+                     "expr": "1000 * sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_copy_obj_lat_sum{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) / (sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_copy_obj_lat_count{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))) > 0)",
+                     "format": "table",
+                     "hide": false,
+                     "instant": true,
+                     "interval": "",
+                     "intervalFactor": 1,
+                     "legendFormat": "",
+                     "range": false,
+                     "refId": "E"
+                  }
+               ],
+               "title": "Bucket Average Latency (ms)",
+               "transformations": [
+                  {
+                     "id": "merge",
+                     "options": { }
+                  },
+                  {
+                     "id": "groupBy",
+                     "options": {
+                        "fields": {
+                           "Value #A": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #B": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #C": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #D": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "Value #E": {
+                              "aggregations": [
+                                 "max"
+                              ],
+                              "operation": "aggregate"
+                           },
+                           "bucket": {
+                              "aggregations": [ ],
+                              "operation": "groupby"
+                           },
+                           "owner": {
+                              "aggregations": [ ],
+                              "operation": "groupby"
+                           }
+                        }
+                     }
+                  },
+                  {
+                     "id": "organize",
+                     "options": {
+                        "excludeByName": { },
+                        "indexByName": {
+                           "Value #A (max)": 2,
+                           "Value #B (max)": 3,
+                           "Value #C (max)": 4,
+                           "Value #D (max)": 5,
+                           "Value #E (max)": 6,
+                           "bucket": 0,
+                           "owner": 1
+                        },
+                        "renameByName": {
+                           "Value #A (max)": "PUT (ms)",
+                           "Value #B (max)": "GET (ms)",
+                           "Value #C (max)": "List (ms)",
+                           "Value #D (max)": "DELETE (ms)",
+                           "Value #E (max)": "COPY (ms)",
+                           "bucket": "Bucket",
+                           "owner": "User"
+                        }
+                     }
+                  },
+                  {
+                     "id": "filterFieldsByName",
+                     "options": {
+                        "include": {
+                           "names": [
+                              "Bucket",
+                              "User",
+                              "PUT (ms)",
+                              "GET (ms)",
+                              "List (ms)",
+                              "DELETE (ms)",
+                              "COPY (ms)"
+                           ]
+                        }
+                     }
+                  },
+                  {
+                     "id": "sortBy",
+                     "options": {
+                        "fields": [
+                           {
+                              "desc": true,
+                              "displayName": "PUT (ms)"
+                           }
+                        ]
+                     }
+                  }
+               ],
+               "type": "table"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Cumulative PUT operations per bucket (per-bucket performance counters). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "thresholds"
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 28
+               },
+               "id": 41,
+               "options": {
+                  "displayMode": "gradient",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ]
+                  }
+               },
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "topk(5, sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_put_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))))",
+                     "format": "time_series",
+                     "instant": true,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": false,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Top 5 Bucket PUTs by Operations",
+               "type": "bargauge"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Cumulative GET operations per bucket (per-bucket performance counters). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "thresholds"
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green",
+                              "value": null
+                           }
+                        ]
+                     },
+                     "unit": "short"
+                  }
+               },
+               "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 28
+               },
+               "id": 42,
+               "options": {
+                  "displayMode": "gradient",
+                  "orientation": "horizontal",
+                  "reduceOptions": {
+                     "calcs": [
+                        "lastNotNull"
+                     ]
+                  }
+               },
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "topk(5, sum by (bucket, owner) ((((ceph_rgw_op_per_bucket_get_obj_ops{bucket=~\"$bucket\"}) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"}))))",
+                     "format": "time_series",
+                     "instant": true,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": false,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Top 5 Bucket GETs by Operations",
+               "type": "bargauge"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Upload throughput (bytes/s) per bucket from per-bucket performance counters. This is traffic, not stored capacity. Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 0,
+                  "y": 36
+               },
+               "id": 43,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_put_obj_bytes{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket PUT Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Download throughput (bytes/s) per bucket from per-bucket performance counters. This is traffic, not stored capacity. Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 6,
+                  "y": 36
+               },
+               "id": 44,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_get_obj_bytes{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket GET Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "PUT operations per second per bucket from per-bucket performance counters. Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 12,
+                  "y": 36
+               },
+               "id": 45,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_put_obj_ops{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket PUT Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "GET operations per second per bucket from per-bucket performance counters. Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 6,
+                  "x": 18,
+                  "y": 36
+               },
+               "id": 46,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_get_obj_ops{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket GET Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Copy throughput (bytes/s) per bucket (per-bucket performance counters). Traffic, not stored capacity. Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 12,
+                  "x": 0,
+                  "y": 43
+               },
+               "id": 47,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_copy_obj_bytes{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket Copy Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Delete throughput (bytes/s) per bucket (per-bucket performance counters). Traffic, not stored capacity. Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "Bps"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 12,
+                  "x": 12,
+                  "y": 43
+               },
+               "id": 48,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_del_obj_bytes{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket Delete Throughput",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "List operations per second per bucket (per-bucket performance counters). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 8,
+                  "x": 0,
+                  "y": 50
+               },
+               "id": 49,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_list_obj_ops{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket List Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Delete operations per second per bucket (per-bucket performance counters). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 8,
+                  "x": 8,
+                  "y": 50
+               },
+               "id": 50,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_del_obj_ops{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket Delete Request Rate",
+               "type": "timeseries"
+            },
+            {
+               "datasource": "${datasource}",
+               "description": "Copy operations per second per bucket (per-bucket performance counters). Respects RGW instance and bucket; when a user is selected only that user's buckets are shown. Counters are matched to buckets by name, tenant and the zone of the serving RGW daemon, so same-named buckets are listed separately per owner.",
+               "fieldConfig": {
+                  "defaults": {
+                     "color": {
+                        "mode": "palette-classic"
+                     },
+                     "custom": {
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                           "legend": false,
+                           "tooltip": false,
+                           "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                           "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": true,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                           "mode": "off"
+                        }
+                     },
+                     "decimals": 2,
+                     "mappings": [ ],
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                           {
+                              "color": "green"
+                           }
+                        ]
+                     },
+                     "unit": "ops"
+                  },
+                  "overrides": [ ]
+               },
+               "gridPos": {
+                  "h": 7,
+                  "w": 8,
+                  "x": 16,
+                  "y": 50
+               },
+               "id": 51,
+               "options": {
+                  "legend": {
+                     "displayMode": "list",
+                     "placement": "bottom",
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "multi",
+                     "sort": "desc"
+                  }
+               },
+               "pluginVersion": "9.1.3",
+               "seriesOverrides": [ ],
+               "targets": [
+                  {
+                     "datasource": "${datasource}",
+                     "expr": "sum by (bucket, owner) ((((rate(ceph_rgw_op_per_bucket_copy_obj_ops{bucket=~\"$bucket\"}[$__rate_interval])) * on (instance_id) group_left (ceph_daemon, zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\", bucket=~\"$bucket\"})))",
+                     "format": "time_series",
+                     "instant": false,
+                     "intervalFactor": 1,
+                     "legendFormat": "{{bucket}}",
+                     "range": true,
+                     "refId": "A"
+                  }
+               ],
+               "title": "Bucket Copy Request Rate",
+               "type": "timeseries"
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Bucket Operations and Performance",
+         "titleSize": "h6",
+         "type": "row"
+      }
+   ],
+   "refresh": "1m",
+   "rows": [ ],
+   "schemaVersion": 22,
+   "style": "dark",
+   "tags": [
+      "ceph-mixin"
+   ],
+   "templating": {
+      "list": [
+         {
+            "current": {
+               "text": "default",
+               "value": "default"
+            },
+            "hide": 0,
+            "label": "Data Source",
+            "name": "datasource",
+            "options": [ ],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "type": "datasource"
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_health_status, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": false,
+            "label": null,
+            "multi": false,
+            "name": "rgw_instance",
+            "options": [ ],
+            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster|\", }, ceph_daemon)",
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": ".*",
+            "current": {
+               "text": "all",
+               "value": "$__all"
+            },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "User",
+            "multi": false,
+            "name": "user",
+            "options": [ ],
+            "query": "query_result(group by (owner) (ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+            "refresh": 2,
+            "regex": "/owner=\"([^\"]*)\"/",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": ".*",
+            "current": {
+               "text": "all",
+               "value": "$__all"
+            },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Bucket",
+            "multi": false,
+            "name": "bucket",
+            "options": [ ],
+            "query": "query_result(group by (bucket) (ceph_rgw_bucket_usage_bytes{owner=~\"$user\"} and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+            "refresh": 2,
+            "regex": "/bucket=\"([^\"]*)\"/",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         }
+      ]
+   },
+   "time": {
+      "from": "now-1h",
+      "to": "now"
+   },
+   "timepicker": {
+      "refresh_intervals": [
+         "5s",
+         "10s",
+         "30s",
+         "1m",
+         "5m",
+         "15m",
+         "30m",
+         "1h",
+         "2h",
+         "1d"
+      ],
+      "time_options": [
+         "5m",
+         "15m",
+         "1h",
+         "6h",
+         "12h",
+         "24h",
+         "2d",
+         "7d",
+         "30d"
+      ]
+   },
+   "timezone": "",
+   "title": "Ceph Object - S3 Analytics - Users & Buckets",
+   "uid": "s3usrbktAnlt",
+   "version": 0
+}
