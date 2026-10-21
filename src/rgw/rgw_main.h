@@ -126,6 +126,22 @@ class AppMain {
   std::unique_ptr<RGWPauser> rgw_pauser;
   std::unique_ptr<sal::ConfigStore> cfgstore;
   SiteConfig site;
+  // the realm's current period that the site configuration was loaded with,
+  // recorded by init_storage() for reload_if_period_changed(). the site
+  // configuration itself can't be read for that once the realm watch exists,
+  // because a reload rewrites it
+  struct LoadedPeriod {
+    bool has_realm = false;
+    std::string realm_id;
+    std::string zone_id;
+    bool has_period = false;
+    std::string period_id;
+    epoch_t period_epoch = 0;
+  } loaded_period;
+  static bool realm_period_changed(const DoutPrefixProvider* dpp,
+                                   sal::ConfigStore* cfgstore,
+                                   const LoadedPeriod& loaded,
+                                   RGWPeriod& stored_period);
   const DoutPrefixProvider* dpp;
   RGWProcessEnv env;
   class AdminSocketHook* heap_profiler_hook{nullptr};
@@ -182,6 +198,7 @@ public:
   void init_ldap();
   void init_opslog();
   int init_frontends2(RGWLib* rgwlib = nullptr);
+  void reload_if_period_changed();
   void init_tracepoints();
   void init_lua();
   void init_kms_cache();

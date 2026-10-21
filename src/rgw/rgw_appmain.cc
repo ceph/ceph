@@ -13,7 +13,9 @@
  *
  */
 
+#include <chrono>
 #include <set>
+#include <thread>
 #include <boost/intrusive/list.hpp>
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -304,6 +306,19 @@ int rgw::AppMain::init_storage()
   }
   env.site = &site;
 
+  if (const auto& realm = site.get_realm(); realm) {
+    loaded_period.has_realm = true;
+    loaded_period.realm_id = realm->get_id();
+    loaded_period.zone_id = site.get_zone_params().id;
+    // the period stays engaged but empty when its object could not be read
+    if (const auto& period = site.get_period();
+        period && !period->get_id().empty()) {
+      loaded_period.has_period = true;
+      loaded_period.period_id = period->get_id();
+      loaded_period.period_epoch = period->get_epoch();
+    }
+  }
+
   // Helper lambda to get thread config flag based on protocol type
   auto get_thread_flag = [this](const char* thread_type) -> bool {
     if (protocol_type == ProtocolType::HTTP_S3) {
@@ -517,6 +532,66 @@ void rgw::AppMain::init_opslog()
   env.olog.reset(olog_manifold);
 } /* init_opslog */
 
+#ifdef WITH_RADOSGW_RADOS
+// whether the realm's current period, or its latest epoch, is no longer the
+// one the site configuration was loaded with. stored_period is the current
+// one when it is
+bool rgw::AppMain::realm_period_changed(const DoutPrefixProvider* dpp,
+                                        sal::ConfigStore* cfgstore,
+                                        const LoadedPeriod& loaded,
+                                        RGWPeriod& stored_period)
+{
+  if (!loaded.has_realm) {
+    return false;
+  }
+  RGWRealm stored_realm;
+  int r = cfgstore->read_realm_by_id(dpp, null_yield, loaded.realm_id,
+                                     stored_realm, nullptr);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to read realm " << loaded.realm_id
+        << " to check for a period change during startup: "
+        << cpp_strerror(-r) << dendl;
+    return false;
+  }
+  if (stored_realm.current_period.empty()) {
+    return false; // no period committed yet
+  }
+  r = cfgstore->read_period(dpp, null_yield, stored_realm.current_period,
+                            std::nullopt, stored_period);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to read period " << stored_realm.current_period
+        << " to check for a period change during startup: "
+        << cpp_strerror(-r) << dendl;
+    return false;
+  }
+  if (loaded.has_period) {
+    if (stored_period.get_id() == loaded.period_id &&
+        stored_period.get_epoch() == loaded.period_epoch) {
+      return false;
+    }
+    ldpp_dout(dpp, 0) << "realm's current period changed from "
+        << loaded.period_id << ":" << loaded.period_epoch << " to "
+        << stored_period.get_id() << ":" << stored_period.get_epoch()
+        << " while starting up, reloading" << dendl;
+    return true;
+  }
+  // no period was loaded: the realm's current period did not contain this
+  // zone, so the site configuration fell back to the local zonegroup. that is
+  // how a new zone starts out, and the period that adds it may have been
+  // committed since. reload once the current period contains the zone
+  for (const auto& zg : stored_period.period_map.zonegroups) {
+    if (zg.second.zones.contains(loaded.zone_id)) {
+      ldpp_dout(dpp, 0) << "realm's current period "
+          << stored_period.get_id() << ":" << stored_period.get_epoch()
+          << " now contains zone " << loaded.zone_id
+          << ", it did not while starting up, reloading" << dendl;
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+
 int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 {
   int r{0};
@@ -636,6 +711,23 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     // add a watcher to respond to realm configuration changes
     // if we're part of a realm, add a watcher to respond to configuration changes
     if (const auto& realm = env.site->get_realm(); realm) {
+      // for testing: hold the gateway with its frontends up but no realm watch
+      // yet, so a period change can land in that window. the hold ends when
+      // rgw_inject_delay_pattern stops selecting it, or after the delay
+      if (g_conf()->rgw_inject_delay_sec > 0 &&
+          std::string_view(g_conf()->rgw_inject_delay_pattern) ==
+              "delay_realm_watch") {
+        const double delay_sec = g_conf()->rgw_inject_delay_sec;
+        ldpp_dout(dpp, 0) << "injecting delay of up to " << delay_sec
+            << "s before watching the realm" << dendl;
+        const auto until = std::chrono::steady_clock::now() +
+            std::chrono::duration<double>(delay_sec);
+        while (std::chrono::steady_clock::now() < until &&
+               g_conf().get_val<std::string>("rgw_inject_delay_pattern") ==
+                   "delay_realm_watch") {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+      }
       realm_watcher = env.cfgstore->create_realm_watcher(dpp, null_yield, *realm);
     }
     if (realm_watcher) {
@@ -665,6 +757,36 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 
   return r;
 } /* init_frontends2 */
+
+void rgw::AppMain::reload_if_period_changed()
+{
+#ifdef WITH_RADOSGW_RADOS
+  if (!reloader) {
+    return;
+  }
+  // the site configuration was loaded in init_storage(). a period change
+  // since then notified nobody if it landed before init_frontends2() set up
+  // the realm watch, or before the reload handler was added to it, and a
+  // later push of the same period finds it stored and doesn't notify again.
+  // this runs last, after every other init step, because the reload it
+  // schedules replaces env.driver. the comparison is against what
+  // init_storage() loaded, not against env.site, which a reload that a
+  // notify triggered in the meantime may be rewriting; if that reload
+  // already loaded the new period, this schedules one more, which is harmless
+  RGWPeriod period;
+  if (realm_period_changed(dpp, env.cfgstore, loaded_period, period)) {
+    // do what the lost notify would have done, in its order: the period
+    // pusher first, which sends the period on to the zones that still need
+    // it if this zone is its master (the pusher only knows the period the
+    // driver started with), then the reload
+    bufferlist bl;
+    period.encode(bl);
+    auto p = bl.cbegin();
+    pusher->handle_notify(RGWRealmNotify::ZonesNeedPeriod, p);
+    reloader->schedule_reload();
+  }
+#endif
+} /* reload_if_period_changed */
 
 void rgw::AppMain::init_tracepoints()
 {

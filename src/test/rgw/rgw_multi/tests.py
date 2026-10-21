@@ -1611,6 +1611,175 @@ def test_multi_zone_redirect():
         set_sync_from_all(z2, True)
         set_redirect_zone(z2, None)
 
+def test_period_change_during_gateway_startup():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.rw_zones) < 2:
+        raise SkipTest("test_period_change_during_gateway_startup skipped. Requires 2 or more zones in master zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    (zc1, zc2) = zonegroup_conns.rw_zones[0:2]
+    z1, z2 = (zc1.zone, zc2.zone)
+    clients = [get_gateway_connection(gw, zc2.credentials, zonegroup.name) for gw in z2.gateways]
+    bucket_name = gen_bucket_name()
+    obj = 'testperiodchange'
+
+    def get_code(client):
+        try:
+            client.get_object(Bucket=bucket_name, Key=obj)
+            return '200'
+        except ClientError as e:
+            return e.response['Error']['Code']
+        except Exception as e: # not listening yet, or paused for a reload
+            return type(e).__name__
+
+    def wait_for_gateways(what, codes, timeout):
+        deadline = time.time() + timeout
+        for gw, client in zip(z2.gateways, clients):
+            code = get_code(client)
+            while code not in codes:
+                assert time.time() < deadline, \
+                    f"gateway {gw.endpoint()} {what} (got {code}, expected {'/'.join(codes)})"
+                time.sleep(2)
+                code = get_code(client)
+
+    # hold zone 2's gateways after their frontends are up but before they watch
+    # the realm. they are released when the pattern is cleared, or after the delay
+    delay = 300
+    def hold_before_realm_watch(hold):
+        cluster = z2.cluster
+        if hold:
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_sec', str(delay)])
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_pattern', 'delay_realm_watch'])
+        else:
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+
+    hold_before_realm_watch(False) # in case an earlier run left it behind
+    try:
+        # an object only zone 1 has: once zone 2 redirects to zone 1, a gateway on
+        # the new period answers 301 for it, a gateway still on the old one NoSuchKey
+        set_sync_from_all(z2, False)
+        zc1.s3_client.create_bucket(Bucket=bucket_name)
+        zc1.s3_client.put_object(Bucket=bucket_name, Key=obj, Body='A' * 512)
+        zonegroup_meta_checkpoint(zonegroup)
+
+        hold_before_realm_watch(True)
+        z2.stop()
+        z2.start()
+        wait_for_gateways('is not answering', ['NoSuchKey'], 120)
+
+        # commit while they are held: the notify reaches none of them
+        set_redirect_zone(z2, z1)
+        for gw, client in zip(z2.gateways, clients):
+            code = get_code(client)
+            assert code == 'NoSuchKey', \
+                f"gateway {gw.endpoint()} answered {code} while held before its realm watch, expected NoSuchKey"
+
+        # release them: each must find the new period and reload
+        hold_before_realm_watch(False)
+        wait_for_gateways('is still on the old period', ['301'], 60)
+        for gw in z2.gateways:
+            log.info('gateway %s picked up the period change', gw.endpoint())
+    finally:
+        # each step runs even if an earlier one fails. the gateways restart
+        # last, so that they start on the final period
+        try:
+            hold_before_realm_watch(False)
+        finally:
+            try:
+                set_sync_from_all(z2, True)
+            finally:
+                try:
+                    set_redirect_zone(z2, None)
+                finally:
+                    z2.stop()
+                    z2.start()
+                    wait_for_gateways('did not come back', ['200', 'NoSuchKey'], 120)
+
+def test_master_change_during_gateway_startup():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.rw_zones) < 2:
+        raise SkipTest("test_master_change_during_gateway_startup skipped. Requires 2 or more zones in master zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    (zc1, zc2) = zonegroup_conns.rw_zones[0:2]
+    z1, z2 = (zc1.zone, zc2.zone)
+    assert z1 == zonegroup.master_zone
+    clients = [get_gateway_connection(gw, zc2.credentials, zonegroup.name) for gw in z2.gateways]
+
+    def period_id_on(zone):
+        out, _ = zone.cluster.admin(['period', 'get'], read_only=True)
+        return json.loads(out)['id']
+
+    def wait_for_gateways(what, timeout):
+        deadline = time.time() + timeout
+        for gw, client in zip(z2.gateways, clients):
+            while True:
+                try:
+                    client.list_buckets()
+                    break
+                except Exception as e: # not listening yet
+                    assert time.time() < deadline, f"gateway {gw.endpoint()} {what} ({type(e).__name__})"
+                    time.sleep(2)
+
+    # hold zone 2's gateways after their frontends are up but before they watch
+    # the realm. they are released when the pattern is cleared, or after the delay
+    delay = 300
+    def hold_before_realm_watch(hold):
+        cluster = z2.cluster
+        if hold:
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_sec', str(delay)])
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_pattern', 'delay_realm_watch'])
+        else:
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+
+    hold_before_realm_watch(False) # in case an earlier run left it behind
+    zonegroup_meta_checkpoint(zonegroup) # a master change needs the new master caught up
+    old_period = period_id_on(z1)
+    try:
+        hold_before_realm_watch(True)
+        z2.stop()
+        z2.start()
+        wait_for_gateways('is not answering', 120)
+
+        # make zone 2 the master while its gateways are held. the commit runs on
+        # zone 2's own cluster, so it notifies nobody there and makes no request
+        # to zone 1: only zone 2's gateways would send the new period on
+        set_master_zone(z2)
+        new_period = realm.current_period.id
+        assert new_period != old_period
+        assert period_id_on(z1) == old_period, \
+            'zone 1 got the new period while zone 2 was held before its realm watch'
+
+        # release them: each must find the new period, and zone 1 must get it
+        hold_before_realm_watch(False)
+        deadline = time.time() + 60
+        while period_id_on(z1) != new_period:
+            assert time.time() < deadline, 'zone 1 never got the period that made zone 2 the master'
+            time.sleep(2)
+        log.info('zone %s got period %s from zone %s', z1.name, new_period, z2.name)
+    finally:
+        # each step runs even if an earlier one fails. zone 1 gets the period
+        # by hand if the push never came, and must have caught up with zone 2
+        # before it can be made the master again. the gateways restart last,
+        # so that they start on the final period
+        try:
+            hold_before_realm_watch(False)
+        finally:
+            try:
+                if period_id_on(z1) != realm.current_period.id:
+                    creds = user.credentials[0] if isinstance(user.credentials, list) else user.credentials
+                    realm.pull(z1.cluster, z2.gateways[0], creds)
+                zone_meta_checkpoint(z1)
+            finally:
+                try:
+                    set_master_zone(z1)
+                finally:
+                    z2.stop()
+                    z2.start()
+                    wait_for_gateways('did not come back', 120)
+
 def test_zonegroup_remove():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
