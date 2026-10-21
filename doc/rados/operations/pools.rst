@@ -785,11 +785,15 @@ To set values for a stretch pool, run a command of the following form:
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
 
+This command configures an individual stretch pool, which is an alternative to
+stretch mode. It fails while stretch mode is enabled. See :ref:`stretch_mode`.
+
 Here are the breakdowns of the arguments:
 
 .. describe:: {pool-name}
 
-   The name of the pool. It must be an existing pool: this command doesn't create a new pool.
+   The name of the pool. It must be an existing replicated pool: this command
+   doesn't create a new pool, and it refuses erasure-coded pools.
 
    :Type: String
    :Required: Yes.
@@ -821,8 +825,7 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {crush_rule}
       
-   The CRUSH rule to use for the pool. The type of pool must match the type of the CRUSH rule
-   (``replicated`` or ``erasure``).
+   The CRUSH rule to use for the pool. It must be a ``replicated`` rule.
 
    :Type: String
    :Required: Yes.
@@ -860,6 +863,8 @@ To move the pool back to non-stretch, run a command of the following form:
 
    ceph osd pool stretch unset {pool-name} {crush_rule} {size} {min_size}
 
+This command fails while stretch mode is enabled.
+
 Here are the breakdowns of the arguments:
 
 .. describe:: {pool-name}
@@ -880,7 +885,9 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {size}
          
-   The number of replicas for objects after exiting stretch pool.
+   The number of replicas for objects after exiting stretch pool. For an
+   erasure-coded pool that an older release made a stretch pool, this must be
+   ``k+m``, and ``min_size`` must be between ``k`` and ``k+m``.
    
    :Type: Integer
    :Required: Yes.
