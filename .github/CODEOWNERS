@@ -131,6 +131,53 @@ README*                                         @ceph/doc-writers
 /src/tools/rados                                @ceph/core
 /src/test/osd                                   @ceph/core
 
+# cephfs (after core, so the MDS parts of /src/mon ask both teams)
+/doc/cephfs                                     @ceph/cephfs @ceph/doc-writers
+/doc/man/8/ceph-fuse.rst                        @ceph/cephfs @ceph/doc-writers
+/doc/man/8/ceph-mds.rst                         @ceph/cephfs @ceph/doc-writers
+/doc/man/8/ceph-syn.rst                         @ceph/cephfs @ceph/doc-writers
+/doc/man/8/mount.ceph.rst                       @ceph/cephfs @ceph/doc-writers
+/doc/man/8/mount.fuse.ceph.rst                  @ceph/cephfs @ceph/doc-writers
+/qa/cephfs                                      @ceph/cephfs
+/qa/suites/fs                                   @ceph/cephfs
+/qa/tasks/ceph_fuse.py                          @ceph/cephfs
+/qa/tasks/cephfs                                @ceph/cephfs
+/qa/tasks/cephfs_test_runner.py                 @ceph/cephfs
+/qa/tasks/fs.py                                 @ceph/cephfs
+/qa/tasks/kclient.py                            @ceph/cephfs
+/qa/tasks/mds_creation_failure.py               @ceph/cephfs
+/qa/tasks/mds_thrash.py                         @ceph/cephfs
+/qa/workunits/fs                                @ceph/cephfs
+/src/ceph_fuse.cc                               @ceph/cephfs
+/src/ceph_mds.cc                                @ceph/cephfs
+/src/ceph_syn.cc                                @ceph/cephfs
+/src/client                                     @ceph/cephfs
+/src/include/ceph_fs.h                          @ceph/cephfs
+/src/include/ceph_fuse.h                        @ceph/cephfs
+/src/include/cephfs                             @ceph/cephfs
+/src/include/filepath.h                         @ceph/cephfs
+/src/include/frag.h                             @ceph/cephfs
+/src/include/fs_types.h                         @ceph/cephfs
+/src/libcephfs.cc                               @ceph/cephfs
+/src/mds                                        @ceph/cephfs
+/src/mon/FSCommands.*                           @ceph/core @ceph/cephfs
+/src/mon/MDSMonitor.*                           @ceph/core @ceph/cephfs
+/src/mount                                      @ceph/cephfs
+/src/pybind/cephfs                              @ceph/cephfs
+/src/pybind/mgr/mds_autoscaler                  @ceph/cephfs
+/src/pybind/mgr/mirroring                       @ceph/cephfs
+/src/pybind/mgr/snap_schedule                   @ceph/cephfs
+/src/pybind/mgr/stats                           @ceph/cephfs
+/src/pybind/mgr/status                          @ceph/cephfs
+/src/pybind/mgr/volumes                         @ceph/cephfs
+/src/test/client                                @ceph/cephfs
+/src/test/fs                                    @ceph/cephfs
+/src/test/libcephfs                             @ceph/cephfs
+/src/test/mds                                   @ceph/cephfs
+/src/test/pybind/test_cephfs.py                 @ceph/cephfs
+/src/tools/cephfs                               @ceph/cephfs
+/src/tools/cephfs_mirror                        @ceph/cephfs
+
 # rbd
 /doc/dev/rbd*                                   @ceph/rbd @ceph/doc-writers
 /doc/man/8/ceph-rbdnamer.rst                    @ceph/rbd @ceph/doc-writers
