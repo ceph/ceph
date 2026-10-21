@@ -138,6 +138,11 @@ static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
 static const string OSD_SNAP_PREFIX("osd_snap");
 
+// where the documentation says when going to fewer zones makes PGs
+// unavailable
+static constexpr std::string_view reducing_num_zones_doc =
+  "\"Reducing the Number of Zones\" in the Stretch Clusters documentation";
+
 /*
 
   OSD snapshot metadata
@@ -9319,6 +9324,16 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
 
   if (old_num_zones > 1 && n == 1) {
     if (p.is_stretch_pool()) {
+      // an erasure coded PG keeps only the shards of its first zone
+      if (p.is_erasure() &&
+          !cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false)) {
+        ss << "num_zones 1 takes erasure coded pool '" << poolstr
+           << "' out of stretch mode and can leave PGs unavailable; see "
+           << reducing_num_zones_doc << ". Pool migration can move the data "
+           << "to a pool in one zone instead. Pass --yes-i-really-mean-it to "
+           << "proceed anyway.";
+        return -EPERM;
+      }
       // an individual stretch pool leaves stretch mode, if off, as it is
       const bool last_stretch_pool = stretch_mode_enabled_or_pending() &&
         !other_pool(pool, [](const pg_pool_t& p) {
@@ -16471,8 +16486,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (!cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false)) {
         ss << "This command will set every stretched pool to num_zones 1 "
               "and every stretched replicated pool to "
-           << LOCAL_REPLICA << " replicas. Pass --yes-i-really-mean-it to "
-              "proceed.";
+           << LOCAL_REPLICA << " replicas; see " << reducing_num_zones_doc
+           << ". Pass --yes-i-really-mean-it to proceed anyway.";
         err = -EPERM;
         goto reply_no_propose;
       }
@@ -18407,6 +18422,7 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
       p = pending_inc.new_pools[id];
     }
     cmdmap_t cmdmap;
+    cmdmap["yes_i_really_mean_it"] = true;
     if (p.is_replicated()) {
       cmdmap["replica"] = int64_t(LOCAL_REPLICA);
       if (!crush_rule.empty()) {
