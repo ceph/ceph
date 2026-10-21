@@ -4802,8 +4802,15 @@ void Server::handle_client_open(const MDRequestRef& mdr)
     }
   }
 
+  // Many opens for write never write.  With mds_defer_open_client_range the
+  // client gets no writeable range here; its first write past max_size asks
+  // for one (Locker::_do_cap_update), so an open that never writes costs no
+  // filelock wrlock and no journaled inode update, now or at close.
+  const bool defer_range =
+    g_conf().get_val<bool>("mds_defer_open_client_range");
+
   // increase max_size?
-  if (cmode & CEPH_FILE_MODE_WR)
+  if ((cmode & CEPH_FILE_MODE_WR) && !defer_range)
     mds->locker->check_inode_max_size(cur);
 
   // make sure this inode gets into the journal
@@ -4815,7 +4822,7 @@ void Server::handle_client_open(const MDRequestRef& mdr)
   }
   
   // hit pop
-  if (cmode & CEPH_FILE_MODE_WR)
+  if ((cmode & CEPH_FILE_MODE_WR) && !defer_range)
     mds->balancer->hit_inode(cur, META_POP_IWR);
   else
     mds->balancer->hit_inode(cur, META_POP_IRD);

@@ -2961,18 +2961,22 @@ class C_MDL_CheckMaxSize : public LockerContext {
   uint64_t new_max_size;
   uint64_t newsize;
   utime_t mtime;
+  client_t req_client;
 
 public:
   C_MDL_CheckMaxSize(Locker *l, CInode *i, uint64_t _new_max_size,
-                     uint64_t _newsize, utime_t _mtime) :
+                     uint64_t _newsize, utime_t _mtime,
+		     client_t _req_client=client_t()) :
     LockerContext(l), in(i),
-    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime)
+    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime),
+    req_client(_req_client)
   {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
     if (in->is_auth())
-      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
+      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime,
+				   req_client);
     in->put(CInode::PIN_PTRWAITER);
   }
 };
@@ -2988,7 +2992,19 @@ uint64_t Locker::calc_new_max_size(const CInode::inode_const_ptr &pi, uint64_t s
   return round_up_to(new_max, pi->get_layout_size_increment());
 }
 
-bool Locker::check_client_ranges(CInode *in, uint64_t size)
+/*
+ * With mds_defer_open_client_range, a client that holds or wants Fw gets a
+ * writeable range only once it asks for one: it keeps the range it already
+ * has, and only @req_client, the client asking, gets a new one.
+ */
+static bool defer_client_range(client_t client, client_t req_client)
+{
+  return client != req_client &&
+	 g_conf().get_val<bool>("mds_defer_open_client_range");
+}
+
+bool Locker::check_client_ranges(CInode *in, uint64_t size,
+				 client_t req_client)
 {
   const auto& latest = in->get_projected_inode();
   uint64_t ms;
@@ -3002,10 +3018,13 @@ bool Locker::check_client_ranges(CInode *in, uint64_t size)
   auto it = latest->client_ranges.begin();
   for (auto &p : in->client_caps) {
     if ((p.second.issued() | p.second.wanted()) & CEPH_CAP_ANY_FILE_WR) {
-      if (it == latest->client_ranges.end())
+      if (it != latest->client_ranges.end() && it->first < p.first)
 	return true;
-      if (it->first != p.first)
+      if (it == latest->client_ranges.end() || it->first != p.first) {
+	if (defer_client_range(p.first, req_client))
+	  continue;
 	return true;
+      }
       if (ms > it->second.range.last)
 	return true;
       ++it;
@@ -3014,7 +3033,8 @@ bool Locker::check_client_ranges(CInode *in, uint64_t size)
   return it != latest->client_ranges.end();
 }
 
-bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increased)
+bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increased,
+				    client_t req_client)
 {
   const auto& latest = in->get_projected_inode();
   uint64_t ms;
@@ -3045,6 +3065,9 @@ bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increas
 	  if (max_increased)
 	    *max_increased = true;
 	}
+      } else if (defer_client_range(p.first, req_client)) {
+	p.second.clear_clientwriteable();
+	continue;
       } else {
 	it = pi->client_ranges.emplace_hint(it, std::piecewise_construct,
 					    std::forward_as_tuple(p.first),
@@ -3076,7 +3099,7 @@ bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increas
 
 bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 				  uint64_t new_max_size, uint64_t new_size,
-				  utime_t new_mtime)
+				  utime_t new_mtime, client_t req_client)
 {
   ceph_assert(in->is_auth());
   ceph_assert(in->is_file());
@@ -3092,7 +3115,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       update_size = false;
   }
 
-  bool new_ranges = check_client_ranges(in, std::max(new_max_size, size));
+  bool new_ranges = check_client_ranges(in, std::max(new_max_size, size),
+					req_client);
   if (!update_size && !new_ranges) {
     dout(20) << "check_inode_max_size no-op on " << *in << dendl;
     return false;
@@ -3105,7 +3129,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (in->is_frozen()) {
     dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE,
-		   new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
+		   new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime,
+					  req_client));
     return false;
   } else if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
@@ -3121,7 +3146,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     if (!in->filelock.can_wrlock(in->get_loner())) {
       dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
       in->filelock.add_waiter(SimpleLock::WAIT_STABLE,
-			      new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
+			      new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime,
+						     req_client));
       return false;
     }
   }
@@ -3134,7 +3160,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 
   bool max_increased = false;
   if (new_ranges &&
-      calc_new_client_ranges(in, std::max(new_max_size, size), &max_increased)) {
+      calc_new_client_ranges(in, std::max(new_max_size, size), &max_increased,
+			     req_client)) {
     dout(10) << "check_inode_max_size client_ranges "
 	     << in->get_previous_projected_inode()->client_ranges
 	     <<  " -> " << pi.inode->client_ranges << dendl;
@@ -4128,7 +4155,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	change_max = true;
 	forced_change_max = true;
 	new_max = calc_new_max_size(latest, m->get_max_size());
-      } else {
+      } else if (old_max ||
+		 !g_conf().get_val<bool>("mds_defer_open_client_range")) {
+	// grow the range ahead of the writes; with mds_defer_open_client_range
+	// a client with no range yet gets one only when it asks (above)
 	new_max = calc_new_max_size(latest, size);
 
 	if (new_max > old_max)
@@ -4167,7 +4197,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  !in->filelock.can_force_wrlock(client)) {
 	C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
 	                                                 forced_change_max ? new_max : 0,
-	                                                 0, utime_t());
+	                                                 0, utime_t(),
+							 forced_change_max ? client : client_t());
 
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
 	change_max = false;

@@ -203,12 +203,15 @@ public:
 
   void request_inode_file_caps(CInode *in);
 
-  bool check_client_ranges(CInode *in, uint64_t size);
+  bool check_client_ranges(CInode *in, uint64_t size,
+			   client_t req_client=client_t());
   bool calc_new_client_ranges(CInode *in, uint64_t size,
-			      bool *max_increased=nullptr);
+			      bool *max_increased=nullptr,
+			      client_t req_client=client_t());
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,
-			    utime_t mtime=utime_t());
+			    utime_t mtime=utime_t(),
+			    client_t req_client=client_t());
   void share_inode_max_size(CInode *in, Capability *only_cap=0);
 
   // -- client leases --
