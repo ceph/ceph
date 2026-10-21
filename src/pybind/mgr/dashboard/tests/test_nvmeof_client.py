@@ -1,11 +1,13 @@
+import errno
 from typing import Dict, List, NamedTuple, Optional
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from ..exceptions import DashboardException
 from ..services import nvmeof_client
 from ..services.nvmeof_client import MaxRecursionDepthError, convert_to_model, \
-    obj_to_namedtuple, pick
+    handle_nvmeof_error, obj_to_namedtuple, pick
 
 
 class TestObjToNamedTuple:
@@ -491,3 +493,156 @@ class TestPick:
             return None
         with pytest.raises(TypeError):
             get_person()
+
+
+class TestHandleNvmeofError:
+
+    def test_success_with_status_zero(self):
+
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = 0
+            response.error_message = "Success"
+            return response
+
+        result = mock_function()
+        assert result.status == 0
+        assert result.error_message == "Success"
+
+    def test_success_with_status_none(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = None
+            response.error_message = None
+            return response
+
+        result = mock_function()
+        assert result.status is None
+
+    def test_success_with_eremote_status(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = errno.EREMOTE
+            response.error_message = "Host name mismatch, listener will only be " \
+                                     "active when the appropriate gateway is up"
+            return response
+
+        # Should not raise an exception
+        result = mock_function()
+        assert result.status == 0
+        assert result.error_message == ""
+
+    def test_error_with_einval(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = errno.EINVAL
+            response.error_message = "Invalid argument"
+            return response
+
+        with pytest.raises(DashboardException) as exc_info:
+            mock_function()
+
+        assert exc_info.value.code == str(errno.EINVAL)
+        assert "Invalid argument" in str(exc_info.value)
+        assert exc_info.value.component == "nvmeof"
+
+    def test_error_with_enoent(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = errno.ENOENT
+            response.error_message = "Not found"
+            return response
+
+        with pytest.raises(DashboardException) as exc_info:
+            mock_function()
+
+        assert exc_info.value.code == str(errno.ENOENT)
+        assert exc_info.value.status == 404
+        assert "Not found" in str(exc_info.value)
+
+    def test_error_with_eexist(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = errno.EEXIST
+            response.error_message = "Already exists"
+            return response
+
+        with pytest.raises(DashboardException) as exc_info:
+            mock_function()
+
+        assert exc_info.value.code == str(errno.EEXIST)
+        assert exc_info.value.status == 409
+        assert "Already exists" in str(exc_info.value)
+
+    def test_error_with_unknown_status(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = 999  # Unknown error code
+            response.error_message = "Unknown error"
+            return response
+
+        with pytest.raises(DashboardException) as exc_info:
+            mock_function()
+
+        assert exc_info.value.code == str(999)
+        assert exc_info.value.status == 400  # Default HTTP status
+        assert "Unknown error" in str(exc_info.value)
+
+    def test_error_without_message(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock()
+            response.status = errno.EINVAL
+            response.error_message = None
+            return response
+
+        with pytest.raises(DashboardException) as exc_info:
+            mock_function()
+
+        assert "NVMeoF operation failed" in str(exc_info.value)
+
+    def test_grpc_inactive_rpc_error(self):
+        class MockInactiveRpcError(Exception):
+            def __init__(self, details_msg, code_val):
+                super().__init__(details_msg)
+                self._details = details_msg
+                self._code = code_val
+
+            def details(self):
+                return self._details
+
+            def code(self):
+                return self._code
+
+        # Mock grpc module
+        with patch('dashboard.services.nvmeof_client.grpc') as mock_grpc:
+            # pylint: disable=protected-access
+            mock_grpc._channel._InactiveRpcError = MockInactiveRpcError
+
+            @handle_nvmeof_error
+            def mock_function():
+                raise MockInactiveRpcError("Connection failed", "UNAVAILABLE")
+
+            with pytest.raises(DashboardException) as exc_info:
+                mock_function()
+
+            assert exc_info.value.status == 504
+            assert exc_info.value.component == "nvmeof"
+            assert "Connection failed" in str(exc_info.value)
+
+    def test_response_without_status_attribute(self):
+        @handle_nvmeof_error
+        def mock_function():
+            response = MagicMock(spec=[])  # No attributes
+            return response
+
+        # Should not raise an exception when status is None (default)
+        result = mock_function()
+        assert result is not None
