@@ -1321,6 +1321,19 @@ TEST_P(AllocTest, test_get_free_extents_needle_at_end)
   alloc->shutdown();
 }
 
+TEST_P(AllocTest, test_fragmentation_score_single_block_after_allocation)
+{
+  const uint64_t unit = 4096;
+  const uint64_t capacity = 4 * 1024 * 1024;
+  init_alloc(capacity, unit);
+  alloc->init_add_free(0, capacity);
+  PExtentVector taken;
+  ASSERT_EQ(static_cast<int64_t>(capacity - unit),
+            alloc->allocate(capacity - unit, unit, 0, -1, &taken));
+  ASSERT_EQ(unit, alloc->get_free());
+  EXPECT_EQ(0.0, alloc->get_fragmentation_score());
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,

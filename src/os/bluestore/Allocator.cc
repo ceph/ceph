@@ -137,7 +137,7 @@ double Allocator::get_fragmentation_score()
     sum += len;
   };
   foreach_interruptible(iterated_allocation);
-  if (sum == 0) {
+  if (sum <= static_cast<uint64_t>(block_size)) {
     return 0.0;
   }
 
