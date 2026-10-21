@@ -879,3 +879,42 @@ def test_nfs_choose_next_action_detects_explicit_value_change():
         last_deps=['tls_ktls: False'],
     )
     assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_get_dependencies_log_to_file(cephadm_module: CephadmOrchestrator):
+    """log_to_file appears in deps only when True in the spec."""
+    nfs_svc = service_registry.get_service('nfs')
+
+    default_spec = NFSServiceSpec(service_id='foo')
+    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
+    assert not any(d.startswith('log_to_file:') for d in deps)
+
+    log_spec = NFSServiceSpec(service_id='foo', log_to_file=True)
+    deps = nfs_svc.get_dependencies(cephadm_module, log_spec)
+    assert 'log_to_file: True' in deps
+
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        log_spec,
+        curr_deps=deps,
+        last_deps=[],
+    )
+    assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_get_dependencies_log_to_file_unset_no_upgrade_churn(
+    cephadm_module: CephadmOrchestrator,
+):
+    """Existing daemons with no log_to_file dep must not see action after upgrade."""
+    nfs_svc = service_registry.get_service('nfs')
+    default_spec = NFSServiceSpec(service_id='foo')
+    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        default_spec,
+        curr_deps=deps,
+        last_deps=deps,
+    )
+    assert step.action is utils.Action.NO_ACTION
