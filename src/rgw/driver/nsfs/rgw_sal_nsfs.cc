@@ -12103,6 +12103,13 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
       }
     }
     open_failed = false;
+    /* EIO, not a permission:  the same swallow below on every access
+     * model, without the retry a denial sets off */
+    if (get_bucket() &&
+	driver->attr_read_fail_injected(get_bucket()->get_name())) {
+      driver->record_attr_read_fail();
+      return -EIO;
+    }
     return ent->read_attrs(dpp, y, state.attrset, use_fd);
   });
   state.has_attrs = (ret == 0);
@@ -17580,6 +17587,34 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_create_failure = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_create_failure ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-attr-read-fail") {
+    /* fail an object's attribute read after its open, in one bucket,
+     * so a test can assert what a delete does when the object lock
+     * cannot be read */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    {
+      std::lock_guard l{inject_attr_read_fail_lock};
+      if (on) {
+	inject_attr_read_fail_buckets.insert(b_it->second);
+      } else {
+	inject_attr_read_fail_buckets.erase(b_it->second);
+      }
+      inject_attr_read_fail_armed = !inject_attr_read_fail_buckets.empty();
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
+      (*out)["fired"] = std::to_string(attr_read_fails_injected.load());
     }
     return 0;
   }

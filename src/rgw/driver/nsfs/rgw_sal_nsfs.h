@@ -946,6 +946,17 @@ protected:
    * test can assert the rollback:  nothing in an ordinary setup makes
    * the steps after mkdir fail */
   bool inject_create_failure{false};
+  /* fail an object's attribute read under get_obj_attrs() after its
+   * open has succeeded, for objects in these buckets, so a test can
+   * assert what a delete does when the object lock cannot be read.
+   * Keyed by bucket, as inject_delta_by_upload is by upload:  armed
+   * for the driver it would fail every lock test running at the
+   * time */
+  std::set<std::string> inject_attr_read_fail_buckets;
+  std::atomic<bool> inject_attr_read_fail_armed{false};
+  std::atomic<uint64_t> attr_read_fails_injected{0};
+  ceph::mutex inject_attr_read_fail_lock =
+      ceph::make_mutex("NSFSDriver::inject_attr_read_fail_lock");
 
   /* Which POSIX identity a converted consumer chose for one named
    * object, so a test can assert the uid and not the status --  (n)
@@ -1586,6 +1597,14 @@ public:
   bool etag_as_gateway_injected() const { return inject_etag_as_gateway; }
   bool no_chown_injected() const { return inject_no_chown; }
   bool create_failure_injected() const { return inject_create_failure; }
+  bool attr_read_fail_injected(const std::string& bucket) {
+    if (!inject_attr_read_fail_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_attr_read_fail_lock};
+    return inject_attr_read_fail_buckets.contains(bucket);
+  }
+  void record_attr_read_fail() { ++attr_read_fails_injected; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
