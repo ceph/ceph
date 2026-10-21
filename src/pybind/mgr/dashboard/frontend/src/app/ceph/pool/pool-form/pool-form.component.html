@@ -1,7 +1,4 @@
-<div
-  cdsCol
-  [columnNumbers]="{ md: 4 }"
->
+<div class="cd-col-form">
   <ng-container *cdFormLoading="loading">
     <form
       name="form"
@@ -18,7 +15,115 @@
             Stretch cluster is enabled. Only replicated pool type is supported in Stretch mode.
           </cd-help-text>
         }
+        @if (migrating && data.pool) {
+          <cd-help-text>
+            Migrate pool <strong>{{ data.pool.pool_name }}</strong> to a new pool with different
+            parameters. The pool will keep the same name and data will be migrated transparently.
+          </cd-help-text>
+        }
       </div>
+      <!-- Migration preconditions -->
+      @if (migrating) {
+        <div class="form-item">
+          @if (!migrationPreconditions.experimentalFlag) {
+            <div class="cds--mb-05">
+              <cds-notification
+                [notificationObj]="{
+                  type: 'warning',
+                  lowContrast: true,
+                  title: migrationNotifications.experimentalFlag.title,
+                  message: migrationNotifications.experimentalFlag.message,
+                  showClose: false
+                }"
+              ></cds-notification>
+              <div class="cds--mt-03">
+                <button
+                  type="button"
+                  cdsButton="tertiary"
+                  size="sm"
+                  (click)="enablePoolMigrationFlag()"
+                  [disabled]="enablingFlag"
+                  i18n
+                >
+                  @if (enablingFlag) {
+                    Enabling...
+                  } @else {
+                    Enable pool migration flag
+                  }
+                </button>
+              </div>
+            </div>
+          }
+          @if (!migrationPreconditions.minCompatClient) {
+            <div class="cds--mb-05">
+              <cds-notification
+                [notificationObj]="{
+                  type: 'warning',
+                  lowContrast: true,
+                  title: migrationNotifications.minCompatClient.title,
+                  message: migrationNotifications.minCompatClient.message,
+                  showClose: false
+                }"
+              ></cds-notification>
+              <div class="cds--mt-03">
+                <button
+                  type="button"
+                  cdsButton="tertiary"
+                  size="sm"
+                  (click)="setMinCompatClient()"
+                  [disabled]="settingMinCompatClient"
+                  i18n
+                >
+                  @if (settingMinCompatClient) {
+                    Setting...
+                  } @else {
+                    Set minimum compatible client to umbrella
+                  }
+                </button>
+              </div>
+            </div>
+          }
+          @if (!migrationPreconditions.osdRelease) {
+            <div class="cds--mb-05">
+              <cds-notification
+                [notificationObj]="{
+                  type: 'warning',
+                  lowContrast: true,
+                  title: migrationNotifications.osdRelease.title,
+                  message: migrationNotifications.osdRelease.message,
+                  showClose: false
+                }"
+              ></cds-notification>
+            </div>
+          }
+          @if (!migrationPreconditions.poolNotMigrating) {
+            <div class="cds--mb-05">
+              <cds-notification
+                [notificationObj]="{
+                  type: 'error',
+                  lowContrast: true,
+                  title: migrationNotifications.poolNotMigrating.title,
+                  message: migrationNotifications.poolNotMigrating.message,
+                  showClose: false
+                }"
+              ></cds-notification>
+            </div>
+          }
+          @if (!migrationPreconditions.pgNumStable) {
+            <div class="cds--mb-05">
+              <cds-notification
+                [notificationObj]="{
+                  type: 'warning',
+                  lowContrast: true,
+                  title: migrationNotifications.pgNumStable.title,
+                  message: migrationNotifications.pgNumStable.message,
+                  showClose: false
+                }"
+              ></cds-notification>
+            </div>
+          }
+        </div>
+      }
       <!-- Name -->
       <div
         class="form-item"
@@ -347,8 +452,9 @@
           <span i18n> Pools need to be associated with an application before use </span>
         </ng-template>
       </div>
-      <!-- Mirroring -->
+      <!-- Mirroring (hidden in migrate mode) -->
       @if (
+        !migrating &&
         (permissions?.rbdMirroring?.create || (editing && permissions?.rbdMirroring?.update)) &&
         data.applications.selected.includes('rbd')
       ) {
@@ -1048,94 +1154,96 @@
           }
         </div>
       }
-      <!-- Quotas -->
-      <div>
-        <legend
-          class="cd-header"
-          i18n
-        >
-          Quotas
-        </legend>
-        <!-- Max Bytes -->
-        <div
-          cdsRow
-          class="form-item form-item-append"
-        >
-          <div cdsCol>
-            <cds-number
-              label="Max bytes"
-              [helperText]="maxObjectsHelpText"
-              [invalid]="form.controls.max_bytes.invalid && form.controls.max_bytes.dirty"
-              [invalidText]="maxBytesError"
-              formControlName="max_bytes"
-              min="0"
-              i18n
-            >
-            </cds-number>
-            <ng-template #maxBytesError>
-              @if (form.showError('max_bytes', formDir, 'min')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >The value should be greater or equal to 0
-                </span>
-              }
-            </ng-template>
+      <!-- Quotas (hidden in migrate mode) -->
+      @if (!migrating) {
+        <div>
+          <legend
+            class="cd-header"
+            i18n
+          >
+            Quotas
+          </legend>
+          <!-- Max Bytes -->
+          <div
+            cdsRow
+            class="form-item form-item-append"
+          >
+            <div cdsCol>
+              <cds-number
+                label="Max bytes"
+                [helperText]="maxObjectsHelpText"
+                [invalid]="form.controls.max_bytes.invalid && form.controls.max_bytes.dirty"
+                [invalidText]="maxBytesError"
+                formControlName="max_bytes"
+                min="0"
+                i18n
+              >
+              </cds-number>
+              <ng-template #maxBytesError>
+                @if (form.showError('max_bytes', formDir, 'min')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >The value should be greater or equal to 0
+                  </span>
+                }
+              </ng-template>
+            </div>
+            <div cdsCol>
+              <cds-select
+                formControlName="maxBytesUnit"
+                label="Unit"
+                i18n-label
+                id="maxBytesUnit"
+              >
+                @for (maxBytesUnit of maxBytesUnits; track maxBytesUnit) {
+                  <option
+                    [value]="maxBytesUnit"
+                    i18n
+                  >
+                    {{ maxBytesUnit }}
+                  </option>
+                }
+              </cds-select>
+            </div>
           </div>
-          <div cdsCol>
-            <cds-select
-              formControlName="maxBytesUnit"
-              label="Unit"
-              i18n-label
-              id="maxBytesUnit"
-            >
-              @for (maxBytesUnit of maxBytesUnits; track maxBytesUnit) {
-                <option
-                  [value]="maxBytesUnit"
-                  i18n
-                >
-                  {{ maxBytesUnit }}
-                </option>
-              }
-            </cds-select>
+          <!-- Max Objects -->
+          <div
+            cdsRow
+            class="form-item"
+          >
+            <div cdsCol>
+              <cds-number
+                label="Max objects"
+                [helperText]="maxObjectsHelpText"
+                [invalid]="form.controls.max_objects.invalid && form.controls.max_objects.dirty"
+                [invalidText]="maxObjectsError"
+                formControlName="max_objects"
+                min="0"
+                i18n
+                i18n-helperText
+              >
+              </cds-number>
+              <ng-template #maxObjectsHelpText>
+                <span i18n> Leave it blank or specify 0 to disable this quota. </span>
+                <br />
+                <span i18n> A valid quota should be greater than 0. </span>
+              </ng-template>
+              <ng-template #maxObjectsError>
+                @if (form.showError('max_objects', formDir, 'min')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >The value should be greater or equal to 0
+                  </span>
+                }
+              </ng-template>
+            </div>
           </div>
         </div>
-        <!-- Max Objects -->
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <div cdsCol>
-            <cds-number
-              label="Max objects"
-              [helperText]="maxObjectsHelpText"
-              [invalid]="form.controls.max_objects.invalid && form.controls.max_objects.dirty"
-              [invalidText]="maxObjectsError"
-              formControlName="max_objects"
-              min="0"
-              i18n
-              i18n-helperText
-            >
-            </cds-number>
-            <ng-template #maxObjectsHelpText>
-              <span i18n> Leave it blank or specify 0 to disable this quota. </span>
-              <br />
-              <span i18n> A valid quota should be greater than 0. </span>
-            </ng-template>
-            <ng-template #maxObjectsError>
-              @if (form.showError('max_objects', formDir, 'min')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >The value should be greater or equal to 0
-                </span>
-              }
-            </ng-template>
-          </div>
-        </div>
-      </div>
+      }
       <!-- Pool configuration -->
-      <div [hidden]="isErasure || data.applications.selected.indexOf('rbd') === -1">
+      <div [hidden]="migrating || isErasure || data.applications.selected.indexOf('rbd') === -1">
         <cd-rbd-configuration-form
           [form]="form"
           [initializeData]="initializeConfigData"
@@ -1148,6 +1256,7 @@
         (submitActionEvent)="submit()"
         [form]="form"
         [submitText]="submitAction"
+        [disabled]="migrating && !migrationPreconditionsMet"
         wrappingClass="text-right form-button"
       >
       </cd-form-button-panel>

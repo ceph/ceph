@@ -163,6 +163,14 @@ export class TaskMessageService {
     'pool/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.pool(metadata)
     ),
+    'pool/migrate': this.newTaskMessage(
+      new TaskMessageOperation(
+        $localize`Starting migration of`,
+        $localize`start migration of`,
+        $localize`Started migration of`
+      ),
+      (metadata) => this.pool(metadata)
+    ),
     // Erasure code profile tasks
     'ecp/create': this.newTaskMessage(
       this.commonOperations.create,

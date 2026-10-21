@@ -84,6 +84,14 @@
   >
     {{ row.pool_name }}
   </a>
+  @if (row.migrationTag) {
+    <cds-tag
+      [class]="row.migrationTag.cssClass"
+      size="sm"
+    >
+      {{ row.migrationTag.label }}
+    </cds-tag>
+  }
 </ng-template>
 
 <ng-template #poolEnableTpl>

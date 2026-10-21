@@ -36,10 +36,12 @@ import {
   LayoutModule,
   SkeletonModule,
   ModalModule,
+  NotificationModule,
   ButtonModule,
   GridModule,
   MenuButtonModule,
-  ContextMenuModule
+  ContextMenuModule,
+  ProgressBarModule
 } from 'carbon-components-angular';
 import HelpIcon from '@carbon/icons/es/help/16';
 import UnlockedIcon from '@carbon/icons/es/unlocked/16';
@@ -81,10 +83,12 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     LayoutModule,
     SkeletonModule,
     ModalModule,
+    NotificationModule,
     ButtonModule,
     GridModule,
     MenuButtonModule,
     ContextMenuModule,
+    ProgressBarModule,
     AreaChartComponent
   ],
   exports: [PoolListComponent, PoolFormComponent],
@@ -156,6 +160,11 @@ const routes: Routes = [
     path: `${URLVerbs.EDIT}/:name`,
     component: PoolFormComponent,
     data: { breadcrumbs: ActionLabels.EDIT }
+  },
+  {
+    path: `${URLVerbs.MIGRATE}/:name`,
+    component: PoolFormComponent,
+    data: { breadcrumbs: ActionLabels.MIGRATE }
   }
 ];
 

@@ -80,6 +80,19 @@ export class PoolService {
     return this.http.get(`ui-${this.apiPath}/info`);
   }
 
+  migrate(poolName: string, params: Record<string, any> = {}) {
+    return this.http.post(`${this.apiPath}/${encodeURIComponent(poolName)}/migrate`, params, {
+      observe: 'response'
+    });
+  }
+
+  setMinCompatClient(release: string) {
+    return this.http.post(`ui-${this.apiPath}/set_min_compat_client`, {
+      release,
+      yes_i_really_mean_it: true
+    });
+  }
+
   list(attrs: string[] = []) {
     const attrsStr = attrs.join(',');
     return this.http

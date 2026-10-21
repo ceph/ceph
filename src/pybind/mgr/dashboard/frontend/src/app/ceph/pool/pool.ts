@@ -80,6 +80,10 @@ export class Pool {
   stats?: PoolStats;
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];
+  migration_src?: number;
+  migration_target?: number;
+  migration_root?: number;
+  migrating_pgs?: string;
 
   constructor(name: string) {
     this.pool_name = name;
@@ -96,6 +100,36 @@ export const getPoolDataProtection = (pool?: Pool): string => {
   }
 
   return '';
+};
+
+const CEPH_RELEASES = [
+  'argonaut',
+  'bobtail',
+  'cuttlefish',
+  'dumpling',
+  'emperor',
+  'firefly',
+  'giant',
+  'hammer',
+  'infernalis',
+  'jewel',
+  'kraken',
+  'luminous',
+  'mimic',
+  'nautilus',
+  'octopus',
+  'pacific',
+  'quincy',
+  'reef',
+  'squid',
+  'tentacle',
+  'umbrella'
+];
+
+export const isReleaseAtLeast = (current: string, minimum: string): boolean => {
+  const currentIdx = CEPH_RELEASES.indexOf(current.toLowerCase());
+  const minIdx = CEPH_RELEASES.indexOf(minimum.toLowerCase());
+  return currentIdx >= 0 && minIdx >= 0 && currentIdx >= minIdx;
 };
 
 export const transformPgStatus = (pgStatus: any): string => {
