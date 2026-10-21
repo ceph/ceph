@@ -215,6 +215,9 @@ def task(ctx, config):
     finally:
         log.info('joining thrashosds')
         thrash_proc.stop_and_join()
+        if thrash_proc.exception is not None:
+            raise RuntimeError(
+                'error during osd thrashing: %s' % thrash_proc.exception)
         cluster_manager.wait_for_all_osds_up()
         cluster_manager.flush_all_pg_stats()
         cluster_manager.wait_for_recovery(config.get('timeout', 360))
