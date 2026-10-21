@@ -722,8 +722,10 @@ TransactionManager::update_lba_mappings(
       }
       if (extent->is_logical()) {
         assert(is_logical_type(extent->get_type()));
-        // for rewritten extents, last_committed_crc should have been set
-        // because the crc of the original extent may be reused.
+        // last_committed_crc should have been set if the extents are purely
+        // rewritten and not supposed to be modified, like in TRIM_DIRTY and
+        // CLEANER trnasactions, because the crc of the original extent may
+        // be reused.
         // also see rewrite_logical_extent()
 	if (!extent->get_last_committed_crc()) {
 	  if (get_checksum_needed(extent->get_paddr())) {
@@ -999,7 +1001,7 @@ TransactionManager::rewrite_logical_extent(
       }
     }
     assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
-    nextent->rewrite(t, *extent, 0);
+    nextent->rewrite(t, *extent, 0, false);
 
     DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
 
@@ -1075,7 +1077,7 @@ TransactionManager::rewrite_logical_extent(
       assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
       bool first_extent = (off == 0);
       ceph_assert(left >= nextent->get_length());
-      nextent->rewrite(t, *extent, off);
+      nextent->rewrite(t, *extent, off, false);
       DEBUGT("rewriting data -- {} to {}", t, *extent, *nextent);
 
       /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
@@ -1450,7 +1452,7 @@ TransactionManager::promote_extent(
     for (auto &extent : promoted_raw_extents) {
       auto slice_laddr = (orig_laddr + offset).checked_to_laddr();
       auto slice_length = extent->get_length();
-      extent->rewrite(t, *orig_ext, offset);
+      extent->rewrite(t, *orig_ext, offset, false);
       if (extent->get_paddr().is_absolute()) {
         assert(!cache->is_on_cold_tier(extent->get_paddr()));
       }
@@ -1499,7 +1501,7 @@ TransactionManager::promote_extent(
     }
     auto lext = promoted_extent->cast<LogicalChildNode>();
     lext->set_laddr(orig_ext->get_laddr());
-    lext->rewrite(t, *orig_ext, 0);
+    lext->rewrite(t, *orig_ext, 0, false);
     if (lext->get_paddr().is_absolute()) {
       assert(!cache->is_on_cold_tier(lext->get_paddr()));
     }
