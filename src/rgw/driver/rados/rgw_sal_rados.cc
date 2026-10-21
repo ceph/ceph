@@ -4616,57 +4616,6 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // AEAD: (S3 part number, GCM salt) per selected part, in manifest-segment order.
   std::vector<std::pair<uint32_t, std::string>> part_keys;
 
-  // a completion records its tag, and the version it writes, in the meta
-  // object before its head write. a record here is an earlier
-  // completion's, whose meta object was left behind
-  {
-    rgw::sal::Attrs meta_attrs;
-    ret = get_info(dpp, y, nullptr, &meta_attrs);
-    if (ret < 0) {
-      return ret;
-    }
-    if (auto i = meta_attrs.find(RGW_ATTR_MP_COMPLETION_TAG); i != meta_attrs.end()) {
-      // if the version it wrote carries the tag, that completion took
-      // effect: answer as it did, and the caller deletes the meta object.
-      // otherwise its head was never written, or was replaced or deleted
-      // and its parts sent to GC, and a head written over those parts
-      // would lose the object's data
-      std::unique_ptr<rgw::sal::Object> head = recorded_head(meta_attrs);
-      ret = head_carries(dpp, y, head.get(), i->second);
-      if (ret < 0) {
-        return ret;
-      }
-      if (ret == 0) {
-        ldpp_dout(dpp, 0) << "NOTICE: an earlier completion of upload " << get_upload_id()
-                          << " did not take effect, or was replaced; not completing it again" << dendl;
-        return -ERR_NO_SUCH_UPLOAD;
-      }
-      // the part list must be the one the earlier completion used
-      for (const auto& [num, part_etag] : part_etags) {
-        char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-        hex_to_buf(rgw_string_unquote(part_etag).c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
-        hash.Update((const unsigned char *)petag, sizeof(petag));
-      }
-      hash.Final((unsigned char *)final_etag);
-      std::string want;
-      buf_to_hex(final_etag, std::back_inserter(want));
-      fmt::format_to(std::back_inserter(want), "-{}", part_etags.size());
-      bufferlist head_etag;
-      if (!head->get_attr(RGW_ATTR_ETAG, head_etag) || rgw_bl_str(head_etag) != want) {
-        return -ERR_NO_SUCH_UPLOAD;
-      }
-      // answer with the version the earlier completion wrote, not the one
-      // generated for this request
-      if (head->get_key().need_to_encode_instance()) {
-        target_obj->set_instance(head->get_instance());
-      }
-      target_obj->set_attrs(head->get_attrs());
-      ofs = head->get_size();
-      accounted_size = head->get_accounted_size();
-      return 0;
-    }
-  }
-
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
     if (ret == -ENOENT) {
@@ -4877,8 +4826,49 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     bufferlist tag_bl;
     tag_bl.append(tag.c_str(), tag.size() + 1);
     ret = set_completion_record(dpp, y, &tag_bl, instance.empty() ? "null" : instance);
+    if (ret == -ECANCELED) {
+      // RGW_ATTR_MP_COMPLETION_TAG was already set. read the updated attrs
+      rgw::sal::Attrs meta_attrs;
+      ret = get_info(dpp, y, nullptr, &meta_attrs);
+      if (ret < 0) {
+        return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
+      }
+
+      auto i = meta_attrs.find(RGW_ATTR_MP_COMPLETION_TAG);
+      if (i == meta_attrs.end()) {
+        // set_completion_record() failed because RGW_ATTR_MP_COMPLETION_TAG
+        // was there, but it was subsequently removed. return a retryable error
+        return -ERR_SERVICE_UNAVAILABLE;
+      }
+      const bufferlist& target_tag = i->second;
+      const bufferlist& target_etag = attrs[RGW_ATTR_ETAG];
+
+      std::unique_ptr<rgw::sal::Object> head = recorded_head(meta_attrs);
+      ret = head->load_obj_state(dpp, y);
+      if (ret < 0) {
+        return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
+      }
+
+      // only return success if the target head object exists with the same tag/etag
+      bufferlist existing_tag;
+      bufferlist existing_etag;
+      if (!head->get_attr(RGW_ATTR_ID_TAG, existing_tag) ||
+          !head->get_attr(RGW_ATTR_ETAG, existing_etag) ||
+          !existing_tag.contents_equal(target_tag) ||
+          !existing_etag.contents_equal(target_etag)) {
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+
+      // answer with the version the earlier completion wrote, not the one
+      // generated for this request
+      if (head->get_key().need_to_encode_instance()) {
+        target_obj->set_instance(head->get_instance());
+      }
+      target_obj->set_attrs(head->get_attrs());
+      return 0;
+    }
     if (ret < 0) {
-      return ret;
+      return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
     }
   }
 
