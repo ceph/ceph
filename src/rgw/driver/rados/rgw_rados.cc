@@ -4668,8 +4668,12 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
 				      std::optional<rgw_user> *poverride_owner,
                                       const rgw_placement_rule **prule)
 {
-  const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
-  if (!ptail_rule) {
+  const rgw_placement_rule *ptail_rule = nullptr;
+  if (dest_placement_rule) {
+    // the parameter is destroyed when this returns, so point at a member
+    dest_rule = *dest_placement_rule;
+    ptail_rule = &dest_rule;
+  } else {
     auto iter = obj_attrs.find(RGW_ATTR_STORAGE_CLASS);
     if (iter != obj_attrs.end()) {
       dest_rule.storage_class = iter->second.to_str();
