@@ -952,6 +952,7 @@ void lognode_delta_t::encode(ceph::buffer::list& bl) const {
   encode(committed_seq, bl);
   encode(trans_id, bl);
   encode(flushed_through, bl);
+  encode(flushed_through_trans_id, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -963,6 +964,7 @@ void lognode_delta_t::decode(ceph::buffer::list::const_iterator& p) {
   decode(committed_seq, p);
   decode(trans_id, p);
   decode(flushed_through, p);
+  decode(flushed_through_trans_id, p);
   DECODE_FINISH(p);
 }
 

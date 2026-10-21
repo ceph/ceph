@@ -2566,22 +2566,33 @@ Cache::replay_delta(
       auto oid_it = pending_lognode_deltas_by_oid.find(d.oid);
       if (oid_it != pending_lognode_deltas_by_oid.end()) {
 	auto& deltas = oid_it->second;
-	for (auto it = deltas.begin(); it != deltas.end();) {
-	  if (it->committed_seq <= d.flushed_through) {
+	// Find the last delta of the flushed transaction.
+	auto boundary = std::find_if(
+	  deltas.rbegin(), deltas.rend(),
+	  [&d](const auto& p) {
+	    return p.committed_seq == d.flushed_through &&
+		   p.trans_id == d.flushed_through_trans_id;
+	  });
+        if (boundary != deltas.rend()) {
+	  auto end = boundary.base();
+	  for (auto it = deltas.begin(); it != end; ++it) {
 	    auto seq_it = pending_lognode_deltas_by_seq.find(
 	      it->committed_seq);
 	    ceph_assert(
 	      seq_it != pending_lognode_deltas_by_seq.end());
+
 	    auto& oids = seq_it->second;
-	    auto found = std::find(oids.begin(), oids.end(), d.oid);
+	    auto found = std::find(
+	      oids.begin(), oids.end(), d.oid);
 	    ceph_assert(found != oids.end());
 	    oids.erase(found);
 	    if (oids.empty()) {
 	      pending_lognode_deltas_by_seq.erase(seq_it);
 	    }
-	    it = deltas.erase(it);
-	  } else {
-	    ++it;
+	  }
+	  deltas.erase(deltas.begin(), end);
+	  if (deltas.empty()) {
+	    pending_lognode_deltas_by_oid.erase(oid_it);
 	  }
 	}
       }

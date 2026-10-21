@@ -2646,6 +2646,7 @@ struct lognode_delta_t {
   transaction_id_t trans_id = 0;
   uint64_t last_idx_to_delete = 0; // indicate the last index to be deleted
   journal_seq_t flushed_through;
+  transaction_id_t flushed_through_trans_id = TRANS_ID_NULL;
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
