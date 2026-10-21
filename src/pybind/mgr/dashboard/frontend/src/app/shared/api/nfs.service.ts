@@ -117,8 +117,21 @@ export class NfsService extends ApiClient {
     return this.http.get(`${this.uiApiPath}/cephfs/filesystems`);
   }
 
+  getCluster(clusterId: string): Observable<NFSCluster> {
+    return this.listClusters(true).pipe(
+      map((clusters) => clusters.find((c) => c.name === clusterId) ?? null)
+    );
+  }
+
   createCluster(requestModel: any): Observable<HttpResponse<any>> {
     return this.http.post<any>(`${this.apiPath}/cluster`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  updateCluster(clusterId: string, requestModel: any): Observable<HttpResponse<any>> {
+    return this.http.put<any>(`${this.apiPath}/cluster/${clusterId}`, requestModel, {
       headers: { Accept: this.getVersionHeaderValue(1, 0) },
       observe: 'response'
     });

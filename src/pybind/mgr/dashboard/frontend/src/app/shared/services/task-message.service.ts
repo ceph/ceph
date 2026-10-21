@@ -457,6 +457,9 @@ export class TaskMessageService {
     'nfs/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nfsCluster(metadata)
     ),
+    'nfs/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.nfsCluster(metadata)
+    ),
     'nfs/cluster/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfsCluster(metadata)
     ),

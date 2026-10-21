@@ -1,4 +1,5 @@
-import { Component, NgZone, OnInit, TemplateRef, ViewChild, inject } from '@angular/core';
+import { Component, DestroyRef, NgZone, OnInit, TemplateRef, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -48,6 +49,7 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
 
   public actionLabels = inject(ActionLabelsI18n);
   protected ngZone = inject(NgZone);
+  private destroyRef = inject(DestroyRef);
   private authStorageService = inject(AuthStorageService);
   private nfsService = inject(NfsService);
   private orchService = inject(OrchestratorService);
@@ -61,9 +63,12 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
   }
 
   ngOnInit(): void {
-    this.orchService.status().subscribe((status: OrchestratorStatus) => {
-      this.orchStatus = status;
-    });
+    this.orchService
+      .status()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((status: OrchestratorStatus) => {
+        this.orchStatus = status;
+      });
     this.permission = this.authStorageService.getPermissions().nfs;
     this.clusters$ = this.subject.pipe(
       switchMap(() =>
@@ -104,6 +109,18 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
         icon: Icons.add,
         click: () => this.router.navigateByUrl(this.urlBuilder.getCreate()),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => {
+          const cluster = this.selection.first();
+          const clusterId = cluster?.name;
+          this.router.navigateByUrl(this.urlBuilder.getEdit(clusterId));
+        },
+        canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
+        disable: (selection: CdTableSelection) => !selection.hasSingleSelection
       },
       {
         name: this.actionLabels.DELETE,

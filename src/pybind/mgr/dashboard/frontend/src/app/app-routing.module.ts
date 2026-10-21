@@ -628,6 +628,11 @@ const routes: Routes = [
                     path: `${URLVerbs.CREATE}`,
                     component: NfsClusterFormComponent,
                     data: { breadcrumbs: ActionLabels.CREATE }
+                  },
+                  {
+                    path: `${URLVerbs.EDIT}/:cluster_id`,
+                    component: NfsClusterFormComponent,
+                    data: { breadcrumbs: ActionLabels.EDIT, editing: true }
                   }
                 ]
               },
