@@ -1441,6 +1441,7 @@ class NFSServiceSpec(ServiceSpec):
                  client_object_cache_size: Optional[Union[str, int]] = None,
                  client_object_cache_max_dirty: Optional[Union[str, int]] = None,
                  enable_cephfs_client_log: bool = False,
+                 objecter_dispatch_to_session_strand: bool = True,
                  cephfs_client_log_level: Optional[int] = None,
                  cephfs_client_log_dir: Optional[str] = None,
                  mem_stats_disable: bool = False,
@@ -1483,6 +1484,7 @@ class NFSServiceSpec(ServiceSpec):
         self.client_object_cache_max_dirty = client_object_cache_max_dirty
 
         self.enable_cephfs_client_log = enable_cephfs_client_log
+        self.objecter_dispatch_to_session_strand = objecter_dispatch_to_session_strand
         self.cephfs_client_log_level = cephfs_client_log_level
         self.cephfs_client_log_dir = cephfs_client_log_dir
         # Disables per-component memory-statistics capture in NFS_CORE_PARAM.
