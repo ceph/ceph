@@ -54,6 +54,7 @@ tasks:
         - nvmeof/add_delete_test.sh
         - nvmeof/cross_namespace_copy_test.sh
     env:
+      NVMEOF_POOL: mypool
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'
       RUNTIME: '120'

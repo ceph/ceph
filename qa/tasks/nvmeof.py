@@ -68,7 +68,7 @@ class Nvmeof(Task):
         self.gateway_image = self.config.get('gw_image', 'default')
 
         rbd_config = self.config.get('rbd', {})
-        self.poolname = rbd_config.get('pool_name', 'mypool')
+        self.rbd_poolname = rbd_config.get('pool_name', 'mypool')
         self.image_name_prefix = rbd_config.get('image_name_prefix', 'myimage')
         self.rbd_size = rbd_config.get('rbd_size', 1024*8)
 
@@ -86,8 +86,9 @@ class Nvmeof(Task):
         self.srport = gateway_config.get('srport', '5500')
         self.create_mtls_secrets = gateway_config.get('create_mtls_secrets', False)
         self.auto_pool_create = gateway_config.get('auto_pool_create', False)
+        self.nvmeof_poolname = self.rbd_poolname
         if self.auto_pool_create:
-            self.poolname = ".nvmeof"
+            self.nvmeof_poolname = ".nvmeof"
 
     def deploy_nvmeof(self):
         """
@@ -119,18 +120,18 @@ class Nvmeof(Task):
                     gw_image
                 ])
 
-            poolname = self.poolname
+            poolname = self.rbd_poolname
+            nvmeof_poolname = self.nvmeof_poolname
 
-            if not self.auto_pool_create:
-                log.info(f'[nvmeof]: ceph osd pool create {poolname}')
-                _shell(self.ctx, self.cluster_name, self.remote, [
-                    'ceph', 'osd', 'pool', 'create', poolname
-                ])
+            log.info(f'[nvmeof]: ceph osd pool create {poolname}')
+            _shell(self.ctx, self.cluster_name, self.remote, [
+                'ceph', 'osd', 'pool', 'create', poolname
+            ])
 
-                log.info(f'[nvmeof]: rbd pool init {poolname}')
-                _shell(self.ctx, self.cluster_name, self.remote, [
-                    'rbd', 'pool', 'init', poolname
-                ])
+            log.info(f'[nvmeof]: rbd pool init {poolname}')
+            _shell(self.ctx, self.cluster_name, self.remote, [
+                'rbd', 'pool', 'init', poolname
+            ])
 
             if self.enable_groups:
                 group_to_nodes = defaultdict(list)
@@ -146,14 +147,14 @@ class Nvmeof(Task):
                             '--placement', ';'.join(gp_nodes)
                         ])
                     else:
-                        log.info(f'[nvmeof]: ceph orch apply nvmeof {poolname} {group_name}')
+                        log.info(f'[nvmeof]: ceph orch apply nvmeof {nvmeof_poolname} {group_name}')
                         _shell(self.ctx, self.cluster_name, self.remote, [
-                            'ceph', 'orch', 'apply', 'nvmeof', '--pool',poolname, '--group', group_name,
+                            'ceph', 'orch', 'apply', 'nvmeof', '--pool',nvmeof_poolname, '--group', group_name,
                             '--placement', ';'.join(gp_nodes)
                         ])
             else:
                 _shell(self.ctx, self.cluster_name, self.remote, [
-                        'ceph', 'orch', 'apply', 'nvmeof', poolname,
+                        'ceph', 'orch', 'apply', 'nvmeof', nvmeof_poolname,
                         '--placement', ';'.join(nodes)
                 ])
 
@@ -249,7 +250,7 @@ class Nvmeof(Task):
         ])
         for i in range(self.groups_count):
             group_name = self.groups_prefix + str(i)
-            service_name = f"nvmeof.{self.poolname}.{group_name}"
+            service_name = f"nvmeof.{self.nvmeof_poolname}.{group_name}"
             _shell(self.ctx, self.cluster_name, self.remote, [
                 'ceph', 'orch', 'rm', service_name
             ])
