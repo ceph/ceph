@@ -21,14 +21,18 @@ in ``ceph.conf``:
 * ``local`` — LanceDB stores data on the local filesystem (no S3 bucket needed)
 * ``rgw`` — LanceDB stores data via RGW's SAL layer
 
-When set to ``rgw``, the tests automatically create and clean up a regular S3
-bucket with the same name as each vector bucket.
+The ``rgw_s3vector_data_s3_bucket`` option controls data storage for the
+``rgw`` backend. It defaults to ``false``, storing data directly in the vector
+bucket. When ``true``, data is stored in a regular S3 bucket with the same name
+as the vector bucket. The tests select this setting with ``s3vector_data_s3_bucket``
+and create and clean up the S3 backing bucket when enabled. This option does
+not apply to the ``local`` backend.
 
 Starting the cluster for each backend:
 
 For ``rgw`` (default)::
 
-  ../src/vstart.sh -n -d
+  ../src/vstart.sh -n -d -o "rgw_s3vector_backend=rgw" -o "rgw_s3vector_data_s3_bucket=false"
 
 For ``local``::
 

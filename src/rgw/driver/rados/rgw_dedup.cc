@@ -2936,6 +2936,13 @@ namespace rgw::dedup {
       return ret;
     }
 
+    // the objects of vector buckets are LanceDB files, and are excluded from dedup
+    if (bucket->get_info().is_vector()) {
+      ldpp_dout(dpp, 10) << __func__ << "::skip vector bucket: "
+                         << bucket->get_name() << dendl;
+      return 0;
+    }
+
     const std::string bucket_id = bucket->get_key().get_key();
     RGWBucketInfo bucket_info;
     ret = rados->get_bucket_instance_info(bucket_id, bucket_info,
@@ -3066,6 +3073,13 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: driver->load_bucket(): "
                         << cpp_strerror(-ret) << dendl;
       return ret;
+    }
+
+    // the objects of vector buckets are LanceDB files, and are excluded from dedup
+    if (bucket->get_info().is_vector()) {
+      ldpp_dout(dpp, 10) << __func__ << "::skip vector bucket: "
+                         << bucket->get_name() << dendl;
+      return 0;
     }
 
     const auto& index = bucket->get_info().get_current_index();

@@ -5173,6 +5173,19 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: rgw_s3vector_data_s3_bucket
+  type: bool
+  level: advanced
+  desc: Store vector data in a separate S3 bucket
+  long_desc: With the rgw backend, store LanceDB files in a pre-existing S3 bucket
+    with the same name as the vector bucket. When false, the vector bucket stores
+    its own objects. The setting is recorded at vector bucket creation; changes
+    only affect new vector buckets. It has no effect on the local backend.
+  default: false
+  services:
+  - rgw
+  flags:
+  - runtime
 - name: rgw_s3vector_local_path
   type: str
   level: advanced

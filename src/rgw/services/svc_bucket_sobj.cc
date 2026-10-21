@@ -61,12 +61,6 @@ std::string RGWSI_Bucket_SObj::instance_oid_to_meta_key(const std::string& oid) 
   return key;
 }
 
-std::string RGWSI_Bucket_SObj::get_cache_key(const std::string& key) const {
-  std::string cache_key("bi/");
-  cache_key.append(key);
-  return cache_key;
-}
-
 RGWSI_Bucket_SObj::RGWSI_Bucket_SObj(CephContext *cct): RGWSI_Bucket(cct) {
 }
 
@@ -127,6 +121,13 @@ const rgw_pool& RGWSI_Bucket_SObj::get_entrypoint_pool() const
   return svc.zone->get_zone_params().domain_root;
 }
 
+const rgw_pool& RGWSI_Bucket_SObj::get_instance_pool() const
+{
+  // Bucket ids distinguish S3 and vector instances, even for the same name.
+  // Only their entrypoints need separate namespaces.
+  return svc.zone->get_zone_params().domain_root;
+}
+
 int RGWSI_Bucket_SObj::create_entrypoint_lister(
     const DoutPrefixProvider* dpp,
     const std::string& marker,
@@ -172,7 +173,7 @@ int RGWSI_Bucket_SObj::create_instance_lister(
     const std::string& marker,
     std::unique_ptr<RGWMetadataLister>& lister)
 {
-  const rgw_pool& pool = get_entrypoint_pool();
+  const rgw_pool& pool = get_instance_pool();
   auto p = std::make_unique<BucketInstanceLister>(svc.sysobj->get_pool(pool), this);
   int r = p->init(dpp, marker, instance_oid_prefix());
   if (r < 0) {
@@ -331,7 +332,7 @@ int RGWSI_Bucket_SObj::do_read_bucket_instance_info(const string& key,
                                                     optional_yield y,
                                                     const DoutPrefixProvider *dpp)
 {
-  const rgw_pool& pool = get_entrypoint_pool();
+  const rgw_pool& pool = get_instance_pool();
   const std::string oid = instance_meta_key_to_oid(key);
   bufferlist bl;
   RGWObjVersionTracker objv;
@@ -503,11 +504,16 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(const string& key,
     }
   }
 
-  const rgw_pool& pool = get_entrypoint_pool();
+  const rgw_pool& pool = get_instance_pool();
   const std::string oid = instance_meta_key_to_oid(key);
   int ret = rgw_put_system_obj(dpp, svc.sysobj, pool, oid, bl, exclusive,
                                &info.objv_tracker, mtime, y, pattrs);
   if (ret >= 0) {
+    // Shared instance storage also allows writes through the S3 bucket service.
+    // Vector metadata must remain local regardless of which service wrote it.
+    if (info.is_vector()) {
+      return 0;
+    }
     int r = complete_entry(dpp, y, "bucket.instance",
                                       key, &info.objv_tracker);
     if (r < 0) {
@@ -543,12 +549,16 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(const string& key,
                                                    optional_yield y,
                                                    const DoutPrefixProvider *dpp)
 {
-  const rgw_pool& pool = get_entrypoint_pool();
+  const rgw_pool& pool = get_instance_pool();
   const std::string oid = instance_meta_key_to_oid(key);
   int ret = rgw_delete_system_obj(dpp, svc.sysobj, pool, oid, objv_tracker, y);
   if (ret < 0 &&
       ret != -ENOENT) {
     return ret;
+  }
+
+  if (info.is_vector()) {
+    return 0;
   }
 
   int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
@@ -609,18 +619,6 @@ int RGWSI_Bucket_SObj::read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
   }
 
   return buckets.size();
-}
-
-const std::string& RGWSI_VectorBucket_SObj::instance_oid_prefix() const
-{
-  static const std::string vector_instance_oid_prefix = ".vectorbucket.meta.";
-  return vector_instance_oid_prefix;
-}
-
-std::string RGWSI_VectorBucket_SObj::get_cache_key(const std::string& key) const {
-  std::string cache_key("vbi/");
-  cache_key.append(key);
-  return cache_key;
 }
 
 int RGWSI_VectorBucket_SObj::complete_entry(const DoutPrefixProvider* dpp, optional_yield y,

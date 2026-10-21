@@ -35,10 +35,10 @@ class RGWChainedCacheImpl;
 
 class RGWSI_Bucket_SObj : public RGWSI_Bucket
 {
-  virtual const std::string& instance_oid_prefix() const;
+  const std::string& instance_oid_prefix() const;
   std::string instance_meta_key_to_oid(const std::string& metadata_key) const;
   virtual const rgw_pool& get_entrypoint_pool() const;
-  virtual std::string get_cache_key(const std::string& key) const;
+  const rgw_pool& get_instance_pool() const;
   virtual int complete_entry(const DoutPrefixProvider* dpp, optional_yield y,
                      const std::string& section, const std::string& key,
                      const RGWObjVersionTracker* objv);
@@ -169,9 +169,7 @@ public:
 
 class RGWSI_VectorBucket_SObj : public RGWSI_Bucket_SObj
 {
-  const std::string& instance_oid_prefix() const override;
   const rgw_pool& get_entrypoint_pool() const override;
-  std::string get_cache_key(const std::string& key) const override;
   int complete_entry(const DoutPrefixProvider* dpp, optional_yield y,
                      const std::string& section, const std::string& key,
                      const RGWObjVersionTracker* objv) override;

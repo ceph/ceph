@@ -6,6 +6,7 @@ cluster = c1
 # the backend, and its options, are set on the RGWs of both zones at the
 # beginning of the run. see: s3vtests.conf.SAMPLE
 s3vector_backend = rgw
+s3vector_data_s3_bucket = false
 
 [secondary]
 port = 8201

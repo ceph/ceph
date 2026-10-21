@@ -196,13 +196,17 @@ private:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << session_name.second <<
                 " of namespace: " << session_name.first << dendl;
-              std::unique_lock l(sessions_mutex);
-              if (sessions.find(session_name) != sessions.end()) {
-                ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << session_name.second <<
-                  " of namespace: " << session_name.first << dendl;
-                return;
+              {
+                std::shared_lock l(sessions_mutex);
+                if (sessions.find(session_name) != sessions.end()) {
+                  ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << session_name.second <<
+                    " of namespace: " << session_name.first << dendl;
+                  return;
+                }
               }
 
+              // Session messages are processed serially. Keep bucket I/O and
+              // session construction outside the lock used by session readers.
               const std::string backend_str = cct->_conf.get_val<std::string>("rgw_s3vector_backend");
               BackendType backend_type;
               if (int ret = get_backend_type(backend_str, backend_type); ret < 0) {
@@ -215,7 +219,16 @@ private:
               const LanceDBSessionOptions* options = nullptr;
 
               if (is_rgw_backend(backend_type)) {
-                session = create_rgw_session(this, driver, message->ns.tenant, options);
+                StorageMode mode;
+                if (int r = get_bucket_storage_mode(this, driver, message->ns,
+                                                    session_name.second, mode, null_yield); r < 0) {
+                  ldpp_dout(this, 1) << "ERROR: failed to read vector bucket storage mode: " << r << dendl;
+                  return;
+                }
+                const bool use_vector_bucket = uses_vector_bucket_storage(mode);
+                session = create_rgw_session(this, driver,
+                    use_vector_bucket ? message->ns.name() : message->ns.tenant,
+                    use_vector_bucket, options);
               } else {
                 session = lancedb_session_new(options);
               }
@@ -227,7 +240,9 @@ private:
               ldpp_dout(this, 20) << "INFO: created session for bucket: " << session_name.second <<
                 " of namespace: " << session_name.first << dendl;
 
-              sessions[session_name] = SessionPtr(session, LanceDBSessionDeleter());
+              SessionPtr session_ptr(session, LanceDBSessionDeleter());
+              std::unique_lock l(sessions_mutex);
+              sessions.emplace(session_name, std::move(session_ptr));
               return;
             }
           case message_t::Op::SESSION_DELETE:
@@ -440,7 +455,10 @@ bool notify_session_create(const DoutPrefixProvider* dpp, const bucket_namespace
 
 bool notify_session_delete(const DoutPrefixProvider* dpp, const bucket_namespace_t& ns, const std::string& bucket_name) {
   if (!s_manager) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session deletion: manager is not initialized" << dendl;
+    // radosgw-admin can delete vector buckets without starting the manager.
+    // There is no cached session to invalidate in that process.
+    ldpp_dout(dpp, 20) << "skipping s3vectors session deletion notification: "
+                        "manager is not initialized" << dendl;
     return false;
   }
   return s_manager->notify_session(dpp, ns, bucket_name, Manager::message_t::Op::SESSION_DELETE);
