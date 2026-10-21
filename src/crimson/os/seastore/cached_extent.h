@@ -4,6 +4,7 @@
 #pragma once
 
 #include <iostream>
+#include <unordered_map>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set.hpp>
@@ -1470,6 +1471,9 @@ private:
 };
 
 class LBAMapping;
+class LogicalCachedExtent;
+using laddr_extent_index_t =
+  std::unordered_map<laddr_t, LogicalCachedExtent*>;
 /**
  * LogicalCachedExtent
  *
@@ -1551,7 +1555,11 @@ public:
     ceph_abort_msg("Unsupported");
   }
 
-  virtual ~LogicalCachedExtent() {}
+  virtual ~LogicalCachedExtent() {
+    if (laddr_index) {
+      laddr_index->erase(get_laddr());
+    }
+  }
 
 protected:
 
@@ -1576,6 +1584,8 @@ protected:
   virtual void do_on_state_commit() {}
 
 private:
+  friend class Cache;
+
   // the logical address of the extent, and if shared,
   // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
@@ -1585,6 +1595,11 @@ private:
   //
   // user must initialize the logical extent upon the first access.
   bool seen_by_users = false;
+
+  // Cache's laddr index if this extent is in it, the index doesn't hold
+  // a ref, so the extent erases its own entry upon destruction.
+  // While set, the map key is get_laddr().
+  laddr_extent_index_t *laddr_index = nullptr;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;

@@ -2258,6 +2258,12 @@ void Cache::complete_commit(
       i->invalidate_hints();
       add_extent(i);
       touch_extent_fully(*i, &t_src, t.get_cache_hint());
+      // index newly created onode/coll/log nodes so the first read by
+      // laddr can skip the LBA walk
+      if (is_laddr_indexed(i->get_type())) {
+        laddr_index_insert(
+          i->cast<LogicalCachedExtent>()->get_laddr(), i);
+      }
     }
     i->reset_prior_instance();
     i->complete_io();
@@ -2415,7 +2421,7 @@ void Cache::init()
     remove_extent(root, nullptr);
     root = nullptr;
   }
-  laddr_index.clear();
+  laddr_index_clear();
   root = CachedExtent::make_cached_extent_ref<RootBlock>();
   // Make it simpler to keep root dirty
   root->init(CachedExtent::extent_state_t::DIRTY,
@@ -2459,7 +2465,7 @@ Cache::close_ertr::future<> Cache::close()
        extents_index.size(),
        extents_index.get_bytes());
   root.reset();
-  laddr_index.clear();
+  laddr_index_clear();
   clear_dirty();
   backref_extents.clear();
   backref_entryrefs_by_seq.clear();
