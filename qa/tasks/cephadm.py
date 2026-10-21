@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 import yaml
 
@@ -1708,6 +1709,128 @@ def wait_for_service(ctx, config):
                 )
                 if s['status']['running'] == s['status']['size']:
                     break
+
+
+def _upgrade_failed_daemons(daemons, target_image):
+    """
+    Return the names of daemons already on the upgrade target image that are
+    in error state (i.e. systemd gave up restarting them).
+    """
+    if not target_image:
+        return []
+    failed = []
+    for d in daemons:
+        if d.get('status') != -1 and d.get('status_desc') != 'error':
+            continue
+        if (
+            d.get('container_image_name') == target_image
+            or target_image in (d.get('container_image_digests') or [])
+        ):
+            failed.append(d.get('daemon_name')
+                          or f"{d.get('daemon_type')}.{d.get('daemon_id')}")
+    return sorted(failed)
+
+
+def wait_for_upgrade(ctx, config):
+    """
+    Wait for an in-progress cephadm upgrade to finish, failing as soon as it
+    is clear that it never will.
+
+      tasks:
+        - cephadm.wait_for_upgrade:
+            timeout: 7200          # overall limit in seconds, defaults to 7200
+            stall_timeout: 1800    # fail if no progress for this long, defaults to 1800
+            failed_daemon_grace: 300  # fail if an upgraded daemon stays in error
+                                      # state for this long, defaults to 300
+            interval: 30           # seconds between polls, defaults to 30
+
+    Fails when:
+      - the upgrade status reports an error
+      - a daemon already on the target image stays in error state for longer
+        than failed_daemon_grace (e.g. a mon that refuses to start: the
+        upgrade will otherwise wait forever for ok-to-stop on its peers)
+      - neither the upgrade progress nor the daemon versions change for
+        stall_timeout
+      - the upgrade does not finish within timeout
+    """
+    cluster_name = config.get('cluster', 'ceph')
+    timeout = config.get('timeout', 7200)
+    stall_timeout = config.get('stall_timeout', 1800)
+    failed_daemon_grace = config.get('failed_daemon_grace', 300)
+    interval = config.get('interval', 30)
+    remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    def _ceph(*args, capture=False, check_status=True):
+        kwargs = {'stdout': StringIO()} if capture else {}
+        r = _shell(ctx, cluster_name, remote, ['ceph'] + list(args),
+                   check_status=check_status, **kwargs)
+        return r.stdout.getvalue() if capture else None
+
+    def _fail(reason):
+        log.error('cephadm upgrade: %s', reason)
+        # leave the state of the cluster in the log for debugging
+        for cmd in (['orch', 'upgrade', 'status'], ['orch', 'ps'],
+                    ['versions'], ['health', 'detail']):
+            _ceph(*cmd, check_status=False)
+        raise RuntimeError(f'cephadm upgrade: {reason}')
+
+    log.info(
+        f'Waiting for {cluster_name} upgrade to finish (timeout {timeout}s, '
+        f'stall timeout {stall_timeout}s, failed daemon grace {failed_daemon_grace}s)'
+    )
+    start = time.monotonic()
+    last_change = start
+    last_state = None
+    failed_since = {}
+    while True:
+        now = time.monotonic()
+        if now - start >= timeout:
+            _fail(f'upgrade did not finish within {timeout}s')
+        try:
+            status = json.loads(_ceph('orch', 'upgrade', 'status', capture=True))
+            daemons = json.loads(_ceph('orch', 'ps', '--format', 'json', capture=True))
+            versions = json.loads(_ceph('versions', '--format', 'json', capture=True))
+        except (CommandFailedError, ValueError) as e:
+            # e.g. a mgr failover while upgrading the mgrs; a persistent
+            # failure is caught by the stall timeout
+            log.warning('cephadm upgrade: failed to query cluster state: %s', e)
+            if now - last_change >= stall_timeout:
+                _fail(f'no progress for {stall_timeout}s')
+            time.sleep(interval)
+            continue
+
+        message = status.get('message') or ''
+        if 'Error' in message:
+            _fail(f'upgrade reported an error: {message}')
+        if not status.get('in_progress'):
+            log.info('cephadm upgrade finished after %ds', now - start)
+            return
+
+        log.info('cephadm upgrade status: %s', json.dumps(status))
+        log.info('ceph versions: %s', json.dumps(versions.get('overall', {})))
+
+        failed = _upgrade_failed_daemons(daemons, status.get('target_image'))
+        failed_since = {n: failed_since.get(n, now) for n in failed}
+        stuck = [n for n, t in failed_since.items() if now - t >= failed_daemon_grace]
+        if stuck:
+            _fail(
+                f'daemon(s) {", ".join(stuck)} on the target image have been in '
+                f'error state for more than {failed_daemon_grace}s; the upgrade '
+                'cannot complete'
+            )
+
+        state = (
+            status.get('progress'),
+            json.dumps(status.get('services_complete'), sort_keys=True),
+            json.dumps(versions, sort_keys=True),
+        )
+        if state != last_state:
+            last_state = state
+            last_change = now
+        elif now - last_change >= stall_timeout:
+            _fail(f'no progress for {stall_timeout}s')
+
+        time.sleep(interval)
 
 
 def wait_for_service_not_present(ctx, config):
