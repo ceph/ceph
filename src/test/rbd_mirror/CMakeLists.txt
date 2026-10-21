@@ -87,6 +87,7 @@ target_link_libraries(ceph_test_rbd_mirror
   rbd_internal
   journal
   cls_rbd_client
+  cls_lock_client
   cls_journal_client
   rbd_types
   libneorados
