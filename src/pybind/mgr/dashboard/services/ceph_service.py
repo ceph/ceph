@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 
 import rados
 from mgr_module import CommandResult
@@ -127,6 +128,74 @@ class CephService(object):
                 if application in pool.get('application_metadata', {})]
 
     @classmethod
+    def get_pool_migration_info(cls):
+        """Return migration metadata for every pool that has migration_src set.
+
+        Returns a list of dicts, each containing:
+          pool_id, pool_name, src_id, src_name,
+          num_objects, num_objects_migrated, num_bytes, num_bytes_migrated,
+          progress (int 0-100).
+        Also returns a mapping of target pool_id -> source stat_sum for
+        injecting migration counters into pool stats.
+        """
+        migrations = []
+        migration_stats = {}
+
+        osd_map = mgr.get('osd_map')
+        pools = osd_map.get('pools', []) if isinstance(osd_map, dict) else []
+        if not isinstance(pools, list):
+            return migrations, migration_stats
+
+        pools_by_id = {}
+        migrating_pools = []
+        for p in pools:
+            pool_id = p.get('pool')
+            if pool_id is not None:
+                pools_by_id[pool_id] = p
+            if p.get('migration_src') is not None and pool_id is not None:
+                migrating_pools.append(p)
+
+        if not migrating_pools:
+            return migrations, migration_stats
+
+        pg_dump = mgr.get('pg_dump')
+        pg_stat_sums = {}
+        if isinstance(pg_dump, dict):
+            pool_stats_list = pg_dump.get('pg_map', pg_dump).get(
+                'pool_stats', [])
+            pg_stat_sums = {
+                ps['poolid']: ps.get('stat_sum', {})
+                for ps in pool_stats_list
+                if 'poolid' in ps
+            }
+
+        for pool in migrating_pools:
+            pool_id = pool['pool']
+            src_id = pool['migration_src']
+
+            src_stats = pg_stat_sums.get(src_id, {})
+            migration_stats[pool_id] = src_stats
+
+            total = src_stats.get('num_objects', 0)
+            migrated = src_stats.get('num_objects_migrated', 0)
+            pct = min(int(100 * migrated / total), 100) if total > 0 else 0
+
+            migrations.append({
+                'pool_id': pool_id,
+                'pool_name': pool.get('pool_name', str(pool_id)),
+                'src_id': src_id,
+                'src_name': pools_by_id.get(src_id, {}).get(
+                    'pool_name', str(src_id)),
+                'num_objects': total,
+                'num_objects_migrated': migrated,
+                'num_bytes': src_stats.get('num_bytes', 0),
+                'num_bytes_migrated': src_stats.get(
+                    'num_bytes_migrated', 0),
+                'progress': pct,
+            })
+        return migrations, migration_stats
+
+    @classmethod
     def get_pool_list_with_stats(cls, application=None):
         # pylint: disable=too-many-locals
         # copy each pool: get_pool_list returns mgr's cached osd_map dicts, and
@@ -137,6 +206,8 @@ class CephService(object):
 
         pg_summary = mgr.get("pg_summary")
         pool_stats = mgr.get_updated_pool_stats()
+
+        _, migration_stats = cls.get_pool_migration_info()
 
         for pool in pools:
             pool['pg_status'] = pg_summary['by_pool'][pool['pool'].__str__()]
@@ -150,6 +221,20 @@ class CephService(object):
                     'rate': get_most_recent_rate(rates),
                     'rates': rates
                 }
+
+            # Inject migration counters from pg dump stat_sum
+            pool_id = pool['pool']
+            if pool_id in migration_stats:
+                ms = migration_stats[pool_id]
+                now = time.time()
+                for key in ('num_objects_migrated', 'num_bytes_migrated',
+                            'num_objects', 'num_bytes'):
+                    s[key] = {
+                        'latest': ms.get(key, 0),
+                        'rate': 0,
+                        'rates': [[now, ms.get(key, 0)]]
+                    }
+
             pool['stats'] = s
             pools_w_stats.append(pool)
         return pools_w_stats

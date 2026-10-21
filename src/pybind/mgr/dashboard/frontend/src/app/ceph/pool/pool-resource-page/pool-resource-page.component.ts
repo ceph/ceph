@@ -1,9 +1,11 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewEncapsulation } from '@angular/core';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 
 import _ from 'lodash';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { finalize, switchMap } from 'rxjs/operators';
+
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -31,6 +33,7 @@ type RatePoint = [number, number] | number;
   selector: 'cd-pool-resource-page',
   templateUrl: './pool-resource-page.component.html',
   styleUrls: ['./pool-resource-page.component.scss'],
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
 export class PoolResourcePageComponent implements OnInit, OnDestroy {
@@ -71,7 +74,14 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
     readOpsChartData: [] as ChartPoint[],
     writeThroughput: '',
     writeOps: '',
-    writeOpsChartData: [] as ChartPoint[]
+    writeOpsChartData: [] as ChartPoint[],
+    isMigrating: false,
+    migrationObjectsMigrated: 0,
+    migrationBytesMigrated: 0,
+    migrationObjectsTotal: 0,
+    migrationBytesTotal: 0,
+    migrationProgress: 0,
+    migrationMigratingPgs: ''
   };
 
   omittedPoolAttributes = ['cdExecuting', 'cdIsBinary', 'stats'];
@@ -81,7 +91,8 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private poolService: PoolService,
     private erasureCodeProfileService: ErasureCodeProfileService,
-    private formatter: FormatterService
+    private formatter: FormatterService,
+    private refreshIntervalService: RefreshIntervalService
   ) {
     this.cacheTierColumns = [
       { prop: 'pool_name', name: $localize`Name`, flexGrow: 3 },
@@ -152,12 +163,35 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
             poolOverviewFields: this.poolOverviewFields,
             overviewModel: this.overviewModel
           });
+
+          this.setupMigrationPolling();
         })
     );
   }
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+  }
+
+  private setupMigrationPolling(): void {
+    this.sub.add(
+      this.refreshIntervalService.intervalData$
+        .pipe(
+          switchMap(() => {
+            if (!this.overviewModel.isMigrating || !this.poolName) {
+              return of(null);
+            }
+            return this.poolService.get(this.poolName, true);
+          })
+        )
+        .subscribe((poolData: Pool | null) => {
+          if (!poolData) return;
+
+          const stats = (poolData.stats || {}) as PoolStats;
+          const migrationUpdate = this.buildMigrationModel(poolData, stats);
+          this.overviewModel = { ...this.overviewModel, ...migrationUpdate };
+        })
+    );
   }
 
   private buildOverviewModel(pool?: Pool, erasureProfile?: ErasureCodeProfile): PoolOverviewModel {
@@ -212,7 +246,39 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
       readOpsChartData,
       writeThroughput: this.formatRate(this.getStatRate(stats.wr_bytes), true) || '',
       writeOps: this.formatRate(this.getStatRate(stats.wr), false) || '',
-      writeOpsChartData
+      writeOpsChartData,
+      ...this.buildMigrationModel(poolData, stats)
+    };
+  }
+
+  private buildMigrationModel(
+    pool: Pool,
+    stats: PoolStats
+  ): Pick<
+    PoolOverviewModel,
+    | 'isMigrating'
+    | 'migrationObjectsMigrated'
+    | 'migrationBytesMigrated'
+    | 'migrationObjectsTotal'
+    | 'migrationBytesTotal'
+    | 'migrationProgress'
+    | 'migrationMigratingPgs'
+  > {
+    const isMigrating = !!(pool.migration_src || pool.migration_target);
+    const objMigrated = (stats as any)?.num_objects_migrated?.latest ?? 0;
+    const bytesMigrated = (stats as any)?.num_bytes_migrated?.latest ?? 0;
+    const objTotal = (stats as any)?.num_objects?.latest ?? 0;
+    const bytesTotal = (stats as any)?.num_bytes?.latest ?? 0;
+    const progress = objTotal > 0 ? Math.min(Math.round((objMigrated / objTotal) * 100), 100) : 0;
+
+    return {
+      isMigrating,
+      migrationObjectsMigrated: objMigrated,
+      migrationBytesMigrated: bytesMigrated,
+      migrationObjectsTotal: objTotal,
+      migrationBytesTotal: bytesTotal,
+      migrationProgress: progress,
+      migrationMigratingPgs: pool.migrating_pgs || ''
     };
   }
 

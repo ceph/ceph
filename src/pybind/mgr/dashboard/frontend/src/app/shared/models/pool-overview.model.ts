@@ -29,4 +29,11 @@ export interface PoolOverviewModel {
   writeThroughput: string;
   writeOps: string;
   writeOpsChartData: ChartPoint[];
+  isMigrating: boolean;
+  migrationObjectsMigrated: number;
+  migrationBytesMigrated: number;
+  migrationObjectsTotal: number;
+  migrationBytesTotal: number;
+  migrationProgress: number;
+  migrationMigratingPgs: string;
 }

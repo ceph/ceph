@@ -46,13 +46,18 @@ export class PgCategory {
           'repair',
           'scrubbing',
           'snaptrim',
-          'snaptrim_wait'
+          'snaptrim_wait',
+          'migrating',
+          'migration_wait'
         ];
         break;
       case PgCategory.CATEGORY_WARNING:
         this.states = [
           'backfill_toofull',
           'backfill_unfound',
+          'migration_toofull',
+          'migration_unfound',
+          'migration_error',
           'down',
           'incomplete',
           'inconsistent',

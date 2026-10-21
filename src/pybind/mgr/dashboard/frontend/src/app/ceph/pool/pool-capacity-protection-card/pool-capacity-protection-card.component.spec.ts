@@ -36,7 +36,14 @@ describe('PoolCapacityProtectionCardComponent', () => {
     readOpsChartData: [],
     writeThroughput: '0 B/s',
     writeOps: '0/s',
-    writeOpsChartData: []
+    writeOpsChartData: [],
+    isMigrating: false,
+    migrationObjectsMigrated: 0,
+    migrationBytesMigrated: 0,
+    migrationObjectsTotal: 0,
+    migrationBytesTotal: 0,
+    migrationProgress: 0,
+    migrationMigratingPgs: ''
   };
 
   configureTestBed({
