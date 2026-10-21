@@ -3858,19 +3858,10 @@ bool OSDMonitor::preprocess_full(MonOpRequestRef op)
 	    << m->get_orig_source_inst() << dendl;
     goto ignore;
   }
-  if ((!osdmap.is_up(from) &&
-       osdmap.get_most_recent_addrs(from).legacy_equals(
-	 m->get_orig_source_addrs())) ||
-      (osdmap.is_up(from) &&
-       !osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs()))) {
-    dout(7) << __func__ << " ignoring full message from down "
-	    << m->get_orig_source_inst() << dendl;
-    goto ignore;
-  }
 
   OSDMap::calc_state_set(osdmap.get_state(from), state);
 
-  if ((osdmap.get_state(from) & mask) == m->state) {
+  if ((osdmap.get_state(from) & mask) == (m->state & mask)) {
     dout(7) << __func__ << " state already " << state << " for osd." << from
 	    << " " << m->get_orig_source_inst() << dendl;
     _reply_map(op, m->version);
