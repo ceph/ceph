@@ -30,21 +30,22 @@ try:
 except ImportError:
     grpc = None
 else:
+    GATEWAY_CONNECT_TIMEOUT = 2
+
+    class _FailoverStub(object):
+        def __init__(self, client: 'NVMeoFClient'):
+            self._client = client
+
+        def __getattr__(self, method_name: str) -> Callable[..., Any]:
+            def call(*args, **kwargs):
+                return self._client._invoke(  # pylint: disable=protected-access
+                    method_name, *args, **kwargs)
+            return call
 
     class NVMeoFClient(object):
         pb2 = pb2
 
         def __init__(self, gw_group: Optional[str] = None, server_address: Optional[str] = None):
-
-            def encode_tls_bundle(bundle: Dict[str, str]) -> Dict[str, bytes]:
-                """Encode TLS bundle string values to bytes for gRPC."""
-                encoded: Dict[str, bytes] = {}
-                for key, value in bundle.items():
-                    if isinstance(value, str):
-                        encoded[key] = value.encode('utf-8')
-                    else:
-                        encoded[key] = value
-                return encoded
 
             logger.info("Initiating nvmeof gateway connection...")
             try:
@@ -84,29 +85,113 @@ else:
                         component='nvmeof',
                         http_status_code=400
                     )
-            enable_auth = is_mtls_enabled(service_name)
-            if enable_auth:
-                tls_bundle = NvmeofGatewaysConfig.get_nvmeof_tls_bundle(service_name,
-                                                                        self.daemon_name)
-                if tls_bundle:
-                    logger.info('Securely connecting to: %s', self.gateway_addr)
-                    encoded_tls_bundle = encode_tls_bundle(tls_bundle)
-                    credentials = grpc.ssl_channel_credentials(
-                        root_certificates=encoded_tls_bundle['server_cert'],
-                        private_key=encoded_tls_bundle['client_key'],
-                        certificate_chain=encoded_tls_bundle['client_cert'],
-                    )
-                    self.channel = grpc.secure_channel(self.gateway_addr, credentials)
-                else:
-                    self.channel = None
-                    logger.error("Cannot obtain nvmeof TLS bundle for the service %s (gw: %s)",
-                                 service_name, self.gateway_addr)
-            else:
-                logger.info("Insecurely connecting to: %s", self.gateway_addr)
-                self.channel = grpc.insecure_channel(self.gateway_addr)
             self.service_name = service_name
+
+            self._fallbacks: List[Dict[str, Any]] = []
+            if not server_address:
+                gateways_info = NvmeofGatewaysConfig.get_gateways_config()
+                self._fallbacks = [
+                    gateway
+                    for gateway in gateways_info.get('gateways', {}).get(service_name, [])
+                    if gateway.get('service_url') != self.gateway_addr
+                ]
+
+            self._stubs: Dict[str, Any] = {}
+            self._channels: Dict[str, Any] = {}
+            self.channel = self._create_channel(self.gateway_addr, self.daemon_name)
             if self.channel is not None:
-                self.stub = pb2_grpc.GatewayStub(self.channel)
+                self._channels[self.gateway_addr] = self.channel
+                self._stubs[self.gateway_addr] = pb2_grpc.GatewayStub(self.channel)
+                self.stub = _FailoverStub(self)
+
+        @staticmethod
+        def _encode_tls_bundle(bundle: Dict[str, str]) -> Dict[str, bytes]:
+            """Encode TLS bundle string values to bytes for gRPC."""
+            encoded: Dict[str, bytes] = {}
+            for key, value in bundle.items():
+                if isinstance(value, str):
+                    encoded[key] = value.encode('utf-8')
+                else:
+                    encoded[key] = value
+            return encoded
+
+        def _create_channel(self, gateway_addr: str, daemon_name: Any):
+            if is_mtls_enabled(self.service_name):
+                tls_bundle = NvmeofGatewaysConfig.get_nvmeof_tls_bundle(self.service_name,
+                                                                        daemon_name)
+                if not tls_bundle:
+                    logger.error("Cannot obtain nvmeof TLS bundle for the service %s (gw: %s)",
+                                 self.service_name, gateway_addr)
+                    return None
+                logger.info('Securely connecting to: %s', gateway_addr)
+                encoded_tls_bundle = self._encode_tls_bundle(tls_bundle)
+                credentials = grpc.ssl_channel_credentials(
+                    root_certificates=encoded_tls_bundle['server_cert'],
+                    private_key=encoded_tls_bundle['client_key'],
+                    certificate_chain=encoded_tls_bundle['client_cert'],
+                )
+                return grpc.secure_channel(gateway_addr, credentials)
+            logger.info("Insecurely connecting to: %s", gateway_addr)
+            return grpc.insecure_channel(gateway_addr)
+
+        def _get_stub(self, gateway_addr: str, daemon_name: Any):
+            if gateway_addr not in self._stubs:
+                channel = self._create_channel(gateway_addr, daemon_name)
+                if channel is None:
+                    return None
+                self._channels[gateway_addr] = channel
+                self._stubs[gateway_addr] = pb2_grpc.GatewayStub(channel)
+            return self._stubs[gateway_addr]
+
+        def _is_reachable(self, gateway_addr: str) -> bool:
+            """Return True if the channel connects within the timeout (instant if connected)."""
+            ready = grpc.channel_ready_future(self._channels[gateway_addr])
+            try:
+                ready.result(timeout=GATEWAY_CONNECT_TIMEOUT)
+                return True
+            except grpc.FutureTimeoutError:
+                ready.cancel()
+                return False
+
+        def _invoke(self, method_name: str, *args, **kwargs):
+            targets = [(self.gateway_addr, self.daemon_name)] + [
+                (gw['service_url'], gw.get('daemon_name')) for gw in self._fallbacks
+            ]
+            last_exc = None
+            for gateway_addr, daemon_name in targets:
+                stub = self._get_stub(gateway_addr, daemon_name)
+                if stub is None:
+                    continue
+                # Only probe when there is somewhere to fail over to; a single
+                # gateway keeps the original behaviour.
+                if self._fallbacks and not self._is_reachable(gateway_addr):
+                    logger.warning("Gateway %s is not reachable (timeout %ss) for %s",
+                                   gateway_addr, GATEWAY_CONNECT_TIMEOUT, method_name)
+                    continue
+                try:
+                    response = getattr(stub, method_name)(*args, **kwargs)
+                except grpc.RpcError as e:
+                    if e.code() != grpc.StatusCode.UNAVAILABLE:
+                        raise
+                    logger.warning("Gateway %s is unavailable for %s: %s",
+                                   gateway_addr, method_name, e.details())
+                    last_exc = e
+                    continue
+                if gateway_addr != self.gateway_addr:
+                    logger.warning("Failing over from gateway %s to %s",
+                                   self.gateway_addr, gateway_addr)
+                    self.gateway_addr = gateway_addr
+                    self.daemon_name = daemon_name
+                    self.channel = self._channels[gateway_addr]
+                return response
+            if last_exc is not None:
+                raise last_exc
+            raise DashboardException(
+                msg=f"No reachable NVMe-oF gateway found for service {self.service_name}",
+                code='gateway_unavailable',
+                http_status_code=504,
+                component="nvmeof",
+            )
 
     Model = Dict[str, Any]
     Collection = List[Model]
