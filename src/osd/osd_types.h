@@ -2857,8 +2857,13 @@ struct pg_history_t {
    * same-named fields, which are only ever wholesale-copied, never merged
    * -- see merge() below). last_degraded stays pinned at the true onset
    * once latched; vuln_window_reported is a separate "recorded up to"
-   * marker (tied to last_clean's own advance) that gates re-recording, so
-   * last_degraded itself never needs to be artificially moved.
+   * marker (the time of the clean publish that closed the last window)
+   * that gates re-recording, so last_degraded itself never needs to be
+   * artificially moved. last_clean is set to vuln_window_reported's value
+   * on each close and is not read by newer code; it is kept for peers on
+   * older code, whose merge() anchors on it. None of these fields change
+   * on an ordinary clean publish, so that publish can still persist via
+   * _fastinfo.
    */
   utime_t last_degraded;
   utime_t last_clean;
@@ -2867,12 +2872,11 @@ struct pg_history_t {
   /**
    * Active-rebuild span onset (pg_rebuild_duration's counterpart to
    * last_degraded above), merged across peers the same way -- see merge()
-   * below. Unlike last_degraded, which closes against last_clean, a
-   * rebuild span closes whenever Recovering/Backfilling simply ends,
-   * independent of whether the PG ever reaches clean, so it has no
-   * external field to anchor against: rebuild_span_reported is this
-   * field's own "recorded up to" marker, serving the same role last_clean
-   * serves for last_degraded.
+   * below. Unlike last_degraded, which closes when the PG reaches clean,
+   * a rebuild span closes whenever Recovering/Backfilling simply ends,
+   * independent of whether the PG ever reaches clean:
+   * rebuild_span_reported is this field's own "recorded up to" marker,
+   * serving the same role vuln_window_reported serves for last_degraded.
    */
   utime_t last_rebuild_active_start;
   utime_t rebuild_span_reported;
@@ -2994,17 +2998,25 @@ struct pg_history_t {
       modified = true;
     }
 
-    // Vulnerability-window onset: not monotonic, so take the EARLIEST
-    // still-open onset (whoever noticed the transition first), anchored
-    // against the merged last_clean. If neither side is open, both
-    // onsets are just stale leftovers, so fall back to a plain max.
+    // vuln_window_reported only ever advances, so a plain max-merge. It
+    // is merged first because it anchors the onset merge below.
+    if (other.vuln_window_reported > vuln_window_reported) {
+      vuln_window_reported = other.vuln_window_reported;
+      modified = true;
+    }
+    // last_clean is not read by newer code (see the field comment above);
+    // a plain max-merge keeps it meaningful for peers on older code.
     if (other.last_clean > last_clean) {
       last_clean = other.last_clean;
       modified = true;
     }
+    // Vulnerability-window onset: not monotonic, so take the EARLIEST
+    // still-open onset (whoever noticed the transition first), anchored
+    // against the merged vuln_window_reported. If neither side is open,
+    // both onsets are just stale leftovers, so fall back to a plain max.
     {
-      const bool mine_open = last_degraded > last_clean;
-      const bool other_open = other.last_degraded > last_clean;
+      const bool mine_open = last_degraded > vuln_window_reported;
+      const bool other_open = other.last_degraded > vuln_window_reported;
       utime_t merged_last_degraded;
       if (mine_open && other_open) {
         merged_last_degraded = std::min(last_degraded, other.last_degraded);
@@ -3016,18 +3028,13 @@ struct pg_history_t {
         // Neither side shows a currently-open window, so last_degraded is
         // just a stale marker from a past (already-closed) episode on each
         // side -- treat it as an ordinary monotonic value here and take the
-        // max, exactly like vuln_window_reported below.
+        // max, exactly like vuln_window_reported above.
         merged_last_degraded = std::max(last_degraded, other.last_degraded);
       }
       if (merged_last_degraded != last_degraded) {
         last_degraded = merged_last_degraded;
         modified = true;
       }
-    }
-    // vuln_window_reported only ever advances, so a plain max-merge.
-    if (other.vuln_window_reported > vuln_window_reported) {
-      vuln_window_reported = other.vuln_window_reported;
-      modified = true;
     }
 
     // Active-rebuild span onset + its pause accumulator

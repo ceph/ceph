@@ -4511,7 +4511,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
     info.stats.last_fresh = now;
 
     if (info.stats.state & PG_STATE_CLEAN)
-      info.history.last_clean = now;
+      info.stats.last_clean = now;
     if (info.stats.state & PG_STATE_ACTIVE)
       info.stats.last_active = now;
     if (info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED))
@@ -4531,27 +4531,36 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
      * DEGRADED/UNDERSIZED, or shows missing (degraded) / misplaced objects
      * -- until it next returns to active+clean. Three pg_history_t fields
      * (persisted with the PG info, and genuinely merged across peers on
-     * every peering info exchange -- see pg_history_t::merge()) bracket
-     * and track it:
+     * every peering info exchange -- see pg_history_t::merge()) track it:
      *  - last_degraded: latched, on the first publish of a new window, to
      *    the onset (last_change, i.e. when the state transition happened),
      *    and never moved again -- neither while the episode is open nor
      *    after it is recorded.
-     *  - last_clean: (re-)stamped to "now" on every publish of a clean PG,
-     *    above -- so it is not a stable marker on its own.
-     *  - vuln_window_reported: the "recorded up to" marker. Once a window
-     *    is recorded, this advances to last_clean's value, so a later
-     *    publish (this OSD's own, a peer's after a handover, or this OSD's
-     *    own after a restart) can tell "this onset was already recorded"
-     *    apart from "there's a real, unreported episode" without ever
-     *    moving last_degraded itself.
+     *  - vuln_window_reported: the "recorded up to" marker. When a window
+     *    is recorded, this advances to the time of the clean publish that
+     *    closed it, so a later publish (this OSD's own, a peer's after a
+     *    handover, or this OSD's own after a restart) can tell "this onset
+     *    was already recorded" apart from "there's a real, unreported
+     *    episode" without ever moving last_degraded itself.
+     *  - last_clean: set to vuln_window_reported's value when a window is
+     *    recorded, and not read by this logic. It is kept only so a peer
+     *    on older code, whose merge() anchors on it, sees the same
+     *    open/closed state.
      * A window is open and unrecorded exactly when last_degraded >
-     * vuln_window_reported; it has closed once last_clean also advances
-     * past last_degraded.
+     * vuln_window_reported; it closes on the first publish of a clean PG
+     * after the onset.
      *
-     * pg_stat_t.last_degraded/last_clean are re-derived from these fields
-     * on every publish, below, purely for external reporting (ceph pg
-     * query/pg dump) -- pg_history_t is the source of truth.
+     * A clean publish deliberately leaves pg_history_t unchanged outside
+     * that close: stats are published on every client write, and a
+     * pg_history_t change forces prepare_info_keymap() to write the full
+     * _info instead of _fastinfo. Only pg_stat_t.last_clean, which
+     * _fastinfo covers, is stamped above on each clean publish. That
+     * pg_stat_t field is wholesale-copied from peers during peering, so
+     * the close below does not read it.
+     *
+     * pg_stat_t.last_degraded is re-derived from pg_history_t on every
+     * publish, below, purely for external reporting (ceph pg query/pg
+     * dump) -- pg_history_t is the source of truth for it.
      *
      * Scope: this counter measures *exposure* time, not data-movement time.
      * An empty or dataless window still counts (durability risk exists from
@@ -4585,7 +4594,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
         // the pre-publish detection lag.
         if (info.history.last_degraded <= info.history.vuln_window_reported) {
           info.history.last_degraded =
-            (info.stats.last_change > info.history.last_clean)
+            (info.stats.last_change > info.stats.last_clean)
               ? info.stats.last_change : now;
           psdout(15) << "rebuild-stats: vulnerability window opened for "
                      << info.pgid << " at " << info.history.last_degraded
@@ -4595,18 +4604,18 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
           dirty_info = true;
         }
       } else if (info.history.last_degraded > info.history.vuln_window_reported &&
-                 info.history.last_clean > info.history.last_degraded) {
-        // A previously-latched, not-yet-recorded window has closed: the PG
-        // reached clean and the clean-stamp above advanced last_clean past
-        // the latched onset. (Leaving the vulnerable state without
-        // reaching clean -- e.g. a transient mid-peering reading where the
-        // degraded count momentarily drops to zero -- does not satisfy
-        // last_clean > last_degraded, so the window stays open until the PG
-        // is genuinely clean.) Record it once, then advance
+                 (info.stats.state & PG_STATE_CLEAN) &&
+                 now > info.history.last_degraded) {
+        // A previously-latched, not-yet-recorded window has closed: this
+        // is a publish of a clean PG after the latched onset. (Leaving the
+        // vulnerable state without reaching clean -- e.g. a transient
+        // mid-peering reading where the degraded count momentarily drops
+        // to zero -- does not take this branch, so the window stays open
+        // until the PG is genuinely clean.) Record it once, then advance
         // vuln_window_reported so it is never recorded again (by a later
         // publish, a peer that inherits this history, or this OSD after a
         // restart) -- last_degraded itself stays pinned at the true onset.
-        const utime_t dur = info.history.last_clean - info.history.last_degraded;
+        const utime_t dur = now - info.history.last_degraded;
         if (dur.to_msec() > 0) {
           PerfCounters &perf = pl->get_peering_perf();
           // tinc_with_max() accumulates the sum/avgcount AND tracks the
@@ -4626,7 +4635,8 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
                      << info.pgid << " duration=" << dur
                      << " (below timer resolution)" << dendl;
         }
-        info.history.vuln_window_reported = info.history.last_clean;
+        info.history.vuln_window_reported = now;
+        info.history.last_clean = now;
          // Mark dirty so a standalone write can be forced if needed, rather
          // than relying on an unrelated future transaction to pick this up.
          // Also flag that replicas don't know about this close yet: not every
@@ -4636,11 +4646,10 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
         dirty_info = true;
         rebuild_stats_close_unshared = true;
       }
-      // pg_history_t is the source of truth; mirror it into pg_stat_t for
-      // external reporting (ceph pg query/pg dump), and resend immediately
-      // since either field may have just changed above.
+      // pg_history_t is the source of truth for last_degraded; mirror it into
+      // pg_stat_t for external reporting (ceph pg query/pg dump), and resend
+      // immediately since it or last_clean may have just changed above.
       info.stats.last_degraded = info.history.last_degraded;
-      info.stats.last_clean = info.history.last_clean;
       pre_publish.last_degraded = info.stats.last_degraded;
       pre_publish.last_clean = info.stats.last_clean;
     }

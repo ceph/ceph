@@ -2466,20 +2466,22 @@ TEST_F(PeeringStateTest, Issue79706_test3) {
 //
 // These exercise the vulnerability-window tracking in
 // prepare_stats_for_publish() that feeds rs_pg_vulnerability_duration
-// (avgcount/sum/avgtime). The window is bracketed by three pg_history_t
-// fields -- last_degraded (onset, latched once and never moved again),
-// last_clean (resolution), and vuln_window_reported (the "recorded up to"
-// marker) -- and is genuinely merged across peers on every peering info
-// exchange, so it is recorded exactly once, by whichever OSD is primary
-// when the window closes, regardless of how many primaries held it along
-// the way. pg_stat_t.last_degraded/last_clean mirror these fields on every
-// publish, purely for external reporting.
+// (avgcount/sum/avgtime). The window is tracked by two pg_history_t
+// fields -- last_degraded (onset, latched once and never moved again) and
+// vuln_window_reported (the "recorded up to" marker, set to the time of the
+// clean publish that closes the window) -- which are genuinely merged across
+// peers on every peering info exchange, so it is recorded exactly once, by
+// whichever OSD is primary when the window closes, regardless of how many
+// primaries held it along the way. pg_stat_t.last_degraded mirrors the
+// history onset on every publish, purely for external reporting;
+// pg_stat_t.last_clean is stamped on every clean publish, and pg_history_t
+// is left unchanged by a clean publish that does not close a window.
 // Design notes:
 //   - call_prepare_stats(osd) passes nullopt so the publish branch always
 //     runs, which is what drives the window logic even when stats are
 //     otherwise unchanged.
 //   - A 10 ms sleep between opening the window and reaching clean ensures
-//     (last_clean - last_degraded).to_msec() > 0 so the record commits.
+//     (close time - last_degraded).to_msec() > 0 so the record commits.
 //   - get_ps(osd)->get_info().stats.{last_degraded,last_clean} (the mirror)
 //     and get_ps(osd)->get_info().history.* (the source of truth) are read
 //     directly to check the latch/record/inheritance invariants.

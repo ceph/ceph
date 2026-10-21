@@ -855,10 +855,10 @@ function TEST_divergent_3() {
 # describes rejoins via PeeringState::Stray::react(MInfoRec)'s "rewind
 # the primary's pg_stat_t (last_degraded/last_clean included) onto the
 # rejoining replica's own info.stats -- but never touches info.history.
-# Since pg_stat_t.last_degraded/last_clean are only ever a mirror re-derived
-# from info.history on the next publish, whatever this copy puts in them is
-# overwritten again before it can matter; the vulnerability-window latch
-# itself never sees a value it didn't compute from its own info.history.
+# pg_stat_t.last_degraded is only ever a mirror re-derived from info.history
+# on the next publish, and the window close reads only info.history and the
+# publish's own clock, never the copied pg_stat_t.last_clean, so whatever
+# this copy puts in them cannot reopen or close a window.
 # This test confirms that directly: forcing primary role onto the
 # once-divergent replica afterward must not surface the primary's
 # pre-rejoin episode as its own.

@@ -2691,10 +2691,12 @@ TEST(chunk_info_test, calc_refs_inc_match) {
     mk_delta({}));
 }
 
-// pg_history_t::merge()'s vulnerability-window onset fields (last_degraded/
-// last_clean/vuln_window_reported) are the one part of this struct that
-// isn't a plain monotonic max-merge. See the class comment on those
-// fields and the merge() algorithm's own comments in osd_types.h.
+// pg_history_t::merge()'s vulnerability-window onset field (last_degraded)
+// is the one part of this struct that isn't a plain monotonic max-merge: a
+// side's onset is open when it is later than the merged
+// vuln_window_reported. last_clean is only max-merged, for peers on older
+// code. See the class comment on those fields and the merge() algorithm's
+// own comments in osd_types.h.
 TEST(pg_history_t, merge_vulnerability_onset_normal_handover)
 {
   // Local side has no window open; the peer (e.g. the departing primary,
@@ -2703,10 +2705,12 @@ TEST(pg_history_t, merge_vulnerability_onset_normal_handover)
   utime_t t0(100, 0), t1(150, 0);
   pg_history_t local;
   local.last_clean = t0;
-  local.last_degraded = t0; // not open (last_degraded <= last_clean)
+  local.vuln_window_reported = t0;
+  local.last_degraded = t0; // not open (last_degraded <= reported)
 
   pg_history_t peer;
   peer.last_clean = t0;
+  peer.vuln_window_reported = t0;
   peer.last_degraded = t1; // open since t1
 
   ASSERT_TRUE(local.merge(peer));
@@ -2720,21 +2724,23 @@ TEST(pg_history_t, merge_vulnerability_onset_stale_peer_after_close)
   // window closed elsewhere; the local side already knows the window
   // closed at a later point (t2 > t1). The merge must not resurrect the
   // stale onset just because the peer still shows it as open relative to
-  // ITS OWN last_clean.
+  // ITS OWN vuln_window_reported.
   utime_t t0(100, 0), t1(150, 0), t2(200, 0);
   pg_history_t local;
-  local.last_clean = t2; // already knows the window closed
+  local.last_clean = t2;
+  local.vuln_window_reported = t2; // already knows the window closed
   local.last_degraded = t2; // not open locally
 
   pg_history_t peer;
-  peer.last_clean = t0; // peer's stale view, from before the close
+  peer.last_clean = t0;
+  peer.vuln_window_reported = t0; // peer's stale view, from before the close
   peer.last_degraded = t1; // peer still thinks it's open (t1 > t0)
 
   // merge is a no-op here as local is already at the correct final state.
   ASSERT_FALSE(local.merge(peer));
-  ASSERT_EQ(t2, local.last_clean);
-  // Not t1 - the stale onset must be dropped once last_clean is merged
-  // past it, not carried forward.
+  ASSERT_EQ(t2, local.vuln_window_reported);
+  // Not t1 - the stale onset must be dropped once vuln_window_reported is
+  // merged past it, not carried forward.
   ASSERT_EQ(t2, local.last_degraded);
 }
 
@@ -2746,15 +2752,17 @@ TEST(pg_history_t, merge_vulnerability_onset_redegrade_after_close)
   // the old, already-closed one.
   utime_t t0(150, 0), t1(200, 0), t2(250, 0);
   pg_history_t local;
-  local.last_clean = t1; // a close already known locally
+  local.last_clean = t1;
+  local.vuln_window_reported = t1; // a close already known locally
   local.last_degraded = t0; // stale onset from before that close
 
   pg_history_t peer;
-  peer.last_clean = t1; // agrees on the same close point
+  peer.last_clean = t1;
+  peer.vuln_window_reported = t1; // agrees on the same close point
   peer.last_degraded = t2; // but has since observed a genuine re-degrade
 
   ASSERT_TRUE(local.merge(peer));
-  ASSERT_EQ(t1, local.last_clean);
+  ASSERT_EQ(t1, local.vuln_window_reported);
   ASSERT_EQ(t2, local.last_degraded);
 }
 
@@ -2782,9 +2790,8 @@ TEST(pg_history_t, merge_vuln_window_reported_is_plain_max)
 // A genuinely never-touched peer (e.g. a brand-new replica whose own
 // pg_history_t is still all-default) must not disturb an already-settled,
 // not-open last_degraded/vuln_window_reported pair, even when last_clean
-// has since advanced past them via ordinary steady-state re-stamping
-// (every clean publish re-stamps last_clean to "now", independent of any
-// real episode).
+// has since advanced past them (a peer on older code re-stamps last_clean
+// to "now" on every clean publish, independent of any real episode).
 TEST(pg_history_t, merge_never_touched_peer_does_not_open_false_window)
 {
   utime_t creation(50, 0), later_clean(100, 0);
