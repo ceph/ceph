@@ -267,6 +267,68 @@ describe('ServiceFormComponent', () => {
         });
       });
 
+      it('should not submit metrics push options when disabled', () => {
+        component.onSubmit();
+        const spec = (cephServiceService.create as jasmine.Spy).calls.mostRecent().args[0];
+        expect(spec['metrics_push_enabled']).toBeUndefined();
+        expect(spec['metrics_push_interval']).toBeUndefined();
+        expect(spec['metrics_push_timeout']).toBeUndefined();
+      });
+
+      it('should have default metrics push values', () => {
+        expect(component.serviceForm.get('metrics_push_enabled').value).toBe(false);
+        expect(component.serviceForm.get('metrics_push_interval').value).toBe(3600);
+        expect(component.serviceForm.get('metrics_push_timeout').value).toBe(300);
+      });
+
+      it('should submit rgw with metrics push enabled and default values', () => {
+        formHelper.setValue('metrics_push_enabled', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: false,
+          metrics_push_enabled: true,
+          metrics_push_interval: 3600,
+          metrics_push_timeout: 300
+        });
+      });
+
+      it('should submit rgw with custom metrics push values', () => {
+        formHelper.setValue('metrics_push_enabled', true);
+        formHelper.setValue('metrics_push_interval', 120);
+        formHelper.setValue('metrics_push_timeout', 60);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          ssl: false,
+          metrics_push_enabled: true,
+          metrics_push_interval: 120,
+          metrics_push_timeout: 60
+        });
+      });
+
+      it('should validate metrics push minimum values only when enabled', () => {
+        formHelper.setValue('metrics_push_interval', 10);
+        formHelper.setValue('metrics_push_timeout', 10);
+        formHelper.expectValid('metrics_push_interval');
+        formHelper.expectValid('metrics_push_timeout');
+        formHelper.setValue('metrics_push_enabled', true);
+        formHelper.expectError('metrics_push_interval', 'min');
+        formHelper.expectError('metrics_push_timeout', 'min');
+      });
+
       it('should submit rgw with virtual-host style bucket access and SSL', () => {
         formHelper.setValue('virtual_host_enabled', true);
         formHelper.setValue('ssl', true);
