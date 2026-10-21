@@ -788,7 +788,7 @@ private:
 
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,
-                     bool is_remote=false);
+                     bool is_remote=false, SnapMetadataMap *snap_metadata_map = nullptr);
 
   void initialize_checkpoints(const std::string &dir_root);
   // An already-COMPLETE checkpoint eligible for pruning. metadata_keys is the
