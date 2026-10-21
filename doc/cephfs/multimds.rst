@@ -264,6 +264,12 @@ Spreading one directory over several ranks helps workloads with many clients
 working in it. A single client gains little, because a client serializes the
 creates and unlinks it issues in one directory.
 
+.. note:: ``ceph-fuse`` and ``libcephfs`` clients need the fix for
+   https://tracker.ceph.com/issues/81952 to work well in a directory spread over
+   several ranks, by this policy or by a distributed ephemeral pin. Without it,
+   creates and unlinks from several such clients in one directory run at a small
+   fraction of their usual rate. The kernel client is not affected.
+
 The ranks do not replicate the fragments of directories under a distributed
 ephemeral pin for read load: those fragments are already spread over the
 ranks. Other hot directories, randomly pinned ones included, can be
