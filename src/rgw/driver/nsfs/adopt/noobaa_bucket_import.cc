@@ -469,7 +469,10 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     }
     /* After the load, which overwrites info with what is on disk. */
     bucket->get_info() = info;
-    ret = bucket->merge_and_store_attrs(dpp, attrs, y);
+    /* As adoption, not as a client:  the bucket is not marked yet, and
+     * the gate rejects a client's write to it (MutationPurpose). */
+    ret = static_cast<NSFSBucket*>(bucket.get())->merge_and_store_attrs(
+	dpp, attrs, y, MutationPurpose::adoption);
     if (ret < 0) {
       result.failures.push_back(
 	  rec.name + ": merge_and_store_attrs: " + cpp_strerror(-ret));

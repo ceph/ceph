@@ -4790,11 +4790,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   shared_profile.format = &rgw_meta_format;
   extended_profile.extensions = nsfs::EXTENSIONS_STRONG;
   extended_profile.format = &rgw_meta_format;
-  ldpp_dout(dpp, 1) << "nsfs: new buckets are "
-    << (extensions_enabled() ? "marked with extension set "
-	  + std::to_string(new_bucket_extensions())
-	: std::string("unmarked, and no bucket is converted (rgw_nsfs_extensions "
-		      "is off)")) << dendl;
+  ldpp_dout(dpp, 1) << "nsfs: new buckets are marked with extension set "
+    << new_bucket_extensions() << dendl;
 
   /* Every strategy names some scaffolding, and the listing paths test one
    * name at a time;  assemble the union once so that no strategy is
@@ -5924,10 +5921,8 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     info.flags = 0;
     info.requester_pays = false;
 
-    if (extensions_enabled()) {
-      ret = bucket->mark_extensions(dpp, new_bucket_extensions());
-      marked = true;
-    }
+    ret = bucket->mark_extensions(dpp, new_bucket_extensions());
+    marked = true;
   }
   if (ret == 0) {
     Attrs attrs;
@@ -7292,9 +7287,16 @@ if (max <= 0) {
 int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 					Attrs& new_attrs, optional_yield y)
 {
+  return merge_and_store_attrs(dpp, new_attrs, y, MutationPurpose::client);
+}
+
+int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
+				      Attrs& new_attrs, optional_yield y,
+				      MutationPurpose purpose)
+{
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, get_name());
+  NSFSMutationGuard mg(dpp, driver, this, purpose);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -7311,7 +7313,7 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, get_name());
+  NSFSMutationGuard mg(dpp, driver, this);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -7648,7 +7650,8 @@ int NSFSBucket::clear_converting(const DoutPrefixProvider* dpp)
 /* Remove the extensions attribute, which is how a bucket reaches base.
  * Reached through set_profile(), which is where the conditions on
  * getting there are enforced. */
-int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
+int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp,
+				  const UnmarkPasskey&)
 {
   int ret = dir->open(dpp);
   if (ret < 0) {
@@ -7683,9 +7686,8 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
  * .shadow as scaffolding and a bucket must never end up claiming a
  * profile while holding structure the profile does not describe.
  *
- * Leaving base takes a tree nsfs did not write into its management.  It is
- * rejected while rgw_nsfs_extensions is off, and it is never inferred
- * from access.
+ * Leaving base takes a tree nsfs did not write into its management.  It
+ * is never inferred from access, and nothing returns a bucket to base.
  */
 nsfs::XattrStrategy* NSFSBucket::xattr_strategy() const
 {
@@ -7783,6 +7785,19 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   const uint32_t current = profile->extensions;
+
+  /* Nothing takes a bucket back into base (DECISIONS.md 2026-10-21):
+   * adoption is one-way, and an RGW bucket in NooBaa's format is one
+   * nothing may write.  Rejected for every caller -- the profile
+   * endpoint, the `bucket-profile` hint, adoption -- before anything is
+   * removed.  A bucket already in base asking for base is the no-op
+   * below. */
+  if ((target == nsfs::EXTENSIONS_BASE) && (current != target)) {
+    ldpp_dout(dpp, 0) << "ERROR: not returning bucket " << get_name()
+      << " to the base profile:  adoption is one-way" << dendl;
+    return -ERR_INVALID_BUCKET_STATE;
+  }
+
   if (target == current) {
     /* Asking for the profile a bucket is already in is a no-op --
      * unless it is still converting, in which case it is a request to
@@ -7803,12 +7818,6 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   if (target & ~current) {
-    if (! driver->extensions_enabled()) {
-      ldpp_dout(dpp, 0) << "ERROR: not extending bucket " << get_name()
-	<< ":  rgw_nsfs_extensions is false, and extending a bucket is what "
-	<< "ends its ability to go back" << dendl;
-      return -EPERM;
-    }
     if (current == nsfs::EXTENSIONS_BASE) {
       /* Leaving base is adopting the bucket (DECISIONS.md 2026-10-11),
        * so its NooBaa record is imported first:  owner, versioning,
@@ -7860,14 +7869,6 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  if (target == nsfs::EXTENSIONS_BASE) {
-    ret = unmark_extensions(dpp);
-    if ((ret == 0) && progress) {
-      progress->profile_set = true;
-      progress->complete = true;
-    }
-    return ret;
-  }
 
   if (current != nsfs::EXTENSIONS_BASE) {
     /* Between two nsfs profiles.  Both formats are rgw-meta, so nothing in
@@ -9118,9 +9119,48 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  * is the thing being prevented.
  */
 
-int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
-			       const std::string& bucket)
+/* A bucket not taken over takes no client writes (DECISIONS.md
+ * 2026-10-21, the gate):  no `user.nsfs.extensions` means the bucket is
+ * NooBaa's until adoption marks it, and InvalidBucketState says the
+ * request is not valid in the bucket's current state, which a command
+ * can change. */
+int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
+				 NSFSBucket* b, MutationPurpose purpose)
 {
+  if (purpose != MutationPurpose::client) {
+    return 0;
+  }
+  const int pret = b->resolve_profile(dpp);
+  if (pret < 0) {
+    return pret;
+  }
+  if (b->extended() || adoption_gate_lifted(b->get_name())) {
+    return 0;
+  }
+  unadopted_writes_rejected.fetch_add(1, std::memory_order_relaxed);
+  ldpp_dout(dpp, 4) << "nsfs: bucket " << b->get_name() << " is not adopted;"
+    << "  a client write waits for adoption" << dendl;
+  return -ERR_INVALID_BUCKET_STATE;
+}
+
+NSFSMutationGuard::NSFSMutationGuard(const DoutPrefixProvider* dpp,
+				     NSFSDriver* _driver, NSFSBucket* _bucket,
+				     MutationPurpose purpose)
+  : driver(_driver), bucket(_bucket->get_name()),
+    rc(_driver ? _driver->mutation_enter(dpp, _bucket, purpose) : 0)
+{ }
+
+int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
+			       NSFSBucket* b, MutationPurpose purpose)
+{
+  const std::string& bucket = b->get_name();
+
+  /* checked before the slot, so a rejection holds nothing */
+  const int gret = reject_unadopted(dpp, b, purpose);
+  if (gret < 0) {
+    return gret;
+  }
+
   std::unique_lock l{gate_lock};
   auto& g = bucket_gates[bucket];
   if (g.closed) {
@@ -9437,7 +9477,7 @@ int NSFSBucket::set_acl(const DoutPrefixProvider* dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, get_name());
+  NSFSMutationGuard mg(dpp, driver, this);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -9590,7 +9630,7 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, get_name());
+  NSFSMutationGuard mg(dpp, driver, this);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -9684,6 +9724,14 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
 
 int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
+  /* a client's change to the bucket's own state -- versioning, object
+   * lock, the rest of RGWBucketInfo -- so the gate on a bucket not taken
+   * over asks, and a conversion holds it off;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, this);
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   mtime = _mtime;
 
   struct timespec ts[2];
@@ -10079,13 +10127,14 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
   const bool made = !existed || !*existed;
 
   /* Stamp a bucket we made, so that everything this deployment creates
-   * is marked and only trees that came from somewhere else are not.  An
-   * existing directory is left alone:  re-creating a base-profile bucket
-   * must not mark it by a side effect, since marking is what ends its
-   * ability to go back. */
+   * is marked and only trees that came from somewhere else are not.
+   * Only an internal bucket reaches here over a directory that already
+   * exists -- a client's is rejected above -- and that directory keeps
+   * the profile it already has:  marking is adoption's act, not a side
+   * effect of re-creating scaffolding. */
   if (!is_internal() && driver->create_failure_injected()) {
     ret = -EIO;
-  } else if (made && driver->extensions_enabled()) {
+  } else if (made) {
     ret = mark_extensions(dpp, driver->new_bucket_extensions());
   } else if (!profile) {
     profile = driver->get_base_profile();
@@ -10222,16 +10271,14 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
    * another, and either may be mid-rewrite.  Ordered by name so two
    * renames crossing in opposite directions cannot each hold the
    * gate the other wants. */
-  const std::string& first = (sb->get_name() < db->get_name())
-      ? sb->get_name() : db->get_name();
-  const std::string& second = (sb->get_name() < db->get_name())
-      ? db->get_name() : sb->get_name();
+  NSFSBucket* first = (sb->get_name() < db->get_name()) ? sb : db;
+  NSFSBucket* second = (first == sb) ? db : sb;
   NSFSMutationGuard mg1(dpp, driver, first);
   if (mg1.result() < 0) {
     return mg1.result();
   }
   std::optional<NSFSMutationGuard> mg2;
-  if (first != second) {
+  if (first->get_name() != second->get_name()) {
     mg2.emplace(dpp, driver, second);
     if (mg2->result() < 0) {
       return mg2->result();
@@ -10579,18 +10626,25 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  /* both trees, ordered by name;  see NSFSObject::rename() */
-  const std::string& cfirst = (src_bucket->get_name() < dest_bucket->get_name())
-      ? src_bucket->get_name() : dest_bucket->get_name();
-  const std::string& csecond = (src_bucket->get_name() < dest_bucket->get_name())
-      ? dest_bucket->get_name() : src_bucket->get_name();
-  NSFSMutationGuard cg1(dpp, driver, cfirst);
+  /* both trees, ordered by name;  see NSFSObject::rename().  The source
+   * is read, not written, so the gate on a bucket not taken over asks
+   * only of the destination;  a self-copy writes its one bucket. */
+  NSFSBucket* csrc = static_cast<NSFSBucket*>(src_bucket);
+  NSFSBucket* cdst = static_cast<NSFSBucket*>(dest_bucket);
+  const bool cself = (csrc->get_name() == cdst->get_name());
+  NSFSBucket* cfirst = (csrc->get_name() < cdst->get_name()) ? csrc : cdst;
+  NSFSBucket* csecond = (cfirst == csrc) ? cdst : csrc;
+  auto cpurpose = [&](NSFSBucket* b) {
+    return (!cself && (b == csrc)) ? MutationPurpose::copy_source
+				   : MutationPurpose::client;
+  };
+  NSFSMutationGuard cg1(dpp, driver, cfirst, cpurpose(cfirst));
   if (cg1.result() < 0) {
     return cg1.result();
   }
   std::optional<NSFSMutationGuard> cg2;
-  if (cfirst != csecond) {
-    cg2.emplace(dpp, driver, csecond);
+  if (!cself) {
+    cg2.emplace(dpp, driver, csecond, cpurpose(csecond));
     if (cg2->result() < 0) {
       return cg2->result();
     }
@@ -11239,7 +11293,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
    * fallback strategies are for. */
   std::optional<NSFSMutationGuard> gate;
   if (flags & FSIOObject::OPEN_FLAG_WRITE) {
-    gate.emplace(dpp, driver, get_bucket()->get_name());
+    gate.emplace(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
     if (gate->result() < 0) {
       return FSIOResult{gate->result(), nullptr};
     }
@@ -12035,7 +12089,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, get_bucket()->get_name());
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -12143,7 +12197,7 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 {
   /* held off while this bucket's tree is being rewritten, as the other
    * attribute writes are;  see NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, get_bucket()->get_name());
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -12256,7 +12310,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, get_bucket()->get_name());
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -13727,7 +13781,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, source->driver, source->get_bucket()->get_name());
+  NSFSMutationGuard mg(dpp, source->driver,
+		       static_cast<NSFSBucket*>(source->get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14730,7 +14785,7 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, bucket->get_name());
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14940,7 +14995,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, bucket->get_name());
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -14977,7 +15032,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(dpp, driver, bucket->get_name());
+  NSFSMutationGuard mg(dpp, driver, static_cast<NSFSBucket*>(bucket));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -15658,11 +15713,24 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 						std::move(cache_key),
 						base_offset, shared_target,
 						shared_name,
-						mp_obj.upload_id, extent);
+						mp_obj.upload_id, extent,
+						static_cast<NSFSBucket*>(bucket));
 }
 
 int NSFSMultipartWriter::prepare(optional_yield y)
 {
+  /* The gate first:  a part's record and bytes are written here and in
+   * process(), before complete() takes the mutation slot, so a part for a
+   * bucket not taken over is rejected before anything lands in its
+   * staging (DECISIONS.md 2026-10-21). */
+  if (bucket) {
+    const int gret = driver->reject_unadopted(dpp, bucket,
+					      MutationPurpose::client);
+    if (gret < 0) {
+      return gret;
+    }
+  }
+
   /* Resolve and pin before anything else this operation does.
    *
    * Here rather than where the SQE is built, because that is one
@@ -15891,8 +15959,7 @@ int NSFSMultipartWriter::complete(
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(rctx.dpp, driver,
-		       nsfs::mp_cache_bucket_split(mp_cache_key.bucket_name).second);
+  NSFSMutationGuard mg(rctx.dpp, driver, bucket);
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -16209,7 +16276,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
-  NSFSMutationGuard mg(rctx.dpp, driver, obj->get_bucket()->get_name());
+  NSFSMutationGuard mg(rctx.dpp, driver,
+		       static_cast<NSFSBucket*>(obj->get_bucket()));
   if (mg.result() < 0) {
     return mg.result();
   }
@@ -16528,13 +16596,12 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *                   bucket without that marker is read as NooBaa wrote
    *                   it and the extension-only interfaces are rejected
    *                   on it.
-   *   extensions_default
-   *                   whether a bucket created here is marked
-   *                   (rgw_nsfs_extensions).  False also means no bucket
-   *                   is converted, so none is adopted.
    *   bucket_profile  the profile a bucket created here is marked with,
-   *                   rgw_nsfs_bucket_profile;  empty when
-   *                   extensions_default is false.
+   *                   rgw_nsfs_bucket_profile.  Every bucket created here
+   *                   is marked.
+   *   hint_unmarked_buckets
+   *                   buckets the `unmarked-bucket` test hint has
+   *                   unmarked;  0 on any gateway not under test.
    *   strategy        which FSStrategy was selected by probing at startup.
    *   can_rename      a rename moves the name.  When false, RGWLibFS::rename
    *                   emulates it by copy-and-delete, so the object does not
@@ -16553,11 +16620,12 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   features["rename_enabled"] =
     ctx()->_conf->rgw_nsfs_enable_rename ? "true" : "false";
   features["extensions"] = std::to_string(nsfs::EXTENSIONS_KNOWN);
-  features["extensions_default"] = extensions_enabled() ? "true" : "false";
+  features["hint_unmarked_buckets"] =
+    std::to_string(hint_unmarked_buckets.load(std::memory_order_relaxed));
   {
     nsfs::BucketProfile p;
     p.extensions = new_bucket_extensions();
-    features["bucket_profile"] = extensions_enabled() ? p.name() : "";
+    features["bucket_profile"] = p.name();
   }
   /* Whether requests are served as their own POSIX identity.  A test
    * needs to know this from the gateway rather than infer it:  the
@@ -16805,26 +16873,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
  * that adopts bucket by bucket while serving is phase 5 (C8-C10) and
  * not built;  until then a startup that takes as long as its adoption
  * is honest about what it is doing.  A bucket that fails is reported
- * and the rest continue;  re-running adopts what is left.
- *
- * With `rgw_nsfs_extensions` off no bucket can be adopted, so nothing
- * is run, and one message says why rather than one failure per
- * bucket. */
+ * and the rest continue;  re-running adopts what is left. */
 int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
 			     optional_yield y,
 			     std::map<std::string, std::string>* report)
 {
-  if (!extensions_enabled()) {
-    if (report) {
-      (*report)["ran"] = "false";
-      (*report)["why"] = "rgw_nsfs_extensions is off, so no bucket's tree "
-			 "can be converted";
-    }
-    ldpp_dout(dpp, 0) << "ERROR: adoption cannot run:  rgw_nsfs_extensions "
-      << "is off, so no bucket's tree can be converted;  nothing was "
-      << "adopted" << dendl;
-    return -EPERM;
-  }
   int ret = adopt_identities(dpp, y, report);
   if (ret < 0) {
     return ret;
@@ -17186,14 +17239,9 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
 }
 
 /* Adopt one bucket:  import its NooBaa record and bring its tree into
- * the shared profile, the target for a NooBaa migration (DECISIONS.md
- * 2026-10-11).  set_profile() leaving base does both;  this is that
- * call, by name, and the same thing the profile endpoint does with
- * whichever profile it is given.
- *
- * With `rgw_nsfs_extensions` off a bucket's tree cannot be converted,
- * so the bucket is not adopted, and nothing is written:  adoption is
- * the import and the conversion together, per bucket. */
+ * the shared profile (DECISIONS.md 2026-10-11).  set_profile() leaving
+ * base does both;  this is that call, by name, and the same thing the
+ * profile endpoint does with whichever profile it is given. */
 int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 const std::string& bucket_name,
@@ -17204,16 +17252,6 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
       (*report)[k] = v;
     }
   };
-
-  if (!extensions_enabled()) {
-    put_report("adopted", "false");
-    put_report("why", "rgw_nsfs_extensions is off, so the bucket's tree cannot be "
-	       "converted");
-    ldpp_dout(dpp, 0) << "ERROR: not adopting bucket " << bucket_name
-      << ":  rgw_nsfs_extensions is off, so its tree cannot be converted"
-      << dendl;
-    return -EPERM;
-  }
 
   /* An operator decided this record goes no further, so adopting it by
    * name is rejected as the full pass skips it.  Take the abandonment
@@ -17287,6 +17325,72 @@ static int hint_credentials(const DoutPrefixProvider* dpp, NSFSDriver* driver,
   const int ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
 					    who, account, cred);
   return (ret == -EPERM) ? -ENOENT : ret;
+}
+
+/* `unmarked-bucket`:  make a test's unmarked bucket.  The one place an
+ * UnmarkPasskey is made.
+ *
+ * Narrow on purpose (DECISIONS.md 2026-10-21, the gate):  only a bucket
+ * this gateway marked, holding no content, which NooBaa's store has no
+ * record of.  So all it can produce is an empty directory with no
+ * marker -- never RGW-written objects in a bucket that claims to be
+ * NooBaa's, and never a bucket adoption would treat as NooBaa's. */
+int NSFSDriver::hint_unmarked_bucket(
+    const DoutPrefixProvider* dpp,
+    const std::map<std::string, std::string>& params,
+    std::map<std::string, std::string>* out)
+{
+  auto it = params.find("bucket");
+  if ((it == params.end()) || it->second.empty()) {
+    return -EINVAL;
+  }
+  const std::string& name = it->second;
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  int ret = load_bucket(dpp, rgw_bucket{"", name}, &loaded, null_yield);
+  if (ret < 0) {
+    return ret;
+  }
+  auto& b = *static_cast<NSFSBucket*>(loaded.get());
+  ret = b.resolve_profile(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!b.extended() || b.is_converting()) {
+    ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  " << name
+      << " is not a marked bucket at rest" << dendl;
+    return -ERR_INVALID_BUCKET_STATE;
+  }
+  if (adoption_configured()) {
+    const std::string record =
+      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root") +
+      "/buckets/" + name + ".json";
+    if (::access(record.c_str(), F_OK) == 0) {
+      ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  NooBaa holds a record "
+	"of " << name << dendl;
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+  }
+  ret = b.check_empty(dpp, null_yield);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  " << name
+      << " holds content" << dendl;
+    return ret;
+  }
+
+  ret = b.unmark_extensions(dpp, UnmarkPasskey{});
+  if (ret < 0) {
+    return ret;
+  }
+  hint_unmarked_buckets.fetch_add(1, std::memory_order_relaxed);
+  ldpp_dout(dpp, 1) << "nsfs: unmarked-bucket:  " << name
+    << " is now unmarked, for a test" << dendl;
+  if (out) {
+    (*out)["bucket"] = name;
+    (*out)["profile"] = b.profile_name();
+    (*out)["unmarked"] = std::to_string(hint_unmarked_buckets.load());
+  }
+  return 0;
 }
 
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
@@ -17612,6 +17716,39 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["enabled"] = on ? "true" : "false";
       (*out)["bucket"] = b_it->second;
       (*out)["fired"] = std::to_string(attr_read_fails_injected.load());
+    }
+    return 0;
+  }
+
+  if (hint == "unmarked-bucket") {
+    return hint_unmarked_bucket(dpp, params, out);
+  }
+
+  if (hint == "inject-lift-adoption-gate") {
+    /* lift the gate on a bucket not taken over, in one bucket, so a test
+     * can show a rejection is the gate's:  the same write succeeds with
+     * it lifted.  `rejected` counts every write the gate turned away. */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    {
+      std::lock_guard l{inject_lift_adoption_gate_lock};
+      if (on) {
+	inject_lift_adoption_gate_buckets.insert(b_it->second);
+      } else {
+	inject_lift_adoption_gate_buckets.erase(b_it->second);
+      }
+      inject_lift_adoption_gate_armed =
+	  !inject_lift_adoption_gate_buckets.empty();
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
+      (*out)["rejected"] = std::to_string(unadopted_writes_rejected.load());
     }
     return 0;
   }

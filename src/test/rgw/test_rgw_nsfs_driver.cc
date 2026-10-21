@@ -5844,16 +5844,27 @@ TEST_F(NSFSStridedEvictingBucketTest, AnEvictedPartRecordsItsPlacement)
 /* A bucket in NooBaa's format, served by the driver.
  *
  * The bucket is created marked -- every bucket this gateway makes is
- * -- and then reduced to base while it is still empty, which is the
- * only transition the profile rules allow into NooBaa's format.  From
- * there every strategy the bucket uses is NooBaa's. */
+ * -- and then unmarked while it is still empty, through the
+ * `unmarked-bucket` hint:  nothing else makes an RGW bucket unmarked
+ * (UnmarkPasskey;  DECISIONS.md 2026-10-21).  From there every strategy
+ * the bucket uses is NooBaa's, and a client's write to it is rejected
+ * until it is adopted. */
 class NSFSNooBaaBucketTest : public NSFSBucketTest {
 public:
   void SetUp() override {
     NSFSBucketTest::SetUp();
+    ASSERT_NO_FATAL_FAILURE(unmark());
+  }
+
+  /* Unmark the empty bucket and take a fresh handle, since a loaded one
+   * keeps the profile it resolved. */
+  void unmark() {
+    std::map<std::string, std::string> out;
+    ASSERT_EQ(driver->driver_hint(env->dpp, "unmarked-bucket",
+				  {{"bucket", testname}}, &out), 0);
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				  &bucket, null_yield), 0);
     auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-    ASSERT_EQ(b->resolve_profile(env->dpp), 0);
-    ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE), 0);
     ASSERT_STREQ(b->profile_name(), "base");
     ASSERT_STREQ(b->get_format()->name(), "noobaa");
   }
@@ -6058,18 +6069,21 @@ TEST_F(NSFSNooBaaBucketTest, TheRootObjectReadsTheSameBeforeAndAfterConversion)
       sf::remove(bucket_path() / ".folder");
     }
 
-    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
     if (body.empty()) {
       /* back to base for the second case;  the bucket is empty but for
        * the root object, which does not keep a bucket from changing */
-      ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE), 0);
+      ASSERT_NO_FATAL_FAILURE(unmark());
     }
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
 
+    /* the bucket's state as adoption's first step writes it, before the
+     * bucket is marked */
     bufferlist tag;
     tag.append("bucket-tag");
     rgw::sal::Attrs add;
     add[RGW_ATTR_TAGS] = tag;
-    ASSERT_EQ(bucket->merge_and_store_attrs(env->dpp, add, null_yield), 0);
+    ASSERT_EQ(b->merge_and_store_attrs(env->dpp, add, null_yield,
+				       rgw::sal::MutationPurpose::adoption), 0);
     lay_noobaa_directory_object(bucket_path(), body, "text/x-root", "root");
 
     const ClientView r0 = client_view(bucket.get(), env->dpp, "/");
@@ -6186,17 +6200,16 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryWithoutTheMarkerIsNotItsObject)
   EXPECT_FALSE(u.listed);
 }
 
-/* On a base bucket nothing converts, so a write to a NooBaa directory
- * object is rejected rather than put in the nsfs format beside NooBaa's.
- * What such a bucket should allow is open (DECISIONS.md 2026-10-11, the
- * command mode). */
+/* On a bucket not taken over a client's write is rejected
+ * (DECISIONS.md 2026-10-21), a write to a NooBaa directory object among
+ * them, and nothing is put in the nsfs format beside NooBaa's. */
 TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRejected)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
 
   auto obj = bucket->get_object(rgw_obj_key("e/"));
   EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0),
-	    -EOPNOTSUPP);
+	    -ERR_INVALID_BUCKET_STATE);
   EXPECT_TRUE(client_view(bucket.get(), env->dpp, "e/").exists);
   EXPECT_FALSE(sf::exists(bucket_path() / "e" / ".folder"))
       << "a sentinel was written into a base bucket";
@@ -6242,17 +6255,367 @@ static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
   return out;
 }
 
+/* ------------------------------------------------------------------ *
+ * The gate on a bucket not taken over (DECISIONS.md 2026-10-21).
+ *
+ * A bucket directory without `user.nsfs.extensions` has not been taken
+ * over, and a client's write to it is rejected with InvalidBucketState.
+ * The status code is the weakest evidence there is, so each case also
+ * compares the tree before and after, byte for byte:  every name, its
+ * type, mode, owner, size, mtime and attribute values.
+ * ------------------------------------------------------------------ */
+
+/* The tree as the filesystem has it, one line per name, sorted. */
+static std::vector<std::string> tree_snapshot(const sf::path& root)
+{
+  std::vector<std::string> out;
+  auto one = [&](const sf::path& p) {
+    struct stat st{};
+    if (::lstat(p.c_str(), &st) < 0) {
+      out.push_back(p.string() + " unstattable");
+      return;
+    }
+    std::string line = sf::relative(p, root).string() + " " +
+      std::to_string(st.st_mode) + " " + std::to_string(st.st_uid) + ":" +
+      std::to_string(st.st_gid) + " " + std::to_string(st.st_size) + " " +
+      std::to_string(st.st_mtim.tv_sec) + "." +
+      std::to_string(st.st_mtim.tv_nsec);
+    char names[8192];
+    const ssize_t n = ::llistxattr(p.c_str(), names, sizeof(names));
+    std::vector<std::string> xs;
+    for (ssize_t i = 0; (n > 0) && (i < n); i += strlen(names + i) + 1) {
+      char v[4096];
+      const ssize_t vl = ::lgetxattr(p.c_str(), names + i, v, sizeof(v));
+      xs.push_back(std::string(names + i) + "=" +
+		   ((vl >= 0) ? std::string(v, vl) : std::string("?")));
+    }
+    std::sort(xs.begin(), xs.end());
+    for (const auto& x : xs) {
+      line += " " + x;
+    }
+    out.push_back(line);
+  };
+  one(root);
+  for (const auto& e : sf::recursive_directory_iterator(root)) {
+    one(e.path());
+  }
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
+class NSFSAdoptionGateTest : public NSFSNooBaaBucketTest {
+public:
+  /* a NooBaa object and a NooBaa upload in flight, laid by hand */
+  TestTree tree;
+  void SetUp() override {
+    NSFSNooBaaBucketTest::SetUp();
+    if (HasFatalFailure()) {
+      return;
+    }
+    make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+    write_file(bucket_path() / "obj", "their bytes");
+  }
+
+  /* a bucket this gateway made, so marked */
+  std::unique_ptr<rgw::sal::Bucket> marked_bucket(const std::string& name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = owner;
+    info.creation_time = ceph::real_clock::now();
+    auto b = driver->get_bucket(info);
+    EXPECT_NE(b.get(), nullptr);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    EXPECT_EQ(b->create(env->dpp, cp, null_yield), 0);
+    return b;
+  }
+
+  int put(rgw::sal::Bucket* b, const std::string& key) {
+    auto obj = b->get_object(rgw_obj_key(key));
+    auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					    acl_owner, nullptr, 0, "put");
+    int r = writer->prepare(null_yield);
+    if (r < 0) {
+      return r;
+    }
+    bufferlist bl;
+    bl.append("ours");
+    if ((r = writer->process(std::move(bl), 0)) < 0 ||
+	(r = writer->process({}, 4)) < 0) {
+      return r;
+    }
+    Attrs attrs;
+    ceph::real_time mtime;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    return writer->complete(4, etag, &mtime, real_time(), attrs,
+			    std::nullopt, real_time(), nullptr, nullptr,
+			    nullptr, nullptr, nullptr, rctx, 0);
+  }
+
+  int upload_part(rgw::sal::MultipartUpload* upload, int num) {
+    rgw_placement_rule placement;
+    auto writer = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				     &placement, num, std::to_string(num));
+    if (!writer) {
+      return -EINVAL;
+    }
+    int r = writer->prepare(null_yield);
+    if (r < 0) {
+      return r;
+    }
+    bufferlist bl;
+    bl.append(std::string(16, 'p'));
+    if ((r = writer->process(std::move(bl), 0)) < 0 ||
+	(r = writer->process({}, 16)) < 0) {
+      return r;
+    }
+    Attrs attrs;
+    ceph::real_time mtime;
+    std::string etag = std::to_string(num);
+    req_context rctx{env->dpp, null_yield, nullptr};
+    return writer->complete(16, etag, &mtime, real_time(), attrs,
+			    std::nullopt, real_time(), nullptr, nullptr,
+			    nullptr, nullptr, nullptr, rctx, 0);
+  }
+
+  int copy(rgw::sal::Bucket* src_b, const std::string& src,
+	   rgw::sal::Bucket* dst_b, const std::string& dst) {
+    auto src_obj = src_b->get_object(rgw_obj_key(src));
+    auto dst_obj = dst_b->get_object(rgw_obj_key(dst));
+    Attrs attrs;
+    std::string etag, tag;
+    return src_obj->copy_object(
+	acl_owner, rgw_user(), nullptr, rgw_zone_id(),
+	dst_obj.get(), dst_b, src_b,
+	rgw_placement_rule(), nullptr, nullptr,
+	nullptr, nullptr, false,
+	nullptr, nullptr,
+	ATTRSMOD_NONE, false, attrs,
+	RGWObjCategory::Main, 0,
+	boost::none, nullptr, &tag, &etag,
+	nullptr, nullptr, nullptr,
+	env->dpp, null_yield);
+  }
+};
+
+/* Every mutating entry point, on a bucket not taken over:  rejected, and
+ * nothing in the tree changes.  An entry point added later and missing
+ * here is a missing row, not a silent gap. */
+TEST_F(NSFSAdoptionGateTest, AClientWriteIsRejectedAndChangesNothing)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  bufferlist v;
+  v.append("x");
+  const std::vector<std::pair<std::string, std::function<int()>>> ops = {
+    {"PutObject", [&] { return put(bucket.get(), "new"); }},
+    {"PutObject over theirs", [&] { return put(bucket.get(), "obj"); }},
+    {"set_obj_attrs", [&] {
+      Attrs a;
+      a[RGW_ATTR_META_PREFIX "probe"] = v;
+      return bucket->get_object(rgw_obj_key("obj"))->set_obj_attrs(
+	  env->dpp, &a, nullptr, null_yield, rgw::sal::FLAG_LOG_OP,
+	  rgw_user());
+    }},
+    {"modify_obj_attrs", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->modify_obj_attrs(
+	  RGW_ATTR_META_PREFIX "probe", v, null_yield, env->dpp, rgw_user());
+    }},
+    {"delete_obj_attrs", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->delete_obj_attrs(
+	  env->dpp, RGW_ATTR_TAGS, null_yield, rgw_user());
+    }},
+    {"DeleteObject", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->get_delete_op()
+	  ->delete_obj(env->dpp, null_yield, 0);
+    }},
+    {"CopyObject within", [&] {
+      return copy(bucket.get(), "obj", bucket.get(), "copied");
+    }},
+    {"rename", [&] {
+      return bucket->get_object(rgw_obj_key("obj"))->rename(
+	  env->dpp, null_yield, bucket.get(), rgw_obj_key("renamed"),
+	  rgw::sal::Object::FLAG_RENAME_NONE, rgw_user());
+    }},
+    {"CreateMultipartUpload", [&] {
+      auto u = bucket->get_multipart_upload("started",
+					    "44444444-5555-4666-8777-888888888888");
+      rgw_placement_rule placement;
+      Attrs a;
+      return u->init(env->dpp, null_yield, acl_owner, placement, a);
+    }},
+    {"UploadPart into theirs", [&] {
+      auto u = bucket->get_multipart_upload(tree.key, tree.upload_id);
+      return upload_part(u.get(), 9);
+    }},
+    {"CompleteMultipartUpload of theirs", [&] {
+      auto u = bucket->get_multipart_upload(tree.key, tree.upload_id);
+      std::map<int, std::string> etags;
+      return complete_mp(bucket.get(), u.get(), owner, tree.key, etags);
+    }},
+    {"AbortMultipartUpload of theirs", [&] {
+      auto u = bucket->get_multipart_upload(tree.key, tree.upload_id);
+      return u->abort(env->dpp, env->cct.get(), null_yield);
+    }},
+    {"bucket attributes", [&] {
+      Attrs a;
+      a["user.rgw.probe"] = v;
+      return bucket->merge_and_store_attrs(env->dpp, a, null_yield);
+    }},
+    {"bucket info", [&] {
+      bucket->get_info().flags |= BUCKET_VERSIONED;
+      return bucket->put_info(env->dpp, false, real_time(), null_yield);
+    }},
+    {"bucket ACL", [&] {
+      RGWAccessControlPolicy acl;
+      acl.create_default(acl_owner.id, acl_owner.display_name);
+      return b->set_acl(env->dpp, acl, null_yield);
+    }},
+    {"bucket chown", [&] {
+      return b->chown(env->dpp, owner, "", null_yield);
+    }},
+    {"DeleteBucket", [&] {
+      return bucket->remove(env->dpp, false, null_yield);
+    }},
+  };
+  for (const auto& [name, op] : ops) {
+    SCOPED_TRACE(name);
+    const auto before = tree_snapshot(bucket_path());
+    EXPECT_EQ(op(), -ERR_INVALID_BUCKET_STATE);
+    EXPECT_EQ(tree_snapshot(bucket_path()), before)
+	<< "a rejected write changed the tree";
+  }
+}
+
+/* Reads are served on a bucket not taken over, and write nothing:  the
+ * hazard serve mode's refusal named, a GET writing an attribute. */
+TEST_F(NSFSAdoptionGateTest, ReadsWriteNothing)
+{
+  const auto before = tree_snapshot(bucket_path());
+  EXPECT_TRUE(client_view(bucket.get(), env->dpp, "obj").exists);
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "obj", ""), "their bytes");
+  (void) listed_versions(bucket.get(), env->dpp, "obj");
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				    nullptr, &truncated, null_yield), 0);
+  EXPECT_EQ(uploads.size(), 1u) << "their upload in flight is listed";
+  EXPECT_EQ(tree_snapshot(bucket_path()), before) << "a read wrote";
+}
+
+/* The rejection is the gate's:  with it lifted for this bucket the same
+ * write succeeds, and each rejection is counted. */
+TEST_F(NSFSAdoptionGateTest, TheRejectionIsTheGates)
+{
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "false"}, {"bucket", testname}},
+				&out), 0);
+  const uint64_t before = std::stoull(out["rejected"]);
+  EXPECT_EQ(put(bucket.get(), "lifted"), -ERR_INVALID_BUCKET_STATE);
+
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "true"}, {"bucket", testname}},
+				&out), 0);
+  const int lifted = put(bucket.get(), "lifted");
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-lift-adoption-gate",
+				{{"enable", "false"}, {"bucket", testname}},
+				&out), 0);
+  EXPECT_EQ(lifted, 0) << "the write failed for a reason other than the gate";
+  EXPECT_EQ(std::stoull(out["rejected"]), before + 1)
+      << "the rejection was not counted";
+}
+
+/* Adoption's own write gets in;  the same call as a client does not. */
+TEST_F(NSFSAdoptionGateTest, OnlyAdoptionsWriteGetsIn)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  Attrs a;
+  EXPECT_EQ(b->merge_and_store_attrs(env->dpp, a, null_yield,
+				     rgw::sal::MutationPurpose::client),
+	    -ERR_INVALID_BUCKET_STATE);
+  EXPECT_EQ(b->merge_and_store_attrs(env->dpp, a, null_yield,
+				     rgw::sal::MutationPurpose::adoption), 0);
+}
+
+/* Copying out of a bucket not taken over is a read of it:  the copy into
+ * a marked bucket succeeds and the source is unchanged.  A marked bucket
+ * takes the write the unmarked one rejects. */
+TEST_F(NSFSAdoptionGateTest, ACopyOutIsARead)
+{
+  auto ours = marked_bucket(testname + "-ours");
+  const auto before = tree_snapshot(bucket_path());
+  EXPECT_EQ(copy(bucket.get(), "obj", ours.get(), "copied"), 0);
+  EXPECT_EQ(tree_snapshot(bucket_path()), before) << "the copy wrote its source";
+  EXPECT_EQ(put(ours.get(), "new"), 0) << "a marked bucket rejected a write";
+}
+
+/* Nothing returns a bucket to base:  set_profile() rejects it for every
+ * caller, the profile hint among them, and the bucket stays marked. */
+TEST_F(NSFSBucketTest, NothingReturnsABucketToBase)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE),
+	    -ERR_INVALID_BUCKET_STATE);
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "bucket-profile",
+				{{"bucket", testname}, {"profile", "base"}},
+				&out), -ERR_INVALID_BUCKET_STATE);
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &loaded,
+				null_yield), 0);
+  EXPECT_STRNE(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base");
+}
+
+/* The `unmarked-bucket` hint is narrow:  it rejects a bucket holding
+ * content and one already unmarked, makes an empty marked one unmarked,
+ * and is counted in the features map. */
+TEST_F(NSFSBucketTest, TheUnmarkedBucketHintIsNarrow)
+{
+  std::map<std::string, std::string> f0;
+  driver->get_features(f0);
+  const uint64_t count = std::stoull(f0["hint_unmarked_buckets"]);
+
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "content", "c",
+	     "text/plain");
+  std::map<std::string, std::string> out;
+  EXPECT_NE(driver->driver_hint(env->dpp, "unmarked-bucket",
+				{{"bucket", testname}}, &out), 0)
+      << "a bucket holding content was unmarked";
+  ASSERT_EQ(bucket->get_object(rgw_obj_key("content"))->get_delete_op()
+	      ->delete_obj(env->dpp, null_yield, 0), 0);
+
+  ASSERT_EQ(driver->driver_hint(env->dpp, "unmarked-bucket",
+				{{"bucket", testname}}, &out), 0);
+  EXPECT_EQ(out["profile"], "base");
+  EXPECT_EQ(driver->driver_hint(env->dpp, "unmarked-bucket",
+				{{"bucket", testname}}, &out),
+	    -ERR_INVALID_BUCKET_STATE) << "an unmarked bucket was unmarked again";
+
+  std::map<std::string, std::string> f1;
+  driver->get_features(f1);
+  EXPECT_EQ(std::stoull(f1["hint_unmarked_buckets"]), count + 1);
+}
+
 /* A version keeps the id it was recorded with (DECISIONS.md 2026-10-13).
  *
  * NooBaa records each version's id when it writes it, and the id it
  * records drops the low bits of the mtime, so one recomputed from the
  * stat differs.  The recorded id below is deliberately not what the stat
  * would give.  A client that was handed it must find the version by it
- * after import, after the next PUT demotes it, and after conversion. */
+ * before adoption, after it, and after the next PUT demotes it. */
 TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
 {
+  /* versioning in the bucket's state, as adoption's first step writes
+   * it from NooBaa's record */
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   bucket->get_info().flags |= BUCKET_VERSIONED;
-  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  rgw::sal::Attrs none;
+  ASSERT_EQ(b->merge_and_store_attrs(env->dpp, none, null_yield,
+				     rgw::sal::MutationPurpose::adoption), 0);
 
   const sf::path cur = bucket_path() / "v";
   write_file(cur, "first");
@@ -6276,6 +6639,12 @@ TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
   auto rows = listed_versions(bucket.get(), env->dpp, "v");
   EXPECT_TRUE(rows.count(recorded)) << "the listing shows another id";
 
+  /* adoption keeps the id;  a PUT can only come after it, since nothing
+   * writes a bucket not taken over */
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first")
+      << "adoption lost the id the client holds";
+
   /* a new version demotes this one, under the id it was recorded with */
   put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "v", "second",
 	     "text/plain");
@@ -6286,17 +6655,6 @@ TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
   ASSERT_TRUE(rows.count(recorded));
   EXPECT_FALSE(rows[recorded]);
   EXPECT_EQ(rows.size(), 2u);
-
-  std::string second;
-  read_version(bucket.get(), env->dpp, "v", "", &second);
-
-  /* and conversion keeps both */
-  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
-  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first");
-  std::string after;
-  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", "", &after), "second");
-  EXPECT_EQ(after, second) << "conversion changed the current version's id";
 }
 
 /* NooBaa's temp directory is content only while it holds something.
@@ -6311,7 +6669,9 @@ TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
 {
   sf::create_directories(bucket_path() / ".noobaa-nsfs_6ace0000aaaabbbbccccdddd"
 			 / "multipart-uploads");
+  /* adopted first:  a bucket not taken over takes no DeleteBucket */
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
   EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
       << "an empty temp directory counted as an upload in flight";
   EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
@@ -7685,13 +8045,19 @@ TEST_F(NSFSNooBaaBucketTest, ListsThePartsOfTheirUpload)
   }
 }
 
-/* And completing one.  The object is assembled from NooBaa's staging and
- * written in NooBaa's format, which is what makes this a round trip
- * rather than a read. */
+/* An upload NooBaa started completes after the bucket is adopted.
+ *
+ * NooBaa's gateway has stopped by then -- the handoff is sequential --
+ * and nothing completes an upload on a bucket not taken over
+ * (DECISIONS.md 2026-10-21), so the upload is completed through RGW once
+ * adoption has carried its staging into RGW's layout. */
 TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0)
+      << "adoption did not carry the upload across";
 
   auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
   ASSERT_NE(upload.get(), nullptr);
@@ -7830,203 +8196,6 @@ TEST_F(NSFSBucketTest, GetInfoOnOurOwnUpload)
   ASSERT_NE(rule, nullptr);
   EXPECT_EQ(rule->name, "default-placement");
   EXPECT_EQ(rule->storage_class, "GLACIER");
-}
-
-/* Base can start an upload, not only finish a NooBaa one.
- *
- * The staging root is two questions.  Reading asks where staging IS,
- * and must not name a directory that is absent -- a bucket with no
- * uploads lists empty.  Writing asks where it WOULD go, and may
- * create the intermediate directory, because the bucket id is already
- * on disk and `multipart-uploads/` beneath it is what NooBaa's own
- * create_object_upload makes.
- */
-TEST_F(NSFSNooBaaBucketTest, CreatesAnUploadOnAQuiescentTree)
-{
-  TestTree tree;
-  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
-
-  const std::string objname = "written/by/us.bin";
-  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
-  auto upload = bucket->get_multipart_upload(objname, upload_id);
-  ASSERT_NE(upload.get(), nullptr);
-
-  rgw_placement_rule placement;
-  Attrs attrs;
-  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
-
-  /* under NooBaa's temp directory, which we did not invent */
-  std::vector<sf::path> tmpdirs;
-  for (auto& e : sf::directory_iterator(bucket_path())) {
-    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
-      tmpdirs.push_back(e.path());
-    }
-  }
-  ASSERT_EQ(tmpdirs.size(), 1u) << "a second temp directory was created";
-  EXPECT_TRUE(sf::is_directory(tmpdirs[0] / "multipart-uploads" / upload_id));
-
-  const size_t stride = 64;
-  std::string expected;
-  std::map<int, std::string> part_etags;
-  for (int i = 1; i <= 3; ++i) {
-    std::string payload(stride, static_cast<char>('a' + i));
-    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
-				  payload);
-    expected += payload;
-  }
-
-  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
-			part_etags), 0);
-  EXPECT_EQ(read_all(bucket_path() / objname), expected);
-}
-
-/* What NooBaa's completion path reads out of the meta file.
- *
- * `complete_object_upload` takes content_type, content_encoding,
- * xattr, storage_class and lock_settings out of create_object_upload
- * and puts them on the finished object (`namespace_fs.js:2024`), so
- * an upload we start and NooBaa's gateway finishes loses each of these
- * if we do not write it.  Nothing in nsfs reads them back, which is
- * why they need a test of their own.
- *
- * The absences are asserted too.  NooBaa's document is JSON.stringify of
- * the request parameters and stringify omits what is undefined, so a
- * field the request did not carry must be missing rather than empty --
- * an empty content_type would become the object's content type.
- */
-TEST_F(NSFSNooBaaBucketTest, RecordsWhatTheirCompletionReads)
-{
-  TestTree tree;
-  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
-
-  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
-  const std::string key = "meta/data.bin";
-  auto upload = bucket->get_multipart_upload(key, upload_id);
-  ASSERT_NE(upload.get(), nullptr);
-
-  auto bl_of = [](const char* v) {
-    bufferlist bl;
-    bl.append(v);
-    return bl;
-  };
-
-  rgw_placement_rule placement;
-  placement.storage_class = "STANDARD";
-  Attrs attrs;
-  attrs[RGW_ATTR_CONTENT_TYPE] = bl_of("text/plain");
-  attrs[RGW_ATTR_CONTENT_ENC] = bl_of("gzip");
-  attrs[std::string(RGW_ATTR_META_PREFIX) + "colour"] = bl_of("green");
-  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
-
-  sf::path doc;
-  for (auto& e : sf::directory_iterator(bucket_path())) {
-    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
-      doc = e.path() / "multipart-uploads" / upload_id /
-	    "create_object_upload";
-    }
-  }
-  ASSERT_FALSE(doc.empty());
-  ASSERT_TRUE(sf::exists(doc)) << doc;
-
-  const std::string text = read_all(doc);
-  JSONParser parser;
-  ASSERT_TRUE(parser.parse(text.data(), text.size())) << text;
-
-  auto field = [&parser](const char* n) -> std::string {
-    JSONObj* o = parser.find_obj(n);
-    return o ? o->get_data() : std::string{"<absent>"};
-  };
-  EXPECT_EQ(field("key"), key);
-  EXPECT_EQ(field("content_type"), "text/plain");
-  EXPECT_EQ(field("content_encoding"), "gzip");
-  EXPECT_EQ(field("storage_class"), "STANDARD");
-
-  JSONObj* xattr = parser.find_obj("xattr");
-  ASSERT_NE(xattr, nullptr) << text;
-  JSONObj* colour = xattr->find_obj("colour");
-  ASSERT_NE(colour, nullptr) << text;
-  EXPECT_EQ(colour->get_data(), "green");
-  /* stored under the bare name, as NooBaa's is:  `user.<key>` on disk,
-   * and `x-amz-meta-` belongs to the protocol */
-  EXPECT_EQ(xattr->find_obj("x-amz-meta-colour"), nullptr);
-
-  /* NooBaa's spelling of the upload id, which NooBaa's
-   * ListMultipartUploads reports as UploadId;  under that name and not
-   * nsfs's */
-  EXPECT_EQ(field("obj_id"), upload_id);
-  EXPECT_EQ(field("bucket"), bucket->get_name());
-  EXPECT_EQ(parser.find_obj("upload_id"), nullptr) << text;
-  EXPECT_EQ(parser.find_obj("lock_settings"), nullptr) << text;
-}
-
-/* An ordinary object in a base bucket is written in NooBaa's names.
- *
- * Not multipart:  the multipart paths were converted when they moved
- * onto NSFSBucket::mpu_strategy(), and the object paths were not,
- * because an FSEnt carries the strategies it inherited from the
- * driver's root.  So a bucket whose profile was base, whose format was
- * noobaa and whose staging layout was NooBaa's still wrote
- * `user.nsfs.rgw.etag` where NooBaa's reader wants `user.content_md5`.
- *
- * The names are asserted on disk rather than through the driver.
- * Reading back through the same strategy that wrote would agree with
- * itself whichever format it used, which is the tautology this has to
- * avoid;  NooBaa's gateway reads the names.
- */
-TEST_F(NSFSNooBaaBucketTest, ObjectsAreWrittenInTheirNames)
-{
-  const std::string objname = "plain.bin";
-  auto obj = bucket->get_object(rgw_obj_key(objname));
-  ASSERT_NE(obj.get(), nullptr);
-
-  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
-					  acl_owner, nullptr, 0, testname);
-  ASSERT_EQ(writer->prepare(null_yield), 0);
-  bufferlist bl;
-  bl.append("some bytes");
-  const int len = bl.length();
-  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
-  ASSERT_EQ(writer->process({}, len), 0);
-
-  Attrs attrs;
-  bufferlist ct;
-  ct.append("text/plain");
-  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
-  bufferlist meta;
-  meta.append("green");
-  attrs[std::string(RGW_ATTR_META_PREFIX) + "colour"] = meta;
-
-  ceph::real_time mtime;
-  std::string etag;
-  req_context rctx{env->dpp, null_yield, nullptr};
-  ASSERT_EQ(writer->complete(len, etag, &mtime, real_time(), attrs,
-			     std::nullopt, real_time(), nullptr, nullptr,
-			     nullptr, nullptr, nullptr, rctx, 0), 0);
-
-  const sf::path p{bucket_path() / objname};
-  ASSERT_TRUE(sf::is_regular_file(p)) << p;
-
-  char buf[8192];
-  ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
-  ASSERT_GT(nlen, 0);
-  std::set<std::string> names;
-  for (const char* q = buf; q < buf + nlen; q += strlen(q) + 1) {
-    names.insert(q);
-  }
-
-  EXPECT_TRUE(names.contains("user.noobaa.content_type")) << "content type";
-  EXPECT_TRUE(names.contains("user.colour")) << "user metadata";
-  EXPECT_FALSE(names.contains("user.nsfs.rgw.content_type"));
-  EXPECT_FALSE(names.contains("user.nsfs.user.rgw.x-amz-meta-colour"));
-
-  /* and reading it back gives the logical keys, through NooBaa's parser */
-  auto rd = bucket->get_object(rgw_obj_key(objname));
-  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
-  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
-  auto& got = rd->get_attrs();
-  auto it = got.find(RGW_ATTR_CONTENT_TYPE);
-  ASSERT_NE(it, got.end()) << "content type did not come back";
-  EXPECT_EQ(it->second.to_str(), "text/plain");
 }
 
 /* The control:  the same write in a strong bucket keeps the nsfs names.
@@ -8562,88 +8731,6 @@ TEST_F(NSFSConvertingBucketTest, TagsRemovedByAnAttributeWriteStayRemoved)
       << "the sweep brought the removed tags back";
 }
 
-/* And the same, on a bucket in NooBaa's format.
- *
- * The callback computed the staging directory with the driver's own
- * path strategy, which names nsfs's.  A base bucket stages under
- * `.noobaa-nsfs_<id>/multipart-uploads/`, so the openat failed and it
- * returned having written nothing:  under writeback the records lived
- * only in the cache, and eviction -- the one thing that was supposed
- * to persist them -- dropped them instead.
- */
-class NSFSNooBaaEvictingBucketTest : public NSFSNooBaaBucketTest {
-public:
-  file::listing::MultipartCachePolicy mp_cache_policy() const override {
-    return file::listing::MultipartCachePolicy::writeback;
-  }
-  std::array<uint64_t, 4> mp_cache_sizes() const override {
-    return {1, 1, 1, 8};
-  }
-};
-
-TEST_F(NSFSNooBaaEvictingBucketTest, AnEvictedPartReachesTheirStaging)
-{
-  TestTree tree;
-  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
-
-  const std::string objname = "written/by/us.bin";
-  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
-  auto upload = bucket->get_multipart_upload(objname, upload_id);
-  ASSERT_NE(upload.get(), nullptr);
-
-  rgw_placement_rule placement;
-  Attrs attrs;
-  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
-
-  const size_t stride = 64;
-  std::string expected;
-  std::map<int, std::string> part_etags;
-  for (int i = 1; i <= 3; ++i) {
-    std::string payload(stride, static_cast<char>('a' + i));
-    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
-				  payload);
-    expected += payload;
-  }
-
-  {
-    auto other = bucket->get_multipart_upload(
-	"other.bin", "22222222-3333-4444-8555-666666666666");
-    ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
-			  attrs), 0);
-    write_mp_part(other.get(), acl_owner, &placement, 1,
-		  std::string(stride, 'z'));
-  }
-
-  /* the records are on disk, in NooBaa's staging and in both formats:
-   * nsfs's because the nsfs reader decodes it, NooBaa's because it is
-   * what NooBaa's gateway reads */
-  sf::path staging;
-  for (auto& e : sf::directory_iterator(bucket_path())) {
-    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
-      staging = e.path() / "multipart-uploads" / upload_id;
-    }
-  }
-  ASSERT_TRUE(sf::is_directory(staging)) << staging;
-
-  for (int i = 1; i <= 3; ++i) {
-    const sf::path rec{staging / ("part-" + std::to_string(i))};
-    ASSERT_TRUE(sf::exists(rec)) << rec;
-    char buf[8192];
-    ssize_t len = ::listxattr(rec.c_str(), buf, sizeof(buf));
-    ASSERT_GT(len, 0) << rec << " carries no record at all";
-    std::set<std::string> names;
-    for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
-      names.insert(q);
-    }
-    EXPECT_TRUE(names.contains("user.nsfs.mp_upload")) << i;
-    EXPECT_TRUE(names.contains("user.noobaa.part_size")) << i;
-  }
-
-  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
-			part_etags), 0);
-  EXPECT_EQ(read_all(bucket_path() / objname), expected);
-}
-
 /* Object lock:  three plain NooBaa attributes, two encoded nsfs
  * ones.
  *
@@ -8725,52 +8812,6 @@ TEST_F(NSFSNooBaaBucketTest, AHalfWrittenRetentionIsNoRetention)
 	 "expired";
 }
 
-/* And nsfs's is written in NooBaa's three attributes. */
-TEST_F(NSFSNooBaaBucketTest, WritesObjectLockInTheirShape)
-{
-  const sf::path p{bucket_path() / "mine.bin"};
-  write_file(p, "bytes");
-
-  auto obj = bucket->get_object(rgw_obj_key("mine.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-
-  ceph::real_time until;
-  ASSERT_EQ(parse_time("2031-06-15T12:00:00.000Z", &until), 0);
-  RGWObjectRetention ret("GOVERNANCE", until);
-  RGWObjectLegalHold hold("OFF");
-  Attrs set;
-  bufferlist rb, hb;
-  ret.encode(rb);
-  hold.encode(hb);
-  set[RGW_ATTR_OBJECT_RETENTION] = rb;
-  set[RGW_ATTR_OBJECT_LEGAL_HOLD] = hb;
-  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
-
-  auto xattr = [&p](const char* n) {
-    char buf[256];
-    ssize_t len = ::getxattr(p.c_str(), n, buf, sizeof(buf));
-    return (len > 0) ? std::string(buf, len) : std::string{};
-  };
-  EXPECT_EQ(xattr("user.noobaa.legal_hold"), "OFF");
-  EXPECT_EQ(xattr("user.noobaa.retention_mode"), "GOVERNANCE");
-  EXPECT_EQ(xattr("user.noobaa.retention_date").substr(0, 10), "2031-06-15")
-      << "got " << xattr("user.noobaa.retention_date");
-
-  /* read back through the driver:  the round trip is what a
-   * converting bucket depends on */
-  auto rd = bucket->get_object(rgw_obj_key("mine.bin"));
-  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
-  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
-  auto i = rd->get_attrs().find(RGW_ATTR_OBJECT_RETENTION);
-  ASSERT_NE(i, rd->get_attrs().end());
-  RGWObjectRetention back;
-  auto bi = i->second.cbegin();
-  back.decode(bi);
-  EXPECT_EQ(back.get_mode(), "GOVERNANCE");
-  EXPECT_EQ(back.get_retain_until_date(), until);
-}
-
 /* The control:  a marked bucket keeps nsfs's encoded. */
 TEST_F(NSFSBucketTest, ObjectLockInAMarkedBucketStaysEncoded)
 {
@@ -8830,36 +8871,6 @@ TEST_F(NSFSNooBaaBucketTest, ReadsTheirStorageClass)
   EXPECT_EQ(attrs.find(std::string(RGW_ATTR_META_PREFIX) + "storage_class"),
 	    attrs.end())
       << "their storage class surfaced as user metadata";
-}
-
-/* And nsfs's is written under NooBaa's name. */
-TEST_F(NSFSNooBaaBucketTest, WritesStorageClassUnderTheirName)
-{
-  const sf::path p{bucket_path() / "warm.bin"};
-  write_file(p, "bytes");
-
-  auto obj = bucket->get_object(rgw_obj_key("warm.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-  Attrs set;
-  bufferlist bl;
-  bl.append("GLACIER");
-  set[RGW_ATTR_STORAGE_CLASS] = bl;
-  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
-
-  char buf[256];
-  ssize_t len = ::getxattr(p.c_str(), "user.storage_class", buf, sizeof(buf));
-  ASSERT_GT(len, 0) << "not written under their name";
-  EXPECT_EQ(std::string(buf, len), "GLACIER");
-
-  char nb[8192];
-  ssize_t nlen = ::listxattr(p.c_str(), nb, sizeof(nb));
-  ASSERT_GT(nlen, 0);
-  for (const char* q = nb; q < nb + nlen; q += strlen(q) + 1) {
-    EXPECT_EQ(std::string(q).find("nsfs.rgw.storage_class"),
-	      std::string::npos)
-	<< "also wrote our name: " << q;
-  }
 }
 
 /* Object tags, which are one attribute per tag in NooBaa's format and
@@ -8930,87 +8941,6 @@ TEST_F(NSFSTagTest, ReadsTheirTags)
   ASSERT_EQ(tags.get_tags().size(), 2u) << "their tags were not read";
   EXPECT_EQ(tags.get_tags().find("colour")->second, "green");
   EXPECT_EQ(tags.get_tags().find("size")->second, "large");
-}
-
-/* And nsfs's are written as NooBaa's. */
-TEST_F(NSFSTagTest, WritesTagsInTheirShape)
-{
-  const sf::path p{bucket_path() / "mine.bin"};
-  write_file(p, "bytes");
-
-  auto obj = bucket->get_object(rgw_obj_key("mine.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-
-  RGWObjTags tags;
-  tags.add_tag("colour", "blue");
-  tags.add_tag("shape", "round");
-  bufferlist bl;
-  tags.encode(bl);
-  Attrs set;
-  set[RGW_ATTR_TAGS] = bl;
-  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
-
-  auto names = xattr_names(p);
-  EXPECT_TRUE(names.contains("user.noobaa.tag.colour"));
-  EXPECT_TRUE(names.contains("user.noobaa.tag.shape"));
-  EXPECT_EQ(xattr(p, "user.noobaa.tag.colour"), "blue");
-  EXPECT_EQ(xattr(p, "user.noobaa.tag.shape"), "round");
-  /* and not as one nsfs blob */
-  for (const auto& n : names) {
-    EXPECT_EQ(n.find("x-amz-tagging"), std::string::npos)
-	<< "wrote our encoded tag set on their tree: " << n;
-  }
-
-  /* read back through the driver, which is the round trip */
-  auto rd = bucket->get_object(rgw_obj_key("mine.bin"));
-  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
-  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
-  EXPECT_EQ(decode_tags(rd->get_attrs()).get_tags().size(), 2u);
-}
-
-/* Writing the set replaces it, which is S3's contract and NooBaa's. */
-TEST_F(NSFSTagTest, WritingTheSetReplacesIt)
-{
-  their_tagged_object("tagged.bin", {{"old", "1"}, {"stale", "2"}});
-
-  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-  RGWObjTags tags;
-  tags.add_tag("fresh", "3");
-  bufferlist bl;
-  tags.encode(bl);
-  Attrs set;
-  set[RGW_ATTR_TAGS] = bl;
-  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
-
-  auto names = xattr_names(bucket_path() / "tagged.bin");
-  EXPECT_TRUE(names.contains("user.noobaa.tag.fresh"));
-  EXPECT_FALSE(names.contains("user.noobaa.tag.old"))
-      << "the replaced set was merged rather than replaced";
-  EXPECT_FALSE(names.contains("user.noobaa.tag.stale"));
-}
-
-/* DeleteObjectTagging removes all of them, not one nsfs name. */
-TEST_F(NSFSTagTest, DeletingTagsRemovesTheirAttributes)
-{
-  their_tagged_object("tagged.bin", {{"a", "1"}, {"b", "2"}});
-  const sf::path p{bucket_path() / "tagged.bin"};
-
-  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
-  ASSERT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
-				  rgw_user()), 0);
-
-  auto names = xattr_names(p);
-  EXPECT_FALSE(names.contains("user.noobaa.tag.a"));
-  EXPECT_FALSE(names.contains("user.noobaa.tag.b"));
-
-  auto rd = bucket->get_object(rgw_obj_key("tagged.bin"));
-  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
-  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
-  EXPECT_EQ(rd->get_attrs().find(RGW_ATTR_TAGS), rd->get_attrs().end());
 }
 
 /* The control:  a marked bucket still keeps one encoded set.
@@ -9167,7 +9097,10 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
   bl.append(policy);
   rgw::sal::Attrs add;
   add[RGW_ATTR_IAM_POLICY] = bl;
-  ASSERT_EQ(bucket->merge_and_store_attrs(env->dpp, add, null_yield), 0);
+  /* as adoption's first step writes it, before the bucket is marked */
+  ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+	      ->merge_and_store_attrs(env->dpp, add, null_yield,
+				      rgw::sal::MutationPurpose::adoption), 0);
 
   auto before = xattr_names(bucket_path());
   EXPECT_TRUE(before.contains(our_name))
@@ -9683,7 +9616,11 @@ static std::vector<std::string> listing_rows(rgw::sal::Bucket* bucket,
 TEST_F(NSFSUpgradeTest, AListingCachedBeforeTheUpgradeEqualsOneBuiltAfterIt)
 {
   bucket->get_info().flags |= BUCKET_VERSIONED;
-  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  /* as adoption's first step writes it from NooBaa's record */
+  rgw::sal::Attrs none;
+  ASSERT_EQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+	      ->merge_and_store_attrs(env->dpp, none, null_yield,
+				      rgw::sal::MutationPurpose::adoption), 0);
 
   their_object("plain.bin", "text/plain");
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
@@ -9782,91 +9719,6 @@ TEST_F(NSFSUpgradeTest, ReStagingDropsCachedPartsWhosePlacementChanged)
   ASSERT_TRUE(mc->peek_part(ck, 2, pi));
   EXPECT_FALSE(pi.shared);
   EXPECT_EQ(pi.offset, 0u);
-}
-
-/* Under the writeback policy a part's record is written to disk only
- * when its cache entry is evicted, so until then the cache holds the only
- * copy.  Conversion read part records from disk alone and skipped a part
- * with none:  a part uploaded through RGW into an upload NooBaa's layout
- * stages, before the upgrade, was dropped from the upload. */
-class NSFSUpgradeWritebackTest : public NSFSUpgradeTest {
-public:
-  file::listing::MultipartCachePolicy mp_cache_policy() const override {
-    return file::listing::MultipartCachePolicy::writeback;
-  }
-
-  /* upload two parts through RGW, upgrade, and complete */
-  void a_part_whose_record_is_only_cached_survives_the_upgrade() {
-    TestTree tree;
-    make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
-
-    const std::string objname = "uploaded.bin";
-    const std::string upload_id = "33333333-4444-4555-8666-777777777777";
-    auto upload = bucket->get_multipart_upload(objname, upload_id);
-    ASSERT_NE(upload.get(), nullptr);
-    rgw_placement_rule placement;
-    Attrs attrs;
-    ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
-
-    std::string expected;
-    std::map<int, std::string> part_etags;
-    for (int i = 1; i <= 2; ++i) {
-      std::string payload(64, static_cast<char>('a' + i));
-      part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
-  				  payload);
-      expected += payload;
-    }
-
-    /* the control:  the parts' records are in the cache only, or this
-     * would pass without the cache being consulted */
-    sf::path staging;
-    for (auto& e : sf::directory_iterator(bucket_path())) {
-      if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
-        staging = e.path() / "multipart-uploads" / upload_id;
-      }
-    }
-    ASSERT_TRUE(sf::is_directory(staging)) << staging;
-    for (int i = 1; i <= 2; ++i) {
-      const sf::path rec{staging / ("part-" + std::to_string(i))};
-      EXPECT_LT(::getxattr(rec.c_str(), "user.noobaa.part_size", nullptr, 0), 0)
-  	<< rec << " already carries its record on disk";
-    }
-
-    nsfs::ConvertProgress prog;
-    ASSERT_EQ(upgrade(nullptr, &prog), 0);
-    ASSERT_EQ(prog.uploads, 1u);
-    EXPECT_EQ(prog.parts, 2u) << "a part was skipped by the re-staging";
-
-    auto after = bucket->get_multipart_upload(objname, upload_id);
-    int next = 0;
-    bool truncated = false;
-    ASSERT_EQ(after->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
-  			      &truncated, null_yield), 0);
-    EXPECT_EQ(after->get_parts().size(), 2u) << "a part was lost in the upgrade";
-
-    ASSERT_EQ(complete_mp(bucket.get(), after.get(), owner, objname,
-  			part_etags), 0);
-    EXPECT_EQ(read_all(bucket_path() / objname), expected);
-  }
-};
-
-TEST_F(NSFSUpgradeWritebackTest, APartWhoseRecordIsOnlyCachedSurvivesTheUpgrade)
-{
-  a_part_whose_record_is_only_cached_survives_the_upgrade();
-}
-
-/* The volatile policy defers the record the same way, and never writes
- * it at all if the entry is evicted first. */
-class NSFSUpgradeVolatileTest : public NSFSUpgradeWritebackTest {
-public:
-  file::listing::MultipartCachePolicy mp_cache_policy() const override {
-    return file::listing::MultipartCachePolicy::volatile_;
-  }
-};
-
-TEST_F(NSFSUpgradeVolatileTest, APartWhoseRecordIsOnlyCachedSurvivesTheUpgrade)
-{
-  a_part_whose_record_is_only_cached_survives_the_upgrade();
 }
 
 /* Every part is reported, and a stop inside one leaves the rest. */
@@ -10434,102 +10286,6 @@ TEST_F(NSFSUpgradeTest, ReportsTheProfileAndTheConvertingState)
   EXPECT_FALSE(converting);
 }
 
-/* NooBaa's does move one, because NooBaa's file IS the size.
- *
- * `parts-size-17` at 17 * (num - 1) is the only place NooBaa's reader
- * looks for a 17-byte part -- it derives the name from the part's own
- * record -- so a short final part left in the stride's file is one
- * NooBaa's gateway cannot read, and one the nsfs assembly cannot either,
- * since it implements NooBaa's scheme.
- *
- * The record is asserted as well as the bytes.  The two together are
- * what makes the tree NooBaa's;  bytes in the right file with a record
- * pointing at the wrong offset reads as zeros.
- */
-TEST_F(NSFSNooBaaBucketTest, ShortFinalPartMovesToItsOwnSizeFile)
-{
-  TestTree tree;
-  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
-
-  const std::string objname = "short-tail.bin";
-  const size_t stride = 64;
-  const size_t tail = 17;
-
-  /* the staging directory before it is cleaned up, so the layout can
-   * be looked at:  the upload is driven by hand rather than through
-   * the helper, which completes it */
-  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
-  auto upload = bucket->get_multipart_upload(objname, upload_id);
-  ASSERT_NE(upload.get(), nullptr);
-
-  rgw_placement_rule placement;
-  Attrs attrs;
-  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
-
-  std::string expected;
-  std::map<int, std::string> part_etags;
-  for (int i = 1; i <= 3; ++i) {
-    const size_t len = (i == 3) ? tail : stride;
-    std::string payload(len, static_cast<char>('a' + i));
-    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
-				  payload);
-    expected += payload;
-  }
-
-  sf::path staging;
-  for (auto& e : sf::directory_iterator(bucket_path())) {
-    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
-      staging = e.path() / "multipart-uploads" / upload_id;
-    }
-  }
-  ASSERT_TRUE(sf::is_directory(staging)) << staging;
-
-  const sf::path tail_file{staging / ("parts-size-" + std::to_string(tail))};
-  ASSERT_TRUE(sf::exists(tail_file)) << "the short part was left in the "
-				     << "stride's file";
-  /* 17 * (3 - 1) = 34, and the part is the 17 bytes after it */
-  const uint64_t tail_offset = tail * 2;
-  ASSERT_EQ(sf::file_size(tail_file), tail_offset + tail);
-  EXPECT_EQ(read_all(tail_file).substr(tail_offset, tail),
-	    std::string(tail, 'd'));
-
-  const sf::path rec{staging / ("part-" + std::to_string(3))};
-  EXPECT_EQ(str_xattr(rec, "user.noobaa.part_size"), std::to_string(tail));
-  EXPECT_EQ(str_xattr(rec, "user.noobaa.part_offset"),
-	    std::to_string(tail_offset));
-
-  /* and the two uniform parts are still in the stride's file */
-  const sf::path body{staging / ("parts-size-" + std::to_string(stride))};
-  ASSERT_TRUE(sf::exists(body)) << body;
-  EXPECT_EQ(str_xattr(staging / "part-2", "user.noobaa.part_offset"),
-	    std::to_string(stride));
-
-  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
-			part_etags), 0);
-  EXPECT_EQ(read_all(bucket_path() / objname), expected);
-}
-
-/* A tree with no temp directory at all:  one is created, because
- * there is nothing to conflict with. */
-TEST_F(NSFSNooBaaBucketTest, CreatesATempDirectoryWhenThereIsNone)
-{
-  TestTree tree;
-  make_noobaa_tree(bucket_path(), TreeShape::empty, tree);
-
-  auto upload = bucket->get_multipart_upload("k", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
-  rgw_placement_rule placement;
-  Attrs attrs;
-  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
-
-  int n = 0;
-  for (auto& e : sf::directory_iterator(bucket_path())) {
-    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
-      ++n;
-    }
-  }
-  EXPECT_EQ(n, 1);
-}
-
 /* Two temp directories means two bucket ids have written here, and
  * which holds the uploads is not decidable.  Rejected rather than
  * guessed -- and no third is created. */
@@ -10736,12 +10492,7 @@ INSTANTIATE_TEST_SUITE_P(
 	FormatCase{"rgw", true, nsfs::EXTENSIONS_STRONG, "rgw",
 		   make_nsfs_tree},
 	FormatCase{"rgwstrided", false, nsfs::EXTENSIONS_STRONG,
-		   "rgw-strided", make_nsfs_tree},
-	/* the format names the layout, so the probe does not reach it;
-	 * forced true all the same, so the case does not vary with the
-	 * filesystem the build directory is on */
-	FormatCase{"noobaa", true, nsfs::EXTENSIONS_BASE, "noobaa",
-		   make_noobaa_tree}),
+		   "rgw-strided", make_nsfs_tree}),
     [](const ::testing::TestParamInfo<FormatCase>& i) {
       return std::string(i.param.label);
     });
@@ -13773,8 +13524,15 @@ TEST_F(NooBaaModeTest, CommandIsTheDefaultAndAdoptsNothing)
   EXPECT_EQ(st["base_path"], driver->default_bucket_location());
   EXPECT_EQ(st["config_root"], conf_root().string());
 
-  /* a write, through the gate every mutation takes */
-  EXPECT_EQ(driver->mutation_enter(env->dpp, testname), 0);
+  /* A client's write is rejected:  the bucket is not adopted, and
+   * `command` means only that nothing adopts it automatically
+   * (DECISIONS.md 2026-10-21).  Adoption's own write gets in. */
+  auto* nb = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_EQ(driver->mutation_enter(env->dpp, nb,
+				   rgw::sal::MutationPurpose::client),
+	    -ERR_INVALID_BUCKET_STATE);
+  ASSERT_EQ(driver->mutation_enter(env->dpp, nb,
+				   rgw::sal::MutationPurpose::adoption), 0);
   driver->mutation_leave(testname);
 
   /* nothing imported:  the credential NooBaa's record carries does not
@@ -13803,8 +13561,10 @@ TEST_F(NSFSBucketTest, TheAdoptionModeIsInertWithoutAStore)
 				{{"identities", "true"}}, &out), -ENOENT);
   EXPECT_EQ(out["ran"], "false");
 
-  /* and writes work, which is the whole point */
-  EXPECT_EQ(driver->mutation_enter(env->dpp, testname), 0);
+  /* and writes work on a bucket this gateway made, which is marked */
+  ASSERT_EQ(driver->mutation_enter(
+	      env->dpp, static_cast<rgw::sal::NSFSBucket*>(bucket.get()),
+	      rgw::sal::MutationPurpose::client), 0);
   driver->mutation_leave(testname);
 }
 
@@ -13943,56 +13703,6 @@ TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
   EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
 		 ->profile_name(), "base")
       << "a bucket whose owner does not exist was converted";
-}
-
-/* With rgw_nsfs_extensions off no bucket can be adopted.
- *
- * Adoption is a bucket's import and the conversion of its tree, and
- * with extensions off the tree cannot be converted, so the bucket is
- * rejected and nothing is written -- not even its record.  Both
- * polarities on one bucket:  rejected with extensions off, adopted once
- * they are on.  And `run=true`, what `automatic` runs, is rejected once
- * up front rather than failing every bucket, before any identity is
- * imported. */
-TEST_F(NooBaaModeTest, AdoptionIsRejectedWithExtensionsOff)
-{
-  add_the_owning_account();
-  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
-
-  g_conf().set_val("rgw_nsfs_extensions", "false");
-  g_conf().apply_changes(nullptr);
-  auto restore = make_scope_guard([] {
-    g_conf().set_val("rgw_nsfs_extensions", "true");
-    g_conf().apply_changes(nullptr);
-  });
-
-  std::map<std::string, std::string> out;
-  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
-				{{"run", "true"}}, &out), -EPERM);
-  EXPECT_EQ(out["ran"], "false");
-  EXPECT_TRUE(out.find("accounts") == out.end())
-      << "a run that cannot adopt imported identities anyway";
-
-  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
-  out.clear();
-  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
-				{{"bucket", testname}}, &out), -EPERM);
-  EXPECT_EQ(out["adopted"], "false");
-
-  std::unique_ptr<rgw::sal::Bucket> loaded;
-  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
-				&loaded, null_yield), 0);
-  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
-		 ->profile_name(), "base");
-  EXPECT_FALSE(loaded->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
-      << "a rejected adoption imported the record";
-
-  g_conf().set_val("rgw_nsfs_extensions", "true");
-  g_conf().apply_changes(nullptr);
-  auto on = ask({{"bucket", testname}});
-  EXPECT_EQ(on["adopted"], "true") << on["error"];
-  EXPECT_EQ(on["profile"], "shared");
 }
 
 /* Adoption's completion record (DECISIONS.md 2026-10-13):  written by the
@@ -14250,9 +13960,11 @@ TEST_F(NooBaaAbandonTest, AnAbandonedRecordIsNotAdoptedByName)
   EXPECT_EQ(ask({{"bucket", testname}})["adopted"], "true");
 }
 
-/* A conversion that stopped partway can be abandoned:  the escape hatch
- * for a tree that will not convert.  It is recorded as partly converted,
- * adoption completes, and the bucket stays served, still converting. */
+/* A conversion that stopped partway can be abandoned, as an exception:
+ * a tree that will not convert (DECISIONS.md 2026-10-21).  It is recorded
+ * as partly converted, adoption completes, and the bucket is left as it
+ * stopped, still converting.  Its objects are NooBaa's, laid as files,
+ * since nothing writes a bucket not taken over. */
 TEST_F(NooBaaAbandonTest, APartlyConvertedBucketCanBeAbandoned)
 {
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
@@ -14261,10 +13973,8 @@ TEST_F(NooBaaAbandonTest, APartlyConvertedBucketCanBeAbandoned)
     std::unique_ptr<rgw::sal::Bucket> b;
     ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
 				  null_yield), 0);
-    put_object(driver.get(), b.get(), env->dpp, acl_owner, "one", "1",
-	       "text/plain");
-    put_object(driver.get(), b.get(), env->dpp, acl_owner, "two", "2",
-	       "text/plain");
+    write_file(bucket_path() / "one", "1");
+    write_file(bucket_path() / "two", "2");
     nsfs::convert_cb_t stop =
       [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
 	return (ev.phase == nsfs::ConvertEvent::Phase::pruned) ? -EINTR : 0;
@@ -14470,6 +14180,15 @@ public:
 							      bp2), 0);
   }
 
+  /* Mark a hand-made directory as a bucket RGW placed (P4) carries:
+   * these tests are about the row and the path, and an unmarked
+   * directory is a bucket not taken over, which takes no client write
+   * (DECISIONS.md 2026-10-21). */
+  static void mark(const sf::path& at) {
+    const std::string v = std::to_string(nsfs::EXTENSIONS_SHARED);
+    ASSERT_EQ(::setxattr(at.c_str(), nsfs::EXTENSIONS_XATTR, v.data(),
+			 v.size(), 0), 0) << at;
+  }
   std::unique_ptr<rgw::sal::Bucket> make_bucket(const std::string& name) {
     RGWBucketInfo info;
     info.bucket.name = name;
@@ -14507,6 +14226,7 @@ TEST_F(NSFSPlacedBucketTest, ARowServesTheBucketFromItsStoredPath)
 {
   const sf::path at = elsewhere() / "placed";
   sf::create_directories(at);
+  mark(at);
   place("placed", at);
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
@@ -14548,6 +14268,7 @@ TEST_F(NSFSPlacedBucketTest, AnOwnedPlacedBucketIsDeletedWithItsDirectory)
 {
   const sf::path at = elsewhere() / "placed-and-owned";
   sf::create_directories(at);
+  mark(at);
   place("placed-and-owned", at);
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
@@ -14575,6 +14296,8 @@ TEST_F(NSFSPlacedBucketTest, ThePathIsBoundPerLookup)
   const sf::path second = elsewhere() / "second";
   sf::create_directories(first);
   sf::create_directories(second);
+  mark(first);
+  mark(second);
 
   place("moving", first);
   std::unique_ptr<rgw::sal::Bucket> a;
@@ -14866,6 +14589,7 @@ TEST_F(NSFSPlacedBucketTest, ListBucketsIsTheOwnersRows)
   auto b2 = make_bucket("lb-c");
   const sf::path at = elsewhere() / "lb-b";
   sf::create_directories(at);
+  mark(at);
   place("lb-b", at);
   ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, "lb-b",
 				       nullptr, nullptr), 0);
@@ -15550,6 +15274,7 @@ TEST_F(NSFSPlacedBucketTest, TheTenantSelectsTheRow)
 {
   const sf::path a = elsewhere() / "tenant-a";
   sf::create_directories(a);
+  mark(a);
   place("shared", a, "tenant-a");
 
   /* the untenanted bucket has no row and stays at the default */

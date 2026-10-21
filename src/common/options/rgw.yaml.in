@@ -4768,29 +4768,10 @@ options:
     filesystem namespace, and the profile a NooBaa bucket is adopted into.
     Strong adds the shadow subtree that FSIO, the librgw file interface,
     writes through;  FSIO is rejected on a bucket that is not strong.
-    Ignored when rgw_nsfs_extensions is false, since new buckets are then
-    unmarked.
   default: shared
   enum_values:
   - shared
   - strong
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_nsfs_extensions
-  type: bool
-  level: advanced
-  desc: Mark buckets created here as carrying the nsfs extensions.
-  long_desc: An nsfs bucket directory with no extensions marker is read as
-    NooBaa wrote it, and nothing is added to it -- no shadow subtree, no
-    positional layout, no S3 ACL attribute. A marked bucket carries those.
-    New buckets are marked by default, with rgw_nsfs_bucket_profile.
-    Setting this false leaves new buckets unmarked and converts no bucket,
-    so no NooBaa bucket is adopted;  importing a bucket's NooBaa record is
-    still allowed, and does not mark it. The extension-only interfaces,
-    FSIO among them, are rejected on an unmarked bucket whatever this is
-    set to.
-  default: true
   services:
   - rgw
   with_legacy: true

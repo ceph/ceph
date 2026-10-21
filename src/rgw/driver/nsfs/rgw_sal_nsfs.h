@@ -49,6 +49,15 @@ class NSFSDriver;
 class NSFSBucket;
 class NSFSObject;
 
+/* What a mutation's slot is for (DECISIONS.md 2026-10-21, the gate).
+ *
+ * A bucket without `user.nsfs.extensions` has not been taken over, and
+ * a client's write to it is rejected until adoption marks it.  Two
+ * writers are not a client's:  adoption, which writes a bucket's state
+ * before it marks it, and a copy's source, which is read and not
+ * written but takes the slot so it waits out a rewrite. */
+enum class MutationPurpose { client, adoption, copy_source };
+
 namespace nsfs {
 
 struct NooBaaStoreContents;
@@ -774,6 +783,14 @@ public:
 };
 
 class NSFSDriver : public StoreDriver {
+  /* the `unmarked-bucket` hint, the only maker of an UnmarkPasskey */
+  friend class UnmarkPasskey;
+  int hint_unmarked_bucket(const DoutPrefixProvider* dpp,
+			   const std::map<std::string, std::string>& params,
+			   std::map<std::string, std::string>* out);
+  /* buckets that hint has unmarked;  in the features map, 0 in service */
+  std::atomic<uint64_t> hint_unmarked_buckets{0};
+
 protected:
   CephContext *cct;
   /* the driver's database.  An IdentityDB rather than a plain
@@ -957,6 +974,15 @@ protected:
   std::atomic<uint64_t> attr_read_fails_injected{0};
   ceph::mutex inject_attr_read_fail_lock =
       ceph::make_mutex("NSFSDriver::inject_attr_read_fail_lock");
+  /* lift the gate on a bucket not taken over, for these buckets, so a
+   * test can show a rejection is the gate's:  the same write succeeds
+   * with it lifted.  Keyed by bucket, as the attribute-read injection
+   * is.  The count is every write the gate rejected. */
+  std::set<std::string> inject_lift_adoption_gate_buckets;
+  std::atomic<bool> inject_lift_adoption_gate_armed{false};
+  std::atomic<uint64_t> unadopted_writes_rejected{0};
+  ceph::mutex inject_lift_adoption_gate_lock =
+      ceph::make_mutex("NSFSDriver::inject_lift_adoption_gate_lock");
 
   /* Which POSIX identity a converted consumer chose for one named
    * object, so a test can assert the uid and not the status --  (n)
@@ -1473,8 +1499,15 @@ public:
    * 503 ServiceUnavailable, which every SDK retries.
    *
    * Paired with mutation_leave(), or held through NSFSMutationGuard. */
-  int mutation_enter(const DoutPrefixProvider* dpp,
-		     const std::string& bucket);
+  int mutation_enter(const DoutPrefixProvider* dpp, NSFSBucket* bucket,
+		     MutationPurpose purpose);
+  /* The gate's question alone, without a slot:  0, or
+   * -ERR_INVALID_BUCKET_STATE for a client's write to a bucket not taken
+   * over.  mutation_enter() asks it, and so does a path that writes
+   * before it takes its slot -- UploadPart writes the part's bytes before
+   * its writer's complete(). */
+  int reject_unadopted(const DoutPrefixProvider* dpp, NSFSBucket* bucket,
+		       MutationPurpose purpose);
   void mutation_leave(const std::string& bucket);
 
   /* Hold mutations off, and wait for the ones already running.
@@ -1605,6 +1638,13 @@ public:
     return inject_attr_read_fail_buckets.contains(bucket);
   }
   void record_attr_read_fail() { ++attr_read_fails_injected; }
+  bool adoption_gate_lifted(const std::string& bucket) {
+    if (!inject_lift_adoption_gate_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_lift_adoption_gate_lock};
+    return inject_lift_adoption_gate_buckets.contains(bucket);
+  }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
@@ -1750,19 +1790,9 @@ public:
   }
   const nsfs::BucketProfile* get_base_profile() const { return &base_profile; }
 
-  /* Whether nsfs marks buckets:  rgw_nsfs_extensions.
-   *
-   * False means a bucket created here is unmarked, and no bucket is
-   * converted -- so none is adopted, since adoption converts a bucket's
-   * tree.  Importing a bucket's NooBaa record does not mark it and is
-   * allowed either way. */
-  bool extensions_enabled() {
-    return ctx()->_conf->rgw_nsfs_extensions;
-  }
-
-  /* What a bucket created here is marked with, when extensions are
-   * enabled:  rgw_nsfs_bucket_profile.  Read per call, so a test can
-   * select strong for a bucket it is about to create. */
+  /* What a bucket created here is marked with:  rgw_nsfs_bucket_profile.
+   * Read per call, so a test can select strong for a bucket it is about
+   * to create. */
   uint32_t new_bucket_extensions() {
     auto ext = nsfs::extensions_for_profile(
       ctx()->_conf.get_val<std::string>("rgw_nsfs_bucket_profile"));
@@ -1793,6 +1823,23 @@ public:
     const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */);
 
   RGWQuotaHandler* get_quota_handler() {return quota_handler;}
+};
+
+/* The one key to NSFSBucket::unmark_extensions().
+ *
+ * An unmarked bucket made by RGW is the state the gate exists to keep
+ * clients out of (DECISIONS.md 2026-10-21), and tests need one.  So the
+ * capability is contained by the compiler rather than by review:  the
+ * constructor is private and its only friend is the hint that makes a
+ * test's unmarked bucket, which takes only an empty bucket this gateway
+ * marked and NooBaa holds no record of.  Any other call does not
+ * compile. */
+class UnmarkPasskey {
+  friend int NSFSDriver::hint_unmarked_bucket(
+      const DoutPrefixProvider* dpp,
+      const std::map<std::string, std::string>& params,
+      std::map<std::string, std::string>* out);
+  UnmarkPasskey() = default;
 };
 
 class NSFSNotification : public StoreNotification {
@@ -1883,10 +1930,8 @@ class NSFSMutationGuard {
 
 public:
   NSFSMutationGuard(const DoutPrefixProvider* dpp, NSFSDriver* _driver,
-		    const std::string& _bucket)
-    : driver(_driver), bucket(_bucket),
-      rc(_driver ? _driver->mutation_enter(dpp, _bucket) : 0)
-  { }
+		    NSFSBucket* _bucket,
+		    MutationPurpose purpose = MutationPurpose::client);
   ~NSFSMutationGuard() {
     if ((rc == 0) && driver) {
       driver->mutation_leave(bucket);
@@ -1981,6 +2026,10 @@ public:
 		   ListResults&, optional_yield y) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				    Attrs& new_attrs, optional_yield y) override;
+  /* The same, for a writer that is not a client:  adoption writes a
+   * bucket's state before it marks it (MutationPurpose). */
+  int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs,
+			    optional_yield y, MutationPurpose purpose);
   virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
 		     optional_yield y) override;
   virtual int remove_bypass_gc(int concurrent_max,
@@ -2134,8 +2183,9 @@ public:
    * and directly at creation. */
   int mark_extensions(const DoutPrefixProvider* dpp, uint32_t version);
 
-  /* test support only -- reachable through the unmark-bucket hint */
-  int unmark_extensions(const DoutPrefixProvider* dpp);
+  /* Only the `unmarked-bucket` test hint can call this;  see
+   * UnmarkPasskey. */
+  int unmark_extensions(const DoutPrefixProvider* dpp, const UnmarkPasskey&);
 
   /* Write the converting marker, and remove it.
    *
@@ -2918,6 +2968,9 @@ private:
    * injection map is keyed by this rather than by the internal meta,
    * so a test can arm exactly the upload it created. */
   std::string upload_id;
+  /* the bucket the part is for, which the mutation gate asks;  the
+   * staging directory is the shadow bucket's, not this one */
+  NSFSBucket* bucket{nullptr};
   std::unique_ptr<nsfs::Directory> upload_dir;
   /* the part's RECORD -- part-NNNNN -- which carries its attributes.
    * Always this file, whatever the layout, because complete() writes
@@ -2959,7 +3012,8 @@ public:
 		    bool _shared_target = false,
 		    const std::string& _shared_name = std::string(),
 		    const std::string& _upload_id = std::string(),
-		    std::optional<uint64_t> _extent = std::nullopt) :
+		    std::optional<uint64_t> _extent = std::nullopt,
+		    NSFSBucket* _bucket = nullptr) :
     StoreWriter(dpp, y),
     driver(_driver),
     mpu_strat(_mpu_strat),
@@ -2970,6 +3024,7 @@ public:
     shared_target(_shared_target),
     extent(_extent),
     upload_id(_upload_id),
+    bucket(_bucket),
     upload_dir(_shadow_bucket->get_dir()->clone()),
     part_file(std::make_unique<nsfs::File>(
 		_driver->get_path_strategy()->object_name(_key, false),
