@@ -245,28 +245,33 @@ void MDSDaemon::dump_status(Formatter *f)
 {
   f->open_object_section("status");
   f->dump_stream("cluster_fsid") << monc->get_fsid();
-  if (mds_rank) {
-    f->dump_int("whoami", mds_rank->get_nodeid());
-  } else {
-    f->dump_int("whoami", MDS_RANK_NONE);
-  }
-
-  f->dump_int("id", monc->get_global_id());
-  f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
-  f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
-	    monc->get_global_id()))));
-  if (mds_rank) {
+  {
+    // mdsmap is swapped out by handle_mds_map() and mds_rank is
+    // created/destroyed, both under mds_lock -- hold it while
+    // reading either of them.
     std::lock_guard l(mds_lock);
-    mds_rank->dump_status(f);
-  }
+    if (mds_rank) {
+      f->dump_int("whoami", mds_rank->get_nodeid());
+    } else {
+      f->dump_int("whoami", MDS_RANK_NONE);
+    }
 
-  f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
-  if (mds_rank) {
-    f->dump_unsigned("osdmap_epoch", mds_rank->get_osd_epoch());
-    f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
-  } else {
-    f->dump_unsigned("osdmap_epoch", 0);
-    f->dump_unsigned("osdmap_epoch_barrier", 0);
+    f->dump_int("id", monc->get_global_id());
+    f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
+    f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
+	      monc->get_global_id()))));
+    if (mds_rank) {
+      mds_rank->dump_status(f);
+    }
+
+    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+    if (mds_rank) {
+      f->dump_unsigned("osdmap_epoch", mds_rank->get_osd_epoch());
+      f->dump_unsigned("osdmap_epoch_barrier", mds_rank->get_osd_epoch_barrier());
+    } else {
+      f->dump_unsigned("osdmap_epoch", 0);
+      f->dump_unsigned("osdmap_epoch_barrier", 0);
+    }
   }
 
   f->dump_float("uptime", get_uptime().count());
