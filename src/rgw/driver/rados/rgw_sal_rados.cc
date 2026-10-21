@@ -4217,8 +4217,17 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   list<rgw_obj_index_key> remove_objs;
   bool truncated;
   int marker = 0;
-  int ret;
   uint64_t parts_accounted_size = 0;
+
+  // flag the upload as aborted so racing Aborts/Completes will be rejected
+  const std::string tag = "ABORTED";
+  bufferlist tag_bl;
+  tag_bl.append(tag);
+  int ret = set_completion_record(dpp, y, &tag_bl, tag);
+  if (ret < 0) {
+    // the meta object was already flagged or deleted
+    return -ERR_NO_SUCH_UPLOAD;
+  }
 
   prefix_map_t processed_prefixes;
 
@@ -4232,35 +4241,6 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     }
 
     RGWObjVersionTracker objv_tracker = meta_obj->get_version_tracker();
-
-    // a completion records its tag, and the version it writes, before its
-    // head write. if that version carries the tag, the upload was
-    // completed and its parts are that version's: remove only the meta
-    // object. in a versioned bucket, the version may no longer be the
-    // current one and still reference the parts
-    // get_obj_attrs() fills the attrs without marking them read, so look
-    // them up directly rather than through get_attr()
-    const auto& meta_attrs = meta_obj->get_attrs();
-    const auto record = meta_attrs.find(RGW_ATTR_MP_COMPLETION_TAG);
-    if (record != meta_attrs.end()) {
-      std::unique_ptr<rgw::sal::Object> head = recorded_head(meta_attrs);
-      ret = head_carries(dpp, y, head.get(), record->second);
-      if (ret < 0) {
-        return ret;
-      }
-      if (ret > 0) {
-        std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-        del_op->params.bucket_owner = bucket->get_info().owner;
-        del_op->params.versioning_status = 0;
-        del_op->params.objv_tracker = &objv_tracker;
-        ret = del_op->delete_obj(dpp, y, 0);
-        if (ret == -ECANCELED) {
-          continue; // a part upload raced; look again
-        }
-        // the upload is gone, and the object it completed stays
-        return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
-      }
-    }
 
     do {
       ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated, y);
