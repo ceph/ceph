@@ -1,3 +1,7 @@
+# crimson has no legacy performance baseline to protect: always build it
+# (and all its subdirectories) with frame pointers, for every build type.
+add_compile_options(${FRAME_POINTER_COMPILE_OPTIONS})
+
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
