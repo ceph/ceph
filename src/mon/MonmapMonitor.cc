@@ -125,13 +125,13 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
 			   stringify(ceph_release()));
   }
 
-  mon.notify_new_monmap(true);
+  mon.notify_new_monmap();
 }
 
 void MonmapMonitor::init()
 {
   /* init relevant Monitor state */
-  mon.notify_new_monmap(false, false);
+  mon.notify_new_monmap(false);
 }
 
 void MonmapMonitor::create_pending()

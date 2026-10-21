@@ -304,7 +304,7 @@ private:
 
   bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
   void disconnect_disallowed_stretch_sessions();
-  void set_elector_disallowed_leaders(bool allow_election);
+  void set_elector_disallowed_leaders();
 
   std::map<std::string,std::string> crush_loc;
   bool need_set_crush_loc{false};
@@ -916,10 +916,8 @@ public:
   void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_mon_message(Message *m, int rank);
-  /** can_change_external_state if we can do things like
-   *  call elections as a result of the new map.
-   */
-  void notify_new_monmap(bool can_change_external_state=false, bool remove_rank_elector=true);
+  // Callers bootstrap afterwards, which holds the election.
+  void notify_new_monmap(bool remove_rank_elector=true);
 
 public:
   struct C_Command : public C_MonOp {
