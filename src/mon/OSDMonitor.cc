@@ -9319,6 +9319,16 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
 
   if (old_num_zones > 1 && n == 1) {
     if (p.is_stretch_pool()) {
+      // an individual stretch pool leaves stretch mode, if off, as it is
+      const bool last_stretch_pool = stretch_mode_enabled_or_pending() &&
+        !other_pool(pool, [](const pg_pool_t& p) {
+          return p.is_stretch_pool();
+        });
+      if (last_stretch_pool && !mon.monmon()->is_writeable()) {
+        dout(10) << __func__ << " " << poolstr
+                 << " waiting for monmap to clear stretch mode" << dendl;
+        return -EAGAIN;
+      }
       int crush_rule = -1;
       int err = prepare_num_zones_crush_rule(cmdmap, poolstr, n, p,
                                              &crush_rule, &ss);
@@ -9385,11 +9395,7 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         return r;
       }
       ss << "pool unstretched (num_zones=1); ";
-      // an individual stretch pool leaves stretch mode, if off, as it is
-      if (stretch_mode_enabled_or_pending() &&
-          !other_pool(pool, [](const pg_pool_t& p) {
-            return p.is_stretch_pool();
-          })) {
+      if (last_stretch_pool) {
         mon.monmon()->clear_stretch_mode_state();
         pending_inc.change_stretch_mode = true;
         pending_inc.stretch_mode_enabled = false;
@@ -18412,6 +18418,11 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
   }
   if (plan.empty() && stretch_mode) {
     // stretch mode without a stretched pool
+    if (!mon.monmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for monmap to clear stretch mode"
+               << dendl;
+      return -EAGAIN;
+    }
     mon.monmon()->clear_stretch_mode_state();
     pending_inc.change_stretch_mode = true;
     pending_inc.stretch_mode_enabled = false;
@@ -18611,4 +18622,3 @@ void OSDMonitor::apply_stretch_transition_to_pools(
     }
   }
 }
-
