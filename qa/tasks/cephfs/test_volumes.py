@@ -5320,6 +5320,77 @@ class TestSubvolumes(TestVolumesHelper):
             errmsgs='Error ENAMETOOLONG: use shorter group or subvol name, '
                     'combination of both should be less than 249 characters')
 
+    def _assert_fs_cmd_einval(self, *args):
+        with self.assertRaises(CommandFailedError) as cm:
+            self._fs_cmd(*args)
+        self.assertEqual(cm.exception.exitstatus, errno.EINVAL,
+                         f"expected EINVAL for 'ceph fs {' '.join(args)}'")
+
+    def test_subvolume_invalid_name_rejected(self):
+        """
+        Verify that '', '.', '..' and names containing '/' are rejected with
+        EINVAL, and fail early, across the subvolume commands.
+        """
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        v = self.volname
+        invalid_names = ['', '.', '..', 'sub/vol', '/sub', 'sub/']
+        cmds = [
+            ("create", v, "{n}"),
+            ("info", v, "{n}"),
+            ("getpath", v, "{n}"),
+            ("rm", v, "{n}"),
+            ("resize", v, "{n}", "inf"),
+            ("metadata", "set", v, "{n}", "key", "val"),
+            ("snapshot", "create", v, "{n}", "snap1"),
+            ("snapshot", "rm", v, "{n}", "snap1"),
+            ("authorize", v, "{n}", "client1"),
+        ]
+        for name in invalid_names:
+            for cmd in cmds:
+                args = [a.format(n=name) for a in cmd]
+                self._assert_fs_cmd_einval("subvolume", *args,
+                                           "--group_name", group)
+
+        self._fs_cmd("subvolumegroup", "rm", v, group)
+
+    def test_subvolume_invalid_name_does_not_mark_dirs(self):
+        """
+        Verify that 'fs subvolume info' with '', '.' or '..' does not set
+        'ceph.dir.subvolume=1' on the group directory or on its parent
+        (the volumes base directory), and that the group stays usable.
+        """
+        group = self._gen_subvol_grp_name()
+        subvol = self._gen_subvol_name()
+
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        group_path = self._get_subvolume_group_path(self.volname, group)
+        volumes_path = os.path.dirname(group_path)
+
+        for name in ('', '.', '..'):
+            self._assert_fs_cmd_einval("subvolume", "info", self.volname,
+                                       name, "--group_name", group)
+            for path in (group_path, volumes_path):
+                xattr_val = self.mount_a.getfattr(path, "ceph.dir.subvolume")
+                self.assertNotEqual(
+                    xattr_val, "1",
+                    f"'{path}' was incorrectly marked as a subvolume by "
+                    f"'subvolume info' on '{name}'")
+
+        # the group is still usable: creating a subvolume in it succeeds and
+        # the new subvolume has valid metadata (info reads the .meta file)
+        self._fs_cmd("subvolume", "create", self.volname, subvol,
+                     "--group_name", group)
+        self._fs_cmd("subvolume", "info", self.volname, subvol,
+                     "--group_name", group)
+
+        # Clean up
+        self._fs_cmd("subvolume", "rm", self.volname, subvol,
+                     "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        self._wait_for_trash_empty()
+
 class TestPausePurging(TestVolumesHelper):
     '''
     Tests related to config "mgr/volumes/pause_purging".
