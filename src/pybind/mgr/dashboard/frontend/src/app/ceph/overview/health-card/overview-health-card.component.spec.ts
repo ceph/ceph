@@ -12,7 +12,6 @@ import { ProductiveCardComponent } from '~/app/shared/components/productive-card
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { HealthService } from '~/app/shared/api/health.service';
-import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
 
@@ -61,11 +60,8 @@ describe('OverviewHealthCardComponent', () => {
     getPermissions: jest.fn(() => ({ configOpt: { read: true } }))
   };
 
-  const mockMgrModuleService = {
-    getConfig: jest.fn(() => of({ hw_monitoring: true }))
-  };
-
   const mockHardwareService = {
+    isHardwareMonitoringEnabled$: of(true),
     getSummary: jest.fn(() => of(MOCK_HW_SUMMARY))
   };
 
@@ -90,7 +86,6 @@ describe('OverviewHealthCardComponent', () => {
         { provide: SummaryService, useValue: summaryServiceMock },
         { provide: UpgradeService, useValue: upgradeServiceMock },
         { provide: AuthStorageService, useValue: mockAuthStorageService },
-        { provide: MgrModuleService, useValue: mockMgrModuleService },
         { provide: HardwareService, useValue: mockHardwareService },
         { provide: HealthService, useValue: mockHealthService },
         provideRouter([])
@@ -245,10 +240,12 @@ describe('OverviewHealthCardComponent (all healthy)', () => {
           useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
         },
         {
-          provide: MgrModuleService,
-          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
+          provide: HardwareService,
+          useValue: {
+            isHardwareMonitoringEnabled$: of(true),
+            getSummary: jest.fn(() => of(healthyMock))
+          }
         },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(healthyMock)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
         provideRouter([])
       ]
@@ -321,10 +318,12 @@ describe('OverviewHealthCardComponent (warn only)', () => {
           useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
         },
         {
-          provide: MgrModuleService,
-          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: true })) }
+          provide: HardwareService,
+          useValue: {
+            isHardwareMonitoringEnabled$: of(true),
+            getSummary: jest.fn(() => of(warnMock))
+          }
         },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(warnMock)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
         provideRouter([])
       ]
@@ -382,10 +381,9 @@ describe('OverviewHealthCardComponent (hw disabled)', () => {
           useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
         },
         {
-          provide: MgrModuleService,
-          useValue: { getConfig: jest.fn(() => of({ hw_monitoring: false })) }
+          provide: HardwareService,
+          useValue: { isHardwareMonitoringEnabled$: of(false), getSummary: jest.fn(() => of(null)) }
         },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
         provideRouter([])
       ]
@@ -438,8 +436,10 @@ describe('OverviewHealthCardComponent (no permissions)', () => {
           provide: AuthStorageService,
           useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: false } })) }
         },
-        { provide: MgrModuleService, useValue: { getConfig: jest.fn(() => of({})) } },
-        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
+        {
+          provide: HardwareService,
+          useValue: { isHardwareMonitoringEnabled$: of(false), getSummary: jest.fn(() => of(null)) }
+        },
         { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
         provideRouter([])
       ]

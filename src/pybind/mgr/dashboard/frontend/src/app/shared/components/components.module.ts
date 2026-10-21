@@ -110,6 +110,7 @@ import Close16 from '@carbon/icons/es/close/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
 import WarningAltFilled32 from '@carbon/icons/es/warning--alt--filled/32';
 import Help16 from '@carbon/icons/es/help/16';
+import Growth16 from '@carbon/icons/es/growth/16';
 import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
 import IbmStreamSets16 from '@carbon/icons/es/ibm--streamsets/16';
 import DataEnrichment16 from '@carbon/icons/es/data-enrichment/16';
@@ -303,6 +304,7 @@ export class ComponentsModule {
       WarningAltFilled16,
       WarningAltFilled32,
       Help16,
+      Growth16,
       IncidentReporter16,
       IbmStreamSets16,
       DataEnrichment16,

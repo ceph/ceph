@@ -7,7 +7,7 @@ import {
   ViewEncapsulation
 } from '@angular/core';
 import { GridModule, LayoutModule, TilesModule } from 'carbon-components-angular';
-import { combineLatest, EMPTY, Observable, timer } from 'rxjs';
+import { combineLatest, EMPTY, Observable, of, timer } from 'rxjs';
 import {
   catchError,
   distinctUntilChanged,
@@ -22,11 +22,16 @@ import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { HealthSnapshotMap } from '~/app/shared/models/health.interface';
 import {
+  buildConsumptionStats,
   buildHealthCardVM,
+  buildSavingsCardVM,
   HealthCardTabSection,
   HealthCardVM,
-  StorageCardVM
+  SavingsCardVM,
+  StorageCardVM,
+  toTrendPoints
 } from '~/app/shared/models/overview';
+import { HardwareService } from '~/app/shared/api/hardware.service';
 
 import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
 import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
@@ -38,11 +43,13 @@ import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { OverviewStorageService } from '~/app/shared/api/storage-overview.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
-
-const SECONDS_PER_HOUR = 3600;
-const SECONDS_PER_DAY = 86400;
-const TREND_DAYS = 7;
-const PROMETHUES_CONFIG_POLL_INTERVAL = 60000;
+import {
+  CURRENT_TIME_SECONDS,
+  PROMETHEUS_CONFIG_POLL_INTERVAL,
+  SECONDS_PER_DAY,
+  SECONDS_PER_HOUR,
+  TREND_START_SECONDS
+} from '~/app/shared/constants/query.constants';
 
 @Component({
   selector: 'cd-overview',
@@ -80,6 +87,7 @@ export class OverviewComponent {
   private readonly overviewStorageService = inject(OverviewStorageService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly prometheusService = inject(PrometheusService);
+  private readonly hardwareService = inject(HardwareService);
 
   /* HEALTH CARD DATA */
   private readonly healthData$: Observable<HealthSnapshotMap> = this.refreshIntervalObs(() =>
@@ -92,7 +100,7 @@ export class OverviewComponent {
   );
 
   /* EMPTY STATE DATA */
-  readonly isPromethuesConfigured$ = timer(0, PROMETHUES_CONFIG_POLL_INTERVAL).pipe(
+  readonly isPromethuesConfigured$ = timer(0, PROMETHEUS_CONFIG_POLL_INTERVAL).pipe(
     switchMap(() => this.prometheusService.refreshPrometheusUsable()),
     distinctUntilChanged(),
     shareReplay({ bufferSize: 1, refCount: true })
@@ -169,20 +177,62 @@ export class OverviewComponent {
     switchMap((isConfigured) =>
       isConfigured
         ? this.overviewStorageService.getTrendData(
-            Math.floor(Date.now() / 1000) - TREND_DAYS * SECONDS_PER_DAY,
-            Math.floor(Date.now() / 1000),
+            TREND_START_SECONDS,
+            CURRENT_TIME_SECONDS,
             SECONDS_PER_HOUR
           )
         : EMPTY
     ),
-    map((result) => {
-      const values = result?.TOTAL_RAW_USED ?? [];
+    map((result) => toTrendPoints(result?.TOTAL_RAW_USED)),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
 
-      return values.map(([ts, val]) => ({
-        timestamp: new Date(ts * 1000),
-        values: { Used: Number(val) }
-      }));
-    }),
+  /* SAVINGS DATA */
+  readonly compressionStats$ = this.hardwareService.isHardwareMonitoringEnabled$.pipe(
+    switchMap((isEnabled) =>
+      isEnabled
+        ? this.refreshIntervalObs(() =>
+            this.hardwareService.getCompression().pipe(catchError(() => of(null)))
+          )
+        : of(null)
+    ),
+    map((stats) => (stats?.fcm_drive_count ? stats : null)),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly hasFcmDrives$ = this.compressionStats$.pipe(map(Boolean), distinctUntilChanged());
+
+  // getSavingsTrend() is already a polling stream through getRangeQueriesData()
+  // hence no refresh needed.
+  readonly savingsTrendData$ = combineLatest([
+    this.hasFcmDrives$,
+    this.isPromethuesConfigured$
+  ]).pipe(
+    switchMap(([hasFcmDrives, isConfigured]) =>
+      hasFcmDrives && isConfigured
+        ? this.overviewStorageService.getSavingsTrend(
+            TREND_START_SECONDS,
+            CURRENT_TIME_SECONDS,
+            SECONDS_PER_DAY
+          )
+        : EMPTY
+    ),
+    map((result) => toTrendPoints(result?.SAVINGS)),
+    catchError(() => of([])),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly savingsState$ = combineLatest([
+    this.compressionStats$,
+    this.savingsTrendData$.pipe(startWith([]))
+  ]).pipe(
+    map(([stats, trendData]) => ({
+      isSavingsLoaded: true,
+      savings: stats
+        ? buildSavingsCardVM(stats, trendData, this.formatSavings(stats.savings_bytes))
+        : null
+    })),
+    startWith({ isSavingsLoaded: false, savings: null as SavingsCardVM | null }),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
@@ -215,8 +265,7 @@ export class OverviewComponent {
             : [],
           isBreakdownLoaded: !!breakdownRawData,
           consumptionTrendData,
-          averageDailyConsumption,
-          estimatedTimeUntilFull,
+          consumptionStats: buildConsumptionStats(estimatedTimeUntilFull, averageDailyConsumption),
           threshold: this.overviewStorageService.getThresholdStatus(
             total,
             storage?.used,
@@ -228,6 +277,14 @@ export class OverviewComponent {
     ),
     shareReplay({ bufferSize: 1, refCount: true })
   );
+
+  private formatSavings(bytes: number | null): string | null {
+    if (bytes === null) {
+      return null;
+    }
+    const [value, unit] = this.overviewStorageService.formatBytesForChart(bytes);
+    return `${value} ${unit}`;
+  }
 
   private refreshIntervalObs<T>(fn: () => Observable<T>): Observable<T> {
     return this.refreshIntervalService.intervalData$.pipe(
