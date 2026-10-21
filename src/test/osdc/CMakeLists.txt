@@ -30,6 +30,7 @@ install(TARGETS ceph_test_objectcacher_misc
 # pulls in, so this needs no further libraries.
 add_executable(unittest_split_ops_ut
   test_splitop.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_split_ops_ut)
 target_link_libraries(unittest_split_ops_ut global ${BLKID_LIBRARIES})
