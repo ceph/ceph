@@ -4159,9 +4159,15 @@ class TestMirroring(CephFSTestCase):
         self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
                                     peer_spec, f'/{dir_name}', snap0, 1)
 
-        res1 = self.mgr_mirror_status(self.primary_fs_name)
-        res2 = self.mgr_mirror_status(self.primary_fs_name)
-        self.assertEqual(res1, res2)
+        # TTL is bucketed via int(monotonic()/ttl); adjacent calls can straddle
+        # a bucket boundary and both miss, so retry until we see a cache hit.
+        with safe_while(sleep=0.1, tries=30,
+                        action='mgr metrics cache hit') as proceed:
+            while proceed():
+                res1 = self.mgr_mirror_status(self.primary_fs_name)
+                res2 = self.mgr_mirror_status(self.primary_fs_name)
+                if res1 == res2:
+                    break
 
         snap1 = 'snap1'
         self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap1}'])
