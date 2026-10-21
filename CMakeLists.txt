@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 
 project(ceph
-  VERSION 21.1.2
+  VERSION 21.2.0
   LANGUAGES CXX C ASM)
 
 foreach(policy CMP0127 CMP0135
