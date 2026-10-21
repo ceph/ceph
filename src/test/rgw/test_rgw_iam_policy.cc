@@ -1864,3 +1864,486 @@ TEST_F(ConditionTest, KeystoneUserIdStringEquals)
   EXPECT_TRUE(cond.eval({{key, "user-123"}}, nullptr));
   EXPECT_FALSE(cond.eval({{key, "user-456"}}, nullptr));
 }
+
+// Policy variables ("runtime conditions"): condition values containing
+// ${key}, substituted from the request context at evaluation time.
+//
+// Behaviour follows the AWS IAM User Guide, "IAM policy elements:
+// Variables and tags",
+// https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html
+// Cited below as:
+//  [V1] "Variables are marked using a $ prefix followed by a pair of
+//       curly braces ({ }) that include the variable name of the value
+//       from the request."
+//  [V2] "You can use a policy variable for Condition values in any
+//       condition that involves the string operators or the ARN
+//       operators. ... You can't use a policy variable with other
+//       operators, such as Numeric, Date, Boolean, Binary, IP Address,
+//       or Null operators."
+//  [V3] "Key names are case-insensitive. ... You can use any
+//       single-valued condition key as a variable. You can't use a
+//       multivalued condition key as a variable."
+//  [V4] "When you use a variable with no value in the condition element
+//       ... StringEquals or StringLike do not match ... Inverted
+//       condition operators like StringNotEquals or StringNotLike do
+//       match against a null value".
+//  [V5] "If you don't include the Version element and set it to an
+//       appropriate version date, variables like ${aws:username} are
+//       treated as literal strings in the policy." (2012-10-17 required.)
+//  [V6] Special characters ${*}, ${?}, ${$} "can be used in any string
+//       where you can use regular policy variables."
+//  [V7] Default values: "surround the default value with single quotes
+//       (' '), and separate the variable text and the default value with
+//       a comma and space (, )", e.g. ${aws:PrincipalTag/team, 'none'}.
+//  [V8] Documented example of a variable embedded in a longer value:
+//       {"StringLike": {"s3:prefix": ["${aws:PrincipalTag/team}/*"]}}
+//
+// Tests on the RuntimeConditionTest fixture assert documented AWS
+// behaviour. Tests on RuntimeConditionDecision assert choices of ours
+// where AWS is silent or where matching AWS is a compatibility
+// decision; they are grouped so they can be revisited together.
+
+class RuntimeConditionTest : public ::testing::Test {
+protected:
+  intrusive_ptr<CephContext> cct;
+  const std::string tenant = "tenant";
+
+  RuntimeConditionTest() {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_CLIENT), false);
+  }
+
+  // JSON-quote a string value.
+  static std::string q(std::string_view s) {
+    return fmt::format(R"("{}")", s);
+  }
+
+  // A one-statement policy with a single condition. `vals` is raw JSON:
+  // a quoted string or an array of them. An empty `version` omits the
+  // Version element altogether.
+  static std::string policy_text(std::string_view op, std::string_view key,
+                                 std::string_view vals,
+                                 std::string_view version = "2012-10-17") {
+    std::string s = "{";
+    if (!version.empty()) {
+      s += fmt::format(R"("Version": "{}", )", version);
+    }
+    s += fmt::format(
+      R"("Statement": [{{"Effect": "Allow", "Action": "s3:ListBucket", )"
+      R"("Resource": "arn:aws:s3:::bucket", )"
+      R"("Condition": {{"{}": {{"{}": {}}}}}}}]}})",
+      op, key, vals);
+    return s;
+  }
+
+  boost::optional<Policy> parse(const std::string& text) {
+    try {
+      return Policy(cct.get(), &tenant, text, true);
+    } catch (const rgw::IAM::PolicyParseException&) {
+      return boost::none;
+    }
+  }
+
+  bool parses(const std::string& text) {
+    return bool(parse(text));
+  }
+
+  // Evaluate the single condition of a one-statement policy. A parse
+  // failure is a test failure and evaluates false.
+  bool eval(const std::string& text, const Environment& env) {
+    auto p = parse(text);
+    if (!p) {
+      ADD_FAILURE() << "failed to parse: " << text;
+      return false;
+    }
+    if (p->statements.size() != 1 || p->statements[0].conditions.size() != 1) {
+      ADD_FAILURE() << "expected exactly one condition: " << text;
+      return false;
+    }
+    return p->statements[0].conditions[0].eval(env, nullptr);
+  }
+};
+
+using RuntimeConditionDecision = RuntimeConditionTest;
+
+// --- What is and is not a variable ----------------------------------
+
+TEST_F(RuntimeConditionTest, LiteralDollarIsNotAVariable)
+{
+  // Only "${" opens a variable [V1]. A bare "$" is an ordinary
+  // character and the value is an ordinary literal.
+  for (const char* lit : {"$", "$5", "$x", "price$", "$$", "{aws:username}",
+                          "$ {aws:username}"}) {
+    auto text = policy_text("StringEquals", "s3:prefix", q(lit));
+    ASSERT_TRUE(parses(text)) << text;
+    EXPECT_TRUE(eval(text, {{"s3:prefix", lit}})) << lit;
+    EXPECT_FALSE(eval(text, {{"s3:prefix", "alice"},
+                             {"aws:username", "alice"}})) << lit;
+  }
+}
+
+TEST_F(RuntimeConditionTest, EmbeddedVariablesParse)
+{
+  // [V8]: a variable may be part of a longer value.
+  for (const char* v : {"${aws:username}/*",
+                        "home/${aws:username}",
+                        "home/${aws:username}/*",
+                        "${aws:PrincipalTag/team}-${aws:PrincipalTag/env}",
+                        "arn:aws:s3:::bucket/${aws:username}/*"}) {
+    EXPECT_TRUE(parses(policy_text("StringLike", "s3:prefix", q(v)))) << v;
+  }
+}
+
+TEST_F(RuntimeConditionTest, EmbeddedVariablesSubstitute)
+{
+  // The documented example [V8].
+  auto team = policy_text("StringLike", "s3:prefix",
+                          q("${aws:PrincipalTag/team}/*"));
+  EXPECT_TRUE(eval(team, {{"s3:prefix", "marketing/q3.csv"},
+                          {"aws:PrincipalTag/team", "marketing"}}));
+  EXPECT_FALSE(eval(team, {{"s3:prefix", "finance/q3.csv"},
+                           {"aws:PrincipalTag/team", "marketing"}}));
+  // No team tag: the variable has no value and nothing is like it [V4].
+  EXPECT_FALSE(eval(team, {{"s3:prefix", "marketing/q3.csv"}}));
+
+  auto two = policy_text("StringEquals", "s3:prefix",
+                         q("${aws:PrincipalTag/team}-${aws:PrincipalTag/env}"));
+  EXPECT_TRUE(eval(two, {{"s3:prefix", "web-prod"},
+                         {"aws:PrincipalTag/team", "web"},
+                         {"aws:PrincipalTag/env", "prod"}}));
+  EXPECT_FALSE(eval(two, {{"s3:prefix", "web-prod"},
+                          {"aws:PrincipalTag/team", "web"}}));
+  EXPECT_FALSE(eval(two, {{"s3:prefix", "web-"},
+                          {"aws:PrincipalTag/team", "web"}}));
+}
+
+// --- Operators that take variables [V2] -----------------------------
+
+TEST_F(RuntimeConditionTest, WholeValueVariableStringOperators)
+{
+  const Environment match{{"s3:prefix", "alice"}, {"aws:username", "alice"}};
+  const Environment differ{{"s3:prefix", "bob"}, {"aws:username", "alice"}};
+  const Environment caseonly{{"s3:prefix", "ALICE"}, {"aws:username", "alice"}};
+  auto t = [](const char* op) {
+    return policy_text(op, "s3:prefix", q("${aws:username}"));
+  };
+
+  EXPECT_TRUE(eval(t("StringEquals"), match));
+  EXPECT_FALSE(eval(t("StringEquals"), differ));
+  EXPECT_FALSE(eval(t("StringEquals"), caseonly));
+
+  EXPECT_FALSE(eval(t("StringNotEquals"), match));
+  EXPECT_TRUE(eval(t("StringNotEquals"), differ));
+  EXPECT_TRUE(eval(t("StringNotEquals"), caseonly));
+
+  EXPECT_TRUE(eval(t("StringEqualsIgnoreCase"), match));
+  EXPECT_TRUE(eval(t("StringEqualsIgnoreCase"), caseonly));
+  EXPECT_FALSE(eval(t("StringEqualsIgnoreCase"), differ));
+
+  EXPECT_FALSE(eval(t("StringNotEqualsIgnoreCase"), match));
+  EXPECT_FALSE(eval(t("StringNotEqualsIgnoreCase"), caseonly));
+  EXPECT_TRUE(eval(t("StringNotEqualsIgnoreCase"), differ));
+
+  EXPECT_TRUE(eval(t("StringLike"), match));
+  EXPECT_FALSE(eval(t("StringLike"), differ));
+  EXPECT_FALSE(eval(t("StringLike"), caseonly));
+
+  EXPECT_FALSE(eval(t("StringNotLike"), match));
+  EXPECT_TRUE(eval(t("StringNotLike"), differ));
+  EXPECT_TRUE(eval(t("StringNotLike"), caseonly));
+}
+
+TEST_F(RuntimeConditionTest, SetOperatorsWithVariable)
+{
+  // Request key multi-valued, variable single-valued.
+  auto all = policy_text("ForAllValues:StringEquals", "aws:TagKeys",
+                         q("${aws:PrincipalTag/only}"));
+  auto any = policy_text("ForAnyValue:StringEquals", "aws:TagKeys",
+                         q("${aws:PrincipalTag/only}"));
+  const Environment one{{"aws:TagKeys", "a"}, {"aws:PrincipalTag/only", "a"}};
+  const Environment two{{"aws:TagKeys", "a"}, {"aws:TagKeys", "b"},
+                        {"aws:PrincipalTag/only", "a"}};
+  const Environment none{{"aws:TagKeys", "b"}, {"aws:PrincipalTag/only", "a"}};
+
+  EXPECT_TRUE(eval(all, one));
+  EXPECT_FALSE(eval(all, two));
+  EXPECT_FALSE(eval(all, none));
+
+  EXPECT_TRUE(eval(any, one));
+  EXPECT_TRUE(eval(any, two));
+  EXPECT_FALSE(eval(any, none));
+
+  auto like = policy_text("ForAllValues:StringLike", "aws:TagKeys",
+                          q("${aws:PrincipalTag/only}-*"));
+  EXPECT_TRUE(eval(like, {{"aws:TagKeys", "a-1"}, {"aws:TagKeys", "a-2"},
+                          {"aws:PrincipalTag/only", "a"}}));
+  EXPECT_FALSE(eval(like, {{"aws:TagKeys", "a-1"}, {"aws:TagKeys", "b-2"},
+                           {"aws:PrincipalTag/only", "a"}}));
+}
+
+TEST_F(RuntimeConditionTest, ArnOperatorsWithVariable)
+{
+  const std::string key = "aws:SourceArn";
+  auto whole = policy_text("ArnEquals", key, q("${aws:PrincipalArn}"));
+  EXPECT_TRUE(eval(whole, {{key, "arn:aws:iam::123:user/alice"},
+                           {"aws:PrincipalArn", "arn:aws:iam::123:user/alice"}}));
+  EXPECT_FALSE(eval(whole, {{key, "arn:aws:iam::123:user/bob"},
+                            {"aws:PrincipalArn", "arn:aws:iam::123:user/alice"}}));
+
+  auto embedded = policy_text("ArnLike", key, q("arn:aws:sns:*:*:${aws:username}-*"));
+  EXPECT_TRUE(eval(embedded, {{key, "arn:aws:sns:us-east-1:123:alice-topic"},
+                              {"aws:username", "alice"}}));
+  EXPECT_FALSE(eval(embedded, {{key, "arn:aws:sns:us-east-1:123:bob-topic"},
+                               {"aws:username", "alice"}}));
+
+  auto notlike = policy_text("ArnNotLike", key, q("arn:aws:sns:*:*:${aws:username}-*"));
+  EXPECT_FALSE(eval(notlike, {{key, "arn:aws:sns:us-east-1:123:alice-topic"},
+                              {"aws:username", "alice"}}));
+  EXPECT_TRUE(eval(notlike, {{key, "arn:aws:sns:us-east-1:123:bob-topic"},
+                             {"aws:username", "alice"}}));
+}
+
+// --- Lists mixing literals and variables ----------------------------
+
+TEST_F(RuntimeConditionTest, MixedLiteralAndVariableLists)
+{
+  const Environment viavar{{"s3:prefix", "alice"}, {"aws:username", "alice"}};
+  const Environment vialit{{"s3:prefix", "shared"}, {"aws:username", "alice"}};
+  const Environment neither{{"s3:prefix", "bob"}, {"aws:username", "alice"}};
+  for (const char* vals : {R"(["${aws:username}", "shared"])",
+                           R"(["shared", "${aws:username}"])",
+                           R"(["other", "${aws:username}", "shared"])"}) {
+    auto text = policy_text("StringEquals", "s3:prefix", vals);
+    EXPECT_TRUE(eval(text, viavar)) << vals;
+    EXPECT_TRUE(eval(text, vialit)) << vals;
+    EXPECT_FALSE(eval(text, neither)) << vals;
+  }
+
+  // Two variables in one list.
+  auto text = policy_text("StringEquals", "s3:prefix",
+                          R"(["${aws:username}", "${aws:PrincipalTag/team}"])");
+  EXPECT_TRUE(eval(text, {{"s3:prefix", "web"}, {"aws:username", "alice"},
+                          {"aws:PrincipalTag/team", "web"}}));
+  EXPECT_TRUE(eval(text, {{"s3:prefix", "alice"}, {"aws:username", "alice"},
+                          {"aws:PrincipalTag/team", "web"}}));
+  EXPECT_FALSE(eval(text, {{"s3:prefix", "bob"}, {"aws:username", "alice"},
+                           {"aws:PrincipalTag/team", "web"}}));
+}
+
+TEST_F(RuntimeConditionTest, ShortLiteralAfterVariableDoesNotThrow)
+{
+  // Regression: brace-stripping applied to the LAST value regardless
+  // of whether it was the variable. On a literal shorter than three
+  // characters that threw std::out_of_range from Condition::eval, an
+  // uncaught exception in the request path.
+  const Environment env{{"s3:prefix", "alice"}, {"aws:username", "alice"}};
+  for (const char* vals : {R"(["${aws:username}", "a"])",
+                           R"(["${aws:username}", "ab"])",
+                           R"(["${aws:username}", ""])"}) {
+    auto text = policy_text("StringEquals", "s3:prefix", vals);
+    bool r = false;
+    EXPECT_NO_THROW(r = eval(text, env)) << vals;
+    EXPECT_TRUE(r) << vals;
+  }
+}
+
+// --- Variable names [V3] --------------------------------------------
+
+TEST_F(RuntimeConditionTest, VariableNameIsCaseInsensitive)
+{
+  const Environment env{{"s3:prefix", "alice"}, {"aws:username", "alice"}};
+  for (const char* v : {"${aws:username}", "${AWS:Username}",
+                        "${aws:USERNAME}", "${Aws:UserName}"}) {
+    EXPECT_TRUE(eval(policy_text("StringEquals", "s3:prefix", q(v)), env)) << v;
+  }
+}
+
+// --- Variables with no value [V4] -----------------------------------
+
+TEST_F(RuntimeConditionTest, UnresolvedVariablePositiveFalseNegativeTrue)
+{
+  // Condition key present, variable's key absent.
+  const Environment env{{"s3:prefix", "alice"}};
+  auto t = [](const char* op) {
+    return policy_text(op, "s3:prefix", q("${aws:username}"));
+  };
+  EXPECT_FALSE(eval(t("StringEquals"), env));
+  EXPECT_TRUE(eval(t("StringNotEquals"), env));
+  EXPECT_FALSE(eval(t("StringEqualsIgnoreCase"), env));
+  EXPECT_TRUE(eval(t("StringNotEqualsIgnoreCase"), env));
+  EXPECT_FALSE(eval(t("StringLike"), env));
+  EXPECT_TRUE(eval(t("StringNotLike"), env));
+  EXPECT_FALSE(eval(t("ForAnyValue:StringEquals"), env));
+  EXPECT_FALSE(eval(t("ForAllValues:StringEquals"), env));
+
+  const Environment arn{{"aws:SourceArn", "arn:aws:s3:::bucket"}};
+  EXPECT_FALSE(eval(policy_text("ArnEquals", "aws:SourceArn",
+                                q("${aws:PrincipalArn}")), arn));
+  EXPECT_TRUE(eval(policy_text("ArnNotEquals", "aws:SourceArn",
+                               q("${aws:PrincipalArn}")), arn));
+  EXPECT_FALSE(eval(policy_text("ArnLike", "aws:SourceArn",
+                                q("${aws:PrincipalArn}")), arn));
+  EXPECT_TRUE(eval(policy_text("ArnNotLike", "aws:SourceArn",
+                               q("${aws:PrincipalArn}")), arn));
+
+  // An unresolved variable embedded in a longer value is just as null.
+  EXPECT_FALSE(eval(policy_text("StringLike", "s3:prefix",
+                                q("${aws:username}/*")),
+                    {{"s3:prefix", "/x"}}));
+  EXPECT_FALSE(eval(policy_text("StringLike", "s3:prefix",
+                                q("${aws:username}/*")),
+                    {{"s3:prefix", "alice/x"}}));
+}
+
+TEST_F(RuntimeConditionTest, UnresolvedVariableDoesNotHideResolvedOnes)
+{
+  // One variable unresolved, another resolved, in the same list.
+  auto text = policy_text("StringEquals", "s3:prefix",
+                          R"(["${aws:username}", "${aws:PrincipalTag/team}"])");
+  EXPECT_TRUE(eval(text, {{"s3:prefix", "web"}, {"aws:PrincipalTag/team", "web"}}));
+  EXPECT_FALSE(eval(text, {{"s3:prefix", "alice"}, {"aws:PrincipalTag/team", "web"}}));
+}
+
+// --- Default values [V7] --------------------------------------------
+
+TEST_F(RuntimeConditionTest, DefaultValue)
+{
+  auto text = policy_text("StringEquals", "s3:prefix",
+                          q("${aws:PrincipalTag/team, 'company-wide'}"));
+  EXPECT_TRUE(eval(text, {{"s3:prefix", "yellow"},
+                          {"aws:PrincipalTag/team", "yellow"}}));
+  EXPECT_FALSE(eval(text, {{"s3:prefix", "company-wide"},
+                           {"aws:PrincipalTag/team", "yellow"}}));
+  EXPECT_TRUE(eval(text, {{"s3:prefix", "company-wide"}}));
+  EXPECT_FALSE(eval(text, {{"s3:prefix", "yellow"}}));
+
+  auto embedded = policy_text("StringLike", "s3:prefix",
+                              q("${aws:PrincipalTag/team, 'company-wide'}/*"));
+  EXPECT_TRUE(eval(embedded, {{"s3:prefix", "company-wide/readme"}}));
+  EXPECT_TRUE(eval(embedded, {{"s3:prefix", "yellow/readme"},
+                              {"aws:PrincipalTag/team", "yellow"}}));
+  EXPECT_FALSE(eval(embedded, {{"s3:prefix", "company-wide/readme"},
+                               {"aws:PrincipalTag/team", "yellow"}}));
+
+  // An empty default is a value, not an absence.
+  auto empty = policy_text("StringEquals", "s3:prefix",
+                           q("${aws:PrincipalTag/team, ''}"));
+  EXPECT_TRUE(eval(empty, {{"s3:prefix", ""}}));
+  EXPECT_FALSE(eval(policy_text("StringNotEquals", "s3:prefix",
+                                q("${aws:PrincipalTag/team, ''}")),
+                    {{"s3:prefix", ""}}));
+}
+
+// --- Special characters [V6] ----------------------------------------
+
+TEST_F(RuntimeConditionTest, SpecialCharacterVariables)
+{
+  auto star = policy_text("StringLike", "s3:prefix", q("a${*}b"));
+  EXPECT_TRUE(eval(star, {{"s3:prefix", "a*b"}}));
+  EXPECT_FALSE(eval(star, {{"s3:prefix", "aXb"}}));
+  EXPECT_FALSE(eval(star, {{"s3:prefix", "ab"}}));
+
+  auto qmark = policy_text("StringLike", "s3:prefix", q("a${?}b"));
+  EXPECT_TRUE(eval(qmark, {{"s3:prefix", "a?b"}}));
+  EXPECT_FALSE(eval(qmark, {{"s3:prefix", "aXb"}}));
+
+  auto dollar = policy_text("StringLike", "s3:prefix", q("${$}"));
+  EXPECT_TRUE(eval(dollar, {{"s3:prefix", "$"}}));
+  EXPECT_FALSE(eval(dollar, {{"s3:prefix", "x"}}));
+
+  // ${$} escapes what would otherwise be a variable.
+  auto escaped = policy_text("StringEquals", "s3:prefix",
+                             q("${$}{aws:username}"));
+  EXPECT_TRUE(eval(escaped, {{"s3:prefix", "${aws:username}"},
+                             {"aws:username", "alice"}}));
+  EXPECT_FALSE(eval(escaped, {{"s3:prefix", "alice"},
+                              {"aws:username", "alice"}}));
+
+  // Special variables mixed with a real one.
+  auto mixed = policy_text("StringLike", "s3:prefix",
+                           q("${aws:username}/${*}/*"));
+  EXPECT_TRUE(eval(mixed, {{"s3:prefix", "alice/*/x"},
+                           {"aws:username", "alice"}}));
+  EXPECT_FALSE(eval(mixed, {{"s3:prefix", "alice/y/x"},
+                            {"aws:username", "alice"}}));
+}
+
+// --- Our decisions where AWS is silent or compatibility is at stake --
+
+TEST_F(RuntimeConditionDecision, MalformedVariableRejectedAtParse)
+{
+  // AWS does not document what an unterminated "${" or an empty name
+  // means. We fail closed at parse time rather than guess.
+  for (const char* bad : {"${", "${aws:username", "a${b", "${}", "x${}y"}) {
+    EXPECT_FALSE(parses(policy_text("StringEquals", "s3:prefix", q(bad))))
+      << bad;
+  }
+}
+
+TEST_F(RuntimeConditionDecision, VariablesRejectedInNonStringOperators)
+{
+  // [V2] forbids variables outside the string and ARN operators. We
+  // reject the policy rather than evaluate it; before this, a variable
+  // under NumericNotEquals (unconvertible, so skipped) was an
+  // unconditional match, and under Bool or Null it read as "true".
+  struct { const char* op; const char* key; } cases[] = {
+    {"NumericEquals", "s3:max-keys"},
+    {"NumericNotEquals", "s3:max-keys"},
+    {"NumericLessThan", "s3:max-keys"},
+    {"NumericLessThanEquals", "s3:max-keys"},
+    {"NumericGreaterThan", "s3:max-keys"},
+    {"NumericGreaterThanEquals", "s3:max-keys"},
+    {"DateEquals", "aws:CurrentTime"},
+    {"DateNotEquals", "aws:CurrentTime"},
+    {"DateLessThan", "aws:CurrentTime"},
+    {"DateLessThanEquals", "aws:CurrentTime"},
+    {"DateGreaterThan", "aws:CurrentTime"},
+    {"DateGreaterThanEquals", "aws:CurrentTime"},
+    {"Bool", "aws:SecureTransport"},
+    {"BinaryEquals", "s3:prefix"},
+    {"IpAddress", "aws:SourceIp"},
+    {"NotIpAddress", "aws:SourceIp"},
+    {"Null", "s3:prefix"},
+  };
+  for (const auto& c : cases) {
+    auto text = policy_text(c.op, c.key, q("${aws:username}"));
+    EXPECT_FALSE(parses(text)) << text;
+    // Should it parse anyway, it must never be a match.
+    if (auto p = parse(text)) {
+      EXPECT_FALSE(p->statements[0].conditions[0].eval(
+                     {{c.key, "10"}, {"aws:username", "alice"}}, nullptr))
+        << text;
+    }
+  }
+}
+
+TEST_F(RuntimeConditionDecision, VariablesAreLiteralBefore2012)
+{
+  // [V5]. Compatibility note: policies written without a Version line
+  // (our parser defaults to 2008-10-17) that relied on interpolation
+  // stop interpolating.
+  for (const char* version : {"2008-10-17", ""}) {
+    auto text = policy_text("StringEquals", "s3:prefix",
+                            q("${aws:username}"), version);
+    ASSERT_TRUE(parses(text)) << text;
+    EXPECT_TRUE(eval(text, {{"s3:prefix", "${aws:username}"},
+                            {"aws:username", "alice"}})) << text;
+    EXPECT_FALSE(eval(text, {{"s3:prefix", "alice"},
+                             {"aws:username", "alice"}})) << text;
+  }
+}
+
+TEST_F(RuntimeConditionDecision, MultiValuedVariableIsUnresolved)
+{
+  // [V3] forbids multivalued keys as variables but does not say what
+  // happens if you do it. We treat the variable as having no value;
+  // before this, every value was substituted, turning a scalar
+  // comparison into a set comparison.
+  const Environment env{{"s3:prefix", "a"},
+                        {"aws:TagKeys", "a"}, {"aws:TagKeys", "b"}};
+  EXPECT_FALSE(eval(policy_text("StringEquals", "s3:prefix",
+                                q("${aws:TagKeys}")), env));
+  EXPECT_TRUE(eval(policy_text("StringNotEquals", "s3:prefix",
+                               q("${aws:TagKeys}")), env));
+  EXPECT_FALSE(eval(policy_text("StringLike", "s3:prefix",
+                                q("${aws:TagKeys}*")), env));
+}
