@@ -57,6 +57,11 @@ void ceph_heap_release_free_memory()
   MallocExtension::instance()->ReleaseFreeMemory();
 }
 
+void ceph_heap_release_to_system(size_t bytes)
+{
+  MallocExtension::instance()->ReleaseToSystem(bytes);
+}
+
 double ceph_heap_get_release_rate()
 {
   return MallocExtension::instance()->GetMemoryReleaseRate();

@@ -13,6 +13,8 @@
  *
  */
 
+#include <condition_variable>
+#include <mutex>
 #include <set>
 #include <boost/intrusive/list.hpp>
 #include "global/global_init.h"
@@ -374,6 +376,50 @@ void rgw::AppMain::init_perfcounters()
     heap_profiler_hook = nullptr;
   }
 } /* init_perfcounters */
+
+void rgw::AppMain::init_heap_release()
+{
+  if (!ceph_using_tcmalloc()) {
+    return;
+  }
+  heap_releaser = std::jthread([dpp = dpp] (std::stop_token stop) {
+    ceph_pthread_setname("rgw_heap_rel");
+    std::mutex mutex;
+    std::condition_variable_any cond;
+    std::unique_lock lock{mutex};
+    while (!stop.stop_requested()) {
+      // re-read every pass so it can be changed at runtime; 0 disables
+      const auto interval = g_conf().get_val<std::chrono::seconds>(
+          "rgw_heap_release_interval");
+      if (interval.count()) {
+        const uint64_t bytes = g_conf().get_val<Option::size_t>(
+            "rgw_heap_release_bytes");
+        // memory handed back to the OS has to be faulted in again when it is
+        // reused, so only make a pass once a full pass's worth is free
+        size_t free_bytes = 0;
+        if (bytes &&
+            ceph_heap_get_numeric_property("tcmalloc.pageheap_free_bytes",
+                                           &free_bytes) &&
+            free_bytes < bytes) {
+          ldpp_dout(dpp, 20) << "not releasing tcmalloc memory: " << free_bytes
+                             << " bytes free in page heap, below "
+                             << bytes << dendl;
+        } else {
+          ldpp_dout(dpp, 20) << "releasing free tcmalloc memory, "
+                             << free_bytes << " bytes free in page heap"
+                             << dendl;
+          if (bytes) {
+            ceph_heap_release_to_system(bytes);
+          } else {
+            ceph_heap_release_free_memory();
+          }
+        }
+      }
+      cond.wait_for(lock, stop, std::max(interval, std::chrono::seconds(1)),
+                    [] { return false; });
+    }
+  });
+}
 
 void rgw::AppMain::init_http_clients()
 {
@@ -832,6 +878,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(implicit_tenant_context.get());
   implicit_tenant_context.reset(); // deletes
+  heap_releaser = std::jthread{};
   unregister_heap_profiler_hook();
   rgw_perf_stop(g_ceph_context);
   ratelimiter.reset(); // deletes--ensure this happens before we destruct
