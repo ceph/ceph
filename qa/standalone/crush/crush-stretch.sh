@@ -892,11 +892,15 @@ function TEST_stretch_unstretch_clean() {
     ceph osd pool create data_recovery --num_zones 2 --replica 2 || return 1
 
     # Recovery stretch mode is entered from degraded stretch mode, and only
-    # with a monitor in quorum in every zone: kill the OSDs of dc2, not mon.b
+    # with a monitor in quorum in every zone: lose dc2, then bring back
+    # mon.b but not the OSDs
+    kill_daemons $dir TERM mon.b
     kill_daemons $dir TERM osd.2
     kill_daemons $dir TERM osd.3
     ceph osd down 2 3 || return 1
     wait_for_output "^degraded_stretch_mode 1" ceph osd dump || return 1
+    activate_mon $dir b || return 1
+    wait_for_quorum 60 3 || return 1
 
     ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
     wait_for_output "^recovering_stretch_mode 1" ceph osd dump || return 1
