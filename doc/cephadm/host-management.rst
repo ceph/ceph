@@ -246,7 +246,7 @@ to take a host out of maintenance mode:
 .. prompt:: bash #
 
    ceph orch host maintenance enter <hostname> [--force [--yes-i-really-mean-it]]
-   ceph orch host maintenance exit <hostname> [--force] [--offline]
+   ceph orch host maintenance exit <hostname> [--force [--offline]]
 
 * Adding the ``--force`` flag to the ``enter`` command allows the user to
   bypass warnings (but not alerts).
@@ -255,7 +255,8 @@ to take a host out of maintenance mode:
   the host into maintenance mode. Without ``--force``, the flag is rejected.
 * Adding the ``--force`` and ``--offline`` flags to the ``exit`` command
   causes cephadm to mark hosts that are in maintenance mode and offline as
-  no longer in maintenance mode. Note that if the host comes online, the
+  no longer in maintenance mode. Without ``--force``, the ``--offline`` flag
+  is rejected. Note that if the host comes online, the
   Ceph daemons on the host will remain in the stopped state. The ``--force``
   and ``--offline`` flags of the ``exit`` command are meant to be run on
   hosts that are in maintenance mode and that are permanently offline prior
@@ -703,6 +704,8 @@ host name. This in turn means that Ceph will return the bare host names
 when executing ``ceph * metadata``. This in turn means cephadm also
 requires the bare host name when adding a host to the cluster:
 ``ceph orch host add <bare-name>``.
+
+.. _cephadm-sudo-hardening:
 
 Sudo Hardening
 ==============
