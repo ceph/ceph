@@ -1675,7 +1675,8 @@ public:
     size_t idx = 1, last_idx_to_delete = 0;
     transaction_id_t prev_id = oid_iter->second.begin()->trans_id;
     for (auto &p : oid_iter->second) {
-      if (prev_has_delete && p.op == lognode_delta_t::op_t::INSERT) {
+      if (prev_has_delete && p.op == lognode_delta_t::op_t::INSERT &&
+	  prev_id < p.trans_id) {
 	break;
       }
       if (prev_has_insert && p.op == lognode_delta_t::op_t::DELETE &&

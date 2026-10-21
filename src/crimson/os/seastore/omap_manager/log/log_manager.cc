@@ -64,6 +64,38 @@ LogManager::merge_deltas(
   lognode_deltas_t &deltas)
 {
   LOG_PREFIX(LogManager::merge_deltas);
+  // Preserve the original operation order when INSERT and
+  // DELETE operations are mixed, as merging them may change
+  // the final values of overlapping keys.
+  const auto first_op = deltas.front().op;
+  const bool mixed_ops = std::any_of(
+    deltas.begin(), deltas.end(),
+    [first_op](const auto& d) {
+      return d.op != first_op;
+    });
+
+  if (mixed_ops) {
+    for (auto& delta : deltas) {
+      auto iter = delta.buffer.cbegin();
+      if (delta.op == lognode_delta_t::op_t::INSERT) {
+        std::map<std::string, ceph::bufferlist> kvs;
+        decode(kvs, iter);
+        co_await _omap_set_keys(
+          log_root, t, std::move(kvs));
+      } else {
+        ceph_assert(
+          delta.op == lognode_delta_t::op_t::DELETE);
+        std::vector<std::pair<std::string, std::string>> ranges;
+        decode(ranges, iter);
+        for (auto& [first, last] : ranges) {
+          co_await _omap_rm_key_range(
+            log_root, t, first, last);
+        }
+      }
+    }
+    co_return;
+  }
+
   std::map<std::string, ceph::bufferlist> merged_kvs;
   std::vector<std::pair<std::string, std::string>> merged_ranges;
   for (auto &delta : deltas) {
