@@ -4510,7 +4510,7 @@ TEST_F(NSFSGatewayAttrReadTest, AnAttributeIsReadOnAnotherThread)
  * Under `s3-native` the first raise is the publish, and listings,
  * stats and attribute reads failed after it.  The control is a raw
  * statx into the uploader's `0700` directory on the same thread:  it
- * must fail, or the read after the raise says nothing. */
+ * must fail, or the read after the raise shows nothing. */
 TEST_F(NSFSGatewayAttrReadTest, ARaiseKeepsReadSearch)
 {
   if (!permitted(CAP_FOWNER) || !permitted(CAP_DAC_OVERRIDE)) {

@@ -12077,34 +12077,34 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
    * Scoping it to the open alone does not work, and the way it fails
    * is quiet:  the open is retried as the gateway and succeeds, the
    * entry's identity is restored on the way out, and the attribute
-   * read that follows runs as the requester and is denied again --
-   * then swallowed into has_attrs=false, so the caller sees an object
-   * with no ACL rather than an error.  Both halves are the operation. */
-  /* Two failures, and they are not the same answer.
+   * read that follows runs as the requester and is denied again, so
+   * the read fails although S3 authorised it.  Both halves are the
+   * operation. */
+  /* Both failures reach the caller, and has_attrs is false on either.
    *
-   * The object could not be *opened* -- a permission the tree does
-   * not grant -- and that must reach the client, which is a 403.
-   * Or it opened and its attributes could not be read, which has
-   * always left has_attrs false and returned 0, because a caller
-   * decides for itself what a missing attribute means.
+   * An object that could not be opened is a permission the tree does
+   * not grant, and reaches the client as a 403.  An object that opened
+   * and whose attributes could not be read is not an object with no
+   * attributes:  the core takes a 0 here to mean the attributes were
+   * read, and decides object lock on them -- for a delete and for a
+   * retention change -- so a failed read taken for an empty one
+   * deleted a version under a legal hold.  Measured 2026-10-21 with
+   * inject-attr-read-fail.
    *
-   * Collapsing the two returned 0 for a failed open, so the caller
-   * saw an object with no etag and returned 400:  "could not open
-   * ... Permission denied" followed by "has no etag after
-   * get_obj_attrs()".  Thirteen acl tests, measured 2026-10-16. */
-  bool open_failed = false;
+   * And the open failure kept apart from a missing etag:  collapsed
+   * into a 0, the caller saw an object with no etag and returned 400,
+   * "could not open ... Permission denied" followed by "has no etag
+   * after get_obj_attrs()".  Thirteen acl tests, measured 2026-10-16. */
   int ret = with_cross_account_retry(dpp, nsfs::AccessClass::object_attrs,
 				     [&](int use_fd) -> int {
     if (use_fd < 0) {
       const int oret = open(dpp, y, false);
       if (oret < 0) {
-	open_failed = true;
 	return oret;
       }
     }
-    open_failed = false;
-    /* EIO, not a permission:  the same swallow below on every access
-     * model, without the retry a denial sets off */
+    /* EIO, not a permission:  the same failure on every access model,
+     * without the retry a denial sets off */
     if (get_bucket() &&
 	driver->attr_read_fail_injected(get_bucket()->get_name())) {
       driver->record_attr_read_fail();
@@ -12113,9 +12113,6 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
     return ent->read_attrs(dpp, y, state.attrset, use_fd);
   });
   state.has_attrs = (ret == 0);
-  if ((ret < 0) && !open_failed) {
-    ret = 0;
-  }
 
   if (state.has_attrs && state.attrset.find(RGW_ATTR_ETAG) == state.attrset.end()) {
     bufferlist bl;
