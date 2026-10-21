@@ -31,7 +31,9 @@
   that clients send to them instead of forwarding them to the auth rank
   (``mds_bal_replica_discover_reads``);
   ``mds_bal_skip_replicate_ephemeral_random`` keeps randomly pinned
-  directories from being replicated. See doc/cephfs/multimds.rst.
+  directories from being replicated. ``ceph-fuse`` and ``libcephfs`` clients
+  need the fix for https://tracker.ceph.com/issues/81952 to work well in
+  directories spread this way. See doc/cephfs/multimds.rst.
 
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
