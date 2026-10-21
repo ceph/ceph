@@ -4368,6 +4368,8 @@ int RadosMultipartUpload::set_completion_record(const DoutPrefixProvider* dpp, o
   if (tag) {
     bufferlist instance_bl;
     instance_bl.append(instance);
+    // assert that we haven't set a completion tag yet
+    op.cmpxattr(RGW_ATTR_MP_COMPLETION_TAG, LIBRADOS_CMPXATTR_OP_EQ, bufferlist());
     op.setxattr(RGW_ATTR_MP_COMPLETION_TAG, *tag);
     op.setxattr(RGW_ATTR_MP_COMPLETION_INSTANCE, instance_bl);
   } else {
