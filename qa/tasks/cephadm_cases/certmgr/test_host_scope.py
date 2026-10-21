@@ -4,9 +4,10 @@ certmgr integration tests: grafana (host scope).
 Run by the orch/cephadm/certmgr suite; shared helpers live in base.py.
 """
 
+import unittest
 from typing import Any, Dict, List
 
-from tasks.cephadm_cases.certmgr.base import CertMgrTestCase
+from tasks.cephadm_cases.certmgr.base import CertMgrTestCase, WORKDIR
 
 
 class GrafanaTestCase(CertMgrTestCase):
@@ -70,3 +71,47 @@ class TestCertMgrHostScope(GrafanaTestCase):
         self.assertIn('ssl_cert', res.err + res.out, res)
         self.assertEqual(self.orch_ls('grafana'), [], 'an inline grafana spec must not be stored')
         self.assertFalse(self.daemons('grafana'))
+
+
+class TestCertMgrHostScopeReference(GrafanaTestCase):
+    """grafana with user-provided certificates ('reference'), one per host.
+
+    Run by its own facet (host-scope-reference) because of a known issue:
+    cephadm looks the per-host certificate up under the host's FQDN
+    (get_fqdn()), while 'cert-key set --hostname' stores it under the host
+    name from 'orch host ls'. grafana is then deployed without a certificate
+    and fails, which raises CEPHADM_FAILED_DAEMON; that facet ignores it so
+    the expected failure below does not fail the job.
+
+    Once the lookup is fixed: drop the expectedFailure (an unexpected
+    success fails the job), drop the facet's ignorelist, and move the test
+    into TestCertMgrHostScope.
+    """
+
+    @unittest.expectedFailure
+    def test_grafana_reference_per_host(self) -> None:
+        """Each grafana daemon serves the user certificate stored for its own
+        host, with the chain sent: a client trusting only the QA root CA
+        validates it."""
+        hosts = self.host_names[:2]
+        leaves = {}
+        try:
+            for host in hosts:
+                leaves[host] = self.leaf(f'grafana-ref-{host}', ips=[self.hosts[host]],
+                                         dns=['grafana_servers'])
+                self.set_pair('grafana', leaves[host], host=host)
+            self.apply('grafana', self.grafana_spec(hosts, certificate_source='reference'))
+            for host in hosts:
+                with self.subTest(host=host):
+                    expected = leaves[host]['fingerprint']
+                    # bounded: with the known issue grafana never serves it
+                    self.wait_served(host, self.GRAFANA_PORT,
+                                     lambda r: r['fingerprint'] == expected,
+                                     'grafana reference certificate', timeout=300)
+                    res = self.served(host, self.GRAFANA_PORT,
+                                      cafile=f'{WORKDIR}/ca/root/ca.crt')
+                    self.assertTrue(res['ok'], res)
+        finally:
+            self.rm_service('grafana')
+            for host in hosts:
+                self.rm_cert_key('grafana_ssl_cert', host=host)
