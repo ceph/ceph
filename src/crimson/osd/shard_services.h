@@ -622,12 +622,18 @@ public:
     return pg_to_shard_mapping.dump_store_shards(f);
   }
 
+  /// Whether this OSD is the up primary of pgid (and, for EC, holds the
+  /// primary shard), according to the current osdmap. Used to place the pg.
+  bool is_mapping_primary(spg_t pgid) const;
+
   auto create_split_pg_mapping(spg_t pgid, core_id_t core, store_index_t store_index) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, core, store_index, is_mapping_primary(pgid));
   }
 
   seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid).then(
+    return pg_to_shard_mapping.get_or_create_pg_mapping(
+      pgid, NULL_CORE, NULL_STORE_INDEX, false).then(
       [](std::pair<core_id_t, store_index_t> mapping) {
         return mapping.first;
       });
