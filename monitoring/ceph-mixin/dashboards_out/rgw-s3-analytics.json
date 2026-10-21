@@ -59,7 +59,7 @@
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "Total bytes currently stored across all buckets (usage metric).",
+         "description": "Total number of buckets (usage metric).",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -71,18 +71,14 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
                      }
                   ]
                },
-               "unit": "decbytes"
+               "unit": "none"
             }
          },
          "gridPos": {
-            "h": 3,
+            "h": 4,
             "w": 3,
             "x": 0,
             "y": 1
@@ -91,7 +87,7 @@
          "links": [ ],
          "options": {
             "colorMode": "none",
-            "graphMode": "none",
+            "graphMode": "area",
             "justifyMode": "auto",
             "orientation": "auto",
             "reduceOptions": {
@@ -107,7 +103,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))",
+               "expr": "count(ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -115,14 +111,14 @@
                "refId": "A"
             }
          ],
-         "title": "Total Used Bytes",
+         "title": "Buckets",
          "transparent": false,
          "type": "stat"
       },
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "Total number of objects currently stored across all buckets (usage metric).",
+         "description": "Total number of users that own at least one bucket (usage metric).",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -134,10 +130,6 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
                      }
                   ]
                },
@@ -145,7 +137,7 @@
             }
          },
          "gridPos": {
-            "h": 3,
+            "h": 4,
             "w": 3,
             "x": 3,
             "y": 1
@@ -154,7 +146,7 @@
          "links": [ ],
          "options": {
             "colorMode": "none",
-            "graphMode": "none",
+            "graphMode": "area",
             "justifyMode": "auto",
             "orientation": "auto",
             "reduceOptions": {
@@ -170,7 +162,125 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_bucket_usage_objects and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))",
+               "expr": "count(count by (owner) (ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Users",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Bytes currently stored across all buckets (usage metric).",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "decbytes"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 6,
+            "y": 1
+         },
+         "id": 5,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Used Bytes",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "${datasource}",
+         "description": "Number of objects currently stored across all buckets (usage metric).",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 9,
+            "y": 1
+         },
+         "id": 6,
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(ceph_rgw_bucket_usage_objects and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -185,7 +295,7 @@
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "Average size per stored object (total used bytes / object count, usage metrics).",
+         "description": "Average size per stored object (used bytes / object count, usage metrics).",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -197,10 +307,6 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
                      }
                   ]
                },
@@ -208,16 +314,16 @@
             }
          },
          "gridPos": {
-            "h": 3,
+            "h": 4,
             "w": 3,
-            "x": 6,
+            "x": 12,
             "y": 1
          },
-         "id": 5,
+         "id": 7,
          "links": [ ],
          "options": {
             "colorMode": "none",
-            "graphMode": "none",
+            "graphMode": "area",
             "justifyMode": "auto",
             "orientation": "auto",
             "reduceOptions": {
@@ -233,7 +339,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) / (sum(ceph_rgw_bucket_usage_objects and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) > 0)",
+               "expr": "sum(ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) / (sum(ceph_rgw_bucket_usage_objects and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) > 0)",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -248,7 +354,7 @@
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "Cumulative bytes uploaded via PUT operations across all buckets and RGW daemons (per-bucket performance counter).",
+         "description": "Cumulative bytes uploaded (PUT) and downloaded (GET) across all buckets and RGW daemons (per-bucket performance counters).",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -260,10 +366,6 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
                      }
                   ]
                },
@@ -271,133 +373,7 @@
             }
          },
          "gridPos": {
-            "h": 3,
-            "w": 3,
-            "x": 9,
-            "y": 1
-         },
-         "id": 6,
-         "links": [ ],
-         "options": {
-            "colorMode": "none",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "reduceOptions": {
-               "calcs": [
-                  "lastNotNull"
-               ],
-               "fields": "",
-               "values": false
-            },
-            "textMode": "auto"
-         },
-         "pluginVersion": "9.4.7",
-         "targets": [
-            {
-               "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
-               "format": "time_series",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": true,
-               "refId": "A"
-            }
-         ],
-         "title": "Total PUT Bytes",
-         "transparent": false,
-         "type": "stat"
-      },
-      {
-         "colors": null,
-         "datasource": "${datasource}",
-         "description": "Cumulative bytes downloaded via GET operations across all buckets and RGW daemons (per-bucket performance counter).",
-         "fieldConfig": {
-            "defaults": {
-               "decimals": 0,
-               "links": [ ],
-               "mappings": [ ],
-               "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                     {
-                        "color": "green",
-                        "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
-                     }
-                  ]
-               },
-               "unit": "decbytes"
-            }
-         },
-         "gridPos": {
-            "h": 3,
-            "w": 3,
-            "x": 12,
-            "y": 1
-         },
-         "id": 7,
-         "links": [ ],
-         "options": {
-            "colorMode": "none",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "reduceOptions": {
-               "calcs": [
-                  "lastNotNull"
-               ],
-               "fields": "",
-               "values": false
-            },
-            "textMode": "auto"
-         },
-         "pluginVersion": "9.4.7",
-         "targets": [
-            {
-               "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
-               "format": "time_series",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": true,
-               "refId": "A"
-            }
-         ],
-         "title": "Total GET Bytes",
-         "transparent": false,
-         "type": "stat"
-      },
-      {
-         "colors": null,
-         "datasource": "${datasource}",
-         "description": "Cumulative PUT object operation count across all buckets and RGW daemons (per-bucket performance counter).",
-         "fieldConfig": {
-            "defaults": {
-               "decimals": 0,
-               "links": [ ],
-               "mappings": [ ],
-               "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                     {
-                        "color": "green",
-                        "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
-                     }
-                  ]
-               },
-               "unit": "none"
-            }
-         },
-         "gridPos": {
-            "h": 3,
+            "h": 4,
             "w": 3,
             "x": 15,
             "y": 1
@@ -406,9 +382,9 @@
          "links": [ ],
          "options": {
             "colorMode": "none",
-            "graphMode": "none",
+            "graphMode": "area",
             "justifyMode": "auto",
-            "orientation": "auto",
+            "orientation": "vertical",
             "reduceOptions": {
                "calcs": [
                   "lastNotNull"
@@ -416,28 +392,37 @@
                "fields": "",
                "values": false
             },
-            "textMode": "auto"
+            "textMode": "value_and_name"
          },
          "pluginVersion": "9.4.7",
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_per_bucket_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
-               "legendFormat": "__auto",
+               "legendFormat": "PUT",
                "range": true,
                "refId": "A"
+            },
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "GET",
+               "range": true,
+               "refId": "B"
             }
          ],
-         "title": "Total PUT Ops",
+         "title": "PUT / GET Bytes",
          "transparent": false,
          "type": "stat"
       },
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "Cumulative GET object operation count across all buckets and RGW daemons (per-bucket performance counter).",
+         "description": "Cumulative PUT and GET object operation counts across all buckets and RGW daemons (per-bucket performance counters).",
          "fieldConfig": {
             "defaults": {
                "decimals": 0,
@@ -449,10 +434,6 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
                      }
                   ]
                },
@@ -460,7 +441,7 @@
             }
          },
          "gridPos": {
-            "h": 3,
+            "h": 4,
             "w": 3,
             "x": 18,
             "y": 1
@@ -469,9 +450,9 @@
          "links": [ ],
          "options": {
             "colorMode": "none",
-            "graphMode": "none",
+            "graphMode": "area",
             "justifyMode": "auto",
-            "orientation": "auto",
+            "orientation": "vertical",
             "reduceOptions": {
                "calcs": [
                   "lastNotNull"
@@ -479,31 +460,39 @@
                "fields": "",
                "values": false
             },
-            "textMode": "auto"
+            "textMode": "value_and_name"
          },
          "pluginVersion": "9.4.7",
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_per_bucket_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
-               "legendFormat": "__auto",
+               "legendFormat": "PUT",
                "range": true,
                "refId": "A"
+            },
+            {
+               "datasource": "${datasource}",
+               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "GET",
+               "range": true,
+               "refId": "B"
             }
          ],
-         "title": "Total GET Ops",
+         "title": "PUT / GET Ops",
          "transparent": false,
          "type": "stat"
       },
       {
          "colors": null,
          "datasource": "${datasource}",
-         "description": "Total Used Bytes / Utilized Bytes (size after compression and encryption). Values above 1 mean data is compressed.",
+         "description": "Used Bytes : Utilized Bytes (size after compression and encryption), shown as N:1. Values above 1:1 mean data is compressed.",
          "fieldConfig": {
             "defaults": {
-               "decimals": 2,
                "links": [ ],
                "mappings": [ ],
                "thresholds": {
@@ -515,11 +504,11 @@
                      }
                   ]
                },
-               "unit": "suffix:x"
+               "unit": "suffix::1"
             }
          },
          "gridPos": {
-            "h": 3,
+            "h": 4,
             "w": 3,
             "x": 21,
             "y": 1
@@ -528,7 +517,7 @@
          "links": [ ],
          "options": {
             "colorMode": "none",
-            "graphMode": "none",
+            "graphMode": "area",
             "justifyMode": "auto",
             "orientation": "auto",
             "reduceOptions": {
@@ -544,7 +533,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) / (sum(ceph_rgw_bucket_usage_bytes_utilized and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) > 0)",
+               "expr": "sum(ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) / (sum(ceph_rgw_bucket_usage_bytes_utilized and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) > 0)",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -563,7 +552,7 @@
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 4
+            "y": 5
          },
          "id": 11,
          "panels": [ ],
@@ -598,7 +587,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 5
+            "y": 6
          },
          "id": 12,
          "options": {
@@ -613,7 +602,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -623,7 +612,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_buckets_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_list_buckets_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "List Buckets",
@@ -632,7 +621,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -642,7 +631,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -652,7 +641,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -662,7 +651,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_bucket_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_del_bucket_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -672,7 +661,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_copy_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_copy_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Copy Objects",
@@ -720,7 +709,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 5
+            "y": 6
          },
          "id": 13,
          "options": {
@@ -735,7 +724,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -745,7 +734,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -755,7 +744,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -765,7 +754,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Copy Objects",
@@ -813,7 +802,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 5
+            "y": 6
          },
          "id": 14,
          "options": {
@@ -828,7 +817,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -838,7 +827,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_buckets_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_list_buckets_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "List Bucket",
@@ -847,7 +836,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -857,7 +846,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -867,7 +856,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -877,7 +866,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_bucket_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_del_bucket_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -887,7 +876,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
+               "expr": "sum(ceph_rgw_op_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Copy Object",
@@ -905,7 +894,7 @@
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 13
+            "y": 14
          },
          "id": 15,
          "panels": [ ],
@@ -913,7 +902,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "Top Users & Top Buckets",
+         "title": "Users Usage and Performance",
          "titleSize": "h6",
          "type": "row"
       },
@@ -959,7 +948,7 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
                      }
@@ -977,9 +966,21 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.hidden",
+                        "value": true
                      }
                   ]
                },
@@ -1031,9 +1032,9 @@
          },
          "gridPos": {
             "h": 8,
-            "w": 12,
+            "w": 6,
             "x": 0,
-            "y": 14
+            "y": 15
          },
          "id": 16,
          "options": {
@@ -1063,7 +1064,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "topk(5, sum by (owner) (ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "expr": "topk(5, sum by (owner, ceph_daemon) (ceph_rgw_bucket_usage_bytes * on (zone) group_left (ceph_daemon) topk by (zone) (1, label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))))",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1082,234 +1083,13 @@
                   "excludeByName": {
                      "Time": true,
                      "__name__": true,
-                     "time": true,
-                     "zone": true
+                     "time": true
                   },
                   "indexByName": {
                      "User": 0,
                      "Value": 1,
+                     "ceph_daemon": 2,
                      "owner": 0
-                  },
-                  "renameByName": { }
-               }
-            }
-         ],
-         "type": "table"
-      },
-      {
-         "datasource": {
-            "uid": "${datasource}"
-         },
-         "description": "Top 5 buckets by bytes stored. Source: usage metrics (ceph_rgw_bucket_usage_bytes), filtered by the zones of the selected RGW servers. Click a bucket to open S3 Analytics – Users & Buckets filtered to that bucket.",
-         "fieldConfig": {
-            "defaults": {
-               "custom": {
-                  "align": "auto",
-                  "cellOptions": {
-                     "type": "auto"
-                  },
-                  "filterable": false,
-                  "inspect": false
-               },
-               "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                     {
-                        "color": "green",
-                        "value": null
-                     }
-                  ]
-               }
-            },
-            "overrides": [
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "bucket"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Bucket"
-                     },
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Bucket"
-                  },
-                  "properties": [
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "owner"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "User"
-                     },
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "User"
-                  },
-                  "properties": [
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Usage"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "decbytes"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value #A"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Usage"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "decbytes"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Usage"
-                  },
-                  "properties": [
-                     {
-                        "id": "unit",
-                        "value": "decbytes"
-                     }
-                  ]
-               }
-            ]
-         },
-         "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 14
-         },
-         "id": 17,
-         "options": {
-            "footer": {
-               "countRows": false,
-               "enablePagination": false,
-               "fields": "",
-               "reducer": [
-                  "sum"
-               ],
-               "show": false
-            },
-            "frameIndex": 0,
-            "showHeader": true,
-            "sortBy": [
-               {
-                  "desc": true,
-                  "displayName": "Usage"
-               }
-            ]
-         },
-         "pluginVersion": "9.4.7",
-         "targets": [
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "topk(5, sum by (bucket, owner, zone) (ceph_rgw_bucket_usage_bytes and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "",
-               "range": false,
-               "refId": "A"
-            }
-         ],
-         "title": "Top Buckets by Usage",
-         "transformations": [
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time": true,
-                     "__name__": true,
-                     "time": true,
-                     "zone": true
-                  },
-                  "indexByName": {
-                     "Bucket": 0,
-                     "User": 1,
-                     "Value": 2,
-                     "bucket": 0,
-                     "owner": 1
                   },
                   "renameByName": { }
                }
@@ -1359,7 +1139,7 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
                      }
@@ -1377,9 +1157,21 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.hidden",
+                        "value": true
                      }
                   ]
                },
@@ -1431,11 +1223,11 @@
          },
          "gridPos": {
             "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 22
+            "w": 6,
+            "x": 6,
+            "y": 15
          },
-         "id": 18,
+         "id": 17,
          "options": {
             "footer": {
                "countRows": false,
@@ -1463,7 +1255,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "topk(5, sum by (owner) (ceph_rgw_bucket_usage_objects and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
+               "expr": "topk(5, sum by (owner, ceph_daemon) (ceph_rgw_bucket_usage_objects * on (zone) group_left (ceph_daemon) topk by (zone) (1, label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))))",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1482,12 +1274,12 @@
                   "excludeByName": {
                      "Time": true,
                      "__name__": true,
-                     "time": true,
-                     "zone": true
+                     "time": true
                   },
                   "indexByName": {
                      "User": 0,
                      "Value": 1,
+                     "ceph_daemon": 2,
                      "owner": 0
                   },
                   "renameByName": { }
@@ -1500,7 +1292,7 @@
          "datasource": {
             "uid": "${datasource}"
          },
-         "description": "Top 5 buckets by number of objects stored. Source: usage metrics (ceph_rgw_bucket_usage_objects), filtered by the zones of the selected RGW servers. Click a bucket to open S3 Analytics – Users & Buckets filtered to that bucket.",
+         "description": "PUT bytes per user across the selected RGW daemons. Click a user name to open S3 Analytics – Users & Buckets filtered to that user.",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -1525,47 +1317,19 @@
                {
                   "matcher": {
                      "id": "byName",
-                     "options": "bucket"
+                     "options": "ceph_daemon"
                   },
                   "properties": [
                      {
-                        "id": "displayName",
-                        "value": "Bucket"
-                     },
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
+                        "id": "custom.hidden",
+                        "value": true
                      }
                   ]
                },
                {
                   "matcher": {
                      "id": "byName",
-                     "options": "Bucket"
-                  },
-                  "properties": [
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "owner"
+                     "options": "user"
                   },
                   "properties": [
                      {
@@ -1578,7 +1342,7 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
                      }
@@ -1596,229 +1360,7 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Object Count"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "none"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value #A"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Object Count"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "none"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Object Count"
-                  },
-                  "properties": [
-                     {
-                        "id": "unit",
-                        "value": "none"
-                     }
-                  ]
-               }
-            ]
-         },
-         "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 22
-         },
-         "id": 19,
-         "options": {
-            "footer": {
-               "countRows": false,
-               "enablePagination": false,
-               "fields": "",
-               "reducer": [
-                  "sum"
-               ],
-               "show": false
-            },
-            "frameIndex": 0,
-            "showHeader": true,
-            "sortBy": [
-               {
-                  "desc": true,
-                  "displayName": "Object Count"
-               }
-            ]
-         },
-         "pluginVersion": "9.4.7",
-         "targets": [
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "topk(5, sum by (bucket, owner, zone) (ceph_rgw_bucket_usage_objects and on (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")))",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "",
-               "range": false,
-               "refId": "A"
-            }
-         ],
-         "title": "Top Buckets by Object Count",
-         "transformations": [
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time": true,
-                     "__name__": true,
-                     "time": true,
-                     "zone": true
-                  },
-                  "indexByName": {
-                     "Bucket": 0,
-                     "User": 1,
-                     "Value": 2,
-                     "bucket": 0,
-                     "owner": 1
-                  },
-                  "renameByName": { }
-               }
-            }
-         ],
-         "type": "table"
-      },
-      {
-         "collapse": false,
-         "collapsed": false,
-         "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 30
-         },
-         "id": 20,
-         "panels": [ ],
-         "repeat": null,
-         "repeatIteration": null,
-         "repeatRowId": null,
-         "showTitle": true,
-         "title": "Bucket Performance",
-         "titleSize": "h6",
-         "type": "row"
-      },
-      {
-         "datasource": {
-            "uid": "${datasource}"
-         },
-         "description": "PUT bytes per bucket across the selected RGW daemons. Click a bucket name to open S3 Analytics – Users & Buckets filtered to that bucket.",
-         "fieldConfig": {
-            "defaults": {
-               "custom": {
-                  "align": "auto",
-                  "cellOptions": {
-                     "type": "auto"
-                  },
-                  "filterable": false,
-                  "inspect": false
-               },
-               "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                     {
-                        "color": "green",
-                        "value": null
-                     }
-                  ]
-               }
-            },
-            "overrides": [
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "bucket"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Bucket"
-                     },
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Bucket"
-                  },
-                  "properties": [
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "owner"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "User"
-                     },
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
                      }
@@ -1872,11 +1414,11 @@
          },
          "gridPos": {
             "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 31
+            "w": 6,
+            "x": 12,
+            "y": 15
          },
-         "id": 21,
+         "id": 18,
          "options": {
             "footer": {
                "countRows": false,
@@ -1904,7 +1446,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "sum by (bucket, owner) ((ceph_rgw_op_per_bucket_put_obj_bytes * on (instance_id) group_left (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes)) or label_replace(sum by (bucket) ((ceph_rgw_op_per_bucket_put_obj_bytes * on (instance_id) group_left (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) unless on (bucket, tenant, zone) ceph_rgw_bucket_usage_bytes), \"owner\", \"All\", \"bucket\", \".*\")",
+               "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1915,7 +1457,882 @@
                "refId": "A"
             }
          ],
-         "title": "Bandwidth per bucket",
+         "title": "Bandwidth per User",
+         "transformations": [
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "__name__": true,
+                     "time": true
+                  }
+               }
+            }
+         ],
+         "type": "table"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "PUT operation latency per user across the selected RGW daemons. Click a user name to open S3 Analytics – Users & Buckets filtered to that user.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": false,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.hidden",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "user"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "User"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "User"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "ms"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "ms"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Latency (ms)"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "ms"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 18,
+            "y": 15
+         },
+         "id": 19,
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 0,
+            "showHeader": true,
+            "sortBy": [
+               {
+                  "desc": true,
+                  "displayName": "Latency (ms)"
+               }
+            ]
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "exemplar": false,
+               "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", })",
+               "format": "table",
+               "hide": false,
+               "instant": true,
+               "interval": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Latency(ms) Per User",
+         "transformations": [
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "__name__": true,
+                     "time": true
+                  }
+               }
+            }
+         ],
+         "type": "table"
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 23
+         },
+         "id": 20,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Buckets Usage and Performance",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Top 5 buckets by bytes stored. Source: usage metrics (ceph_rgw_bucket_usage_bytes), filtered by the zones of the selected RGW servers. Click a bucket to open S3 Analytics – Users & Buckets filtered to that bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": false,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bucket"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "owner"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "User"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "User"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.hidden",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Usage"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Usage"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Usage"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 24
+         },
+         "id": 21,
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 0,
+            "showHeader": true,
+            "sortBy": [
+               {
+                  "desc": true,
+                  "displayName": "Usage"
+               }
+            ]
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "exemplar": false,
+               "expr": "topk(5, sum by (bucket, owner, ceph_daemon) (ceph_rgw_bucket_usage_bytes * on (zone) group_left (ceph_daemon) topk by (zone) (1, label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))))",
+               "format": "table",
+               "hide": false,
+               "instant": true,
+               "interval": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Top Buckets by Usage",
+         "transformations": [
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "__name__": true,
+                     "time": true
+                  },
+                  "indexByName": {
+                     "Bucket": 0,
+                     "User": 1,
+                     "Value": 2,
+                     "bucket": 0,
+                     "ceph_daemon": 3,
+                     "owner": 1
+                  },
+                  "renameByName": { }
+               }
+            }
+         ],
+         "type": "table"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Top 5 buckets by number of objects stored. Source: usage metrics (ceph_rgw_bucket_usage_objects), filtered by the zones of the selected RGW servers. Click a bucket to open S3 Analytics – Users & Buckets filtered to that bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": false,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bucket"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "owner"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "User"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "User"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.hidden",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Object Count"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Object Count"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Object Count"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 24
+         },
+         "id": 22,
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 0,
+            "showHeader": true,
+            "sortBy": [
+               {
+                  "desc": true,
+                  "displayName": "Object Count"
+               }
+            ]
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "exemplar": false,
+               "expr": "topk(5, sum by (bucket, owner, ceph_daemon) (ceph_rgw_bucket_usage_objects * on (zone) group_left (ceph_daemon) topk by (zone) (1, label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\"))))",
+               "format": "table",
+               "hide": false,
+               "instant": true,
+               "interval": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Top Buckets by Object Count",
+         "transformations": [
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "__name__": true,
+                     "time": true
+                  },
+                  "indexByName": {
+                     "Bucket": 0,
+                     "User": 1,
+                     "Value": 2,
+                     "bucket": 0,
+                     "ceph_daemon": 3,
+                     "owner": 1
+                  },
+                  "renameByName": { }
+               }
+            }
+         ],
+         "type": "table"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "PUT bytes per bucket across the selected RGW daemons. Click a bucket name to open S3 Analytics – Users & Buckets filtered to that bucket.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": false,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.hidden",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bucket"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bucket"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "owner"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "User"
+                     },
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "targetBlank": false,
+                              "title": "Open ${__value.raw}",
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
+                           }
+                        ]
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bandwidth"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bandwidth"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Bandwidth"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 32
+         },
+         "id": 23,
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 0,
+            "showHeader": true,
+            "sortBy": [
+               {
+                  "desc": true,
+                  "displayName": "Bandwidth"
+               }
+            ]
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "exemplar": false,
+               "expr": "sum by (bucket, owner, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes * on (instance_id) group_left (zone, ceph_daemon) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes)) or label_replace(sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes * on (instance_id) group_left (zone, ceph_daemon) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) unless on (bucket, tenant, zone) ceph_rgw_bucket_usage_bytes), \"owner\", \"All\", \"bucket\", \".*\")",
+               "format": "table",
+               "hide": false,
+               "instant": true,
+               "interval": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Bandwidth per Bucket",
          "transformations": [
             {
                "id": "organize",
@@ -1966,6 +2383,18 @@
                {
                   "matcher": {
                      "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.hidden",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
                      "options": "bucket"
                   },
                   "properties": [
@@ -1979,7 +2408,7 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
                      }
@@ -1997,7 +2426,7 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-bucket=${__value.raw}&var-user=${__data.fields.owner}&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
                      }
@@ -2019,7 +2448,7 @@
                            {
                               "targetBlank": false,
                               "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
+                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&var-rgw_instance=${__data.fields.ceph_daemon}&${__url_time_range}"
                            }
                         ]
                      }
@@ -2073,11 +2502,11 @@
          },
          "gridPos": {
             "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 31
+            "w": 8,
+            "x": 16,
+            "y": 24
          },
-         "id": 22,
+         "id": 24,
          "options": {
             "footer": {
                "countRows": false,
@@ -2105,7 +2534,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "sum by (bucket, owner) ((ceph_rgw_op_per_bucket_put_obj_lat_sum * on (instance_id) group_left (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes)) or label_replace(sum by (bucket) ((ceph_rgw_op_per_bucket_put_obj_lat_sum * on (instance_id) group_left (zone) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) unless on (bucket, tenant, zone) ceph_rgw_bucket_usage_bytes), \"owner\", \"All\", \"bucket\", \".*\")",
+               "expr": "sum by (bucket, owner, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_lat_sum * on (instance_id) group_left (zone, ceph_daemon) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) * on (bucket, tenant, zone) group_left (owner) group by (bucket, tenant, zone, owner) (ceph_rgw_bucket_usage_bytes)) or label_replace(sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_lat_sum * on (instance_id) group_left (zone, ceph_daemon) label_replace(ceph_rgw_metadata{ceph_daemon=~\"$rgw_instance\", cluster=~\"$cluster|\", }, \"zone\", \"$1\", \"zone_id\", \"(.+)\")) unless on (bucket, tenant, zone) ceph_rgw_bucket_usage_bytes), \"owner\", \"All\", \"bucket\", \".*\")",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -2133,369 +2562,6 @@
                      "owner": 1
                   },
                   "renameByName": { }
-               }
-            }
-         ],
-         "type": "table"
-      },
-      {
-         "collapse": false,
-         "collapsed": false,
-         "gridPos": {
-            "h": 1,
-            "w": 24,
-            "x": 0,
-            "y": 39
-         },
-         "id": 23,
-         "panels": [ ],
-         "repeat": null,
-         "repeatIteration": null,
-         "repeatRowId": null,
-         "showTitle": true,
-         "title": "User Performance",
-         "titleSize": "h6",
-         "type": "row"
-      },
-      {
-         "datasource": {
-            "uid": "${datasource}"
-         },
-         "description": "PUT bytes per user across the selected RGW daemons. Click a user name to open S3 Analytics – Users & Buckets filtered to that user.",
-         "fieldConfig": {
-            "defaults": {
-               "custom": {
-                  "align": "auto",
-                  "cellOptions": {
-                     "type": "auto"
-                  },
-                  "filterable": false,
-                  "inspect": false
-               },
-               "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                     {
-                        "color": "green",
-                        "value": null
-                     }
-                  ]
-               }
-            },
-            "overrides": [
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "user"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "User"
-                     },
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "User"
-                  },
-                  "properties": [
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Bandwidth"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "decbytes"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value #A"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Bandwidth"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "decbytes"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Bandwidth"
-                  },
-                  "properties": [
-                     {
-                        "id": "unit",
-                        "value": "decbytes"
-                     }
-                  ]
-               }
-            ]
-         },
-         "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 40
-         },
-         "id": 24,
-         "options": {
-            "footer": {
-               "countRows": false,
-               "enablePagination": false,
-               "fields": "",
-               "reducer": [
-                  "sum"
-               ],
-               "show": false
-            },
-            "frameIndex": 0,
-            "showHeader": true,
-            "sortBy": [
-               {
-                  "desc": true,
-                  "displayName": "Bandwidth"
-               }
-            ]
-         },
-         "pluginVersion": "9.4.7",
-         "targets": [
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "sum by (user) (ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "",
-               "range": false,
-               "refId": "A"
-            }
-         ],
-         "title": "Bandwidth per user",
-         "transformations": [
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time": true,
-                     "__name__": true,
-                     "time": true
-                  }
-               }
-            }
-         ],
-         "type": "table"
-      },
-      {
-         "datasource": {
-            "uid": "${datasource}"
-         },
-         "description": "PUT operation latency per user across the selected RGW daemons. Click a user name to open S3 Analytics – Users & Buckets filtered to that user.",
-         "fieldConfig": {
-            "defaults": {
-               "custom": {
-                  "align": "auto",
-                  "cellOptions": {
-                     "type": "auto"
-                  },
-                  "filterable": false,
-                  "inspect": false
-               },
-               "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                     {
-                        "color": "green",
-                        "value": null
-                     }
-                  ]
-               }
-            },
-            "overrides": [
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "user"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "User"
-                     },
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "User"
-                  },
-                  "properties": [
-                     {
-                        "id": "links",
-                        "value": [
-                           {
-                              "targetBlank": false,
-                              "title": "Open ${__value.raw}",
-                              "url": "/d/s3usrbktAnlt/ceph-object-s3-analytics-users-buckets?var-user=${__value.raw}&var-bucket=All&${rgw_servers:queryparam}&${__url_time_range}"
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Latency (ms)"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "ms"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value #A"
-                  },
-                  "properties": [
-                     {
-                        "id": "displayName",
-                        "value": "Latency (ms)"
-                     },
-                     {
-                        "id": "unit",
-                        "value": "ms"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Latency (ms)"
-                  },
-                  "properties": [
-                     {
-                        "id": "unit",
-                        "value": "ms"
-                     }
-                  ]
-               }
-            ]
-         },
-         "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 40
-         },
-         "id": 25,
-         "options": {
-            "footer": {
-               "countRows": false,
-               "enablePagination": false,
-               "fields": "",
-               "reducer": [
-                  "sum"
-               ],
-               "show": false
-            },
-            "frameIndex": 0,
-            "showHeader": true,
-            "sortBy": [
-               {
-                  "desc": true,
-                  "displayName": "Latency (ms)"
-               }
-            ]
-         },
-         "pluginVersion": "9.4.7",
-         "targets": [
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "${datasource}"
-               },
-               "exemplar": false,
-               "expr": "sum by (user) (ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "",
-               "range": false,
-               "refId": "A"
-            }
-         ],
-         "title": "Latency(ms) Per User",
-         "transformations": [
-            {
-               "id": "organize",
-               "options": {
-                  "excludeByName": {
-                     "Time": true,
-                     "__name__": true,
-                     "time": true
-                  }
                }
             }
          ],
@@ -2553,7 +2619,7 @@
             "includeAll": true,
             "label": null,
             "multi": false,
-            "name": "rgw_servers",
+            "name": "rgw_instance",
             "options": [ ],
             "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster|\", }, ceph_daemon)",
             "refresh": 2,
