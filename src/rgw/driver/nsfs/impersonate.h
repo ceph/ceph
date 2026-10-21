@@ -21,6 +21,7 @@
 #include "common/dout.h"
 #include "driver/posix/posix_io_uring.h"
 
+#include "access_strategy.h"
 #include "personality.h"
 
 namespace rgw { namespace sal { namespace nsfs {
@@ -362,6 +363,40 @@ int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
 
 /* The mask for one capability, for callers assembling one. */
 constexpr uint64_t cap_bit(int cap) { return 1ull << cap; }
+
+/* Perform `fn` as `id`, and where the filesystem denies it and `model`
+ * permits AccessClass::data, perform it again as the gateway, raising
+ * `caps` for the call.
+ *
+ * The one place the gateway decides to perform a directory operation
+ * the requester was denied:  creating, linking, renaming or unlinking
+ * in a key directory or its `.versions` that is another identity's.
+ * Under s3-native S3 has authorised it, and the filesystem is storage.
+ *
+ * `fn` must not yield, as for with_capabilities():  the second call
+ * runs on this thread, raised.  It runs plain syscalls, which are the
+ * identity's on the helper and the gateway's on the second call.
+ *
+ * `*raised` is set where the gateway performed it and it succeeded:  a
+ * caller that created something then gives it its owner.  An inactive
+ * `id` is the gateway already, and `fn` runs once. */
+int with_identity_or_raise(const DoutPrefixProvider* dpp,
+			   const FSIdentity& id, const AccessStrategy* model,
+			   uint64_t caps, const ImpersonatedFn& fn,
+			   optional_yield y, bool* raised = nullptr);
+
+/* open_as(), and as the gateway where with_identity_or_raise() would
+ * raise:  the open through the ring as `id`, then a plain openat(2)
+ * raising `caps`.  An inactive `id` is a plain openat(2).  A
+ * descriptor, or -errno. */
+int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		     const AccessStrategy* model, uint64_t caps,
+		     int dirfd, const char* path, uint64_t flags,
+		     uint64_t mode, bool* raised = nullptr);
+
+/* How many operations the two above performed as the gateway, for the
+ * `access-model` hint. */
+uint64_t raised_operations();
 
 /* The same, for operations that return something other than an
  * errno -- the compare-and-swap link and unlink return a verdict

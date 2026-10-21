@@ -220,6 +220,9 @@ protected:
   Directory* parent;
   int fd{-1};
   nsfs::FSIdentity identity;
+  /* What decides once the filesystem denies `identity`;  null lets
+   * no denial through.  See set_access_model(). */
+  const nsfs::AccessStrategy* access_model{nullptr};
   bool read_only{false};
   bool need_fsync{false};
   bool exist{false};
@@ -325,6 +328,12 @@ public:
    * which lasts one request. */
   void set_identity(const nsfs::FSIdentity& id) { identity = id; }
   const nsfs::FSIdentity& get_identity() const { return identity; }
+
+  /* Where `identity` is denied:  a walk goes on as the gateway where
+   * the model permits AccessClass::path, and a create, link, rename or
+   * unlink is performed by the gateway where it permits
+   * AccessClass::data (with_identity_or_raise()). */
+  void set_access_model(const nsfs::AccessStrategy* m) { access_model = m; }
 
   /* Ask for no more access than the caller needs.
    *
@@ -444,12 +453,6 @@ public:
 };
 
 class Directory : public FSEnt {
-protected:
-  /* Whether a walk denied as this directory's identity may go on as
-   * the gateway:  the access model's permits(AccessClass::path), set
-   * by resolve_path(). */
-  bool walk_fallback{false};
-
 public:
   Directory(std::string _name, Directory* _parent, CephContext* _ctx, FSStrategy* _strat = nullptr) : FSEnt(_name, _parent, _ctx, _strat)
     {}
@@ -461,8 +464,6 @@ public:
   virtual ObjectType get_type() override { return ObjectType::DIRECTORY; };
 
   virtual bool file_exists(std::string& name);
-
-  void set_walk_fallback(bool b) { walk_fallback = b; }
 
   virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed = nullptr, bool temp_file = false) override;
   virtual int open(const DoutPrefixProvider *dpp) override;
@@ -2277,9 +2278,11 @@ private:
     ent->set_read_only(pending_read_only);
     if (pending_identity.active()) {
       ent->set_identity(pending_identity);
+      ent->set_access_model(driver->get_access_strategy());
       /* and the key's directories, which a delete prunes */
       for (auto& d : dir_chain) {
 	d->set_identity(pending_identity);
+	d->set_access_model(driver->get_access_strategy());
       }
     }
   }

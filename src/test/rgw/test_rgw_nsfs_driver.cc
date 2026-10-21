@@ -4621,6 +4621,9 @@ protected:
   }
 
   void TearDown() override {
+    if (driver) {
+      (void) set_model("default");
+    }
     set_impersonate("false");
     /* Always, unlike the suite's other trees:  the key directories are
      * the identities' 0770, which the next run's clean_first cannot
@@ -4640,6 +4643,31 @@ protected:
   static void set_impersonate(const char* v) {
     g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
     g_conf().apply_changes(nullptr);
+  }
+
+  int set_model(const std::string& m) {
+    std::map<std::string, std::string> out;
+    return driver->driver_hint(env->dpp, "access-model", {{"set", m}}, &out);
+  }
+
+  /* how many operations the gateway performed for a denied requester */
+  uint64_t raised() {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "access-model", {}, &out), 0);
+    return std::stoull(out["raised_operations"]);
+  }
+
+  /* on a thread of its own, as put_as() */
+  int delete_as(const rgw_user& who, const std::string& key) {
+    int ret = 0;
+    std::thread deleter([&] {
+      auto obj = bucket->get_object(rgw_obj_key(key));
+      auto del = obj->get_delete_op();
+      del->set_authenticated_user(who);
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    deleter.join();
+    return ret;
   }
 
   /* On a thread of its own:  the write holds read-search for the life
@@ -4796,6 +4824,97 @@ TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
       << "another identity's rename was not denied: " << cpp_strerror(-ret);
   EXPECT_EQ(owned("src/k").err, 0) << "the leaf moved";
   EXPECT_EQ(owned("dst/k").err, -ENOENT) << "the leaf arrived";
+}
+
+/* s3-native:  another identity's writes in the owner's key directory
+ * are the gateway's to perform, and what they create is the
+ * requester's object in the owner's directories (DECISIONS.md
+ * 2026-10-20). */
+TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysPutIsRaised)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  ASSERT_EQ(owned("src").mode, 0770u);
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+
+  /* twice each:  the second demotes the first, into a `.versions` */
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/m", "bob's first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/m", "bob's second"));
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/new/m", "bob's first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(bob, "src/new/m", "bob's second"));
+  EXPECT_GT(raised(), before)
+      << "nothing was raised, so the filesystem never denied bob and the "
+	 "test shows nothing";
+
+  const Owned m = owned("src/m");
+  ASSERT_EQ(m.err, 0);
+  EXPECT_EQ(m.uid, other_uid) << "the object is the requester's";
+  EXPECT_EQ(m.mode, 0660u);
+
+  const Owned nd = owned("src/new");
+  ASSERT_EQ(nd.err, 0);
+  EXPECT_EQ(nd.uid, owner_uid) << "a key directory is its parent's owner's";
+  EXPECT_EQ(nd.mode, 0770u);
+  EXPECT_EQ(owned("src/new/m").uid, other_uid);
+  const Owned nv = owned("src/new/.versions");
+  ASSERT_EQ(nv.err, 0) << "the second put made no history";
+  EXPECT_EQ(nv.uid, owner_uid) << "`.versions` is its parent's owner's";
+
+  const auto hist = versions_in("src/new");
+  ASSERT_EQ(hist.size(), 1u);
+  EXPECT_EQ(owned("src/new/.versions/" + hist[0]).uid, other_uid)
+      << "the demoted version is still the requester's object";
+}
+
+/* s3-native:  another identity's delete in the owner's key directory
+ * is performed, and the delete marker is the requester's. */
+TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysDeleteIsRaised)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+
+  const int ret = delete_as(bob, "src/k");
+  ASSERT_EQ(ret, 0) << "the delete failed: " << cpp_strerror(-ret);
+  EXPECT_GT(raised(), before);
+
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+  const auto hist = versions_in("src");
+  ASSERT_EQ(hist.size(), 2u) << "the demoted version and the marker";
+  int markers = 0;
+  for (const auto& v : hist) {
+    const Owned o = owned("src/.versions/" + v);
+    if (o.uid == other_uid) {
+      ++markers;
+    } else {
+      EXPECT_EQ(o.uid, owner_uid) << v << " changed owner";
+    }
+  }
+  EXPECT_EQ(markers, 1) << "the delete marker is the requester's";
+}
+
+/* s3-native:  another identity's rename out of the owner's key
+ * directory is performed, and the leaf and its history move. */
+TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysRenameIsRaised)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+
+  const int ret = rename_as(bob, "src/k", "dst/k");
+  ASSERT_EQ(ret, 0) << "the rename failed: " << cpp_strerror(-ret);
+  EXPECT_GT(raised(), before);
+
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the leaf was not moved";
+  const Owned leaf = owned("dst/k");
+  ASSERT_EQ(leaf.err, 0) << "the leaf did not arrive";
+  EXPECT_EQ(leaf.uid, owner_uid) << "a rename keeps the inode's owner";
+  EXPECT_EQ(owned("dst").uid, other_uid)
+      << "the requester made the destination key directory, unraised";
+  EXPECT_TRUE(versions_in("src").empty()) << "the history stayed behind";
+  EXPECT_EQ(versions_in("dst").size(), 1u)
+      << "the history did not follow the leaf";
 }
 
 /* NooBaa's attribute names.

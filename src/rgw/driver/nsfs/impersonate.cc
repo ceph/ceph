@@ -799,6 +799,80 @@ int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
 				       ref.id());
 }
 
+static std::atomic<uint64_t> raised_ops{0};
+
+uint64_t raised_operations()
+{
+  return raised_ops.load(std::memory_order_relaxed);
+}
+
+/* Whether the gateway performs what `id` was denied:  the decision
+ * both entry points below take, so it is made in one place. */
+static bool raise_permitted(const FSIdentity& id, const AccessStrategy* model,
+			    int ret)
+{
+  return id.active() && ((ret == -EACCES) || (ret == -EPERM)) &&
+    model && model->permits(AccessClass::data);
+}
+
+static int raise_for(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		     const AccessStrategy* model, uint64_t caps,
+		     const ImpersonatedFn& fn, bool* raised)
+{
+  const int ret = with_capabilities(dpp, caps, fn);
+  if (ret < 0) {
+    ldpp_dout(dpp, 4) << "nsfs: uid " << id.cred.uid << " was denied, and"
+      " the gateway's call failed even raised: " << cpp_strerror(-ret)
+      << dendl;
+    return ret;
+  }
+  raised_ops.fetch_add(1, std::memory_order_relaxed);
+  if (raised) {
+    *raised = true;
+  }
+  ldpp_dout(dpp, 10) << "nsfs: the filesystem denied uid " << id.cred.uid
+    << ", so the gateway performed it (access model " << model->name()
+    << ")" << dendl;
+  return ret;
+}
+
+int with_identity_or_raise(const DoutPrefixProvider* dpp,
+			   const FSIdentity& id, const AccessStrategy* model,
+			   uint64_t caps, const ImpersonatedFn& fn,
+			   optional_yield y, bool* raised)
+{
+  if (raised) {
+    *raised = false;
+  }
+  const int ret = with_identity(dpp, id, fn, y);
+  if (! raise_permitted(id, model, ret)) {
+    return ret;
+  }
+  return raise_for(dpp, id, model, caps, fn, raised);
+}
+
+int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
+		     const AccessStrategy* model, uint64_t caps,
+		     int dirfd, const char* path, uint64_t flags,
+		     uint64_t mode, bool* raised)
+{
+  if (raised) {
+    *raised = false;
+  }
+  const auto plain = [&]() -> int {
+    const int fd = ::openat(dirfd, path, flags, mode);
+    return (fd < 0) ? -errno : fd;
+  };
+  if (! id.active()) {
+    return plain();
+  }
+  const int ret = open_as(dpp, id, dirfd, path, flags, mode);
+  if (! raise_permitted(id, model, ret)) {
+    return ret;
+  }
+  return raise_for(dpp, id, model, caps, plain, raised);
+}
+
 int IdentityPersonality::acquire(const DoutPrefixProvider* dpp, uint16_t* out)
 {
   const int ret = acquire_personality(dpp, id.key, id.cred, &ref);

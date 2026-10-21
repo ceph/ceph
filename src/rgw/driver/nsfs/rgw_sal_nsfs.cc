@@ -811,33 +811,82 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
   return true;
 }
 
+/* What the gateway raises to perform, in another identity's key
+ * directory or `.versions`, what the requester was denied
+ * (with_identity_or_raise()):  DAC_OVERRIDE for the directory's mode,
+ * FOWNER for a sticky `.versions` and for an attribute on another
+ * identity's file. */
+static constexpr uint64_t RAISED_KEYDIR_CAPS =
+  nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
+
+/* What a raised create raises, and then what gives the new entry its
+ * owner:  the requester for an object, the parent's owner for a
+ * directory (DECISIONS.md 2026-10-20). */
+static constexpr uint64_t RAISED_CREATE_CAPS = nsfs::cap_bit(CAP_DAC_OVERRIDE);
+static constexpr uint64_t RAISED_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
+
+/* Give what a raised create made to `uid` and `gid`:  `name` in `dirfd`,
+ * or `dirfd` itself where `name` is empty. */
+static int chown_raised(const DoutPrefixProvider* dpp, int dirfd,
+			const char* name, uid_t uid, gid_t gid)
+{
+  const int flags = AT_SYMLINK_NOFOLLOW | (*name ? 0 : AT_EMPTY_PATH);
+  const int ret = nsfs::with_capabilities(dpp, RAISED_CHOWN_CAPS,
+					  [&]() -> int {
+    return (::fchownat(dirfd, name, uid, gid, flags) < 0)
+	? -errno : 0;
+  });
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not give " << name << " to uid "
+      << uid << ": " << cpp_strerror(-ret) << dendl;
+  }
+  return ret;
+}
+
+/* A raised directory create:  the directory is its parent's owner's. */
+static int chown_raised_dir(const DoutPrefixProvider* dpp, int parent_fd,
+			    const char* name)
+{
+  struct statx pstx;
+  const int ret = statx_ids(parent_fd, pstx);
+  if (ret < 0) {
+    return ret;
+  }
+  return chown_raised(dpp, parent_fd, name, pstx.stx_uid, pstx.stx_gid);
+}
+
 /* One call as `id`, or as the gateway where `id` is inactive -- the
  * calls inside a key's directory and its `.versions`, which are the
- * requester's (call-site table §11).  Each returns 0 or a descriptor,
- * or -errno;  `dpp` may be null only when `id` is inactive. */
+ * requester's (call-site table §11).  Denied, the gateway performs it
+ * where `model` permits (with_identity_or_raise());  a null `model`
+ * lets the denial stand.  Each returns 0 or a descriptor, or -errno;
+ * `dpp` may be null only when `id` is inactive. */
 static int openat_as(const DoutPrefixProvider* dpp, const nsfs::FSIdentity& id,
+		     const nsfs::AccessStrategy* model,
 		     int dirfd, const char* name, int flags)
 {
-  if (id.active()) {
-    return nsfs::open_as(dpp, id, dirfd, name, flags, 0);
-  }
-  const int fd = ::openat(dirfd, name, flags);
-  return (fd < 0) ? -errno : fd;
+  return nsfs::open_as_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+				dirfd, name, flags, 0);
 }
 
 static int unlinkat_as(const DoutPrefixProvider* dpp,
-		       const nsfs::FSIdentity& id, int dirfd, const char* name)
+		       const nsfs::FSIdentity& id,
+		       const nsfs::AccessStrategy* model,
+		       int dirfd, const char* name)
 {
-  return nsfs::with_identity(dpp, id, [&]() -> int {
+  return nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+				      [&]() -> int {
     return (::unlinkat(dirfd, name, 0) < 0) ? -errno : 0;
   }, null_yield);
 }
 
 static int renameat_as(const DoutPrefixProvider* dpp,
-		       const nsfs::FSIdentity& id, int olddirfd,
+		       const nsfs::FSIdentity& id,
+		       const nsfs::AccessStrategy* model, int olddirfd,
 		       const char* oldname, int newdirfd, const char* newname)
 {
-  return nsfs::with_identity(dpp, id, [&]() -> int {
+  return nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+				      [&]() -> int {
     return (::renameat(olddirfd, oldname, newdirfd, newname) < 0)
 	? -errno : 0;
   }, null_yield);
@@ -871,6 +920,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
                            const nsfs::XattrStrategy* xs,
                            const nsfs::IdentityDB* idb,
                            const nsfs::FSIdentity& scanner,
+                           const nsfs::AccessStrategy* model,
                            optional_yield y,
                            PromoteResult* out = nullptr)
 {
@@ -887,8 +937,8 @@ static int promote_version(int parent_fd, const std::string& leaf,
       return 0;
     }
 
-    int vfd = openat_as(dpp, scanner, parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-                        O_RDONLY | O_DIRECTORY);
+    int vfd = openat_as(dpp, scanner, model, parent_fd,
+                        HIDDEN_VERSIONS_PATH.c_str(), O_RDONLY | O_DIRECTORY);
     if (vfd < 0) {
       int err = -vfd;
       ldpp_dout(dpp, err == ENOENT ? 10 : 0) << "promote_version: " << leaf
@@ -1141,17 +1191,27 @@ static mode_t hidden_dir_mode()
  * gateway's at hidden_dir_mode() otherwise.  `dpp` may be null only
  * when `id` is inactive. */
 static int ensure_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
-			       const nsfs::FSIdentity& id)
+			       const nsfs::FSIdentity& id,
+			       const nsfs::AccessStrategy* model)
 {
   if (id.active()) {
     const mode_t mode = nsfs::dir_create_mode();
-    return nsfs::with_identity(dpp, id, [&]() -> int {
+    bool raised = false;
+    bool made = false;
+    const int ret = nsfs::with_identity_or_raise(dpp, id, model,
+						 RAISED_CREATE_CAPS,
+						 [&]() -> int {
       if (::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), mode) < 0) {
 	return (errno == EEXIST) ? 0 : -errno;
       }
+      made = true;
       return nsfs::apply_create_mode_at(dpp, parent_fd,
 					HIDDEN_VERSIONS_PATH.c_str(), mode);
-    }, null_yield);
+    }, null_yield, &raised);
+    if ((ret < 0) || !(raised && made)) {
+      return ret;
+    }
+    return chown_raised_dir(dpp, parent_fd, HIDDEN_VERSIONS_PATH.c_str());
   }
   const mode_t mode = hidden_dir_mode();
   int ret = ::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), mode);
@@ -1165,15 +1225,16 @@ static int ensure_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
 /* `.versions` beside `parent_fd`, opened as `id` where it is active.
  * A descriptor, or -errno;  `dpp` as ensure_versions_dir(). */
 static int open_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
-			     const nsfs::FSIdentity& id)
+			     const nsfs::FSIdentity& id,
+			     const nsfs::AccessStrategy* model)
 {
-  int ret = ensure_versions_dir(dpp, parent_fd, id);
+  int ret = ensure_versions_dir(dpp, parent_fd, id, model);
   if (ret < 0) {
     return ret;
   }
   if (id.active()) {
-    return nsfs::open_as(dpp, id, parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-			 O_RDONLY | O_DIRECTORY, 0);
+    return openat_as(dpp, id, model, parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+		     O_RDONLY | O_DIRECTORY);
   }
   int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
                      O_RDONLY | O_DIRECTORY);
@@ -1262,13 +1323,14 @@ static std::string rename_intent_xattr(const nsfs::XattrStrategy* xs)
 static int write_rename_intent(const DoutPrefixProvider* dpp,
 			       const nsfs::XattrStrategy* xs,
 			       int src_parent_fd, const nsfs::FSIdentity& id,
+			       const nsfs::AccessStrategy* model,
 			       const std::string& leaf,
 			       const std::string& dst_tenant,
 			       const std::string& dst_bucket,
 			       const std::string& dst_key,
 			       bool slice)
 {
-  int vfd = open_versions_dir(dpp, src_parent_fd, id);
+  int vfd = open_versions_dir(dpp, src_parent_fd, id, model);
   if (vfd < 0) {
     return vfd;
   }
@@ -1286,7 +1348,9 @@ static int write_rename_intent(const DoutPrefixProvider* dpp,
   }
   std::string name = rename_intent_xattr(xs);
   /* as `id`:  the `.versions` the record lives on is the requester's */
-  const int err = nsfs::with_identity(dpp, id, [&]() -> int {
+  const int err = nsfs::with_identity_or_raise(dpp, id, model,
+						 RAISED_KEYDIR_CAPS,
+						 [&]() -> int {
     return (::fsetxattr(vfd, name.c_str(), rec.data(), rec.size(), 0) < 0)
 	? -errno : 0;
   }, null_yield);
@@ -1320,20 +1384,22 @@ static bool parse_rename_intent(const std::string& rec, RenameIntent& out)
 
 static void clear_rename_intent(const DoutPrefixProvider* dpp,
 				const nsfs::XattrStrategy* xs,
-				int src_parent_fd, const nsfs::FSIdentity& id)
+				int src_parent_fd, const nsfs::FSIdentity& id,
+				const nsfs::AccessStrategy* model)
 {
   /* the gateway's open, in a `.versions` that may be the requester's:
    * read-search at the call */
   if (! id.active() && nsfs::impersonation_enabled()) {
     (void) nsfs::hold_thread_capabilities(dpp);
   }
-  int vfd = openat_as(dpp, id, src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-		      O_RDONLY | O_DIRECTORY);
+  int vfd = openat_as(dpp, id, model, src_parent_fd,
+		      HIDDEN_VERSIONS_PATH.c_str(), O_RDONLY | O_DIRECTORY);
   if (vfd < 0) {
     return;
   }
   std::string name = rename_intent_xattr(xs);
-  (void) nsfs::with_identity(dpp, id, [&]() -> int {
+  (void) nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+				      [&]() -> int {
     return (::fremovexattr(vfd, name.c_str()) < 0) ? -errno : 0;
   }, null_yield);
   ::close(vfd);
@@ -1499,7 +1565,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
     int dst_vfd = -1;
     if (! behind.empty() && ! in.slice) {
       dst_vfd = open_versions_dir(dpp, dst_parent_fd,
-				  nsfs::FSIdentity::none());
+				  nsfs::FSIdentity::none(), nullptr);
       if (dst_vfd < 0) {
 	::close(src_vfd);
 	return dst_vfd;
@@ -1536,7 +1602,8 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
   }
 
   ::close(src_vfd);
-  clear_rename_intent(dpp, xs, src_parent_fd, nsfs::FSIdentity::none());
+  clear_rename_intent(dpp, xs, src_parent_fd, nsfs::FSIdentity::none(),
+		      nullptr);
 
   /* The cache cannot describe what recovery just changed:  a rekey expresses
    * a whole move, and this was half of one.  Drop the filled flag on both
@@ -1555,18 +1622,34 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
  * (DECISIONS 2026-10-15:  a mutex, not a permission).  `dpp` as
  * ensure_versions_dir(). */
 static int open_versions_lockfile(const DoutPrefixProvider* dpp,
-				  int parent_fd, const nsfs::FSIdentity& id)
+				  int parent_fd, const nsfs::FSIdentity& id,
+				  const nsfs::AccessStrategy* model)
 {
-  int ret = ensure_versions_dir(dpp, parent_fd, id);
+  int ret = ensure_versions_dir(dpp, parent_fd, id, model);
   if (ret < 0) {
     return ret;
   }
   if (id.active()) {
-    const int fd = nsfs::open_as(dpp, id, parent_fd, VERSIONS_LOCKFILE.c_str(),
-				 O_RDWR | O_CREAT, nsfs::file_create_mode());
-    if (fd >= 0) {
+    bool raised = false;
+    const int fd = nsfs::open_as_or_raise(dpp, id, model, RAISED_CREATE_CAPS,
+					  parent_fd, VERSIONS_LOCKFILE.c_str(),
+					  O_RDWR | O_CREAT,
+					  nsfs::file_create_mode(), &raised);
+    if (fd < 0) {
+      return fd;
+    }
+    struct statx lstx;
+    if (! raised) {
       (void) nsfs::apply_create_mode(dpp, fd, nsfs::file_create_mode(),
 				     null_yield, id);
+    } else if ((statx_ids(fd, lstx) == 0) && (lstx.stx_uid == ::geteuid())) {
+      /* the gateway made it:  its directory's owner's, as `.versions` is */
+      struct statx pstx;
+      (void) nsfs::apply_create_mode(dpp, fd, nsfs::file_create_mode(),
+				     null_yield);
+      if (statx_ids(parent_fd, pstx) == 0) {
+	(void) chown_raised(dpp, fd, "", pstx.stx_uid, pstx.stx_gid);
+      }
     }
     return fd;
   }
@@ -1611,7 +1694,8 @@ version_lock_recovering(const DoutPrefixProvider* dpp, NSFSDriver* driver,
 			int* recovery_ret = nullptr)
 {
   auto vlock = driver->get_fs_strategy()->version_lock(
-    dpp, open_versions_lockfile(dpp, parent_fd, id));
+    dpp, open_versions_lockfile(dpp, parent_fd, id,
+				driver->get_access_strategy()));
   if (recovery_ret) {
     *recovery_ret = 0;
   }
@@ -1697,13 +1781,14 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 				  bool ver_enabled,
 				  DemoteResult& result,
 				  const nsfs::FSIdentity& id,
+				  const nsfs::AccessStrategy* model,
 				  optional_yield y,
 				  const nsfs::XattrStrategy* alt = nullptr)
 {
   ldpp_dout(dpp, 10) << "nsfs: demote enter leaf=" << leaf
     << " enabled=" << ver_enabled << " as="
     << (id.active() ? id.key.to_str() : std::string("gateway")) << dendl;
-  int vfd = open_versions_dir(dpp, parent_fd, id);
+  int vfd = open_versions_dir(dpp, parent_fd, id, model);
   if (vfd < 0) {
     ldpp_dout(dpp, 10) << "nsfs: demote " << leaf
       << " has no .versions: " << cpp_strerror(-vfd) << dendl;
@@ -1713,7 +1798,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 
   if (!ver_enabled) {
     std::string null_name = nsfs_ver_entry(leaf, NULL_VERSION_ID);
-    const int uret = unlinkat_as(dpp, id, vfd, null_name.c_str());
+    const int uret = unlinkat_as(dpp, id, model, vfd, null_name.c_str());
     if ((uret < 0) && (uret != -ENOENT)) {
       ldpp_dout(dpp, 4) << "nsfs: demote " << leaf << ":  unlinking "
 	<< null_name << ": " << cpp_strerror(-uret) << dendl;
@@ -1733,7 +1818,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
    * as a version. */
   std::string cur_ver_id = nsfs_version_id_from_statx(cur_stx);
   {
-    int chk_fd = openat_as(dpp, id, parent_fd, leaf.c_str(), O_RDONLY);
+    int chk_fd = openat_as(dpp, id, model, parent_fd, leaf.c_str(), O_RDONLY);
     if (chk_fd >= 0) {
       cur_ver_id = recorded_version_id(chk_fd, xs, alt);
       ::close(chk_fd);
@@ -1747,15 +1832,23 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 
   std::string ver_name = nsfs_ver_entry(leaf, cur_ver_id);
 
-  SafeResult sr = fs_strategy->safe_link(
-    dpp, parent_fd, leaf,
-    vfd, ver_name,
-    statx_mtime_ns(cur_stx), cur_stx.stx_ino, y, id);
+  /* the link inside the wrapper, so a denial can be the gateway's to
+   * perform:  as `id` on the helper, then raised */
+  SafeResult sr = SafeResult::ERROR;
+  (void) nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+				      [&]() -> int {
+    sr = fs_strategy->safe_link(
+      dpp, parent_fd, leaf,
+      vfd, ver_name,
+      statx_mtime_ns(cur_stx), cur_stx.stx_ino, null_yield,
+      nsfs::FSIdentity::none());
+    return (sr == SafeResult::DENIED) ? -EACCES : 0;
+  }, y);
   ldpp_dout(dpp, 10) << "nsfs: demote " << leaf << " -> " << ver_name
     << " result=" << (int)sr << dendl;
 
   if (sr == SafeResult::OK) {
-    int demoted_fd = openat_as(dpp, id, vfd, ver_name.c_str(), O_RDONLY);
+    int demoted_fd = openat_as(dpp, id, model, vfd, ver_name.c_str(), O_RDONLY);
     if (demoted_fd >= 0) {
       /* when it stopped being current (D5):  on the demoted file, the
        * writer's, and a `user.*` write is checked against the caller */
@@ -1764,7 +1857,9 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 	  std::chrono::system_clock::now().time_since_epoch()).count());
       const std::string ts_x =
 	xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
-      const int tret = nsfs::with_identity(dpp, id, [&]() -> int {
+      const int tret = nsfs::with_identity_or_raise(dpp, id, model,
+						    RAISED_KEYDIR_CAPS,
+						    [&]() -> int {
 	return (::fsetxattr(demoted_fd, ts_x.c_str(), now_ms.c_str(),
 			    now_ms.size(), 0) < 0) ? -errno : 0;
       }, y);
@@ -1910,7 +2005,7 @@ int resolve_path(const DoutPrefixProvider* dpp,
 
     auto dir = std::make_unique<Directory>(component, leaf_dir, cct);
     dir->set_identity(id);
-    dir->set_walk_fallback(model && model->permits(AccessClass::path));
+    dir->set_access_model(model);
     int ret = dir->open(dpp);
     if (ret < 0) {
       if (!create_dirs || ret != -ENOENT) {
@@ -2913,9 +3008,12 @@ int File::create(const DoutPrefixProvider *dpp, optional_yield y,
    * impersonation it is also what gives the new file the right
    * owner.  With none, the plain syscall, unchanged. */
   const mode_t mode = nsfs::file_create_mode();
+  bool raised = false;
   if (identity.active()) {
-    ret = open_as(dpp, identity, parent->get_fd(), path.c_str(),
-		  flags | O_NOFOLLOW, mode);
+    ret = nsfs::open_as_or_raise(dpp, identity, access_model,
+				 RAISED_CREATE_CAPS, parent->get_fd(),
+				 path.c_str(), flags | O_NOFOLLOW, mode,
+				 &raised);
   } else {
     ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, mode);
     if (ret < 0) {
@@ -2937,11 +3035,24 @@ int File::create(const DoutPrefixProvider *dpp, optional_yield y,
   fd = ret;
   need_fsync = true;
 
-  ret = nsfs::apply_create_mode(dpp, fd, mode, y, identity);
+  /* Made by the gateway, so its mode is the gateway's to set, and then
+   * the object is the requester's (DECISIONS.md 2026-10-20).  A raised
+   * O_CREAT that found the file there made nothing, and leaves it. */
+  struct statx cstx;
+  const bool made_raised = raised && (statx_ids(fd, cstx) == 0) &&
+    (cstx.stx_uid == ::geteuid());
+  if (raised && !made_raised) {
+    return 0;
+  }
+  ret = nsfs::apply_create_mode(dpp, fd, mode, y,
+				made_raised ? FSIdentity::none() : identity);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
 		      << ": " << cpp_strerror(-ret) << dendl;
     return ret;
+  }
+  if (made_raised) {
+    return chown_raised(dpp, fd, "", identity.cred.uid, identity.cred.gid);
   }
   return 0;
 }
@@ -3224,7 +3335,9 @@ int File::rename(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   /* as the entry's identity:  both directories are the requester's */
-  const int ret = nsfs::with_identity(dpp, identity, [&]() -> int {
+  const int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+						 RAISED_KEYDIR_CAPS,
+						 [&]() -> int {
     return (::renameat(src_fd, fname.c_str(), dst_fd, dst_name.c_str()) < 0)
 	? -errno : 0;
   }, y);
@@ -3288,7 +3401,8 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
 
   int parent_fd = parent->get_fd();
   /* as the entry's identity:  its directory is the requester's */
-  int ret = nsfs::with_identity(dpp, identity, [&]() -> int {
+  int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+					   RAISED_KEYDIR_CAPS, [&]() -> int {
     return (::unlinkat(parent_fd, fname.c_str(), 0) < 0) ? -errno : 0;
   }, y);
   if ((ret < 0) && (ret != -ENOENT)) {
@@ -3368,12 +3482,15 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
   if (identity.active()) {
     const int at = parent ? parent->get_fd() : AT_FDCWD;
     const mode_t mode = nsfs::dir_create_mode();
-    const int ret = nsfs::with_identity(dpp, identity, [&]() -> int {
+    bool raised = false;
+    const int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+						 RAISED_CREATE_CAPS,
+						 [&]() -> int {
       if (::mkdirat(at, fname.c_str(), mode) < 0) {
 	return -errno;
       }
       return nsfs::apply_create_mode_at(dpp, at, fname.c_str(), mode);
-    }, y);
+    }, y, &raised);
     if (ret == -EEXIST) {
       if (existed != nullptr) {
 	*existed = true;
@@ -3384,6 +3501,10 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
       ldpp_dout(dpp, 0) << "ERROR: could not create directory " << get_name()
 			<< " as uid " << identity.cred.uid << ": "
 			<< cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    if (raised) {
+      return chown_raised_dir(dpp, at, fname.c_str());
     }
     return ret;
   }
@@ -3475,7 +3596,8 @@ int Directory::open(const DoutPrefixProvider* dpp)
       fd = r;
       return 0;
     }
-    if (!(walk_fallback && ((r == -EACCES) || (r == -EPERM)))) {
+    if (!(access_model && access_model->permits(nsfs::AccessClass::path) &&
+	  ((r == -EACCES) || (r == -EPERM)))) {
       ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name()
 			<< " as uid " << identity.cred.uid << ": "
 			<< cpp_strerror(-r) << dendl;
@@ -3544,7 +3666,9 @@ int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool dele
    * removal with its children is a bucket's, which is the gateway's
    * (raise site 3). */
   if (identity.active() && !delete_children) {
-    return nsfs::with_identity(dpp, identity, [&]() -> int {
+    return nsfs::with_identity_or_raise(dpp, identity, access_model,
+						RAISED_KEYDIR_CAPS,
+						[&]() -> int {
       return delete_directory(at, fname.c_str(), false, dpp,
 			      reserved_or_none(reserved_names));
     }, y);
@@ -10127,6 +10251,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
       set_access(id, /*ro=*/false);
     }
   }
+  const nsfs::AccessStrategy* model = driver->get_access_strategy();
 
   int ret = stat(dpp);
   if (ret < 0) {
@@ -10251,7 +10376,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   }
   const bool slicing = (! versions.empty() && ! dst_holds_history && slice);
 
-  ret = write_rename_intent(dpp, xattr_strategy(), src_parent_fd, id,
+  ret = write_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model,
 			    src_leaf, db->get_tenant(),
 			    db->get_name(), dest_key.name, slicing);
   if (ret < 0) {
@@ -10265,7 +10390,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   auto roll_back = [&]() {
     for (size_t k = 0; k < moved; ++k) {
       std::string dname = dst_leaf + "_" + versions[k].ver_id;
-      const int rret = renameat_as(dpp, id, dst_vfd, dname.c_str(),
+      const int rret = renameat_as(dpp, id, model, dst_vfd, dname.c_str(),
 				   src_vfd, versions[k].entry.c_str());
       if (rret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: rename rollback failed for " << dname
@@ -10278,14 +10403,15 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   };
 
   if (! versions.empty() && ! slicing) {
-    dst_vfd = open_versions_dir(dpp, dst_parent_fd, id);
-    src_vfd = openat_as(dpp, id, src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+    dst_vfd = open_versions_dir(dpp, dst_parent_fd, id, model);
+    src_vfd = openat_as(dpp, id, model, src_parent_fd,
+			HIDDEN_VERSIONS_PATH.c_str(),
 			O_RDONLY | O_DIRECTORY);
     if (dst_vfd < 0 || src_vfd < 0) {
       ret = (dst_vfd < 0) ? dst_vfd : src_vfd;
       if (dst_vfd >= 0) { ::close(dst_vfd); }
       if (src_vfd >= 0) { ::close(src_vfd); }
-      clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id);
+      clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
       return ret;
     }
 
@@ -10305,20 +10431,20 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
 	ldpp_dout(dpp, 4) << "rename: injected failure after " << moved
 	  << " version(s);  rolling back" << dendl;
 	if (roll_back()) {
-	  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id);
+	  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
 	}
 	::close(src_vfd);
 	::close(dst_vfd);
 	return ret;
       }
-      ret = renameat_as(dpp, id, src_vfd, versions[moved].entry.c_str(),
+      ret = renameat_as(dpp, id, model, src_vfd, versions[moved].entry.c_str(),
 			dst_vfd, dname.c_str());
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: rename: moving version "
 	  << versions[moved].entry << " failed: " << cpp_strerror(-ret)
 	  << ";  rolling back" << dendl;
 	if (roll_back()) {
-	  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id);
+	  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
 	}
 	::close(src_vfd);
 	::close(dst_vfd);
@@ -10333,7 +10459,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     ldpp_dout(dpp, 0) << "ERROR: rename: moving " << src_leaf
       << " failed: " << cpp_strerror(-ret) << ";  rolling back" << dendl;
     if (roll_back()) {
-      clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id);
+      clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
     }
     if (src_vfd >= 0) { ::close(src_vfd); }
     if (dst_vfd >= 0) { ::close(dst_vfd); }
@@ -10353,11 +10479,12 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   /* slicing:  the history must not outlive the key it belonged to, or it
    * lists as versions of an object that is no longer there */
   if (slicing) {
-    int svfd = openat_as(dpp, id, src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
+    int svfd = openat_as(dpp, id, model, src_parent_fd,
+			 HIDDEN_VERSIONS_PATH.c_str(),
 			 O_RDONLY | O_DIRECTORY);
     if (svfd >= 0) {
       for (const auto& v : versions) {
-	const int uret = unlinkat_as(dpp, id, svfd, v.entry.c_str());
+	const int uret = unlinkat_as(dpp, id, model, svfd, v.entry.c_str());
 	if (uret < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: rename: sliced version " << v.entry
 	    << " could not be removed: " << cpp_strerror(-uret) << dendl;
@@ -10367,7 +10494,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id);
+  clear_rename_intent(dpp, xattr_strategy(), src_parent_fd, id, model);
   if (src_vfd >= 0) { ::close(src_vfd); }
   if (dst_vfd >= 0) { ::close(dst_vfd); }
 
@@ -10578,7 +10705,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       int dret2 = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 					 dest_parent_fd, dest_leaf,
-					 dest_ver_enabled, demote, identity, y,
+					 dest_ver_enabled, demote, identity,
+					 driver->get_access_strategy(), y,
 					 static_cast<NSFSBucket*>(dest_bucket)
 					   ->xattr_fallback());
       if (dret2 < 0) {
@@ -11521,7 +11649,8 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
     demote_current_version(dpp, driver->get_fs_strategy(),
 			   src_obj->xattr_strategy(),
 			   parent_fd, leaf_name,
-			   binfo.versioning_enabled(), demote, {}, null_yield,
+			   binfo.versioning_enabled(), demote, {}, nullptr,
+			   null_yield,
 			   src_obj->xattr_fallback());
   }
   {
@@ -12429,8 +12558,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
           auto ver_dir = std::make_unique<Directory>(
             HIDDEN_VERSIONS_PATH, leaf_dir, driver->ctx());
           ver_dir->set_identity(pending_identity);
-          ver_dir->set_walk_fallback(
-            driver->get_access_strategy()->permits(nsfs::AccessClass::path));
+          ver_dir->set_access_model(driver->get_access_strategy());
           if (ver_dir->open(dpp) == 0) {
             ent = std::make_unique<File>(ver_name, ver_dir.get(), driver->ctx());
             dir_chain.push_back(std::move(ver_dir));
@@ -12465,8 +12593,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
           /* as above:  .versions/ opened as the walk would */
           Directory vdir_ent(HIDDEN_VERSIONS_PATH, leaf_dir, driver->ctx());
           vdir_ent.set_identity(pending_identity);
-          vdir_ent.set_walk_fallback(
-            driver->get_access_strategy()->permits(nsfs::AccessClass::path));
+          vdir_ent.set_access_model(driver->get_access_strategy());
           const int vfd = (vdir_ent.open(dpp) == 0)
             ? ::dup(vdir_ent.get_fd()) : -1;
           if (vfd >= 0) {
@@ -12512,7 +12639,8 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
 
               if (!max_name.empty()) {
                 /* check if it's a delete marker */
-                int dm_fd = openat_as(dpp, pending_identity, vfd,
+                int dm_fd = openat_as(dpp, pending_identity,
+                                      driver->get_access_strategy(), vfd,
                                       max_name.c_str(), O_RDONLY);
                 if (dm_fd >= 0) {
                   char buf[8];
@@ -12792,9 +12920,13 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    * `inode_owner_or_capable(CAP_FOWNER)`.  Measured 2026-10-19:
    * without the raise the publish runs as uid 1000 and `linkat`
    * returns EPERM.  The same rule bit the demote from the other side
-   * (`d75e5561a39`). */
+   * (`d75e5561a39`).
+   *
+   * And `CAP_DAC_OVERRIDE`, where the directory is a key directory
+   * another identity made at 0770:  the gateway does not own that
+   * one, and both the link and the rename write in it. */
   static constexpr uint64_t PUBLISH_AS_GATEWAY_CAPS =
-    nsfs::cap_bit(CAP_FOWNER);
+    nsfs::cap_bit(CAP_FOWNER) | nsfs::cap_bit(CAP_DAC_OVERRIDE);
   const bool as_gateway = ent->get_identity().active() &&
     driver->get_access_strategy()->permits(nsfs::AccessClass::data);
 
@@ -13625,6 +13757,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   if (identity.active()) {
     source->set_access(identity, /*ro=*/true);
   }
+  const nsfs::AccessStrategy* model = source->driver->get_access_strategy();
 
   bool has_cond = params.if_match ||
     !real_clock::is_zero(params.last_mod_time_match) ||
@@ -13819,7 +13952,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           (void) promote_version(promote_fd, promote_leaf, dpp,
                           source->driver->get_fs_strategy(),
 			  source->xattr_strategy(),
-			  source->driver->get_identity_db(), identity, y,
+			  source->driver->get_identity_db(), identity, model, y,
 			  &promoted);
           struct statx pstx;
           if (nsfs::statx(promote_fd, promote_leaf.c_str(),
@@ -13867,12 +14000,13 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
 
     if (parent_fd >= 0) {
-      int vfd = openat_as(dpp, identity, parent_fd,
+      int vfd = openat_as(dpp, identity, model, parent_fd,
 			  HIDDEN_VERSIONS_PATH.c_str(), O_RDONLY | O_DIRECTORY);
       if (vfd >= 0) {
         std::string ver_name = nsfs_ver_entry(leaf_name, req_version_id);
         bool is_dm = false;
-        int ver_fd = openat_as(dpp, identity, vfd, ver_name.c_str(), O_RDONLY);
+        int ver_fd = openat_as(dpp, identity, model, vfd, ver_name.c_str(),
+                               O_RDONLY);
         if (ver_fd < 0) {
           ldpp_dout(dpp, 10) << "delete_obj: " << ver_name
             << " not found in .versions/ (already deleted?)" << dendl;
@@ -13932,7 +14066,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         ::close(ver_fd);
 
         {
-          const int uret = unlinkat_as(dpp, identity, vfd, ver_name.c_str());
+          const int uret = unlinkat_as(dpp, identity, model, vfd,
+                                       ver_name.c_str());
           if ((uret < 0) && (uret != -ENOENT)) {
             ldpp_dout(dpp, 4) << "delete_obj: unlinking " << ver_name
               << ": " << cpp_strerror(-uret) << dendl;
@@ -13959,7 +14094,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           (void) promote_version(parent_fd, leaf_name, dpp,
                           source->driver->get_fs_strategy(),
 			  source->xattr_strategy(),
-			  source->driver->get_identity_db(), identity, y,
+			  source->driver->get_identity_db(), identity, model, y,
 			  &promoted);
           /* update cache for the promoted version */
           struct statx pstx;
@@ -14053,7 +14188,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return -EINVAL;
   }
 
-  int vfd = open_versions_dir(dpp, parent_fd, identity);
+  int vfd = open_versions_dir(dpp, parent_fd, identity, model);
   if (vfd < 0) {
     return vfd;
   }
@@ -14079,7 +14214,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   /* in suspended mode, remove any existing _null from .versions/ */
   if (!ver_enabled) {
     std::string null_name = nsfs_ver_entry(dm_leaf, NULL_VERSION_ID);
-    const int uret = unlinkat_as(dpp, identity, vfd, null_name.c_str());
+    const int uret = unlinkat_as(dpp, identity, model, vfd, null_name.c_str());
     if ((uret < 0) && (uret != -ENOENT)) {
       ldpp_dout(dpp, 4) << "delete_obj: unlinking " << null_name
         << ": " << cpp_strerror(-uret) << dendl;
@@ -14107,7 +14242,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         ? NULL_VERSION_ID
         : nsfs_version_id_from_statx(cur_stx);
       if (!cur_is_null) {
-        int rfd = openat_as(dpp, identity, parent_fd, dm_leaf.c_str(),
+        int rfd = openat_as(dpp, identity, model, parent_fd, dm_leaf.c_str(),
 			    O_RDONLY);
         if (rfd >= 0) {
           cur_ver_id = recorded_version_id(rfd, source->xattr_strategy(),
@@ -14124,10 +14259,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
        * identity wrote, and fs.protected_hardlinks denies it to the
        * gateway -- the same denial the writer's demote had before it
        * carried one. */
-      SafeResult sr = source->driver->get_fs_strategy()->safe_link(
+      SafeResult sr = SafeResult::ERROR;
+      (void) nsfs::with_identity_or_raise(dpp, identity, model,
+                                          RAISED_KEYDIR_CAPS, [&]() -> int {
+        sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
                                 vfd, ver_name,
-                                cur_mtime, cur_ino, y, identity);
+                                cur_mtime, cur_ino, null_yield,
+                                nsfs::FSIdentity::none());
+        return (sr == SafeResult::DENIED) ? -EACCES : 0;
+      }, y);
       if (sr == SafeResult::OK) {
         /* when it stopped being current, for NooBaa's lifecycle and
          * (D5) RGW's:  on the demoted file, which is the requester's,
@@ -14137,7 +14278,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             std::chrono::system_clock::now().time_since_epoch()).count());
         const std::string ts_x =
           source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
-        const int tret = nsfs::with_identity(dpp, identity, [&]() -> int {
+        const int tret = nsfs::with_identity_or_raise(dpp, identity, model,
+                                                      RAISED_KEYDIR_CAPS,
+                                                      [&]() -> int {
           const int dfd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
           if (dfd < 0) {
             return -errno;
@@ -14155,9 +14298,14 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         /* CAS unlink: remove current only if it still matches.  The
          * requester's too:  the entry it removes is in the bucket
          * directory, which phase D hands to the account. */
-        source->driver->get_fs_strategy()->safe_unlink(
-                    dpp, parent_fd, dm_leaf, vfd,
-                    cur_mtime, cur_ino, y, identity);
+        (void) nsfs::with_identity_or_raise(dpp, identity, model,
+                                            RAISED_KEYDIR_CAPS, [&]() -> int {
+          const SafeResult ur = source->driver->get_fs_strategy()->safe_unlink(
+                      dpp, parent_fd, dm_leaf, vfd,
+                      cur_mtime, cur_ino, null_yield,
+                      nsfs::FSIdentity::none());
+          return (ur == SafeResult::DENIED) ? -EACCES : 0;
+        }, y);
         demoted_ver_id = cur_ver_id;
         did_demote = true;
         break;
@@ -14189,7 +14337,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
   } else if (!ver_enabled && ret == 0 && ent && ent->exists() && cur_is_null) {
     /* suspended + null current: just unlink (rename will fail if no current) */
-    const int uret = unlinkat_as(dpp, identity, parent_fd, dm_leaf.c_str());
+    const int uret = unlinkat_as(dpp, identity, model, parent_fd,
+                                 dm_leaf.c_str());
     if ((uret < 0) && (uret != -ENOENT)) {
       ldpp_dout(dpp, 4) << "delete_obj: unlinking " << dm_leaf
         << ": " << cpp_strerror(-uret) << dendl;
@@ -14220,7 +14369,10 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * against the calling thread, so the gateway writing to the
    * requester's file would fail, and these are unchecked. */
   int dm_fd = -1;
-  const int dmret = nsfs::with_identity(dpp, identity, [&]() -> int {
+  bool dm_raised = false;
+  const int dmret = nsfs::with_identity_or_raise(dpp, identity, model,
+                                                 RAISED_CREATE_CAPS,
+                                                 [&]() -> int {
     dm_fd = ::openat(vfd, dm_tmp.c_str(),
                      O_WRONLY | O_CREAT | O_EXCL,
                      nsfs::file_create_mode());
@@ -14228,7 +14380,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       return -errno;
     }
     return 0;
-  }, y);
+  }, y, &dm_raised);
   if (dmret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: delete_obj: could not create the delete"
       " marker for " << dm_leaf << ": " << cpp_strerror(-dmret) << dendl;
@@ -14237,6 +14389,11 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   }
   if (dm_fd >= 0) {
     (void) nsfs::apply_create_mode(dpp, dm_fd, nsfs::file_create_mode(), y);
+    /* made by the gateway, and the requester's as any object is */
+    if (dm_raised) {
+      (void) chown_raised(dpp, dm_fd, "", identity.cred.uid,
+                          identity.cred.gid);
+    }
     /* Every attribute on the marker is written as its owner, for the
      * reason the version id is:  a `user.*` write is tested against
      * the calling thread, so the gateway writing to the requester's
@@ -14295,7 +14452,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     /* rename to final name, as the marker's maker */
     std::string dm_name = nsfs_ver_entry(dm_leaf, dm_ver_id);
     {
-      const int rret = renameat_as(dpp, identity, vfd, dm_tmp.c_str(),
+      const int rret = renameat_as(dpp, identity, model, vfd, dm_tmp.c_str(),
                                    vfd, dm_name.c_str());
       if (rret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: delete_obj: naming the delete marker "
@@ -15083,7 +15240,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     int dret = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 				      leaf_fd, leaf_name,
-				      ver_enabled, demote, identity, y,
+				      ver_enabled, demote, identity,
+				      driver->get_access_strategy(), y,
 				      xattr_fallback());
     if (dret < 0) {
       return dret;
@@ -16228,7 +16386,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 					obj->xattr_strategy(),
 					parent_fd,
 					obj->get_fsent()->get_name(),
-					ver_enabled, demote, identity, rctx.y,
+					ver_enabled, demote, identity,
+					driver->get_access_strategy(), rctx.y,
 					obj->xattr_fallback());
       if (dret < 0) {
         return dret;
@@ -17740,6 +17899,10 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	cross_account_data_served.load(std::memory_order_relaxed));
       (*out)["publishes_as_gateway"] = std::to_string(
 	publishes_as_gateway.load(std::memory_order_relaxed));
+      /* directory operations in another identity's key directory,
+       * performed by the gateway (with_identity_or_raise()) */
+      (*out)["raised_operations"] = std::to_string(
+	nsfs::raised_operations());
       (*out)["copy_sources_as_gateway"] = std::to_string(
 	get_fs_strategy()->cross_account_source_reads());
     }
