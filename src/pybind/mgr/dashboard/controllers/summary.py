@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import json
+from datetime import datetime, timezone
 
 from .. import mgr
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..exceptions import ViewCacheNoDataException
 from ..security import Permission, Scope
 from ..services import progress
+from ..services.ceph_service import CephService
 from ..tools import TaskManager
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc
 
@@ -96,6 +98,51 @@ class Summary(BaseController):
         services = mgr.get('mgr_map')['services']
         return services['dashboard'] if 'dashboard' in services else ''
 
+    @staticmethod
+    def _pool_create_time_to_iso(value):
+        """Convert a pool's ``create_time`` to a UTC ISO 8601 string, or None.
+
+        Ceph prints it as ``2024-05-01T12:00:00.123456+0000``; older releases used
+        the legacy ``2019-08-02 02:23:01.618519`` form (local time, no offset).
+        """
+        if not isinstance(value, str):
+            return None
+        for fmt in ('%Y-%m-%dT%H:%M:%S.%f%z', '%Y-%m-%d %H:%M:%S.%f'):
+            try:
+                parsed = datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+            # naive values (legacy form) are interpreted as local time
+            return parsed.astimezone(timezone.utc).isoformat()
+        return None
+
+    @staticmethod
+    def _get_pool_migration_tasks():
+        """Detect active pool migrations and return them as executing tasks.
+
+        Migrations whose start time (the target pool's ``create_time``) is
+        unknown are skipped rather than reported with a made-up time.
+        """
+        pools = CephService.get_pool_list()
+        migrations, _ = CephService.get_pool_migration_info(pools)
+        tasks = []
+        for m in migrations:
+            begin_time = Summary._pool_create_time_to_iso(m.get('create_time'))
+            if begin_time is None:
+                continue
+            tasks.append({
+                'name': "progress/Migrating pool '{}' (source: {})".format(
+                    m['pool_name'], m['src_name']),
+                'metadata': {
+                    'pool_name': m['pool_name'],
+                    'pool_id': m['pool_id'],
+                    'src_name': m['src_name'],
+                },
+                'begin_time': begin_time,
+                'progress': m['progress'],
+            })
+        return tasks
+
     @Endpoint()
     @EndpointDoc("Display Summary",
                  responses={200: SUMMARY_SCHEMA})
@@ -107,6 +154,9 @@ class Summary(BaseController):
         e, f = progress.get_progress_tasks()
         executing_tasks.extend(e)
         finished_tasks.extend(f)
+
+        if self._has_permissions(Permission.READ, Scope.POOL):
+            executing_tasks.extend(self._get_pool_migration_tasks())
 
         executing_tasks.sort(key=lambda t: t['begin_time'], reverse=True)
         finished_tasks.sort(key=lambda t: t['end_time'], reverse=True)

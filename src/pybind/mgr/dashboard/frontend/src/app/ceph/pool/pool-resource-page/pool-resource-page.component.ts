@@ -1,9 +1,11 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewEncapsulation } from '@angular/core';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 
 import _ from 'lodash';
 import { forkJoin, of, Subscription } from 'rxjs';
 import { finalize, switchMap } from 'rxjs/operators';
+
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -31,6 +33,7 @@ type RatePoint = [number, number] | number;
   selector: 'cd-pool-resource-page',
   templateUrl: './pool-resource-page.component.html',
   styleUrls: ['./pool-resource-page.component.scss'],
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
 export class PoolResourcePageComponent implements OnInit, OnDestroy {
@@ -71,8 +74,18 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
     readOpsChartData: [] as ChartPoint[],
     writeThroughput: '',
     writeOps: '',
-    writeOpsChartData: [] as ChartPoint[]
+    writeOpsChartData: [] as ChartPoint[],
+    isMigrating: false,
+    migrationObjectsMigrated: 0,
+    migrationBytesMigrated: 0,
+    migrationObjectsTotal: 0,
+    migrationBytesTotal: 0,
+    migrationProgress: 0,
+    migrationMigratingPgs: '',
+    migrationSourceName: '',
+    migrationTargetName: ''
   };
+  migrationFinished = false;
 
   omittedPoolAttributes = ['cdExecuting', 'cdIsBinary', 'stats'];
   private readonly binaryUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
@@ -81,7 +94,8 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private poolService: PoolService,
     private erasureCodeProfileService: ErasureCodeProfileService,
-    private formatter: FormatterService
+    private formatter: FormatterService,
+    private refreshIntervalService: RefreshIntervalService
   ) {
     this.cacheTierColumns = [
       { prop: 'pool_name', name: $localize`Name`, flexGrow: 3 },
@@ -101,6 +115,7 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
         .pipe(
           switchMap((pm: ParamMap) => {
             this.poolName = pm.get('name') ?? '';
+            this.migrationFinished = false;
 
             if (!this.poolName) {
               this.isOverviewLoading = false;
@@ -143,7 +158,11 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
 
           const selectedErasureProfile = this.getErasureProfile(poolData, ecProfiles || []);
           this.poolOverviewFields = this.buildOverviewFields(poolData);
-          this.overviewModel = this.buildOverviewModel(poolData, selectedErasureProfile);
+          this.overviewModel = this.buildOverviewModel(
+            poolData,
+            selectedErasureProfile,
+            lightweightPoolList || []
+          );
 
           CdHelperClass.updateChanged(this, {
             poolDetails: this.poolDetails,
@@ -154,13 +173,57 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
           });
         })
     );
+    this.setupMigrationPolling();
   }
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
   }
 
-  private buildOverviewModel(pool?: Pool, erasureProfile?: ErasureCodeProfile): PoolOverviewModel {
+  private setupMigrationPolling(): void {
+    this.sub.add(
+      this.refreshIntervalService.intervalData$
+        .pipe(
+          switchMap(() => {
+            if (!this.overviewModel.isMigrating || !this.poolName) {
+              return of(null);
+            }
+            return this.poolService.get(this.poolName, true);
+          })
+        )
+        .subscribe((poolData: Pool | null) => {
+          if (!poolData) return;
+
+          const stats = (poolData.stats || {}) as PoolStats;
+          const migrationUpdate = this.buildMigrationModel(poolData, stats);
+          if (migrationUpdate.isMigrating) {
+            this.overviewModel = { ...this.overviewModel, ...migrationUpdate };
+            return;
+          }
+          // Migration is over: the backend no longer reports progress, so pin the last
+          // known figures to 100% and keep the card until the user dismisses it.
+          this.migrationFinished = true;
+          this.overviewModel = {
+            ...this.overviewModel,
+            isMigrating: false,
+            migrationProgress: 100,
+            migrationObjectsMigrated: this.overviewModel.migrationObjectsTotal,
+            migrationBytesMigrated: this.overviewModel.migrationBytesTotal,
+            migrationMigratingPgs: ''
+          };
+        })
+    );
+  }
+
+  dismissMigration(): void {
+    this.migrationFinished = false;
+  }
+
+  private buildOverviewModel(
+    pool?: Pool,
+    erasureProfile?: ErasureCodeProfile,
+    pools: Pool[] = []
+  ): PoolOverviewModel {
     const poolData = (pool as Pool) || ({} as Pool);
     const stats = (poolData.stats || {}) as PoolStats;
     const usageUsed = this.getStatLatest(stats.bytes_used);
@@ -212,7 +275,57 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
       readOpsChartData,
       writeThroughput: this.formatRate(this.getStatRate(stats.wr_bytes), true) || '',
       writeOps: this.formatRate(this.getStatRate(stats.wr), false) || '',
-      writeOpsChartData
+      writeOpsChartData,
+      ...this.buildMigrationModel(poolData, stats),
+      ...this.buildMigrationNames(poolData, pools)
+    };
+  }
+
+  private buildMigrationNames(
+    pool: Pool,
+    pools: Pool[]
+  ): Pick<PoolOverviewModel, 'migrationSourceName' | 'migrationTargetName'> {
+    const nameOf = (id: number) => pools.find((item) => item.pool === id)?.pool_name ?? '';
+    const poolName = pool.pool_name || this.poolName;
+
+    if (pool.migration_src != null) {
+      return { migrationSourceName: nameOf(pool.migration_src), migrationTargetName: poolName };
+    }
+    if (pool.migration_target != null) {
+      return { migrationSourceName: poolName, migrationTargetName: nameOf(pool.migration_target) };
+    }
+    return { migrationSourceName: '', migrationTargetName: '' };
+  }
+
+  private buildMigrationModel(
+    pool: Pool,
+    stats: PoolStats
+  ): Pick<
+    PoolOverviewModel,
+    | 'isMigrating'
+    | 'migrationObjectsMigrated'
+    | 'migrationBytesMigrated'
+    | 'migrationObjectsTotal'
+    | 'migrationBytesTotal'
+    | 'migrationProgress'
+    | 'migrationMigratingPgs'
+  > {
+    const isMigrating = pool.migration_src != null || pool.migration_target != null;
+    // Backend injects totals from source+target pool stats (same as ceph status).
+    const objMigrated = (stats as any)?.num_objects_migrated?.latest ?? 0;
+    const bytesMigrated = (stats as any)?.num_bytes_migrated?.latest ?? 0;
+    const objTotal = (stats as any)?.num_objects?.latest ?? 0;
+    const bytesTotal = (stats as any)?.num_bytes?.latest ?? 0;
+    const progress = objTotal > 0 ? Math.min(Math.round((objMigrated / objTotal) * 100), 100) : 0;
+
+    return {
+      isMigrating,
+      migrationObjectsMigrated: objMigrated,
+      migrationBytesMigrated: bytesMigrated,
+      migrationObjectsTotal: objTotal,
+      migrationBytesTotal: bytesTotal,
+      migrationProgress: progress,
+      migrationMigratingPgs: pool.migrating_pgs || ''
     };
   }
 

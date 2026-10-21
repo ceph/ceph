@@ -587,7 +587,7 @@ class OsdUi(Osd):
 
         return res.as_dict()
 
-    @Endpoint(method='POST')
+    @Endpoint(method='PUT')
     @UpdatePermission
     @handle_send_command_error('osd')
     def set_min_compat_client(self, release: str,
