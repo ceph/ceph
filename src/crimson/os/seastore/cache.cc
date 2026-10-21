@@ -1982,21 +1982,21 @@ record_t Cache::prepare_record(
     if (b.last_idx_to_delete > 0) {
       auto &seqs_by_oid = pending_lognode_deltas_by_oid[oid];
       ceph_assert(b.last_idx_to_delete <= seqs_by_oid.size());
-      std::optional<journal_seq_t> old_seq;
+      // Remove old_seq and its condition.
       for (auto it = seqs_by_oid.begin();
 	   it != seqs_by_oid.begin() + b.last_idx_to_delete;
 	   ++it) {
-	const auto committed_seq = it->committed_seq;
-	if (!old_seq || *old_seq != committed_seq) {
-	  auto map_it = pending_lognode_deltas_by_seq.find(committed_seq);
-	  if (map_it != pending_lognode_deltas_by_seq.end()) {
-	    auto& oids = map_it->second;
-	    std::erase(oids, b.oid);
-	    if (oids.empty()) {
-	      pending_lognode_deltas_by_seq.erase(map_it);
-	    }
-	  }
-	  old_seq = committed_seq;
+	auto map_it = pending_lognode_deltas_by_seq.find(
+	  it->committed_seq);
+	ceph_assert(map_it != pending_lognode_deltas_by_seq.end());
+
+	auto& oids = map_it->second;
+	auto found = std::find(oids.begin(), oids.end(), b.oid);
+	ceph_assert(found != oids.end());
+
+	oids.erase(found);
+	if (oids.empty()) {
+	  pending_lognode_deltas_by_seq.erase(map_it);
 	}
       }
       seqs_by_oid.erase(seqs_by_oid.begin(), seqs_by_oid.begin() + b.last_idx_to_delete);
