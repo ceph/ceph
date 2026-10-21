@@ -73,7 +73,7 @@ std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_rea
   extent_set extents_out;
 
   auto &orig_osd_op = orig_op->ops[ops_index].op;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.target_oloc.pool);
   ceph_assert(pi);
   ECStripeView stripe_view(orig_osd_op.extent.offset, orig_osd_op.extent.length, pi);
   ldout(cct, DBG_LVL) << __func__ << " START -->" << " object_id=" << orig_op->target.base_oid << " tid=" << orig_op->tid << " extent="
@@ -132,7 +132,7 @@ std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_rea
  */
 void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
   auto &orig_osd_op = orig_op->ops[ops_index].op;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.target_oloc.pool);
   ceph_assert(pi);
   ECStripeView stripe_view(orig_osd_op.extent.offset, orig_osd_op.extent.length, pi);
 
@@ -178,7 +178,7 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
  */
 void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
   auto &target = orig_op->target;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.target_oloc.pool);
   ceph_assert(pi);
 
   uint64_t offset = op.op.extent.offset;
@@ -338,7 +338,7 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) con
 void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
 
   auto &target = orig_op->target;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.target_oloc.pool);
   ceph_assert(pi);
 
   // init_reference_sub_read() aborts on < 2 valid OSDs; checked by create().
@@ -900,10 +900,10 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
  */
 void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct) {
   auto &target = op->target;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  objecter._calc_target(&op->target, op->snapid);
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.target_oloc.pool);
   ceph_assert(pi);
 
-  objecter._calc_target(&op->target, op->snapid);
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
@@ -982,6 +982,20 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   if (op->snapid != CEPH_NOSNAP || !op->snapc.empty()) {
     ldout(cct, DBG_LVL) << __func__ <<" REJECT: snapshot operation" << dendl;
     return false;
+  }
+
+  // A pool migration routes the op to either pool of the migration, which
+  // may differ in layout: plan the read for the pool it is routed to.
+  if (pi->is_migrating()) {
+    auto routed = target;
+    routed.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+    objecter._calc_target(&routed, op->snapid);
+    pi = objecter.osdmap->get_pg_pool(routed.target_oloc.pool);
+    if (!pi || routed.osd < 0) {
+      ldout(cct, DBG_LVL) << __func__ << " REJECT: no OSD in the routed pool"
+                          << dendl;
+      return false;
+    }
   }
 
   // Reject if direct reads not supported by profile.
