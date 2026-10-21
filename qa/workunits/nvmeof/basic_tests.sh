@@ -44,6 +44,7 @@ connect() {
 
 disconnect_all() {
     sudo nvme disconnect-all
+    sleep 5
     output=$(sudo nvme list)
     if echo "$output" | grep -q "$SPDK_CONTROLLER"; then
         return 1

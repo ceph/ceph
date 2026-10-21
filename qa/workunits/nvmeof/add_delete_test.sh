@@ -19,10 +19,10 @@ IFS=',' read -ra gateway_names <<< "$NVMEOF_GATEWAY_NAMES"
 assert_namespaces_count() {
     expected_count_per_subsys=$1
     for gw_ip in "${gateway_ips[@]}"; do
-        actual_count=$(ceph nvmeof --server-address $gw_ip --format json subsystem list |
+        actual_count=$(ceph nvmeof --format json subsystem list --server-address $gw_ip |
             jq --argjson expected "$expected_count_per_subsys" '[.subsystems[] | select(.namespace_count == $expected)] | length')
         if [ "$actual_count" -ne "$NVMEOF_SUBSYSTEMS_COUNT" ]; then
-            ceph nvmeof --server-address $gw_ip --format json subsystem list
+            ceph nvmeof --format json subsystem list --server-address $gw_ip
             echo "Expected count of namespaces not found via gateway $gw_ip, expected (per subsystem): $expected_count_per_subsys"
             return 1
         fi
@@ -32,10 +32,10 @@ assert_namespaces_count() {
 assert_subsystems_count() {
     expected_count=$1
     for gw_ip in "${gateway_ips[@]}"; do
-        actual_count=$(ceph nvmeof --server-address $gw_ip --format json subsystem list |
+        actual_count=$(ceph nvmeof --format json subsystem list --server-address $gw_ip |
             jq '.subsystems | length')
         if [ "$actual_count" -ne "$expected_count" ]; then
-            ceph nvmeof --server-address $gw_ip --format json subsystem list
+            ceph nvmeof --format json subsystem list --server-address $gw_ip
             echo "Expected $expected_count subsystems via gateway $gw_ip, found $actual_count"
             return 1
         fi
@@ -47,10 +47,10 @@ assert_hosts_count() {
     subsystem_nqn=$1
     expected_count=$2
     for gw_ip in "${gateway_ips[@]}"; do
-        actual_count=$(ceph nvmeof --server-address $gw_ip --format json host list --nqn $subsystem_nqn |
+        actual_count=$(ceph nvmeof --format json host list --nqn $subsystem_nqn --server-address $gw_ip |
             jq '[.hosts[] | select(.nqn != "*")] | length')
         if [ "$actual_count" -ne "$expected_count" ]; then
-            ceph nvmeof --server-address $gw_ip --format json host list --nqn $subsystem_nqn
+            ceph nvmeof --format json host list --nqn $subsystem_nqn --server-address $gw_ip
             echo "Expected $expected_count hosts on $subsystem_nqn via gateway $gw_ip, found $actual_count"
             return 1
         fi
@@ -65,10 +65,10 @@ assert_host_connected() {
     subsystem_nqn=$1
     host_nqn=$2
     expected=$3 # "true" or "false"
-    actual=$(ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --format json connection list --nqn $subsystem_nqn |
+    actual=$(ceph nvmeof --format json connection list --nqn $subsystem_nqn --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS |
         jq -r --arg h "$host_nqn" '[.connections[] | select(.nqn == $h)][0].connected // false')
     if [ "$actual" != "$expected" ]; then
-        ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --format json connection list --nqn $subsystem_nqn
+        ceph nvmeof --format json connection list --nqn $subsystem_nqn --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
         echo "Expected host $host_nqn to be $(connected_or_disconnected "$expected")" \
             "on $subsystem_nqn, found $(connected_or_disconnected "$actual")"
         return 1
@@ -83,10 +83,10 @@ assert_listener_exists() {
     trsvcid=$3
     expected=$4 # "true" or "false"
     for gw_ip in "${gateway_ips[@]}"; do
-        actual=$(ceph nvmeof --server-address $gw_ip --format json listener list --nqn $subsystem_nqn |
+        actual=$(ceph nvmeof --format json listener list --nqn $subsystem_nqn --server-address $gw_ip |
             jq -r --arg t "$traddr" --arg p "$trsvcid" '[.listeners[] | select(.traddr == $t and (.trsvcid | tostring) == $p)] | length > 0')
         if [ "$actual" != "$expected" ]; then
-            ceph nvmeof --server-address $gw_ip --format json listener list --nqn $subsystem_nqn
+            ceph nvmeof --format json listener list --nqn $subsystem_nqn --server-address $gw_ip
             echo "Expected listener $traddr:$trsvcid to be $(present_or_absent "$expected") on $subsystem_nqn" \
                 "via gateway $gw_ip, found $(present_or_absent "$actual")"
             return 1
@@ -121,9 +121,10 @@ for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
     subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
     for ns in $(seq 1 $NEW_NAMESPACES_COUNT); do
         image="test${image_index}"
-        ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS namespace add \
+        ceph nvmeof namespace add \
             --nqn $subsystem_nqn --rbd-pool $RBD_POOL --rbd-image-name $image \
-            --load-balancing-group $(($image_index % $gateways_count + 1))
+            --load-balancing-group $(($image_index % $gateways_count + 1)) \
+            --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
         ((image_index++))
     done
 done
@@ -131,7 +132,7 @@ done
 # list namespaces
 for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
     subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
-    ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --format plain namespace list --nqn $subsystem_nqn        
+    ceph nvmeof --format plain namespace list --nqn $subsystem_nqn --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 done
 
 # verify namespaces added
@@ -141,13 +142,13 @@ assert_namespaces_count $expected_count_per_subsys
 # delete namespaces
 for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
     subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
-    NSIDs=$(ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --format json namespace list --nqn $subsystem_nqn | 
+    NSIDs=$(ceph nvmeof --format json namespace list --nqn $subsystem_nqn --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS |
             jq -r '.namespaces[] | select(.rbd_image_name | startswith("test")) | .nsid')
 
     for nsid in $NSIDs; do
-        ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS namespace del --nqn $subsystem_nqn --nsid $nsid
+        ceph nvmeof namespace del --nqn $subsystem_nqn --nsid $nsid --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
     done
-    assert_command_fails ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS namespace del --nqn $subsystem_nqn --nsid 99999
+    assert_command_fails ceph nvmeof namespace del --nqn $subsystem_nqn --nsid 99999 --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 done
 
 # verify namespaces deleted
@@ -168,10 +169,11 @@ echo "[nvmeof.add_delete] Subsystem add/delete testing.."
 # add new subsystems, each with one namespace
 for i in $(seq 1 $NEW_SUBSYSTEMS_COUNT); do
     new_subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}test${i}"
-    ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS subsystem add --nqn $new_subsystem_nqn --no-group-append
-    ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS namespace add \
+    ceph nvmeof subsystem add --nqn $new_subsystem_nqn --no-group-append --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
+    ceph nvmeof namespace add \
         --nqn $new_subsystem_nqn --rbd-pool $RBD_POOL --rbd-image-name "subsystest${i}" \
-        --create-image --rbd-image-size 16MB
+        --create-image --rbd-image-size 16MB \
+        --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 done
 
 # verify subsystems added
@@ -180,8 +182,8 @@ assert_subsystems_count $(( $NVMEOF_SUBSYSTEMS_COUNT + $NEW_SUBSYSTEMS_COUNT ))
 # delete new subsystems (force, since they have a namespace)
 for i in $(seq 1 $NEW_SUBSYSTEMS_COUNT); do
     new_subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}test${i}"
-    assert_command_fails ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS subsystem del --nqn $new_subsystem_nqn
-    ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS subsystem del --nqn $new_subsystem_nqn --force true
+    assert_command_fails ceph nvmeof subsystem del --nqn $new_subsystem_nqn --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
+    ceph nvmeof subsystem del --nqn $new_subsystem_nqn --force true --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 done
 
 # verify subsystems deleted
@@ -199,8 +201,9 @@ listener_test_subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}1"
 for i in "${!gateway_ips[@]}"; do
     gw_ip="${gateway_ips[i]}"
     gw_name="${gateway_names[i]}"
-    ceph nvmeof --server-address $gw_ip listener add --nqn $listener_test_subsystem_nqn \
-        --host-name $gw_name --traddr $gw_ip --trsvcid $NEW_LISTENER_PORT
+    ceph nvmeof listener add --nqn $listener_test_subsystem_nqn \
+        --host-name $gw_name --traddr $gw_ip --trsvcid $NEW_LISTENER_PORT \
+        --server-address $gw_ip
 done
 
 # verify new listeners
@@ -212,8 +215,9 @@ done
 for i in "${!gateway_ips[@]}"; do
     gw_ip="${gateway_ips[i]}"
     gw_name="${gateway_names[i]}"
-    ceph nvmeof --server-address $gw_ip listener del --nqn $listener_test_subsystem_nqn \
-        --host-name $gw_name --traddr $gw_ip --trsvcid $NEW_LISTENER_PORT
+    ceph nvmeof listener del --nqn $listener_test_subsystem_nqn \
+        --host-name $gw_name --traddr $gw_ip --trsvcid $NEW_LISTENER_PORT \
+        --server-address $gw_ip
 done
 
 # verify listeners deleted
@@ -231,7 +235,7 @@ for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
     subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
     for h in $(seq 1 $NEW_HOSTS_COUNT); do
         host_nqn="nqn.2014-08.org.nvmexpress:uuid:00000000-0000-0000-0000-$(printf '%012d' $((i * 1000 + h)))"
-        ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS host add --nqn $subsystem_nqn --host-nqn $host_nqn
+        ceph nvmeof host add --nqn $subsystem_nqn --host-nqn $host_nqn --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
     done
 done
 
@@ -246,7 +250,7 @@ for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
     subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
     for h in $(seq 1 $NEW_HOSTS_COUNT); do
         host_nqn="nqn.2014-08.org.nvmexpress:uuid:00000000-0000-0000-0000-$(printf '%012d' $((i * 1000 + h)))"
-        ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS host del --nqn $subsystem_nqn --host-nqn $host_nqn
+        ceph nvmeof host del --nqn $subsystem_nqn --host-nqn $host_nqn --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
     done
 done
 
@@ -265,26 +269,27 @@ LOCAL_HOST_NQN=$(cat /etc/nvme/hostnqn)
 dummy_subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}dummy1"
 
 # add dummy subsystem and add current initiator as host
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS subsystem add --nqn $dummy_subsystem_nqn --no-group-append
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS listener add \
+ceph nvmeof subsystem add --nqn $dummy_subsystem_nqn --no-group-append --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
+ceph nvmeof listener add \
     --nqn $dummy_subsystem_nqn --host-name $NVMEOF_DEFAULT_GATEWAY_HOSTNAME \
-    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS host add --nqn $dummy_subsystem_nqn --host-nqn $LOCAL_HOST_NQN
+    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT \
+    --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
+ceph nvmeof host add --nqn $dummy_subsystem_nqn --host-nqn $LOCAL_HOST_NQN --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 
-# connect and verify 
+# connect and verify
 sudo nvme connect -t tcp --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS -s $NVMEOF_PORT -n $dummy_subsystem_nqn
 sleep 5
 assert_host_connected $dummy_subsystem_nqn $LOCAL_HOST_NQN "true"
 
 # delete the connected host
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS host del --nqn $dummy_subsystem_nqn --host-nqn $LOCAL_HOST_NQN
+ceph nvmeof host del --nqn $dummy_subsystem_nqn --host-nqn $LOCAL_HOST_NQN --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 
 sleep 5
 assert_host_connected $dummy_subsystem_nqn $LOCAL_HOST_NQN "false"
 
 # cleanup
 sudo nvme disconnect -n $dummy_subsystem_nqn || true
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS subsystem del --nqn $dummy_subsystem_nqn --force true
+ceph nvmeof subsystem del --nqn $dummy_subsystem_nqn --force true --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 assert_subsystems_count $NVMEOF_SUBSYSTEMS_COUNT
 
 echo "[nvmeof.add_delete] Connected host deletion testing passed!"
@@ -295,11 +300,12 @@ echo "[nvmeof.add_delete] Connected listener deletion testing.."
 listener_dummy_subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}dummy2"
 
 # add dummy subsystem, a listener, and add current initiator as host
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS subsystem add --nqn $listener_dummy_subsystem_nqn --no-group-append
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS listener add \
+ceph nvmeof subsystem add --nqn $listener_dummy_subsystem_nqn --no-group-append --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
+ceph nvmeof listener add \
     --nqn $listener_dummy_subsystem_nqn --host-name $NVMEOF_DEFAULT_GATEWAY_HOSTNAME \
-    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS host add --nqn $listener_dummy_subsystem_nqn --host-nqn $LOCAL_HOST_NQN
+    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT \
+    --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
+ceph nvmeof host add --nqn $listener_dummy_subsystem_nqn --host-nqn $LOCAL_HOST_NQN --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 
 # connect and verify
 sudo nvme connect -t tcp --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS -s $NVMEOF_PORT -n $listener_dummy_subsystem_nqn
@@ -307,20 +313,22 @@ sleep 5
 assert_listener_exists $listener_dummy_subsystem_nqn $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS $NVMEOF_PORT "true"
 
 # delete without --force should fail (active connection)
-assert_command_fails ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS listener del \
+assert_command_fails ceph nvmeof listener del \
     --nqn $listener_dummy_subsystem_nqn --host-name $NVMEOF_DEFAULT_GATEWAY_HOSTNAME \
-    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT
+    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT \
+    --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 assert_listener_exists $listener_dummy_subsystem_nqn $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS $NVMEOF_PORT "true"
 
 # --force tears down the connection along with the listener
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS listener del \
+ceph nvmeof listener del \
     --nqn $listener_dummy_subsystem_nqn --host-name $NVMEOF_DEFAULT_GATEWAY_HOSTNAME \
-    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT --force
+    --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --trsvcid $NVMEOF_PORT --force \
+    --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 assert_listener_exists $listener_dummy_subsystem_nqn $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS $NVMEOF_PORT "false"
 
 # cleanup
 sudo nvme disconnect -n $listener_dummy_subsystem_nqn || true
-ceph nvmeof --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS subsystem del --nqn $listener_dummy_subsystem_nqn --force true
+ceph nvmeof subsystem del --nqn $listener_dummy_subsystem_nqn --force true --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS
 assert_subsystems_count $NVMEOF_SUBSYSTEMS_COUNT
 
 echo "[nvmeof.add_delete] Connected listener deletion testing passed!"
