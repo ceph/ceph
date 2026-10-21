@@ -18,6 +18,7 @@
 #include "test/osd/ECPeeringTestFixture.h"
 #include "osd/osd_perf_counters.h"
 #include "osd/PrimaryLogPG.h"
+#include "messages/MOSDECSubOpRead.h"
 #include "test/osd/TestCommon.h"
 
 using namespace std;
@@ -75,6 +76,39 @@ public:
     enter_degraded_stretch_mode(1 - zone);
   }
 
+  // ceph osd pool set <pool> num_zones 1, as the monitor does it to a pool
+  // over two zones: the pool keeps shards 0 to k+m-1, on zone's OSDs, with
+  // the pg_upmap cut to them; pg_temp and primary_temp are dropped, and
+  // stretch mode ends with its last pool over zones.
+  void go_to_one_zone(int zone = 0) {
+    auto new_osdmap = std::make_shared<OSDMap>();
+    new_osdmap->deepish_copy_from(*osdmap);
+    pg_pool_t pool = *new_osdmap->get_pg_pool(pool_id);
+    pool.size = k + m;
+    pool.num_zones = 1;
+    pool.min_size = k + std::min(1, m - 1);
+    pool.nonprimary_shards = ECUtil::nonprimary_shards(k, m, {}, 1);
+    pool.peering_crush_bucket_count = 0;
+    pool.peering_crush_bucket_target = 0;
+    pool.peering_crush_bucket_barrier = 0;
+    pool.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
+    inc.fsid = new_osdmap->get_fsid();
+    inc.new_pools[pool_id] = pool;
+    const std::vector<int> block0 = zone_osds(zone);
+    inc.new_pg_upmap[pgid].assign(block0.begin(), block0.end());
+    inc.new_pg_temp[pgid] = mempool::osdmap::vector<int32_t>();
+    inc.new_primary_temp[pgid] = -1;
+    inc.change_stretch_mode = true;
+    inc.stretch_mode_enabled = false;
+    inc.new_stretch_bucket_count = 0;
+    inc.new_degraded_stretch_mode = 0;
+    inc.new_recovering_stretch_mode = 0;
+    inc.new_stretch_mode_bucket = 0;
+    new_osdmap->apply_incremental(inc);
+    update_osdmap_with_peering(new_osdmap);
+  }
+
   void restore_zone(int zone) {
     for (int osd : zone_osds(zone)) {
       mark_osd_up(osd);
@@ -95,6 +129,16 @@ public:
     ghobject_t ghoid(make_test_object(obj_name), gen, shard_id_t(shard));
     struct stat st;
     return get_osd_fixture(shard)->store->stat(test_pg->ch, ghoid, &st) == 0;
+  }
+
+  std::set<shard_id_t> ec_read_shards() {
+    std::set<shard_id_t> shards;
+    for (auto& [osd, msg] : get_primary_listener()->sent_messages_with_dest) {
+      if (auto read = boost::dynamic_pointer_cast<MOSDECSubOpRead>(msg)) {
+        shards.insert(read->pgid.shard);
+      }
+    }
+    return shards;
   }
 
   /**
@@ -3488,6 +3532,75 @@ TEST_P(TestECFailoverWithPeering, ZoneOrderChangeKeepsPGAvailable) {
 
   auto* primary_ps = get_primary_test_pg()->get_peering_state();
   ASSERT_TRUE(primary_ps->is_active()) << primary_ps->get_current_state();
+  verify_object(obj);
+}
+
+// Going to one zone while zone 0 is down keeps zone 0's shards. Once zone 0
+// is back, an object that only zone 1's old shards, k+m and up, hold at its
+// last version is recovered from them, read as their relative shards. The
+// read plan once tried only the zone of the primary of a pool with one zone,
+// so recovery of that object aborted in continue_recovery_op().
+TEST_P(TestECFailoverWithPeering, OneZoneRecoversFromStraysBeyondSize) {
+  if (num_zones != 2) {
+    GTEST_SKIP() << "requires num_zones == 2";
+  }
+  const size_t object_size = stripe_unit * k;
+  const std::string kept = "test_one_zone_kept";
+  const std::string rewritten = "test_one_zone_rewritten";
+  const std::string pattern_b(object_size, 'B');
+  create_and_write_verify(kept, std::string(object_size, 'A'));
+  create_and_write_verify(rewritten, std::string(object_size, 'A'));
+
+  fail_zone(0);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  write_verify(rewritten, 0, pattern_b, object_size);
+
+  go_to_one_zone();
+  for (int osd : zone_osds(0)) {
+    mark_osd_up(osd);
+  }
+
+  auto* primary_ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(primary_ps->is_active()) << primary_ps->get_current_state();
+  const hobject_t hoid = make_test_object(rewritten);
+  ASSERT_TRUE(primary_ps->get_missing_loc().needs_recovery(hoid));
+  EXPECT_FALSE(primary_ps->get_missing_loc().is_unfound(hoid));
+  get_primary_listener()->sent_messages_with_dest.clear();
+  run_recovery(rewritten, true, pattern_b);
+  const std::set<shard_id_t> read = ec_read_shards();
+  ASSERT_FALSE(read.empty());
+  EXPECT_GE(int(read.rbegin()->id), k + m);
+  EXPECT_FALSE(get_primary_test_pg()->get_peering_state()->needs_recovery());
+  verify_object(kept);
+  verify_object(rewritten, pattern_b, 0, object_size);
+}
+
+// After going to one zone, an object an OSD missed is recovered from the
+// pool's own shards, although the strays of the old zone 1 hold it too.
+TEST_P(TestECFailoverWithPeering, OneZoneRecoversFromItsOwnShards) {
+  if (num_zones != 2) {
+    GTEST_SKIP() << "requires num_zones == 2";
+  }
+  const size_t object_size = stripe_unit * k;
+  const std::string obj = "test_one_zone_missed";
+  const std::string pattern_b(object_size, 'B');
+  create_and_write_verify(obj, std::string(object_size, 'A'));
+  const int failed = 1;
+  mark_osd_down(failed);
+  write_verify(obj, 0, pattern_b, object_size);
+
+  go_to_one_zone();
+  mark_osd_up(failed);
+
+  auto* primary_ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(primary_ps->is_active()) << primary_ps->get_current_state();
+  ASSERT_TRUE(primary_ps->get_missing_loc().needs_recovery(
+                make_test_object(obj)));
+  get_primary_listener()->sent_messages_with_dest.clear();
+  run_recovery(obj, false, pattern_b);
+  const std::set<shard_id_t> read = ec_read_shards();
+  ASSERT_FALSE(read.empty());
+  EXPECT_LT(int(read.rbegin()->id), k + m);
   verify_object(obj);
 }
 
