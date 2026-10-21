@@ -8592,6 +8592,12 @@ int OSDMonitor::prepare_new_pool(string& name,
       return r;
     }
   }
+  if (num_zones == 2 && !mon.monmon()->pending_map.stretch_mode_enabled &&
+      !mon.monmon()->is_writeable()) {
+    dout(10) << __func__ << " " << name
+             << " waiting for monmap to enable stretch mode" << dendl;
+    return -EAGAIN;
+  }
   r = prepare_pool_crush_rule(pool_type, name, erasure_code_profile,
                                  crush_rule_name, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, &crush_rule, ss);
   if (r) {
@@ -8886,10 +8892,14 @@ int OSDMonitor::prepare_new_pool(string& name,
     bool okay = false;
     int errcode = 0;
     if (stretch_mons) {
+      // the MonMap and the pool commit together, in one Paxos round
+      paxos.plug();
       mon.monmon()->try_enable_stretch_mode(stretch_ss, &okay, &errcode, true, "",
                                             zone_failure_domain, crush);
       ceph_assert(okay);
       request_proposal(mon.monmon());
+      paxos.unplug();
+      force_immediate_propose();
     }
     try_enable_stretch_mode(stretch_ss, &okay, &errcode, true,
                             zone_failure_domain, num_zones,
