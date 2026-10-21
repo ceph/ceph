@@ -9,14 +9,16 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal, NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { Observable, of } from 'rxjs';
+import { Observable, of, Subject } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { ErrorComponent } from '~/app/core/error/error.component';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { SelectBadgesComponent } from '~/app/shared/components/select-badges/select-badges.component';
+import { LoadingStatus } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { Permission } from '~/app/shared/models/permissions';
@@ -113,7 +115,9 @@ describe('PoolFormComponent', () => {
       used_profiles: {
         ecp1: ['some.other.pool.uses.it']
       },
-      nodes: Mocks.generateSimpleCrushMap(3, 5)
+      nodes: Mocks.generateSimpleCrushMap(3, 5),
+      require_min_compat_client: '',
+      require_osd_release: ''
     };
   };
 
@@ -1682,6 +1686,203 @@ describe('PoolFormComponent', () => {
           );
         });
       });
+    });
+  });
+
+  describe('migrate mode', () => {
+    let configurationService: ConfigurationService;
+    let pool$: Subject<Pool>;
+    let config$: Subject<any>;
+    let pool: Pool;
+
+    const warnings = () => fixture.debugElement.queryAll(By.css('cds-notification'));
+
+    beforeEach(() => {
+      pool = new Pool('somePoolName');
+      pool.type = 'replicated';
+      pool.size = 3;
+      pool.crush_rule = 'rep1';
+      pool.pg_num = 32;
+      pool.pg_num_target = 32;
+      pool.pg_placement_num = 32;
+      pool.pg_placement_num_target = 32;
+      pool.options = {};
+      pool.application_metadata = ['rbd'];
+
+      pool$ = new Subject<Pool>();
+      config$ = new Subject<any>();
+      configurationService = TestBed.inject(ConfigurationService);
+      spyOn(poolService, 'get').and.callFake(() => pool$);
+      spyOn(configurationService, 'get').and.callFake(() => config$);
+
+      infoReturn.require_min_compat_client = 'umbrella';
+      infoReturn.require_osd_release = 'umbrella';
+
+      Object.defineProperty(router, 'url', { value: '/pool/migrate/somePoolName' });
+      setUpPoolComponent();
+    });
+
+    it('is in migrate mode if migrate is included in url', () => {
+      expect(component.migrating).toBe(true);
+    });
+
+    it('keeps the form loading and shows no warnings until all data arrived', () => {
+      expect(component.loading).toBe(LoadingStatus.Loading);
+      expect(warnings().length).toBe(0);
+
+      pool$.next(pool);
+      pool$.complete();
+      fixture.detectChanges();
+      // the experimental flag is still unknown, so we must not render a stale warning
+      expect(component.loading).toBe(LoadingStatus.Loading);
+      expect(warnings().length).toBe(0);
+    });
+
+    it('shows no warnings once data arrived and every precondition is met', () => {
+      pool$.next(pool);
+      pool$.complete();
+      config$.next({ value: [{ section: 'global', value: 'poolmigration' }] });
+      config$.complete();
+      fixture.detectChanges();
+
+      expect(component.loading).toBe(LoadingStatus.Ready);
+      expect(component.migrationPreconditionsMet).toBe(true);
+      expect(warnings().length).toBe(0);
+    });
+
+    it('shows the experimental warning when the flag is not enabled', () => {
+      pool$.next(pool);
+      pool$.complete();
+      config$.next({ value: [{ section: 'global', value: 'other' }] });
+      config$.complete();
+      fixture.detectChanges();
+
+      expect(component.loading).toBe(LoadingStatus.Ready);
+      expect(component.migrationPreconditions.experimentalFlag).toBe(false);
+      expect(component.migrationPreconditionsMet).toBe(false);
+      expect(warnings().length).toBe(1);
+    });
+
+    it.each(['other;poolmigration', '*,other'])(
+      'accepts the experimental flag value "%s" like Ceph does',
+      (value) => {
+        pool$.next(pool);
+        pool$.complete();
+        config$.next({ value: [{ section: 'global', value }] });
+        config$.complete();
+        fixture.detectChanges();
+
+        expect(component.migrationPreconditions.experimentalFlag).toBe(true);
+        expect(component.migrationPreconditionsMet).toBe(true);
+        expect(warnings().length).toBe(0);
+      }
+    );
+
+    it('treats pool id 0 as a valid migration peer', () => {
+      pool.migration_src = 0;
+      pool$.next(pool);
+      pool$.complete();
+      config$.next({ value: [{ section: 'global', value: 'poolmigration' }] });
+      config$.complete();
+      fixture.detectChanges();
+
+      expect(component.migrationPreconditions.poolNotMigrating).toBe(false);
+      expect(component.migrationPreconditionsMet).toBe(false);
+    });
+
+    describe('submit', () => {
+      let migrateSpy: jasmine.Spy;
+
+      beforeEach(() => {
+        migrateSpy = spyOn(poolService, 'migrate').and.returnValue(of(null) as any);
+        pool$.next(pool);
+        pool$.complete();
+        config$.next({ value: [{ section: 'global', value: 'poolmigration' }] });
+        config$.complete();
+        fixture.detectChanges();
+      });
+
+      const submittedParams = () => migrateSpy.calls.mostRecent().args[1];
+
+      it('uses the migrate endpoint keys and confirms the migration', () => {
+        form.get('pgAutoscaleMode').setValue('off');
+        component.submit();
+
+        expect(migrateSpy).toHaveBeenCalledTimes(1);
+        expect(migrateSpy.calls.mostRecent().args[0]).toBe('somePoolName');
+        const params = submittedParams();
+        expect(params.rule).toBe('rep1');
+        expect(params.autoscale_mode).toBe('off');
+        expect(params.pg_num).toBe(32);
+        expect(params.size).toBe(3);
+        expect(params.yes_i_really_mean_it).toBe(true);
+        expect(params.rule_name).toBeUndefined();
+        expect(params.pg_autoscale_mode).toBeUndefined();
+        expect(params.pool).toBeUndefined();
+      });
+
+      it('sends pg_num 1 when the autoscaler is on, like pool creation does', () => {
+        form.get('pgAutoscaleMode').setValue('on');
+        component.submit();
+
+        expect(submittedParams().autoscale_mode).toBe('on');
+        expect(submittedParams().pg_num).toBe(1);
+      });
+
+      it('does not send ec_overwrites for a replicated pool', () => {
+        form.get('ecOverwrites').setValue(true);
+        component.submit();
+
+        expect(submittedParams().flags).toBeUndefined();
+      });
+
+      it('keeps the compression ratio of the source pool', () => {
+        pool.options = {
+          compression_mode: 'passive',
+          compression_algorithm: 'snappy',
+          compression_required_ratio: 0.5
+        };
+        component['initMigrateFormData'](pool);
+        component.submit();
+
+        expect(form.getValue('ratio')).toBe(0.5);
+        expect(submittedParams().compression_required_ratio).toBe(0.5);
+      });
+
+      it('does not migrate and flags the form when no application is selected', () => {
+        component.data.applications.selected = [];
+        // The submit button removes the key from the same object right after it is set, so the
+        // value has to be captured at call time.
+        const flagged: boolean[] = [];
+        const setErrors = form.setErrors.bind(form);
+        spyOn(form, 'setErrors').and.callFake((errors, opts) => {
+          flagged.push(!!errors?.['cdSubmitButton']);
+          setErrors(errors, opts);
+        });
+        component.submit();
+
+        expect(migrateSpy).not.toHaveBeenCalled();
+        expect(flagged).toEqual([true]);
+        expect(component.isFormSubmitted).toBe(true);
+      });
+
+      it('does not send create-only fields', () => {
+        component.submit();
+
+        ['quota_max_bytes', 'quota_max_objects', 'rbd_mirroring', 'configuration'].forEach((key) =>
+          expect(submittedParams()[key]).toBeUndefined()
+        );
+      });
+    });
+
+    it('treats a failing config request as flag not enabled and still loads the form', () => {
+      pool$.next(pool);
+      pool$.complete();
+      config$.error('boom');
+      fixture.detectChanges();
+
+      expect(component.loading).toBe(LoadingStatus.Ready);
+      expect(component.migrationPreconditions.experimentalFlag).toBe(false);
     });
   });
 

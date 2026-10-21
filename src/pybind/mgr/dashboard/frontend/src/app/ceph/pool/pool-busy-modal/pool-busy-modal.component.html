@@ -1,0 +1,99 @@
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3
+      cdsModalHeaderHeading
+      modal-primary-focus
+    >
+      @switch (action) {
+        @case (actions.EDIT) {
+          <ng-container i18n>Cannot edit pool</ng-container>
+        }
+        @case (actions.DELETE) {
+          <ng-container i18n>Cannot delete pool</ng-container>
+        }
+        @default {
+          <ng-container i18n>Cannot migrate pool</ng-container>
+        }
+      }
+    </h3>
+  </cds-modal-header>
+  <section cdsModalContent>
+    <p
+      class="cds--type-body-01 cds--mb-05"
+      data-testid="description"
+    >
+      @switch (action) {
+        @case (actions.EDIT) {
+          @switch (reason) {
+            @case (reasons.MIGRATING) {
+              <ng-container i18n>
+                Pool editing is currently unavailable because this pool is already part of an
+                ongoing migration. Wait for it to finish and try again.
+              </ng-container>
+            }
+            @case (reasons.PG_CHANGE) {
+              <ng-container i18n>
+                Pool editing is currently unavailable because the number of PGs of this pool is
+                being adjusted. Wait for the change to finish and try again.
+              </ng-container>
+            }
+            @default {
+              <ng-container i18n>
+                Pool editing is currently unavailable because another operation is in progress on
+                this pool ({{ taskDescription }}). Wait for it to finish and try again.
+              </ng-container>
+            }
+          }
+        }
+        @case (actions.DELETE) {
+          @switch (reason) {
+            @case (reasons.MIGRATING) {
+              <ng-container i18n>
+                Pool deletion is currently unavailable because this pool is already part of an
+                ongoing migration. Wait for it to finish and try again.
+              </ng-container>
+            }
+            @case (reasons.PG_CHANGE) {
+              <ng-container i18n>
+                Pool deletion is currently unavailable because the number of PGs of this pool is
+                being adjusted. Wait for the change to finish and try again.
+              </ng-container>
+            }
+            @default {
+              <ng-container i18n>
+                Pool deletion is currently unavailable because another operation is in progress on
+                this pool ({{ taskDescription }}). Wait for it to finish and try again.
+              </ng-container>
+            }
+          }
+        }
+        @default {
+          @switch (reason) {
+            @case (reasons.MIGRATING) {
+              <ng-container i18n>
+                Pool migration is currently unavailable because this pool is already part of an
+                ongoing migration. Wait for it to finish and try again.
+              </ng-container>
+            }
+            @case (reasons.PG_CHANGE) {
+              <ng-container i18n>
+                Pool migration is currently unavailable because the number of PGs of this pool is
+                being adjusted. Wait for the change to finish and try again.
+              </ng-container>
+            }
+            @default {
+              <ng-container i18n>
+                Pool migration is currently unavailable because another operation is in progress on
+                this pool ({{ taskDescription }}). Wait for it to finish and try again.
+              </ng-container>
+            }
+          }
+        }
+      }
+    </p>
+  </section>
+</cds-modal>

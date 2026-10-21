@@ -38,7 +38,7 @@
         data-testid="submitBtn"
         [modalForm]="modalForm"
         [buttonType]="submitBtnType"
-        class="w-100"
+        [ngClass]="showCancel ? 'w-100' : 'w-50'"
         >{{ submitText }}</cd-submit-button
       >
     }

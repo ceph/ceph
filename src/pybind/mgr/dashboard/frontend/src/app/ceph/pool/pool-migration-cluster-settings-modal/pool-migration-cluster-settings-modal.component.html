@@ -1,0 +1,71 @@
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3
+      cdsModalHeaderHeading
+      modal-primary-focus
+      i18n
+    >
+      Cannot migrate pool
+    </h3>
+  </cds-modal-header>
+  <section cdsModalContent>
+    <form
+      name="clusterSettingsForm"
+      [formGroup]="form"
+      novalidate
+    >
+      @if (needsFlag && needsMinCompatClient) {
+        <p
+          class="cds--type-body-01 cds--mb-05"
+          data-testid="description"
+          i18n
+        >
+          Pool migration is currently unavailable because this cluster doesn't have the pool
+          migration capability enabled and a compatible <code>umbrella</code> client configured.
+          Enable the required cluster settings to continue.
+        </p>
+      } @else if (needsFlag) {
+        <p
+          class="cds--type-body-01 cds--mb-05"
+          data-testid="description"
+          i18n
+        >
+          Pool migration is currently unavailable because this cluster doesn't have the pool
+          migration capability enabled. Enable the required cluster setting to continue.
+        </p>
+      } @else {
+        <p
+          class="cds--type-body-01 cds--mb-05"
+          data-testid="description"
+          i18n
+        >
+          Pool migration is currently unavailable because this cluster doesn't have a compatible
+          <code>umbrella</code> client configured. Enable the required cluster setting to continue.
+        </p>
+      }
+      @if (needsMinCompatClient) {
+        <cds-checkbox
+          id="understand"
+          formControlName="understand"
+          data-testid="understand-checkbox"
+          i18n
+          >I understand that the minimum compatible client change is irreversible and have verified
+          client compatibility.</cds-checkbox
+        >
+      }
+    </form>
+  </section>
+  <cd-form-button-panel
+    (submitActionEvent)="onSubmit()"
+    [form]="form"
+    [disabled]="form.invalid"
+    [showCancel]="false"
+    [modalForm]="true"
+    submitText="Enable settings and continue"
+    i18n-submitText
+  ></cd-form-button-panel>
+</cds-modal>
