@@ -1,17 +1,17 @@
 //! Which buckets carry our extensions, and how one comes to.
 //!
-//! An nsfs bucket directory with no `user.nsfs.extensions` marker is read
-//! as NooBaa wrote it, and nothing is added to it.  A marked bucket
-//! carries the extensions -- the shadow subtree, positional layout, S3
-//! ACLs.  The unmarked case is the default because a NooBaa tree has no
-//! marker by construction, and because a tree we have not extended can
-//! still be handed back.
+//! An nsfs bucket directory with no `user.nsfs.extensions` marker is
+//! NooBaa's:  a bucket RGW has not taken over, read as NooBaa wrote it
+//! and not written (DECISIONS.md 2026-10-21).  A marked bucket carries
+//! the extensions.  Every bucket this gateway creates is marked;  an
+//! unmarked one comes from NooBaa's tree, or, for a test, from the
+//! `unmarked-bucket` driver hint.
 //!
 //! Marking is always a declared act:  at creation, or by adopting a named
-//! bucket.  Never inferred on access, which would convert a tree an
-//! operator was deliberately keeping reversible.
+//! bucket.  Never inferred on access.  Adoption is one-way, so nothing
+//! returns a bucket to base.
 
-use s3_tests_rs::admin::{nsfs_get_profile, nsfs_set_profile};
+use s3_tests_rs::admin::{driver_hint_results, nsfs_get_profile, nsfs_set_profile};
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::features::features;
 use s3_tests_rs::fixtures::{get_new_bucket, TestGuard};
@@ -39,32 +39,39 @@ async fn test_extensions_are_reported() {
     let v: u32 = v.parse().expect("the extension set is not an integer");
     assert!(v > 0, "0 is the absence of a marker, not a version");
 
-    assert!(f.get_bool("extensions_default").is_some(),
-        "whether new buckets are marked is not reported");
+    assert!(f.get_str("bucket_profile").is_some(),
+        "the profile new buckets are marked with is not reported");
+}
+
+/* A bucket this gateway made, unmarked through the test hint -- the
+ * only way an RGW bucket becomes unmarked.  None where the hint is not
+ * reachable.  A test that leaves it unmarked adopts it before it ends:
+ * cleanup's DeleteBucket is a client write, which the gate rejects on a
+ * bucket not taken over. */
+async fn unmarked_bucket() -> Option<String> {
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    let r = driver_hint_results("unmarked-bucket", &[("bucket", &bucket)]).await?;
+    assert_eq!(r.get("profile").map(String::as_str), Some("base"),
+        "the hint did not leave the bucket unmarked");
+    Some(bucket)
 }
 
 /// Both polarities.  A bucket the gateway created is in the profile the
 /// gateway reports as `bucket_profile` (`rgw_nsfs_bucket_profile`,
-/// default `shared`);  moving it to `base` is the only way a suite
-/// reaches that profile, and only then does setting `strong` have
-/// anything to do.  Without the base leg this would pass against a
-/// setter that did nothing at all.
-///
-/// Reducing a profile requires the bucket to hold no content, so the
-/// bucket is left empty here.
+/// default `shared`), and the endpoint will not take it back to `base`:
+/// adoption is one-way.  An unmarked bucket, from the test hint, moves
+/// up to `strong`.  Without the upward leg this would pass against a
+/// setter that rejected everything.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_profile_moves_between_base_and_strong() {
+async fn test_profile_moves_up_and_never_back() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
     let f = features().await.unwrap();
-    if f.get_bool("extensions_default") != Some(true) {
-        eprintln!("reversible mode;  extending a bucket is rejected by design");
-        return;
-    }
 
     let created = f.get_str("bucket_profile")
         .expect("the profile a new bucket is marked with is not reported");
@@ -80,16 +87,19 @@ async fn test_profile_moves_between_base_and_strong() {
     assert_eq!(first.get("profile").map(String::as_str), Some(created),
         "a bucket this gateway created is not in the profile it reports");
 
-    let down = nsfs_set_profile(&bucket, "base").await
-        .expect("the profile endpoint answered once and should answer again");
-    assert_eq!(down.get("had_profile").map(String::as_str), Some(created));
-
+    assert!(nsfs_set_profile(&bucket, "base").await.is_none(),
+        "a bucket was returned to base");
     let now = nsfs_get_profile(&bucket).await.expect("profile should answer");
-    assert_eq!(now.get("profile").map(String::as_str), Some("base"),
-        "the bucket was not reduced to base");
-    assert_eq!(now.get("extensions").map(String::as_str), Some("0"),
-        "base carries no extensions");
+    assert_eq!(now.get("profile").map(String::as_str), Some(created),
+        "the rejected move changed the profile anyway");
 
+    let Some(bucket) = unmarked_bucket().await else {
+        eprintln!("unmarked-bucket hint unavailable;  the upward leg is not checked");
+        return;
+    };
+    let base = nsfs_get_profile(&bucket).await.expect("profile should answer");
+    assert_eq!(base.get("extensions").map(String::as_str), Some("0"),
+        "base carries no extensions");
     let up = nsfs_set_profile(&bucket, "strong").await
         .expect("profile should answer");
     assert_eq!(up.get("had_profile").map(String::as_str), Some("base"),
@@ -111,12 +121,6 @@ async fn test_profile_shared_is_distinct_from_base() {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
-    let f = features().await.unwrap();
-    if f.get_bool("extensions_default") != Some(true) {
-        eprintln!("reversible mode;  extending a bucket is rejected by design");
-        return;
-    }
-
     let client = get_client();
     let bucket = get_new_bucket(Some(&client)).await;
 
@@ -134,11 +138,17 @@ async fn test_profile_shared_is_distinct_from_base() {
     assert_ne!(got.get("extensions").map(String::as_str), Some("0"),
         "shared reported the same extension set as base");
 
-    /* and base still reads as base, so the two are not aliases */
-    nsfs_set_profile(&bucket, "base").await.expect("profile should answer");
-    let base = nsfs_get_profile(&bucket).await.expect("profile should answer");
+    /* and an unmarked bucket reads as base, so the two are not aliases */
+    let Some(unmarked) = unmarked_bucket().await else {
+        eprintln!("unmarked-bucket hint unavailable;  the base side is not checked");
+        return;
+    };
+    let base = nsfs_get_profile(&unmarked).await.expect("profile should answer");
     assert_eq!(base.get("profile").map(String::as_str), Some("base"));
     assert_eq!(base.get("extensions").map(String::as_str), Some("0"));
+
+    /* adopted, so cleanup can delete it */
+    nsfs_set_profile(&unmarked, "shared").await.expect("adopting the empty bucket");
 }
 
 /// Reducing a profile is rejected once the bucket holds content, because
@@ -157,11 +167,12 @@ async fn test_profile_cannot_be_reduced_with_content() {
 
     /* empty, so the reduction is allowed:  the control for the rejection
      * below, which would otherwise pass against a setter that rejected
-     * everything */
-    if nsfs_set_profile(&bucket, "base").await.is_none() {
+     * everything.  Strong down to shared, since nothing goes to base. */
+    if nsfs_set_profile(&bucket, "strong").await.is_none() {
         eprintln!("profile endpoint unavailable;  nothing to check");
         return;
     }
+    nsfs_set_profile(&bucket, "shared").await.expect("an empty bucket reduces");
     nsfs_set_profile(&bucket, "strong").await.expect("profile should answer");
 
     client.put_object()
@@ -169,114 +180,43 @@ async fn test_profile_cannot_be_reduced_with_content() {
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
         .send().await.expect("put on a strong bucket");
 
-    assert!(nsfs_set_profile(&bucket, "base").await.is_none(),
-        "a bucket holding content was reduced to base");
+    assert!(nsfs_set_profile(&bucket, "shared").await.is_none(),
+        "a bucket holding content was reduced");
 
     let still = nsfs_get_profile(&bucket).await.expect("profile should answer");
     assert_eq!(still.get("profile").map(String::as_str), Some("strong"),
         "the rejected reduction changed the profile anyway");
 }
 
-/// A base bucket still serves S3.  The extensions are what it lacks, not
-/// the object interface -- if this broke, the base profile would be
-/// useless and the whole polarity would be wrong.
+/// An unmarked bucket is read and not written:  it has not been taken
+/// over, so a client's PUT is rejected with InvalidBucketState and a
+/// listing is served (DECISIONS.md 2026-10-21).
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_base_bucket_still_serves_s3() {
+async fn test_an_unmarked_bucket_takes_no_writes() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
-
-    let client = get_client();
-    let bucket = get_new_bucket(Some(&client)).await;
-
-    if nsfs_set_profile(&bucket, "base").await.is_none() {
-        eprintln!("profile endpoint unavailable;  nothing to check");
+    let Some(bucket) = unmarked_bucket().await else {
+        eprintln!("unmarked-bucket hint unavailable;  nothing to check");
         return;
-    }
+    };
+    let client = get_client();
 
-    client.put_object()
+    let put = client.put_object()
         .bucket(&bucket).key("obj")
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
-        .send().await.expect("put on a base bucket");
-
-    let got = client.get_object()
-        .bucket(&bucket).key("obj")
-        .send().await.expect("get on a base bucket");
-    let body = got.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"payload");
+        .send().await;
+    s3_tests_rs::assert_s3_err!(put, 409, "InvalidBucketState");
 
     let listed = client.list_objects_v2()
-        .bucket(&bucket).send().await.expect("list on a base bucket");
-    assert_eq!(listed.contents().len(), 1);
-}
+        .bucket(&bucket).send().await.expect("list on an unmarked bucket");
+    assert_eq!(listed.contents().len(), 0, "the rejected PUT left an object");
 
-/// Upgrading a base bucket rewrites what is in it, and says how much.
-///
-/// The whole thing through the two interfaces an operator has:  S3 to
-/// put the objects there, and the profile endpoint to move the bucket.
-/// A base bucket's objects are written in NooBaa's format by the
-/// driver, so this needs no tree laid down by hand -- the suite makes
-/// the before state with ordinary PUTs.
-#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
-#[tokio::test]
-async fn test_upgrade_reports_what_it_converted() {
-    let _guard = TestGuard::setup();
-    if !nsfs_only().await {
-        eprintln!("not nsfs;  nothing to check");
-        return;
-    }
-
-    let client = get_client();
-    let bucket = get_new_bucket(Some(&client)).await;
-
-    if nsfs_set_profile(&bucket, "base").await.is_none() {
-        eprintln!("profile endpoint unavailable;  nothing to check");
-        return;
-    }
-
-    for k in ["flat.bin", "deep/nested.bin", "deep/other.bin"] {
-        client.put_object()
-            .bucket(&bucket).key(k)
-            .content_type("text/plain")
-            .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
-            .send().await.expect("put on a base bucket");
-    }
-
-    let before = nsfs_get_profile(&bucket).await.expect("profile read");
-    assert_eq!(before.get("profile").map(String::as_str), Some("base"));
-    assert_eq!(before.get("converting").map(String::as_str), Some("false"),
-        "a base bucket is not converting;  it is simply in their format");
-
-    let up = nsfs_set_profile(&bucket, "strong").await
-        .expect("upgrading a base bucket");
-    assert_eq!(up.get("had_profile").map(String::as_str), Some("base"));
-    assert_eq!(up.get("profile").map(String::as_str), Some("strong"));
-    assert_eq!(up.get("converting").map(String::as_str), Some("false"),
-        "the upgrade did not report itself finished");
-    assert_eq!(up.get("converted.objects").map(String::as_str), Some("3"),
-        "the three objects were not counted");
-
-    let after = nsfs_get_profile(&bucket).await.expect("profile read");
-    assert_eq!(after.get("profile").map(String::as_str), Some("strong"));
-    assert_eq!(after.get("converting").map(String::as_str), Some("false"));
-
-    /* and the objects survived the rewrite, content type included */
-    for k in ["flat.bin", "deep/nested.bin", "deep/other.bin"] {
-        let got = client.get_object()
-            .bucket(&bucket).key(k)
-            .send().await.unwrap_or_else(|e| panic!("get {k} after upgrade: {e}"));
-        assert_eq!(got.content_type(), Some("text/plain"),
-            "{k} lost its content type in the rewrite");
-        let body = got.body.collect().await.unwrap().into_bytes();
-        assert_eq!(&body[..], b"payload", "{k}");
-    }
-
-    let listed = client.list_objects_v2()
-        .bucket(&bucket).send().await.expect("list after upgrade");
-    assert_eq!(listed.contents().len(), 3);
+    /* adopted, so cleanup can delete it */
+    nsfs_set_profile(&bucket, "shared").await.expect("adopting the empty bucket");
 }
 
 /// Asking for the profile a bucket is already in changes nothing, and
@@ -297,17 +237,15 @@ async fn test_reissuing_the_profile_is_a_no_op() {
     let client = get_client();
     let bucket = get_new_bucket(Some(&client)).await;
 
-    if nsfs_set_profile(&bucket, "base").await.is_none() {
-        eprintln!("profile endpoint unavailable;  nothing to check");
-        return;
-    }
     client.put_object()
         .bucket(&bucket).key("obj")
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
-        .send().await.expect("put on a base bucket");
+        .send().await.expect("put on a bucket this gateway made");
 
-    let first = nsfs_set_profile(&bucket, "strong").await.expect("upgrade");
-    assert_eq!(first.get("converted.objects").map(String::as_str), Some("1"));
+    if nsfs_set_profile(&bucket, "strong").await.is_none() {
+        eprintln!("profile endpoint unavailable;  nothing to check");
+        return;
+    }
 
     let again = nsfs_set_profile(&bucket, "strong").await
         .expect("asking for the profile it is already in");
@@ -317,101 +255,3 @@ async fn test_reissuing_the_profile_is_a_no_op() {
         "a settled bucket was walked again");
 }
 
-/// Conversion records the bucket's owner on an object that records
-/// none.
-///
-/// NooBaa's format has nowhere to put an ACL, so an object written to
-/// a base bucket records no owner, and it is its bucket owner's -- what
-/// NooBaa returns for every object, and what RGW returns for an object
-/// with no ACL (DECISIONS.md 2026-10-11).  Marking the bucket makes the
-/// recorded ACL the only source, so conversion writes that owner down.
-///
-/// Both reads are required to be the bucket's owner, from GetBucketAcl,
-/// and not merely each other:  an earlier reading answered with the
-/// file's uid on both sides, and equality alone could not tell.
-///
-/// **This is a control that can fail.**  A base bucket genuinely stores
-/// no ACL -- `disk_name(RGW_ATTR_ACL)` returns the empty string on that
-/// mapping -- so without the conversion's record the object comes out
-/// with no owner, and the second read fails.
-#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
-#[tokio::test]
-async fn test_conversion_records_the_bucket_owner() {
-    let _guard = TestGuard::setup();
-    if !nsfs_only().await {
-        eprintln!("not nsfs;  nothing to check");
-        return;
-    }
-    let f = features().await.unwrap();
-    if f.get_bool("extensions_default") != Some(true) {
-        eprintln!("reversible mode;  extending a bucket is rejected by design");
-        return;
-    }
-
-    let client = get_client();
-    let bucket = get_new_bucket(Some(&client)).await;
-
-    /* Reduce while empty:  a profile cannot be reduced on a bucket that
-     * holds content, and base is the only way to reach the state where
-     * an object is written without an ACL. */
-    if nsfs_set_profile(&bucket, "base").await.is_none() {
-        eprintln!("profile endpoint unavailable;  nothing to check");
-        return;
-    }
-
-    let key = "owner-survives-conversion";
-    let bucket_owner = client.get_bucket_acl()
-        .bucket(&bucket)
-        .send()
-        .await
-        .expect("the bucket's ACL")
-        .owner()
-        .and_then(|o| o.id())
-        .expect("the bucket has an owner")
-        .to_string();
-    client.put_object()
-        .bucket(&bucket)
-        .key(key)
-        .body(b"x".to_vec().into())
-        .send()
-        .await
-        .expect("a base bucket should accept a write");
-
-    let before = client.get_object_acl()
-        .bucket(&bucket)
-        .key(key)
-        .send()
-        .await
-        .expect("an object with no recorded ACL still has an owner");
-    let before_id = before.owner()
-        .and_then(|o| o.id())
-        .expect("GetObjectAcl returned no owner")
-        .to_string();
-    assert_eq!(before_id, bucket_owner,
-        "before conversion the object is not its bucket owner's");
-
-    nsfs_set_profile(&bucket, "shared").await
-        .expect("profile should answer");
-
-    let after = client.get_object_acl()
-        .bucket(&bucket)
-        .key(key)
-        .send()
-        .await
-        .expect("a converted object should still answer its ACL");
-    let after_id = after.owner()
-        .and_then(|o| o.id())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-
-    assert_eq!(after_id, bucket_owner,
-        "conversion did not record the bucket's owner:  before {before_id:?}, after {after_id:?}");
-
-    /* What it writes is RGW's default policy, not a bare owner.  An
-     * owner with no grants is a shape RGW never produces, and it would
-     * be more restrictive than the absence it replaced -- with no ACL
-     * at all, authorization falls through to the bucket. */
-    assert!(!after.grants().is_empty(),
-        "the captured ACL grants nobody anything, which is more restrictive \
-         than the no-ACL state it replaced");
-}
