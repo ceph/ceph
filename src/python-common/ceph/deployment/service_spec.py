@@ -1444,6 +1444,7 @@ class NFSServiceSpec(ServiceSpec):
                  cephfs_client_log_level: Optional[int] = None,
                  cephfs_client_log_dir: Optional[str] = None,
                  mem_stats_disable: bool = False,
+                 log_to_file: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1488,6 +1489,8 @@ class NFSServiceSpec(ServiceSpec):
         # Disables per-component memory-statistics capture in NFS_CORE_PARAM.
         # Applied at daemon startup only; requires daemon restart to take effect.
         self.mem_stats_disable = mem_stats_disable
+        # When True, NFS-Ganesha writes server logs to a file instead of STDERR.
+        self.log_to_file = log_to_file
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec

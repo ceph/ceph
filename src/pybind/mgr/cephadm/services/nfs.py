@@ -179,7 +179,11 @@ class NFSService(CephService):
             deps.append(f'enable_cephfs_client_log: {nfs_spec.enable_cephfs_client_log}')
             if nfs_spec.cephfs_client_log_level is not None:
                 deps.append(f'cephfs_client_log_level: {nfs_spec.cephfs_client_log_level}')
-            if nfs_spec.cephfs_client_log_dir is not None:
+            # cephfs_client_log_dir controls the bind-mount source, but when
+            # log_to_file is also True the per-daemon directory is used
+            # instead, so changing cephfs_client_log_dir has no effect and
+            # should not trigger a redeploy.
+            if nfs_spec.cephfs_client_log_dir is not None and not nfs_spec.log_to_file:
                 deps.append(f'cephfs_client_log_dir: {nfs_spec.cephfs_client_log_dir}')
         # TLS related
         if nfs_spec.tls_ktls:
@@ -204,6 +208,9 @@ class NFSService(CephService):
                 )
         if nfs_spec.mem_stats_disable:
             deps.append(f'mem_stats_disable: {nfs_spec.mem_stats_disable}')
+        # NFS-Ganesha server file logging (opt-in via spec)
+        if nfs_spec.log_to_file:
+            deps.append('log_to_file: True')
 
         return sorted(deps)
 
@@ -499,6 +506,7 @@ class NFSService(CephService):
                 'keyring': rgw_keyring,
             }
             config['enable_rdma'] = nfs_spec.enable_rdma
+            config['log_to_file'] = nfs_spec.log_to_file
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 

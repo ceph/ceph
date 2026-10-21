@@ -1653,3 +1653,61 @@ def test_nfs_choose_next_action_non_kmip_update_redeploys():
     )
     assert step.action is utils.Action.REDEPLOY
     assert step.send_signal_to_daemon is None
+
+
+def test_nfs_get_dependencies_log_to_file(cephadm_module: CephadmOrchestrator):
+    """log_to_file appears in deps only when True in the spec."""
+    nfs_svc = service_registry.get_service('nfs')
+
+    default_spec = NFSServiceSpec(service_id='foo')
+    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
+    assert not any(d.startswith('log_to_file:') for d in deps)
+
+    log_spec = NFSServiceSpec(service_id='foo', log_to_file=True)
+    deps = nfs_svc.get_dependencies(cephadm_module, log_spec)
+    assert 'log_to_file: True' in deps
+
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        log_spec,
+        curr_deps=deps,
+        last_deps=[],
+    )
+    assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_get_dependencies_log_to_file_unset_no_upgrade_churn(
+    cephadm_module: CephadmOrchestrator,
+):
+    """Existing daemons with no log_to_file dep must not see action after upgrade."""
+    nfs_svc = service_registry.get_service('nfs')
+    default_spec = NFSServiceSpec(service_id='foo')
+    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        default_spec,
+        curr_deps=deps,
+        last_deps=deps,
+    )
+    assert step.action is utils.Action.NO_ACTION
+
+
+def test_nfs_get_dependencies_log_to_file_with_cephfs_client_log(
+    cephadm_module: CephadmOrchestrator,
+):
+    """When both log_to_file and enable_cephfs_client_log are set,
+    cephfs_client_log_dir is excluded from deps since the log_to_file
+    bind mount takes precedence."""
+    nfs_svc = service_registry.get_service('nfs')
+    spec = NFSServiceSpec(
+        service_id='foo',
+        log_to_file=True,
+        enable_cephfs_client_log=True,
+        cephfs_client_log_dir='/custom/log/dir',
+    )
+    deps = nfs_svc.get_dependencies(cephadm_module, spec)
+    assert 'log_to_file: True' in deps
+    assert 'enable_cephfs_client_log: True' in deps
+    assert not any(d.startswith('cephfs_client_log_dir:') for d in deps)
