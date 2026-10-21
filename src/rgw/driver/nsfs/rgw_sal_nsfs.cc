@@ -8637,28 +8637,30 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
  * in the part's own file is what the nsfs assembly reads for a
  * diverted part, so both nsfs layouts complete it.
  */
-int NSFSBucket::convert_before_write(const DoutPrefixProvider* dpp,
-				     optional_yield y, nsfs::Directory* dir,
-				     const std::string& key)
+int NSFSBucket::admit_write(const DoutPrefixProvider* dpp,
+			    optional_yield y, nsfs::Directory* dir,
+			    const std::string& key)
 {
   nsfs::PathStrategy::DirectoryObject dobj{};
   if (!dir->directory_object(dpp, dobj)) {
     return 0;
   }
-  auto* theirs = xattr_fallback();
-  auto* their_paths = path_fallback();
-  if (!converting || !theirs || !their_paths) {
+  if (!converting) {
     ldpp_dout(dpp, 1) << "nsfs: rejecting a change to the directory object "
       << key << " in bucket " << get_name() << ":  it is in NooBaa's "
       << "format, and the bucket is not being converted" << dendl;
     return -EOPNOTSUPP;
   }
-  nsfs::ConvertProgress progress;
-  return convert_directory_object(dpp, y, dir->get_fd(), key,
-				  driver->get_fs_strategy(), xattr_strategy(),
-				  theirs, default_object_owner(dpp, y),
-				  their_paths, nullptr, progress,
-				  driver->no_chown_injected());
+  /* A write that needs a conversion first waits for it and converts
+   * nothing (DECISIONS.md 2026-10-21).  Here inside the mutation slot, so
+   * no conversion is running -- it would hold the gate -- and the one
+   * that stopped short of this object is resumed by its command or by
+   * the next adoption pass:  the write is answered with the retryable
+   * 503 rather than waiting for a resume nothing has started. */
+  ldpp_dout(dpp, 4) << "nsfs: the directory object " << key << " in bucket "
+    << get_name() << " has not been converted;  rejecting a write until "
+    << "the bucket's adoption reaches it" << dendl;
+  return -ERR_SERVICE_UNAVAILABLE;
 }
 
 int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
@@ -9141,6 +9143,45 @@ int NSFSDriver::reject_unadopted(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 4) << "nsfs: bucket " << b->get_name() << " is not adopted;"
     << "  a client write waits for adoption" << dendl;
   return -ERR_INVALID_BUCKET_STATE;
+}
+
+int NSFSDriver::wait_for_conversion(const DoutPrefixProvider* dpp,
+				    const std::string& bucket,
+				    const std::function<bool()>& done)
+{
+  if (done()) {
+    return 0;
+  }
+  std::unique_lock l{gate_lock};
+  if (gate_cond.wait_for(l, mutation_gate_wait, done)) {
+    return 0;
+  }
+  ldpp_dout(dpp, 4) << "nsfs: bucket " << bucket << " has not been converted "
+    << "this far;  rejecting a write after waiting "
+    << mutation_gate_wait.count() << "ms" << dendl;
+  return -ERR_SERVICE_UNAVAILABLE;
+}
+
+bool NSFSBucket::upload_awaits_conversion(const DoutPrefixProvider* dpp,
+					  const std::string& meta)
+{
+  if ((resolve_profile(dpp) < 0) || !converting) {
+    return false;
+  }
+  auto* theirs = mpu_fallback();
+  if (!theirs || (dir->open(dpp) < 0)) {
+    return false;
+  }
+  auto root = theirs->staging_root(dpp, dir->get_fd());
+  if (!root) {
+    return false;
+  }
+  std::string path = theirs->staging_dir_name(meta);
+  if (*root != ".") {
+    path = *root + "/" + path;
+  }
+  return ::faccessat(dir->get_fd(), path.c_str(), F_OK,
+		     AT_SYMLINK_NOFOLLOW) == 0;
 }
 
 NSFSMutationGuard::NSFSMutationGuard(const DoutPrefixProvider* dpp,
@@ -10671,7 +10712,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                       << dendl;
     return -EINVAL;
   }
-  ret = dobj->convert_before_write(dpp, y);
+  ret = dobj->admit_write(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -12093,7 +12134,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = convert_before_write(dpp, y);
+  int ret = admit_write(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -12201,7 +12242,7 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = convert_before_write(dpp, y);
+  int ret = admit_write(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -12314,7 +12355,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = convert_before_write(dpp, y);
+  int ret = admit_write(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -12782,8 +12823,8 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int NSFSObject::convert_before_write(const DoutPrefixProvider* dpp,
-				     optional_yield y)
+int NSFSObject::admit_write(const DoutPrefixProvider* dpp,
+			    optional_yield y)
 {
   const std::string& k = state.obj.key.name;
   if (k.empty() || (k.back() != '/') || !state.obj.key.ns.empty()) {
@@ -12813,7 +12854,7 @@ int NSFSObject::convert_before_write(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
-  ret = b->convert_before_write(dpp, y, leaf_dir, k);
+  ret = b->admit_write(dpp, y, leaf_dir, k);
   if (ret < 0) {
     return ret;
   }
@@ -12831,8 +12872,9 @@ int NSFSObject::convert_before_write(const DoutPrefixProvider* dpp,
 int NSFSObject::make_ent(ObjectType type)
 {
   /* A NooBaaDirectoryObject is for reading:  a writer needs the sentinel
-   * itself, and convert_before_write() has made it the object by the
-   * time the write is published. */
+   * itself, and admit_write() has rejected a write to one the
+   * bucket's adoption has not converted yet, so by the time a write is
+   * published the object is in RGW's format. */
   if (ent && !dynamic_cast<nsfs::NooBaaDirectoryObject*>(ent.get())) {
     return 0;
   }
@@ -13787,7 +13829,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     return mg.result();
   }
   {
-    const int cret = source->convert_before_write(dpp, y);
+    const int cret = source->admit_write(dpp, y);
     if (cret < 0) {
       return cret;
     }
@@ -14999,6 +15041,18 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
   if (mg.result() < 0) {
     return mg.result();
   }
+  /* An upload NooBaa staged that this bucket's adoption has not
+   * reached:  the guard waited out a running conversion, so the one that
+   * stopped short of it is resumed by its command or the next pass, and
+   * the write is answered with the retryable 503 rather than waiting in
+   * the slot (DECISIONS.md 2026-10-21). */
+  if (static_cast<NSFSBucket*>(bucket)->upload_awaits_conversion(
+	dpp, mp_obj.meta)) {
+    ldpp_dout(dpp, 4) << "nsfs: upload " << mp_obj.meta << " has not been "
+      << "converted;  rejecting until the bucket's adoption reaches it"
+      << dendl;
+    return -ERR_SERVICE_UNAVAILABLE;
+  }
   int ret;
 
   ret = load(dpp);
@@ -15036,9 +15090,21 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   if (mg.result() < 0) {
     return mg.result();
   }
+  /* An upload NooBaa staged that this bucket's adoption has not
+   * reached:  the guard waited out a running conversion, so the one that
+   * stopped short of it is resumed by its command or the next pass, and
+   * the write is answered with the retryable 503 rather than waiting in
+   * the slot (DECISIONS.md 2026-10-21). */
+  if (static_cast<NSFSBucket*>(bucket)->upload_awaits_conversion(
+	dpp, mp_obj.meta)) {
+    ldpp_dout(dpp, 4) << "nsfs: upload " << mp_obj.meta << " has not been "
+      << "converted;  rejecting until the bucket's adoption reaches it"
+      << dendl;
+    return -ERR_SERVICE_UNAVAILABLE;
+  }
   {
     const int cret =
-      static_cast<NSFSObject*>(target_obj)->convert_before_write(dpp, y);
+      static_cast<NSFSObject*>(target_obj)->admit_write(dpp, y);
     if (cret < 0) {
       return cret;
     }
@@ -15729,6 +15795,14 @@ int NSFSMultipartWriter::prepare(optional_yield y)
     if (gret < 0) {
       return gret;
     }
+    /* and an upload NooBaa staged, which this bucket's adoption has not
+     * reached, is waited for:  this writer stages in RGW's layout */
+    const std::string& meta = mp_cache_key.upload_meta;
+    const int wret = driver->wait_for_conversion(dpp, bucket->get_name(),
+      [this, &meta] { return !bucket->upload_awaits_conversion(dpp, meta); });
+    if (wret < 0) {
+      return wret;
+    }
   }
 
   /* Resolve and pin before anything else this operation does.
@@ -16281,7 +16355,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = obj->convert_before_write(rctx.dpp, rctx.y);
+  int ret = obj->admit_write(rctx.dpp, rctx.y);
   if (ret < 0) {
     return ret;
   }

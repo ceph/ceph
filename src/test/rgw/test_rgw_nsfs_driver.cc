@@ -8082,6 +8082,74 @@ TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
   EXPECT_EQ(read_all(obj), tree.payload);
 }
 
+/* An UploadPart into an upload NooBaa started, while the bucket's
+ * adoption is underway and has not reached that upload (D4 measurement
+ * 2, `inflight/base-write-damage.md`).
+ *
+ * The bucket is marked and converting, so its staging layout is RGW's,
+ * while the upload is still in NooBaa's.  Uploads are converted after the
+ * walk over objects, so stopping at the first upload event leaves exactly
+ * that state.  No client write converts anything:  the part waits, and
+ * with the conversion stopped it is answered with the retryable 503 and
+ * nothing is written (DECISIONS.md 2026-10-21).  Once adoption finishes
+ * the same part is taken, and the completion assembles all four. */
+TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionWaitsForIt)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.kind == nsfs::ConvertEvent::Kind::upload) ? -EINTR : 0;
+    };
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED,
+			   &stop, nullptr), -EINTR);
+  ASSERT_TRUE(b->is_converting()) << "the control:  adoption is underway";
+  ASSERT_TRUE(sf::is_directory(tree.staging))
+      << "the control:  the upload is still in NooBaa's staging";
+
+  /* the wait is the gate's bound;  shortened, as the gate's own tests do */
+  driver->set_gate_waits(std::chrono::milliseconds(20),
+			 std::chrono::milliseconds(20));
+  rgw_placement_rule placement;
+  const std::string extra(tree.part_size, 'z');
+  auto part = [&](rgw::sal::MultipartUpload* u) {
+    auto writer = u->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				&placement, tree.parts + 1,
+				std::to_string(tree.parts + 1));
+    return writer ? writer->prepare(null_yield) : -EINVAL;
+  };
+  {
+    auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+    const auto before = tree_snapshot(bucket_path());
+    EXPECT_EQ(part(upload.get()), -ERR_SERVICE_UNAVAILABLE)
+	<< "a part was taken into an upload the adoption had not reached";
+    EXPECT_EQ(tree_snapshot(bucket_path()), before)
+	<< "the waiting part wrote something";
+    std::map<int, std::string> none;
+    EXPECT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key, none),
+	      -ERR_SERVICE_UNAVAILABLE)
+	<< "the completion did not wait for the adoption";
+  }
+
+  /* adoption finishes;  the same part is taken, and all four complete */
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  auto after = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  write_mp_part(after.get(), acl_owner, &placement, tree.parts + 1, extra);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(after->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			      &truncated, null_yield), 0);
+  EXPECT_EQ(after->get_parts().size(), tree.parts + 1);
+  std::map<int, std::string> etags;
+  for (auto& [num, p] : after->get_parts()) {
+    etags[num] = p->get_etag();
+  }
+  ASSERT_EQ(complete_mp(bucket.get(), after.get(), owner, tree.key, etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload + extra);
+}
+
 /* get_info() on an upload they started.
  *
  * It decoded the nsfs record off the meta object and returned -EIO
@@ -8386,15 +8454,26 @@ TEST_F(NSFSConvertingBucketTest, ReadsTheirDirectoryObjects)
   EXPECT_EQ(c.listed_size, 9u);
 }
 
-/* A write to a directory object the sweep has not reached converts that
- * object first, so its effect is the effect after adoption
- * (DECISIONS.md 2026-10-13).  Each case is read once the write is done
- * and again once the sweep has run, and the two must agree. */
-TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepStaysDeleted)
+/* A write to a directory object the sweep has not reached waits for the
+ * sweep and converts nothing (DECISIONS.md 2026-10-21, correcting
+ * 2026-10-13):  before the sweep it is answered with the retryable 503
+ * and the object is unchanged;  after it, the same write takes effect.
+ * Each case reads the object at all three points. */
+TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepWaitsForIt)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
 
+  for (const char* k : {"e/", "c/"}) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0),
+	      -ERR_SERVICE_UNAVAILABLE) << k;
+    EXPECT_TRUE(client_view(bucket.get(), env->dpp, k).exists)
+	<< k << " was deleted before the sweep reached it";
+  }
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
   for (const char* k : {"e/", "c/"}) {
     auto obj = bucket->get_object(rgw_obj_key(k));
     EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0), 0) << k;
@@ -8402,74 +8481,61 @@ TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepStaysDeleted)
     EXPECT_FALSE(v.exists) << k << " survived its delete";
     EXPECT_FALSE(v.listed) << k << " listed after its delete";
   }
-
-  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
-  for (const char* k : {"e/", "c/"}) {
-    const ClientView v = client_view(bucket.get(), env->dpp, k);
-    EXPECT_FALSE(v.exists) << k << " came back with the sweep";
-    EXPECT_FALSE(v.listed) << k << " listed again after the sweep";
-  }
 }
 
-TEST_F(NSFSConvertingBucketTest, APutBeforeTheSweepIsTheObject)
+TEST_F(NSFSConvertingBucketTest, APutBeforeTheSweepWaitsForIt)
 {
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
   put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "c/", "new body",
-	     "text/x-new");
-
+	     "text/x-new", -ERR_SERVICE_UNAVAILABLE);
   const ClientView v0 = client_view(bucket.get(), env->dpp, "c/");
   ASSERT_TRUE(v0.exists);
-  EXPECT_EQ(v0.body, "new body");
-  EXPECT_EQ(v0.size, 8u);
-  EXPECT_EQ(v0.content_type, "text/x-new");
-  EXPECT_EQ(v0.probe, "") << "the replaced object's metadata survived the PUT";
-  EXPECT_TRUE(v0.listed);
-  EXPECT_EQ(v0.listed_size, 8u);
+  EXPECT_EQ(v0.body, "dir bytes") << "the PUT took effect before the sweep";
+  EXPECT_EQ(v0.probe, "c");
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "c/", "new body",
+	     "text/x-new");
   const ClientView v1 = client_view(bucket.get(), env->dpp, "c/");
-  EXPECT_EQ(v1.exists, v0.exists);
-  EXPECT_EQ(v1.body, v0.body);
-  EXPECT_EQ(v1.size, v0.size);
-  EXPECT_EQ(v1.content_type, v0.content_type);
-  EXPECT_EQ(v1.probe, v0.probe);
-  EXPECT_EQ(v1.etag, v0.etag);
-  EXPECT_EQ(v1.mtime, v0.mtime);
-  EXPECT_EQ(v1.listed, v0.listed);
-  EXPECT_EQ(v1.listed_size, v0.listed_size);
-  EXPECT_EQ(v1.listed_etag, v0.listed_etag);
+  ASSERT_TRUE(v1.exists);
+  EXPECT_EQ(v1.body, "new body");
+  EXPECT_EQ(v1.size, 8u);
+  EXPECT_EQ(v1.content_type, "text/x-new");
+  EXPECT_EQ(v1.probe, "") << "the replaced object's metadata survived the PUT";
+  EXPECT_TRUE(v1.listed);
+  EXPECT_EQ(v1.listed_size, 8u);
 }
 
-TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepSurvivesIt)
+TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepWaitsForIt)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
 
-  auto obj = bucket->get_object(rgw_obj_key("e/"));
-  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
   Attrs attrs;
   bufferlist v;
   v.append("changed");
   attrs[RGW_ATTR_META_PREFIX "probe"] = v;
-  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
-			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
-
-  const ClientView v0 = client_view(bucket.get(), env->dpp, "e/");
-  ASSERT_TRUE(v0.exists);
-  EXPECT_EQ(v0.probe, "changed");
-  EXPECT_EQ(v0.content_type, "text/x-e") << "the write lost the object's other attributes";
-  EXPECT_TRUE(v0.listed);
+  {
+    auto obj = bucket->get_object(rgw_obj_key("e/"));
+    ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+    EXPECT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+				 rgw::sal::FLAG_LOG_OP, rgw_user()),
+	      -ERR_SERVICE_UNAVAILABLE);
+  }
+  EXPECT_EQ(client_view(bucket.get(), env->dpp, "e/").probe, "e")
+      << "the attribute was written before the sweep";
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
+  auto obj = bucket->get_object(rgw_obj_key("e/"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP, rgw_user()), 0);
   const ClientView v1 = client_view(bucket.get(), env->dpp, "e/");
-  EXPECT_EQ(v1.exists, v0.exists);
-  EXPECT_EQ(v1.probe, v0.probe);
-  EXPECT_EQ(v1.content_type, v0.content_type);
-  EXPECT_EQ(v1.etag, v0.etag);
-  EXPECT_EQ(v1.mtime, v0.mtime);
-  EXPECT_EQ(v1.listed, v0.listed);
+  ASSERT_TRUE(v1.exists);
+  EXPECT_EQ(v1.probe, "changed");
+  EXPECT_EQ(v1.content_type, "text/x-e") << "the write lost the object's other attributes";
+  EXPECT_TRUE(v1.listed);
 }
 
 /* A file with no recorded id is the null version:  it was placed
