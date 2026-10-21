@@ -307,6 +307,27 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
       ],
+      metrics_push_enabled: [false],
+      metrics_push_interval: [
+        3600,
+        [
+          CdValidators.composeIf({ service_type: 'rgw', metrics_push_enabled: true }, [
+            Validators.required,
+            CdValidators.number(false),
+            Validators.min(60)
+          ])
+        ]
+      ],
+      metrics_push_timeout: [
+        300,
+        [
+          CdValidators.composeIf({ service_type: 'rgw', metrics_push_enabled: true }, [
+            Validators.required,
+            CdValidators.number(false),
+            Validators.min(30)
+          ])
+        ]
+      ],
       realm_name: [null],
       zonegroup_name: [null],
       zone_name: [null],
@@ -827,6 +848,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 response[0].spec?.qat
               );
               this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
+              if (response[0].spec?.metrics_push_enabled) {
+                this.serviceForm.get('metrics_push_enabled').setValue(true);
+                this.serviceForm
+                  .get('metrics_push_interval')
+                  .setValue(response[0].spec?.metrics_push_interval ?? 3600);
+                this.serviceForm
+                  .get('metrics_push_timeout')
+                  .setValue(response[0].spec?.metrics_push_timeout ?? 300);
+              }
               if (response[0].spec?.zonegroup_hostnames?.length) {
                 this.serviceForm
                   .get('zonegroup_hostnames')
@@ -1640,6 +1670,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
           }
           serviceSpec['ssl'] = values['ssl'];
+          if (values['metrics_push_enabled']) {
+            serviceSpec['metrics_push_enabled'] = true;
+            serviceSpec['metrics_push_interval'] = values['metrics_push_interval'];
+            serviceSpec['metrics_push_timeout'] = values['metrics_push_timeout'];
+          }
           if (values['virtual_host_enabled'] && values['zonegroup_hostnames']?.length > 0) {
             serviceSpec['zonegroup_hostnames'] = values['zonegroup_hostnames'];
           }

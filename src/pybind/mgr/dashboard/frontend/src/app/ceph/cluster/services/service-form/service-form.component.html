@@ -522,6 +522,88 @@
           </ng-template>
         </div>
 
+        <!-- metrics push -->
+        <div class="form-item">
+          <cds-checkbox
+            i18n-label
+            formControlName="metrics_push_enabled"
+            id="metrics_push_enabled"
+          >
+            Enable metrics push
+            <cd-help-text i18n>
+              Periodically push RGW usage metrics to the Prometheus pushgateway.
+            </cd-help-text>
+          </cds-checkbox>
+        </div>
+        @if (serviceForm.controls.metrics_push_enabled.value) {
+          <div class="form-item">
+            <cds-number
+              label="Metrics push interval (seconds)"
+              i18n-label
+              formControlName="metrics_push_interval"
+              id="metrics_push_interval"
+              min="60"
+              helperText="How often metrics are pushed. Minimum 60 seconds."
+              i18n-helperText
+              [invalid]="
+                serviceForm.controls.metrics_push_interval.invalid &&
+                serviceForm.controls.metrics_push_interval.dirty
+              "
+              [invalidText]="invalidMetricsPushIntervalError"
+            >
+            </cds-number>
+            <ng-template #invalidMetricsPushIntervalError>
+              @if (serviceForm.showError('metrics_push_interval', frm, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
+              @if (serviceForm.showError('metrics_push_interval', frm, 'min')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value must be at least 60.</span
+                >
+              }
+            </ng-template>
+          </div>
+          <div class="form-item">
+            <cds-number
+              label="Metrics push timeout (seconds)"
+              i18n-label
+              formControlName="metrics_push_timeout"
+              id="metrics_push_timeout"
+              min="30"
+              helperText="Timeout for each metrics push. Minimum 30 seconds."
+              i18n-helperText
+              [invalid]="
+                serviceForm.controls.metrics_push_timeout.invalid &&
+                serviceForm.controls.metrics_push_timeout.dirty
+              "
+              [invalidText]="invalidMetricsPushTimeoutError"
+            >
+            </cds-number>
+            <ng-template #invalidMetricsPushTimeoutError>
+              @if (serviceForm.showError('metrics_push_timeout', frm, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
+              @if (serviceForm.showError('metrics_push_timeout', frm, 'min')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value must be at least 30.</span
+                >
+              }
+            </ng-template>
+          </div>
+        }
+
         @if (!rgwModuleEnabled) {
           <cd-alert-panel
             type="warning"
