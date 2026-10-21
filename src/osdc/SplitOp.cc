@@ -996,6 +996,12 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
+  // _calc_target() may route the op to another pool with a different layout.
+  if (pi->is_migrating()) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: pool is migrating" << dendl;
+    return false;
+  }
+
   auto [validated, single_op] = validate(op, objecter, pi, cct);
 
   if (!validated) {
