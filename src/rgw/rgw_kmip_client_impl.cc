@@ -10,6 +10,7 @@
 #include "common/errno.h"
 #include "rgw_common.h"
 #include "rgw_kmip_client.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_kmip_client_impl.h"
 
 #include <openssl/err.h>
@@ -333,6 +334,7 @@ RGWKmipHandles::entry()
       if (saved_kmip.empty())
 	break;
     } else {
+      ceph_heap_mark_thread_temporarily_idle();
       cleaner_cond.wait_for(lock, std::chrono::seconds(MAXIDLE));
     }
     mono_time now = mono_clock::now();
