@@ -4806,10 +4806,11 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   });
   attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
-  rgw_placement_rule* ru;
-  ru = &placement;
   rgw::sal::Attrs mpu_attrs; // don't overwrite the target object attrs we are updating
-  ret = RadosMultipartUpload::get_info(dpp, y, &ru, &mpu_attrs);
+  ret = get_info(dpp, y, nullptr, &mpu_attrs);
+  if (ret < 0) {
+    return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
+  }
 
   if (upload_information.obj_retention_exist) {
     bufferlist obj_retention_bl;
