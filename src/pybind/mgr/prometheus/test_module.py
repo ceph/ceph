@@ -213,8 +213,6 @@ class GetHealthMessageTest(TestCase):
             'health_detail': Metric('gauge', 'health_detail', '', HEALTHCHECK_DETAIL),
         }
         mod.health_history = HealthHistory(mgr)
-        mod._process_cert_health_detail = (
-            lambda *a: Module._process_cert_health_detail(mod, *a))
         return mod
 
     def _run(self, mod, health):
@@ -369,6 +367,28 @@ class GetHealthMessageTest(TestCase):
         """No history means no health_detail series at all."""
         mod = self._make_mod()
         self.assertEqual(self._run(mod, {'status': 'HEALTH_OK', 'checks': {}}), {})
+
+    def test_cert_check_flows_through_generic_path(self):
+        """CEPHADM_CERT_WARNING is handled by the generic loop, not a separate method.
+
+        One series is emitted per check name using summary.message, consistent
+        with all other health checks. The detail[] entries are not iterated.
+        """
+        mod = self._make_mod()
+        value = self._run(mod, {'status': 'HEALTH_WARN', 'checks': {
+            'CEPHADM_CERT_WARNING': {
+                'severity': 'HEALTH_WARN',
+                'summary': {'message': 'Certificate expires soon', 'count': 1},
+                'detail': [
+                    {'message': 'mgr.a: cert expires in 7 days'},
+                    {'message': 'mgr.b: cert expires in 3 days'},
+                ],
+            }}})
+        # Exactly one series — detail[] entries are NOT iterated
+        self.assertEqual(
+            value,
+            {('CEPHADM_CERT_WARNING', 'HEALTH_WARN', 'Certificate expires soon'): 1}
+        )
 
 
 class ThreadSafeLRUCacheDictTest(TestCase):
