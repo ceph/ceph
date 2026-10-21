@@ -1284,6 +1284,7 @@ class TestIngressService:
                 '[client.nfs.foo]\n'
                 'key = None\n'
             ),
+            'log_to_file': False,
             'namespace': 'foo',
             'pool': '.nfs',
             'rgw': {

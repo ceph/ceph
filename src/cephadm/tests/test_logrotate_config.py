@@ -17,7 +17,8 @@ def test_cluster_logrotate_config(cephadm_fs):
     cephadm_fs.create_dir(ctx.logrotate_dir)
 
     expected_cluster_logrotate_file = """# created by cephadm
-/var/log/ceph/5dcc9af0-7cd3-11ee-9e84-525400babd0a/*.log {
+/var/log/ceph/5dcc9af0-7cd3-11ee-9e84-525400babd0a/*.log
+/var/log/ceph/5dcc9af0-7cd3-11ee-9e84-525400babd0a/*/*.log {
     rotate 7
     daily
     compress

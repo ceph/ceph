@@ -38,6 +38,8 @@ def nfs_json(**kwargs):
         result["enable_cephfs_client_log"] = True
     if kwargs.get("cephfs_client_log_dir"):
         result["cephfs_client_log_dir"] = kwargs["cephfs_client_log_dir"]
+    if kwargs.get("log_to_file"):
+        result["log_to_file"] = True
     return result
 
 
@@ -148,6 +150,21 @@ def test_nfsganesha_container_mounts():
             cmounts["/var/tmp/keyring.rgw"]
             == "/var/lib/ceph/radosgw/ceph-jsmith/keyring:z"
         )
+
+
+def test_nfsganesha_container_mounts_log_to_file():
+    with with_cephadm_ctx([]) as ctx:
+        ctx.log_dir = "/var/log/ceph"
+        nfsg = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            nfs_json(pool=True, files=True, log_to_file=True),
+        )
+        mounts = {}
+        nfsg.customize_container_mounts(ctx, mounts)
+        expected_log_dir = f"/var/log/ceph/{SAMPLE_UUID}/nfs.fred"
+        assert mounts[expected_log_dir] == "/var/log/ceph:z"
 
 
 def test_nfsganesha_container_mounts_cephfs_client_log():
@@ -292,6 +309,20 @@ def test_nfsganesha_get_daemon_args():
         )
         args = nfsg.get_daemon_args()
         assert args == ["-F", "-L", "STDERR"]
+
+
+def test_nfsganesha_get_daemon_args_log_to_file():
+    config = good_nfs_json()
+    config['log_to_file'] = True
+    with with_cephadm_ctx([]) as ctx:
+        nfsg = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            config,
+        )
+        args = nfsg.get_daemon_args()
+        assert args == ["-F", "-L", "/var/log/ceph/ganesha.log"]
 
 
 @pytest.mark.parametrize(
