@@ -2562,6 +2562,35 @@ Cache::replay_delta(
     lognode_delta_t d;
     auto iter = delta.bl.cbegin();
     decode(d, iter);
+    if (d.op == lognode_delta_t::op_t::FLUSH) {
+      assert(d.flushed_through != JOURNAL_SEQ_NULL);
+      auto oid_it = pending_lognode_deltas_by_oid.find(d.oid);
+      if (oid_it != pending_lognode_deltas_by_oid.end()) {
+	auto& deltas = oid_it->second;
+	for (auto it = deltas.begin(); it != deltas.end();) {
+	  if (it->committed_seq <= d.flushed_through) {
+	    auto seq_it = pending_lognode_deltas_by_seq.find(
+	      it->committed_seq);
+	    ceph_assert(
+	      seq_it != pending_lognode_deltas_by_seq.end());
+	    auto& oids = seq_it->second;
+	    auto found = std::find(oids.begin(), oids.end(), d.oid);
+	    ceph_assert(found != oids.end());
+	    oids.erase(found);
+	    if (oids.empty()) {
+	      pending_lognode_deltas_by_seq.erase(seq_it);
+	    }
+	    it = deltas.erase(it);
+	  } else {
+	    ++it;
+	  }
+	}
+      }
+      // FLUSH marker itself is not a pending operation.
+      return replay_delta_ertr::make_ready_future<
+	std::pair<bool, CachedExtentRef>>(
+	  std::make_pair(true, nullptr));
+    }
     d.committed_seq = journal_seq;
     pending_lognode_deltas_by_seq[journal_seq].push_back(d.oid);
     pending_lognode_deltas_by_oid[d.oid].emplace_back(std::move(d));

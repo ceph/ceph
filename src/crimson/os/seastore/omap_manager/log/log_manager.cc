@@ -117,12 +117,15 @@ LogManager::flush_logs(
   Transaction &t) 
 {
   auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, true);
+  journal_seq_t flushed_through = JOURNAL_SEQ_NULL;
   size_t last_idx_to_delete = 0;
   if (!pending) {
     co_return;
   }
   auto& deltas = pending->first;
   last_idx_to_delete = pending->second;
+  // Last journal sequence actually applied to the LogNode.
+  flushed_through = deltas.back().committed_seq;
   co_await merge_deltas(log_root, t, deltas);
 
   lognode_delta_t delta;
@@ -133,6 +136,7 @@ LogManager::flush_logs(
     delta.last_idx_to_delete = last_idx_to_delete;
   }
   delta.trans_id = t.get_trans_id();
+  delta.flushed_through = flushed_through;
   t.add_lognode_delta(std::move(delta));
   co_return;
 }
