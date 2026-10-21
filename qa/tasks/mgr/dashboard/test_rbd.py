@@ -772,8 +772,12 @@ class RbdTest(DashboardTestCase):
                           metadata={'key1': 'val1'})
         self.assertStatus(201)
 
+        # Write a fixed non-zero byte: by default rbd bench fills its whole
+        # write buffer with one random byte, which is 0x00 in 1 run of 256,
+        # and copying all-zero data correctly leaves the copy sparse, so its
+        # disk_usage (0) wouldn't match the source's.
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M',
-                       'rbd/coimg'])
+                       '--pattern-byte', '1', 'rbd/coimg'])
 
         self.copy_image('rbd', None, 'coimg', 'rbd_iscsi', None, 'coimg-copy',
                         features=["layering", "fast-diff", "exclusive-lock",
