@@ -21,6 +21,10 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
     f->open_object_section("core_pgs");
     f->dump_int("core", i.first);
     f->dump_int("num_pgs", i.second);
+    if (auto p = core_to_num_primaries.find(i.first);
+        p != core_to_num_primaries.end()) {
+      f->dump_int("num_primary_pgs", p->second);
+    }
     f->close_section();
   }
 
@@ -60,7 +64,8 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
 seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_create_pg_mapping(
   spg_t pgid,
   core_id_t core_expected,
-  store_index_t store_index)
+  store_index_t store_index,
+  bool is_primary)
 {
   LOG_PREFIX(PGShardMapping::get_or_create_pg_mapping);
   auto find_iter = pg_to_core.find(pgid);
@@ -77,7 +82,8 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
     DEBUG("calling primary to add mapping for pg {} to the expected core {}",
           pgid, core_expected);
     return container().invoke_on(
-        0, [pgid, core_expected, store_index, FNAME, this](auto &primary_mapping) {
+        0, [pgid, core_expected, store_index, is_primary, FNAME,
+            this](auto &primary_mapping) {
       auto core_to_update = core_expected;
       auto shard_index_update = store_index;
       auto find_iter = primary_mapping.pg_to_core.find(pgid);
@@ -111,7 +117,26 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
         std::map<core_id_t, unsigned>::iterator count_iter;
         std::map<core_id_t, std::map<unsigned, unsigned>>::iterator core_shard_iter;
         std::map<unsigned, unsigned>::iterator shard_iter;
-        if (core_expected == NULL_CORE) {
+        if (core_expected == NULL_CORE && is_primary) {
+          assert(store_index == NULL_STORE_INDEX);
+          const auto &num_pgs = primary_mapping.core_to_num_pgs;
+          auto pgs_on = [&num_pgs](core_id_t core) {
+            auto iter = num_pgs.find(core);
+            return iter == num_pgs.end() ? 0u : iter->second;
+          };
+          auto prim_iter = std::min_element(
+            primary_mapping.core_to_num_primaries.begin(),
+            primary_mapping.core_to_num_primaries.end(),
+            [&pgs_on](const auto &left, const auto &right) {
+              return std::make_pair(left.second, pgs_on(left.first)) <
+                     std::make_pair(right.second, pgs_on(right.first));
+            }
+          );
+          ceph_assert_always(
+            prim_iter != primary_mapping.core_to_num_primaries.end());
+          core_to_update = prim_iter->first;
+          count_iter = primary_mapping.core_to_num_pgs.find(core_to_update);
+        } else if (core_expected == NULL_CORE) {
           assert(store_index == NULL_STORE_INDEX);
           count_iter = std::min_element(
             primary_mapping.core_to_num_pgs.begin(),
@@ -162,6 +187,16 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
               shard_iter = core_shard_iter->second.find(shard_index_update);
             }
             ++(shard_iter->second);
+          }
+        }
+        // count the core stored in pg_to_core, which the alien remap above
+        // may have changed, so remove_pg_mapping() decrements the same entry
+        if (is_primary) {
+          auto prim_iter =
+            primary_mapping.core_to_num_primaries.find(core_to_update);
+          if (prim_iter != primary_mapping.core_to_num_primaries.end()) {
+            ++(prim_iter->second);
+            primary_mapping.primary_pgs.insert(pgid);
           }
         }
         [[maybe_unused]] auto [insert_iter, inserted] =
@@ -236,6 +271,14 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     assert(count_iter != primary_mapping.core_to_num_pgs.end());
     assert(count_iter->second > 0);
     --(count_iter->second);
+    if (primary_mapping.primary_pgs.erase(pgid)) {
+      auto prim_iter =
+        primary_mapping.core_to_num_primaries.find(find_iter->second.first);
+      ceph_assert_always(
+        prim_iter != primary_mapping.core_to_num_primaries.end());
+      assert(prim_iter->second > 0);
+      --(prim_iter->second);
+    }
 
     auto core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(find_iter->second.first);
     auto shard_iter = core_shard_iter->second.find(find_iter->second.second);
