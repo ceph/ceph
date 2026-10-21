@@ -7116,6 +7116,10 @@ void Monitor::try_engage_stretch_mode()
     stretch_bucket_divider = osdmon()->osdmap.
       crush->get_type_name(stretch_divider_id);
     disconnect_disallowed_stretch_sessions();
+    // a zone lost while stretch mode was off was not looked for, and the
+    // buckets found dead before it went off are stale
+    dead_mon_buckets.clear();
+    do_stretch_mode_election_work();
   }
 }
 struct CMonDisableStretchMode : public Context {
