@@ -46,7 +46,6 @@ def parse_timestamp(ts: str) -> datetime:
     date = ts_parser(ts)
     # normalize any non utc timezone to utc. If no tzinfo is supplied, assume
     # its already utc
-    # import pdb; pdb.set_trace()
     if date.tzinfo is not timezone.utc and date.tzinfo is not None:
         date = date.astimezone(timezone.utc)
     return date
