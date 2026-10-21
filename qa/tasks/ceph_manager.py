@@ -3417,6 +3417,17 @@ class CephManager:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
 
+    def log_health_detail(self):
+        """
+        Best-effort dump of 'ceph health detail' to the log, to aid
+        debugging; never raises.
+        """
+        try:
+            out = self.raw_cluster_cmd('health', 'detail', timeoutcmd=60)
+            self.log('health detail:\n{h}'.format(h=out))
+        except Exception:
+            log.exception('failed to get ceph health detail')
+
     def wait_until_healthy(self, timeout=None, expected_checks=[]):
         self.log("wait_until_healthy")
         start = time.time()
@@ -3441,6 +3452,7 @@ class CephManager:
                 break
             if timeout is not None:
                 if timeout < (time.time() - start):
+                    self.log_health_detail()
                     what = ", ".join(unhealthy)
                     err = f"timeout {timeout}s expired waiting for healthy cluster with these unhealthy checks: {what}"
                     raise RuntimeError(err)
