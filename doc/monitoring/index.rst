@@ -316,6 +316,9 @@ Generic Metrics
     (stable)"``
   * ``hostname``: Name of the host where the daemon runs. Example:
     ``hostname="cephtest-node-00.cephlab.com"``
+  * ``zone_id``: ID of the RGW zone the daemon serves. Matches the ``zone``
+    label of the ``ceph_rgw_bucket_usage_*`` metrics. Example:
+    ``zone_id="e2471ec1-6da5-4aaa-be5a-1f25f0929acc"``
   * ``ceph_rgw_req``: Number of requests processed by the daemon
     (``GET`` + ``PUT`` + ``DELETE``).  Useful for detecting bottlenecks and
     optimizing load distribution.
