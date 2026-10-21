@@ -2766,6 +2766,30 @@ TEST(pg_history_t, merge_vulnerability_onset_redegrade_after_close)
   ASSERT_EQ(t2, local.last_degraded);
 }
 
+TEST(pg_history_t, merge_vulnerability_onset_ignores_peer_last_clean)
+{
+  // A peer on older code stamps last_clean on every clean publish, so its
+  // last_clean can be later than an onset that no OSD has recorded yet.
+  // That must not hide the open window: only vuln_window_reported marks a
+  // window as recorded. last_clean is still max-merged for older peers.
+  utime_t t0(100, 0), t1(150, 0), t2(200, 0);
+  pg_history_t local;
+  local.last_clean = t0;
+  local.vuln_window_reported = t0;
+  local.last_degraded = t1; // open since t1, not yet recorded
+
+  pg_history_t peer;
+  peer.last_clean = t2; // a clean stamp later than the onset
+  peer.vuln_window_reported = t0;
+  peer.last_degraded = t0; // not open on the peer
+
+  ASSERT_TRUE(local.merge(peer));
+  EXPECT_EQ(t1, local.last_degraded)
+      << "the open onset must survive a peer's later last_clean";
+  EXPECT_EQ(t0, local.vuln_window_reported);
+  EXPECT_EQ(t2, local.last_clean);
+}
+
 TEST(pg_history_t, merge_vuln_window_reported_is_plain_max)
 {
   // Unlike the onset, vuln_window_reported is a genuine monotonic marker --
