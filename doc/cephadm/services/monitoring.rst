@@ -17,8 +17,8 @@ metrics on cluster utilization and performance.  Ceph users have three options:
    not be available.
 
 The monitoring stack consists of `Prometheus <https://prometheus.io/>`_,
-Prometheus exporters (:ref:`mgr-prometheus`, `Node exporter
-<https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus
+Prometheus exporters (:ref:`mgr-prometheus`, the ``ceph-exporter`` daemon and
+`Node exporter <https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus
 Alertmanager <https://prometheus.io/docs/alerting/alertmanager/>`_ and `Grafana
 <https://grafana.com/>`_.
 
@@ -52,6 +52,13 @@ cluster (which had no monitoring stack) to cephadm management.)
 To set up monitoring on a Ceph cluster that has no monitoring, follow the
 steps below:
 
+#. Deploy a ceph-exporter service on every host. It exports the performance
+   counters of the Ceph daemons on each host:
+
+   .. prompt:: bash #
+
+     ceph orch apply ceph-exporter
+
 #. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization:
 
    .. prompt:: bash #
@@ -82,6 +89,18 @@ steps below:
    .. prompt:: bash #
 
      ceph orch apply grafana
+
+It might take a minute or two for the services to be deployed. After they
+have been deployed, ``ceph orch ls`` lists them:
+
+.. prompt:: bash #
+
+   ceph orch ls
+
+The columns are ``NAME``, ``PORTS``, ``RUNNING``, ``REFRESHED``, ``AGE`` and
+``PLACEMENT``.
+
+.. _cephadm-monitoring-stack-security:
 
 Enabling Security for the Monitoring Stack
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -202,8 +221,8 @@ Default Images
 ~~~~~~~~~~~~~~
 
 *The information in this section was developed by Eugen Block in a thread on
-the [ceph-users] mailing list in April of 2024. The thread can be viewed here:
-https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/thread/QGC66QIFBKRTPZAQMQEYFXOGZJ7RLWBN/*
+the [ceph-users] mailing list in April of 2024.* See the `mailing list thread
+<https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/thread/QGC66QIFBKRTPZAQMQEYFXOGZJ7RLWBN/>`_.
 
 The cephadm Manager module copies the ``cephadm`` binary to each managed host
 as ``/var/lib/ceph/{FSID}/cephadm.{DIGEST}``. ``{DIGEST}`` is the SHA-256 hash
@@ -238,6 +257,7 @@ configuration. The following configuration options are available:
 - ``container_image_alertmanager``
 - ``container_image_node_exporter``
 - ``container_image_loki``
+- ``container_image_alloy`` (Umbrella 21 and later releases)
 - ``container_image_promtail``
 - ``container_image_haproxy``
 - ``container_image_keepalived``
@@ -348,6 +368,7 @@ overridden. These are the names to be used when storing with ``ceph config-key s
 
 - ``services/alertmanager/alertmanager.yml``
 - ``services/alertmanager/web.yml``
+- ``services/alloy``
 - ``services/grafana/ceph-dashboard.yml``
 - ``services/grafana/grafana.ini``
 - ``services/ingress/haproxy.cfg``
@@ -370,6 +391,7 @@ You can look up the file templates that are currently used by cephadm in
 
 - ``services/alertmanager/alertmanager.yml.j2``
 - ``services/alertmanager/web.yml.j2``
+- ``services/alloy.j2``
 - ``services/grafana/ceph-dashboard.yml.j2``
 - ``services/grafana/grafana.ini.j2``
 - ``services/ingress/haproxy.cfg.j2``
@@ -445,8 +467,9 @@ cluster.
 
      ceph mgr module enable prometheus
 
-  By default, ceph-mgr presents Prometheus metrics on port 9283 on each host
-  running a ceph-mgr daemon.  Configure Prometheus to scrape these.
+  By default, the active ceph-mgr daemon serves Prometheus metrics on port 9283.
+  Standby ceph-mgr daemons listen on the same port but return no metrics, so
+  configure Prometheus to scrape every host that runs a ceph-mgr daemon.
 
 To make this integration easier, cephadm provides a service discovery endpoint at
 ``http://<mgr-ip>:8765/sd/``. This endpoint can be used by an external
@@ -499,6 +522,7 @@ To disable monitoring and remove the software that supports it, run the followin
   ceph orch rm prometheus
   ceph orch rm node-exporter
   ceph orch rm alertmanager
+  ceph orch rm ceph-exporter
   ceph mgr module disable prometheus
 
 By default, cephadm moves Prometheus data aside under ``<fsid>/removed/`` on the
@@ -566,16 +590,6 @@ issue the following command:
 .. prompt:: bash #
 
      ceph dashboard set-grafana-frontend-api-url <grafana-server-api>
-
-It might take a minute or two for services to be deployed. After the
-services have been deployed, ``ceph orch ls`` lists them:
-
-.. prompt:: bash #
-
-  ceph orch ls
-
-The columns are ``NAME``, ``PORTS``, ``RUNNING``, ``REFRESHED``, ``AGE`` and
-``PLACEMENT``.
 
 Configuring SSL/TLS for Grafana
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
