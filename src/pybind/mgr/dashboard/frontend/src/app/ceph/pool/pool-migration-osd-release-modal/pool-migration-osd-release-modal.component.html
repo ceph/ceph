@@ -1,0 +1,53 @@
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3
+      cdsModalHeaderHeading
+      modal-primary-focus
+      i18n
+    >
+      Cannot migrate pool
+    </h3>
+  </cds-modal-header>
+  <section cdsModalContent>
+    <p
+      class="cds--type-body-01 cds--mb-05"
+      i18n
+    >
+      Pool migration is currently unavailable because not every OSD of this cluster is upgraded to
+      umbrella release or newer.
+    </p>
+    <div class="cds--mb-05">
+      <a
+        cdsLink
+        class="cds--type-body-01"
+        data-testid="upgrade-page-link"
+        [routerLink]="upgradeUrl"
+        (click)="closeModal()"
+        i18n
+      >
+        Go to upgrade page
+      </a>
+    </div>
+    <div class="cds--mb-05">
+      <a
+        cdsLink
+        class="cds--type-body-01"
+        data-testid="documentation-link"
+        target="_blank"
+        rel="noopener noreferrer"
+        [href]="docsUrl"
+      >
+        <span
+          class="cds--mr-03"
+          i18n
+          >Check documentation</span
+        >
+        <cd-icon type="launch"></cd-icon>
+      </a>
+    </div>
+  </section>
+</cds-modal>
