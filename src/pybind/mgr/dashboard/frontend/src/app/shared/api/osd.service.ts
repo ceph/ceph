@@ -123,7 +123,7 @@ export class OsdService {
   }
 
   setMinCompatClient(release: string) {
-    return this.http.post(`${this.uiPath}/set_min_compat_client`, {
+    return this.http.put(`${this.uiPath}/set_min_compat_client`, {
       release,
       yes_i_really_mean_it: true
     });

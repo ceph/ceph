@@ -2,12 +2,14 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { By } from '@angular/platform-browser';
-import { of, Subject } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 
 import { PoolResourcePageComponent } from './pool-resource-page.component';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { PoolType } from '../pool';
 
 describe('PoolResourcePageComponent', () => {
@@ -75,6 +77,7 @@ describe('PoolResourcePageComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [PoolResourcePageComponent],
+      imports: [PipesModule],
       providers: [
         { provide: ActivatedRoute, useValue: mockActivatedRoute },
         { provide: PoolService, useValue: mockPoolService },
@@ -183,6 +186,188 @@ describe('PoolResourcePageComponent', () => {
       expect(component.overviewModel.writeOpsChartData.length).toBe(1);
       expect(component.overviewModel.writeOpsChartData[0].values['Write Ops']).toBe(10);
     });
+
+    it('should correctly build migration model when pool is migrating', fakeAsync(() => {
+      // Injected stats: migrated = target objects, total = source + target
+      const migratingPoolData = {
+        ...mockPoolData,
+        migration_src: 2,
+        migrating_pgs: '3/32',
+        stats: {
+          ...mockPoolData.stats,
+          num_objects: { latest: 100, rate: 0, rates: [] },
+          num_objects_migrated: { latest: 40, rate: 0, rates: [] },
+          num_bytes: { latest: 10000, rate: 0, rates: [] },
+          num_bytes_migrated: { latest: 4000, rate: 0, rates: [] }
+        }
+      };
+      mockPoolService.get.mockReturnValue(of(migratingPoolData));
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+
+      expect(component.overviewModel.isMigrating).toBe(true);
+      expect(component.overviewModel.migrationObjectsMigrated).toBe(40);
+      expect(component.overviewModel.migrationObjectsTotal).toBe(100);
+      expect(component.overviewModel.migrationBytesMigrated).toBe(4000);
+      expect(component.overviewModel.migrationBytesTotal).toBe(10000);
+      expect(component.overviewModel.migrationProgress).toBe(40);
+      expect(component.overviewModel.migrationMigratingPgs).toBe('3/32');
+    }));
+
+    it('should calculate 100% progress when migration is fully completed', fakeAsync(() => {
+      const completedMigrationPoolData = {
+        ...mockPoolData,
+        migration_src: 2,
+        stats: {
+          ...mockPoolData.stats,
+          num_objects: { latest: 100, rate: 0, rates: [] },
+          num_objects_migrated: { latest: 100, rate: 0, rates: [] },
+          num_bytes: { latest: 10000, rate: 0, rates: [] },
+          num_bytes_migrated: { latest: 10000, rate: 0, rates: [] }
+        }
+      };
+      mockPoolService.get.mockReturnValue(of(completedMigrationPoolData));
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+
+      expect(component.overviewModel.isMigrating).toBe(true);
+      expect(component.overviewModel.migrationObjectsMigrated).toBe(100);
+      expect(component.overviewModel.migrationObjectsTotal).toBe(100);
+      expect(component.overviewModel.migrationProgress).toBe(100);
+    }));
+
+    it('should resolve source and target names when this pool is the migration target', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of({ ...mockPoolData, migration_src: 2 }));
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+
+      expect(component.overviewModel.migrationSourceName).toBe('cache-pool');
+      expect(component.overviewModel.migrationTargetName).toBe('test-pool');
+    }));
+
+    it('should resolve source and target names when this pool is the migration source', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of({ ...mockPoolData, migration_target: 2 }));
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+
+      expect(component.overviewModel.migrationSourceName).toBe('test-pool');
+      expect(component.overviewModel.migrationTargetName).toBe('cache-pool');
+    }));
+
+    it('should treat pool id 0 as a migration peer', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of({ ...mockPoolData, migration_src: 0 }));
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+
+      expect(component.overviewModel.isMigrating).toBe(true);
+    }));
+  });
+
+  describe('Migration card lifecycle', () => {
+    const migratingPool = {
+      ...mockPoolData,
+      migration_src: 2,
+      stats: {
+        ...mockPoolData.stats,
+        num_objects: { latest: 100, rate: 0, rates: [] },
+        num_objects_migrated: { latest: 40, rate: 0, rates: [] },
+        num_bytes: { latest: 10000, rate: 0, rates: [] },
+        num_bytes_migrated: { latest: 4000, rate: 0, rates: [] }
+      }
+    };
+    let refreshInterval: BehaviorSubject<any>;
+
+    const load = () => {
+      mockActivatedRoute.snapshot.data.section = 'overview';
+      fixture.detectChanges();
+      paramMapSubject.next(convertToParamMap({ name: 'test-pool' }));
+      tick();
+      fixture.detectChanges();
+    };
+
+    beforeEach(() => {
+      refreshInterval = new BehaviorSubject<any>(null);
+      TestBed.inject(RefreshIntervalService).intervalData$ = refreshInterval.asObservable();
+    });
+
+    it('should render the migration card before the pool details card', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of(migratingPool));
+      load();
+
+      const children = Array.from(fixture.nativeElement.children as HTMLCollection).map((el) =>
+        el.tagName.toLowerCase()
+      );
+      expect(children.indexOf('cds-tile')).toBeLessThan(
+        children.indexOf('cd-resource-overview-card')
+      );
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="migration-subtitle"]').textContent
+      ).toContain("Migrating pool 'test-pool' (source: cache-pool)");
+      expect(fixture.nativeElement.querySelector('[data-testid="dismiss-migration"]')).toBeFalsy();
+    }));
+
+    it('should keep the card as finished until dismissed once migration ends', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of(migratingPool));
+      load();
+
+      mockPoolService.get.mockReturnValue(of(mockPoolData));
+      refreshInterval.next(5000);
+      tick();
+      fixture.detectChanges();
+
+      expect(component.overviewModel.isMigrating).toBe(false);
+      expect(component.migrationFinished).toBe(true);
+      expect(component.overviewModel.migrationProgress).toBe(100);
+      expect(component.overviewModel.migrationObjectsMigrated).toBe(100);
+      expect(component.overviewModel.migrationBytesMigrated).toBe(10000);
+      expect(
+        fixture.nativeElement.querySelector('[data-testid="migration-subtitle"]').textContent
+      ).toContain("Migration finished for pool 'test-pool' (source: cache-pool)");
+
+      fixture.nativeElement.querySelector('[data-testid="dismiss-migration"]').click();
+      fixture.detectChanges();
+
+      expect(component.migrationFinished).toBe(false);
+      expect(fixture.nativeElement.querySelector('cds-tile')).toBeFalsy();
+    }));
+
+    it('should not show a finished card for a pool that was never migrating', fakeAsync(() => {
+      load();
+      refreshInterval.next(5000);
+      tick();
+
+      expect(component.migrationFinished).toBe(false);
+    }));
+
+    it('should reset the finished state when navigating to another pool', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of(migratingPool));
+      load();
+      mockPoolService.get.mockReturnValue(of(mockPoolData));
+      refreshInterval.next(5000);
+      tick();
+      expect(component.migrationFinished).toBe(true);
+
+      paramMapSubject.next(convertToParamMap({ name: 'other-pool' }));
+      tick();
+
+      expect(component.migrationFinished).toBe(false);
+    }));
+
+    it('should keep a single migration poll when navigating between pools', fakeAsync(() => {
+      mockPoolService.get.mockReturnValue(of(migratingPool));
+      load();
+      ['pool-a', 'pool-b', 'pool-c'].forEach((name) => {
+        paramMapSubject.next(convertToParamMap({ name }));
+        tick();
+      });
+
+      mockPoolService.get.mockClear();
+      refreshInterval.next(5000);
+      tick();
+
+      expect(mockPoolService.get).toHaveBeenCalledTimes(1);
+      expect(mockPoolService.get).toHaveBeenCalledWith('pool-c', true);
+    }));
   });
 
   describe('Template Section Rendering', () => {

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 
 import rados
 from mgr_module import CommandResult
@@ -127,6 +128,105 @@ class CephService(object):
                 if application in pool.get('application_metadata', {})]
 
     @classmethod
+    def get_pool_migration_info(cls, pools=None):
+        """Return migration metadata for every pool that has migration_src set.
+
+        Progress matches ceph status / POOL MIGRATION health check:
+          migrated = target pool num_objects (and num_bytes)
+          total    = source + target
+          progress = migrated / total
+
+        :param pools: optional iterable of pool dicts (e.g. from get_pool_list).
+                      Prefer passing the same list used by the caller — a fresh
+                      mgr.get('osd_map') can omit migration_* fields.
+        Returns a list of migration dicts and a pool_id -> stats map used to
+        inject counters into pool list/detail responses.
+        """
+        migrations = []
+        migration_stats = {}
+
+        if pools is None:
+            osd_map = mgr.get('osd_map')
+            pools = osd_map.get('pools', []) if isinstance(osd_map, dict) else []
+        if not isinstance(pools, (list, tuple)):
+            return migrations, migration_stats
+
+        # Plain dicts so migration_* keys from the mgr osd_map binding are visible.
+        pools = [dict(p) for p in pools]
+
+        pools_by_id = {}
+        migrating_pools = []
+        for p in pools:
+            pool_id = p.get('pool')
+            if pool_id is not None:
+                pools_by_id[pool_id] = p
+                try:
+                    pools_by_id[int(pool_id)] = p
+                except (TypeError, ValueError):
+                    pass
+            if p.get('migration_src') is not None and pool_id is not None:
+                migrating_pools.append(p)
+
+        if not migrating_pools:
+            return migrations, migration_stats
+
+        pg_dump = mgr.get('pg_dump')
+        pg_stat_sums = {}
+        if isinstance(pg_dump, dict):
+            pool_stats_list = pg_dump.get('pg_map', pg_dump).get(
+                'pool_stats', [])
+            for ps in pool_stats_list:
+                if 'poolid' not in ps:
+                    continue
+                try:
+                    pg_stat_sums[int(ps['poolid'])] = ps.get('stat_sum', {})
+                except (TypeError, ValueError):
+                    continue
+
+        for pool in migrating_pools:
+            pool_id = int(pool['pool'])
+            src_id = int(pool['migration_src'])
+
+            src_stats = pg_stat_sums.get(src_id, {})
+            tgt_stats = pg_stat_sums.get(pool_id, {})
+
+            rem_objs = src_stats.get('num_objects', 0)
+            migrated_objs = tgt_stats.get('num_objects', 0)
+            total_objs = rem_objs + migrated_objs
+
+            rem_bytes = src_stats.get('num_bytes', 0)
+            migrated_bytes = tgt_stats.get('num_bytes', 0)
+            total_bytes = rem_bytes + migrated_bytes
+
+            pct = (min(int(100 * migrated_objs / total_objs), 100)
+                   if total_objs > 0 else 0)
+
+            stats_dict = {
+                'num_objects': total_objs,
+                'num_objects_migrated': migrated_objs,
+                'num_bytes': total_bytes,
+                'num_bytes_migrated': migrated_bytes,
+            }
+            migration_stats[pool_id] = stats_dict
+            migration_stats[src_id] = stats_dict
+
+            src_pool = pools_by_id.get(src_id) or pools_by_id.get(str(src_id), {})
+            migrations.append({
+                'pool_id': pool_id,
+                'pool_name': pool.get('pool_name', str(pool_id)),
+                # The target pool is created when the migration starts.
+                'create_time': pool.get('create_time'),
+                'src_id': src_id,
+                'src_name': src_pool.get('pool_name', str(src_id)),
+                'num_objects': total_objs,
+                'num_objects_migrated': migrated_objs,
+                'num_bytes': total_bytes,
+                'num_bytes_migrated': migrated_bytes,
+                'progress': pct,
+            })
+        return migrations, migration_stats
+
+    @classmethod
     def get_pool_list_with_stats(cls, application=None):
         # pylint: disable=too-many-locals
         # copy each pool: get_pool_list returns mgr's cached osd_map dicts, and
@@ -137,6 +237,8 @@ class CephService(object):
 
         pg_summary = mgr.get("pg_summary")
         pool_stats = mgr.get_updated_pool_stats()
+
+        _, migration_stats = cls.get_pool_migration_info(pools)
 
         for pool in pools:
             pool['pg_status'] = pg_summary['by_pool'][pool['pool'].__str__()]
@@ -150,6 +252,23 @@ class CephService(object):
                     'rate': get_most_recent_rate(rates),
                     'rates': rates
                 }
+
+            # Inject migration counters from pg dump (source+target object counts)
+            try:
+                pool_id = int(pool['pool'])
+            except (TypeError, ValueError):
+                pool_id = pool['pool']
+            ms = migration_stats.get(pool_id)
+            if ms is not None:
+                now = time.time()
+                for key in ('num_objects_migrated', 'num_bytes_migrated',
+                            'num_objects', 'num_bytes'):
+                    s[key] = {
+                        'latest': ms.get(key, 0),
+                        'rate': 0,
+                        'rates': [[now, ms.get(key, 0)]]
+                    }
+
             pool['stats'] = s
             pools_w_stats.append(pool)
         return pools_w_stats
