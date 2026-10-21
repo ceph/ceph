@@ -5745,8 +5745,8 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     }
   }
 
-  bool allow_all = mdr->session->auth_caps.allow_all();
-  if (mask & (CEPH_SETATTR_FSCRYPT_FILE|CEPH_SETATTR_FSCRYPT_AUTH) && !allow_all) {
+  bool allow_encryption = mdr->session->auth_caps.allow_encryption();
+  if (mask & (CEPH_SETATTR_FSCRYPT_FILE|CEPH_SETATTR_FSCRYPT_AUTH) && !allow_encryption) {
     respond_to_request(mdr, -EACCES);
     return;
   }
