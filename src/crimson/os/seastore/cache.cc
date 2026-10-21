@@ -2562,8 +2562,7 @@ Cache::replay_delta(
     lognode_delta_t d;
     auto iter = delta.bl.cbegin();
     decode(d, iter);
-    if (d.op == lognode_delta_t::op_t::FLUSH) {
-      assert(d.flushed_through != JOURNAL_SEQ_NULL);
+    if (d.flushed_through != JOURNAL_SEQ_NULL) {
       auto oid_it = pending_lognode_deltas_by_oid.find(d.oid);
       if (oid_it != pending_lognode_deltas_by_oid.end()) {
 	auto& deltas = oid_it->second;
@@ -2586,6 +2585,9 @@ Cache::replay_delta(
 	  }
 	}
       }
+    }
+    if (d.op == lognode_delta_t::op_t::FLUSH) {
+      assert(d.flushed_through != JOURNAL_SEQ_NULL);
       // FLUSH marker itself is not a pending operation.
       return replay_delta_ertr::make_ready_future<
 	std::pair<bool, CachedExtentRef>>(
