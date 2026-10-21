@@ -30,9 +30,11 @@
 #include <gtest/gtest.h>
 #include <numeric>
 
+#include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "osdc/SplitOp.h"
 #include "include/rados.h"
+#include "test/osd/OSDMapTestHelpers.h"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -628,4 +630,182 @@ TEST_F(TestReplicaLocalizeZoneFiltering, FilteredSetSizeEqualsZoneSize)
       << "zone " << z << ": expected " << zone_size
       << " replicas, got " << count;
   }
+}
+
+// ===========================================================================
+// Section 6: SplitOp::create() on pools in a pool migration
+//
+// _calc_target() can route an op to the other pool of a migration, which may
+// have a different layout from the pool in base_oloc.  The Objecter has no
+// messenger, so every op here must stay unsplit.
+// ===========================================================================
+
+class TestSplitOpPoolMigration : public ::testing::Test {
+protected:
+  static constexpr int64_t plain_ec4 = 1;
+  // The only PG of each source below has migrated.
+  static constexpr int64_t ec2_src = 2;
+  static constexpr int64_t ec4_tgt = 3;
+  static constexpr int64_t ec2_to_rep_src = 4;
+  static constexpr int64_t rep_tgt = 5;
+  // Clients open ec2_named_tgt by name; its source's PG has not migrated.
+  static constexpr int64_t ec4_unmigrated_src = 6;
+  static constexpr int64_t ec2_named_tgt = 7;
+  // The migration from ec2_finished_src has finished.
+  static constexpr int64_t ec2_finished_src = 8;
+  static constexpr int64_t ec4_finished_tgt = 9;
+
+  boost::asio::io_context ioc;
+  std::unique_ptr<Objecter> objecter;
+  std::map<int64_t, std::vector<int>> acting;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("TestSplitOpPoolMigration");
+
+  static pg_pool_t migration_src(pg_pool_t pool, int64_t target, bool migrated)
+  {
+    pool.migration_target = target;
+    pool.lowest_migrated_pg = migrated ? 0 : 1;
+    return pool;
+  }
+
+  static pg_pool_t migration_tgt(pg_pool_t pool, int64_t src)
+  {
+    pool.migration_src = src;
+    pool.migration_root = src;
+    pool.lowest_migrated_pg = 0;
+    return pool;
+  }
+
+  void add_pool(OSDMap &map, int64_t id, pg_pool_t pool,
+                const std::vector<int> &pg_acting)
+  {
+    pool.set_pg_num(1);
+    pool.set_pgp_num(1);
+    OSDMapTestHelpers::add_pool(map, id, pool);
+    OSDMapTestHelpers::set_pg_acting(map, pg_t(0, id), pg_acting);
+    acting[id] = pg_acting;
+  }
+
+  void SetUp() override
+  {
+    objecter = std::make_unique<Objecter>(g_ceph_context, nullptr, nullptr, ioc);
+    objecter->init();
+    objecter->set_honor_pool_migration();
+
+    OSDMap map;
+    uuid_d fsid;
+    fsid.generate_random();
+    ceph_assert(map.build_simple(g_ceph_context, 1, fsid, 8) == 0);
+    for (int i = 0; i < 8; i++) {
+      map.set_state(i, CEPH_OSD_EXISTS | CEPH_OSD_UP);
+    }
+
+    add_pool(map, plain_ec4, make_ec_pool(4, 2, 4096), {0, 1, 2, 3, 4, 5});
+    add_pool(map, ec2_src, migration_src(make_ec_pool(2, 1, 4096), ec4_tgt, true),
+             {0, 1, 2});
+    add_pool(map, ec4_tgt, migration_tgt(make_ec_pool(4, 2, 4096), ec2_src),
+             {7, 6, 5, 4, 3, 2});
+    add_pool(map, ec2_to_rep_src,
+             migration_src(make_ec_pool(2, 1, 4096), rep_tgt, true), {0, 1, 2});
+    add_pool(map, rep_tgt, migration_tgt(make_replicated_pool(3), ec2_to_rep_src),
+             {5, 6, 7});
+    add_pool(map, ec4_unmigrated_src,
+             migration_src(make_ec_pool(4, 2, 4096), ec2_named_tgt, false),
+             {2, 3, 4, 5, 6, 7});
+    add_pool(map, ec2_named_tgt,
+             migration_tgt(make_ec_pool(2, 1, 4096), ec4_unmigrated_src), {0, 1, 2});
+    add_pool(map, ec2_finished_src,
+             migration_src(make_ec_pool(2, 1, 4096), ec4_finished_tgt, true),
+             {0, 1, 2});
+    add_pool(map, ec4_finished_tgt, make_ec_pool(4, 2, 4096), {7, 6, 5, 4, 3, 2});
+
+    objecter->start(&map);
+  }
+
+  void TearDown() override
+  {
+    objecter->shutdown();
+    objecter.reset();
+  }
+
+  Objecter::Op *make_read_op(int64_t pool, uint64_t off, uint64_t len)
+  {
+    osdc_opvec ops(1);
+    ops[0].op.op = CEPH_OSD_OP_READ;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    return new Objecter::Op(object_t("obj"), object_locator_t(pool),
+                            std::move(ops),
+                            CEPH_OSD_FLAG_READ | CEPH_OSD_FLAG_BALANCE_READS,
+                            (Context*)nullptr, nullptr);
+  }
+
+  bool create(Objecter::Op *op)
+  {
+    shunique_lock<ceph::shared_mutex> sul(lock, ceph::acquire_unique);
+    return SplitOp::create(op, *objecter, sul, g_ceph_context);
+  }
+
+  // A direct read must go to the shard holding the data in the pool the op
+  // is routed to.
+  void expect_direct_read_on(Objecter::Op *op, int64_t pool, int shard)
+  {
+    const auto &t = op->target;
+    bool direct = t.flags & CEPH_OSD_FLAG_EC_DIRECT_READ;
+    spg_t want(pg_t(0, pool), shard_id_t(shard));
+    EXPECT_TRUE(!direct || (t.actual_pgid == want && t.osd == acting[pool][shard]))
+      << "direct read sent to " << t.actual_pgid << " osd." << t.osd
+      << ", data is on " << want << " osd." << acting[pool][shard];
+  }
+};
+
+TEST_F(TestSplitOpPoolMigration, PlainECDirectRead)
+{
+  auto op = make_read_op(plain_ec4, 8192, 4096);
+  EXPECT_FALSE(create(op));
+  EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+  expect_direct_read_on(op, plain_ec4, 2);
+  op->put();
+}
+
+// 8192~4096 is on shard 0 of the k=2 source and shard 2 of the k=4 target.
+TEST_F(TestSplitOpPoolMigration, ECSourceDirectReadUsesTargetLayout)
+{
+  auto op = make_read_op(ec2_src, 8192, 4096);
+  EXPECT_FALSE(create(op));
+  EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+  expect_direct_read_on(op, ec4_tgt, 2);
+  op->put();
+}
+
+// Addressed to the k=2 target, routed back to the k=4 source.
+TEST_F(TestSplitOpPoolMigration, ECTargetDirectReadUsesSourceLayout)
+{
+  auto op = make_read_op(ec2_named_tgt, 8192, 4096);
+  EXPECT_FALSE(create(op));
+  EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+  expect_direct_read_on(op, ec4_unmigrated_src, 2);
+  op->put();
+}
+
+// A client that addresses a finished migration's source by id reads the
+// target.
+TEST_F(TestSplitOpPoolMigration, FinishedSourceDirectReadUsesTargetLayout)
+{
+  auto op = make_read_op(ec2_finished_src, 8192, 4096);
+  EXPECT_FALSE(create(op));
+  EXPECT_TRUE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ);
+  expect_direct_read_on(op, ec4_finished_tgt, 2);
+  op->put();
+}
+
+// A replicated PG has no shards to read directly.
+TEST_F(TestSplitOpPoolMigration, ECSourceReplicatedTargetNoDirectRead)
+{
+  auto op = make_read_op(ec2_to_rep_src, 4096, 4096);
+  EXPECT_FALSE(create(op));
+  EXPECT_FALSE(op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ)
+    << "direct read sent to " << op->target.actual_pgid << " osd." << op->target.osd;
+  EXPECT_FALSE(op->target.flags & CEPH_OSD_FLAG_FORCE_OSD);
+  EXPECT_EQ(shard_id_t::NO_SHARD, op->target.actual_pgid.shard);
+  op->put();
 }
