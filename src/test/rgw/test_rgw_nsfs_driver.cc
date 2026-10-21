@@ -1758,6 +1758,19 @@ TEST_F(NSFSIdentityDBTest, CompleteFileCredentialsIgnoresRowsWithoutIds)
   EXPECT_EQ(nsfs::complete_file_credentials(env->dpp, *db, cred), -ENOENT);
 }
 
+/* A test's own raise, on a thread of its own.  Under impersonation a
+ * raise leaves its thread holding CAP_DAC_READ_SEARCH, and every
+ * thread started from it afterwards inherits that, which spoils the
+ * fresh-thread controls of every case after it. */
+static int with_capabilities_elsewhere(uint64_t caps,
+				       const nsfs::ImpersonatedFn& fn)
+{
+  int r = 0;
+  std::thread t([&] { r = nsfs::with_capabilities(env->dpp, caps, fn); });
+  t.join();
+  return r;
+}
+
 /* The raise primitive.  The rejections need a process not permitted
  * the capability, which the unit test is unless it was given the
  * gateway's file capabilities.  The other polarity, a raise that works and is
@@ -4300,7 +4313,7 @@ protected:
     auto close_fd = make_scope_guard([fd] { ::close(fd); });
     ASSERT_EQ(::write(fd, body.data(), body.size()), (ssize_t)body.size());
     ASSERT_EQ(::fchmod(fd, 0660), 0);
-    ASSERT_EQ(nsfs::with_capabilities(env->dpp, nsfs::cap_bit(CAP_CHOWN),
+    ASSERT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
 	[fd]() -> int {
 	  return ::fchown(fd, uploader, uploader) < 0 ? -errno : 0;
 	}), 0) << "could not give " << name << " to the uploader";
@@ -4433,7 +4446,7 @@ protected:
 
     ASSERT_NO_FATAL_FAILURE(give("obj", "body"));
     const std::string path = (dir / "obj").string();
-    ASSERT_EQ(nsfs::with_capabilities(env->dpp,
+    ASSERT_EQ(with_capabilities_elsewhere(
 				      nsfs::cap_bit(CAP_DAC_OVERRIDE),
 	[&path]() -> int {
 	  return ::setxattr(path.c_str(), attr, "v", 1, 0) < 0 ? -errno : 0;
@@ -4485,6 +4498,75 @@ TEST_F(NSFSGatewayAttrReadTest, AnAttributeIsReadOnAnotherThread)
 	 "the read below does not show the wrapper taking it";
   ASSERT_EQ(len, 1) << "the attribute was not read: " << cpp_strerror(err);
   EXPECT_EQ(std::string(buf, len), "v");
+}
+
+/* A raise does not take read-search away.
+ *
+ * `with_capabilities()` saves the thread's set and puts it back after
+ * the call.  A thread whose first gateway read falls inside the raise
+ * takes read-search there, so the restore would drop it while
+ * `tl_holds_read_search` stayed set, and every later gateway read on
+ * the thread would be denied in a directory it could not search.
+ * Under `s3-native` the first raise is the publish, and listings,
+ * stats and attribute reads failed after it.  The control is a raw
+ * statx into the uploader's `0700` directory on the same thread:  it
+ * must fail, or the read after the raise says nothing. */
+TEST_F(NSFSGatewayAttrReadTest, ARaiseKeepsReadSearch)
+{
+  if (!permitted(CAP_FOWNER) || !permitted(CAP_DAC_OVERRIDE)) {
+    GTEST_SKIP() << "the binary cannot raise CAP_FOWNER;  run the setcap "
+		    "step";
+  }
+  ASSERT_EQ(::mkdirat(dfd, "sub", 0700), 0);
+  auto remove_sub = make_scope_guard([this] {
+    (void) with_capabilities_elsewhere(
+				   nsfs::cap_bit(CAP_DAC_OVERRIDE),
+      [this]() -> int {
+	std::error_code ec;
+	sf::remove_all(dir / "sub", ec);
+	return ec ? -ec.value() : 0;
+      });
+  });
+  const int xfd = ::openat(dfd, "sub/x", O_WRONLY | O_CREAT | O_EXCL, 0600);
+  ASSERT_GE(xfd, 0);
+  ::close(xfd);
+  ASSERT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
+	[this]() -> int {
+	  return ::fchownat(dfd, "sub", uploader, uploader, 0) < 0 ? -errno : 0;
+	}), 0) << "could not give the directory to the uploader";
+
+  bool had_read_search = true;
+  int control = 0;
+  int inside = -1;
+  int after = -1;
+  bool still_held = false;
+  std::thread fresh([&] {
+    struct ::statx stx;
+    had_read_search = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+    control = (::statx(dfd, "sub/x", AT_SYMLINK_NOFOLLOW, STATX_BASIC_STATS,
+		       &stx) < 0) ? -errno : 0;
+    inside = nsfs::with_capabilities(env->dpp, nsfs::cap_bit(CAP_FOWNER),
+      [&]() -> int {
+	return (nsfs::statx(dfd, "obj", AT_SYMLINK_NOFOLLOW,
+			    STATX_BASIC_STATS, &stx) < 0) ? -errno : 0;
+      });
+    after = (nsfs::statx(dfd, "sub/x", AT_SYMLINK_NOFOLLOW,
+			 STATX_BASIC_STATS, &stx) < 0) ? -errno : 0;
+    still_held = nsfs::capability_is_effective(CAP_DAC_READ_SEARCH);
+  });
+  fresh.join();
+
+  ASSERT_FALSE(had_read_search)
+      << "a new thread started with CAP_DAC_READ_SEARCH effective";
+  ASSERT_EQ(control, -EACCES)
+      << "the thread could search the uploader's directory without the "
+	 "capability, so the read below does not show it kept";
+  ASSERT_EQ(inside, 0) << cpp_strerror(-inside);
+  EXPECT_EQ(after, 0)
+      << "the gateway's read after the raise was denied: "
+      << cpp_strerror(-after);
+  EXPECT_TRUE(still_held)
+      << "the raise's restore dropped CAP_DAC_READ_SEARCH";
 }
 
 /* An object rename runs as its requester.
@@ -4637,7 +4719,7 @@ protected:
   Owned owned(const std::string& rel) {
     Owned o;
     const sf::path p = bucket_path() / rel;
-    EXPECT_EQ(nsfs::with_capabilities(env->dpp,
+    EXPECT_EQ(with_capabilities_elsewhere(
 				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
 	[&]() -> int {
 	  struct stat st{};
@@ -4652,7 +4734,7 @@ protected:
   std::vector<std::string> versions_in(const std::string& keydir) {
     std::vector<std::string> out;
     const sf::path p = bucket_path() / keydir / ".versions";
-    EXPECT_EQ(nsfs::with_capabilities(env->dpp,
+    EXPECT_EQ(with_capabilities_elsewhere(
 				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
 	[&]() -> int {
 	  std::error_code ec;

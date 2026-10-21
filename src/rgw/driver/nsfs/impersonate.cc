@@ -744,6 +744,13 @@ int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
     return -EPERM;
   }
 
+  /* Before the save:  a read-search first taken inside the scope
+   * would be undone by the restore while tl_holds_read_search stayed
+   * set, and every later gateway read on this thread would fail. */
+  if (impersonation_enabled()) {
+    (void) hold_thread_capabilities(dpp);
+  }
+
   ScopedCapabilities raised;
   uint64_t missing = 0;
   const int ret = raised.push(caps, &missing);
