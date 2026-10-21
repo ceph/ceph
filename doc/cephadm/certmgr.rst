@@ -60,10 +60,9 @@ certificate lifecycle and renewal:
 - ``mgr/cephadm/certificate_renewal_threshold_days`` (default: ``30``, min:
   ``10``, max: ``90``): Defines the number of days before a certificate's
   expiration when Cephadm should initiate renewal. This ensures timely
-  replacement before expiration occurs. This applies to both self-signed and
-  user-provided certificates. In the case of user-provided certificates,
-  Cephadm will issue a health error or warning alerting administrators about
-  the upcoming renewal period proximity.
+  replacement before expiration occurs. This applies to both cephadm-signed and
+  user-provided certificates. Cephadm cannot renew user-provided certificates,
+  so for those it raises the ``CEPHADM_CERT_WARNING`` health warning instead.
 
 - ``mgr/cephadm/certificate_check_period`` (default: ``1``, min: ``0``, max:
   ``30``): Specifies how often (in days) the certificate should be checked for
@@ -74,21 +73,20 @@ certificate lifecycle and renewal:
 Certificate Health Monitoring
 =============================
 
-Cephadm continuously monitors the status of all managed certificates, both self-signed and user-provided.
-
-- If a certificate is invalid or has already expired, Cephadm issues a health
-  error (``CEPHADM_CERT_ERROR``) to alert administrators.
-- If a certificate is approaching its expiration date, as determined by the
-  configured ``mgr/cephadm/certificate_renewal_threshold_days``, Cephadm issues a
-  health warning.
+Cephadm continuously monitors the status of all managed certificates, both
+cephadm-signed and user-provided.
 
 Cephadm renews cephadm-signed certificates itself when automated rotation is
 enabled, and it does not raise a health check for them. It cannot renew
 user-provided certificates. For those, and for cephadm-signed certificates when
-automated rotation is disabled, it raises ``CEPHADM_CERT_WARNING`` when a
-certificate is inside the renewal threshold and ``CEPHADM_CERT_ERROR`` when a
-certificate is invalid or has expired. This proactive monitoring helps ensure
-uninterrupted service operation while giving users control over their certificate policies.
+automated rotation is disabled, Cephadm raises the following health checks:
+
+- ``CEPHADM_CERT_WARNING`` when a certificate is inside the renewal threshold
+  set by ``mgr/cephadm/certificate_renewal_threshold_days``.
+- ``CEPHADM_CERT_ERROR`` when a certificate is invalid or has expired.
+
+This proactive monitoring helps ensure uninterrupted service operation while
+giving users control over their certificate policies.
 
 Spec Fields for SSL Configuration
 =================================
@@ -102,7 +100,8 @@ Service specs that support SSL/TLS can define the following fields:
 - ``certificate_source``: One of ``inline``, ``reference``, or
   ``cephadm-signed``. If ``ssl`` is ``true`` and this field is not set,
   cephadm uses ``inline`` when the spec contains both ``ssl_cert`` and
-  ``ssl_key``, and ``cephadm-signed`` otherwise.
+  ``ssl_key``, and ``cephadm-signed`` when it contains neither. A spec that
+  contains only one of them is rejected.
 
 With ``reference``, leave ``ssl_cert`` and ``ssl_key`` out. Cephadm reads the
 certificate and key stored in certmgr under the names
@@ -325,7 +324,10 @@ To remove an existing certificate:
 
    ceph orch certmgr cert rm <certificate_name> [--service_name <value>] [--hostname <value>]
 
-**Note:** For certificates with host or service scope, use the ``--service-name`` or ``--hostname`` option to specify the target.
+.. note::
+
+   For certificates with host or service scope, use the ``--service_name`` or
+   ``--hostname`` option to specify the target.
 
 ``<certificate_name>`` must be a valid certificate name. Use ``ceph orch certmgr cert ls`` to list supported certificates.
 
@@ -344,7 +346,10 @@ To remove an existing private key:
 
    ceph orch certmgr key rm <key-name> [--service_name <value>] [--hostname <value>]
 
-**Note:** For keys with host or service scope, use the ``--service-name`` or ``--hostname`` option to specify the target.
+.. note::
+
+   For keys with host or service scope, use the ``--service_name`` or
+   ``--hostname`` option to specify the target.
 
 ``<key_name>`` must be a valid key name. Use ``ceph orch certmgr key ls`` to list supported keys.
 
