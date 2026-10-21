@@ -173,7 +173,7 @@ function TEST_rule_lifetime_on_pool_changes() {
     rule_exists erasure-code || return 1
     ceph osd pool set e2 num_zones 2 || return 1
     ! rule_exists erasure-code || return 1
-    ceph osd pool set e1 num_zones 1 || return 1
+    ceph osd pool set e1 num_zones 1 --yes-i-really-mean-it || return 1
     ! rule_exists e1-stretch || return 1
     rule_exists e1-single-zone || return 1
 
