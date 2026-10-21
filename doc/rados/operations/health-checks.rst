@@ -659,8 +659,9 @@ this case, you should install the required package and restart your Manager
 daemons.
 
 This health check is applied only to enabled modules. If a module is not
-enabled, you can see whether it is reporting dependency issues in the output of
-``ceph module ls``.
+enabled, you can see whether it is reporting dependency issues in the
+``can_run`` and ``error_string`` fields of the output of
+``ceph mgr module ls --format=json-pretty``.
 
 
 MGR_MODULE_ERROR
@@ -2295,7 +2296,7 @@ To entirely disable this alert, run the following command:
 
 .. prompt:: bash #
 
-   ceph config set mgr/crash/warn_recent_interval 0
+   ceph config set mgr mgr/crash/warn_recent_interval 0
 
 RECENT_MGR_MODULE_CRASH
 _______________________
@@ -2337,7 +2338,7 @@ To entirely disable this alert, run the following command:
 
 .. prompt:: bash #
 
-   ceph config set mgr/crash/warn_recent_interval 0
+   ceph config set mgr mgr/crash/warn_recent_interval 0
 
 TELEMETRY_CHANGED
 _________________
@@ -2365,7 +2366,7 @@ To re-enable telemetry (and silence the alert), run the following command:
 
 .. prompt:: bash #
 
-   ceph telemetry on
+   ceph telemetry on --license sharing-1-0
 
 To disable telemetry (and silence the alert), run the following command:
 
