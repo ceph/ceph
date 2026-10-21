@@ -80,6 +80,10 @@ export class Pool {
   stats?: PoolStats;
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];
+  migration_src?: number;
+  migration_target?: number;
+  migration_root?: number;
+  migrating_pgs?: string;
 
   constructor(name: string) {
     this.pool_name = name;
@@ -96,6 +100,88 @@ export const getPoolDataProtection = (pool?: Pool): string => {
   }
 
   return '';
+};
+
+const CEPH_RELEASES = [
+  'argonaut',
+  'bobtail',
+  'cuttlefish',
+  'dumpling',
+  'emperor',
+  'firefly',
+  'giant',
+  'hammer',
+  'infernalis',
+  'jewel',
+  'kraken',
+  'luminous',
+  'mimic',
+  'nautilus',
+  'octopus',
+  'pacific',
+  'quincy',
+  'reef',
+  'squid',
+  'tentacle',
+  'umbrella'
+];
+
+/** Oldest Ceph release (OSD release and minimum compatible client) that supports pool migration. */
+export const MIN_POOL_MIGRATION_RELEASE = 'umbrella';
+
+export const isReleaseAtLeast = (current: string, minimum: string): boolean => {
+  const currentIdx = CEPH_RELEASES.indexOf(current.toLowerCase());
+  const minIdx = CEPH_RELEASES.indexOf(minimum.toLowerCase());
+  return currentIdx >= 0 && minIdx >= 0 && currentIdx >= minIdx;
+};
+
+export const EXPERIMENTAL_FEATURES_CONFIG =
+  'enable_experimental_unrecoverable_data_corrupting_features';
+export const POOL_MIGRATION_FEATURE = 'poolmigration';
+
+// Same separators as Ceph's for_each_substr(..., ";,= \t", ...) in src/common/ceph_context.cc
+const parseFeatures = (value: unknown): string[] =>
+  typeof value === 'string' ? value.split(/[;,= \t]+/).filter(Boolean) : [];
+
+export const isPoolMigrationFlagEnabled = (value: unknown): boolean => {
+  const features = parseFeatures(value);
+  return features.includes('*') || features.includes(POOL_MIGRATION_FEATURE);
+};
+
+/** Returns the new config value with the pool migration feature added. */
+export const addPoolMigrationFlag = (value: unknown): string =>
+  isPoolMigrationFlagEnabled(value)
+    ? (value as string)
+    : [...parseFeatures(value), POOL_MIGRATION_FEATURE].join(',');
+
+export enum PoolBusyReason {
+  MIGRATING = 'migrating',
+  PG_CHANGE = 'pgChange',
+  TASK = 'task'
+}
+
+export enum PoolAction {
+  MIGRATE = 'migrate',
+  EDIT = 'edit',
+  DELETE = 'delete'
+}
+
+/**
+ * Returns why an operation can't be performed on a pool right now, or null when it is idle.
+ * Specific causes are checked before a generic running task, because an ongoing
+ * migration is also reported as an executing task by the backend.
+ */
+export const getPoolBusyReason = (pool: Pool): PoolBusyReason | null => {
+  if (pool.migration_src != null || pool.migration_target != null) {
+    return PoolBusyReason.MIGRATING;
+  }
+  if (
+    pool.pg_num !== pool.pg_num_target ||
+    pool.pg_placement_num !== pool.pg_placement_num_target
+  ) {
+    return PoolBusyReason.PG_CHANGE;
+  }
+  return pool.cdExecuting ? PoolBusyReason.TASK : null;
 };
 
 export const transformPgStatus = (pgStatus: any): string => {

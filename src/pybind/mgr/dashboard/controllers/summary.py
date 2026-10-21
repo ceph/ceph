@@ -75,6 +75,8 @@ class Summary(BaseController):
             result = self._has_permissions(Permission.UPDATE, Scope.POOL)
         elif name == 'pool/delete':
             result = self._has_permissions(Permission.DELETE, Scope.POOL)
+        elif name == 'pool/migrate':
+            result = self._has_permissions(Permission.CREATE, Scope.POOL)
         elif name in [
                 'rbd/create', 'rbd/copy', 'rbd/snap/create',
                 'rbd/clone', 'rbd/trash/restore']:

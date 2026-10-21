@@ -122,6 +122,13 @@ export class OsdService {
     return this.http.get<DeploymentOptions>(`${this.uiPath}/deployment_options`);
   }
 
+  setMinCompatClient(release: string) {
+    return this.http.post(`${this.uiPath}/set_min_compat_client`, {
+      release,
+      yes_i_really_mean_it: true
+    });
+  }
+
   getFlags() {
     return this.http.get(`${this.path}/flags`);
   }
