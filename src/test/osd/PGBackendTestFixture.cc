@@ -25,6 +25,8 @@
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGPull.h"
+#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 
 void PGBackendTestFixture::initialize_scrub_infra()
 {
@@ -1908,4 +1910,38 @@ void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t s
 
   std::cout << "Corrupted shard " << shard.osd << " data for object " << obj
             << " (wrote " << size << " bytes of zeros)" << std::endl;
+}
+
+uint64_t PGBackendTestFixture::get_shard_size_on_disk(const hobject_t& hoid,
+                                                      int shard)
+{
+  TestPG* pg = get_test_pg_by_shard(shard);
+  ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
+  struct stat st;
+  int r = get_osd_fixture(pg->pg_whoami.osd)->store->stat(pg->ch, ghoid, &st);
+  EXPECT_EQ(0, r) << "failed to stat shard " << shard;
+  return r == 0 ? st.st_size : 0;
+}
+
+void PGBackendTestFixture::make_legacy_layout(const hobject_t& hoid,
+                                              uint64_t legacy_shard_size)
+{
+  for (int shard = 0; shard < k + m; shard++) {
+    TestPG* pg = get_test_pg_by_shard(shard);
+    ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
+    uint64_t size = get_shard_size_on_disk(hoid, shard);
+    ObjectStore::Transaction t;
+    if (size < legacy_shard_size) {
+      bufferlist zeros;
+      zeros.append_zero(legacy_shard_size - size);
+      t.write(pg->ch->cid, ghoid, size, zeros.length(), zeros);
+    }
+    ECLegacy::ECUtilL::HashInfo hinfo(k + m);
+    hinfo.set_total_chunk_size_clear_hash(legacy_shard_size);
+    bufferlist hbl;
+    encode(hinfo, hbl);
+    t.setattr(pg->ch->cid, ghoid, ECUtil::get_hinfo_key(), hbl);
+    ASSERT_EQ(0, get_osd_fixture(pg->pg_whoami.osd)->store->queue_transaction(
+      pg->ch, std::move(t)));
+  }
 }

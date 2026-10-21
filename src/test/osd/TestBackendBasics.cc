@@ -44,7 +44,6 @@
 #include "crush/CrushWrapper.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "osd/ECUtil.h"
-#include "osd/ECUtilL.h"
 
 using namespace std;
 
@@ -84,6 +83,27 @@ public:
     PGBackendTestFixture::SetUp();
     initialize_scrub_infra();
   }
+
+  bool runs_legacy_tests() const;
+  ECUtil::stripe_info_t get_sinfo();
+
+  /* Write data to a new object and lay it out as a pool without EC
+   * optimizations would. */
+  void create_legacy_object(const std::string& obj_name,
+                            const std::string& data);
+
+  /* Every shard of the object must be its shard size for data, and the
+   * object must scrub clean and read back as data. */
+  void check_trimmed_object(const std::string& obj_name,
+                            const std::string& data);
+
+  /* Create a legacy object of old_size random bytes, then truncate it and
+   * write to it in one op. */
+  void truncate_legacy_object(
+    const std::string& obj_name,
+    uint64_t old_size,
+    uint64_t truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes = {});
 
   /**
    * Simulate failure of multiple OSDs by marking them down in the OSDMap.
@@ -827,19 +847,68 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSize) {
 // TestBackendBasics: shrinking objects written before EC optimizations
 // ---------------------------------------------------------------------------
 
-namespace {
-
-uint64_t shard_size_on_disk(PGBackendTestFixture& f, TestPG* pg,
-                            const hobject_t& hoid, int shard)
+bool TestBackendBasics::runs_legacy_tests() const
 {
-  ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
-  struct stat st;
-  int r = f.get_osd_fixture(pg->pg_whoami.osd)->store->stat(pg->ch, ghoid, &st);
-  EXPECT_EQ(0, r) << "failed to stat shard " << shard;
-  return r == 0 ? st.st_size : 0;
+  return GetParam().backend.pool_type == EC &&
+         (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) &&
+         GetParam().write_read.label == "4k";
 }
 
-}  // namespace
+ECUtil::stripe_info_t TestBackendBasics::get_sinfo()
+{
+  return ECUtil::stripe_info_t(k, m, k * stripe_unit,
+                               osdmap->get_pg_pool(pool_id));
+}
+
+void TestBackendBasics::create_legacy_object(const std::string& obj_name,
+                                             const std::string& data)
+{
+  const ECUtil::stripe_info_t sinfo = get_sinfo();
+  const uint64_t legacy_size = sinfo.ro_offset_to_next_chunk_offset(data.size());
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(make_test_object(obj_name),
+                                             legacy_size));
+  // Deep scrub of parity CRCs assumes the primary shards have their
+  // optimized size, so it rejects a legacy layout where they do not.
+  if (legacy_size == sinfo.object_size_to_shard_size(
+        data.size(), sinfo.get_shard(raw_shard_id_t(0)))) {
+    ASSERT_FALSE(scrub_object(obj_name)) << "scrub should accept the legacy layout";
+  }
+}
+
+void TestBackendBasics::check_trimmed_object(const std::string& obj_name,
+                                             const std::string& data)
+{
+  const hobject_t hoid = make_test_object(obj_name);
+  const ECUtil::stripe_info_t sinfo = get_sinfo();
+  for (int shard = 0; shard < k + m; shard++) {
+    EXPECT_EQ(sinfo.object_size_to_shard_size(data.size(), shard_id_t(shard)),
+              get_shard_size_on_disk(hoid, shard))
+      << "shard " << shard;
+  }
+  EXPECT_FALSE(scrub_object(obj_name));
+  verify_object(obj_name, data, 0, data.size());
+}
+
+void TestBackendBasics::truncate_legacy_object(
+  const std::string& obj_name,
+  uint64_t old_size,
+  uint64_t truncate_size,
+  const std::vector<std::pair<uint64_t, std::string>>& writes)
+{
+  SCOPED_TRACE(obj_name);
+  std::string data = create_random_buffer(old_size).to_str();
+  ASSERT_NO_FATAL_FAILURE(create_legacy_object(obj_name, data));
+  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, truncate_size, writes));
+  data.resize(truncate_size, '\0');
+  for (const auto& [off, buf] : writes) {
+    if (data.size() < off + buf.size()) {
+      data.resize(off + buf.size(), '\0');
+    }
+    data.replace(off, buf.size(), buf);
+  }
+  check_trimmed_object(obj_name, data);
+}
 
 // Without EC optimizations, every shard is padded to the stripe.
 TEST_P(TestBackendBasics, LegacyShardsArePadded) {
@@ -858,141 +927,43 @@ TEST_P(TestBackendBasics, LegacyShardsArePadded) {
 
   hobject_t hoid = make_test_object(obj_name);
   for (int shard = 0; shard < k + m; shard++) {
-    EXPECT_EQ(5 * stripe_unit,
-              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
+    EXPECT_EQ(5 * stripe_unit, get_shard_size_on_disk(hoid, shard))
       << "shard " << shard;
-  }
-}
-
-// Lay out an object as a pool without EC optimizations would: every shard
-// zero-padded to the stripe, with a hinfo attr.
-static void make_legacy_layout(PGBackendTestFixture& f,
-                               const hobject_t& hoid,
-                               int k, int m,
-                               uint64_t legacy_shard_size)
-{
-  for (int shard = 0; shard < k + m; shard++) {
-    TestPG* pg = f.get_test_pg_by_shard(shard);
-    ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
-    uint64_t size = shard_size_on_disk(f, pg, hoid, shard);
-    ObjectStore::Transaction t;
-    if (size < legacy_shard_size) {
-      bufferlist zeros;
-      zeros.append_zero(legacy_shard_size - size);
-      t.write(pg->ch->cid, ghoid, size, zeros.length(), zeros);
-    }
-    ECLegacy::ECUtilL::HashInfo hinfo(k + m);
-    hinfo.set_total_chunk_size_clear_hash(legacy_shard_size);
-    bufferlist hbl;
-    encode(hinfo, hbl);
-    t.setattr(pg->ch->cid, ghoid, ECUtil::get_hinfo_key(), hbl);
-    ASSERT_EQ(0, f.get_osd_fixture(pg->pg_whoami.osd)->store->queue_transaction(
-      pg->ch, std::move(t)));
   }
 }
 
 // Truncating a legacy object to a stripe boundary, like a discard at the end
 // of an RBD object, must trim the padding on every shard.
 TEST_P(TestBackendBasics, TruncateLegacyObject) {
-  const auto& param = GetParam().write_read;
-  const auto& backend_config = GetParam().backend;
-  if (backend_config.pool_type != EC ||
-      !(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
-      param.label != "4k") {
+  if (!runs_legacy_tests()) {
     GTEST_SKIP() << "only applies to optimized EC pools";
   }
-
-  std::string obj_name = "test_truncate_legacy_" + backend_config.label;
   const uint64_t stripe_width = k * stripe_unit;
-  const uint64_t old_size = 4 * stripe_width + stripe_unit;
-  const uint64_t new_size = 4 * stripe_width;
-  std::string data(old_size, 'X');
-  ASSERT_EQ(0, create_and_write(obj_name, data));
-
-  hobject_t hoid = make_test_object(obj_name);
-  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(*this, hoid, k, m, 5 * stripe_unit));
-  ASSERT_FALSE(scrub_object(obj_name)) << "scrub should accept the legacy layout";
-
-  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, new_size, {}));
-
-  const ECUtil::stripe_info_t sinfo(k, m, stripe_width,
-                                    osdmap->get_pg_pool(pool_id));
-  for (int shard = 0; shard < k + m; shard++) {
-    EXPECT_EQ(sinfo.object_size_to_shard_size(new_size, shard_id_t(shard)),
-              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
-      << "shard " << shard;
-  }
-  EXPECT_FALSE(scrub_object(obj_name));
-  verify_object(obj_name, data.substr(0, new_size), 0, new_size);
+  truncate_legacy_object("test_truncate_legacy",
+                         4 * stripe_width + stripe_unit, 4 * stripe_width);
 }
 
 // With chunks larger than a page, shard 0 and the parity shards are padded
 // too.
 TEST_P(TestBackendBasics, TruncateLegacyObjectPartialChunk) {
-  const auto& param = GetParam().write_read;
-  const auto& backend_config = GetParam().backend;
-  if (backend_config.pool_type != EC ||
-      !(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
-      param.label != "4k" || stripe_unit == EC_ALIGN_SIZE) {
+  if (!runs_legacy_tests() || stripe_unit == EC_ALIGN_SIZE) {
     GTEST_SKIP() << "only applies to optimized EC pools with chunks larger than a page";
   }
-
-  std::string obj_name = "test_truncate_legacy_partial_" + backend_config.label;
   const uint64_t stripe_width = k * stripe_unit;
-  const uint64_t old_size = 4 * stripe_width + EC_ALIGN_SIZE;
-  const uint64_t new_size = 4 * stripe_width;
-  std::string data(old_size, 'X');
-  ASSERT_EQ(0, create_and_write(obj_name, data));
-
-  hobject_t hoid = make_test_object(obj_name);
-  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(*this, hoid, k, m, 5 * stripe_unit));
-
-  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, new_size, {}));
-
-  const ECUtil::stripe_info_t sinfo(k, m, stripe_width,
-                                    osdmap->get_pg_pool(pool_id));
-  for (int shard = 0; shard < k + m; shard++) {
-    EXPECT_EQ(sinfo.object_size_to_shard_size(new_size, shard_id_t(shard)),
-              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
-      << "shard " << shard;
-  }
-  EXPECT_FALSE(scrub_object(obj_name));
-  verify_object(obj_name, data.substr(0, new_size), 0, new_size);
+  truncate_legacy_object("test_truncate_legacy_partial",
+                         4 * stripe_width + EC_ALIGN_SIZE, 4 * stripe_width);
 }
 
 // Truncating into the middle of a stripe, like a write-zeroes at the end of
 // an RBD object, must also trim shards whose expected size does not shrink.
 TEST_P(TestBackendBasics, TruncateLegacyObjectUnaligned) {
-  const auto& param = GetParam().write_read;
-  const auto& backend_config = GetParam().backend;
-  if (backend_config.pool_type != EC ||
-      !(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) ||
-      param.label != "4k" || k < 4) {
+  if (!runs_legacy_tests() || k < 4) {
     GTEST_SKIP() << "only applies to optimized EC pools with k >= 4";
   }
-
-  std::string obj_name = "test_truncate_legacy_unaligned_" + backend_config.label;
   const uint64_t stripe_width = k * stripe_unit;
-  const uint64_t old_size = 5 * stripe_width + stripe_unit;
-  const uint64_t new_size = 4 * stripe_width + 3 * stripe_unit;
-  std::string data(old_size, 'X');
-  ASSERT_EQ(0, create_and_write(obj_name, data));
-
-  hobject_t hoid = make_test_object(obj_name);
-  ASSERT_NO_FATAL_FAILURE(make_legacy_layout(*this, hoid, k, m, 6 * stripe_unit));
-  ASSERT_FALSE(scrub_object(obj_name)) << "scrub should accept the legacy layout";
-
-  ASSERT_EQ(0, truncate_and_write(obj_name, old_size, new_size, {}));
-
-  const ECUtil::stripe_info_t sinfo(k, m, stripe_width,
-                                    osdmap->get_pg_pool(pool_id));
-  for (int shard = 0; shard < k + m; shard++) {
-    EXPECT_EQ(sinfo.object_size_to_shard_size(new_size, shard_id_t(shard)),
-              shard_size_on_disk(*this, get_test_pg_by_shard(shard), hoid, shard))
-      << "shard " << shard;
-  }
-  EXPECT_FALSE(scrub_object(obj_name));
-  verify_object(obj_name, data.substr(0, new_size), 0, new_size);
+  truncate_legacy_object("test_truncate_legacy_unaligned",
+                         5 * stripe_width + stripe_unit,
+                         4 * stripe_width + 3 * stripe_unit);
 }
 
 // ---------------------------------------------------------------------------
