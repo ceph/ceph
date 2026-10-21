@@ -966,6 +966,66 @@ TEST_P(TestBackendBasics, TruncateLegacyObjectUnaligned) {
                          4 * stripe_width + 3 * stripe_unit);
 }
 
+// A truncate and writes in one op, as a write with a newer truncate_seq or
+// a writefull sends.
+TEST_P(TestBackendBasics, TruncateLegacyObjectAndWrite) {
+  if (!runs_legacy_tests()) {
+    GTEST_SKIP() << "only applies to optimized EC pools";
+  }
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t old_size = 4 * sw + stripe_unit;
+  const uint64_t new_size = 4 * sw;
+  auto data = [this](uint64_t len) {
+    return create_random_buffer(len).to_str();
+  };
+  truncate_legacy_object("below", old_size, new_size,
+                         {{3 * sw, data(stripe_unit)}});
+  truncate_legacy_object("across", old_size, new_size,
+                         {{new_size - 512, data(1024)}});
+  truncate_legacy_object("in_truncated_range", old_size, new_size,
+                         {{new_size + 512, data(512)}});
+  truncate_legacy_object("past_old_end", old_size, new_size,
+                         {{old_size + sw, data(stripe_unit)}});
+  truncate_legacy_object("same_page", old_size, new_size + 100,
+                         {{new_size + 1000, data(100)}});
+  truncate_legacy_object("to_zero", old_size, 0,
+                         {{stripe_unit, data(stripe_unit)},
+                          {(k + 1) * stripe_unit, data(stripe_unit)}});
+}
+
+// A truncate within the last stripe leaves the legacy size of that stripe
+// valid, but can leave the primary shards shorter than the data shards it
+// does not shrink.
+TEST_P(TestBackendBasics, TruncateLegacyObjectWithinStripe) {
+  if (!runs_legacy_tests() || k < 3) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 3";
+  }
+  const uint64_t sw = k * stripe_unit;
+  truncate_legacy_object("within_stripe",
+                         4 * sw + stripe_unit + EC_ALIGN_SIZE,
+                         4 * sw + EC_ALIGN_SIZE);
+}
+
+// Grow a legacy object with EC optimizations, so that one data shard holds
+// data where the others hold padding, then truncate it.
+TEST_P(TestBackendBasics, TruncateGrownLegacyObject) {
+  if (!runs_legacy_tests() || k < 3) {
+    GTEST_SKIP() << "only applies to optimized EC pools with k >= 3";
+  }
+  const uint64_t sw = k * stripe_unit;
+  const std::string obj_name = "grown";
+  std::string data = create_random_buffer(4 * sw + stripe_unit).to_str();
+  ASSERT_NO_FATAL_FAILURE(create_legacy_object(obj_name, data));
+  const std::string append = create_random_buffer(stripe_unit).to_str();
+  ASSERT_EQ(0, write(obj_name, data.size(), append, data.size()));
+  data += append;
+  EXPECT_FALSE(scrub_object(obj_name));
+
+  ASSERT_EQ(0, truncate_and_write(obj_name, data.size(), 4 * sw, {}));
+  data.resize(4 * sw);
+  check_trimmed_object(obj_name, data);
+}
+
 // ---------------------------------------------------------------------------
 // Backend configurations and size parameters
 // ---------------------------------------------------------------------------
