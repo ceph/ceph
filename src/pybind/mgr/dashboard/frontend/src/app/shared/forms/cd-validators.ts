@@ -75,6 +75,23 @@ export class CdValidators {
   }
 
   /**
+   * IPv4 network address. Same format as ipv4Cidr, and host bits must be zero.
+   */
+  static ipv4Network(): ValidatorFn {
+    const cidr = CdValidators.ipv4Cidr();
+    return (control: AbstractControl): ValidationErrors | null => {
+      const error = cidr(control);
+      if (error || !control.value) {
+        return error;
+      }
+      const [addr, prefixText] = String(control.value).split('/');
+      const prefix = Number(prefixText);
+      const ip = addr.split('.').reduce((sum, octet) => sum * 256 + Number(octet), 0);
+      return ip % 2 ** (32 - prefix) === 0 ? null : { hostBitsSet: true };
+    };
+  }
+
+  /**
    * Validator function in order to validate numbers.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.

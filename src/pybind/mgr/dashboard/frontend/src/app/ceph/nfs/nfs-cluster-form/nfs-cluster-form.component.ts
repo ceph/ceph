@@ -7,9 +7,9 @@ import {
   ValidationErrors,
   Validators
 } from '@angular/forms';
-import { Router } from '@angular/router';
-import { forkJoin, Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { ActivatedRoute, Router } from '@angular/router';
+import { forkJoin, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { HostService } from '~/app/shared/api/host.service';
@@ -19,10 +19,11 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Host } from '~/app/shared/models/host.interface';
 import type {
   NFSBindAddr,
+  NFSCluster,
   NFSClusterPayload,
   NFSClusterPlacement
 } from '../models/nfs-cluster-config';
@@ -42,11 +43,13 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
   clusterNames: string[] = [];
   showDeploymentSettings = false;
   showAdvancedNetwork = false;
+  isEdit = false;
+  clusterId!: string;
 
   selectedHosts: string[] = [];
   selectedIngressHosts: string[] = [];
 
-  action: string;
+  action!: string;
 
   readonly PLACEMENT = {
     auto: 'auto',
@@ -89,6 +92,7 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
     private nfsService: NfsService,
     private taskWrapper: TaskWrapperService,
     private router: Router,
+    private route: ActivatedRoute,
     private hostService: HostService,
     private formBuilder: CdFormBuilder,
     public actionLabels: ActionLabelsI18n
@@ -97,7 +101,12 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit(): void {
-    this.action = this.actionLabels.CREATE;
+    if (this.route.snapshot.data['editing']) {
+      this.isEdit = true;
+      this.clusterId = this.route.snapshot.params['cluster_id'];
+    }
+
+    this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
 
     this.hostsAndLabels$ = forkJoin({
       hosts: this.hostService.getAllHosts(),
@@ -109,15 +118,75 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
       }))
     );
 
+    this.createForm();
+    if (this.isEdit) {
+      this.populateForm();
+    } else {
+      this.loadingReady();
+    }
+  }
+
+  private populateForm(): void {
+    this.nfsForm.get('cluster_id').disable();
     this.nfsService
-      .listClusters(false)
-      .pipe(
-        catchError(() => of([])),
-        takeUntilDestroyed(this.destroyRef)
-      )
-      .subscribe((names: string[]) => {
-        this.clusterNames = names;
-        this.createForm();
+      .getCluster(this.clusterId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((cluster: NFSCluster | null) => {
+        if (!cluster) {
+          this.loadingReady();
+          return;
+        }
+        this.nfsForm.patchValue({
+          cluster_id: cluster.name,
+          port: cluster.port ?? 2049,
+          ingress: cluster.ingress ?? !!cluster.virtual_ip,
+          virtual_ip: cluster.virtual_ip ?? '',
+          ingress_mode: cluster.ingress_mode ?? 'haproxy-protocol',
+          enable_rdma: cluster.enable_rdma ?? false,
+          monitoring_port: cluster.monitor_port
+        });
+
+        // Placement
+        const p = cluster.placement;
+        if (p) {
+          if (p.hosts?.length) {
+            this.nfsForm.get('placement').setValue(this.PLACEMENT.host);
+            this.selectedHosts = p.hosts;
+          } else if (p.label) {
+            this.nfsForm.get('placement').setValue(this.PLACEMENT.custom);
+            this.nfsForm.get('custom_placement_type').setValue(this.CUSTOM_PLACEMENT.label);
+            this.nfsForm.get('label').setValue(p.label);
+          }
+          if (p.count != null) {
+            this.nfsForm.get('count').setValue(p.count);
+          }
+        }
+
+        // Networks
+        if (cluster.networks?.length) {
+          const networkArray = this.nfsForm.get('networks') as FormArray;
+          networkArray.clear();
+          cluster.networks.forEach((net) =>
+            networkArray.push(new FormControl(net, [CdValidators.ipv4Network()]))
+          );
+          this.showAdvancedNetwork = true;
+        }
+
+        // Bind addresses
+        if (cluster.bind_addrs?.length) {
+          const bindArray = this.nfsForm.get('bind_addrs') as FormArray;
+          bindArray.clear();
+          cluster.bind_addrs.forEach((addr) =>
+            bindArray.push(
+              this.formBuilder.group({
+                hostname: [{ content: addr.hostname, selected: true }],
+                ip: [addr.ip, [CdValidators.ip()]]
+              })
+            )
+          );
+          this.showAdvancedNetwork = true;
+        }
+
         this.loadingReady();
       });
   }
@@ -131,14 +200,12 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
   }
 
   createForm() {
-    this.nfsForm = this.formBuilder.group({
+    this.nfsForm = this.formBuilder.group(
+      {
       cluster_id: [
         '',
-        [
-          Validators.required,
-          Validators.pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-          CdValidators.custom('uniqueName', (id: string) => this.clusterNames?.includes(id))
-        ]
+        [Validators.required, Validators.pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)],
+        this.isEdit ? [] : [CdValidators.unique((name: string) => this.nfsService.exists(name))]
       ],
       placement: [this.PLACEMENT.auto],
       hosts: [[]],
@@ -192,7 +259,21 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
         9587,
         [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
       ]
-    });
+      }
+    );
+
+    this.nfsForm.get('ingress').valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((enabled: boolean) => {
+        if (!enabled) {
+          this.nfsForm.patchValue({
+            virtual_ip: '',
+            ingress_mode: 'haproxy-protocol',
+            ingress_placement_mode: 'nfs'
+          });
+          this.selectedIngressHosts = [];
+        }
+      });
   }
 
   addNetwork() {
@@ -275,6 +356,10 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
           payload.ingress_placement = ingressPlacementSpec;
         }
       }
+    } else if (this.isEdit) {
+      // Explicitly signal ingress removal so the backend can tear down
+      // the ingress service even if virtual_ip was never set in this session.
+      payload.ingress = false;
     }
 
     if (values.protocol_version === 'nfsv3') {
@@ -292,10 +377,15 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
       payload.monitoring_port = values.monitoring_port;
     }
 
+    const taskName = this.isEdit ? `nfs/cluster/${URLVerbs.EDIT}` : `nfs/cluster/${URLVerbs.CREATE}`;
+    const call = this.isEdit
+      ? this.nfsService.updateCluster(this.clusterId, payload)
+      : this.nfsService.createCluster(payload);
+
     this.taskWrapper
       .wrapTaskAroundCall({
-        task: new FinishedTask('nfs/cluster/create', { cluster_id: payload.cluster_id }),
-        call: this.nfsService.createCluster(payload)
+        task: new FinishedTask(taskName, { cluster_id: payload.cluster_id }),
+        call
       })
       .subscribe({
         complete: () => {

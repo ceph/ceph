@@ -693,6 +693,8 @@ class NFSCluster:
         deployment_type = "standalone"
         placement = None
         enable_rdma = False
+        nfs_networks: List[str] = []
+        nfs_ip_addrs: Dict[str, str] = {}
 
         try:
             nfs_sc = self.mgr.describe_service(
@@ -704,6 +706,8 @@ class NFSCluster:
                 if svc.spec.service_id == cluster_id:
                     placement = svc.spec.placement
                     enable_rdma = bool(getattr(svc.spec, 'enable_rdma', False))
+                    nfs_networks = list(getattr(svc.spec, 'networks', []) or [])
+                    nfs_ip_addrs = dict(getattr(svc.spec, 'ip_addrs', {}) or {})
                     break
         except orchestrator.OrchestratorError:
             log.debug("Failed to get NFS service spec for cluster %s", cluster_id)
@@ -736,13 +740,21 @@ class NFSCluster:
             else:
                 deployment_type = "active-passive"
 
+        bind_addrs = [{'hostname': h, 'ip': ip} for h, ip in nfs_ip_addrs.items() if h and ip]
+
         r: Dict[str, Any] = {
             'deployment_type': deployment_type,
+            'ingress': virtual_ip is not None,
             'virtual_ip': virtual_ip,
             'backend': backends,
             'placement': placement.to_json() if placement else {},
             'enable_rdma': enable_rdma,
         }
+
+        if nfs_networks:
+            r['networks'] = nfs_networks
+        if bind_addrs:
+            r['bind_addrs'] = bind_addrs
 
         if ingress_mode:
             r['ingress_mode'] = ingress_mode.value

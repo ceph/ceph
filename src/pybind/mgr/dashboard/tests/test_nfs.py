@@ -8,7 +8,7 @@ from nfs.export import AppliedExportResults
 
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi, format_host_ip_addrs, normalize_networks, parse_ingress_mode
+from ..controllers.nfs import NFSGaneshaCluster, NFSGaneshaExports, NFSGaneshaUi, format_host_ip_addrs, normalize_networks, parse_ingress_mode
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -242,6 +242,44 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
         self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False, 'message': 'Test'})
+
+
+class NFSGaneshaClusterTest(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([NFSGaneshaCluster])
+
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_get_cluster(self, mock_remote):
+        mock_remote.return_value = {
+            'nfs-01': {'deployment_type': 'standalone', 'backend': [], 'placement': {}}
+        }
+        self._get('/api/nfs-ganesha/cluster/nfs-01',
+                  version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        body = self.json_body()
+        self.assertEqual(body['name'], 'nfs-01')
+        mock_remote.assert_called_once_with('nfs', 'cluster_info')
+
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_get_cluster_not_found(self, mock_remote):
+        mock_remote.return_value = {'other-cluster': {'backend': [], 'placement': {}}}
+        self._get('/api/nfs-ganesha/cluster/missing',
+                  version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        self.assertIsNone(self.json_body())
+
+    @patch('dashboard.controllers.nfs.mgr.remote')
+    def test_set_cluster(self, mock_remote):
+        mock_remote.return_value = None
+        self._put('/api/nfs-ganesha/cluster/nfs-01',
+                  {'port': 2049},
+                  version=APIVersion(1, 0))
+        self.assertStatus(200)
+        mock_remote.assert_called_once()
+        call_args = mock_remote.call_args
+        self.assertEqual(call_args[0][1], 'cluster_create')
+        self.assertEqual(call_args[1]['cluster_id'], 'nfs-01')
 
 
 class NFSIngressModeTest(ControllerTestCase):

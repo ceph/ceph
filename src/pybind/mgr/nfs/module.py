@@ -363,6 +363,56 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             networks=networks,
         )
 
+    def cluster_update(self,
+                       cluster_id: str,
+                       placement: Optional[str] = None,
+                       ingress: Optional[bool] = None,
+                       virtual_ip: Optional[str] = None,
+                       ingress_mode: Optional[IngressType] = None,
+                       port: Optional[int] = None,
+                       bind_addrs: Optional[str] = None,
+                       monitoring_port: Optional[int] = None,
+                       enable_rdma: bool = False,
+                       rdma_port: Optional[int] = None,
+                       enable_nfsv3: bool = False,
+                       ingress_placement: Optional[str] = None,
+                       networks: Optional[List[str]] = None) -> None:
+        """Python API for updating an existing NFS cluster by re-applying the spec."""
+        ip_addrs = None
+        if bind_addrs:
+            ip_addrs = {}
+            for pair in bind_addrs.split(','):
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    ip_addrs[host.strip()] = ip.strip()
+
+        # If ingress was explicitly disabled, remove the ingress service if it exists
+        if ingress is False or not virtual_ip:
+            ingress_service = f'ingress.nfs.{cluster_id}'
+            try:
+                sc = self.describe_service(service_type='ingress', service_name=ingress_service)
+                existing = orchestrator.raise_if_exception(sc)
+                if existing:
+                    completion = self.remove_service(ingress_service)
+                    orchestrator.raise_if_exception(completion)
+            except orchestrator.OrchestratorError:
+                pass  # no ingress service to remove
+
+        return self.nfs._call_orch_apply_nfs(
+            cluster_id=cluster_id,
+            placement=placement,
+            virtual_ip=virtual_ip,
+            ingress_mode=ingress_mode,
+            port=port,
+            enable_nfsv3=enable_nfsv3,
+            ip_addrs=ip_addrs,
+            monitoring_port=monitoring_port,
+            enable_rdma=enable_rdma,
+            rdma_port=rdma_port,
+            ingress_placement=ingress_placement,
+            networks=networks,
+        )
+
     def cluster_rm(self, cluster_id: str) -> None:
         """Python API for removing an NFS cluster (no CLI EmptyResponder wrapper)."""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
