@@ -902,6 +902,8 @@ protected:
                                std::move(ops), flags, (Context*)nullptr, nullptr);
     op->target.acting = acting;
     op->target.actual_pgid = spg_t(pg_t(0, pool), shard_id_t(primary_shard));
+    // the pool _calc_target() would have routed the op to
+    op->target.target_oloc = op->target.base_oloc;
     return op;
   }
 };
@@ -1164,6 +1166,7 @@ TEST_F(TestSplitOpInit, ReplicaStatBeforeReadTargetsReference)
                              std::move(ops), CEPH_OSD_FLAG_BALANCE_READS,
                              (Context*)nullptr, nullptr);
   op->target.acting = acting;
+  op->target.target_oloc = op->target.base_oloc;
   {
     ReplicaSplitOpProbe split(op, *objecter, g_ceph_context, 16, false);
     split.init_reference_sub_read();
