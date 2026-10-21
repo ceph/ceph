@@ -1,5 +1,6 @@
 # created by cephadm
-/var/log/ceph/{{ fsid }}/*.log {
+/var/log/ceph/{{ fsid }}/*.log
+/var/log/ceph/{{ fsid }}/*/*.log {
     rotate 7
     daily
     compress
