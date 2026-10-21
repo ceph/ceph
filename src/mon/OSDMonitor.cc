@@ -14130,7 +14130,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       new_pg_temp.push_back(osd);
     }
 
-    int pool_min_size = osdmap.get_pg_pool_min_size(pgid);
+    // the pool as this update leaves it: num_zones can change its size
+    const auto q = pending_inc.new_pools.find(pgid.pool());
+    const pg_pool_t& pi = q != pending_inc.new_pools.end() ?
+      q->second : *osdmap.get_pg_pool(pgid.pool());
+    int pool_min_size = pi.min_size;
     if ((int)new_pg_temp.size() < pool_min_size) {
       ss << "num of osds (" << new_pg_temp.size() <<") < pool min size ("
          << pool_min_size << ")";
@@ -14138,7 +14142,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    int pool_size = osdmap.get_pg_pool_size(pgid);
+    int pool_size = pi.size;
     if ((int)new_pg_temp.size() > pool_size) {
       ss << "num of osds (" << new_pg_temp.size() <<") > pool size ("
          << pool_size << ")";
@@ -14225,8 +14229,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply_no_propose;
       }
     }
-    // Optimized EC does not cope with pg temp with a mismatched size.
-    pending_inc.new_pg_temp[pgid].resize(osdmap.get_pg_size(pgid), CRUSH_ITEM_NONE);
+    // Optimized EC does not cope with pg temp with a mismatched size, and
+    // num_zones can change the pool's size in this update.
+    const auto q = pending_inc.new_pools.find(pgid.pool());
+    pending_inc.new_pg_temp[pgid].resize(
+      q != pending_inc.new_pools.end() ? q->second.size
+                                       : osdmap.get_pg_size(pgid),
+      CRUSH_ITEM_NONE);
     goto update;
   } else if (prefix == "osd pg-upmap" ||
              prefix == "osd rm-pg-upmap" ||
