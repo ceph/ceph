@@ -52,6 +52,12 @@ public:
   /// Remove pgid mapping
   seastar::future<> remove_pg_mapping(spg_t pgid);
 
+  /**
+   * Record whether this OSD is pgid's primary now, so later placements see
+   * the current primary counts. Best effort: the pg stays on its core.
+   */
+  seastar::future<> set_pg_primary(spg_t pgid, bool is_primary);
+
   size_t get_num_pgs() const { return pg_to_core.size(); }
 
   seastar::future<> dump_store_shards(Formatter *f) const;

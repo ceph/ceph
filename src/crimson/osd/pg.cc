@@ -1718,6 +1718,12 @@ void PG::on_change(ceph::os::Transaction &t) {
   obc_loader.notify_on_change(is_primary());
   recovery_backend->on_peering_interval_change(t);
   backend->on_actingset_changed(is_primary());
+  // keep the per-core primary counts current for placing new pgs
+  std::ignore = shard_services.set_pg_primary(
+    get_pgid(), is_primary()
+  ).handle_exception([pgid=get_pgid()](auto ep) {
+    logger().debug("{} failed to update the primary count: {}", pgid, ep);
+  });
   wait_for_active_blocker.unblock();
   if (is_primary()) {
     logger().debug("{} {}: requeueing", *this, __func__);
