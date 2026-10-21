@@ -1,8 +1,8 @@
 import { HttpResponse } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
@@ -51,9 +51,22 @@ describe('NfsClusterFormComponent', () => {
     ]
   });
 
-  beforeEach(() => {
+  function setup(editing = false, clusterId?: string) {
     nfsService = TestBed.inject(NfsService);
     spyOn(nfsService, 'listClusters').and.returnValue(of([] as string[]));
+
+    if (editing) {
+      spyOn(nfsService, 'getCluster').and.returnValue(
+        of({
+          name: clusterId,
+          virtual_ip: null,
+          port: 2049,
+          backend: [],
+          placement: { count: 2, hosts: ['node1'] },
+          enable_rdma: false
+        } as any)
+      );
+    }
 
     const hostService = TestBed.inject(HostService);
     spyOn(hostService, 'getAllHosts').and.returnValue(
@@ -61,12 +74,23 @@ describe('NfsClusterFormComponent', () => {
     );
     spyOn(hostService, 'getLabels').and.returnValue(of(['nfs', 'ingress']));
 
+    const route = TestBed.inject(ActivatedRoute) as any;
+    route.snapshot = {
+      data: { editing },
+      params: { cluster_id: clusterId }
+    };
+
     fixture = TestBed.createComponent(NfsClusterFormComponent);
     component = fixture.componentInstance;
     httpTesting = TestBed.inject(HttpTestingController);
     taskWrapper = TestBed.inject(TaskWrapperService);
     router = TestBed.inject(Router);
     fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    setup();
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
@@ -87,17 +111,32 @@ describe('NfsClusterFormComponent', () => {
     expect(component.nfsForm.get('placement').value).toBe('auto');
   });
 
-  it('should require a valid cluster name', () => {
+  it('should require a valid cluster name format', () => {
     const clusterId = component.nfsForm.get('cluster_id');
     clusterId.setValue('');
-    expect(clusterId.valid).toBeFalsy();
+    expect(clusterId.hasError('required')).toBeTruthy();
 
     clusterId.setValue('Bad Name');
     expect(clusterId.hasError('pattern')).toBeTruthy();
-
-    clusterId.setValue('nfs-01');
-    expect(clusterId.valid).toBeTruthy();
   });
+
+  it('should mark cluster_id as notUnique when cluster already exists', fakeAsync(() => {
+    spyOn(nfsService, 'exists').and.returnValue(of(true));
+    const clusterId = component.nfsForm.get('cluster_id');
+    clusterId.markAsDirty();
+    clusterId.setValue('existing-cluster');
+    tick(500); // DUE_TIMER debounce in CdValidators.unique
+    expect(clusterId.hasError('notUnique')).toBeTruthy();
+  }));
+
+  it('should accept cluster_id when name is available', fakeAsync(() => {
+    spyOn(nfsService, 'exists').and.returnValue(of(false));
+    const clusterId = component.nfsForm.get('cluster_id');
+    clusterId.markAsDirty();
+    clusterId.setValue('nfs-01');
+    tick(500);
+    expect(clusterId.valid).toBeTruthy();
+  }));
 
   it('should add and remove public networks', () => {
     const initialLength = component.networks.length;
@@ -123,6 +162,10 @@ describe('NfsClusterFormComponent', () => {
     expect(virtualIp.valid).toBeFalsy();
 
     virtualIp.setValue('10.20.0.100/24');
+    virtualIp.updateValueAndValidity();
+    expect(virtualIp.valid).toBeTruthy();
+
+    virtualIp.setValue('192.100.100.1');
     virtualIp.updateValueAndValidity();
     expect(virtualIp.valid).toBeTruthy();
   });
@@ -216,5 +259,76 @@ describe('NfsClusterFormComponent', () => {
 
     const payload = (nfsService.createCluster as jasmine.Spy).calls.mostRecent().args[0];
     expect(payload.placement.label).toBe('_admin');
+  });
+
+  describe('edit mode', () => {
+    beforeEach(() => {
+      // Re-configure the already-spied listClusters and add getCluster spy
+      (nfsService.listClusters as jasmine.Spy).and.returnValue(of([] as any));
+      spyOn(nfsService, 'getCluster').and.returnValue(
+        of({
+          name: 'nfs-01',
+          ingress: false,
+          virtual_ip: null,
+          port: 2049,
+          backend: [],
+          placement: { count: 2, hosts: ['node1'] },
+          enable_rdma: true,
+          rdma_port: 20049,
+          enable_nfsv3: true,
+          monitoring_port: 9090
+        } as any)
+      );
+
+      const route = TestBed.inject(ActivatedRoute) as any;
+      route.snapshot = { data: { editing: true }, params: { cluster_id: 'nfs-01' } };
+
+      fixture = TestBed.createComponent(NfsClusterFormComponent);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+    });
+
+    it('should set action to EDIT', () => {
+      expect(component.isEdit).toBe(true);
+      expect(component.clusterId).toBe('nfs-01');
+    });
+
+    it('should disable cluster_id when editing', () => {
+      expect(component.nfsForm.get('cluster_id').disabled).toBe(true);
+    });
+
+    it('should populate form from cluster data', () => {
+      expect(component.nfsForm.get('count').value).toBe(2);
+      expect(component.nfsForm.get('placement').value).toBe(component.PLACEMENT.host);
+      expect(component.selectedHosts).toEqual(['node1']);
+      expect(component.nfsForm.get('hosts').value).toEqual([{ content: 'node1', selected: true }]);
+      expect(component.nfsForm.get('monitoring_port').value).toBe(9090);
+      expect(component.nfsForm.get('enable_rdma').value).toBe(true);
+      expect(component.nfsForm.get('rdma_port').value).toBe(20049);
+      expect(component.nfsForm.get('protocol_version').value).toBe('nfsv3');
+      expect(component.showDeploymentSettings).toBe(true);
+    });
+
+    it('should call updateCluster with all populated values on submit', () => {
+      spyOn(nfsService, 'updateCluster').and.returnValue(of({} as any));
+      spyOn(taskWrapper, 'wrapTaskAroundCall').and.callFake((opts: any) => opts.call);
+      spyOn(router, 'navigate');
+
+      component.submitAction();
+
+      const expectedPayload = {
+        cluster_id: 'nfs-01',
+        port: 2049,
+        placement: { count: 2, hosts: ['node1'] },
+        ingress: false,
+        enable_nfsv3: true,
+        enable_rdma: true,
+        rdma_port: 20049,
+        monitoring_port: 9090
+      };
+
+      expect(nfsService.updateCluster).toHaveBeenCalledWith('nfs-01', expectedPayload);
+      expect(router.navigate).toHaveBeenCalledWith(['/cephfs/nfs']);
+    });
   });
 });

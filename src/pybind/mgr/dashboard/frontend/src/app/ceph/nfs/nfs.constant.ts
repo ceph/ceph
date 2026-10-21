@@ -10,6 +10,7 @@ export interface BindAddrValue {
 export interface NfsClusterFormValue {
   cluster_id: string;
   placement: string;
+  hosts?: (ComboBoxContent | string)[];
   count: number;
   custom_placement_type: string;
   label: ComboBoxContent | string | null;
@@ -21,6 +22,7 @@ export interface NfsClusterFormValue {
   virtual_ip: string;
   ingress_mode: string;
   ingress_placement_mode: string;
+  ingress_hosts?: (ComboBoxContent | string)[];
   protocol_version: string;
   enable_rdma: boolean;
   rdma_port: number;

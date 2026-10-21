@@ -3,20 +3,21 @@ import logging
 import os
 from functools import partial, wraps
 from typing import Any, Dict, List, Optional, Union
+
 import cephfs
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
+from orchestrator import OrchestratorError
 from orchestrator.module import IngressType
+
 from .. import mgr
 from ..security import Scope
 from ..services.cephfs import CephFS
-from ..services.exception import (
-    DashboardException, handle_cephfs_error, serialize_dashboard_exception
-)
+from ..services.exception import DashboardException, handle_cephfs_error, \
+    serialize_dashboard_exception
 from ..tools import str_to_bool
-from . import (
-    APIDoc, APIRouter, BaseController, CreatePermission, DeletePermission, Endpoint, EndpointDoc,
-    ReadPermission, RESTController, Task, UIRouter
-)
+from . import APIDoc, APIRouter, BaseController, CreatePermission, \
+    DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
+    Task, UIRouter
 from ._version import APIVersion
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,18 @@ def raise_on_failure(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
+        try:
+            result = func(*args, **kwargs)
+        except (OrchestratorError, RuntimeError) as e:
+            msg = str(e)
+            if 'Remote method threw exception:' in msg:
+                last_line = msg.strip().splitlines()[-1].strip()
+                if ': ' in last_line:
+                    prefix, _, error_msg = last_line.partition(': ')
+                    if 'Error' in prefix or 'Exception' in prefix:
+                        last_line = error_msg
+                msg = last_line
+            raise NFSException(msg)
         if isinstance(result, dict) and result.get('success') is False:
             msg = result.get('msg', 'Operation failed')
             raise NFSException(msg)
@@ -59,13 +71,16 @@ def normalize_placement(placement: Optional[Union[str, Dict]]) -> Optional[str]:
 
     hosts = placement.get('hosts', [])
     label = placement.get('label', '')
-    count = int(placement.get('count', 1) or 1)
+    host_pattern = placement.get('host_pattern', '')
+    count = placement.get('count')
 
     if hosts:
         host_list = [str(h) for h in hosts]
-        return f"{count} " + " ".join(host_list)
+        return f"{count} " + " ".join(host_list) if count else " ".join(host_list)
     elif label:
-        return f"{count} label:{label}"
+        return f"{count} label:{label}" if count else f"label:{label}"
+    elif host_pattern:
+        return f"{count} {host_pattern}" if count else str(host_pattern)
     elif count:
         return str(count)
 
@@ -138,6 +153,7 @@ EXPORT_SCHEMA = {
 CLUSTER_SCHEMA = {
     'name': (str, 'Cluster identifier'),
     'deployment_type': (str, 'Deployment type (standalone, active-active, or active-passive)'),
+    'ingress': (bool, 'Whether ingress (high availability) is enabled'),
     'virtual_ip': (str, 'Virtual IP address', True),
     'backend': ([{
         'hostname': (str, 'Backend hostname'),
@@ -150,9 +166,21 @@ CLUSTER_SCHEMA = {
         'count': (int, 'Number of daemons', True),
         'label': (str, 'Host label', True)
     }, 'Orchestrator placement specification'),
-    'enable_rdma': (bool, 'Whether RDMA transport is enabled for the cluster'),
+    'networks': ([str], 'Public networks the NFS service listens on', True),
+    'bind_addrs': ([{
+        'hostname': (str, 'Hostname'),
+        'ip': (str, 'IP address')
+    }], 'Per-host bind address mappings', True),
+    'enable_rdma': (bool, 'Whether RDMA transport is enabled for the cluster', True),
+    'rdma_port': (int, 'RDMA port', True),
+    'enable_nfsv3': (bool, 'Whether NFSv3 protocol is enabled', True),
     'ingress_mode': (str, 'Ingress mode', True),
-    'port': (int, 'Ingress port', True),
+    'ingress_placement': ({
+        'hosts': ([str], 'List of ingress hosts', True),
+        'count': (int, 'Number of ingress daemons', True),
+    }, 'Ingress placement specification', True),
+    'port': (int, 'Port', True),
+    'monitoring_port': (int, 'Monitoring port', True),
     'monitor_port': (int, 'Monitor port', True),
 }
 
@@ -203,13 +231,25 @@ class NFSGaneshaCluster(RESTController):
                  responses={200: [CLUSTER_SCHEMA]})
     def list(self, info: Optional[bool] = False):
         if str_to_bool(info):
-            cluster_info = mgr.remote('nfs', 'cluster_info')
+            try:
+                cluster_info = mgr.remote('nfs', 'cluster_info')
+            except Exception as e:  # pylint: disable=broad-except
+                logger.warning("cluster_info failed, falling back to cluster_ls: %s", e)
+                cluster_info = {}
             if not isinstance(cluster_info, dict):
                 logger.error("Unexpected nfs.cluster_info response: %s", type(cluster_info))
-                return []
-            return [
-                {"name": key, **value} for key, value in cluster_info.items()
-            ]
+                cluster_info = {}
+            result = [{"name": key, **value} for key, value in cluster_info.items()]
+            # Cross-reference with cluster_ls to surface clusters that were just created
+            # and may not yet be reflected in cluster_info (orchestrator timing window).
+            known_names = {entry["name"] for entry in result}
+            try:
+                for cluster_id in (mgr.remote('nfs', 'cluster_ls') or []):
+                    if cluster_id not in known_names:
+                        result.append({"name": cluster_id, "backend": [], "placement": {}})
+            except Exception as e:  # pylint: disable=broad-except
+                logger.warning("cluster_ls failed during list: %s", e)
+            return result
         return mgr.remote('nfs', 'cluster_ls')
 
     @raise_on_failure
@@ -220,11 +260,11 @@ class NFSGaneshaCluster(RESTController):
         parameters={
             'cluster_id': (str, 'Cluster identifier'),
             'placement': (str, 'Placement spec as string (e.g. "2 host1 host2") or '
-                         'object with hosts/label/count properties', {'optional': True}),
+                          'object with hosts/label/count properties', {'optional': True}),
             'ingress': (bool, 'Enable ingress', {'optional': True}),
             'virtual_ip': (str, 'Virtual IP for ingress', {'optional': True}),
             'ingress_mode': (str, 'Ingress mode (one of: keepalive-only, '
-                            'haproxy-standard, haproxy-protocol)', {'optional': True}),
+                             'haproxy-standard, haproxy-protocol)', {'optional': True}),
             'port': (int, 'Port to use', {'optional': True}),
             'enable_rdma': (bool, 'Enable NFS over RDMA', {'optional': True}),
             'rdma_port': (int, 'RDMA port', {'optional': True}),
@@ -270,6 +310,75 @@ class NFSGaneshaCluster(RESTController):
             ingress_placement=normalize_placement(ingress_placement),
             bind_addrs=format_host_ip_addrs(bind_addrs),
             monitoring_addrs=format_host_ip_addrs(monitoring_addrs),
+            monitoring_port=monitoring_port,
+            networks=normalize_networks(networks)
+        )
+
+    @ReadPermission
+    @EndpointDoc("Get a single NFS cluster",
+                 parameters={'cluster_id': (str, 'Cluster identifier')},
+                 responses={200: CLUSTER_SCHEMA})
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
+    def get(self, cluster_id: str) -> Optional[Dict]:
+        cluster_info = mgr.remote('nfs', 'cluster_info')
+        if not isinstance(cluster_info, dict):
+            return None
+        data = cluster_info.get(cluster_id)
+        if data is None:
+            return None
+        return {'name': cluster_id, **data}
+
+    @NfsTask('cluster/edit', {'cluster_id': '{cluster_id}'}, 2.0)
+    @EndpointDoc(
+        "Update an NFS cluster",
+        parameters={
+            'cluster_id': (str, 'Cluster identifier'),
+            'placement': (str, 'Placement spec as string (e.g. "2 host1 host2") or '
+                          'object with hosts/label/count properties', {'optional': True}),
+            'ingress': (bool, 'Enable ingress', {'optional': True}),
+            'virtual_ip': (str, 'Virtual IP for ingress', {'optional': True}),
+            'ingress_mode': (str, 'Ingress mode', {'optional': True}),
+            'port': (int, 'Port to use', {'optional': True}),
+            'enable_rdma': (bool, 'Enable NFS over RDMA', {'optional': True}),
+            'rdma_port': (int, 'RDMA port', {'optional': True}),
+            'enable_nfsv3': (bool, 'Enable NFSv3 protocol', {'optional': True}),
+            'ingress_placement': (str, 'Ingress placement spec', {'optional': True}),
+            'bind_addrs': ([dict], 'Host to IP bind address mappings', {'optional': True}),
+            'monitoring_port': (int, 'Monitoring port', {'optional': True}),
+            'networks': ([str], 'Public networks', {'optional': True}),
+        }
+    )
+    @RESTController.MethodMap(version=APIVersion(1, 0))
+    @raise_on_failure
+    def set(self, cluster_id: str, placement: Optional[Union[str, Dict]] = None,
+            ingress: Optional[bool] = None, virtual_ip: Optional[str] = None,
+            ingress_mode: Optional[str] = None, port: Optional[int] = None,
+            enable_rdma: Optional[bool] = None,
+            rdma_port: Optional[int] = None,
+            enable_nfsv3: Optional[bool] = None,
+            ingress_placement: Optional[Union[str, Dict]] = None,
+            bind_addrs: Optional[List[Dict[str, str]]] = None,
+            monitoring_port: Optional[int] = None,
+            networks: Optional[Union[str, List[str]]] = None) -> Any:
+        """Update an NFS-Ganesha cluster by re-applying the spec."""
+        logger.debug(
+            "Updating NFS cluster: cluster_id=%s, placement=%s",
+            cluster_id, placement
+        )
+        return mgr.remote(
+            'nfs',
+            'cluster_update',
+            cluster_id=str(cluster_id),
+            placement=normalize_placement(placement),
+            ingress=ingress,
+            virtual_ip=virtual_ip,
+            ingress_mode=parse_ingress_mode(ingress_mode),
+            port=port,
+            enable_rdma=enable_rdma or False,
+            rdma_port=rdma_port,
+            enable_nfsv3=enable_nfsv3 or False,
+            ingress_placement=normalize_placement(ingress_placement),
+            bind_addrs=format_host_ip_addrs(bind_addrs),
             monitoring_port=monitoring_port,
             networks=normalize_networks(networks)
         )

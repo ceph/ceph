@@ -636,6 +636,7 @@ class NFSCluster:
         virtual_ip: Optional[str] = None
         ingress_port: Optional[int] = None
         monitor_port: Optional[int] = None
+        ingress_placement = None
 
         sc = self.mgr.describe_service(
             service_type='ingress',
@@ -646,7 +647,9 @@ class NFSCluster:
             if ingress_services:
                 svc = ingress_services[0]
                 spec = cast(IngressSpec, svc.spec)
-                virtual_ip = svc.virtual_ip.split('/')[0] if svc.virtual_ip else None
+                if spec.placement:
+                    ingress_placement = spec.placement
+                virtual_ip = svc.virtual_ip if svc.virtual_ip else None
                 if spec.keepalive_only:
                     ingress_mode = IngressType.keepalive_only
                 elif spec.enable_haproxy_protocol:
@@ -693,6 +696,12 @@ class NFSCluster:
         deployment_type = "standalone"
         placement = None
         enable_rdma = False
+        rdma_port = None
+        enable_nfsv3 = False
+        monitoring_port = None
+        nfs_networks: List[str] = []
+        nfs_ip_addrs: Dict[str, str] = {}
+        nfs_port: Optional[int] = None
 
         try:
             nfs_sc = self.mgr.describe_service(
@@ -704,6 +713,12 @@ class NFSCluster:
                 if svc.spec.service_id == cluster_id:
                     placement = svc.spec.placement
                     enable_rdma = bool(getattr(svc.spec, 'enable_rdma', False))
+                    rdma_port = getattr(svc.spec, 'rdma_port', None)
+                    enable_nfsv3 = bool(getattr(svc.spec, 'enable_nfsv3', False))
+                    monitoring_port = getattr(svc.spec, 'monitoring_port', None)
+                    nfs_networks = list(getattr(svc.spec, 'networks', []) or [])
+                    nfs_ip_addrs = dict(getattr(svc.spec, 'ip_addrs', {}) or {})
+                    nfs_port = getattr(svc.spec, 'port', None)
                     break
         except orchestrator.OrchestratorError:
             log.debug("Failed to get NFS service spec for cluster %s", cluster_id)
@@ -736,18 +751,36 @@ class NFSCluster:
             else:
                 deployment_type = "active-passive"
 
+        bind_addrs = [{'hostname': h, 'ip': ip} for h, ip in nfs_ip_addrs.items() if h and ip]
+
         r: Dict[str, Any] = {
             'deployment_type': deployment_type,
+            'ingress': virtual_ip is not None,
             'virtual_ip': virtual_ip,
             'backend': backends,
             'placement': placement.to_json() if placement else {},
             'enable_rdma': enable_rdma,
         }
 
+        if rdma_port is not None:
+            r['rdma_port'] = rdma_port
+        if enable_nfsv3:
+            r['enable_nfsv3'] = enable_nfsv3
+        if monitoring_port is not None:
+            r['monitoring_port'] = monitoring_port
+        if nfs_networks:
+            r['networks'] = nfs_networks
+        if bind_addrs:
+            r['bind_addrs'] = bind_addrs
+
         if ingress_mode:
             r['ingress_mode'] = ingress_mode.value
+        if ingress_placement is not None:
+            r['ingress_placement'] = ingress_placement.to_json()
         if ingress_port is not None:
             r['port'] = ingress_port
+        elif nfs_port is not None:
+            r['port'] = nfs_port
         if monitor_port is not None:
             r['monitor_port'] = monitor_port
 

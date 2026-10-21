@@ -14,13 +14,20 @@ export interface NFSClusterPlacement {
 
 export interface NFSCluster {
   name: string;
+  ingress?: boolean;
   virtual_ip: string | null;
   port?: number;
   backend: NFSBackend[];
   placement: NFSClusterPlacement;
+  networks?: string[];
+  bind_addrs?: NFSBindAddr[];
   enable_rdma?: boolean;
+  rdma_port?: number;
+  enable_nfsv3?: boolean;
   deployment_type?: string;
   ingress_mode?: string;
+  ingress_placement?: NFSClusterPlacement;
+  monitoring_port?: number;
   monitor_port?: number;
 }
 

@@ -1,7 +1,8 @@
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { NFSCluster, NFSClusterPayload } from '~/app/ceph/nfs/models/nfs-cluster-config';
 
 import { NfsFSAbstractionLayer, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
@@ -98,8 +99,8 @@ export class NfsService extends ApiClient {
 
   exists(clusterId: string): Observable<boolean> {
     return this.listClusters(false).pipe(
-      map((names: any) => (names as string[]).includes(clusterId)),
-      catchError(() => observableOf(false))
+      map((names) => names.includes(clusterId)),
+      catchError(() => of(false))
     );
   }
 
@@ -118,8 +119,21 @@ export class NfsService extends ApiClient {
     return this.http.get(`${this.uiApiPath}/cephfs/filesystems`);
   }
 
+  getCluster(clusterId: string): Observable<NFSCluster | null> {
+    return this.listClusters(true).pipe(
+      map((clusters) => clusters.find((cluster) => cluster.name === clusterId) ?? null)
+    );
+  }
+
   createCluster(requestModel: NFSClusterPayload): Observable<HttpResponse<null>> {
     return this.http.post<null>(`${this.apiPath}/cluster`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  updateCluster(clusterId: string, requestModel: any): Observable<HttpResponse<any>> {
+    return this.http.put<any>(`${this.apiPath}/cluster/${clusterId}`, requestModel, {
       headers: { Accept: this.getVersionHeaderValue(1, 0) },
       observe: 'response'
     });

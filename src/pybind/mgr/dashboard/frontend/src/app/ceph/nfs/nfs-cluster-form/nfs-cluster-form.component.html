@@ -60,7 +60,7 @@
               >Use lowercase alphanumeric characters and hyphens only.</span
             >
           }
-          @if (nfsForm.showError('cluster_id', formDir, 'uniqueName')) {
+          @if (nfsForm.showError('cluster_id', formDir, 'notUnique')) {
             <span
               class="invalid-feedback"
               i18n
@@ -388,192 +388,215 @@
       </div>
 
       @if (showAdvancedNetwork) {
-        <p
-          class="cds--type-heading-compact-01 cds-mb-2"
-          i18n
-        >
-          Public network
-        </p>
-        <p
-          class="cds--type-body-compact-01 cds-mb-4"
-          i18n
-        >
-          NFS will use addresses from these networks unless specific bind addresses are provided.
-        </p>
-
-        <ng-container formArrayName="networks">
-          @for (ctrl of networks.controls; track $index; let i = $index) {
-            <div class="form-item form-item-append">
-              <div cdsRow>
-                <div
-                  cdsCol
-                  [columnNumbers]="{ lg: 14 }"
-                >
-                  <cds-text-label
-                    [labelInputID]="'network-' + i"
-                    i18n
-                    [invalid]="networks.controls[i].invalid && networks.controls[i].dirty"
-                    [invalidText]="networkError"
-                  >
-                    Public network
-                    <input
-                      cdsText
-                      type="text"
-                      [id]="'network-' + i"
-                      [formControlName]="i"
-                      placeholder="10.20.0.0/24"
-                      i18n-placeholder
-                      [invalid]="networks.controls[i].invalid && networks.controls[i].dirty"
-                    />
-                  </cds-text-label>
-                  <ng-template #networkError>
-                    <span
-                      class="invalid-feedback"
-                      i18n
-                      >Enter a network address with the host bits cleared (e.g. 10.20.0.0/24).</span
-                    >
-                  </ng-template>
-                </div>
-                <div
-                  cdsCol
-                  [columnNumbers]="{ lg: 1 }"
-                  class="item-action-btn spacing"
-                >
-                  @if (networks.length > 1) {
-                    <cds-icon-button
-                      kind="danger"
-                      size="sm"
-                      i18n-aria-label
-                      aria-label="Remove"
-                      (click)="removeNetwork(i)"
-                    >
-                      <cd-icon type="trash"></cd-icon>
-                    </cds-icon-button>
-                  }
-                </div>
-              </div>
-            </div>
-          }
-        </ng-container>
-        <div class="form-item">
-          <button
-            cdsButton="tertiary"
-            size="sm"
-            type="button"
-            (click)="addNetwork()"
+        <!-- Public network and bind addresses are incompatible with ingress -->
+        @if (!nfsForm.get('ingress').value) {
+          <p
+            class="cds--type-heading-compact-01 cds-mb-2"
             i18n
           >
-            Add network +
-          </button>
-        </div>
+            Public network
+          </p>
+          <p
+            class="cds--type-body-compact-01 cds-mb-4"
+            i18n
+          >
+            NFS will use addresses from these networks unless specific bind addresses are provided.
+          </p>
 
-        <p
-          class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
-          i18n
-        >
-          Bind address
-        </p>
-        <p
-          class="cds--type-body-compact-01 cds-mb-4"
-          i18n
-        >
-          Use this to explicitly control the IP addresses NFS listens on.
-        </p>
-
-        <ng-container formArrayName="bind_addrs">
-          @for (ctrl of bind_addrs.controls; track $index; let i = $index) {
-            <div
-              class="form-item form-item-append"
-              [formGroupName]="i"
-            >
-              <div cdsRow>
-                <div
-                  cdsCol
-                  [columnNumbers]="{ lg: 7 }"
-                >
-                  @if (hostsAndLabels$ | async; as data) {
-                    <cds-combo-box
-                      label="Host"
-                      i18n-label
-                      formControlName="hostname"
-                      [id]="'bind-host-' + i"
-                      placeholder="Select a host"
-                      i18n-placeholder
-                      [appendInline]="true"
-                      [items]="data.hosts"
-                      i18n
-                    >
-                      <cds-dropdown-list></cds-dropdown-list>
-                    </cds-combo-box>
-                  }
-                </div>
-                <div
-                  cdsCol
-                  [columnNumbers]="{ lg: 7 }"
-                >
-                  <cds-text-label
-                    [labelInputID]="'bind-ip-' + i"
-                    i18n
-                    [invalid]="
-                      bind_addrs.controls[i].get('ip').invalid &&
-                      bind_addrs.controls[i].get('ip').dirty
-                    "
-                    [invalidText]="bindIpError"
+          <ng-container formArrayName="networks">
+            @for (ctrl of networks.controls; track $index; let i = $index) {
+              <div class="form-item form-item-append">
+                <div cdsRow>
+                  <div
+                    cdsCol
+                    [columnNumbers]="{ lg: 14 }"
                   >
-                    IP address
-                    <input
-                      cdsText
-                      type="text"
-                      formControlName="ip"
-                      [id]="'bind-ip-' + i"
-                      placeholder="Leave empty to use the default binding."
-                      i18n-placeholder
+                    <cds-text-label
+                      [labelInputID]="'network-' + i"
+                      i18n
+                      [invalid]="networks.controls[i].invalid && networks.controls[i].dirty"
+                      [invalidText]="networkError"
+                    >
+                      Public network
+                      <input
+                        cdsText
+                        type="text"
+                        [id]="'network-' + i"
+                        [formControlName]="i"
+                        placeholder="10.20.0.0/24"
+                        i18n-placeholder
+                        [invalid]="networks.controls[i].invalid && networks.controls[i].dirty"
+                      />
+                    </cds-text-label>
+                    <ng-template #networkError>
+                      @if (networks.controls[i].hasError('pattern')) {
+                        <span
+                          class="invalid-feedback"
+                          i18n
+                          >Enter a valid CIDR network (e.g. 10.20.0.0/24).</span
+                        >
+                      }
+                      @if (networks.controls[i].hasError('hostBitsSet')) {
+                        <span
+                          class="invalid-feedback"
+                          i18n
+                          >Host bits must be zero — use the network address (e.g. 192.168.100.0/24,
+                          not 192.168.100.10/24).</span
+                        >
+                      }
+                    </ng-template>
+                  </div>
+                  <div
+                    cdsCol
+                    [columnNumbers]="{ lg: 1 }"
+                    class="item-action-btn spacing"
+                  >
+                    @if (networks.length > 1) {
+                      <cds-icon-button
+                        kind="danger"
+                        size="sm"
+                        i18n-aria-label
+                        aria-label="Remove"
+                        (click)="removeNetwork(i)"
+                      >
+                        <cd-icon type="trash"></cd-icon>
+                      </cds-icon-button>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+          </ng-container>
+          <div class="form-item">
+            <button
+              cdsButton="tertiary"
+              size="sm"
+              type="button"
+              (click)="addNetwork()"
+              i18n
+            >
+              Add network +
+            </button>
+          </div>
+
+          <p
+            class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
+            i18n
+          >
+            Bind address
+          </p>
+          <p
+            class="cds--type-body-compact-01 cds-mb-4"
+            i18n
+          >
+            Use this to explicitly control the IP addresses NFS listens on.
+          </p>
+
+          <ng-container formArrayName="bind_addrs">
+            @for (ctrl of bind_addrs.controls; track $index; let i = $index) {
+              <div
+                class="form-item form-item-append"
+                [formGroupName]="i"
+              >
+                <div cdsRow>
+                  <div
+                    cdsCol
+                    [columnNumbers]="{ lg: 7 }"
+                  >
+                    @if (hostsAndLabels$ | async; as data) {
+                      <cds-combo-box
+                        type="single"
+                        selectionFeedback="top-after-reopen"
+                        label="Host"
+                        i18n-label
+                        formControlName="hostname"
+                        [id]="'bind-host-' + i"
+                        placeholder="Select a host"
+                        i18n-placeholder
+                        [appendInline]="true"
+                        [items]="data.hosts"
+                        i18n
+                      >
+                        <cds-dropdown-list></cds-dropdown-list>
+                      </cds-combo-box>
+                    }
+                  </div>
+                  <div
+                    cdsCol
+                    [columnNumbers]="{ lg: 7 }"
+                  >
+                    <cds-text-label
+                      [labelInputID]="'bind-ip-' + i"
+                      i18n
                       [invalid]="
                         bind_addrs.controls[i].get('ip').invalid &&
                         bind_addrs.controls[i].get('ip').dirty
                       "
-                    />
-                  </cds-text-label>
-                  <ng-template #bindIpError>
-                    <span
-                      class="invalid-feedback"
-                      i18n
-                      >Enter a valid IPv4 or IPv6 address.</span
+                      [invalidText]="bindIpError"
                     >
-                  </ng-template>
-                </div>
-                <div
-                  cdsCol
-                  [columnNumbers]="{ lg: 1 }"
-                  class="item-action-btn spacing"
-                >
-                  @if (bind_addrs.length > 1) {
-                    <cds-icon-button
-                      kind="danger"
-                      size="sm"
-                      i18n-aria-label
-                      aria-label="Remove"
-                      (click)="removeBindAddr(i)"
-                    >
-                      <cd-icon type="trash"></cd-icon>
-                    </cds-icon-button>
-                  }
+                      IP address
+                      <input
+                        cdsText
+                        type="text"
+                        formControlName="ip"
+                        [id]="'bind-ip-' + i"
+                        placeholder="Leave empty to use the default binding."
+                        i18n-placeholder
+                        [invalid]="
+                          bind_addrs.controls[i].get('ip').invalid &&
+                          bind_addrs.controls[i].get('ip').dirty
+                        "
+                      />
+                    </cds-text-label>
+                    <ng-template #bindIpError>
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                        >Enter a valid IPv4 or IPv6 address.</span
+                      >
+                    </ng-template>
+                  </div>
+                  <div
+                    cdsCol
+                    [columnNumbers]="{ lg: 1 }"
+                    class="item-action-btn spacing"
+                  >
+                    @if (bind_addrs.length > 1) {
+                      <cds-icon-button
+                        kind="danger"
+                        size="sm"
+                        i18n-aria-label
+                        aria-label="Remove"
+                        (click)="removeBindAddr(i)"
+                      >
+                        <cd-icon type="trash"></cd-icon>
+                      </cds-icon-button>
+                    }
+                  </div>
                 </div>
               </div>
-            </div>
-          }
-        </ng-container>
-        <div class="form-item">
-          <button
-            cdsButton="tertiary"
-            size="sm"
-            type="button"
-            (click)="addBindAddr()"
+            }
+          </ng-container>
+          <div class="form-item">
+            <button
+              cdsButton="tertiary"
+              size="sm"
+              type="button"
+              (click)="addBindAddr()"
+              i18n
+            >
+              Add address +
+            </button>
+          </div>
+        } @else {
+          <p
+            class="cds--type-body-compact-01 cds-mb-4"
             i18n
           >
-            Add address +
-          </button>
-        </div>
+            Public network and bind addresses are not available when high availability (ingress) is
+            enabled.
+          </p>
+        }
 
         <p
           class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
