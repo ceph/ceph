@@ -153,6 +153,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, endpoint, admin_c
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, op, op_args)
     assert 'keys' not in out
     assert 'swift_keys' not in out
+    assert 'temp_url_keys' not in out
 
     # TESTCASE 'info-existing','user','info','existing user','returns no keys with user-info-without-keys cap set to read'
     (err, out) = rgwadmin(ctx, client, [

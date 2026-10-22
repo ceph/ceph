@@ -125,6 +125,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   if (dump_keys) {
     dump_access_keys_info(f, info);
     dump_swift_keys_info(f, info);
+    encode_json("temp_url_keys", info.temp_url_keys, f);
   }
 
   encode_json("caps", info.caps, f);
@@ -139,7 +140,6 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("placement_tags", info.placement_tags, f);
   encode_json("bucket_quota", info.quota.bucket_quota, f);
   encode_json("user_quota", info.quota.user_quota, f);
-  encode_json("temp_url_keys", info.temp_url_keys, f);
 
   std::string_view user_source_type;
   switch ((RGWIdentityType)info.type) {
