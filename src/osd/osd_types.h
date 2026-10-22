@@ -1897,9 +1897,11 @@ public:
   /// choose a random hash position within a pg
   uint32_t get_random_pg_position(pg_t pgid, uint32_t seed) const;
 
-  /// EC partial writes: test if a shard is a non-primary
+  /// EC partial writes: test if a shard is a non-primary. A shard of a zone
+  /// that the pool no longer has is one if its relative shard is.
   bool is_nonprimary_shard(const shard_id_t shard) const {
-    return !nonprimary_shards.empty() && nonprimary_shards.contains(shard);
+    return !nonprimary_shards.empty() &&
+      nonprimary_shards.contains(get_relative_shard(shard));
   }
 
   void set_shard_mapping(std::vector<shard_id_t> && mapping) {

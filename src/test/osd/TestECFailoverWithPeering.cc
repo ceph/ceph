@@ -79,8 +79,9 @@ public:
   // ceph osd pool set <pool> num_zones 1, as the monitor does it to a pool
   // over two zones: the pool keeps shards 0 to k+m-1, on zone's OSDs, with
   // the pg_upmap cut to them; pg_temp and primary_temp are dropped, and
-  // stretch mode ends with its last pool over zones.
-  void go_to_one_zone(int zone = 0) {
+  // stretch mode ends with its last pool over zones. up_osds come up in the
+  // same map.
+  void go_to_one_zone(int zone = 0, const std::vector<int>& up_osds = {}) {
     auto new_osdmap = std::make_shared<OSDMap>();
     new_osdmap->deepish_copy_from(*osdmap);
     pg_pool_t pool = *new_osdmap->get_pg_pool(pool_id);
@@ -105,6 +106,11 @@ public:
     inc.new_degraded_stretch_mode = 0;
     inc.new_recovering_stretch_mode = 0;
     inc.new_stretch_mode_bucket = 0;
+    for (int osd : up_osds) {
+      inc.new_up_client[osd] = new_osdmap->get_addrs(osd);
+      inc.new_hb_back_up[osd] = new_osdmap->get_hb_back_addrs(osd);
+      inc.new_hb_front_up[osd] = new_osdmap->get_hb_front_addrs(osd);
+    }
     new_osdmap->apply_incremental(inc);
     update_osdmap_with_peering(new_osdmap);
   }
@@ -3602,6 +3608,42 @@ TEST_P(TestECFailoverWithPeering, OneZoneRecoversFromItsOwnShards) {
   ASSERT_FALSE(read.empty());
   EXPECT_LT(int(read.rbegin()->id), k + m);
   verify_object(obj);
+}
+
+// Zone 1's copy of a nonprimary shard, shard k+m+1, misses the peering that
+// records the partial writes it skipped, and is back as a stray once the
+// pool is in one zone. osd.1 missed a write that the copy holds, so the
+// primary sends the copy an info that pwlc moves past its log. A stray takes
+// that only from a nonprimary shard, and the copy, whose shard ID is at or
+// above the pool's size, once was not one.
+TEST_P(TestECFailoverWithPeering, OneZoneStrayOfNonprimaryShardTakesPwlc) {
+  if (num_zones != 2 || k < 2) {
+    GTEST_SKIP() << "requires num_zones == 2 and a nonprimary shard";
+  }
+  const size_t object_size = stripe_unit * k;
+  const int copy = k + m + 1;
+  const std::string missed = "test_one_zone_missed";
+  const std::string partial = "test_one_zone_partial";
+  const std::string a(object_size, 'A');
+  create_and_write_verify(partial, a);
+  mark_osd_down(1);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  create_and_write_verify(missed, a);
+  mark_osd_up(1);
+  // writes to the first data shard only: the first of an interval goes to
+  // every shard, and shard 1 and its copy skip the others
+  for (char c : {'B', 'C', 'D'}) {
+    write_verify(partial, 0, std::string(stripe_unit, c), object_size);
+  }
+  mark_osd_down(copy);
+  go_to_one_zone(0, {copy});
+
+  auto* primary_ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(primary_ps->is_active()) << primary_ps->get_current_state();
+  run_recovery(missed, false, a);
+  verify_object(missed);
+  verify_object(partial, std::string(stripe_unit, 'D') + a.substr(stripe_unit),
+                0, object_size);
 }
 
 // ---------------------------------------------------------------------------
