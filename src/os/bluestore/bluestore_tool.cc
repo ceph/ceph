@@ -332,7 +332,6 @@ int main(int argc, char **argv)
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
     ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("bdev-type", po::value<vector<string>>(&bdev_type), "bdev type to inspect: 'bdev-block'/'bdev-wal'/'bdev-db'")
-    ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ("op", po::value<string>(&action_aux),
