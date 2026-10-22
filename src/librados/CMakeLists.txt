@@ -30,6 +30,11 @@ if(ENABLE_SHARED)
       LINK_FLAGS " -static-libstdc++ -static-libgcc")
   endif()
   target_compile_definitions(librados PRIVATE -DLIBRADOS_SHARED=1)
+  # The base-version symvers ("fn@@", "fn@") in librados_c.cc need ld.bfd:
+  # lld rejects them and mold drops them, whether selected or default.
+  if(HAVE_ASM_SYMVER OR HAVE_ATTR_SYMVER)
+    target_link_options(librados PRIVATE -fuse-ld=bfd)
+  endif()
 endif()
 target_link_libraries(librados PRIVATE
   librados_impl osdc ceph-common cls_lock_client
