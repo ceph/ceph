@@ -13153,11 +13153,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd crush rule create-stretch-replicated") {
     string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_replica_rule");
-    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    // crush_rule_create_replica() takes an empty root or failure domain from
+    // its osd_pool_default_* option
+    string root = cmd_getval_or<string>(cmdmap, "root", "");
     int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 2);
     int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
-    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", g_conf().get_val<string>("osd_pool_default_zone_failure_domain"));
-    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "");
+    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "");
     bool force = false;
     cmd_getval(cmdmap, "force", force);
     string device_class;
