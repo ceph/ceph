@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <deque>
 #include <iomanip>
 #include <map>
 #include <boost/program_options.hpp>
@@ -15,6 +16,7 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/core/timer.hh>
 
 #include "common/ceph_time.h"
 #include "messages/MOSDOp.h"
@@ -143,6 +145,7 @@ struct server_config {
   bool is_fixed_cpu;
   unsigned core;
   bool lossless;
+  std::chrono::microseconds reply_delay;
 
   std::string str() const {
     std::ostringstream out;
@@ -151,6 +154,7 @@ struct server_config {
         << ", is_fixed_cpu=" << is_fixed_cpu
         << ", core=" << core
         << ", lossless=" << lossless
+        << ", reply_delay_us=" << reply_delay.count()
         << ")";
     return out.str();
   }
@@ -166,6 +170,8 @@ struct server_config {
     conf.is_fixed_cpu = options["server-fixed-cpu"].as<bool>();
     conf.core = options["server-core"].as<unsigned>();
     conf.lossless = load_lossless(options);
+    conf.reply_delay = std::chrono::microseconds(
+        options["server-reply-delay-us"].as<unsigned>());
     return conf;
   }
 };
@@ -201,11 +207,25 @@ static seastar::future<> run(
       unsigned msg_len;
       bufferlist msg_data;
 
-      Server(seastar::shard_id msgr_sid, unsigned msg_len, bool needs_report)
+      // replies held back to model a replica, which replies only once the
+      // write is committed. Due in the order they were queued.
+      const std::chrono::microseconds reply_delay;
+      struct delayed_reply_t {
+        seastar::steady_clock_type::time_point due;
+        crimson::net::ConnectionRef conn;
+        MessageURef msg;
+      };
+      std::deque<delayed_reply_t> delayed_replies;
+      seastar::timer<seastar::steady_clock_type> reply_timer;
+
+      Server(seastar::shard_id msgr_sid, unsigned msg_len, bool needs_report,
+             std::chrono::microseconds reply_delay)
         : msgr_sid{msgr_sid},
-          msg_len{msg_len} {
+          msg_len{msg_len},
+          reply_delay{reply_delay} {
         lname = fmt::format("server@{}", msgr_sid);
         msg_data.append_zero(msg_len);
+        reply_timer.set_callback([this] { send_due_replies(); });
 
         if (seastar::this_shard_id() == msgr_sid &&
             needs_report) {
@@ -253,7 +273,11 @@ static seastar::future<> run(
         rep->write(0, server.msg_len, data);
         rep->set_tid(m->get_tid());
         ++server.msg_count;
-        std::ignore = c->send(std::move(rep));
+        if (server.reply_delay == 0us) {
+          std::ignore = c->send(std::move(rep));
+        } else {
+          server.delay_reply(std::move(c), std::move(rep));
+        }
 
         if (server.msg_count % 16 == 0) {
           server.last_msg = std::move(m);
@@ -286,20 +310,45 @@ static seastar::future<> run(
         });
       }
 
+      void delay_reply(crimson::net::ConnectionRef conn, MessageURef msg) {
+        auto due = seastar::steady_clock_type::now() + reply_delay;
+        delayed_replies.push_back({due, std::move(conn), std::move(msg)});
+        if (!reply_timer.armed()) {
+          reply_timer.arm(due);
+        }
+      }
+
+      void send_due_replies() {
+        auto now = seastar::steady_clock_type::now();
+        while (!delayed_replies.empty() &&
+               delayed_replies.front().due <= now) {
+          auto &reply = delayed_replies.front();
+          std::ignore = reply.conn->send(std::move(reply.msg));
+          delayed_replies.pop_front();
+        }
+        if (!delayed_replies.empty()) {
+          reply_timer.arm(delayed_replies.front().due);
+        }
+      }
+
       seastar::future<> shutdown() {
         logger().info("{} shutdown...", lname);
-        return container().invoke_on(
-            msgr_sid, [](auto &server) {
-          server.is_stopped = true;
-          ceph_assert(server.msgr);
-          server.msgr->stop();
-          return server.msgr->shutdown(
-          ).then([&server] {
-            if (server.fut_report.has_value()) {
-              return std::move(server.fut_report.value());
-            } else {
-              return seastar::now();
-            }
+        return container().invoke_on_all([](auto &server) {
+          server.reply_timer.cancel();
+          server.delayed_replies.clear();
+        }).then([this] {
+          return container().invoke_on(msgr_sid, [](auto &server) {
+            server.is_stopped = true;
+            ceph_assert(server.msgr);
+            server.msgr->stop();
+            return server.msgr->shutdown(
+            ).then([&server] {
+              if (server.fut_report.has_value()) {
+                return std::move(server.fut_report.value());
+              } else {
+                return seastar::now();
+              }
+            });
           });
         });
       }
@@ -1106,7 +1155,8 @@ static seastar::future<> run(
         return create_sharded<test_state::Server>(
           server_conf.core,
           server_conf.block_size,
-          server_needs_report);
+          server_needs_report,
+          server_conf.reply_delay);
       }
     }),
     seastar::futurize_invoke([mode, client_conf, server_sid] {
@@ -1249,6 +1299,9 @@ int main(int argc, char** argv)
      "server messenger running core")
     ("server-bs", bpo::value<unsigned>()->default_value(0),
      "server block size")
+    ("server-reply-delay-us", bpo::value<unsigned>()->default_value(0),
+     "delay each reply by this long, to model a replica that replies "
+     "only once the write is committed")
     ("crc-enabled", bpo::value<bool>()->default_value(false),
      "enable CRC checks")
     ("msgr-policy", bpo::value<std::string>()->default_value("lossy"),
