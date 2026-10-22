@@ -64,6 +64,7 @@
 
 #include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
+#include "osdc/OSDShardRouter.h"
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
@@ -1893,6 +1894,7 @@ public:
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
     bool allows_ecoptimizations = false; ///< whether EC plugin optimizations are enabled.
+    bool crimson_pool = false; ///< pool has FLAG_CRIMSON: its ops may be sent to the PG's reactor
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
@@ -2010,7 +2012,12 @@ public:
 
     op_target_t target;
 
-    ConnectionRef con = nullptr;  // for rx buffer only
+    /// connection the op was last sent on: the session's main connection,
+    /// or a crimson reactor connection chosen by OSDSession::router
+    ConnectionRef con = nullptr;
+    /// the PG `con` was chosen for (target.actual_pgid may change before a
+    /// resend, and the router must release the PG it pinned)
+    spg_t route_pgid;
     uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT; // explicitly specified op features
 
     osdc_opvec ops;
@@ -2558,6 +2565,17 @@ public:
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
+    /// crimson: ops go to the reactor that runs their PG (guarded by lock,
+    /// except owns()/index_of())
+    using router_t =
+      OSDShardRouter<spg_t, ConnectionRef, ceph::coarse_mono_clock>;
+    router_t router;
+
+    /// c is this session's main connection or one of its reactor connections
+    bool owns_connection(const ConnectionRef& c) const {
+      return c == con || router.owns(c);
+    }
+
     OSDSession(CephContext *cct, int o, boost::asio::io_context::executor_type ex) :
       osd(o), strand(ex), incarnation(0), con(NULL),
       num_locks(cct->_conf->objecter_completion_locks_per_session),
@@ -2715,6 +2733,17 @@ private:
   void _command_cancel_map_check(CommandOp *op);
 
   void _kick_requests(OSDSession *session, std::map<uint64_t, LingerOp *>& lresend);
+
+  // crimson reactor routing (OSDSession::router); session lock held
+  /// the connection to send op on, pinned until _unroute_op()
+  ConnectionRef _route_op(Op *op);
+  void _unroute_op(OSDSession *s, Op *op);
+  /// forget all reactor connections; the caller resends what was on them
+  void _drop_reactor_conns(OSDSession *s);
+  /// reactor connection `index` reset: forget it and resend, in tid order,
+  /// only the ops that were on it (rwlock unique)
+  void _retire_reactor_conn(OSDSession *s, int index,
+                            std::map<uint64_t, LingerOp *>& lresend);
   void _linger_ops_resend(std::map<uint64_t, LingerOp *>& lresend,
 			  std::unique_lock<ceph::shared_mutex>& ul);
 
