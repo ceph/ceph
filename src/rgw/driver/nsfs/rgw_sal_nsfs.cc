@@ -7334,7 +7334,9 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
  * (bucketspace_fs.js:424).  Raised here rather than in
  * delete_directory(), which rename, conversion and multipart
  * completion share (§5.2).  In the gateway's permitted set already,
- * so this names a site and not a new capability. */
+ * so this names a site and not a new capability.  Taken only after the
+ * removal is denied:  a gateway on its own directories never raises,
+ * so one started without the capability still deletes its buckets. */
 static constexpr uint64_t BUCKET_DELETE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE);
 
@@ -7381,11 +7383,17 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
       }
     }
   }
-  int ret = owns
-    ? nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, [&]() -> int {
+  int ret = 0;
+  if (owns) {
+    ret = dir->remove(dpp, y, delete_children);
+    if ((ret == -EACCES) || (ret == -EPERM)) {
+      ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, [&]() -> int {
 	return dir->remove(dpp, y, delete_children);
-      })
-    : unadopt(dpp);
+      });
+    }
+  } else {
+    ret = unadopt(dpp);
+  }
   if (ret < 0) {
     return ret;
   }
