@@ -2479,7 +2479,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     AllowedCapsCache caps_cache;
     int allowed = get_allowed_caps(has_qtine_auth_caps, in, cap, caps_cache);
 
-    if (_need_flush_mdlog(in, my_want & ~allowed, true))
+    if (_need_flush_mdlog(in, my_want & ~allowed, true, mdr.get()))
       mds->mdlog->flush();
 
   } else {
@@ -3228,18 +3228,35 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
   }
 }
 
-bool Locker::_need_flush_mdlog(CInode *in, int wanted, bool lock_state_any)
+bool Locker::_need_flush_mdlog(CInode *in, int wanted, bool lock_state_any,
+				const MutationImpl *mut)
 {
   /* flush log if caps are wanted by client but corresponding lock is unstable and locked by
    * pending mutations. */
+  auto locked = [&](SimpleLock &lock) {
+    if (!lock_state_any)
+      return lock.is_unstable_and_locked();
+    if (!lock.is_locked())
+      return false;
+    /* a rdlock held only by the caller is dropped when its request finishes,
+     * which does not wait for the log; flushing it would not help. */
+    if (mut && !lock.is_wrlocked() && !lock.is_xlocked() &&
+	lock.get_num_rdlocks() == 1) {
+      auto it = mut->locks.find(&lock);
+      if (it != mut->locks.end() && it->is_rdlock())
+	return false;
+    }
+    return true;
+  };
+
   if (((wanted & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL)) &&
-       (lock_state_any ? in->filelock.is_locked() : in->filelock.is_unstable_and_locked())) ||
+       locked(in->filelock)) ||
       ((wanted & (CEPH_CAP_AUTH_SHARED|CEPH_CAP_AUTH_EXCL)) &&
-       (lock_state_any ? in->authlock.is_locked() : in->authlock.is_unstable_and_locked())) ||
+       locked(in->authlock)) ||
       ((wanted & (CEPH_CAP_LINK_SHARED|CEPH_CAP_LINK_EXCL)) &&
-       (lock_state_any ? in->linklock.is_locked() : in->linklock.is_unstable_and_locked())) ||
+       locked(in->linklock)) ||
       ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL)) &&
-       (lock_state_any ? in->xattrlock.is_locked() : in->xattrlock.is_unstable_and_locked())))
+       locked(in->xattrlock)))
     return true;
   return false;
 }
