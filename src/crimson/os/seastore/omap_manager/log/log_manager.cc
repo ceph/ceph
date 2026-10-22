@@ -20,7 +20,7 @@ base_iertr::future<laddr_t> LogManager::get_dup_addr_from_root(Transaction &t, l
   auto ext = co_await log_load_extent<LogNode>(
     t, addr, BEGIN_KEY, END_KEY);
   assert(ext);
-  co_return ext->get_dup_tail_addr();
+  co_return ext->get_dup_head_addr();
 }
 
 LogManager::LogManager(
@@ -48,7 +48,7 @@ LogManager::initialize_omap(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
     TransactionManager::alloc_extent_iertr::pass_further{}
   );
-  extent->set_dup_tail_addr(d_extent->get_laddr());
+  extent->set_dup_head_addr(d_extent->get_laddr());
 
   omap_root_t omap_root;
   omap_root.update(extent->get_laddr(), 1, hint,
@@ -178,9 +178,9 @@ LogManager::omap_set_keys(
 	}
 	if (!can_reuse_ow_slot &&
 	    cur->expect_overflow(key, val.length(), false)) {
-	  laddr_t dup_addr = cur->get_dup_tail_addr();
+	  laddr_t dup_addr = cur->get_dup_head_addr();
 	  cur = co_await alloc_log_node(cur->get_laddr());
-	  cur->set_dup_tail_addr(dup_addr);
+	  cur->set_dup_head_addr(dup_addr);
 	  log_root.update(cur->get_laddr(), log_root.depth,
 	    log_root.hint, log_root.type);
 	}
@@ -236,12 +236,12 @@ LogManager::omap_set_keys(
   if (kvs.size() > BATCH_CREATE_SIZE) {
     LogNodeRef e = ext;
     LogNodeRef dup_e;
-    laddr_t dup_tail = co_await get_dup_addr_from_root(t, ext->get_laddr());
+    laddr_t dup_head = co_await get_dup_addr_from_root(t, ext->get_laddr());
     for (auto &[key, val] : kvs) {
       LogNodeRef cur = e;
       if (is_dup_log_key(key)) {
 	if (!dup_e) {
-	  dup_e = co_await alloc_log_node(dup_tail);
+	  dup_e = co_await alloc_log_node(dup_head);
 	}
 	cur = dup_e;
       }
@@ -276,12 +276,12 @@ LogManager::omap_set_keys(
 	e = mut;
       }
     }
-    laddr_t new_dup_tail = dup_e ? dup_e->get_laddr() : dup_tail;
-    if (e->get_dup_tail_addr() != new_dup_tail) {
+    laddr_t new_dup_head = dup_e ? dup_e->get_laddr() : dup_head;
+    if (e->get_dup_head_addr() != new_dup_head) {
       if (e->is_initial_pending()) {
-	e->set_dup_tail_addr(new_dup_tail);
+	e->set_dup_head_addr(new_dup_head);
       } else {
-	tm.get_mutable_extent(t, e)->cast<LogNode>()->set_dup_tail_addr(new_dup_tail);
+	tm.get_mutable_extent(t, e)->cast<LogNode>()->set_dup_head_addr(new_dup_head);
       }
     }
     co_return;
@@ -302,7 +302,7 @@ LogManager::omap_set_keys(
   }
 
   if (!dup_kvs.empty()) {
-    laddr_t last_addr = ext->get_dup_tail_addr();
+    laddr_t last_addr = ext->get_dup_head_addr();
     ext = co_await log_load_extent<LogNode>(t, last_addr, BEGIN_KEY, END_KEY);
     for (auto &[key, val]: dup_kvs) {
       co_await set_log_node_entry(key, val);
@@ -335,17 +335,17 @@ LogManager::omap_set_key(
 
 LogManager::omap_set_key_ret
 LogManager::_log_set_multi_block_key(omap_root_t &log_root,
-  Transaction &t, LogNodeRef tail,
+  Transaction &t, LogNodeRef head,
   const std::string &key, const ceph::bufferlist &value)
 {
   LOG_PREFIX(LogManager::_log_set_multi_block_key);
   DEBUGT("enter key={}", t, key);
   size_t length = value.length();
-  size_t max_val_length = tail->get_max_val_length(key.size());
+  size_t max_val_length = head->get_max_val_length(key.size());
   assert(max_val_length > 0);
   uint16_t idx = 1;
   size_t offset = 0;
-  LogNodeRef cur_extent = tail;
+  LogNodeRef cur_extent = head;
 
   while (offset < length) {
     size_t chunk_len = std::min(max_val_length, length - offset);
@@ -369,26 +369,26 @@ LogManager::_log_set_multi_block_key(omap_root_t &log_root,
   if (!is_dup_log_key(key)) {
     log_root.update(cur_extent->get_laddr(), log_root.depth,
       log_root.hint, log_root.type);
-    cur_extent->set_dup_tail_addr(tail->get_dup_tail_addr());
+    cur_extent->set_dup_head_addr(head->get_dup_head_addr());
   } else {
     auto ext = co_await log_load_extent<LogNode>(
       t, log_root.addr, BEGIN_KEY, END_KEY);
     auto mut = tm.get_mutable_extent(t, ext)->cast<LogNode>();
-    mut->set_dup_tail_addr(cur_extent->get_laddr());
+    mut->set_dup_head_addr(cur_extent->get_laddr());
   }
   co_return;
 }
 
 LogManager::omap_set_key_ret
 LogManager::_log_set_key(omap_root_t &log_root,
-  Transaction &t, LogNodeRef tail,
+  Transaction &t, LogNodeRef head,
   const std::string &key, const ceph::bufferlist &value)
 {
   LOG_PREFIX(LogManager::_log_set_key);
   DEBUGT("enter key={}", t, key);
-  assert(tail);
-  if (!tail->expect_overflow(key.size(), value.length())) {
-    auto mut = tm.get_mutable_extent(t, tail)->cast<LogNode>();
+  assert(head);
+  if (!head->expect_overflow(key.size(), value.length())) {
+    auto mut = tm.get_mutable_extent(t, head)->cast<LogNode>();
     mut->append_kv(t, key, value);
     co_return;
   }
@@ -402,23 +402,23 @@ LogManager::_log_set_key(omap_root_t &log_root,
   assert(extent);
   if (!is_dup_log_key(key)) {
     // Normal log key:
-    // Advance the log_root to the new tail extent.
-    // Preserve the existing dup tail by inheriting it from the previous tail.
+    // Advance the log_root to the new head extent.
+    // Preserve the existing dup head by inheriting it from the previous head.
     log_root.update(extent->get_laddr(), log_root.depth,
       log_root.hint, log_root.type);
-    assert(tail->get_dup_tail_addr() != L_ADDR_NULL);
-    extent->set_dup_tail_addr(tail->get_dup_tail_addr());
+    assert(head->get_dup_head_addr() != L_ADDR_NULL);
+    extent->set_dup_head_addr(head->get_dup_head_addr());
   } else {
     // Dup log key:
-    // Update the dup tail pointer in the current log tail
+    // Update the dup head pointer in the current log head
     //   to point to the newly created dup extent.
     auto ext = co_await log_load_extent<LogNode>(
       t, log_root.addr, BEGIN_KEY, END_KEY);
     auto mut = tm.get_mutable_extent(t, ext)->cast<LogNode>();
-    mut->set_dup_tail_addr(extent->get_laddr());
+    mut->set_dup_head_addr(extent->get_laddr());
   }
   extent->append_kv(t, key, value);
-  extent->set_prev_addr(tail->get_laddr());
+  extent->set_prev_addr(head->get_laddr());
   co_return;
 }
 
@@ -608,13 +608,13 @@ LogManager::remove_node(Transaction &t, LogNodeRef mut, LogNodeRef prev)
 {
   LOG_PREFIX(LogManager::remove_node);
   if (prev == nullptr) { 
-    // This is the tail, so just reinitialize the LogNode.
-    // A LogNode for the pg log should preserve the dup tail.
+    // This is the head, so just reinitialize the LogNode.
+    // A LogNode for the pg log should preserve the dup head.
     laddr_t prev_addr = mut->get_prev_addr();
-    laddr_t dup_tail_addr = mut->get_dup_tail_addr();
+    laddr_t dup_head_addr = mut->get_dup_head_addr();
     mut->set_init_vars();
     mut->set_prev_addr(prev_addr);
-    mut->set_dup_tail_addr(dup_tail_addr);
+    mut->set_dup_head_addr(dup_head_addr);
     co_return;
   }
   assert(mut);
