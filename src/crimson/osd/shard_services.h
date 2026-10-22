@@ -573,6 +573,11 @@ public:
     return pg_to_shard_mapping.dump_store_shards(f);
   }
 
+  /// this reactor's client port (0 = none), see PGShardMapping
+  uint16_t get_local_client_shard_port() const {
+    return pg_to_shard_mapping.get_local_client_shard_port();
+  }
+
   auto create_split_pg_mapping(spg_t pgid, core_id_t core, store_index_t store_index) {
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
   }

@@ -665,6 +665,14 @@ seastar::future<> OSD::start()
     DEBUG("adding to crush");
     return _add_me_to_crush();
   });
+  // replies name the PG's reactor port, so every reactor needs the ports
+  // bound above; this precedes boot, so no client sees a reply without them
+  if (auto ports = public_msgr->get_client_shard_ports(); !ports.empty()) {
+    INFO("{} client shard ports", ports.size());
+    co_await pg_to_shard_mappings.invoke_on_all([ports](auto &mapping) {
+      mapping.set_client_shard_ports(ports);
+    });
+  }
   co_await _add_device_class();
   if (is_rotational.has_value()) {
     co_await shard_services.invoke_on_all([this](auto &local_service) {
