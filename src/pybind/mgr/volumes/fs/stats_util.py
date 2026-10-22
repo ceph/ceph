@@ -286,11 +286,12 @@ class CloneProgressReporter:
         if self.ongoing_clones_count == 0:
             self.ongoing_clones_count = 1
 
-        # onpen bar (that is progress bar for clone jobs in ongoing and pending
-        # state) is printed when clones are in pending state. it is kept in
-        # printing until all clone jobs finish.
-        show_onpen_bar = True if len(clones) > self.ongoing_clones_count \
-            else False
+        # onpen bar (ongoing+pending) is printed for a real backlog: clone jobs
+        # beyond cloner capacity. Do not show it for ramp-up "pending" where
+        # len(clones) <= max_concurrent_clones but not all are INPROGRESS yet
+        # (see tracker #81553). Once published, the progress event remains
+        # until finish() completes it (same sticky behavior as before).
+        show_onpen_bar = len(clones) > int(self.volclient.mgr.max_concurrent_clones)
 
         percent = 0.0
 
