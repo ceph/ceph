@@ -90,7 +90,7 @@ run_expect_nosignal "$RADOS_TOOL" --namespace "asdf" ls
 
 run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
 run_expect_succ "$CEPH_TOOL" osd erasure-code-profile set myprofile k=2 m=1 stripe_unit=2K crush-failure-domain=osd --force --yes-i-really-mean-it
-run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_EC" 100 100 erasure myprofile
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_EC" 100 100 erasure myprofile --yes-i-really-mean-it
 
 
 # expb happens to be the empty export for legacy reasons

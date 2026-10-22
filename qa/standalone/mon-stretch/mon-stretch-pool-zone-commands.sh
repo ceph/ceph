@@ -74,7 +74,8 @@ function TEST_num_zones_osd_limit() {
 }
 
 # A pool over zones is a FastEC pool, which a default profile with a stripe
-# unit that is not a multiple of 4096 cannot give; nothing is left behind
+# unit that is not a multiple of 4096 cannot give, even with
+# --yes-i-really-mean-it; nothing is left behind
 function TEST_odd_stripe_unit_default_over_zones() {
     local dir=$1
     two_zone_cluster $dir || return 1
@@ -83,6 +84,8 @@ function TEST_odd_stripe_unit_default_over_zones() {
         stripe_unit=2048 --force --yes-i-really-mean-it || return 1
     expect_failure $dir "stripe_unit should be a multiple of 4096 bytes" \
         ceph osd pool create e erasure --num_zones 2 || return 1
+    expect_failure $dir "a pool over zones is a FastEC pool" \
+        ceph osd pool create e erasure --num_zones 2 --yes-i-really-mean-it || return 1
     ! ceph osd pool ls | grep -qx e || return 1
     ! ceph osd erasure-code-profile ls | grep -qx e-k2-m1 || return 1
     ! rule_exists e || return 1
