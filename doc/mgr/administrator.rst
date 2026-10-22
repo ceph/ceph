@@ -150,12 +150,36 @@ The ThreadMonitor provides per-module performance counters accessible via
 - ``serve_cpu_usage``: CPU percentage for the module's serve thread (if present)
 - ``mem_rss_current``: Current process memory usage (RSS) in bytes
 - ``mem_rss_change``: Memory usage change since last measurement in bytes
+- ``cmd_in_flight``: Commands queued or running in the module
+- ``cmd_eagain``: Commands rejected with ``EAGAIN`` because the module reached
+  its ``max_command_queue_length``
 
 These counters help identify resource-intensive modules and can be useful for
 debugging performance issues or memory leaks. The ``notify_avg_usec`` and 
 ``cmd_avg_usec`` counters track the performance of module operations, while
 the CPU and memory counters monitor resource consumption. The default monitoring
 interval is 2 seconds.
+
+Module Command Queue Limit
+--------------------------
+
+Each module runs its commands one at a time on its own thread. Commands that
+wait for a slow or stuck module still count against the Manager's client
+message throttle (``mgr_client_messages``, 512 by default), and once it is full the
+Manager stops accepting commands from all clients.
+
+To prevent this, a module can be given a limit on the number of commands it
+has queued or running. When the limit is reached, new commands for that module
+fail right away with ``EAGAIN`` and the client can retry later. Commands for
+other modules are not affected. The limit is disabled (``0``) by default:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/<module>/max_command_queue_length <count>
+
+Keep the sum of the limits of all modules below ``mgr_client_messages``.
+The ``cmd_in_flight`` and ``cmd_eagain`` perf counters show how close a module
+is to its limit.
 
 
 Automatic Stats Period Tuning
