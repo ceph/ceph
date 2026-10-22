@@ -7323,6 +7323,20 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
   return write_attrs(dpp, y);
 }
 
+/* What a bucket delete raises to remove its directory, and nothing
+ * else (raise site 3).
+ *
+ * `CAP_DAC_OVERRIDE` for the scaffolding under the bucket directory --
+ * `.versions` and the `.lock` files in it -- which a requester creates
+ * under impersonation at its own 0770, and which the gateway removes
+ * with the bucket.  NooBaa removes the same as its process
+ * (bucketspace_fs.js:424).  Raised here rather than in
+ * delete_directory(), which rename, conversion and multipart
+ * completion share (§5.2).  In the gateway's permitted set already,
+ * so this names a site and not a new capability. */
+static constexpr uint64_t BUCKET_DELETE_CAPS =
+  nsfs::cap_bit(CAP_DAC_OVERRIDE);
+
 int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y)
@@ -7366,7 +7380,11 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
       }
     }
   }
-  int ret = owns ? dir->remove(dpp, y, delete_children) : unadopt(dpp);
+  int ret = owns
+    ? nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, [&]() -> int {
+	return dir->remove(dpp, y, delete_children);
+      })
+    : unadopt(dpp);
   if (ret < 0) {
     return ret;
   }

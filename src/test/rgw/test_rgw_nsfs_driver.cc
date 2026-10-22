@@ -4569,6 +4569,19 @@ protected:
     return ret;
   }
 
+  int delete_version_as(const rgw_user& who, const std::string& key,
+			const std::string& vid) {
+    int ret = 0;
+    std::thread deleter([&] {
+      auto obj = bucket->get_object(rgw_obj_key(key, vid));
+      auto del = obj->get_delete_op();
+      del->set_authenticated_user(who);
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    deleter.join();
+    return ret;
+  }
+
   /* On a thread of its own:  the write holds read-search for the life
    * of the thread it runs on, and a thread created after that inherits
    * it, which would spoil the control below and other tests' controls
@@ -4634,6 +4647,18 @@ protected:
     fresh.join();
     EXPECT_FALSE(had_read_search)
 	<< "a new thread started with CAP_DAC_READ_SEARCH effective";
+    return r;
+  }
+
+  /* the gateway's unlink of `rel`, on a thread that has never taken
+   * read-search */
+  int gateway_unlink_on_a_fresh_thread(const std::string& rel) {
+    int r = 0;
+    const sf::path p = bucket_path() / rel;
+    std::thread fresh([&] {
+      r = (::unlink(p.c_str()) < 0) ? -errno : 0;
+    });
+    fresh.join();
     return r;
   }
 
@@ -4790,6 +4815,56 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysDeleteIsRaised)
     }
   }
   EXPECT_EQ(markers, 1) << "the delete marker is the requester's";
+}
+
+static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
+						   const DoutPrefixProvider* dpp,
+						   const std::string& key);
+
+/* A bucket whose versions were all deleted by their requester keeps
+ * only scaffolding -- the requester's `.versions` at 0770 -- and the
+ * gateway's bucket delete removes it (raise site 3).  The premise is
+ * that the gateway, unraised, cannot.  Two versions, so one has been
+ * demoted into `.versions` before both are deleted. */
+TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsRequesterIsDeleted)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "second"));
+  /* the listings and the delete on threads of their own:  a gateway
+   * listing holds read-search for the life of its thread, and this
+   * binary's main thread runs the other tests' controls */
+  auto listed_elsewhere = [this]() {
+    std::map<std::string, bool> out;
+    std::thread lister([&] {
+      out = listed_versions(bucket.get(), env->dpp, "k");
+    });
+    lister.join();
+    return out;
+  };
+  const auto listed = listed_elsewhere();
+  ASSERT_EQ(listed.size(), 2u);
+  for (const auto& [vid, _] : listed) {
+    ASSERT_EQ(delete_version_as(alice, "k", vid), 0) << vid;
+  }
+  ASSERT_TRUE(listed_elsewhere().empty());
+
+  const Owned v = owned(".versions");
+  ASSERT_EQ(v.uid, owner_uid)
+      << "the premise:  the scaffolding is the requester's";
+  ASSERT_EQ(v.mode, 0770u);
+  ASSERT_EQ(gateway_unlink_on_a_fresh_thread(".versions/.lock"), -EACCES)
+      << "the premise:  the gateway, unraised, cannot remove it";
+
+  int ret = 0;
+  bool still_raised = true;
+  std::thread remover([&] {
+    ret = bucket->remove(env->dpp, false, null_yield);
+    still_raised = nsfs::capability_is_effective(CAP_DAC_OVERRIDE);
+  });
+  remover.join();
+  ASSERT_EQ(ret, 0) << cpp_strerror(-ret);
+  EXPECT_FALSE(still_raised) << "the delete left DAC_OVERRIDE raised";
+  EXPECT_EQ(owned("").err, -ENOENT) << "the bucket directory stayed";
 }
 
 /* s3-native:  another identity's rename out of the owner's key
