@@ -1708,9 +1708,11 @@ public:
 
     if (!r && oc.tier->is_tier_type_s3()) {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
-      if (!oc.o.is_current() &&
-          !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp, y)) {
-        /* Skip objects which has object lock enabled. */
+      /* Skip objects which have an active retention or legal hold, current
+       * versions included: with retain_head_object and retain_current_version
+       * the head is rewritten as a cloud-tier stub, which would leave the
+       * locked data only on the cloud endpoint. */
+      if (!pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp, y)) {
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return 0;
       }

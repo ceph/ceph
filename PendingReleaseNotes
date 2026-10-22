@@ -56,6 +56,12 @@
   evaluation rules. They had previously only consulted the role's trust policy.
   This means that account users will now require an Allow from identity policy
   to assume roles in other accounts.
+* RGW: Lifecycle transition to a cloud-s3 storage class now skips current
+  object versions that have an unexpired object lock retention period or a
+  legal hold, as it already did for non-current versions. Previously such a
+  version could be replaced by a delete marker or, with ``retain_head_object``
+  and ``retain_current_version`` enabled, by a cloud-tiered stub, leaving its
+  data only on the cloud endpoint.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
