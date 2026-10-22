@@ -26,6 +26,36 @@ function run() {
     done
 }
 
+# Test create-stretch-replicated takes the root and failure domains it is not
+# given from the osd_pool_default_* options
+function TEST_stretch_replicated_option_defaults() {
+    local dir=$1
+    run_mon $dir a --public-addr=$CEPH_MON_A || return 1
+    run_mon $dir b --public-addr=$CEPH_MON_B || return 1
+    run_mon $dir c --public-addr=$CEPH_MON_C || return 1
+    for osd in 0 1 2 3; do
+        run_osd $dir $osd || return 1
+    done
+    ceph osd crush add-bucket other root || return 1
+    for dc in 1 2; do
+        ceph osd crush add-bucket room$dc room || return 1
+        ceph osd crush move room$dc root=other || return 1
+    done
+    ceph osd crush set osd.0 1.0 host=h1 room=room1 root=other || return 1
+    ceph osd crush set osd.1 1.0 host=h1 room=room1 root=other || return 1
+    ceph osd crush set osd.2 1.0 host=h2 room=room2 root=other || return 1
+    ceph osd crush set osd.3 1.0 host=h2 room=room2 root=other || return 1
+
+    ceph config set global osd_pool_default_root other || return 1
+    ceph config set global osd_pool_default_zone_failure_domain room || return 1
+    ceph config set global osd_pool_default_osd_failure_domain osd || return 1
+    ceph osd crush rule create-stretch-replicated --rule_name=from_options || return 1
+    ceph osd crush rule dump from_options > $dir/rule.json || return 1
+    jq -e '.steps[] | select(.op == "take" and .item_name == "other")' $dir/rule.json || return 1
+    jq -e '.steps[] | select(.type == "room")' $dir/rule.json || return 1
+    jq -e '.steps[] | select(.type == "osd")' $dir/rule.json || return 1
+}
+
 # Test create-stretch-replicated fails when insufficient number of zones, hosts, and osds
 function TEST_stretch_replicated() {
     local dir=$1
