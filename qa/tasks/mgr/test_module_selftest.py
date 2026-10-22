@@ -118,6 +118,61 @@ class TestModuleSelftest(MgrTestCase):
             "bar")
         self.wait_until_equal(get_localized_value, "bar", timeout=10)
 
+    def test_command_queue_limit(self):
+        """
+        That a module with max_command_queue_length set rejects new commands
+        with EAGAIN while it is full, without affecting other modules.
+        """
+        self._load_module("selftest")
+
+        def cmd_stats():
+            return self.mgr_cluster.mgr_tell(
+                "perf", "dump", "mgr_module_selftest")["mgr_module_selftest"]
+
+        def get_limit():
+            return self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "config", "get",
+                "max_command_queue_length").strip()
+
+        # set rather than rm on cleanup: the mgr keeps a removed value
+        # until restart
+        self.addCleanup(self.mgr_cluster.set_module_conf, "selftest",
+                        "max_command_queue_length", "0")
+        self.mgr_cluster.set_module_conf("selftest",
+                                         "max_command_queue_length", "2")
+        self.wait_until_equal(get_limit, "2", timeout=10)
+
+        sleep_cmd = ["mgr", "self-test", "eval", "import time; time.sleep(20)"]
+        procs = [self.mgr_cluster.mon_manager.run_cluster_cmd(args=sleep_cmd,
+                                                              wait=False)
+                 for _ in range(2)]
+        def reap(p):
+            try:
+                p.wait()
+            except CommandFailedError:
+                pass
+        for p in procs:
+            self.addCleanup(reap, p)
+        self.wait_until_equal(lambda: cmd_stats()["cmd_in_flight"], 2,
+                              timeout=10)
+        eagain = cmd_stats()["cmd_eagain"]
+
+        with self.assertRaises(CommandFailedError) as exc_raised:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "python-version")
+        self.assertEqual(exc_raised.exception.exitstatus, errno.EAGAIN)
+        self.assertEqual(cmd_stats()["cmd_eagain"], eagain + 1)
+
+        # other modules are not limited
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("balancer", "status")
+
+        for p in procs:
+            p.wait()
+        self.wait_until_equal(lambda: cmd_stats()["cmd_in_flight"], 0,
+                              timeout=10)
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "python-version")
+
 
     def test_selftest_command_spam(self):
         # Use the selftest module to stress the mgr daemon
