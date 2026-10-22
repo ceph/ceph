@@ -214,6 +214,68 @@ def fetch_rgw_credentials(
     return user_id, access_key, secret_key
 
 
+def validate_rgw_credentials(
+    executor: ToolExecer, user_id: str, access_key: str, secret_key: str
+) -> bool:
+    """
+    Validate that provided RGW credentials are valid for a user.
+    Verifies that the credentials actually exist and belong to the user.
+    Args:
+        executor: Any object with tool_exec() method
+        user_id: RGW user ID to validate credentials for
+        access_key: RGW access key ID
+        secret_key: RGW secret access key
+    Returns:
+        True if credentials are valid, False otherwise
+    """
+    log.debug(f"Validating RGW credentials for user {user_id}")
+
+    # Extract tenant if present
+    tenant, user_id_only = _split_tenant_user_id(user_id)
+
+    # Fetch user info to verify credentials exist
+    cmd = ['radosgw-admin', 'user', 'info', '--uid', user_id_only]
+    if tenant:
+        cmd.extend(['--tenant', tenant])
+
+    ret, out, err = executor.tool_exec(cmd)
+    if ret:
+        tenant_info = f' in tenant {tenant}' if tenant else ''
+        error_msg = (
+            f'Failed to fetch user info for {user_id}{tenant_info}: {err}'
+        )
+        log.debug(error_msg)
+        return False
+
+    try:
+        user_info = json.loads(out)
+        keys = user_info.get('keys', [])
+
+        if not keys:
+            log.debug(f'No keys found for user {user_id}')
+            return False
+
+        # Verify the provided credentials exist in the user's key list
+        cred_found = any(
+            key.get('access_key') == access_key
+            and key.get('secret_key') == secret_key
+            for key in keys
+        )
+
+        if not cred_found:
+            log.debug(
+                f'Provided credentials do not match any keys for user {user_id}'
+            )
+            return False
+
+        log.debug(f"RGW credentials validation successful for user {user_id}")
+        return True
+
+    except json.JSONDecodeError as e:
+        log.debug(f'Failed to parse user info for {user_id}: {e}')
+        return False
+
+
 def validate_rgw_bucket(
     executor: ToolExecer, bucket: str, user_id: str
 ) -> bool:
