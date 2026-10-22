@@ -27,6 +27,8 @@ class ConfigMonitor : public PaxosService
 
   void propose_pending_config();
 
+  bool prepare_format_upgrade();
+
 public:
   ConfigMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 

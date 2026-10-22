@@ -212,10 +212,10 @@ int MonClient::get_monmap_and_config()
 
       if (bootstrap_config) {
 	ldout(cct,10) << __func__ << " success" << dendl;
-        config = std::move(bootstrap_config);
-        min_mon_release = monmap.min_mon_release;
-        r = 0;
-        break;
+	config = std::move(bootstrap_config);
+	min_mon_release = monmap.min_mon_release;
+	r = 0;
+	break;
       }
     }
     lderr(cct) << __func__ << " failed to get config" << dendl;

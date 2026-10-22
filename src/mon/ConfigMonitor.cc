@@ -76,9 +76,7 @@ void ConfigMonitor::create_initial()
 {
   dout(10) << __func__ << dendl;
   version = 0;
-  if (ceph_release() > ceph_release_t::umbrella) {
-    format_version = 1;
-  }
+  format_version = 1;
   create_pending();
 }
 
@@ -596,6 +594,19 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     }
     key += name;
 
+    // ConfigMonitor::upgrade_format() is still pending and will write
+    // global/rados_replica_read_policy=default to preserve the pre-upgrade
+    // default, so block `config rm` for that key until it completes, otherwise
+    // the key would silently come back.
+    if (prefix == "config rm" &&
+	format_version < 1 &&
+	key == "global/rados_replica_read_policy") {
+      err = -EBUSY;
+      ss << "cannot remove global/rados_replica_read_policy until the cluster "
+	 << "upgrade has completed";
+      goto reply;
+    }
+
     if (prefix == "config set") {
       bufferlist bl;
       bl.append(value);
@@ -761,6 +772,9 @@ void ConfigMonitor::tick()
   }
   dout(10) << __func__ << dendl;
   bool changed = false;
+  if (format_version < 1 && is_writeable()) {
+    changed = prepare_format_upgrade();
+  }
   if (!pending_cleanup.empty()) {
     changed = true;
   }
@@ -842,6 +856,16 @@ void ConfigMonitor::load_config()
   }
   dout(10) << __func__ << " got " << num << " keys" << dendl;
 
+  // Set default until upgrade_format() persists it if no value set.
+  if (format_version < 1 &&
+      current.find("global/rados_replica_read_policy") == current.end()) {
+    config_map.add_option(
+      g_ceph_context, "rados_replica_read_policy", "global", "default",
+      [&](const std::string& name) {
+	return g_conf().find_option(name);
+      });
+  }
+
   // refresh our own config
   {
     const OSDMap& osdmap = mon.osdmon()->osdmap;
@@ -892,19 +916,25 @@ void ConfigMonitor::upgrade_format()
     return;
   }
 
+  if (prepare_format_upgrade()) {
+    propose_pending_config();
+  }
+}
+
+bool ConfigMonitor::prepare_format_upgrade()
+{
   if (!mon.kvmon()->is_writeable()) {
-    dout(10) << __func__ << " waiting for kv mon to be writeable" << dendl;
-    mon.kvmon()->wait_for_writeable_ctx(new C_MonContext{&mon, [this](int r) {
-                                                           if (r >= 0)
-                                                             upgrade_format();
-                                                         }});
-    return;
+    dout(10) << __func__ << " kvmon not writeable yet, will retry on tick"
+	     << dendl;
+    return false;
   }
 
   // Persist config values where we want to change the default for new clusters,
   // but not to update the value on clusters which have already been created
   format_version = 1;
-  if (current.find("global/rados_replica_read_policy") == current.end()) {
+  pending_description = "upgrade: config format version 1";
+  if (current.find("global/rados_replica_read_policy") == current.end() &&
+      pending.find("global/rados_replica_read_policy") == pending.end()) {
     dout(1)
         << __func__
         << " preserving global/rados_replica_read_policy=default for cluster"
@@ -912,8 +942,11 @@ void ConfigMonitor::upgrade_format()
     bufferlist bl;
     bl.append("default");
     pending["global/rados_replica_read_policy"] = bl;
+    pending_description =
+        "upgrade: preserve previous rados_replica_read_policy default";
   }
-  propose_pending_config();
+
+  return true;
 }
 
 bool ConfigMonitor::refresh_config(MonSession *s)
