@@ -10390,6 +10390,9 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
       set_access(id, /*ro=*/false);
     }
   }
+  /* what this rename chose, for the `ran-as` hint:  before anything
+   * touches the filesystem, so a rename that then fails still says */
+  driver->note_ran_as("rename", authenticated_user.to_str(), id);
   const nsfs::AccessStrategy* model = driver->get_access_strategy();
 
   int ret = stat(dpp);

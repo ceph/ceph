@@ -4736,6 +4736,43 @@ TEST_F(NSFSImpersonatedRenameTest, TheOwnersRenameRunsAsTheOwner)
   EXPECT_EQ(owned("dst/.versions/" + moved[0]).uid, owner_uid);
 }
 
+/* The rename records the identity it chose for its requester (phase C's
+ * validation clause):  the requester's row, and -- the other polarity,
+ * so this discriminates -- a different uid once that row moves.  Only
+ * librgw renames, so this is the unit test the suite's
+ * test_attrs_and_delete_run_as_the_member cannot be for it. */
+TEST_F(NSFSImpersonatedRenameTest, TheRenameRecordsTheIdentityItChose)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  auto ran_as = [this]() {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "ran-as", {}, &out), 0);
+    return out["ran_as_rename"];
+  };
+  auto select = [this]() {
+    std::map<std::string, std::string> out;
+    ASSERT_EQ(driver->driver_hint(env->dpp, "ran-as",
+				  {{"select", alice.to_str()}}, &out), 0);
+  };
+
+  select();
+  ASSERT_EQ(rename_as(alice, "src/k", "dst/k"), 0);
+  EXPECT_EQ(ran_as(), std::to_string(owner_uid));
+
+  /* the row moves;  a rename of a key that is not there still pins
+   * the requester first, so the choice is recorded */
+  static constexpr uid_t moved_uid = 70162;
+  nsfs::Identity row;
+  row.key = to_string(rgw_owner{alice});
+  row.uid = moved_uid;
+  row.gid = moved_uid;
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+  select();
+  (void) rename_as(alice, "never-here", "nowhere");
+  EXPECT_EQ(ran_as(), std::to_string(moved_uid))
+      << "the row moved and the rename's choice did not follow it";
+}
+
 /* posix-strict:  another identity's rename out of the owner's key
  * directory is denied, and nothing moves. */
 TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
