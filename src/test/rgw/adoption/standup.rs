@@ -1624,10 +1624,14 @@ fn conversion(env: &Env) -> Result<(), String> {
             env.tree().display()
         ));
     }
-    if env.ceph_build.is_none() {
+    let Some(ceph_build) = env.ceph_build.as_ref() else {
         return Err("`ceph_build` is not set;  the profile hands the tree to RGW \
                     and runs the nsfs unit binary".into());
-    }
+    };
+    /* The two things a privileged step has to have done, checked before
+     * the NooBaa build rather than at `import` and `adopt`, by when a
+     * sudo ticket taken beforehand has expired. */
+    preflight_rgw(ceph_build)?;
     let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 16] = [
         ("pin", &pin),
         ("worktree", &worktree),
@@ -1652,6 +1656,72 @@ fn conversion(env: &Env) -> Result<(), String> {
     }
     println!("\n==> conversion:  every step passed");
     Ok(())
+}
+
+/// The capabilities `setcap` gives the gateway.  Conversion raises
+/// `CAP_DAC_OVERRIDE` and `CAP_CHOWN` whether or not it impersonates,
+/// so `adopt` needs them on every tree.
+const RGW_CAPS: [&str; 6] = ["cap_chown", "cap_dac_override", "cap_dac_read_search",
+                             "cap_fowner", "cap_setgid", "cap_setuid"];
+
+/// What `import` and `adopt` need of the ceph build, checked by
+/// `conversion` before it starts.
+///
+/// `rgw-vstart.sh`'s clean fails on a data root holding entries another
+/// uid owns -- what an impersonated run leaves -- and `adopt` fails on
+/// a `radosgw` relinked since its `setcap`.  Each fails here with the
+/// command that fixes it.
+fn preflight_rgw(build: &Path) -> Result<(), String> {
+    let root = build.join("dev/rgw/nsfs/root");
+    let me = std::fs::metadata("/proc/self")
+        .map_err(|e| format!("cannot stat /proc/self: {e}"))?
+        .uid();
+    if let Some(p) = foreign_entry(&root, me) {
+        return Err(format!(
+            "{} holds {}, which another uid owns or this one cannot read -- \
+             left by a --with-impersonation run.  `import`'s rgw-vstart.sh \
+             cannot clean it.  Remove it, then run again:\n  sudo rm -rf {}",
+            root.display(), p.display(), root.display()));
+    }
+
+    let rgw = build.join("bin/radosgw");
+    let out = Command::new("getcap").arg(&rgw).output()
+        .map_err(|e| format!("cannot run getcap: {e}"))?;
+    let caps = String::from_utf8_lossy(&out.stdout);
+    let missing: Vec<&str> = RGW_CAPS.iter().copied()
+        .filter(|c| !caps.contains(c)).collect();
+    if !missing.is_empty() {
+        return Err(format!(
+            "{} lacks {} -- relinked since its setcap.  `adopt` raises them to \
+             convert.  Run, then run again:\n  sudo setcap {}+p {}",
+            rgw.display(), missing.join(", "), RGW_CAPS.join(","), rgw.display()));
+    }
+    Ok(())
+}
+
+/// The first entry under `dir` that `uid` does not own or cannot read;
+/// none for a directory that is absent.
+fn foreign_entry(dir: &Path, uid: u32) -> Option<PathBuf> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(d) => d,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(_) => return Some(dir.to_path_buf()),
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        let Ok(md) = std::fs::symlink_metadata(&p) else {
+            return Some(p);
+        };
+        if md.uid() != uid {
+            return Some(p);
+        }
+        if md.is_dir() {
+            if let Some(f) = foreign_entry(&p, uid) {
+                return Some(f);
+            }
+        }
+    }
+    None
 }
 
 /// Stop the endpoint, leaving the tree.
@@ -1747,6 +1817,9 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
             adoption_home().join("adoption.conf").display()
         ));
     };
+    /* `import` starts the gateway `adopt` reuses, and both run alone as
+     * well as under `conversion`, so both check what conversion does */
+    preflight_rgw(build)?;
     let script = build.join("../src/script/rgw/rgw-vstart.sh");
     if !script.exists() {
         return Err(format!(
