@@ -15468,7 +15468,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         if (!device_class.empty())
           profile_map["crush-device-class"] = device_class;
 
-        err = normalize_profile(poolstr, profile_map, false, &ss);
+        // check_pool_params() has checked the stripe unit
+        err = normalize_profile(poolstr, profile_map, true, &ss);
         if (err)
           goto reply_no_propose;
         unsigned k = 0, m = 0;
