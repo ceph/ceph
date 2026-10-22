@@ -1656,11 +1656,11 @@ class CephFSMountBase(object):
                     log.debug('path_dne:=' + dst_file)
                     raise
 
-                if os.path.islink('{src}'):
+                if os.path.islink('{src_file}'):
                     #do link check
                     if os.readlink(src_file) != os.readlink(dst_file):
                         raise
-                elif os.path.isfile('{src}'):
+                elif os.path.isfile('{src_file}'):
                     #check reported size
                     rsize_match = os.path.getsize(src_file) == os.path.getsize(dst_file)
                     if not rsize_match:
