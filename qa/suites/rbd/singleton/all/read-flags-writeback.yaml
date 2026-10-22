@@ -5,6 +5,8 @@ tasks:
 - ceph:
     fs: xfs
     conf:
+      global:
+        rados_replica_read_policy: default
       client:
         rbd cache: true
         rbd cache policy: writeback
