@@ -146,21 +146,24 @@ public:
  * versions:  a bucket that reads as unversioned takes a PUT in place
  * instead of demoting the current version into `.versions/`.
  *
- * `owner_account` is read and not applied.  It is an account id in
- * NooBaa's store, and turning one into an `rgw_owner` needs the account
- * import;  a base bucket's owner is already whatever load_bucket()
- * seeds.  `path` likewise -- placement is a path and the fileset is
+ * `owner_account` is an account id in NooBaa's store, applied through
+ * the account import's record of it (IdentityDB::get_owner_by_noobaa_id).
+ * Before the identities are imported there is no such record, and the
+ * owner stays whatever load_bucket() seeded.  `path` likewise -- placement is a path and the fileset is
  * observed, not stored (ACCOUNT_METADATA.md 8.1), but nothing consumes
  * it here yet.  NooBaa's optional features -- policy, lifecycle, CORS,
  * encryption, website, public access block, object lock, tags -- are
  * each a shape translation into the attribute map and are the step
  * after this one. */
+class IdentityDB;
+
 class NooBaaBucketStateStrategy : public BucketStateStrategy {
   std::string config_root;
+  const IdentityDB* identity_db;
 
 public:
-  explicit NooBaaBucketStateStrategy(std::string root)
-    : config_root(std::move(root)) {}
+  NooBaaBucketStateStrategy(std::string root, const IdentityDB* idb)
+    : config_root(std::move(root)), identity_db(idb) {}
 
   int load(const DoutPrefixProvider* dpp, int dir_fd,
 	   const std::string& bucket_name,

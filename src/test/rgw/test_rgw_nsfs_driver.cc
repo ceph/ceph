@@ -13745,6 +13745,40 @@ TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
       << "a bucket whose owner does not exist was converted";
 }
 
+/* A bucket served in NooBaa's format takes its owner from
+ * `owner_account`, as the account import recorded it, so it is
+ * consumable before its adoption.  The control is the same bucket
+ * before the identities are imported, which has none. */
+TEST_F(NooBaaModeTest, AnUnadoptedBucketTakesItsOwnerFromTheImport)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+  remove_our_bucket_info();
+
+  auto loaded_owner = [this]() {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				  null_yield), 0);
+    return b ? to_string(b->get_owner()) : std::string();
+  };
+  const std::string before = loaded_owner();
+
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  std::string imported;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, THEIR_OWNER_ID, imported), 0);
+  EXPECT_NE(before, imported)
+      << "the control:  the owner was there before the import";
+
+  EXPECT_EQ(loaded_owner(), imported);
+  std::unique_ptr<rgw::sal::Bucket> b;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
+				null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(b.get())->profile_name(),
+	       "base") << "taking the owner adopted the bucket";
+}
+
 /* Adoption's completion record (DECISIONS.md 2026-10-13):  written by the
  * pass that observes NooBaa's store consumed, and from then on the store
  * is not read. */

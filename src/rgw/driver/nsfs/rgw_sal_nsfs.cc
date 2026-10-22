@@ -4731,7 +4731,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
       g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
     if (!nb_root.empty()) {
       nb_bucket_state_strategy =
-	std::make_unique<nsfs::NooBaaBucketStateStrategy>(nb_root);
+	std::make_unique<nsfs::NooBaaBucketStateStrategy>(nb_root,
+							  userDB.get());
       ldpp_dout(dpp, 1) << "nsfs: reading NooBaa bucket state from "
 	<< nb_root << dendl;
 

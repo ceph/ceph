@@ -35,6 +35,7 @@
 #include "include/scope_guard.h"
 
 #include "bucket_state_strategy.h"
+#include "identity_db.h"
 #include "adopt/noobaa_config_store.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -943,6 +944,28 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
        * this reader exists. */
       ldpp_dout(dpp, 4) << "nsfs: " << path << " has an unparsable "
 	<< "creation_date \"" << created << "\"" << dendl;
+    }
+  }
+
+  /* The owner, as the account import recorded it.  A bucket served in
+   * NooBaa's format has no owner of its own, and without one the
+   * core's default ACL names nobody and every request is denied. */
+  std::string owner_account;
+  JSONDecoder::decode_json("owner_account", owner_account, &p);
+  if (!owner_account.empty() && identity_db) {
+    std::string owner_key;
+    const int r = identity_db->get_owner_by_noobaa_id(dpp, owner_account,
+						      owner_key);
+    if (r == 0) {
+      info.owner = parse_owner(owner_key);
+    } else if (r == -ENOENT) {
+      ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket_name << "'s owner_account "
+	<< owner_account << " is not imported;  the bucket has no owner" << dendl;
+    } else {
+      ldpp_dout(dpp, 0) << "ERROR: looking up bucket " << bucket_name
+	<< "'s owner_account " << owner_account << ": " << cpp_strerror(-r)
+	<< dendl;
+      return r;
     }
   }
 
