@@ -4501,7 +4501,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     list_context->starting_pg_num = pg_num;
   }
   // If the pool isn't in a migration then exit as normal
-  if (!pool->is_migrating() || list_context->end_of_tripple_read == true) {
+  if (!pool->is_migrating() || list_context->end_of_triple_read == true) {
     if (list_context->pos.is_max()) {
       ldout(cct, 20) << __func__ << " end of pool, list "
          << list_context->list << dendl;
@@ -4556,9 +4556,6 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
     ++list_context->current_pg;
     if (list_context->current_pg == list_context->starting_pg_num) {
       // end of pool
-      if (list_context->current_stage == NListContext::TGT_READ) { //since the src may have to be read again we need to save the pos of the last object in the pool
-        list_context->tgt_pos = list_context->pos;
-      }
       list_context->pos = hobject_t::get_max();
     } else {
       // next pg
@@ -4568,9 +4565,6 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
     }
   } else {
     list_context->pos = response.handle;
-    if (list_context->current_stage == NListContext::TGT_READ && response.handle.is_max()) {
-      list_context->tgt_pos = list_context->pos; //if the handle is maxed meaning that we have reached the end of the pool then we want to save the last object of the tgt pool so we can come back to it in the second tgt read
-    }
   }
 
   int response_size = response.entries.size();
@@ -4603,17 +4597,6 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 
   //handling a pool currently in a pool-migration
   if (pool->is_migrating()) {
-    ldout(cct,10) << "TOM DEBUG: "
-  << "\nStage: " << list_context->current_stage
-  << "\nSrc pool for migration: " << list_context->src_pool_id
-  << "\ntgt pool for migration: " << list_context->tgt_pool_id
-  << "\ncurrent active pool: " << list_context->pool_id
-  << "\ntgt pos: " << list_context->tgt_pos
-  << "\nsrc pos: " << list_context->src_pos
-  <<"\nCurrent pos: " << list_context->pos
-  << "\nContext budget: " << list_context->ctx_budget
-  << "\nList: " << list_context->list << dendl;
-
     switch (list_context->current_stage) {
       case NListContext::TGT_READ:
         ldout(cct,10) << "Checking the tgt reading stage" << dendl;
@@ -4634,7 +4617,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
           list_context->list.clear();
           list_context->current_stage = NListContext::TGT_SECOND_READ;
           list_context->src_pos = list_context->pos;
-          list_context->pos = list_context->tgt_pos;
+          list_context->pos = collection_list_handle_t();
         }
         break;
       case NListContext::TGT_SECOND_READ:
@@ -4650,7 +4633,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
           list_context->src_list.clear();
           list_context->intermediate_list.clear();
 
-          list_context->end_of_tripple_read = true;
+          list_context->end_of_triple_read = true;
         }
         break;
     }

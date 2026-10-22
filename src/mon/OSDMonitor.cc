@@ -4471,7 +4471,9 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
     const pg_pool_t target_p = std::as_const(*this).get_pg_pool(source_p.migration_target.value());
     auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
     uint64_t migrating_pgs_target_total = calculate_migrating_pg_count(source_p.get_pg_num(), target_p.get_pg_num(), migration_percent);
-    uint64_t num_pgs_to_add = migrating_pgs_target_total - source_p.migrating_pgs.size();
+    uint64_t num_pgs_to_add = migrating_pgs_target_total > source_p.migrating_pgs.size()
+        ? migrating_pgs_target_total - source_p.migrating_pgs.size()
+        : 0;
     if (num_pgs_to_add > source_p.lowest_migrated_pg) {
       num_pgs_to_add = source_p.lowest_migrated_pg;
     }

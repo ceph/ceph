@@ -1704,6 +1704,7 @@ void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
   if (migration_root.has_value())
     f->dump_int("migration_root", *migration_root);
   f->dump_stream("migrating_pgs") << migrating_pgs;
+  f->dump_unsigned("lowest_migrated_pg", lowest_migrated_pg);
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
@@ -2025,9 +2026,12 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 33;
+  uint8_t v = 34;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
+  // TODO: the v34 migration fields currently piggy-back on SERVER_UMBRELLA.
+  // Pool migration ships in VAMPIRE, so once SERVER_VAMPIRE is introduced,
+  // gate v = 34 on SERVER_VAMPIRE instead of reusing SERVER_UMBRELLA.
   if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
     v = 32;
   }
@@ -2159,6 +2163,8 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(shard_mapping, bl);
     encode(ec_data_shard_count, bl);
     encode(ec_coding_shard_count, bl);
+  }
+  if (v >= 34) {
     encode(migration_src, bl);
     encode(migration_target, bl);
     encode(migrating_pgs, bl);
@@ -2170,7 +2176,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(33, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(34, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2370,15 +2376,18 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(shard_mapping, bl);
     decode(ec_data_shard_count, bl);
     decode(ec_coding_shard_count, bl);
+  } else {
+    shard_mapping.clear();
+    ec_data_shard_count.reset();
+    ec_coding_shard_count.reset();
+  }
+  if (struct_v >= 34) {
     decode(migration_src, bl);
     decode(migration_target, bl);
     decode(migrating_pgs, bl);
     decode(lowest_migrated_pg, bl);
     decode(migration_root, bl);
   } else {
-    shard_mapping.clear();
-    ec_data_shard_count.reset();
-    ec_coding_shard_count.reset();
     migration_src.reset();
     migration_target.reset();
     migrating_pgs.clear();
@@ -4440,8 +4449,8 @@ bool PastIntervals::is_new_interval(
   int32_t new_crush_member,
   bool old_allow_ec_optimizations,
   bool new_allow_ec_optimizations,
-  const std::set<pg_t> old_migrating_pgs,
-  const std::set<pg_t> new_migrating_pgs,
+  const std::set<pg_t>& old_migrating_pgs,
+  const std::set<pg_t>& new_migrating_pgs,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||

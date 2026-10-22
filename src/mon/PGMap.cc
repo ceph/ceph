@@ -2797,9 +2797,13 @@ void PGMap::get_health_checks(
 
   //For each pg check if its pool is a migration src or targets and then increment the totals above.
   for (auto &&[pg_id, pg] : pg_stat) {
-    if (osdmap.get_pg_pool(pg_id.pool())->is_migration_src()) {
+    const pg_pool_t *pi = osdmap.get_pg_pool(pg_id.pool());
+    if (!pi) {
+      continue;
+    }
+    if (pi->is_migration_src()) {
       total_migrating_objects += pg.stats.sum.num_objects;
-    }else if (osdmap.get_pg_pool(pg_id.pool())->is_migration_target()) {
+    } else if (pi->is_migration_target()) {
       total_migrated_objects += pg.stats.sum.num_objects;
       total_migrating_objects += pg.stats.sum.num_objects;
     }

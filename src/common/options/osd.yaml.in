@@ -78,7 +78,6 @@ options:
     to a full OSD)
   fmt_desc: The number of seconds to wait before retrying pool migration requests.
   default: 30
-  with_legacy: true
 - name: osd_backfill_retry_interval
   type: float
   level: advanced

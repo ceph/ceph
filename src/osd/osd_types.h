@@ -1707,7 +1707,7 @@ public:
                                           ///< migration completion (unlike
                                           ///< migration_src).
   std::set<pg_t> migrating_pgs; ///< PGs currently migrating. Any higher value PGs have completed migration
-  uint32_t lowest_migrated_pg; ///< PG with the lowest ID that has completed migration
+  uint32_t lowest_migrated_pg = 0; ///< PG with the lowest ID that has completed migration
 
   void clear_migrating_pgs() { migrating_pgs.clear(); }
 
@@ -2134,8 +2134,6 @@ struct object_stat_sum_t {
   int64_t num_objects_recovered{0};
   int64_t num_bytes_recovered{0};
   int64_t num_keys_recovered{0};
-  int64_t num_objects_migrated{0};
-  int64_t num_bytes_migrated{0};
   int64_t num_shallow_scrub_errors{0};
   int64_t num_deep_scrub_errors{0};
   int64_t num_objects_dirty{0};
@@ -2161,6 +2159,8 @@ struct object_stat_sum_t {
   int64_t num_omap_bytes{0};
   int64_t num_omap_keys{0};
   int64_t num_objects_repaired{0};
+  int64_t num_objects_migrated{0};
+  int64_t num_bytes_migrated{0};
 
   object_stat_sum_t() = default;
 
@@ -3788,8 +3788,8 @@ public:
     int32_t new_crush_member,
     bool old_allow_ec_optimizations,
     bool new_allow_ec_optimizations,
-    const std::set<pg_t> old_migrating_pgs,
-    const std::set<pg_t> new_migrating_pgs,
+    const std::set<pg_t>& old_migrating_pgs,
+    const std::set<pg_t>& new_migrating_pgs,
     pg_t pgid
     );
 
