@@ -193,6 +193,10 @@ public:
       }
     }
 
+    // Every backend must be idle before anything is torn down
+    // (IDLE-STATE CONTRACT in osd/ECCommon.h).
+    assert_backends_idle();
+
     // Scrub all objects before shutting down infrastructure (optimized EC pools only)
     // This verifies that all objects remain consistent throughout the test
     // Skip legacy EC pools (without FLAG_EC_OPTIMIZATIONS) as they have different behavior
@@ -979,5 +983,27 @@ public:
     object_tracker.reset();
   }
 
+  // Applied in this order: clear, header, set_keys, rm_keys.
+  struct OmapUpdate {
+    bool clear = false;
+    std::optional<bufferlist> header;
+    std::map<std::string, bufferlist> set_keys;
+    std::set<std::string> rm_keys;
+  };
+
+  // Logged write of an OMAP update to an existing object. The pool needs
+  // pg_pool_t::FLAG_OMAP (see BackendConfig::pool_flags).
+  int omap_write(
+    const std::string& obj_name,
+    const OmapUpdate& update,
+    bool run = true);
+
+  // Journal-merged view of the object's OMAP, as a client read would see it.
+  int omap_read(
+    const std::string& obj_name,
+    bufferlist* header,
+    std::map<std::string, bufferlist>* out);
+
+  void assert_backends_idle();
 };
 

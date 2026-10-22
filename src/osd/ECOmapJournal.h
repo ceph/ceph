@@ -34,6 +34,10 @@
  * the backend fetches the base state from the ObjectStore and supplements it with the
  * updates stored in this journal. This ensures clients always receive the most up-to-date
  * result, merging the persistent state with the in-flight log state.
+ *
+ * IDLE-STATE CONTRACT (see ECCommon.h):
+ * Every container that grows with I/O must be released when that I/O completes, and must
+ * be covered by assert_idle(). object_state_map is exempt: it is released by pg log trimming.
  */
 
 #pragma once
@@ -140,6 +144,7 @@ class ECOmapJournal {
   bool remove_entry_by_version(const hobject_t &hoid, const eversion_t version);
   void clear(const hobject_t &hoid);
   void clear_all();
+  void assert_idle() const;
   [[nodiscard]] std::size_t entries_size(const hobject_t &hoid) const;
   [[nodiscard]] bool has_unprocessed_entries(const hobject_t &hoid) const;
   [[nodiscard]] bool has_omap_updates(const hobject_t &hoid) const;

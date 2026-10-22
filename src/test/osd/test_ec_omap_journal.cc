@@ -1533,3 +1533,34 @@ TEST(ecomapjournal, replace_preserves_header_after_stale_prior_header)
   ASSERT_EQ(73u, result->length());
   ASSERT_TRUE(result->contents_equal(new_header_bl));
 }
+
+TEST(ecomapjournal, assert_idle)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("test_assert_idle", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  journal.assert_idle();  // a new journal is idle
+
+  ceph::buffer::list val;
+  val.append("value");
+  ECOmapJournalEntry entry(eversion_t(1, 1), false, std::nullopt,
+                           {{OmapUpdateType::Insert,
+                             encode_map({{make_key(1), val}})}});
+  journal.add_entry(hoid, entry);
+  // A read processes the entry into key_map ...
+  journal.get_value_updates(hoid);
+  // ... and roll-forward must release it and everything derived from it,
+  // including the per-object nodes. The return value is not checked: for a
+  // processed entry remove_entry() reports false whenever the object has no
+  // removed-range list, even though the keys were released.
+  journal.remove_entry(hoid, entry);
+  journal.assert_idle();
+
+  // Delete tracking in object_state_map is deliberately exempt: it lives
+  // until the pg log is trimmed, not until the write completes.
+  journal.append_delete(hoid, 7, false);
+  journal.assert_idle();
+  journal.trim_delete(hoid, 7);
+  journal.assert_idle();
+}

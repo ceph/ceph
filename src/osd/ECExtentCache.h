@@ -71,6 +71,12 @@
  * instructs the extent cache to discard any ops it has queued.  The second
  * simply asserts that the cache is now idle, this is to ensure that the calling
  * code has performed the required clean up to clear the extent cache.
+ *
+ * IDLE-STATE CONTRACT (see ECCommon.h)
+ *
+ * Every container that grows with I/O must be released when that I/O
+ * completes, and must be covered by assert_idle(). The LRU is exempt: it is
+ * a bounded cache that outlives the I/O that populated it.
  */
 
 #pragma once
@@ -359,6 +365,7 @@ private:
 
   void execute(std::list<OpRef> &op_list);
   [[nodiscard]] bool idle() const;
+  void assert_idle() const;
 
   void add_on_write(std::function<void(void)> &&cb) const {
     if (waiting_ops.empty()) {
