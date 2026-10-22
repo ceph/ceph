@@ -720,6 +720,9 @@ async fn test_bucket_create_naming_dns_long() {
     assert!(prefix.len() < 50);
     let num = 63 - prefix.len();
     let name = format!("{}{}", prefix, "a".repeat(num));
+    /* built from the prefix rather than get_new_bucket_name(), so nothing
+     * tracked it;  register or it leaks */
+    s3_tests_rs::fixtures::register_bucket_for_cleanup(&client, &name);
     client.create_bucket().bucket(&name).send().await.unwrap();
 }
 
