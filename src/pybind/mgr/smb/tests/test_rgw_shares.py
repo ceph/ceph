@@ -37,6 +37,50 @@ class _FakeToolExecer:
         return (0, '{}', '')
 
 
+class _InvalidUserFakeToolExecer:
+    """Mock tool executor that simulates an invalid/non-existent user."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec that returns failure for non-existent user."""
+        # Check if this is a radosgw-admin bucket stats command
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {'owner': 'testuser', 'bucket': 'my-bucket', 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+        # User info fails for invalid user
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            return (1, '', 'ERROR: failed to get user info')
+        return (0, '{}', '')
+
+
+class _InvalidAccessKeyFakeToolExecer:
+    """Mock tool executor that has mismatched credentials (invalid access key)."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec with wrong access key."""
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_stats = json.dumps(
+                {'owner': 'testuser', 'bucket': 'my-bucket', 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Return user info but with different access key
+            user_info = json.dumps(
+                {
+                    'user_id': 'testuser',
+                    'keys': [
+                        {
+                            'access_key': 'DIFFERENT_ACCESS_KEY',
+                            'secret_key': 'AUTO_FETCHED_SECRET_KEY',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
 def _cluster(**kwargs):
     """Helper to create cluster with default clustering setting."""
     if 'clustering' not in kwargs:
@@ -1352,3 +1396,105 @@ def test_tenant_bucket_without_user_id_fails():
 
     with pytest.raises(ValueError):
         fetch_rgw_credentials(executor, 'tenant-bucket', user_id='')
+
+
+def test_rgw_share_with_invalid_user(thandler):
+    """Test that RGW share creation fails when provided user does not exist."""
+    # Use a custom handler with the invalid user executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InvalidUserFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='invaliduser',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with invalid user
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='invalid_cred_1',
+        user_id='nonexistent_user',
+        access_key_id='SOME_ACCESS_KEY',
+        secret_access_key='SOME_SECRET_KEY',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='invaliduser',
+        share_id='invalidshare',
+        name='Invalid User Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='invalid_cred_1',
+        ),
+    )
+
+    # Apply should fail because user does not exist
+    rg = handler.apply([cluster, cred, share])
+    assert not rg.success, 'Expected share creation to fail with invalid user'
+    # Verify share was not created
+    assert (
+        'shares',
+        'invaliduser.invalidshare',
+    ) not in handler.internal_store.data
+
+
+def test_rgw_share_with_invalid_access_key(thandler):
+    """Test that RGW share creation fails when provided access key does not match."""
+    # Use a custom handler with the mismatched key executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_InvalidAccessKeyFakeToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='invalidkey',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential with wrong access key
+    cred = smb.resources.RGWCredential(
+        rgw_credential_id='mismatch_cred_1',
+        user_id='testuser',
+        access_key_id='WRONG_ACCESS_KEY',  # This doesn't match what the mock returns
+        secret_access_key='AUTO_FETCHED_SECRET_KEY',
+    )
+
+    share = smb.resources.Share(
+        cluster_id='invalidkey',
+        share_id='mismatchshare',
+        name='Mismatched Key Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',
+            credential_ref='mismatch_cred_1',
+        ),
+    )
+
+    # Apply should fail because access key does not match
+    rg = handler.apply([cluster, cred, share])
+    assert (
+        not rg.success
+    ), 'Expected share creation to fail with mismatched access key'
+    # Verify share was not created
+    assert (
+        'shares',
+        'invalidkey.mismatchshare',
+    ) not in handler.internal_store.data
