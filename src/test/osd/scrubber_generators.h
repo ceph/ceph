@@ -118,6 +118,8 @@ struct pool_conf_t {
   uint8_t type{pg_pool_t::TYPE_REPLICATED};
   std::optional<erasure_code_profile_conf_t> erasure_code_profile;
   std::set<shard_id_t> nonprimary_shards;
+  // an erasure coded pool without allow_ec_optimizations when false
+  bool ec_optimizations{true};
 };
 
 using attr_t = std::map<std::string, std::string>;
