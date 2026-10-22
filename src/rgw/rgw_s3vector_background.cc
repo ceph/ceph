@@ -43,7 +43,11 @@ namespace rgw::s3vector {
 static constexpr const char* build_state_metadata_key = "s3v_index_state";
 
 // lock object key prefix/suffix within the vector bucket
-static constexpr const char* lock_key_prefix = ".s3v-lock-";
+// The distributed-lock object is stored under a reserved top-level "directory"
+// so it can never collide with (or be enumerated as) LanceDB data. LanceDB only
+// treats "<name>.lance/" trees as tables, and stores its data at the dataset
+// root (or under "<account>/"); a dot-prefixed reserved dir sits outside both.
+static constexpr const char* lock_key_prefix = ".s3v-lock/";
 static constexpr const char* lock_key_suffix = ".lock";
 
 // Perf counters for the background rebuild subsystem. These replace the previous
@@ -61,6 +65,7 @@ enum {
   l_rgw_s3v_bg_lock_refresh,
   l_rgw_s3v_bg_lock_lost,
   l_rgw_s3v_bg_lock_refresh_fail,
+  l_rgw_s3v_bg_lock_bucket_load_fail,
   l_rgw_s3v_bg_last,
 };
 
@@ -142,7 +147,11 @@ WRITE_CLASS_ENCODER(build_state_t)
 struct rebuild_event_t {
   enum class Type {
     SPAWN, FINISH, LIMIT_REACHED,
-    LOCK_REFRESH, LOCK_LOST, LOCK_REFRESH_FAIL
+    LOCK_REFRESH, LOCK_LOST, LOCK_REFRESH_FAIL,
+    // A rebuild could not even attempt the lock because the lock-storage bucket
+    // failed to load for a reason other than "it was deleted" (-ENOENT). The
+    // index will NOT be rebuilt until the underlying problem is resolved.
+    LOCK_BUCKET_LOAD_FAIL
   };
   // Outcome of a FINISH event; NONE for every other event type.
   enum class Result { NONE, SUCCESS, FAILURE, SKIPPED };
@@ -165,6 +174,7 @@ static const char* event_type_to_str(rebuild_event_t::Type t) {
     case rebuild_event_t::Type::LOCK_REFRESH:      return "lock_refresh";
     case rebuild_event_t::Type::LOCK_LOST:         return "lock_lost";
     case rebuild_event_t::Type::LOCK_REFRESH_FAIL: return "lock_refresh_fail";
+    case rebuild_event_t::Type::LOCK_BUCKET_LOAD_FAIL: return "lock_bucket_load_fail";
   }
   return "unknown";
 }
@@ -307,6 +317,9 @@ private:
     bool lock_lost = false;
     ceph::coarse_real_time start_time;  // when the build acquired the lock
     int refresh_count = 0;              // successful lock refreshes so far
+    // storage mode of the vector bucket, captured at acquire time so the refresh
+    // path knows which bucket (vector vs regular S3) holds the lock object.
+    StorageMode mode = StorageMode::S3_BUCKET;
     // true while a refresh_one_lock() coroutine is refreshing THIS lock. The scan
     // skips in-flight locks, so a single lock is never refreshed concurrently with
     // itself (that would break the if_match=etag chain); refreshes of DIFFERENT
@@ -392,6 +405,9 @@ private:
         break;
       case rebuild_event_t::Type::LOCK_REFRESH_FAIL:
         perf_counters_->inc(l_rgw_s3v_bg_lock_refresh_fail);
+        break;
+      case rebuild_event_t::Type::LOCK_BUCKET_LOAD_FAIL:
+        perf_counters_->inc(l_rgw_s3v_bg_lock_bucket_load_fail);
         break;
     }
 
@@ -600,27 +616,42 @@ private:
     return body;
   }
 
-  // load the vector bucket as a regular Bucket for lock object operations.
-  // vector buckets have default-placement set at creation, so PUT/GET/DELETE
-  // by exact key works (indexless only skips bucket index updates).
-  // Load the regular S3 backing bucket (not the vector bucket) for lock operations.
-  // The vector bucket is created with BucketIndexType::Indexless and has no bucket
-  // index shards, so direct SAL writes (get_atomic_writer) fail with -ENOENT on
-  // get_bucket_shard(). The regular S3 bucket (same name) has normal index shards
-  // and is the same bucket that LanceDB uses for data storage via rgw_sal_wrapper.
-  // TODO: the backing S3 bucket is currently created externally (e.g. by tests);
-  // CreateVectorBucket should create it automatically for the RGW backend.
-  int load_bucket_for_lock(const std::string& tenant,
+  // Load the bucket that holds the distributed-lock object, storage-mode aware.
+  //
+  //  - VECTOR_BUCKET (default): the LanceDB data lives inside the vector bucket
+  //    itself, which is created with a Normal bucket index (see
+  //    RGWS3VectorCreateVectorBucket::create_bucket_entity, which requires
+  //    zone_placement->index_type == Normal for native storage). It therefore
+  //    supports SAL object ops, and the lock object lives in it. It is addressed
+  //    via load_vector_bucket(), keyed by ns.name() (account-or-tenant).
+  //  - S3_BUCKET: a same-name regular S3 bucket holds the data and the lock,
+  //    scoped to the owning tenant (ns.tenant); addressed via load_bucket().
+  //
+  // -ENOENT is returned (and left to the caller to interpret as benign) when the
+  // bucket is simply gone, e.g. the vector bucket was deleted — there is nothing
+  // to lock or rebuild. Any OTHER negative return is a genuine failure that the
+  // caller must surface loudly (see try_acquire_lock / process_table).
+  int load_bucket_for_lock(const bucket_namespace_t& ns, StorageMode mode,
                            const std::string& vector_bucket_name,
                            std::unique_ptr<rgw::sal::Bucket>& bucket,
                            optional_yield y) {
     rgw_bucket bucket_id;
-    bucket_id.tenant = tenant;  // scope the lock object to the owning tenant
     bucket_id.name = vector_bucket_name;
-    int ret = driver->load_bucket(this, bucket_id, &bucket, y);
+    int ret;
+    if (uses_vector_bucket_storage(mode)) {
+      bucket_id.tenant = ns.name();  // native vector bucket is keyed by ns.name()
+      ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
+    } else {
+      bucket_id.tenant = ns.tenant;  // regular backing S3 bucket is per-tenant
+      ret = driver->load_bucket(this, bucket_id, &bucket, y);
+    }
     if (ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to load bucket for lock: "
-          << vector_bucket_name << " ret=" << ret << dendl;
+      // -ENOENT (bucket gone) is benign and logged quietly; anything else is a
+      // real error the caller will escalate.
+      ldpp_dout(this, ret == -ENOENT ? 10 : 0)
+          << (ret == -ENOENT ? "INFO" : "ERROR")
+          << ": failed to load bucket for lock: " << vector_bucket_name
+          << " (mode=" << to_string(mode) << ", ret=" << ret << ")" << dendl;
       return ret;
     }
     return 0;
@@ -630,14 +661,14 @@ private:
 
   // PUT lock object with if-none-match="*" (conditional create).
   // exactly one concurrent caller succeeds, others get -ERR_PRECONDITION_FAILED.
-  int put_lock_object(const std::string& tenant,
+  int put_lock_object(const bucket_namespace_t& ns, StorageMode mode,
                       const std::string& vector_bucket_name,
                       const std::string& lock_key,
                       const std::string& token,
                       optional_yield y,
                       std::string* etag_out = nullptr) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(ns, mode, vector_bucket_name, bucket, y);
     if (ret < 0) return ret;
 
     auto obj = bucket->get_object({lock_key});
@@ -694,14 +725,14 @@ private:
   // Refresh (conditional overwrite) the lock object with a fresh timestamp.
   // Uses if_match=current_etag to ensure only the lock holder can refresh.
   // Returns the new ETag on success for subsequent refresh calls.
-  refresh_result refresh_lock_object(const std::string& tenant,
+  refresh_result refresh_lock_object(const bucket_namespace_t& ns, StorageMode mode,
                                      const std::string& vector_bucket_name,
                                      const std::string& lock_key,
                                      const std::string& token,
                                      const std::string& current_etag,
                                      optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(ns, mode, vector_bucket_name, bucket, y);
     if (ret < 0) return {ret, {}};
 
     auto obj = bucket->get_object({lock_key});
@@ -751,13 +782,13 @@ private:
   // if etag is non-empty, only deletes if the object's current ETag matches —
   // prevents deleting a lock that was reclaimed by another instance.
   // if etag is empty, performs unconditional delete.
-  int delete_lock_object(const std::string& tenant,
+  int delete_lock_object(const bucket_namespace_t& ns, StorageMode mode,
                          const std::string& vector_bucket_name,
                          const std::string& lock_key,
                          const std::string& etag,
                          optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(ns, mode, vector_bucket_name, bucket, y);
     if (ret < 0) return ret;
 
     auto obj = bucket->get_object({lock_key});
@@ -781,12 +812,12 @@ private:
     std::string etag;
   };
 
-  lock_read_result get_lock_object(const std::string& tenant,
+  lock_read_result get_lock_object(const bucket_namespace_t& ns, StorageMode mode,
                                    const std::string& vector_bucket_name,
                                    const std::string& lock_key,
                                    optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(ns, mode, vector_bucket_name, bucket, y);
     if (ret < 0) return {ret, {}, {}};
 
     auto obj = bucket->get_object({lock_key});
@@ -839,16 +870,32 @@ private:
   struct lock_acquire_result {
     std::string token;
     std::string etag;
+    // When token is empty: 0 means the lock is genuinely held by another instance
+    // (benign, try again later); <0 means a real error occurred while trying to
+    // acquire it (e.g. the lock-storage bucket could not be loaded) and the caller
+    // must surface it loudly.
+    int ret = 0;
   };
 
-  lock_acquire_result try_acquire_lock(const std::string& tenant,
+  lock_acquire_result try_acquire_lock(const bucket_namespace_t& ns, StorageMode mode,
                                        const std::string& bucket_name,
                                        const std::string& index_name,
                                        optional_yield y) {
     const std::string lock_key = make_lock_key(index_name);
 
+    // step 0: confirm the lock-storage bucket is loadable up front. This separates
+    // a genuine bucket-load failure from "the lock object does not exist yet"
+    // (both surface as -ENOENT deeper in the stack), so the former is reported to
+    // the caller instead of being mistaken for lock contention.
+    {
+      std::unique_ptr<rgw::sal::Bucket> probe;
+      if (int bret = load_bucket_for_lock(ns, mode, bucket_name, probe, y); bret < 0) {
+        return {.ret = bret};
+      }
+    }
+
     // step 1: read existing lock
-    auto lock_info = get_lock_object(tenant, bucket_name, lock_key, y);
+    auto lock_info = get_lock_object(ns, mode, bucket_name, lock_key, y);
     if (lock_info.ret == 0) {
       lock_body_t existing_lock;
       if (!existing_lock.from_json_str(lock_info.body)) {
@@ -870,7 +917,7 @@ private:
       // step 2: stale lock — conditional delete using ETag from step 1
       ldpp_dout(this, 5) << "INFO: deleting stale lock for " << bucket_name
           << "." << index_name << " (age=" << age << "s, ttl=" << lock_ttl << "s)" << dendl;
-      int del_ret = delete_lock_object(tenant, bucket_name, lock_key, lock_info.etag, y);
+      int del_ret = delete_lock_object(ns, mode, bucket_name, lock_key, lock_info.etag, y);
       if (del_ret == -ERR_PRECONDITION_FAILED) {
         ldpp_dout(this, 5) << "INFO: stale lock for " << bucket_name << "." << index_name
             << " was already reclaimed by another instance" << dendl;
@@ -882,7 +929,7 @@ private:
     // create-if-absent (atomic create)
     std::string token = generate_lock_token();
     std::string etag;
-    int ret = put_lock_object(tenant, bucket_name, lock_key, token, y, &etag);
+    int ret = put_lock_object(ns, mode, bucket_name, lock_key, token, y, &etag);
     if (ret == 0) {
       ldpp_dout(this, 5) << "INFO: acquired lock for " << bucket_name
           << "." << index_name << " token=" << token << dendl;
@@ -890,13 +937,15 @@ private:
     }
 
     if (ret == -ERR_PRECONDITION_FAILED) {
+      // another instance won the create race — benign contention.
       ldpp_dout(this, 5) << "INFO: lock acquired by another instance for "
           << bucket_name << "." << index_name << dendl;
-    } else {
-      ldpp_dout(this, 1) << "ERROR: failed to acquire lock for " << bucket_name
-          << "." << index_name << " ret=" << ret << dendl;
+      return {};
     }
-    return {};
+    // genuine failure to create the lock object.
+    ldpp_dout(this, 0) << "ERROR: failed to acquire lock for " << bucket_name
+        << "." << index_name << " ret=" << ret << dendl;
+    return {.ret = ret};
   }
 
   // Release the lock only if we still own it.
@@ -912,7 +961,7 @@ private:
   // note: in the normal case (build completes within TTL), no other instance
   // touches the lock, so the token check and conditional DELETE are redundant
   // safety. they matter only when the build exceeds TTL.
-  void release_lock(const std::string& tenant,
+  void release_lock(const bucket_namespace_t& ns, StorageMode mode,
                     const std::string& bucket_name,
                     const std::string& index_name,
                     const std::string& token,
@@ -920,7 +969,7 @@ private:
     const std::string lock_key = make_lock_key(index_name);
 
     // step 1: read lock
-    auto lock_info = get_lock_object(tenant, bucket_name, lock_key, y);
+    auto lock_info = get_lock_object(ns, mode, bucket_name, lock_key, y);
     if (lock_info.ret < 0) return;
 
     // step 2: verify ownership
@@ -939,7 +988,7 @@ private:
     // step 3: conditional delete using ETag from step 1
     // in the case some other instance reclaimed the lock between our GET and DELETE, 
     // the ETag changed and this delete fails safely without deleting the new holder's lock.
-    int ret = delete_lock_object(tenant, bucket_name, lock_key, lock_info.etag, y);
+    int ret = delete_lock_object(ns, mode, bucket_name, lock_key, lock_info.etag, y);
     if (ret == -ERR_PRECONDITION_FAILED) {
       ldpp_dout(this, 5) << "INFO: lock for " << bucket_name << "." << index_name
           << " was reclaimed between read and delete, not releasing" << dendl;
@@ -1019,9 +1068,6 @@ private:
   int process_table(const table_name_t& table_name,
                     uint64_t local_inserts, uint64_t local_deletes,
                     boost::asio::yield_context yield) {
-    // SAL tenant of the backing bucket/session (empty for account-owned buckets
-    // whose owner has no tenant); the namespace key is table_name.ns.name().
-    const auto& tenant = table_name.ns.tenant;
     const auto& bucket_name = table_name.bucket;
     const auto& index_name = table_name.index;
 
@@ -1173,11 +1219,29 @@ private:
     // metadata commit) against other instances — concurrent commits cause
     // CommitConflict. The rebuild decision itself is now lock-free (above).
     optional_yield y(yield);
-    auto lock_result = try_acquire_lock(tenant, bucket_name, index_name, y);
+    // The lock object lives in the bucket that backs this vector bucket's storage.
+    // For the local backend there is no such bucket; value_or keeps the previous
+    // behavior (the load fails -ENOENT and the rebuild is skipped quietly).
+    const StorageMode mode = backend_config.storage_mode.value_or(StorageMode::S3_BUCKET);
+    auto lock_result = try_acquire_lock(table_name.ns, mode, bucket_name, index_name, y);
     if (lock_result.token.empty()) {
-      ldpp_dout(this, 5) << "INFO: lock held by another process for "
-          << bucket_name << "." << index_name << ", skipping" << dendl;
       restore_counters(table_name, local_inserts, local_deletes);
+      if (lock_result.ret < 0 && lock_result.ret != -ENOENT) {
+        // MAJOR error: the lock-storage bucket could not be accessed, so no rebuild
+        // can run for this index. Surface it loudly (ERROR log + event-log entry +
+        // perf counter) instead of silently skipping, so operators can see that the
+        // index is not being rebuilt. The daemon keeps serving every other table.
+        ldpp_dout(this, 0) << "ERROR: s3vectors background rebuild cannot access lock "
+            "storage for " << bucket_name << "." << index_name << " (ret="
+            << lock_result.ret << "); index will NOT be rebuilt until resolved" << dendl;
+        record_event(rebuild_event_t::Type::LOCK_BUCKET_LOAD_FAIL,
+                     table_name.ns.name(), bucket_name, index_name);
+        return lock_result.ret;
+      }
+      // benign: the lock is genuinely held by another instance, or the bucket is
+      // gone (e.g. the vector bucket was deleted) — nothing to rebuild here.
+      ldpp_dout(this, 5) << "INFO: lock held by another process (or bucket gone) for "
+          << bucket_name << "." << index_name << ", skipping" << dendl;
       return RESULT_SKIPPED;
     }
     const std::string& lock_token = lock_result.token;
@@ -1187,13 +1251,13 @@ private:
       const auto now = ceph::coarse_real_clock::now();
       active_builds.insert(table_name);
       active_locks[table_name] = {lock_token, lock_result.etag,
-                                   now, false, now, 0};
+                                   now, false, now, 0, mode};
     }
 
     struct lock_guard_t {
       Manager* mgr;
       const table_name_t& table_name;
-      const std::string& tenant;
+      StorageMode mode;
       const std::string& bucket_name;
       const std::string& index_name;
       const std::string& token;
@@ -1204,9 +1268,9 @@ private:
           mgr->active_builds.erase(table_name);
           mgr->active_locks.erase(table_name);
         }
-        mgr->release_lock(tenant, bucket_name, index_name, token, y);
+        mgr->release_lock(table_name.ns, mode, bucket_name, index_name, token, y);
       }
-    } lock_guard{this, table_name, tenant, bucket_name, index_name, lock_token, y};
+    } lock_guard{this, table_name, mode, bucket_name, index_name, lock_token, y};
 
     // step 7: re-check the delete ratio under the lock. num_deleted_rows is
     // ground truth, so if another instance compacted this index between our
@@ -1329,7 +1393,7 @@ private:
     const auto now = ceph::coarse_real_clock::now();
 
     // snapshot the locks due for refresh under a short, I/O-free lock.
-    struct due_lock_t { table_name_t name; std::string token; std::string etag; };
+    struct due_lock_t { table_name_t name; StorageMode mode; std::string token; std::string etag; };
     std::vector<due_lock_t> lockers_in_work;
     {
       std::lock_guard lg(active_builds_mutex);
@@ -1338,10 +1402,10 @@ private:
         if (now - lock.last_refresh < refresh_interval) continue;
         lock.refresh_in_flight = true;  // claim: the next scan skips this lock until
                                         // refresh_one_lock writes back and clears it.
-                                        
-        //the vector contain only the locks that are due for refresh, i.e. locks that have not been refreshed in the last TTL/3 seconds and are not already being refreshed.  
+
+        //the vector contain only the locks that are due for refresh, i.e. locks that have not been refreshed in the last TTL/3 seconds and are not already being refreshed.
         //so we can spawn one coroutine per lock to refresh them concurrently.
-        lockers_in_work.push_back({name, lock.token, lock.etag});
+        lockers_in_work.push_back({name, lock.mode, lock.token, lock.etag});
       }
     }
 
@@ -1351,7 +1415,7 @@ private:
     for (const auto& d : lockers_in_work) {
       boost::asio::spawn(make_strand(main_loop_io_context), std::allocator_arg, make_stack_allocator(),
           [this, d](boost::asio::yield_context y) {
-            refresh_one_lock(d.name, d.token, d.etag, y);
+            refresh_one_lock(d.name, d.mode, d.token, d.etag, y);
           },
           [this, name = d.name, token = d.token](std::exception_ptr eptr) {
             if (!eptr) return;
@@ -1380,12 +1444,13 @@ private:
   // — it may have been erased by a finished build, or released and re-acquired by a
   // new build under a different token — before the result is applied.
   void refresh_one_lock(const table_name_t& name,
+                        StorageMode mode,
                         const std::string& token,
                         const std::string& etag,
                         boost::asio::yield_context yield) {
     const std::string lock_key = make_lock_key(name.index);
     //the actual refresh I/O is done outside the lock, so it doesn't block other builds or refreshes.
-    const auto result = refresh_lock_object(name.ns.tenant, name.bucket, lock_key, token, etag,
+    const auto result = refresh_lock_object(name.ns, mode, name.bucket, lock_key, token, etag,
                                             optional_yield(yield));
     const auto now = ceph::coarse_real_clock::now();
 
@@ -1975,6 +2040,8 @@ public:
                         "Distributed locks lost (stolen) during active builds");
     pcb.add_u64_counter(l_rgw_s3v_bg_lock_refresh_fail, "lock_refresh_fail",
                         "Distributed lock refresh failures (transient)");
+    pcb.add_u64_counter(l_rgw_s3v_bg_lock_bucket_load_fail, "lock_bucket_load_fail",
+                        "Lock-storage bucket load failures that blocked a rebuild (major)");
     perf_counters_ = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_counters_);
   }
