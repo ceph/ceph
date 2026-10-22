@@ -1923,3 +1923,37 @@ TEST(ECUtil, pad_and_rebuild_is_idempotent)
   pad_and_check(sem);
   ASSERT_EQ(once, sem);
 }
+
+TEST(ECUtil, ro_range_to_shard_range)
+{
+  const uint64_t chunk_size = 4096;
+  for (unsigned k : {2, 3, 4}) {
+    stripe_info_t s(k, 2, chunk_size * k);
+    for (uint64_t off = 0; off < 3 * s.get_stripe_width(); off += 1024) {
+      for (uint64_t len = 1024; len <= 2 * s.get_stripe_width(); len += 1024) {
+        shard_extent_set_t full(s.get_k_plus_m());
+        s.ro_range_to_shard_extent_set(off, len, full);
+        for (unsigned raw = 0; raw < s.get_k_plus_m(); raw++) {
+          auto [shard_off, shard_len] =
+            s.ro_range_to_shard_range(off, len, raw_shard_id_t(raw));
+          shard_id_t shard = s.get_shard(raw_shard_id_t(raw));
+          if (raw >= k || !full.contains(shard)) {
+            EXPECT_EQ(0u, shard_len) << "k=" << k << " " << off << "~" << len
+                                     << " raw shard " << raw;
+          } else {
+            const extent_set &e = full.at(shard);
+            EXPECT_EQ(e.range_start(), shard_off)
+              << "k=" << k << " " << off << "~" << len << " raw shard " << raw;
+            EXPECT_EQ(e.range_end() - e.range_start(), shard_len)
+              << "k=" << k << " " << off << "~" << len << " raw shard " << raw;
+          }
+        }
+      }
+    }
+  }
+
+  stripe_info_t s(2, 1, chunk_size * 2);
+  EXPECT_EQ(0u, s.ro_range_to_shard_range(4096, 2048, raw_shard_id_t(0)).second);
+  EXPECT_EQ(std::make_pair(uint64_t(0), uint64_t(2048)),
+            s.ro_range_to_shard_range(4096, 2048, raw_shard_id_t(1)));
+}

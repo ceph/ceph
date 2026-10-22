@@ -341,20 +341,10 @@ TEST_P(TestBackendBasics, DirectRead) {
         PGBackend* backend = test_pg->backend.get();
         ASSERT_TRUE(backend != nullptr) << "Backend for shard " << shard_id << " should not be null";
 
-        ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(backend);
-        ASSERT_TRUE(ec_switch != nullptr) << "Backend should be ECSwitch for EC pools";
-
         bufferlist shard_data;
 
-        // Perform sync read with EC_DIRECT_READ flag
         // Read the entire stripe - we expect only this shard's data back
-        int read_result = ec_switch->objects_read_local(
-          hoid,
-          0, // offset
-          stripe_width, // length (full stripe)
-          CEPH_OSD_RMW_FLAG_EC_DIRECT_READ, // op_flags with direct read flag
-          &shard_data
-        );
+        int read_result = direct_read(backend, hoid, 0, stripe_width, shard_data);
 
         EXPECT_GE(read_result, 0)
           << param.label << " direct read to shard " << shard_id << " should complete successfully";
@@ -382,6 +372,157 @@ TEST_P(TestBackendBasics, DirectRead) {
   auto* primary_listener = get_primary_listener();
   if (primary_listener) {
     primary_listener->sent_messages.clear();
+  }
+}
+
+/**
+ * DirectReadOfOtherShardsChunk - a direct read sent to a data shard returns
+ * only that shard's data, so a read within another shard's chunk returns
+ * nothing.
+ */
+TEST_P(TestBackendBasics, DirectReadOfOtherShardsChunk) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      !(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Direct reads need optimized EC";
+  }
+
+  const std::string obj_name = "test_direct_read_other_" +
+    backend_config.label + "_" + GetParam().write_read.label;
+  const int num_chunks = 2 * k;
+  const uint64_t read_len = stripe_unit / 2;
+
+  std::string data;
+  for (int c = 0; c < num_chunks; c++) {
+    data.append(stripe_unit, 'A' + c);
+  }
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+  hobject_t hoid = make_test_object(obj_name);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    if (shard_id >= k) {
+      continue;
+    }
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(test_pg->backend.get());
+      ASSERT_NE(nullptr, ec_switch);
+
+      for (int c = 0; c < num_chunks; c++) {
+        bufferlist bl;
+        ASSERT_GE(ec_switch->objects_read_local(
+                    hoid, c * stripe_unit, read_len, 0, &bl), 0);
+        if (c % k == shard_id) {
+          EXPECT_EQ(std::string(read_len, 'A' + c), bl.to_str())
+            << "shard " << shard_id << " chunk " << c;
+        } else {
+          EXPECT_EQ(0u, bl.length())
+            << "shard " << shard_id << " read chunk " << c << " and got "
+            << bl.length() << " bytes";
+        }
+      }
+    }
+  }
+}
+
+/**
+ * DirectReadRefusedForOtherShardsData - a direct read op with a read that
+ * holds none of the shard's data is refused with -EINVAL. Clients without the
+ * fix for https://tracker.ceph.com/issues/80836 send such ops.
+ */
+TEST_P(TestBackendBasics, DirectReadRefusedForOtherShardsData) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      !(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Direct reads need optimized EC";
+  }
+
+  const std::string obj_name = "test_direct_read_refused_" +
+    backend_config.label + "_" + GetParam().write_read.label;
+  const int num_chunks = 2 * k;
+  const uint64_t read_len = stripe_unit / 2;
+
+  std::string data;
+  for (int c = 0; c < num_chunks; c++) {
+    data.append(stripe_unit, 'A' + c);
+  }
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+  hobject_t hoid = make_test_object(obj_name);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      PGBackend* backend = test_pg->backend.get();
+
+      for (int c = 0; c < num_chunks; c++) {
+        bufferlist bl;
+        int r = direct_read(backend, hoid, c * stripe_unit, read_len, bl);
+        if (shard_id < k && c % k == shard_id) {
+          EXPECT_EQ(int(read_len), r) << "shard " << shard_id << " chunk " << c;
+          EXPECT_EQ(std::string(read_len, 'A' + c), bl.to_str())
+            << "shard " << shard_id << " chunk " << c;
+        } else {
+          EXPECT_EQ(-EINVAL, r) << "shard " << shard_id << " chunk " << c;
+          EXPECT_EQ(0u, bl.length()) << "shard " << shard_id << " chunk " << c;
+        }
+      }
+
+      // Zero length reads the whole object, which no shard holds.
+      bufferlist bl;
+      EXPECT_EQ(-EINVAL, direct_read(backend, hoid, 0, 0, bl))
+        << "shard " << shard_id;
+
+      // The op of such a client: a read of this shard's chunk, then a read
+      // of the next shard's chunk.
+      if (shard_id < k) {
+        std::vector<OSDOp> ops(2);
+        for (int i = 0; i < 2; i++) {
+          ops[i].op.op = CEPH_OSD_OP_READ;
+          ops[i].op.extent.offset = (shard_id + i) * stripe_unit;
+          ops[i].op.extent.length = read_len;
+        }
+        EXPECT_EQ(-EINVAL, backend->check_direct_read(ops))
+          << "shard " << shard_id;
+      }
+    }
+  }
+}
+
+/*
+ * DirectReadRefusedOnLegacyEC - a direct read to a pool without EC
+ * optimizations is refused with -EOPNOTSUPP. A client only sends a direct read
+ * to an optimized EC pool, so reaching one here is a client bug; do_op refuses
+ * it rather than serve it from a shard that cannot, which is why the backend
+ * may then assume a direct read is optimized.
+ */
+TEST_P(TestBackendBasics, DirectReadRefusedOnLegacyEC) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      (backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Only legacy (non-optimized) EC refuses direct reads";
+  }
+
+  hobject_t hoid = make_test_object("test_direct_read_legacy_" +
+    backend_config.label);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      PGBackend* backend = test_pg->backend.get();
+      bufferlist bl;
+      EXPECT_EQ(-EOPNOTSUPP, direct_read(backend, hoid, 0, stripe_unit, bl))
+        << "shard " << shard_id;
+      EXPECT_EQ(0u, bl.length()) << "shard " << shard_id;
+    }
   }
 }
 
