@@ -906,12 +906,12 @@ COMMAND("osd set-require-min-compat-client "
 COMMAND("osd pause", "pause osd", "osd", "rw")
 COMMAND("osd unpause", "unpause osd", "osd", "rw")
 COMMAND("osd erasure-code-profile set "
-	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
-	"name=profile,type=CephString,n=N,req=false "
-	"name=force,type=CephBool,req=false "
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
-	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)",
-	"osd", "rw")
+        "name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
+        "name=profile,type=CephString,n=N,req=false "
+        "name=force,type=CephBool,req=false "
+        "name=yes_i_really_mean_it,type=CephBool,req=false",
+        "create erasure code profile <name> with [<key[=value]> ...] pairs. Changing a profile that a pool uses needs --yes-i-really-mean-it (VERY DANGEROUS)",
+        "osd", "rw")
 COMMAND("osd erasure-code-profile get "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]",
 	"get erasure code profile <name>",

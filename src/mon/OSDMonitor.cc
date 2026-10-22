@@ -13294,20 +13294,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  goto reply_no_propose;
 	}
 
-	if (!force) {
-	  err = -EPERM;
-	  ss << "will not override erasure code profile " << name
-	     << " because the existing profile "
-	     << existing_profile_map
-	     << " is different from the proposed profile "
-	     << profile_map;
-	  goto reply_no_propose;
-	} else if (!force_no_fake) {
-	  err = -EPERM;
-	  ss << "overriding erasure code profile can be DANGEROUS"
-	     << "; add --yes-i-really-mean-it to do it anyway";
-	  goto reply_no_propose;
-	}
+        // only a profile that a pool uses is dangerous to change
+        stringstream users;
+        if (!force_no_fake &&
+            (erasure_code_profile_in_use(osdmap.pools, name, &users) ||
+             erasure_code_profile_in_use(pending_inc.new_pools, name,
+                                         &users))) {
+          err = -EPERM;
+          ss << "will not override erasure code profile " << name
+             << " because the existing profile " << existing_profile_map
+             << " is different from the proposed profile " << profile_map
+             << ", and " << users.str() << ": changing it can corrupt their"
+             << " data; add --yes-i-really-mean-it to do it anyway";
+          goto reply_no_propose;
+        }
       }
 
       dout(20) << "erasure code profile set " << name << "="
