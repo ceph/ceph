@@ -70,7 +70,7 @@ RGW {
 {% if use_old_nodeid or enable_client_object_cache or clients_per_pool %}
 CEPH {
 {% if use_old_nodeid %}
-	Use_old_uuid = true;
+        Use_old_uuid = true;
 {% endif %}
 {% if clients_per_pool %}
         clients_per_pool = {{ clients_per_pool }};

@@ -2320,6 +2320,10 @@ EXPORT {
         first_pool_user = get_pool_user_id(self.cluster_id, 'myfs', 0)
         # Slot 0 is the id an export gets when client-pool mode is off.
         assert first_pool_user == f'nfs.{get_user_id(self.cluster_id, "myfs", "/")}'
+        # Every other slot hangs off that same id, so a pool is recognisable
+        # from its names alone and cannot collide with another filesystem's.
+        assert [get_pool_user_id(self.cluster_id, 'myfs', i) for i in (1, 2)] == [
+            f'{first_pool_user}.pool.1', f'{first_pool_user}.pool.2']
         assert export.fsal.user_id == first_pool_user
         assert export.fsal.cephx_key == f'key-{first_pool_user}'
         assert [c[0] for c in created] == [
@@ -2374,61 +2378,337 @@ EXPORT {
         conf_raw = conf._rados(self.cluster_id).read_obj(f'conf-nfs.{self.cluster_id}')
         assert f'ceph-users-nfs.{self.cluster_id}' not in conf_raw
 
+    def test_cephfs_client_pool_create_reads_spec_once(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_create_reads_spec_once,
+                           clients_per_pool=3)
+
+    def _do_test_cephfs_client_pool_create_reads_spec_once(self):
+        """Creating an export asks the orchestrator for the cluster spec once.
+
+        Both clients_per_pool and the RDMA setting come out of that spec, and
+        the lookup is an orchestrator round trip, so it is resolved once per
+        create and handed down rather than repeated per consumer.
+        """
+        from nfs import export as export_mod
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        with mock.patch('nfs.export.get_nfs_spec_for_cluster',
+                        wraps=export_mod.get_nfs_spec_for_cluster) as spec_lookup:
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/cephfs_pool',
+                read_only=False,
+                squash='root',
+            )
+
+        assert spec_lookup.call_count == 1
+
+    def test_cephfs_client_pool_users_removed_on_orphan_cluster_delete(self):
+        self._do_mock_test(
+            self._do_test_cephfs_client_pool_users_removed_on_orphan_cluster_delete,
+            clients_per_pool=3)
+
+    def _do_test_cephfs_client_pool_users_removed_on_orphan_cluster_delete(self):
+        """'orch rm' then 'nfs cluster rm' still retires the pool users.
+
+        The orphan branch never reaches delete_all_exports, so nothing walks
+        the exports taking their pools down, and remove_all_obj() is about to
+        drop the CEPH_USERS object that names them. Read it while it is still
+        there or the users outlive the cluster with nothing left recording
+        them, one pool per filesystem the cluster served.
+        """
+        from nfs.export import get_pool_user_id
+
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+
+        with mock.patch.object(conf, '_create_user_key',
+                               side_effect=self._create_key_mock()):
+            for fs_name, pseudo in (('myfs', '/pool_one'), ('altfs', '/pool_two')):
+                conf.create_export(
+                    fsal_type='cephfs',
+                    cluster_id=self.cluster_id,
+                    fs_name=fs_name,
+                    path='/',
+                    pseudo_path=pseudo,
+                    read_only=False,
+                    squash='none',
+                )
+
+        expected = sorted(
+            f'client.{get_pool_user_id(self.cluster_id, fs, i)}'
+            for fs in ('myfs', 'altfs') for i in range(3)
+        )
+
+        cluster = NFSCluster(nfs_mod)
+        rm_entities: List[str] = []
+        # The service is gone from the orchestrator while its objects are
+        # not: exactly what 'orch rm nfs.<id>' leaves behind. has_objects()
+        # and delete_config_obj() are stubbed because the fake RADOS of these
+        # tests neither iterates nor removes objects.
+        with mock.patch('nfs.cluster.available_clusters', return_value=[]), \
+                mock.patch('nfs.rados_utils.NFSRados.has_objects',
+                           return_value=True), \
+                mock.patch.object(cluster, 'delete_config_obj'), \
+                mock.patch.object(nfs_mod, 'check_mon_command',
+                                  side_effect=self._auth_rm_mock(rm_entities)):
+            cluster.delete_nfs_cluster(self.cluster_id)
+
+        assert sorted(rm_entities) == expected
+
+    def test_orphan_cluster_delete_without_a_client_pool(self):
+        self._do_mock_test(self._do_test_orphan_cluster_delete_without_a_client_pool)
+
+    def _do_test_orphan_cluster_delete_without_a_client_pool(self):
+        """A cluster with no client pool still deletes the same way.
+
+        The users are read off the CEPH_USERS object rather than the spec,
+        and a cluster that never enabled a pool has none, so the lookup finds
+        nothing to revoke and the objects go as they always did.
+        """
+        from nfs.utils import ceph_users_obj_name
+
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+
+        with mock.patch.object(conf, '_create_user_key',
+                               side_effect=self._create_key_mock()):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/nopool',
+                read_only=False,
+                squash='none',
+            )
+        assert conf._rados(self.cluster_id).read_obj(
+            ceph_users_obj_name(self.cluster_id)) is None
+
+        cluster = NFSCluster(nfs_mod)
+        rm_entities: List[str] = []
+        deleted = mock.MagicMock()
+        with mock.patch('nfs.cluster.available_clusters', return_value=[]), \
+                mock.patch('nfs.rados_utils.NFSRados.has_objects',
+                           return_value=True), \
+                mock.patch.object(cluster, 'delete_config_obj', deleted), \
+                mock.patch.object(nfs_mod, 'check_mon_command',
+                                  side_effect=self._auth_rm_mock(rm_entities)):
+            cluster.delete_nfs_cluster(self.cluster_id)
+
+        assert rm_entities == []
+        deleted.assert_called_once_with(self.cluster_id)
+
+    def test_cephfs_client_pool_teardown_without_a_configured_pool(self):
+        self._do_mock_test(
+            self._do_test_cephfs_client_pool_teardown_without_a_configured_pool,
+            clients_per_pool=3)
+
+    def _do_test_cephfs_client_pool_teardown_without_a_configured_pool(self):
+        """A pool is torn down from what is on disk, not from the spec.
+
+        The spec says nothing useful once the users exist. It is read through
+        the orchestrator, which reports no pool just as readily when it
+        cannot be reached, and `orch rm nfs.x` keeps the CEPH_USERS object,
+        so a cluster recreated without clients_per_pool still serves exports
+        whose credentials live in it. Deleting the last export of such a
+        filesystem has to revoke the whole pool either way: taking the
+        no-pool path would revoke slot 0, which the export and the rest of
+        the pool authenticate with, and strand the other slots.
+        """
+        from nfs.export import get_pool_user_id
+        from nfs.utils import ceph_users_obj_name
+
+        nfs_mod = Module('nfs', '', '')
+        users_obj = ceph_users_obj_name(self.cluster_id)
+        pool_ids = [get_pool_user_id(self.cluster_id, 'myfs', i) for i in range(3)]
+
+        # The orchestrator is unreachable, and a cluster recreated without
+        # clients_per_pool: indistinguishable to the nfs module, and both
+        # have to leave the pool as cleaned up as a healthy cluster does.
+        recreated = NFSServiceSpec(service_id=self.cluster_id, clients_per_pool=None)
+        for spec in (None, recreated):
+            conf = ExportMgr(nfs_mod)
+            with mock.patch.object(conf, '_create_user_key',
+                                   side_effect=self._create_key_mock()):
+                conf.create_export(
+                    fsal_type='cephfs',
+                    cluster_id=self.cluster_id,
+                    fs_name='myfs',
+                    path='/',
+                    pseudo_path='/pool',
+                    read_only=False,
+                    squash='none',
+                )
+            assert conf._rados(self.cluster_id).read_obj(users_obj) is not None
+
+            rm_entities: List[str] = []
+            with mock.patch('nfs.export.get_nfs_spec_for_cluster', return_value=spec), \
+                    mock.patch.object(nfs_mod, 'check_mon_command',
+                                      side_effect=self._auth_rm_mock(rm_entities)):
+                conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/pool')
+
+            # Every slot revoked, not just the one the FSAL block names ...
+            assert sorted(rm_entities) == sorted(f'client.{u}' for u in pool_ids)
+            # ... and the object goes with them rather than being left linked
+            # from the common config with nothing behind it.
+            assert conf._rados(self.cluster_id).read_obj(users_obj) is None
+            conf_raw = conf._rados(self.cluster_id).read_obj(f'conf-nfs.{self.cluster_id}')
+            assert users_obj not in conf_raw
+
     def test_cephfs_client_pool_concurrent_provisioning(self):
         self._do_mock_test(self._do_test_cephfs_client_pool_concurrent_provisioning,
                            clients_per_pool=2)
 
     def _do_test_cephfs_client_pool_concurrent_provisioning(self):
+        """Two filesystems provisioned at once end up with a pool each.
+
+        The pools of every filesystem share one CEPH_USERS object, so a
+        provisioning that read it before another one wrote it would drop the
+        other's users on its own write.
+        """
         import threading
-        import time
         from nfs.utils import ceph_users_obj_name
         from nfs.ganesha_conf import CephUsers
 
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
-        ops = []
-        ops_lock = threading.Lock()
-        real_read = conf._read_ceph_users
-        real_write = conf._write_ceph_users
-
-        def slow_read(cluster_id):
-            with ops_lock:
-                ops.append('read')
-            # Give the other thread every chance to read the same copy.
-            time.sleep(0.05)
-            return real_read(cluster_id)
-
-        def record_write(cluster_id, ceph_users, link=False, should_notify=False):
-            with ops_lock:
-                ops.append('write')
-            return real_write(cluster_id, ceph_users, link, should_notify)
-
         errors = []
 
         def provision(fs_name):
             try:
-                conf._ensure_pool_users_for_fs(self.cluster_id, fs_name)
+                conf._ensure_pool_users_for_fs(self.cluster_id, fs_name, 2)
             except Exception as e:
                 errors.append(e)
 
-        with mock.patch.object(conf, '_read_ceph_users', side_effect=slow_read), \
-                mock.patch.object(conf, '_write_ceph_users', side_effect=record_write):
-            threads = [threading.Thread(target=provision, args=(fs_name,))
-                       for fs_name in ('fs_a', 'fs_b')]
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
+        threads = [threading.Thread(target=provision, args=(fs_name,))
+                   for fs_name in ('fs_a', 'fs_b')]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
         assert not errors
-        # Each provisioning read its own, up to date, copy of CEPH_USERS: the
-        # reads and writes never interleave.
-        assert ops == ['read', 'write', 'read', 'write']
         ceph_users = CephUsers.from_raw(
             conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
         assert len(ceph_users.users_for_fs('fs_a')) == 2
         assert len(ceph_users.users_for_fs('fs_b')) == 2
+
+    def test_cephfs_client_pool_enable_on_existing_exports(self):
+        # The cluster is deliberately mocked without a pool: the exports are
+        # made the way a cluster that predates client-pool mode has them.
+        self._do_mock_test(self._do_test_cephfs_client_pool_enable_on_existing_exports)
+
+    def _do_test_cephfs_client_pool_enable_on_existing_exports(self):
+        """A pool can be enabled and grown on a cluster that already serves."""
+        from nfs.export import get_pool_user_id, get_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        created = []
+
+        def mock_create_key(cluster_id, entity, path, fs_name):
+            created.append((entity, path, fs_name))
+            return f'key-{entity}'
+
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            for pseudo in ('/brownfield1', '/brownfield2'):
+                conf.create_export(
+                    fsal_type='cephfs',
+                    cluster_id=self.cluster_id,
+                    fs_name='myfs',
+                    path='/',
+                    pseudo_path=pseudo,
+                    read_only=False,
+                    squash='root',
+                )
+            # An export that keeps its own client whatever the pool does.
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/volumes',
+                pseudo_path='/dedicated',
+                read_only=False,
+                squash='root',
+                cmount_path='/volumes',
+            )
+
+        shared_user = f'nfs.{get_user_id(self.cluster_id, "myfs", "/")}'
+        dedicated_user = f'nfs.{get_user_id(self.cluster_id, "myfs", "/volumes")}'
+        assert conf._fetch_export(self.cluster_id, '/brownfield1').fsal.user_id == shared_user
+        assert conf._fetch_export(self.cluster_id, '/brownfield2').fsal.user_id == shared_user
+        assert conf._fetch_export(self.cluster_id, '/dedicated').fsal.user_id == dedicated_user
+        assert conf._rados(self.cluster_id).read_obj(
+            ceph_users_obj_name(self.cluster_id)) is None
+
+        exports_before = {
+            pseudo: conf._rados(self.cluster_id).read_obj(f'export-{ex.export_id}')
+            for pseudo, ex in (
+                (p, conf._fetch_export(self.cluster_id, p))
+                for p in ('/brownfield1', '/brownfield2', '/dedicated'))
+        }
+
+        # Enable the pool on the running cluster.
+        created.clear()
+        self.io_mock.notify.reset_mock()
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            grown = conf.reconcile_client_pool(self.cluster_id, 3)
+
+        # The daemons are still configured without a pool, and ganesha refuses
+        # a USERS block that is not exactly clients_per_pool wide, so nothing
+        # tells them to reread: the orchestrator reconfigure that brings them
+        # the new clients_per_pool is what puts the pool to use.
+        assert self.io_mock.notify.call_count == 0
+
+        pool_ids = [get_pool_user_id(self.cluster_id, 'myfs', i) for i in range(3)]
+        # Slot 0 is the user the exports already carry, so it is adopted
+        # rather than replaced, and only two identities are really new.
+        assert pool_ids[0] == shared_user
+        assert set(pool_ids) <= set(grown)
+        assert [c[0] for c in created if c[2] == 'myfs'] == pool_ids
+        assert all(c[1] == '/' for c in created)
+        # The export with its own cmount_path never joins a pool.
+        assert dedicated_user not in grown
+
+        raw = conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id))
+        assert raw is not None
+        assert [u.user_id for u in CephUsers.from_raw(raw).users_for_fs('myfs')] == pool_ids
+        conf_raw = conf._rados(self.cluster_id).read_obj(f'conf-nfs.{self.cluster_id}')
+        assert f'ceph-users-nfs.{self.cluster_id}' in conf_raw
+
+        # No export was rewritten, so no NFS client has to remount.
+        for pseudo, before in exports_before.items():
+            ex = conf._fetch_export(self.cluster_id, pseudo)
+            assert conf._rados(self.cluster_id).read_obj(f'export-{ex.export_id}') == before
+
+        # Re-applying the same size is a no-op.
+        created.clear()
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            assert conf.reconcile_client_pool(self.cluster_id, 3) == []
+        assert created == []
+
+        # Growing the pool only adds the slots it is short of.
+        created.clear()
+        self.io_mock.notify.reset_mock()
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            grown = conf.reconcile_client_pool(self.cluster_id, 5)
+        # Same again: the daemons still run with clients_per_pool=3.
+        assert self.io_mock.notify.call_count == 0
+        new_ids = [get_pool_user_id(self.cluster_id, 'myfs', i) for i in (3, 4)]
+        assert set(new_ids) <= set(grown)
+        assert [c[0] for c in created if c[2] == 'myfs'] == new_ids
+        raw = conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id))
+        assert ([u.user_id for u in CephUsers.from_raw(raw).users_for_fs('myfs')]
+                == pool_ids + new_ids)
 
     def test_cephfs_client_pool_move_to_other_fs(self):
         self._do_mock_test(self._do_test_cephfs_client_pool_move_to_other_fs,
@@ -2517,13 +2797,15 @@ EXPORT {
                            side_effect=lambda *a, **kw: events.append('restart')):
             r = conf.apply_export(self.cluster_id, move)
         assert not r.has_error
-        # The export is persisted first, the pool it left behind is revoked
-        # after it, and ganesha is sent to reread only once both are done.
+        # The export is persisted first, then CEPH_USERS drops the pool it
+        # left behind, and only then are those users revoked, so cephx is
+        # never ahead of the object that names them. Ganesha is sent to
+        # reread once all of it is done.
         assert events == [
             f'write:{export_obj}',
+            f'write:{users_obj}',
             f'auth rm:client.{fs_a_users[0]}',
             f'auth rm:client.{fs_a_users[1]}',
-            f'write:{users_obj}',
             'restart',
         ]
         export = conf._fetch_export(self.cluster_id, '/pool')
@@ -2706,6 +2988,102 @@ EXPORT {
             assert export.fsal.user_id == get_pool_user_id(self.cluster_id, fs_name, 0)
             assert export.fsal.cephx_key == f'key-{export.fsal.user_id}'
 
+    def test_cephfs_client_pool_reconcile_narrows_retained_pool(self):
+        self._do_mock_test(
+            self._do_test_cephfs_client_pool_reconcile_narrows_retained_pool,
+            clients_per_pool=3)
+
+    def _do_test_cephfs_client_pool_reconcile_narrows_retained_pool(self):
+        """A recreated cluster narrows the pool its exports came back with.
+
+        `orch rm nfs.x` keeps both the exports and the CEPH_USERS object, so
+        a cluster recreated with a smaller clients_per_pool meets a pool
+        wider than it asks for. No export is created again, so the resize in
+        _ensure_pool_users_for_fs never runs: the orchestrator reconcile has
+        to narrow the pool itself, before the daemons are given the new size.
+
+        otherfs is served by the same cluster and came back the right size,
+        so the walk that narrows myfs carries on past it with nothing left to
+        retire: the slots myfs gave up are still owed to cephx at the end.
+        """
+        from nfs.export import get_pool_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUser, CephUsers
+        from nfs.rados_utils import NFSRados
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        users_obj = ceph_users_obj_name(self.cluster_id)
+        pool_ids = [get_pool_user_id(self.cluster_id, 'myfs', i) for i in range(5)]
+        other_ids = [get_pool_user_id(self.cluster_id, 'otherfs', i) for i in range(3)]
+
+        mock_create_key = self._create_key_mock()
+        # myfs is exported first, so it is also the first the reconcile walks.
+        for fs_name, pseudo in (('myfs', '/pool'), ('otherfs', '/otherpool')):
+            with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+                conf.create_export(
+                    fsal_type='cephfs',
+                    cluster_id=self.cluster_id,
+                    fs_name=fs_name,
+                    path='/',
+                    pseudo_path=pseudo,
+                    read_only=False,
+                    squash='none',
+                )
+
+        # Widen the pool of myfs to the five slots the removed cluster ran
+        # with, the exports of which came back untouched. otherfs is left at
+        # the size the recreated cluster asks for.
+        retained = CephUsers.from_raw(conf._rados(self.cluster_id).read_obj(users_obj))
+        retained.users.extend(
+            CephUser(user_id, f'key-{user_id}', 'myfs') for user_id in pool_ids[3:])
+        conf._write_ceph_users(self.cluster_id, retained)
+        export = conf._fetch_export(self.cluster_id, '/pool')
+        export_before = conf._rados(self.cluster_id).read_obj(f'export-{export.export_id}')
+
+        events: List[str] = []
+        real_update_obj = NFSRados.update_obj
+
+        def recording_update_obj(rados_obj, conf_block, obj, config_obj, should_notify=True):
+            events.append(f'write:{obj}')
+            return real_update_obj(rados_obj, conf_block, obj, config_obj, should_notify)
+
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key), \
+                mock.patch.object(nfs_mod, 'check_mon_command',
+                                  side_effect=self._auth_rm_mock(events, prefix='auth rm:')), \
+                mock.patch('nfs.export.NFSRados.update_obj', recording_update_obj):
+            created = conf.reconcile_client_pool(self.cluster_id, 3)
+        # Neither pool is added to, myfs only gives slots up and otherfs is
+        # already the width it is asked for.
+        assert not set(created) & set(pool_ids + other_ids)
+
+        ceph_users = CephUsers.from_raw(conf._rados(self.cluster_id).read_obj(users_obj))
+        users = ceph_users.users_for_fs('myfs')
+        assert [u.user_id for u in users] == pool_ids[:3]
+        # The slots that survive keep the keys the exports authenticate with.
+        assert all(u.secret_access_key == f'key-{u.user_id}' for u in users)
+        # The filesystem walked after myfs is left exactly as it was.
+        assert [u.user_id for u in ceph_users.users_for_fs('otherfs')] == other_ids
+        # The narrowed pool is persisted before the slots it dropped are
+        # revoked: a crash in between leaves cephx users nothing points at,
+        # rather than a CEPH_USERS object naming credentials that are gone.
+        # The revocations are owed to myfs, which is not the filesystem the
+        # walk ends on, so they only land if the walk collected them.
+        assert events == [f'write:{users_obj}'] + [
+            f'auth rm:client.{user_id}' for user_id in pool_ids[3:]]
+        # No export was rewritten, so no NFS client has to remount.
+        assert conf._rados(self.cluster_id).read_obj(
+            f'export-{export.export_id}') == export_before
+
+        # The pool is the size it was asked for, so reconciling again is a
+        # no-op rather than another round of revocations.
+        rm_entities: List[str] = []
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key), \
+                mock.patch.object(nfs_mod, 'check_mon_command',
+                                  side_effect=self._auth_rm_mock(rm_entities)):
+            assert conf.reconcile_client_pool(self.cluster_id, 3) == []
+        assert rm_entities == []
+
     def test_cephfs_client_pool_ignores_non_root_cmount(self):
         self._do_mock_test(self._do_test_cephfs_client_pool_ignores_non_root_cmount,
                            clients_per_pool=2)
@@ -2777,6 +3155,49 @@ EXPORT {
         with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon_command):
             conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/sub')
         assert rm_entities == [f'client.{hashed_user}']
+
+    def test_cephfs_client_pool_export_info(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_export_info,
+                           clients_per_pool=3)
+
+    def _do_test_cephfs_client_pool_export_info(self):
+        """`export info` reports the pool the export draws its handles from."""
+        from nfs.export import get_pool_user_id, get_user_id
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        for pseudo, path, cmount in (('/root', '/', '/'),
+                                     ('/sub', '/volumes', '/volumes')):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path=path,
+                pseudo_path=pseudo,
+                read_only=False,
+                squash='none',
+                cmount_path=cmount,
+            )
+
+        pool_ids = [get_pool_user_id(self.cluster_id, 'myfs', i) for i in range(3)]
+        info = conf.get_export(self.cluster_id, '/root')
+        # The FSAL only names slot 0, so the pool is what the export info adds.
+        assert info['fsal']['user_id'] == pool_ids[0]
+        assert info['client_pool'] == {'fs_name': 'myfs', 'users': pool_ids}
+        # Keys are not part of it, no more than the FSAL cephx_key is.
+        assert 'Keys' not in json.dumps(info)
+        assert not any('key' in u for u in info['client_pool']['users'])
+
+        # An export with its own cmount_path is not part of any pool.
+        sub = conf.get_export(self.cluster_id, '/sub')
+        assert sub['fsal']['user_id'] == f'nfs.{get_user_id(self.cluster_id, "myfs", "/volumes")}'
+        assert 'client_pool' not in sub
+
+        # An RGW export has no CephFS client at all.
+        rgw = conf.get_export(self.cluster_id, '/rgw')
+        assert rgw['fsal']['name'] == 'RGW'
+        assert 'client_pool' not in rgw
 
     def test_cephfs_client_pool_single_notify_per_change(self):
         self._do_mock_test(self._do_test_cephfs_client_pool_single_notify_per_change,
@@ -3150,7 +3571,7 @@ def test_ceph_users_block_roundtrip():
 
     users = CephUsers([
         CephUser('nfs.myc.fs_a.80bb977a', 'key0', 'fs_a'),
-        CephUser('nfs.myc.fs_a.pool.1', 'key1', 'fs_a'),
+        CephUser('nfs.myc.fs_a.80bb977a.pool.1', 'key1', 'fs_a'),
         CephUser('nfs.myc.fs_b.deadbeef', 'key2', 'fs_b'),
     ])
     raw = format_block(users.to_block())
@@ -3159,7 +3580,7 @@ def test_ceph_users_block_roundtrip():
     assert len(parsed.users_for_fs('fs_b')) == 1
     # The pool keeps its order, so slot 0 stays the identity of the exports.
     assert [u.user_id for u in parsed.users_for_fs('fs_a')] == [
-        'nfs.myc.fs_a.80bb977a', 'nfs.myc.fs_a.pool.1']
+        'nfs.myc.fs_a.80bb977a', 'nfs.myc.fs_a.80bb977a.pool.1']
     assert parsed.users_for_fs('fs_a')[0].secret_access_key == 'key0'
     parsed.remove_fs('fs_a')
     assert not parsed.users_for_fs('fs_a')
@@ -3172,7 +3593,7 @@ def test_ceph_users_block_roundtrip():
     assert [b.block_name for b in blocks[0].blocks] == ['USERS', 'USERS']
     fs_a_block = blocks[0].blocks[0]
     assert fs_a_block.values['filesystem'] == 'fs_a'
-    assert fs_a_block.values['userids'] == ['nfs.myc.fs_a.80bb977a', 'nfs.myc.fs_a.pool.1']
+    assert fs_a_block.values['userids'] == ['nfs.myc.fs_a.80bb977a', 'nfs.myc.fs_a.80bb977a.pool.1']
     assert fs_a_block.values['keys'] == ['key0', 'key1']
     # A single-user pool writes a scalar stanza, and has to read back as a pool.
     fs_b_block = blocks[0].blocks[1]
@@ -3194,7 +3615,7 @@ def test_ceph_users_block_rejects_mismatched_keys():
     raw = '''
 CEPH_USERS {
     USERS {
-        Userids = "nfs.myc.cephfs.80bb977a", "nfs.myc.cephfs.pool.1";
+        Userids = "nfs.myc.cephfs.80bb977a", "nfs.myc.cephfs.80bb977a.pool.1";
         Keys = "AQCkey1==";
         filesystem = "cephfs";
     }

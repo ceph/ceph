@@ -1492,7 +1492,6 @@ class NFSServiceSpec(ServiceSpec):
         self.mem_stats_disable = mem_stats_disable
 
         # Max independent CephFS client handles Ganesha may use per filesystem.
-        # Immutable after cluster creation. None disables pool mode (default).
         self.clients_per_pool = clients_per_pool
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
@@ -1636,7 +1635,8 @@ class NFSServiceSpec(ServiceSpec):
                 raise SpecValidationError(
                     "Invalid NFS spec: clients_per_pool must be an integer between 2 "
                     f"and {self.MAX_CLIENTS_PER_POOL} (NFS-Ganesha rejects a larger "
-                    "pool). This field can only be set at NFS cluster creation time."
+                    "pool). Once an NFS cluster uses a pool this field can only "
+                    "be raised."
                 )
         cache_size = verify_size_with_units(
             self.client_object_cache_size, "client_object_cache_size"
