@@ -5649,6 +5649,106 @@ TEST_F(NSFSStridedBucketTest, StridedOversizedPartDiverts)
       << "part 2's overrun reached part 3's region";
 }
 
+/* The impersonated fixture with the strided staging layout forced, as
+ * NSFSStridedBucketTest forces it, so an oversized part diverts. */
+class NSFSImpersonatedStridedTest : public NSFSImpersonatedRenameTest {
+public:
+  std::optional<bool> shares_extents() const override { return false; }
+};
+
+/* copy_range() moves bytes between descriptors already opened, so a
+ * copy runs as whoever opened them:  the identity reaches the copies
+ * only through set_identity() calls in NSFSMultipartWriter, far from
+ * them (call-site table §9.2, row 1).  So every file a strided upload
+ * makes -- the shared file, part 2's own file after its divert, and the
+ * object assembly produces -- is the uploader's;  and the same upload
+ * by another identity makes them that identity's, so the first arm
+ * discriminates.  Not the gateway as the other arm:  under impersonation
+ * a part with no requester is denied (n-plan §6.1).  The upload's
+ * `.meta` is the gateway's by design -- staging stays its -- so the
+ * data files are named rather than listed. */
+TEST_F(NSFSImpersonatedStridedTest, EveryFileAStridedUploadMakesIsTheUploaders)
+{
+  ASSERT_STREQ(driver->get_mpu_strategy()->name(), "rgw-strided");
+  const size_t stride = 64;
+  const uint64_t diverts = driver->mpu_diverts_seen();
+
+  /* unversioned:  the fixture versions its bucket, and then the second
+   * uploader's completion needs the bucket root's .versions, which the
+   * first made its own at 0770 -- the cross-identity case, not the
+   * copy this asserts */
+  std::thread unversion([&] {
+    bucket->get_info().flags &= ~BUCKET_VERSIONED;
+    ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  });
+  unversion.join();
+  ASSERT_FALSE(HasFatalFailure());
+
+  /* one upload of three parts, the second oversized, as `who`, each
+   * step on a thread of its own, as put_as() */
+  auto upload_as = [&](const rgw_user& who, uid_t uid,
+		       const std::string& objname) {
+    auto upload = bucket->get_multipart_upload(objname, "c0ffee");
+    rgw_placement_rule placement;
+    std::map<int, std::string> etags;
+    std::thread t([&] {
+      Attrs attrs;
+      ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement,
+			     attrs), 0);
+      const std::string bodies[] = {std::string(stride, 'a'),
+				    std::string(stride + 17, 'b'),
+				    std::string(stride, 'c')};
+      for (int n = 1; n <= 3; ++n) {
+	auto w = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				    &placement, n, std::to_string(n));
+	w->set_authenticated_user(who);
+	ASSERT_EQ(w->prepare(null_yield), 0) << "part " << n;
+	bufferlist bl;
+	bl.append(bodies[n - 1]);
+	const size_t len = bl.length();
+	ASSERT_EQ(w->process(std::move(bl), 0), 0);
+	ASSERT_EQ(w->process({}, len), 0);
+	ceph::real_time mtime;
+	Attrs pa;
+	req_context rctx{env->dpp, null_yield, nullptr};
+	std::string etag = std::to_string(n);
+	ASSERT_EQ(w->complete(len, etag, &mtime, real_time(), pa, std::nullopt,
+			      real_time(), nullptr, nullptr, nullptr, nullptr,
+			      nullptr, rctx, 0), 0) << "part " << n;
+	etags[n] = etag;
+      }
+    });
+    t.join();
+    ASSERT_FALSE(HasFatalFailure());
+
+    /* the shared file and part 2's own file, which divert() copied
+     * into, are the uploader's, before completion */
+    const std::string staging = ".multipart_" + objname + ".c0ffee/";
+    const auto* mpu = driver->get_mpu_strategy();
+    for (const std::string& name : {*mpu->shared_name(stride),
+				    mpu->part_name(2)}) {
+      const Owned o = owned(staging + name);
+      ASSERT_EQ(o.err, 0) << name << " is missing";
+      EXPECT_EQ(o.uid, uid) << name << " is not its uploader's";
+    }
+
+    /* and the object assembly makes from them */
+    std::thread c([&] {
+      upload->set_authenticated_user(who);
+      EXPECT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			    etags), 0);
+    });
+    c.join();
+    EXPECT_EQ(owned(objname).uid, uid)
+	<< "the assembled object is not its uploader's";
+  };
+
+  ASSERT_NO_FATAL_FAILURE(upload_as(alice, owner_uid, "mp"));
+  EXPECT_GT(driver->mpu_diverts_seen(), diverts)
+      << "part 2 did not divert, so divert()'s copy was not exercised";
+  ASSERT_NO_FATAL_FAILURE(upload_as(bob, other_uid, "mp-bob"));
+}
+
 /* The strided layout under the writeback cache policy.
  *
  * A part's record reaches its xattr only when the cache entry is
