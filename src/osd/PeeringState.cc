@@ -4819,6 +4819,15 @@ bool PeeringState::append_log_entries_update_missing(
       // write can result in trim_to being ahead of crt
       trim = pg_log.get_can_rollback_to();
     }
+    // trim_to is broadcast verbatim from the primary based on the acting
+    // set's reported progress.  A backfill/async-recovery target catching
+    // up via update_log_missing may not have appended entries as far as
+    // trim_to yet, so clamp to this replica's own head to avoid raising
+    // log.tail past entries it will append later, which would violate the
+    // pg_log_t invariant that every log entry is newer than tail.
+    if (trim > pg_log.get_head()) {
+      trim = pg_log.get_head();
+    }
     pg_log.trim(trim, info);
   }
   dirty_info = true;
@@ -5008,6 +5017,14 @@ void PeeringState::append_log(
     // An exceptionally long sequence of partial writes followed by a full
     // write can result in trim_to being ahead of crt
     trim_to = pg_log.get_can_rollback_to();
+  }
+  // trim_to is computed by the primary from the acting set's reported
+  // progress and broadcast verbatim to every replica; a replica that is
+  // still catching up (e.g. a backfill/async-recovery target) must never
+  // trim past its own head, or log.tail would end up ahead of entries it
+  // appends once it catches up, violating the log's tail invariant.
+  if (trim_to > pg_log.get_head()) {
+    trim_to = pg_log.get_head();
   }
   pg_log.trim(trim_to, info, transaction_applied, async);
 
@@ -5951,7 +5968,11 @@ void PeeringState::Backfilling::suspend_backfill()
 boost::statechart::result
 PeeringState::Backfilling::react(const Backfilled &c)
 {
+  DECLARE_LOCALS;
   backfill_release_reservations();
+  if (ps->needs_recovery()) {
+    return transit<WaitLocalRecoveryReserved>();
+  }
   return transit<Recovered>();
 }
 
@@ -7445,7 +7466,15 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MTrim& trim)
     // write can result in trim_to being ahead of crt
     trim_to = ps->pg_log.get_can_rollback_to();
   }
-  ps->pg_log.trim(trim.trim_to, ps->info);
+  // trim_to is computed by the primary from the acting set's reported
+  // progress and broadcast verbatim to every replica; a replica that is
+  // still catching up (e.g. a backfill/async-recovery target) must never
+  // trim past its own head, or log.tail would end up ahead of entries it
+  // appends once it catches up, violating the log's tail invariant.
+  if (trim_to > ps->pg_log.get_head()) {
+    trim_to = ps->pg_log.get_head();
+  }
+  ps->pg_log.trim(trim_to, ps->info);
   ps->dirty_info = true;
   return discard_event();
 }

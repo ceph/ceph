@@ -223,3 +223,9 @@ struct formatter<Scrub::SchedEntry> {
   }
 };
 }  // namespace fmt
+
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+using namespace ::Scrub;
+}
+#endif

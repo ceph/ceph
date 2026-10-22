@@ -7,6 +7,7 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/scrub/pg_scrubber.h"
 #include "osd/osd_types.h"
+#include "osd/SnapMapReaderI.h"
 #include "peering_event.h"
 
 namespace crimson::osd {
@@ -78,6 +79,7 @@ public:
 
 class ScrubRequested final : public RemoteScrubEventBaseT<ScrubRequested> {
   bool deep = false;
+  bool repair = false;
 protected:
   ifut<> handle_event(PG &pg) final;
 
@@ -85,19 +87,20 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::scrub_requested;
 
   template <typename... Args>
-  ScrubRequested(bool deep, Args&&... base_args)
+  ScrubRequested(bool deep, bool repair, Args&&... base_args)
     : RemoteScrubEventBaseT<ScrubRequested>(std::forward<Args>(base_args)...),
-      deep(deep) {}
+      deep(deep), repair(repair) {}
 
   epoch_t get_epoch_sent_at() const {
     return epoch;
   }
 
   void print(std::ostream &out) const final {
-    out << "(deep=" << deep << ")";
+    out << "(deep=" << deep << ", repair=" << repair << ")";
   }
   void dump_detail(ceph::Formatter *f) const final {
     f->dump_bool("deep", deep);
+    f->dump_bool("repair", repair);
   }
 
 };
@@ -133,13 +136,14 @@ public:
 template <typename T>
 class ScrubAsyncOpT : public TrackableOperationT<T> {
   Ref<PG> pg;
+  const bool scheduled;
 
 public:
   using interruptor = InterruptibleOperation::interruptor;
   template <typename U=void>
   using ifut = InterruptibleOperation::interruptible_future<U>;
 
-  ScrubAsyncOpT(Ref<PG> pg);
+  ScrubAsyncOpT(Ref<PG> pg, bool scheduled = true);
 
   ifut<> start();
 
@@ -240,6 +244,86 @@ protected:
   ifut<> run(PG &pg) final;
 };
 
+class ScrubSleep : public ScrubAsyncOpT<ScrubSleep> {
+public:
+  static constexpr OperationTypeCode type = OperationTypeCode::scrub_sleep;
+
+  ScrubSleep(Ref<PG> pg)
+    : ScrubAsyncOpT(pg, false) {}
+
+  void print(std::ostream &out) const final {
+    out << "()";
+  }
+  void dump_detail(ceph::Formatter *f) const final {
+  }
+
+protected:
+  ifut<> run(PG &pg) final;
+};
+
+class ScrubDigestUpdate : public ScrubAsyncOpT<ScrubDigestUpdate> {
+  hobject_t oid;
+  std::optional<uint32_t> data_digest;
+  std::optional<uint32_t> omap_digest;
+  uint64_t generation;
+
+public:
+  static constexpr OperationTypeCode type = OperationTypeCode::scrub_digest_update;
+
+  ScrubDigestUpdate(
+    Ref<PG> pg,
+    const hobject_t &oid,
+    std::optional<uint32_t> data_digest,
+    std::optional<uint32_t> omap_digest,
+    uint64_t generation)
+    : ScrubAsyncOpT(pg), oid(oid),
+      data_digest(data_digest), omap_digest(omap_digest),
+      generation(generation) {}
+
+  void print(std::ostream &out) const final {
+    out << "(oid=" << oid << ")";
+  }
+  void dump_detail(ceph::Formatter *f) const final {
+    f->dump_stream("oid") << oid;
+  }
+
+protected:
+  ifut<> run(PG &pg) final;
+};
+
+/**
+ * ScrubSnapMapperRepair
+ *
+ * Background operation that validates and repairs a single clone's snap mapper
+ * entry.  Spawned by PGScrubber::scan_snaps() for each clone found in the
+ * scrub map.  All blocking KV reads and writes happen inside interruptor::async
+ * so they never run on the Seastar reactor thread.
+ */
+class ScrubSnapMapperRepair : public ScrubAsyncOpT<ScrubSnapMapperRepair> {
+  hobject_t hoid;
+  std::set<snapid_t> expected_snaps;  ///< canonical snaps from snapset SS_ATTR
+
+public:
+  static constexpr OperationTypeCode type =
+    OperationTypeCode::scrub_snap_mapper_repair;
+
+  ScrubSnapMapperRepair(
+    Ref<PG> pg,
+    const hobject_t &hoid,
+    const std::set<snapid_t> &expected_snaps)
+    : ScrubAsyncOpT(pg), hoid(hoid), expected_snaps(expected_snaps) {}
+
+  void print(std::ostream &out) const final {
+    out << "(hoid=" << hoid << ")";
+  }
+  void dump_detail(ceph::Formatter *f) const final {
+    f->dump_stream("hoid") << hoid;
+  }
+
+protected:
+  ifut<> run(PG &pg) final;
+};
+
 struct obj_scrub_progress_t {
   // nullopt once complete
   std::optional<uint64_t> offset = 0;
@@ -264,6 +348,20 @@ struct EventBackendRegistry<osd::ScrubRequested> {
 
 template <>
 struct EventBackendRegistry<osd::ScrubMessage> {
+  static std::tuple<> get_backends() {
+    return {};
+  }
+};
+
+template <>
+struct EventBackendRegistry<osd::ScrubDigestUpdate> {
+  static std::tuple<> get_backends() {
+    return {};
+  }
+};
+
+template <>
+struct EventBackendRegistry<osd::ScrubSnapMapperRepair> {
   static std::tuple<> get_backends() {
     return {};
   }
@@ -307,6 +405,15 @@ template <> struct fmt::formatter<crimson::osd::ScrubReserveRange>
   : fmt::ostream_formatter {};
 
 template <> struct fmt::formatter<crimson::osd::ScrubScan>
+  : fmt::ostream_formatter {};
+
+template <> struct fmt::formatter<crimson::osd::ScrubSleep>
+  : fmt::ostream_formatter {};
+
+template <> struct fmt::formatter<crimson::osd::ScrubDigestUpdate>
+  : fmt::ostream_formatter {};
+
+template <> struct fmt::formatter<crimson::osd::ScrubSnapMapperRepair>
   : fmt::ostream_formatter {};
 
 #endif

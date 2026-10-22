@@ -315,7 +315,12 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     ObjectContext::attr_cache_t& attr_cache);
-  interruptible_future<struct stat> stat(
+  using store_stat_ertr = crimson::os::FuturizedStore::Shard::stat_ertr;
+  using store_stat_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      store_stat_ertr>;
+  store_stat_iertr::future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
   read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
@@ -445,6 +450,7 @@ public:
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
   virtual void on_actingset_changed(bool same_primary) = 0;
+  virtual bool auto_repair_supported() const { return false; }
 protected:
   const pg_shard_t whoami;
   CollectionRef coll;
