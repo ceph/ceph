@@ -39,6 +39,7 @@ function run() {
     CEPH_ARGS+="--osd_force_auth_primary_missing_objects=1000000 "
     CEPH_ARGS+="--osd_debug_pg_log_writeout=true "
     CEPH_ARGS+="--osd_min_pg_log_entries=$loglen --osd_max_pg_log_entries=$loglen --osd_pg_log_trim_min=$trim "
+    CEPH_ARGS+="--rados_replica_read_policy=default "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
