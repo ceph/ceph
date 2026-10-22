@@ -1401,8 +1401,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                         std::map<std::string, bufferlist>& attrs,
                         std::map<std::string, bufferlist>* rmattrs,
                         optional_yield y,
-                        bool log_op,
-                        ceph::real_time set_mtime = ceph::real_clock::zero());
+                        bool log_op);
 
   int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                     RGWBucketInfo& bucket_info, const rgw_obj& obj,
