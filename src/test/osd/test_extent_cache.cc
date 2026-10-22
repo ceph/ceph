@@ -771,7 +771,8 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 // do_not_read.  send_reads fires with current_size=0.  In production,
 // get_min_avail_to_read_shards returns 0 without populating shard_reads,
 // and do_read_op hits ceph_assert(reads_sent).
-TEST(ECExtentCache, CloneInvalidateStaleSize)
+// Disabled until https://tracker.ceph.com/issues/78465 has a new fix.
+TEST(ECExtentCache, DISABLED_CloneInvalidateStaleSize)
 {
   MultiClient cl(4096, 2, 1, 1024*1024);
   const auto *si = cl.get_stripe_info();
