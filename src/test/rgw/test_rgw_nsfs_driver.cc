@@ -4773,6 +4773,116 @@ TEST_F(NSFSImpersonatedRenameTest, TheRenameRecordsTheIdentityItChose)
       << "the row moved and the rename's choice did not follow it";
 }
 
+/* A tag removal runs as its requester (phase C's validation clause,
+ * the call-site table's remove_x_attr row), under each access model.
+ *
+ * fremovexattr(2) of a `user.*` name is checked against the calling
+ * thread, so on alice's 0660 object it succeeds only with credentials
+ * that may write it.  Under posix-strict no raise is possible, so a
+ * removal that succeeds there can only have run with the requester's
+ * credentials -- which is what remove_x_attr()'s old single-name arm,
+ * acting as the gateway, failed (16c5f31a2e1).  The premise is that the
+ * gateway, unraised, cannot;  bob, whom posix-strict denies, cannot
+ * either, so the identity follows the requester.  Under s3-native the
+ * same denial is performed by the gateway under a raise, which the
+ * access model's counter shows -- the case in which the file outcome
+ * alone would not say whose credentials ran.  The model is set here,
+ * not inherited;  TearDown() restores the configured one. */
+TEST_F(NSFSImpersonatedRenameTest, ATagRemovalRunsAsItsRequesterUnderEachModel)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "alice's"));
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string tag_x = b->xattr_strategy()->disk_name(RGW_ATTR_TAGS);
+  ASSERT_FALSE(tag_x.empty());
+
+  /* on a thread of its own, as put_as() */
+  auto on_thread = [](const std::function<int()>& fn) {
+    int r = 0;
+    std::thread t([&] { r = fn(); });
+    t.join();
+    return r;
+  };
+  auto tag_as = [&](const rgw_user& who) {
+    RGWObjTags tags;
+    tags.add_tag("phase", "d");
+    bufferlist bl;
+    tags.encode(bl);
+    return on_thread([&] {
+      auto obj = bucket->get_object(rgw_obj_key("k"));
+      /* as the core does before an attribute operation */
+      if (const int lr = obj->load_obj_state(env->dpp, null_yield); lr < 0) {
+	return lr;
+      }
+      return obj->modify_obj_attrs(RGW_ATTR_TAGS, bl, null_yield, env->dpp,
+				   who);
+    });
+  };
+  auto untag_as = [&](const rgw_user& who) {
+    return on_thread([&] {
+      auto obj = bucket->get_object(rgw_obj_key("k"));
+      /* as the core does before an attribute operation */
+      if (const int lr = obj->load_obj_state(env->dpp, null_yield); lr < 0) {
+	return lr;
+      }
+      return obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield,
+				   who);
+    });
+  };
+  /* the attribute's presence, read with the capability */
+  auto tagged = [&]() {
+    ssize_t len = -1;
+    EXPECT_EQ(with_capabilities_elsewhere(nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  len = ::getxattr((bucket_path() / "k").c_str(), tag_x.c_str(),
+			   nullptr, 0);
+	  return 0;
+	}), 0);
+    return len >= 0;
+  };
+  /* the gateway performing an attribute operation the filesystem denied
+   * the requester:  with_cross_account_retry()'s counter, reported by
+   * the access-model hint as `attrs_served` -- not raised(), which
+   * counts with_identity_or_raise()'s directory operations */
+  auto attrs_served = [this]() {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "access-model", {}, &out), 0);
+    return std::stoull(out["attrs_served"]);
+  };
+
+  /* posix-strict:  no raise, so the file's outcome names the credentials */
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  ASSERT_EQ(tag_as(alice), 0);
+  ASSERT_TRUE(tagged());
+  EXPECT_EQ(on_thread([&] {
+	      return (::removexattr((bucket_path() / "k").c_str(),
+				    tag_x.c_str()) < 0) ? -errno : 0;
+	    }), -EACCES)
+      << "the premise:  the gateway, unraised, cannot remove it";
+  ASSERT_TRUE(tagged());
+  const uint64_t served_strict = attrs_served();
+  const uint64_t raised_strict = raised();
+  EXPECT_LT(untag_as(bob), 0) << "posix-strict let another identity remove it";
+  EXPECT_TRUE(tagged()) << "bob's denied removal removed the tags";
+  EXPECT_EQ(untag_as(alice), 0);
+  EXPECT_FALSE(tagged()) << "alice's removal left the tags";
+  EXPECT_EQ(attrs_served(), served_strict)
+      << "posix-strict performed an attribute operation as the gateway, so "
+	 "the outcomes above do not name the credentials";
+  EXPECT_EQ(raised(), raised_strict)
+      << "posix-strict raised a directory operation";
+
+  /* s3-native:  bob's removal is performed, by the gateway under a raise */
+  ASSERT_EQ(set_model("s3-native"), 0);
+  ASSERT_EQ(tag_as(alice), 0);
+  ASSERT_TRUE(tagged());
+  const uint64_t served_native = attrs_served();
+  EXPECT_EQ(untag_as(bob), 0) << "s3-native did not perform bob's removal";
+  EXPECT_FALSE(tagged()) << "s3-native's removal left the tags";
+  EXPECT_GT(attrs_served(), served_native)
+      << "bob's removal succeeded without a raise, so it ran as something "
+	 "other than the gateway";
+}
+
 /* posix-strict:  another identity's rename out of the owner's key
  * directory is denied, and nothing moves. */
 TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
