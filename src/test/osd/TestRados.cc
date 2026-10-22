@@ -503,6 +503,7 @@ void usage(const char *prog)
   cout << "        [--initial-migration-delay <int>]" << std::endl;
   cout << "        [--migration-interval <int>]" << std::endl;
   cout << "        [--migration-pg-count <int>]" << std::endl;
+  cout << "        [--migration-erasure-code-profile <profile>]" << std::endl;
   cout << std::endl;
   cout << "Model-based RADOS integration stress test. Verifies data correctness by" << std::endl;
   cout << "comparing object data and metadata returned by RADOS against an in-memory model." << std::endl;
@@ -585,6 +586,7 @@ int main(int argc, char **argv)
   bool migration_ec_opts = false;
   int migration_interval = 60;
   std::optional<int> migration_pg_num;
+  std::optional<std::string> migration_ec_profile;
   int initial_migration_delay = 0;
 
   for (int i = 1; i < argc; ++i) {
@@ -709,6 +711,8 @@ int main(int argc, char **argv)
       migration_interval = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--migration-pg-count") == 0) {
       migration_pg_num = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--migration-erasure-code-profile") == 0) {
+      migration_ec_profile = argv[++i];
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       usage(argv[0]);
@@ -789,6 +793,7 @@ int main(int argc, char **argv)
     migration_ec_opts,
     migration_interval,
     migration_pg_num,
+    migration_ec_profile,
     initial_migration_delay,
     min_split_size,
     id);
