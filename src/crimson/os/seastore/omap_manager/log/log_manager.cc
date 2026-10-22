@@ -604,10 +604,10 @@ LogManager::find_multi_block_kv(Transaction &t, const std::string &key,
 }
 
 LogManager::omap_rm_key_ret
-LogManager::remove_node(Transaction &t, LogNodeRef mut, LogNodeRef prev)
+LogManager::remove_node(Transaction &t, LogNodeRef mut, LogNodeRef next)
 {
   LOG_PREFIX(LogManager::remove_node);
-  if (prev == nullptr) { 
+  if (next == nullptr) {
     // This is the head, so just reinitialize the LogNode.
     // A LogNode for the pg log should preserve the dup head.
     laddr_t prev_addr = mut->get_prev_addr();
@@ -618,21 +618,21 @@ LogManager::remove_node(Transaction &t, LogNodeRef mut, LogNodeRef prev)
     co_return;
   }
   assert(mut);
-  DEBUGT("mut={}, prev={}", t, *mut, *prev);
+  DEBUGT("mut={}, next={}", t, *mut, *next);
   laddr_t prev_addr = mut->get_prev_addr();
   co_await tm.remove(t, mut->get_laddr()
   ).handle_error_interruptible(
     omap_rm_key_iertr::pass_further{},
     crimson::ct_error::assert_all("Invalid error in remove_node")
   );
-  auto mut_prev = tm.get_mutable_extent(t, prev)->template cast<LogNode>();
-  assert(mut_prev);
-  mut_prev->set_prev_addr(prev_addr);
+  auto mut_next = tm.get_mutable_extent(t, next)->template cast<LogNode>();
+  assert(mut_next);
+  mut_next->set_prev_addr(prev_addr);
   co_return;
 }
 
 LogManager::omap_rm_key_ret
-LogManager::remove_kv(Transaction &t, laddr_t dst, const std::string &key, LogNodeRef prev)
+LogManager::remove_kv(Transaction &t, laddr_t dst, const std::string &key, LogNodeRef next)
 {
   LOG_PREFIX(LogManager::remove_kv);
   DEBUGT("key={}, dst={}", t, key, dst);
@@ -651,10 +651,10 @@ LogManager::remove_kv(Transaction &t, laddr_t dst, const std::string &key, LogNo
     mut->remove_entry(key);
     assert(mut->is_removable());
     if (mut->is_removable()) {
-      co_await remove_node(t, mut, prev);
-      if (prev != nullptr && mut->get_prev_addr() != L_ADDR_NULL) {
+      co_await remove_node(t, mut, next);
+      if (next != nullptr && mut->get_prev_addr() != L_ADDR_NULL) {
 	mut = co_await log_load_extent<LogNode>(
-	  t, prev->get_laddr(), BEGIN_KEY, END_KEY);
+	  t, next->get_laddr(), BEGIN_KEY, END_KEY);
       }
     }
     co_await remove_kv(t, mut->get_prev_addr(), key, mut);
@@ -673,7 +673,7 @@ LogManager::remove_kv(Transaction &t, laddr_t dst, const std::string &key, LogNo
   auto mut = tm.get_mutable_extent(t, extent)->template cast<LogNode>();
   mut->remove_entry(key);
   if (mut->is_removable()) {
-    co_await remove_node(t, mut, prev);
+    co_await remove_node(t, mut, next);
   }
   co_return;
 }
@@ -684,7 +684,7 @@ LogManager::remove_kv_set(
   laddr_t dst,
   pending_keys_t &keys,
   std::vector<std::string> &multi_block_keys,
-  LogNodeRef prev)
+  LogNodeRef next)
 {
   LOG_PREFIX(LogManager::remove_kv_set);
   DEBUGT("key size={}, dst={}", t, keys.size(), dst);
@@ -707,7 +707,7 @@ LogManager::remove_kv_set(
       if (keys.take(key)) {
 	multi_block_keys.emplace_back(key);
       }
-      prev = extent;
+      next = extent;
       dst = prev_addr;
       continue;
     }
@@ -737,14 +737,14 @@ LogManager::remove_kv_set(
 	t, found.size(), *mut, keys.size());
       p = mut;
       if (mut->is_removable()) {
-	co_await remove_node(t, mut, prev);
-	if (prev != nullptr) {
+	co_await remove_node(t, mut, next);
+	if (next != nullptr) {
 	  p = co_await log_load_extent<LogNode>(
-	    t, prev->get_laddr(), BEGIN_KEY, END_KEY);
+	    t, next->get_laddr(), BEGIN_KEY, END_KEY);
 	}
       }
     }
-    prev = p;
+    next = p;
     dst = prev_addr;
   }
   co_return;
@@ -754,7 +754,7 @@ LogManager::omap_rm_key_ret
 LogManager::remove_kvs(Transaction &t, laddr_t dst,
   std::optional<std::string> first, 
   std::optional<std::string> last,
-  LogNodeRef prev)
+  LogNodeRef next)
 {
   LOG_PREFIX(LogManager::remove_kvs);
   DEBUGT("first={}, last={}, dst={}", t, first, last, dst);
@@ -798,10 +798,10 @@ LogManager::remove_kvs(Transaction &t, laddr_t dst,
       t, *extent, extent->get_last_key());
     p = mut;
     if (mut->is_removable()) {
-      co_await remove_node(t, mut, prev);
-      if (prev != nullptr) {
+      co_await remove_node(t, mut, next);
+      if (next != nullptr) {
 	p = co_await log_load_extent<LogNode>(
-	  t, prev->get_laddr(), BEGIN_KEY, END_KEY);
+	  t, next->get_laddr(), BEGIN_KEY, END_KEY);
       }
     }
   }

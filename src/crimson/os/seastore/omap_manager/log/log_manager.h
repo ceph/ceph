@@ -312,19 +312,22 @@ public:
    * When the key is found, the corresponding entry is marked as removed
    * in the node's deletion bitmap. If the node becomes empty as a result,
    * it may be removed from the chain via remove_node().
-   * For non-log (non-time-series) keys, duplicate keys must not remain.
-   * In this case, once the key is removed from the current node, the
-   * function continues recursively to remove all remaining duplicates
-   * in earlier nodes.
+   * For a single-block key, the search stops at the first (newest) match,
+   * so callers must make sure that no duplicate copies of a non-log
+   * (non-time-series) key are left in the chain. For a multi-block key,
+   * every chunk node of the key is removed, including the chunks of older
+   * multi-block copies, and the search continues until it removes a
+   * single-block copy of the key or reaches the end of the chain.
    *
    * @param t     Transaction context.
    * @param dst   Logical address of the LogNode to start searching from.
    * @param key   The key to be removed.
-   * @param prev  The next LogNode in the chain (nullptr if @dst is the head).
+   * @param next  The next newer LogNode, whose prev address is @dst
+   *              (nullptr if @dst is the head).
    */
 
   omap_rm_key_ret remove_kv(Transaction &t, laddr_t dst, const std::string &key,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   /**
    * remove_kv_set
@@ -348,13 +351,13 @@ public:
    *                         These are not touched here; the caller must pass
    *                         each of them to remove_kv(), which knows how to
    *                         unlink an entire chunk chain.
-   * @param prev             The successor of @dst in the forward direction
-   *                         (nullptr if @dst is the head).
+   * @param next             The next newer LogNode, whose prev address is
+   *                         @dst (nullptr if @dst is the head).
    */
   omap_rm_key_ret remove_kv_set(Transaction &t, laddr_t dst,
     pending_keys_t &keys,
     std::vector<std::string> &multi_block_keys,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   /**
    * remove_kvs
@@ -362,42 +365,47 @@ public:
    * Starting at logical address dst, this loads a LogNode extent,
    * gathers entries in the [first, last] range, and decides
    * whether the current extent can be removed
-   * If so, it removes the extent and fixes the link pointer
-   * with prev. Otherwise it recurses to the previous extent.
+   * If so, it removes the extent and fixes the prev address of
+   * @next; if @next is nullptr (@dst is the head), the head is
+   * reinitialized in place instead (see remove_node()). Then it
+   * recurses to the next older extent, unless @first is a log key and
+   * every log entry in this extent is older than @first.
    *
    * @param t       Transaction context.
    * @param dst     Logical address of the starting extent
    * @param first   lower key bound (optional).
    * @param last    upper key bound (optional). Empty string => unbounded.
-   * @param prev    The successor of dst in the forward direction (used to fix links
-   *                when dst is removed). For the initial call at the head, pass nullptr.
+   * @param next    The next newer LogNode, whose prev address is dst (used to
+   *                fix the link when dst is removed). For the initial call at
+   *                the head, pass nullptr.
    *
    * @return omap_rm_key_ret 
    */
   omap_rm_key_ret remove_kvs(Transaction &t, laddr_t dst,
     std::optional<std::string> first, 
     std::optional<std::string> last,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   
   /**
    * remove_node
    *
-   * If @prev is nullptr, the node is the head of the chain. In this case,
+   * If @next is nullptr, the node is the head of the chain. In this case,
    * the node is not physically removed; instead, it is re-initialized
-   * while preserving its prev pointer (if any).
+   * while preserving its prev pointer (if any) and its dup head address.
    *
    * Otherwise, the node is physically removed from the transaction manager,
-   * and the previous node (@prev) is updated to bypass the removed node
+   * and the next newer node (@next) is updated to bypass the removed node
    * by inheriting its prev address.
    *
    * @param t     Transaction context.
    * @param mut   The LogNode to be removed or re-initialized.
-   * @param prev  The next LogNode in the chain (nullptr if @mut is the head).
+   * @param next  The next newer LogNode, whose prev address is @mut
+   *              (nullptr if @mut is the head).
    */
   LogManager::omap_rm_key_ret remove_node(Transaction &t,
     LogNodeRef mut,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   base_iertr::future<laddr_t> get_dup_addr_from_root(Transaction &t, laddr_t addr);
 
