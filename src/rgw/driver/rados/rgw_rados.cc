@@ -10239,10 +10239,33 @@ int RGWRados::remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RG
   // trim no more than 1000 entries per osd op
   constexpr int max_entries = 1000;
 
+  // read the head's current mtime and ID_TAG: the caller's state can be stale, e.g. in
+  // clear_olh() it's cached from before apply_olh_log() removed the null version's data
+  real_time mtime;
+  map<string, bufferlist> attrs;
+  r = raw_obj_stat(dpp, ref.obj, nullptr, &mtime, nullptr, &attrs, nullptr, nullptr, y);
+  if (r == -ENOENT) {
+    return 0;
+  }
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not stat oid \"" << ref.obj.oid << "\", r=" << r << dendl;
+    return r;
+  }
+  struct timespec mtime_ts = real_clock::to_timespec(mtime);
+  // a head without the tag (e.g. its data was removed by apply_olh_log()) compares as empty
+  // cmpxattr below also checks that the tag is still absent
+  bufferlist obj_tag;
+  if (auto it = attrs.find(RGW_ATTR_ID_TAG); it != attrs.end()) {
+    obj_tag = it->second;
+  }
+
   auto i = pending_attrs.begin();
   while (i != pending_attrs.end()) {
     ObjectWriteOperation op;
     bucket_index_guard_olh_op(dpp, state, op);
+    // preserve the head object's mtime, unless it was overwritten since we read it
+    op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, obj_tag);
+    op.mtime2(&mtime_ts);
 
     for (int n = 0; n < max_entries && i != pending_attrs.end(); ++n, ++i) {
       op.rmxattr(i->first.c_str());

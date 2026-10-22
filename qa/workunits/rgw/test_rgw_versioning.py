@@ -217,7 +217,6 @@ def main():
     xattrs = exec_cmd(f'rados -p {DATA_POOL} listxattr {head_objects(key)[0]}')
     assert b'user.rgw.olh.pending.' not in xattrs, 'timed out pending olh entry was not removed'
     # removing the timed out pending entry must not change the null version's mtime
-    # (without the fix, the removal rewrote the shared head object with a new mtime)
     head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
     list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
     null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
