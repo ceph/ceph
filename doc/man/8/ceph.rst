@@ -1228,7 +1228,9 @@ Usage::
 	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
 	{--enable-ec-optimizations}
 
-Subcommand ``migrate`` migrates a pool to a new pool while keeping the same name.
+Subcommand ``migrate`` migrates a pool's RADOS objects to a new pool. The new pool acquires
+the original pool's user-visible name. The original pool is renamed automatically and is by
+default not displayed to the user.
 
 Usage::
 
