@@ -7545,14 +7545,14 @@ TEST_F(NSFSNooBaaStateTest, LoggingWithoutATargetIsNoConfiguration)
   EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_LOGGING), attrs.end());
 }
 
-/* An algorithm that is neither of NooBaa's is kept, not rejected.
+/* An encryption algorithm other than NooBaa's two, AES256 and aws:kms,
+ * is stored as the bucket's configuration rather than failing its load.
  *
  * The string becomes the x-amz-server-side-encryption header value on
- * every PUT, so writes into a bucket configured with one RGW does not
- * know already fail -- fail-closed at the granularity the gap
- * has.  Rejecting the bucket at load would also fail reads of objects
- * that are sitting there perfectly readable. */
-TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRejected)
+ * every PUT, so a write into a bucket configured with an algorithm RGW
+ * does not know fails:  fail-closed, and only for writes.  Failing the
+ * load would also fail reads of objects that are perfectly readable. */
+TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsStoredNotRejected)
 {
   RGWBucketInfo info;
   Attrs attrs;

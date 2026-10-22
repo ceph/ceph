@@ -364,8 +364,8 @@ int from_noobaa_website(const DoutPrefixProvider* dpp, JSONObj* web,
  * requires none of the three, so `{}` is a valid record that says
  * nothing.
  *
- * An algorithm that is neither of NooBaa's is stored anyway, and that is
- * deliberate.  The string becomes the x-amz-server-side-encryption
+ * An algorithm other than NooBaa's two, AES256 and aws:kms, is stored
+ * anyway, and that is deliberate.  The string becomes the x-amz-server-side-encryption
  * header value on every PUT (rgw_rest_s3.cc, get_encryption_defaults),
  * so writes into a bucket configured with one RGW does not know
  * already fail.  That is fail-closed at the granularity the gap
@@ -387,7 +387,7 @@ int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
      * will fail and the reason should be findable without reading the
      * record by hand */
     ldpp_dout(dpp, 1) << "nsfs: bucket encryption names algorithm \""
-      << algorithm << "\", which is neither of theirs;  writes into this "
+      << algorithm << "\", which is neither AES256 nor aws:kms;  writes into this "
       << "bucket will fail" << dendl;
   }
 
