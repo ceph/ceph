@@ -1003,8 +1003,8 @@ public:
     size_t max_bytes) final;
   
   std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(
-    ghobject_t oid, bool force = false) {
-    return cache->get_pending_lognode_delta_by_oid(oid, force);
+    ghobject_t oid, transaction_id_t trans_id, bool force = false) {
+    return cache->get_pending_lognode_delta_by_oid(oid, trans_id, force);
   }
 
   using ExtentCallbackInterface::get_next_dirty_log_node_by_oid_ret;

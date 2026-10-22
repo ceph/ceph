@@ -1232,6 +1232,10 @@ void Cache::on_transaction_destruct(Transaction& t)
     assert(t.lba_tree_stats.is_clear());
     assert(t.backref_tree_stats.is_clear());
   }
+  if (pending_lognode_deltas_by_oid_reserved.empty()) {
+    return;
+  }
+  release_lognode_reservations(t.get_trans_id());
 }
 
 void Cache::check_full_extent_integrity(
@@ -2399,6 +2403,13 @@ void Cache::complete_commit(
     }
   }
 
+  auto clear_lognode_reservation = [&](const ghobject_t& oid) {
+    if (auto it = pending_lognode_deltas_by_oid_reserved.find(oid);
+      it != pending_lognode_deltas_by_oid_reserved.end() &&
+      it->second == t.get_trans_id()) {
+	pending_lognode_deltas_by_oid_reserved.erase(it);
+    }
+  };
   if (t.lognode_deltas.size() && t.get_src() != Transaction::src_t::TRIM_LOG) {
     auto oid = t.lognode_deltas.begin()->oid;
     for (auto &p : t.lognode_deltas) {
@@ -2407,7 +2418,7 @@ void Cache::complete_commit(
       pending_lognode_deltas_by_seq[start_seq].push_back(oid);
     }
     // clear reserved
-    pending_lognode_deltas_by_oid_reserved[oid] = 0;
+    clear_lognode_reservation(oid);
     auto &seqs_by_oid = pending_lognode_deltas_by_oid[oid];
     seqs_by_oid.insert(
       seqs_by_oid.end(),
@@ -2421,7 +2432,7 @@ void Cache::complete_commit(
     assert(t.lognode_deltas.size() > 0);
     auto oid = t.lognode_deltas.begin()->oid;
     // clear reserved
-    pending_lognode_deltas_by_oid_reserved[oid] = 0;
+    clear_lognode_reservation(oid);
   }
 
   if (!can_drop_backref()) {
