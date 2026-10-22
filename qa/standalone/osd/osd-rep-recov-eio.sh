@@ -29,6 +29,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--rados_replica_read_policy=default "
 
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
