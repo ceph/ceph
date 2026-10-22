@@ -51,6 +51,7 @@ IOHandler::IOHandler(ChainedDispatchers &dispatchers,
                      SocketConnection &conn)
   : shard_states(shard_states_t::create(
         seastar::this_shard_id(), io_state_t::delay)),
+    current_sid(seastar::this_shard_id()),
     dispatchers(dispatchers),
     conn(conn),
     conn_ref(conn.get_local_shared_foreign_from_this())
@@ -735,9 +736,10 @@ IOHandler::to_new_sid(
   maybe_prv_shard_states = std::move(shard_states);
   shard_states = shard_states_t::create_from_previous(
       *maybe_prv_shard_states, new_sid);
-  assert(new_sid == get_shard_id());
   // broadcast shard change to all the io waiters, atomically.
   io_crosscore.reset_wait();
+  // publish the new shard last, senders may switch to it right away
+  current_sid = new_sid;
 
   return seastar::smp::submit_to(new_sid,
       [this, next_cc_seq, is_dropped, prv_sid, is_replace, conn_fref=std::move(conn_fref)]() mutable {
@@ -799,6 +801,7 @@ seastar::future<> IOHandler::set_accepted_sid(
   assert(maybe_prv_shard_states == nullptr);
   shard_states.reset();
   shard_states = shard_states_t::create(sid, io_state_t::delay);
+  current_sid = sid;
   logger().debug("{} send {} set_accepted_sid() to core {}", conn, cc_seq, sid);
   return seastar::smp::submit_to(sid,
       [this, cc_seq, conn_fref=std::move(conn_fref)]() mutable {
