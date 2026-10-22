@@ -21,6 +21,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/split.h"
+#include "common/strtol.h"
 
 #include "BaseMgrModule.h"
 #include "PyOSDMap.h"
@@ -502,6 +503,29 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
   } else {
     module_config.config.erase(k);
   }
+}
+
+uint64_t PyModuleRegistry::get_max_command_queue_length(
+  const PyModuleRef &module) const
+{
+  static const std::string opt = "max_command_queue_length";
+  std::string val;
+  if (!get_module_option("mgr/" + module->get_name() + "/" + opt, &val)) {
+    const auto& options = module->get_options();
+    auto it = options.find(opt);
+    if (it == options.end()) {
+      return 0;
+    }
+    val = it->second.default_value;
+  }
+  std::string err;
+  auto limit = strict_strtoll(val, 10, &err);
+  if (!err.empty() || limit < 0) {
+    dout(1) << "ignoring invalid " << opt << " '" << val << "' for module "
+            << module->get_name() << dendl;
+    return 0;
+  }
+  return limit;
 }
 
 void PyModuleRegistry::handle_config_notify()

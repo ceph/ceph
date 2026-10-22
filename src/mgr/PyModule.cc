@@ -830,6 +830,8 @@ int PyModule::perf_counter_build(CephContext *cct) {
   pcb.add_u64(l_pym_mem_rss_change, "mem_rss_change", "Memory RSS change in bytes", "", 0);
   pcb.add_u64(l_pym_mem_rss_current, "mem_rss_current", "Memory RSS current in bytes", "", 0);
   pcb.add_u64(l_pym_serve_cpu_usage, "serve_cpu_usage", "Serve thread CPU usage in percent", "cpu", 0, uint64_t(100));
+  pcb.add_u64(l_pym_cmd_in_flight, "cmd_in_flight", "Commands queued or running in the module", "cmdq", PerfCountersBuilder::PRIO_USEFUL);
+  pcb.add_u64_counter(l_pym_cmd_eagain, "cmd_eagain", "Commands rejected with EAGAIN by max_command_queue_length", "cmde", PerfCountersBuilder::PRIO_USEFUL);
   perfcounter = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
   cct->get_perfcounters_collection()->add(perfcounter.get());
 
