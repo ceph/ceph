@@ -32,8 +32,9 @@ inline bool& get_debug_mode() {
 // Debug print function - only prints when debug mode is enabled
 template<typename... Args>
 void debug_print(Args&&... args) {
-    if (!get_debug_mode()) return;
-    (std::clog << ... << std::forward<Args>(args));
+    if (get_debug_mode()) {
+        (std::clog << ... << std::forward<Args>(args));
+    }
 }
 
 #endif // UTILS_H

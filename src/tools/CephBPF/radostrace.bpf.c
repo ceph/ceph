@@ -281,7 +281,7 @@ int uprobe_send_op(struct pt_regs *ctx) {
 	// read _carriage->_raw->data
 	__u64 data = 0;
 	bpf_probe_read_user(&data, sizeof(data), (void *)raw + CEPH_BUFFER_DATA);
-        // read class name
+	// read class name
 	cls_len &= (MAX_CLS_NAME_LEN - 1);
 	bpf_probe_read_user(val->cls_ops[i].cls_name, cls_len, (void *)data);
 	// read method name

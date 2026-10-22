@@ -56,6 +56,7 @@
 #include "osd/osd_types.h"
 #include "include/rados.h"
 #include "include/buffer.h"
+#include "include/scope_guard.h"
 
 using namespace std;
 
@@ -537,11 +538,11 @@ static int handle_event(void *ctx, void *data, size_t size) {
 int main(int argc, char **argv) {
   signal(SIGINT, signal_handler); 
 
-  /* Default to unlimited execution time */
+  // Default to unlimited execution time
   int timeout = -1;
   int process_id = -1;  // Default to -1 (all processes)
 
-  /* Parse arguments */
+  // Parse arguments
   for (int i = 1; i < argc; ++i) {
       string arg = argv[i];
       if ((arg == "-t" || arg == "--timeout") && i + 1 < argc) {
@@ -587,10 +588,6 @@ int main(int argc, char **argv) {
     }
   }
 
-  struct radostrace_bpf *skel;
-  int ret = 0;
-  struct ring_buffer *rb = nullptr;
-
   DwarfParser dwarfparser(rados_probes, probe_units);
 
   // Since Tentacle (v20), Objecter.cc is compiled only into libceph-common
@@ -609,42 +606,44 @@ int main(int argc, char **argv) {
 
   if (check_library_deleted(process_id, "libceph-common")) {
      cerr << "Error: libceph-common library mismatch detected!" << std::endl;
-     cerr << "The ceph package has been upgraded on disk, but one or more processes are still using the old version in memory." << std::endl;
+     cerr << "The Ceph package has been upgraded on disk, but one or more processes are still using the old version in memory." << std::endl;
      cerr << "Please restart the affected processes to use the new version." << std::endl;
      return 1;
    }
 
-  debug_print("Start to parse dwarf info\n");
+  debug_print("Start parsing DWARF information\n");
   dwarfparser.add_module(libceph_common_path);
   dwarfparser.parse();
 
   libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 
-  /* Set up libbpf errors and debug info callback */
+  // Set up libbpf errors and debug info callback
   libbpf_set_print(libbpf_print_fn);
 
-  /* Load and verify BPF application */
-  debug_print("Start to load uprobe\n");
+  // Load and verify BPF application
+  debug_print("Starting to load uprobe\n");
 
-  /* Open BPF skeleton first (before loading) */
-  skel = radostrace_bpf__open();
+  // Open BPF skeleton first (before loading)
+  struct radostrace_bpf *skel = radostrace_bpf__open();
   if (!skel) {
     cerr << "Failed to open BPF skeleton" << std::endl;
     return 1;
   }
+  auto destroy_skel = make_scope_guard([skel] {
+    debug_print("Clean up the eBPF program\n");
+    radostrace_bpf__destroy(skel);
+  });
 
-  /* Set BPF global variables (rodata) - must be done after open but before load */
+  // Set BPF global variables (rodata) - must be done after open but before load
   set_ceph_offsets(skel);
   skel->rodata->DEBUG_OUTPUT = get_debug_mode();
   if (get_debug_mode()) {
     debug_print("BPF debug output enabled (view with: cat /sys/kernel/debug/tracing/trace_pipe)\n");
   }
 
-  /* Now load the BPF program with the configured globals */
-  ret = radostrace_bpf__load(skel);
-  if (ret) {
-    cerr << "Failed to load BPF skeleton: " << ret << std::endl;
-    radostrace_bpf__destroy(skel);
+  // Now load the BPF program with the configured globals
+  if (radostrace_bpf__load(skel)) {
+    cerr << "Failed to load BPF skeleton: " << strerror(errno) << std::endl;
     return 1;
   }
 
@@ -656,17 +655,18 @@ int main(int argc, char **argv) {
   attach_uprobe(skel, dwarfparser, libceph_common_path, "Objecter::_send_op", process_id);
   attach_uprobe(skel, dwarfparser, libceph_common_path, "Objecter::_finish_op", process_id);
 
-  debug_print("New a ring buffer\n");
+  debug_print("Creating a new ring buffer\n");
 
-  rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, nullptr, nullptr);
+  struct ring_buffer *rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, nullptr, nullptr);
   if (!rb) {
-    cerr << "failed to setup ring_buffer" << std::endl;
-    goto cleanup;
+    cerr << "failed to set up ring_buffer: " << strerror(errno) << std::endl;
+    return EXIT_FAILURE;
   }
+  auto free_rb = make_scope_guard([rb] { ring_buffer__free(rb); });
 
   debug_print("Started polling from ring buffer\n");
 
-  /* Set up timeout now, after all initialization is complete */
+  // Set up timeout now, after all initialization is complete
   if (timeout > 0) {
       signal(SIGALRM, timeout_handler);
       alarm(timeout);
@@ -675,18 +675,14 @@ int main(int argc, char **argv) {
       cout << "No execution timeout set (unlimited).\n";
   }
 
-  while ((!timeout_occurred || timeout == -1) && (ret = ring_buffer__poll(rb, 1000)) >= 0) {
+  while ((!timeout_occurred || timeout == -1) && ring_buffer__poll(rb, 1000) >= 0) {
       // Continue polling while timeout hasn't occurred or if unlimited execution time
   }
 
   if (timeout_occurred) {
       cerr << "Timeout occurred. Exiting." << std::endl;
+  } else {
+      cerr << "Failed to poll ring buffer: " << strerror(errno) << std::endl;
   }
-
-cleanup:
-  debug_print("Clean up the eBPF program\n");
-  ring_buffer__free(rb);
-  radostrace_bpf__destroy(skel);
-  return timeout_occurred ? -1 : -errno;
+  return EXIT_FAILURE;
 }
-

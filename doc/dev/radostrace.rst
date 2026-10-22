@@ -5,7 +5,7 @@ RadosTrace
 RadosTrace is an eBPF-based tracing tool that provides real-time visibility into
 RADOS client operations. It captures latency, object names, target OSDs, and
 other operation details for every request flowing through librados. It can be 
-used to trace any librados based Ceph clients, including VMs, Cinder/Glance, radosgw,
+used to trace any librados-based Ceph clients, including VMs, Cinder/Glance, radosgw,
 cephfs-mirror, etc.
 
 Why eBPF for Ceph?

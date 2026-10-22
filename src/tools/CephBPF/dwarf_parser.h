@@ -19,6 +19,7 @@
 #include <elfutils/libdwfl.h>
 #include <elfutils/known-dwarf.h>
 #include <vector>
+
 class DwarfParser;
 // Forward declarations for callback functions
 int handle_function(Dwarf_Die *, void *);
@@ -56,11 +57,11 @@ public:
 
 private:
   std::vector<Dwfl *> dwfls;
-  Dwfl_Module *cur_mod;
+  Dwfl_Module *cur_mod = nullptr;
   std::string cur_mod_name;
-  Dwarf_Die *cur_cu;
-  Dwarf_CFI *cfi_debug;
-  Dwarf_CFI *cfi_eh;
+  Dwarf_Die *cur_cu = nullptr;
+  Dwarf_CFI *cfi_debug = nullptr;
+  Dwarf_CFI *cfi_eh = nullptr;
   Dwarf_Addr cfi_debug_bias;
   Dwarf_Addr cfi_eh_bias;
 
@@ -70,7 +71,7 @@ public:
   DwarfParser(probes_t probes, std::vector<std::string> probe_units);
 
   ~DwarfParser();
-  void add_module(std::string);
+  void add_module(const std::string &);
   bool die_has_loclist(Dwarf_Die *) const;
   bool has_loclist() const;
   Dwarf_Die *resolve_typedecl(Dwarf_Die *);

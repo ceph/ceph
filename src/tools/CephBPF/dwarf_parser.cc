@@ -482,7 +482,7 @@ int handle_attr(Dwarf_Attribute *attr, void *data) {
 
 int handle_function(Dwarf_Die *die, void *data) {
   assert(data != nullptr);
-  DwarfParser *dp = (DwarfParser *)data;
+  DwarfParser *dp = static_cast<DwarfParser *>(data);
   const char *funcname = dwarf_diename(die);
   if (!dp->filter_func(funcname)) return 0;
   Dwarf_Die func_abstract = *die;
@@ -670,7 +670,6 @@ void DwarfParser::translate_expr(Dwarf_Attribute *fb_attr, Dwarf_Op *expr,
 
 Dwfl *DwarfParser::create_dwfl(int fd, const char *fname) {
   int dwfl_fd = dup(fd);
-  Dwfl *dwfl = nullptr;
   if (dwfl_fd < 0) {
     cerr << "create_dwfl dup failed" << endl;
     return nullptr;
@@ -682,14 +681,15 @@ Dwfl *DwarfParser::create_dwfl(int fd, const char *fname) {
       .section_address = dwfl_offline_section_address,
       .debuginfo_path = nullptr};
 
-  dwfl = dwfl_begin(&callbacks);
+  Dwfl *dwfl = dwfl_begin(&callbacks);
 
   if (dwfl_report_offline(dwfl, fname, fname, dwfl_fd) == nullptr) {
     cerr << "dwfl_report_offline open dwfl failed" << endl;
     close(dwfl_fd);
     dwfl = nullptr;
-  } else
+  } else {
     dwfl_report_end(dwfl, nullptr, nullptr);
+  }
 
   return dwfl;
 }
@@ -701,7 +701,7 @@ int preprocess_module(Dwfl_Module *dwflmod, void **userdata,
   (void)name;
   (void)base;
 
-  DwarfParser *dp = (DwarfParser *)arg;
+  DwarfParser *dp = static_cast<DwarfParser *>(arg);
   assert(dwflmod != nullptr && dp != nullptr);
 
   dp->cur_mod = dwflmod;
@@ -727,7 +727,7 @@ int handle_module(Dwfl_Module *dwflmod, void **userdata,
   (void)name;
   (void)base;
 
-  DwarfParser *dp = (DwarfParser *)arg;
+  DwarfParser *dp = static_cast<DwarfParser *>(arg);
   assert(dwflmod != nullptr && dp != nullptr);
 
   dp->cur_mod = dwflmod;
@@ -785,7 +785,7 @@ void DwarfParser::parse() {
   }
 }
 
-void DwarfParser::add_module(string path) {
+void DwarfParser::add_module(const string &path) {
   const char *fname = path.c_str();
   int fd = open(fname, O_RDONLY);
   if (fd == -1) {
@@ -799,11 +799,7 @@ void DwarfParser::add_module(string path) {
 
 DwarfParser::DwarfParser(probes_t ps, vector<string> pus)
     : probe_units(pus),
-      probes(ps),
-      cur_mod(nullptr),
-      cur_cu(nullptr),
-      cfi_debug(nullptr),
-      cfi_eh(nullptr) {
+      probes(ps) {
 }
 
 DwarfParser::~DwarfParser() {}
