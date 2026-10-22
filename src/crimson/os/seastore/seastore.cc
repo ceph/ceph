@@ -15,6 +15,7 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
+#include <seastar/core/sleep.hh>
 
 #include "common/JSONFormatter.h"
 #include "common/safe_io.h"
@@ -4143,8 +4144,16 @@ base_ertr::future<> SeaStore::Shard::pgoid_log_flush(const ghobject_t oid)
 	[this, oid](auto& t) -> base_iertr::future<>  {
 	return pgoid_do_handle_log_flush(t, oid);
       });
-    }).safe_then([] {
-      return seastar::stop_iteration::no;
+    }).safe_then([this, oid, before = *entries] {
+      auto after = transaction_manager->pending_lognode_delta_size(oid);
+      if (after && *after >= before) {
+	// No progress, possibly reserved by another transaction.
+	return seastar::sleep(std::chrono::milliseconds(1)).then([] {
+	  return seastar::stop_iteration::no;
+	});
+      }
+      return seastar::make_ready_future<seastar::stop_iteration>(
+	seastar::stop_iteration::no);
     });
   });
 }
