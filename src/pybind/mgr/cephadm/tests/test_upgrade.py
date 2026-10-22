@@ -15,6 +15,7 @@ from cephadm.upgrade import (
 )
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
+from mgr_module import MonCommandFailed
 from orchestrator import OrchestratorError, DaemonDescription, HostSpec
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
@@ -743,6 +744,117 @@ def test_wait_for_ok_to_upgrade_osd_batch_bad_no_version_pauses(
     assert 'osd.99' in detail
 
 
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_unknown_bucket_pauses(
+        cephadm_module: CephadmOrchestrator):
+    # "<name> does not exist" -- the crush_bucket name itself is invalid.
+    # This is a real misconfiguration; pause the upgrade like before.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='host',
+        crush_bucket_name='notabucket',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: "notabucket" does not exist retval: -2'),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' in cephadm_module.health_checks
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_empty_bucket_treated_as_done(
+        cephadm_module: CephadmOrchestrator):
+    # "no osds found in crush bucket" -- the bucket exists but is empty
+    # (e.g. an empty host, or a rack whose hosts are all empty, or OSDs
+    # removed after the auto-iterate queue was built). Mon is the single
+    # source of truth on this; treat it as nothing-to-do rather than
+    # pausing the whole upgrade.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='host',
+        crush_bucket_name='emptyhost',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: no osds found in crush bucket: '
+            '"emptyhost" retval: -2'),
+    ):
+        known_ok_to_upgrade: List[str] = []
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch(known_ok_to_upgrade)
+    assert ok is True
+    assert known_ok_to_upgrade == []
+    assert cephadm_module.upgrade._ok_to_upgrade_all_osds_upgraded is True
+    assert cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket == set()
+    assert cephadm_module.upgrade.upgrade_state.paused is not True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' not in cephadm_module.health_checks
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_bucket_no_children_treated_as_done(
+        cephadm_module: CephadmOrchestrator):
+    # "has no children!" -- the other mon-side "empty bucket" message,
+    # returned by _populate_crush_bucket_osds() for a rack/chassis bucket
+    # with zero children at all (distinct from "no osds found in crush
+    # bucket", which covers children that exist but contribute no OSDs).
+    # Must also be treated as nothing-to-do, not a pause.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='rack',
+        crush_bucket_name='emptyrack',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: crush bucket "emptyrack" of type: '
+            'rack has no children! retval: -2'),
+    ):
+        known_ok_to_upgrade: List[str] = []
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch(known_ok_to_upgrade)
+    assert ok is True
+    assert known_ok_to_upgrade == []
+    assert cephadm_module.upgrade._ok_to_upgrade_all_osds_upgraded is True
+    assert cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket == set()
+    assert cephadm_module.upgrade.upgrade_state.paused is not True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' not in cephadm_module.health_checks
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_wait_for_ok_to_upgrade_osd_batch_other_enoent_still_pauses(
+        cephadm_module: CephadmOrchestrator):
+    # An ENOENT we don't specifically recognize as "empty bucket" (e.g. a
+    # bucket-name parse failure from get_osds_by_bucket_name()) must still
+    # pause the upgrade with a clear health warning -- not silently retry
+    # forever, which would just stall with no indication anything is wrong.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'img',
+        'pid',
+        target_version='20.1.0',
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    with mock.patch(
+        'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+        side_effect=MonCommandFailed(
+            'osd ok-to-upgrade failed: cannot parse crush bucket:"host1" '
+            'of type: host. got error code: -2 retval: -2'),
+    ):
+        ok = cephadm_module.upgrade._wait_for_ok_to_upgrade_osd_batch([])
+    assert ok is False
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert 'UPGRADE_INVALID_CRUSH_BUCKET' in cephadm_module.health_checks
+
+
 def test_validate_bucket_upgrade_options_ok(cephadm_module: CephadmOrchestrator):
     cephadm_module.upgrade._validate_bucket_upgrade_options(
         'rack', 'rack-a', ['osd'])
@@ -817,6 +929,26 @@ def test_list_crush_bucket_names_of_type(cephadm_module: CephadmOrchestrator):
     names = cephadm_module.upgrade._list_crush_bucket_names_of_type('rack')
     assert names == ['rack1', 'rack2']
     assert cephadm_module.upgrade._list_crush_bucket_names_of_type('chassis') == []
+
+
+def test_list_crush_bucket_names_of_type_dedupes(cephadm_module: CephadmOrchestrator):
+    # A bucket can be linked under more than one parent (e.g. 'host1' listed
+    # once per root it's reachable from), so osd_map_tree can contain the
+    # same bucket name more than once. If that duplicate reached
+    # crush_iterative_bucket_names, _advance_to_next_crush_bucket()'s
+    # queue.index(name) would always resolve to the earlier occurrence and
+    # the auto-iterate run would cycle between the duplicates forever,
+    # never reaching the rest of the queue.
+    cephadm_module.get = mock.MagicMock(return_value={
+        'nodes': [
+            {'id': -1, 'name': 'host1', 'type': 'host'},
+            {'id': -2, 'name': 'host2', 'type': 'host'},
+            {'id': -3, 'name': 'host1', 'type': 'host'},
+            {'id': -4, 'name': 'host3', 'type': 'host'},
+        ]
+    })
+    names = cephadm_module.upgrade._list_crush_bucket_names_of_type('host')
+    assert names == ['host1', 'host2', 'host3']
 
 
 def test_advance_to_next_crush_bucket(cephadm_module: CephadmOrchestrator):
