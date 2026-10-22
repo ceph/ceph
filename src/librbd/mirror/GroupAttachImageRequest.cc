@@ -16,6 +16,7 @@
 #include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
 #include "librbd/mirror/snapshot/GroupPrepareImagesRequest.h"
 #include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
+#include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 
 #include <shared_mutex>
 
@@ -149,7 +150,7 @@ void GroupAttachImageRequest<I>::validate_image() {
     check_group_snapshot();
     return;
   }
-  create_primary_group_snapshot();
+  attach_existing_mirror_image();
 }
 
 template <typename I>
@@ -189,7 +190,7 @@ void GroupAttachImageRequest<I>::handle_check_group_snapshot(int r) {
       m_global_image_ids.resize(m_image_ctxs.size());
       m_global_image_ids[m_add_image_index] =
         m_existing_mirror_image.global_image_id;
-      group_unlink_peer();
+      cleanup_standalone_snapshots();
       return;
     }
     break;
@@ -310,7 +311,7 @@ void GroupAttachImageRequest<I>::handle_create_primary_image_snapshots(int r) {
     return;
   }
 
-  attach_existing_mirror_image();
+  update_primary_group_snapshot();
 }
 
 template <typename I>
@@ -343,7 +344,7 @@ void GroupAttachImageRequest<I>::handle_update_primary_group_snapshot(int r) {
     return;
   }
 
-  group_unlink_peer();
+  cleanup_standalone_snapshots();
 }
 
 template <typename I>
@@ -376,12 +377,69 @@ void GroupAttachImageRequest<I>::handle_attach_existing_mirror_image(int r) {
                  << cpp_strerror(r) << dendl;
 
     m_ret_val = r;
-    remove_primary_group_snapshot();
+    close_images();
     return;
   }
 
   m_mirror_image_updated = true;
-  update_primary_group_snapshot();
+  create_primary_group_snapshot();
+}
+
+template <typename I>
+void GroupAttachImageRequest<I>::cleanup_standalone_snapshots() {
+  ldout(m_cct, 10) << dendl;
+
+  ceph_assert(m_add_image_ctx != nullptr);
+
+  m_standalone_snap_ids.clear();
+  m_standalone_snap_index = 0;
+
+  {
+    std::shared_lock image_locker{m_add_image_ctx->image_lock};
+    for (const auto& [snap_id, snap_info] : m_add_image_ctx->snap_info) {
+      auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+        &snap_info.snap_namespace);
+      if (mirror_ns == nullptr || !mirror_ns->is_primary() ||
+          mirror_ns->group_spec.is_valid() ||
+          !mirror_ns->mirror_peer_uuids.empty()) {
+        continue;
+      }
+
+      m_standalone_snap_ids.push_back(snap_id);
+    }
+  }
+
+  cleanup_standalone_snapshot();
+}
+
+template <typename I>
+void GroupAttachImageRequest<I>::cleanup_standalone_snapshot() {
+  if (m_standalone_snap_index == m_standalone_snap_ids.size()) {
+    group_unlink_peer();
+    return;
+  }
+
+  auto snap_id = m_standalone_snap_ids[m_standalone_snap_index];
+  ldout(m_cct, 10) << "snap_id=" << snap_id << dendl;
+
+  auto ctx = util::create_context_callback<GroupAttachImageRequest<I>,
+    &GroupAttachImageRequest<I>::handle_cleanup_standalone_snapshot>(this);
+  auto req = snapshot::UnlinkPeerRequest<I>::create(
+    m_add_image_ctx, snap_id, "", true, ctx);
+  req->send();
+}
+
+template <typename I>
+void GroupAttachImageRequest<I>::handle_cleanup_standalone_snapshot(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(m_cct) << "failed to remove old standalone mirror snapshot: "
+                 << cpp_strerror(r) << dendl;
+  }
+
+  ++m_standalone_snap_index;
+  cleanup_standalone_snapshot();
 }
 
 template <typename I>
