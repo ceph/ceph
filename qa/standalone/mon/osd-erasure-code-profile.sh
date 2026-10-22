@@ -56,16 +56,34 @@ function TEST_set() {
     ceph osd erasure-code-profile get $profile | \
         grep -e key=value -e plugin=jerasure || return 1
     #
-    # --force & --yes-i-really-mean-it are required to override
-    # an existing profile
+    # a profile that no pool uses changes without flags
     #
-    ! ceph osd erasure-code-profile set $profile > $dir/out 2>&1 || return 1
-    grep 'will not override' $dir/out || return 1
-    ceph osd erasure-code-profile set $profile key=other --force --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile set $profile key=other || return 1
     ceph osd erasure-code-profile get $profile | \
         grep key=other || return 1
 
     ceph osd erasure-code-profile rm $profile # cleanup
+}
+
+# Changing a profile that a pool uses needs --yes-i-really-mean-it
+function TEST_set_in_use() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    local profile=myprofile
+    ceph osd erasure-code-profile set $profile k=2 m=1 || return 1
+    ceph osd erasure-code-profile set $profile k=3 m=1 || return 1
+    create_pool poolname 12 12 erasure $profile || return 1
+    ! ceph osd erasure-code-profile set $profile k=4 m=1 > $dir/out 2>&1 || return 1
+    grep "will not override.*poolname.*--yes-i-really-mean-it" $dir/out || return 1
+    ! ceph osd erasure-code-profile set $profile k=4 m=1 --force || return 1
+    ceph osd erasure-code-profile get $profile | grep k=3 || return 1
+    ceph osd erasure-code-profile set $profile k=4 m=1 --yes-i-really-mean-it || return 1
+    ceph osd erasure-code-profile get $profile | grep k=4 || return 1
+    # no pool uses default
+    ceph osd erasure-code-profile set default k=3 m=2 || return 1
+    ceph osd erasure-code-profile get default | grep k=3 || return 1
+    ceph osd pool delete poolname poolname --yes-i-really-really-mean-it || return 1
 }
 
 function TEST_ls() {
