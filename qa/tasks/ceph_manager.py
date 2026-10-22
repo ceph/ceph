@@ -2766,9 +2766,11 @@ class CephManager:
                 pg['state'].count('clean') and
                 not pg['state'].count('stale')):
                 num += 1
-            elif (pg['state'].count('migrating') or
-                  pg['state'].count('migration_wait') or
-                  pg['state'].count('migration_toofull')):
+            elif (pg['state'].count('active') and
+                  not pg['state'].count('stale') and
+                  (pg['state'].count('migrating') or
+                   pg['state'].count('migration_wait') or
+                   pg['state'].count('migration_toofull'))):
                 num += 1
         return num
 

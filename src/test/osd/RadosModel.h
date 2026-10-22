@@ -15,6 +15,7 @@
 #include <list>
 #include <string>
 #include <thread>
+#include <atomic>
 #include "Object.h"
 #include "TestOpStat.h"
 #include "test/librados/test.h"
@@ -216,7 +217,7 @@ public:
   uint64_t seq;
   const char *rados_id;
   bool initialized;
-  bool finished;
+  std::atomic<bool> finished;
   std::map<std::string, TestWatchContext*> watches;
   const uint64_t max_size;
   const uint64_t min_stride_size;
@@ -258,9 +259,9 @@ public:
      size_t max_attr_len,
      const bool migrate_pool,
      const bool migration_ec_opts,
-     const uint8_t migration_interval,
+     const int migration_interval,
      std::optional<int> migration_pg_num,
-     uint8_t initial_migration_delay,
+     int initial_migration_delay,
      uint64_t min_split_size = UINT64_MAX,
      const char *id = 0) :
     pool_obj_cont(),
@@ -381,13 +382,13 @@ public:
 
   void shutdown()
   {
-    if (initialized) {
-      rados.shutdown();
-    }
     if (migrate_pool) {
       finished = true;
       cout_prefix() << __func__ <<  " pool_migration_thread joining" << std::endl;
       pool_migration_thread.join();
+    }
+    if (initialized) {
+      rados.shutdown();
     }
   }
 
@@ -1706,11 +1707,13 @@ public:
       context->cout_prefix() << num << ":  expect " << old_value.most_recent() << std::endl;
 
     TestWatchContext *ctx = context->get_watch_context(oid);
-    state_locker.unlock();
     if (ctx) {
       ObjectDesc head;
       ceph_assert(context->find_object(oid, &head, -1));
       ceph_assert(head.exists);
+    }
+    state_locker.unlock();
+    if (ctx) {
       TestAlarm alarm;
       context->cout_prefix() << num << ":  about to start" << std::endl;
       ctx->start();

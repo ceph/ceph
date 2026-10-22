@@ -666,6 +666,9 @@ TEST_F(LibRadosList, PoolMigrationRadosLSBasic) {
   // --- CLEANUP ---
   rados_ioctx_destroy(src_ioctx);
   rados_ioctx_destroy(tgt_ioctx);
+
+  // Deletes whole chain + shuts down the cluster connection
+  ASSERT_EQ(0, destroy_one_pool(src_pool_name, &cluster));
 }
 
 TEST_F(LibRadosList, PoolMigrationRadosLSMultiple) {
@@ -726,4 +729,7 @@ TEST_F(LibRadosList, PoolMigrationRadosLSMultiple) {
   // --- 8. CLEANUP ---
   rados_ioctx_destroy(src_ioctx);
   rados_ioctx_destroy(tgt_ioctx);
+
+  // Deletes whole chain + shuts down the cluster connection
+  ASSERT_EQ(0, destroy_one_pool(src_pool_name, &cluster));
 }

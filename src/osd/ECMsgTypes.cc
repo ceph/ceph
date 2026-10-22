@@ -35,6 +35,10 @@ void ECSubWrite::encode(bufferlist &bl) const
 
 void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) const
 {
+  // TODO: the v6 migration_watermark field currently piggy-backs on
+  // SERVER_TENTACLE. Pool migration ships in VAMPIRE, so once SERVER_VAMPIRE
+  // is introduced, gate ver = 6 on SERVER_VAMPIRE (keeping ver = 5 for
+  // SERVER_TENTACLE) instead of reusing SERVER_TENTACLE.
   uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 6 : 4;
   ENCODE_START(ver, 1, p_bl);
   encode(from, p_bl);

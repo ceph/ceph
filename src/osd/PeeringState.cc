@@ -6244,7 +6244,7 @@ void PeeringState::NotMigrating::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
 
   DECLARE_LOCALS;
-  ps->state_clear(PG_STATE_RECOVERY_UNFOUND);
+  ps->state_clear(PG_STATE_MIGRATION_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_notmigrating_latency, dur);
 }
@@ -6421,7 +6421,7 @@ PeeringState::MigratingSource::react(const PoolMigrationStoppedTooFull &)
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       DoPoolMigration()),
-    ps->cct->_conf->osd_pool_migration_retry_interval);
+    ps->cct->_conf.get_val<double>("osd_pool_migration_retry_interval"));
   return transit<NotMigrating>();
 }
 
@@ -6543,7 +6543,7 @@ void PeeringState::MigratingTarget::exit()
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_MIGRATING);
   utime_t dur = ceph_clock_now() - enter_time;
-  pl->get_peering_perf().tinc(rs_migratingsource_latency, dur);
+  pl->get_peering_perf().tinc(rs_migratingtarget_latency, dur);
 }
 
 /*--WaitRemotePoolMigrationReserved--*/
@@ -6659,7 +6659,7 @@ void PeeringState::WaitRemotePoolMigrationReserved::retry()
       StartTargetPoolMigration(
         context< Active >().pool_migration_target_reservation_num_bytes,
 	context< Active >().pool_migration_target_reservation_num_objects)),
-    ps->cct->_conf->osd_pool_migration_retry_interval);
+    ps->cct->_conf.get_val<double>("osd_pool_migration_retry_interval"));
 }
 
 boost::statechart::result

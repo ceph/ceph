@@ -2329,11 +2329,10 @@ public:
 	uint64_t tgt_pool_id = -1;
 
   	collection_list_handle_t src_pos;
-  	collection_list_handle_t tgt_pos;
 
   	enum stage {TGT_READ, SRC_READ, TGT_SECOND_READ};
   	stage current_stage = TGT_READ;
-  	bool end_of_tripple_read = false;
+  	bool end_of_triple_read = false;
   	// End of Pool Migration attributes
 
     std::list<librados::ListObjectImpl> list;
