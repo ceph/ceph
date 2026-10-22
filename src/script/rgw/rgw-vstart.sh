@@ -219,6 +219,18 @@ for sub in lmdb root userdb; do
 		rm -f "$d" 2>/dev/null || true
 	else
 		rm -rf "$d"/* 2>/dev/null || true
+		# An impersonated run leaves entries other uids own, which
+		# the developer cannot remove;  vstart.sh's own clean then fails.
+		if compgen -G "$d/*" >/dev/null; then
+			if sudo -n true 2>/dev/null; then
+				sudo rm -rf "${d:?}"/*
+			else
+				echo "error: $d holds entries other uids own, left by a" >&2
+				echo "       --with-impersonation run.  Remove them, then run again:" >&2
+				echo "         sudo rm -rf $d" >&2
+				exit 1
+			fi
+		fi
 	fi
 done
 
