@@ -657,6 +657,37 @@ void KernelDevice::_aio_stop()
 
     aio_thread.join();
 
+#if defined(HAVE_POSIXAIO)
+    // The aio thread leaves its loop as soon as it sees aio_stop, which can
+    // be before the wakeup read above has completed, or before the thread
+    // collected it.  FreeBSD keeps a finished job until aio_return() is
+    // called for it, and looks that job up by the address of its aiocb.  A
+    // job left behind here stays in the kernel after wakeup_ctx (and with
+    // it this aio_t) is freed, and the next aio_t that is allocated at the
+    // same address gets the result of the leftover job instead of its own:
+    // the 4096 byte wakeup read hands its length to whatever request lands
+    // on that address next, and that request's own result follows the one
+    // after it ("aio to ... but returned" abort in _aio_thread()).
+    // Collect the job here.  This also keeps the kernel from writing into
+    // bl after it is gone.
+    for (auto& a : wakeup_ctx.running_aios) {
+      auto warn_at = ceph::mono_clock::now() + std::chrono::seconds(10);
+      int e;
+
+      while ((e = aio_error(&a.aio)) == EINPROGRESS) {
+        if (ceph::mono_clock::now() >= warn_at) {
+          derr << __func__ << " still waiting for wakeup read after 10 sec" << dendl;
+          warn_at += std::chrono::seconds(10);
+        }
+        usleep(1000);
+      }
+      // aio_error() can also return the errno of the read itself, which
+      // may be EINVAL, so always reap the job.  If the worker already
+      // collected it, this fails with EINVAL and does nothing.
+      (void)aio_return(&a.aio);
+    }
+#endif
+
     if (cct->_conf->bdev_debug_aio) {
       for (auto& i: wakeup_ctx.running_aios) {
 	debug_aio_unlink(i);
