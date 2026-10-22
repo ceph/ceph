@@ -2233,6 +2233,7 @@ dependencies = [
  "aws-sigv4",
  "aws-smithy-runtime-api",
  "aws-smithy-types",
+ "aws-smithy-xml",
  "base64",
  "chrono",
  "configparser",

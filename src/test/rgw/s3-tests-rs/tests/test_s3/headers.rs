@@ -2,10 +2,16 @@ use std::collections::HashMap;
 use s3_tests_rs::fixtures::{get_new_bucket, get_new_bucket_name};
 use s3_tests_rs::http::{sigv2_request, RawResponse};
 
+/* The <Code> of an S3 error body, read with the SDK's own XML decoder. */
 fn parse_error_code(body: &str) -> Option<String> {
-    let start = body.find("<Code>")?;
-    let end = body.find("</Code>")?;
-    Some(body[start + 6..end].to_string())
+    let mut doc = aws_smithy_xml::decode::Document::new(body);
+    let mut root = doc.root_element().ok()?;
+    while let Some(mut el) = root.next_tag() {
+        if el.start_el().matches("Code") {
+            return aws_smithy_xml::decode::try_data(&mut el).ok().map(|c| c.into_owned());
+        }
+    }
+    None
 }
 
 struct ErrorResult {

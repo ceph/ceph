@@ -1461,6 +1461,94 @@ mod kafka_tests {
 
     /* --- metadata and tag filters --- */
 
+    use aws_smithy_xml::decode::{try_data, Document, ScopedDecoder, XmlDecodeError};
+    use aws_smithy_xml::encode::{ScopeWriter, XmlWriter};
+
+    /* An element of a NotificationConfiguration, decoded.  The SDK's
+     * schema for it is closed, so which elements carry text is known --
+     * NOTIFICATION_LEAVES -- and every other element holds elements. */
+    struct XmlNode {
+        name: String,
+        text: Option<String>,
+        children: Vec<XmlNode>,
+    }
+
+    const NOTIFICATION_LEAVES: [&str; 7] =
+        ["Id", "Topic", "Queue", "CloudFunction", "Event", "Name", "Value"];
+
+    fn decode_node(el: &mut ScopedDecoder<'_, '_>) -> Result<XmlNode, XmlDecodeError> {
+        let name = el.start_el().local().to_string();
+        if NOTIFICATION_LEAVES.contains(&name.as_str()) {
+            let text = try_data(el)?.into_owned();
+            return Ok(XmlNode { name, text: Some(text), children: Vec::new() });
+        }
+        let mut children = Vec::new();
+        while let Some(mut c) = el.next_tag() {
+            children.push(decode_node(&mut c)?);
+        }
+        Ok(XmlNode { name, text: None, children })
+    }
+
+    fn encode_children(scope: &mut ScopeWriter<'_, '_>, node: &XmlNode) {
+        for c in &node.children {
+            let mut child = scope.start_el(&c.name).finish();
+            match &c.text {
+                Some(t) => child.data(t),
+                None => encode_children(&mut child, c),
+            }
+            child.finish();
+        }
+    }
+
+    /* Move each Filter's x-amz-meta-* rules from <S3Key> into
+     * <S3Metadata>, and its other non-key rules into <S3Tags>, within
+     * the same Filter.  Returns whether anything moved. */
+    fn move_filter_rules(node: &mut XmlNode) -> bool {
+        let mut moved = false;
+        for c in &mut node.children {
+            moved |= move_filter_rules(c);
+        }
+        if node.name != "Filter" {
+            return moved;
+        }
+        let Some(at) = node.children.iter().position(|c| c.name == "S3Key") else {
+            return moved;
+        };
+        let rule_name = |r: &XmlNode| -> String {
+            r.children.iter().find(|c| c.name == "Name")
+                .and_then(|c| c.text.clone()).unwrap_or_default()
+        };
+        let (mut key, mut metadata, mut tags) = (Vec::new(), Vec::new(), Vec::new());
+        for r in node.children.remove(at).children {
+            let n = rule_name(&r);
+            if n.starts_with("x-amz-meta-") {
+                metadata.push(r);
+            } else if n != "prefix" && n != "suffix" {
+                tags.push(r);
+            } else {
+                key.push(r);
+            }
+        }
+        if metadata.is_empty() && tags.is_empty() {
+            node.children.insert(at, XmlNode { name: "S3Key".into(), text: None, children: key });
+            return moved;
+        }
+        let mut rebuilt = Vec::new();
+        if !key.is_empty() {
+            rebuilt.push(XmlNode { name: "S3Key".into(), text: None, children: key });
+        }
+        if !metadata.is_empty() {
+            rebuilt.push(XmlNode { name: "S3Metadata".into(), text: None, children: metadata });
+        }
+        if !tags.is_empty() {
+            rebuilt.push(XmlNode { name: "S3Tags".into(), text: None, children: tags });
+        }
+        for (k, n) in rebuilt.into_iter().enumerate() {
+            node.children.insert(at + k, n);
+        }
+        true
+    }
+
     /* The AWS SDK only generates <S3Key> filter rules. RGW's metadata
      * and tag filter extensions use <S3Metadata> and <S3Tags> elements.
      * This interceptor rewrites the PutBucketNotificationConfiguration
@@ -1484,85 +1572,28 @@ mod kafka_tests {
                 .to_vec();
             let body_str = String::from_utf8(body_bytes)?;
 
-            if !body_str.contains("NotificationConfiguration") {
+            let mut doc = Document::new(&body_str);
+            let Ok(mut root) = doc.root_element() else {
+                return Ok(());
+            };
+            if !root.start_el().matches("NotificationConfiguration") {
+                return Ok(());
+            }
+            let xmlns = root.start_el().attr("xmlns").map(str::to_string);
+            let mut config = decode_node(&mut root)?;
+            if !move_filter_rules(&mut config) {
                 return Ok(());
             }
 
-            let mut result = body_str.clone();
-
-            /* extract filter rules that belong in S3Metadata or S3Tags,
-             * move them from <S3Key> into the correct sibling element */
-            let mut metadata_rules = Vec::new();
-            let mut tag_rules = Vec::new();
-
-            /* find all FilterRule elements and classify them */
-            let mut remaining_key_rules = String::new();
-            let mut pos = 0;
-            while let Some(start) = result[pos..].find("<FilterRule>") {
-                let abs_start = pos + start;
-                if let Some(end) = result[abs_start..].find("</FilterRule>") {
-                    let abs_end = abs_start + end + "</FilterRule>".len();
-                    let rule = &result[abs_start..abs_end];
-
-                    if let (Some(ns), Some(ne)) = (rule.find("<Name>"), rule.find("</Name>")) {
-                        let name = &rule[ns + 6..ne];
-                        if let (Some(vs), Some(ve)) = (rule.find("<Value>"), rule.find("</Value>")) {
-                            let value = &rule[vs + 7..ve];
-                            if name.starts_with("x-amz-meta-") {
-                                metadata_rules.push((name.to_string(), value.to_string()));
-                                pos = abs_end;
-                                continue;
-                            } else if name != "prefix" && name != "suffix" {
-                                tag_rules.push((name.to_string(), value.to_string()));
-                                pos = abs_end;
-                                continue;
-                            }
-                        }
-                    }
-                    remaining_key_rules.push_str(rule);
-                    pos = abs_end;
-                } else {
-                    break;
-                }
+            let mut new_body = String::new();
+            let mut w = XmlWriter::new(&mut new_body);
+            let mut el = w.start_el(&config.name);
+            if let Some(ns) = &xmlns {
+                el = el.write_ns(ns, None);
             }
-
-            if metadata_rules.is_empty() && tag_rules.is_empty() {
-                return Ok(());
-            }
-
-            /* rebuild the Filter block with separated elements */
-            let mut extra = String::new();
-            if !metadata_rules.is_empty() {
-                extra.push_str("<S3Metadata>");
-                for (k, v) in &metadata_rules {
-                    extra.push_str(&format!("<FilterRule><Name>{k}</Name><Value>{v}</Value></FilterRule>"));
-                }
-                extra.push_str("</S3Metadata>");
-            }
-            if !tag_rules.is_empty() {
-                extra.push_str("<S3Tags>");
-                for (k, v) in &tag_rules {
-                    extra.push_str(&format!("<FilterRule><Name>{k}</Name><Value>{v}</Value></FilterRule>"));
-                }
-                extra.push_str("</S3Tags>");
-            }
-
-            /* remove the moved rules from <S3Key> and inject the new elements
-             * after </S3Key> inside <Filter> */
-            let mut new_body = result.clone();
-            /* remove all FilterRule elements, then re-add only the key ones */
-            if let Some(s3key_start) = new_body.find("<S3Key>") {
-                if let Some(s3key_end) = new_body.find("</S3Key>") {
-                    let end_pos = s3key_end + "</S3Key>".len();
-                    let before = &new_body[..s3key_start];
-                    let after = &new_body[end_pos..];
-                    if remaining_key_rules.is_empty() {
-                        new_body = format!("{before}{extra}{after}");
-                    } else {
-                        new_body = format!("{before}<S3Key>{remaining_key_rules}</S3Key>{extra}{after}");
-                    }
-                }
-            }
+            let mut scope = el.finish();
+            encode_children(&mut scope, &config);
+            scope.finish();
 
             eprintln!("NotificationFilterRewriter: rewritten body:\n{}", new_body);
             let new_len = new_body.len();

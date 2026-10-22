@@ -12,6 +12,7 @@ aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-credential-types = { version = "1", features = ["hardcoded-credentials"] }
 aws-smithy-runtime-api = "1"
 aws-smithy-types = "1"
+aws-smithy-xml = "0.60"
 aws-sigv4 = "1"
 sha2 = "0.10"
 # the corpus digests the bodies it reads, to validate a digest ETag
