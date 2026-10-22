@@ -206,49 +206,6 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
 
 namespace {
 
-/* NooBaa's `logging` into RGW's bucket-logging configuration.
- *
- * `{log_bucket, log_prefix}` is the whole of NooBaa's record, and it maps
- * onto `target_bucket` and `target_prefix` with logging enabled.  The
- * rest of RGW's configuration -- the key format, the roll time, the
- * batch size -- has no counterpart in NooBaa's record, so it keeps RGW's
- * defaults rather than being invented.
- *
- * This is one of the three fields `NOOBAA_WRITE_SURFACE.md` lists as
- * not read during conversion, and a bucket converted without it loses
- * its logging silently. */
-int carry_logging(const DoutPrefixProvider* dpp, JSONObj* obj, Attrs& attrs)
-{
-  std::string target, prefix;
-  try {
-    JSONDecoder::decode_json("log_bucket", target, obj);
-    JSONDecoder::decode_json("log_prefix", prefix, obj);
-  } catch (const JSONDecoder::err& e) {
-    ldpp_dout(dpp, 0) << "ERROR: logging does not decode: " << e.what()
-      << dendl;
-    return -EBADMSG;
-  }
-  if (target.empty()) {
-    /* a logging record naming no target is not a configuration */
-    return 0;
-  }
-
-  rgw::bucketlogging::configuration conf;
-  /* `enabled` is set for a reader of the object in memory and is
-   * **not part of the encoded form** -- the serialisation carries
-   * target, prefix, key format, roll time, type, batch size and date
-   * source, and nothing else.  So on disk the *presence* of this
-   * attribute is what says logging is configured, which is why the
-   * absent case writes no attribute rather than a disabled one. */
-  conf.enabled = true;
-  conf.target_bucket = target;
-  conf.target_prefix = prefix;
-
-  bufferlist bl;
-  conf.encode(bl);
-  attrs[RGW_ATTR_BUCKET_LOGGING] = std::move(bl);
-  return 1;
-}
 
 } // namespace
 
@@ -375,14 +332,10 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       }
     }
 
-    /* `logging`, which nothing read before. */
-    if (JSONObj* lg = p.find_obj("logging")) {
-      ret = carry_logging(dpp, lg, attrs);
-      if (ret < 0) {
-	result.failures.push_back(rec.name + ": logging");
-	continue;
-      }
-      result.logging_carried += ret;
+    /* `logging`, translated by the reader above;  counted here for
+     * the report. */
+    if (attrs.count(RGW_ATTR_BUCKET_LOGGING)) {
+      ++result.logging_carried;
     }
 
     /* `notifications` needs an RGW topic per destination, and the

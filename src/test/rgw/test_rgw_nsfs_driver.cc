@@ -7511,6 +7511,40 @@ TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
   EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY), attrs.end());
 }
 
+/* `logging` reads as RGW's bucket-logging configuration from the record
+ * alone, so a bucket served before its adoption returns it.  The rest
+ * of RGW's configuration keeps its defaults. */
+TEST_F(NSFSNooBaaStateTest, LoggingIsReadFromTheirRecord)
+{
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("DISABLED",
+		     R"(,"logging":{"log_bucket":"logs","log_prefix":"p/"})");
+
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_BUCKET_LOGGING);
+  ASSERT_NE(i, attrs.end());
+  rgw::bucketlogging::configuration conf;
+  auto it = i->second.cbegin();
+  conf.decode(it);
+  EXPECT_EQ(conf.target_bucket, "logs");
+  EXPECT_EQ(conf.target_prefix, "p/");
+}
+
+/* A logging record naming no target is not a configuration, and writes
+ * no attribute:  the attribute's presence is what says logging is on. */
+TEST_F(NSFSNooBaaStateTest, LoggingWithoutATargetIsNoConfiguration)
+{
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("DISABLED", R"(,"logging":{"log_prefix":"p/"})");
+
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_LOGGING), attrs.end());
+}
+
 /* An algorithm that is neither of NooBaa's is kept, not rejected.
  *
  * The string becomes the x-amz-server-side-encryption header value on
