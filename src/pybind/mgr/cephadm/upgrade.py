@@ -748,6 +748,10 @@ class CephadmUpgrade:
             name = node.get('name')
             if isinstance(name, str) and name:
                 bucket_names.append(name)
+        # A bucket can be linked under more than one parent (e.g. the same
+        # host bucket referenced from two roots), so de-duplicate while
+        # preserving first-seen order.
+        bucket_names = list(dict.fromkeys(bucket_names))
         logger.info(
             'Upgrade: Found %s CRUSH bucket(s) of type %r: %s',
             len(bucket_names),
@@ -757,12 +761,15 @@ class CephadmUpgrade:
         return bucket_names
 
     @staticmethod
-    def is_mon_error_for_invalid_bucket(err: MonCommandFailed) -> bool:
+    def is_mon_error_for_empty_bucket(err: MonCommandFailed) -> bool:
         """
-        CRUSH bucket errors from ``osd ok-to-upgrade`` mon command.
-        Typically ENOENT: unknown bucket name or no OSDs under that bucket.
+        ``osd ok-to-upgrade`` ENOENT: the crush_bucket exists but currently
+        has no OSDs under it.
         """
-        return f'retval: {-errno.ENOENT}' in str(err)
+        msg = str(err)
+        if f'retval: {-errno.ENOENT}' not in msg:
+            return False
+        return 'no osds found in crush bucket' in msg or 'has no children' in msg
 
     def _should_skip_cephx_health_mutes(self) -> bool:
         """Checked before muting: on a cluster that is already fully on aes256k the
@@ -1283,7 +1290,18 @@ class CephadmUpgrade:
                 })
                 return False
             except MonCommandFailed as err:
-                if self.is_mon_error_for_invalid_bucket(err):
+                if self.is_mon_error_for_empty_bucket(err):
+                    # Bucket exists but has no OSDs right now. Treat the
+                    # bucket as done.
+                    logger.info(
+                        'Upgrade: osd ok-to-upgrade reports no OSDs in crush_bucket=%r; '
+                        'treating bucket as done', bucket_name)
+                    self._ok_to_upgrade_all_osds_upgraded = True
+                    self._ok_to_upgrade_osds_in_crush_bucket = set()
+                    return True
+                if f'retval: {-errno.ENOENT}' in str(err):
+                    # Check for unknown bucket name or any other CRUSH
+                    # bucket ENOENT. Pause the upgrade.
                     st = self.upgrade_state
                     btype = st.crush_bucket_type if st else None
                     logger.error('Upgrade: osd ok-to-upgrade failed (CRUSH bucket): %s', err)
@@ -2494,16 +2512,19 @@ class CephadmUpgrade:
         self,
         target_digests: Optional[List[str]],
         target_name: str,
+        daemons: Optional[List[DaemonDescription]] = None,
     ) -> bool:
         assert self.upgrade_state is not None
         if target_digests is None:
             target_digests = []
+        if daemons is None:
+            daemons = self._get_filtered_daemons()
 
         if self.mgr.use_agent:
             hosts: Set[str] = set()
             if self.upgrade_state.hosts is not None:
                 hosts.update(self.upgrade_state.hosts)
-            for d in self._get_filtered_daemons():
+            for d in daemons:
                 if d.hostname is not None:
                     hosts.add(d.hostname)
             for hostname in hosts:
@@ -2515,7 +2536,7 @@ class CephadmUpgrade:
                     self.mgr.agent_helpers._request_ack_all_not_up_to_date()
                     return False
 
-        for d in self._get_filtered_daemons():
+        for d in daemons:
             if d.daemon_type not in CEPH_IMAGE_TYPES:
                 continue
             if (
@@ -2852,10 +2873,11 @@ class CephadmUpgrade:
             if self._advance_to_next_crush_bucket():
                 return
 
-            # Last/only bucket done. Check every OSD cluster-wide (every rack)
-            # is on target before completing the osd upgrade.
+            # Last/only bucket done. Check every OSD cluster-wide, independently
+            # of the bucket filter, before completing the osd upgrade.
             if self._filtered_scope_up_to_date(
-                    target_digests, self.upgrade_state._target_name):
+                    target_digests, self.upgrade_state._target_name,
+                    daemons=self.mgr.cache.get_daemons_by_type('osd')):
                 logger.info('Upgrade: Finalizing container_image settings')
                 self.mgr.set_container_image('global', target_image)
                 for daemon_type in CEPH_UPGRADE_ORDER:
