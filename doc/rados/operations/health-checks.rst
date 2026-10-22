@@ -1487,7 +1487,7 @@ runs or by an external tool that runs a command the following form:
 
 .. prompt:: bash #
 
-   ceph device set-life-expectancy <device-id> <from> <to>
+   ceph device set-life-expectancy <device-id> <from> [<to>]
 
 You can change the stored life expectancy manually, but such a change usually
 doesn't accomplish anything. The reason for this is that whichever tool
