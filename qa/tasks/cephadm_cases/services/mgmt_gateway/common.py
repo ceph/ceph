@@ -230,6 +230,10 @@ class GatewayTestCase(ServicesTestCase):
                           'etc/tls.key': key},
                 'volume_mounts': {'etc': f'{IDP_DIR}:z'},
             },
+            # cephadm writes the files 0600, owned by the spec's uid/gid
+            # (default nobody); run as that user rather than relying on
+            # root's DAC override to read them
+            'extra_container_args': ['--user=65534:65534'],
             'extra_entrypoint_args': [f'{IDP_DIR}/oidc_idp.py', f'{IDP_DIR}/config.json'],
         }
         cls.apply('qa-idp', spec)

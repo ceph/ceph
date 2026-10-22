@@ -18,6 +18,7 @@ dashboard:
                                       refresh_token and password grants;
                                       client_secret_basic or _post
   /userinfo                           claims for a bearer access token
+                                      (refused once expired)
   /logout                             end-session endpoint
 
 ID and access tokens are RS256 JWTs carrying iss, sub, aud, exp, iat, jti,
@@ -84,7 +85,8 @@ class Provider:
         self.lock = threading.Lock()
         self.codes: Dict[str, Dict[str, Any]] = {}
         self.refresh: Dict[str, Tuple[str, Dict[str, Any], str]] = {}
-        self.access: Dict[str, Dict[str, Any]] = {}
+        # access token -> (user, expiry)
+        self.access: Dict[str, Tuple[Dict[str, Any], float]] = {}
 
     # -- keys and tokens ------------------------------------------------
     def jwks(self) -> Dict[str, Any]:
@@ -123,7 +125,10 @@ class Provider:
         access_token = self.sign(access_claims)
         with self.lock:
             self.refresh[refresh] = (client_id, user, scope)
-            self.access[access_token] = user
+            self.access[access_token] = (user, now + TOKEN_TTL)
+            # forget expired access tokens and stale authorization codes
+            self.access = {t: v for t, v in self.access.items() if v[1] > now}
+            self.codes = {c: v for c, v in self.codes.items() if v['expires'] > now}
         return {'access_token': access_token, 'id_token': self.sign(id_claims),
                 'refresh_token': refresh, 'token_type': 'Bearer',
                 'expires_in': TOKEN_TTL, 'scope': scope}
@@ -230,7 +235,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.authorize(self.query(), None)
         if route == '/userinfo':
             auth = self.headers.get('Authorization', '')
-            user = p.access.get(auth[7:]) if auth.startswith('Bearer ') else None
+            entry = p.access.get(auth[7:]) if auth.startswith('Bearer ') else None
+            user = entry[0] if entry and entry[1] > time.time() else None
             if not user:
                 return self.reply(401, {'error': 'invalid_token'},
                                   headers={'WWW-Authenticate': 'Bearer'})
