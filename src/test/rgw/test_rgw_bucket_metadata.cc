@@ -117,6 +117,11 @@ protected:
     info.bucket.tenant = "tenant";
     info.layout.current_index.layout.type = rgw::BucketIndexType::Normal;
     info.layout.current_index.layout.normal.num_shards = 1;
+
+    // make sure logs vector is not empty
+    rgw::bucket_log_layout_generation bllg;
+    info.layout.logs.push_back(bllg);
+    
     return info;
   }
 
