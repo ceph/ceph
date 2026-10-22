@@ -3048,6 +3048,14 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
+
+    // reject metadata with empty logs, since logs not being empty is
+    // an invariant assumed broadly in codebase
+    if (bci.info.layout.logs.empty()) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+        "(): bucket info's layout logs may not be empty" << dendl;
+      return -EINVAL;
+    }
   }
 
   //always keep bucket versioning enabled on archive zone
@@ -3060,7 +3068,8 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
   bci.info.objv_tracker.write_version = objv_tracker.write_version;
 
   return 0;
-}
+} // RGWBucketInstanceMetadataHandler::put_prepare
+
 
 int RGWMetadataHandlerPut_BucketInstance::put_checked(const DoutPrefixProvider *dpp)
 {
