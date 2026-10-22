@@ -378,6 +378,36 @@ function TEST_osd_pool_create_migrate_from() {
   teardown $dir || return 1
 }
 
+function pool_field() {
+  local pool=$1
+  local field=$2
+  ceph osd dump --format=json | jq -r ".pools[] | select(.pool_name == \"$pool\") | .$field"
+}
+
+# --enable_ec_optimizations must give a pool what osd_pool_default_flag_ec_optimizations does
+function TEST_enable_ec_optimizations() {
+  local dir=$1
+
+  run_mon $dir a || return 1
+  ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd || return 1
+
+  ceph config set mon osd_pool_default_flag_ec_optimizations true || return 1
+  ceph osd pool create default_opt 4 4 erasure ec-prof || return 1
+  ceph config set mon osd_pool_default_flag_ec_optimizations false || return 1
+  local stripe_width=$(pool_field default_opt stripe_width)
+
+  ceph osd pool create requested_opt 4 4 erasure ec-prof --enable_ec_optimizations || return 1
+  test "$(pool_field requested_opt stripe_width)" = "$stripe_width" || return 1
+  pool_field requested_opt flags_names | grep -q split_reads || return 1
+
+  ceph config set global enable_experimental_unrecoverable_data_corrupting_features poolmigration || return 1
+  ceph osd set-require-min-compat-client umbrella || return 1
+  ceph osd pool create migrated 4 4 erasure ec-prof || return 1
+  ceph osd pool migrate migrated --pool_type erasure --erasure_code_profile ec-prof --enable_ec_optimizations || return 1
+  test "$(pool_field migrated stripe_width)" = "$stripe_width" || return 1
+  pool_field migrated flags_names | grep -q split_reads || return 1
+}
+
 main osd-pool-create "$@"
 
 # Local Variables:
