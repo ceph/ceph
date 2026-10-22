@@ -547,6 +547,7 @@ private:
 			std::ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
 				const std::string &erasure_code_profile,
+                                bool ec_optimizations,
 				unsigned *stripe_width,
 				std::ostream *ss);
   uint32_t get_osd_num_by_crush(int crush_rule);
