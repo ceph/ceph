@@ -702,44 +702,14 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
   return root;
 }
 
-/* Use the temp directory that is there;  create one only where the
- * tree has none;  reject more than one.  See the header. */
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
 std::optional<std::string>
 NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const
 {
-  auto found = nb_tmpdir(dpp, bucket_fd);
-  if (!found) {
-    /* nb_tmpdir() returns nothing both for "none" and for "more than
-     * one";  only the first may be created into, and that is the case
-     * in which it did not log */
-    if (nb_tmpdir_ambiguous(dpp, bucket_fd)) {
-      return std::nullopt;
-    }
-    std::string name = std::string(NB_TMPDIR_PREFIX) + gen_uuid();
-    if ((::mkdirat(bucket_fd, name.c_str(), dir_create_mode()) < 0) &&
-	(errno != EEXIST)) {
-      int ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not create " << name << ": "
-			<< cpp_strerror(ret) << dendl;
-      return std::nullopt;
-    }
-    (void) apply_create_mode_at(dpp, bucket_fd, name.c_str(),
-				dir_create_mode());
-    found = name;
-  }
-
-  const std::string root = *found + "/" + NB_MPU_ROOT;
-  if ((::mkdirat(bucket_fd, root.c_str(), dir_create_mode()) < 0) &&
-      (errno != EEXIST)) {
-    int ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not create " << root << ": "
-		      << cpp_strerror(ret) << dendl;
-    return std::nullopt;
-  }
-  (void) apply_create_mode_at(dpp, bucket_fd, root.c_str(),
-			      dir_create_mode());
-  return root;
+  return std::nullopt;
 }
 
 /* Does this name end in `_` followed by something UUID-shaped?
@@ -895,25 +865,14 @@ NooBaaMPUStrategy::part_number(std::string_view name) const
   return num;
 }
 
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
 std::optional<MPUStrategy::PartTarget>
 NooBaaMPUStrategy::part_target(uint32_t part_num,
 			       std::optional<uint64_t> stride) const
 {
-  /* NooBaa's offset is the part's own size times (n - 1)
-   * (`namespace_fs.js` upload_multipart).  A uniform upload makes that
-   * the same arithmetic as a stride, which is the case this can serve.
-   *
-   * Without one, the part goes to its own file and is copied into a
-   * size file afterwards -- which is what they do when the size is not
-   * known before the body is read.  NooBaa's own file is the record,
-   * part-<n>, because they write the data there and copy it out. */
-  if (!stride || (*stride == 0)) {
-    return PartTarget{part_name(part_num), 0, std::nullopt, false};
-  }
-  return PartTarget{RGW_MP_SHARED_PREFIX + std::to_string(*stride),
-		    (static_cast<uint64_t>(part_num) - 1) * *stride,
-		    *stride,
-		    true};
+  return std::nullopt;
 }
 
 std::optional<std::string>
@@ -969,22 +928,14 @@ std::string base36(uint64_t v)
 
 } /* anonymous namespace */
 
-/* Whenever the part is not the stride.
- *
- * NooBaa's file is named for the size it holds and NooBaa's reader derives
- * the name from the part's own record, so `parts-size-17` is where a
- * 17-byte part must be, at 17 * (num - 1) within it.  The stride's
- * file keeps the bytes it was given;  truncating it back is not safe,
- * because a later part may already have written past this one, and
- * assembly does not read beyond the sum of the records. */
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
 std::optional<MPUStrategy::PartTarget>
 NooBaaMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
 				     std::optional<uint64_t> stride) const
 {
-  if (stride && (*stride == stored)) {
-    return std::nullopt;
-  }
-  return part_target(part_num, stored);
+  return std::nullopt;
 }
 
 /* NooBaa's record is three plain attributes of its own, which the nsfs
@@ -1072,142 +1023,24 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   return true;
 }
 
-/* NooBaa's create_object_upload, which is where the key lives.
- *
- * NooBaa's gateway writes a JSON dump of the CreateMultipartUpload
- * parameters and reads back only the keys it wants, so an object with
- * `key` in it is one NooBaa can serve.  Written with the fields
- * NooBaa's own readers consume:  the key, which NooBaa's list_multiparts
- * compares against the request's, and what NooBaa's completion path
- * puts on the finished object.  The rest of what nsfs knows about the
- * upload goes in the nsfs attribute, which NooBaa ignores.
- *
- * NooBaa's reader takes the first `key` it finds and nothing else is
- * required, so this is deliberately the smallest document NooBaa
- * accepts rather than a re-encoding of the nsfs record in JSON.
- */
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
 int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
 					   int dir_fd,
 					   const StagedUpload& su) const
 {
-  /* NooBaa's own document is JSON.stringify of the request parameters,
-   * and stringify drops what is undefined, so a field the request did
-   * not carry is absent rather than null.  Emitted the same way:  a
-   * present-but-empty content_type would become the object's content
-   * type on NooBaa's completion path. */
-  JSONFormatter f;
-  f.open_object_section("create_object_upload");
-  encode_json("key", su.key, &f);
-  encode_json("bucket", su.bucket, &f);
-  /* NooBaa's name for the upload id, and what NooBaa's ListMultipartUploads
-   * reports as UploadId (`_get_mpu_info`, `namespace_fs.js:3028`).
-   * The directory is named for it as well, and NooBaa's readers use
-   * whichever is at hand. */
-  encode_json("obj_id", su.upload_id, &f);
-  if (!su.content_type.empty()) {
-    encode_json("content_type", su.content_type, &f);
-  }
-  if (!su.content_encoding.empty()) {
-    encode_json("content_encoding", su.content_encoding, &f);
-  }
-  if (!su.storage_class.empty()) {
-    encode_json("storage_class", su.storage_class, &f);
-  }
-  if (!su.xattr.empty()) {
-    f.open_object_section("xattr");
-    for (const auto& [k, v] : su.xattr) {
-      encode_json(k.c_str(), v, &f);
-    }
-    f.close_section();
-  }
-  if (!su.retention_mode.empty() || !su.legal_hold.empty()) {
-    f.open_object_section("lock_settings");
-    if (!su.retention_mode.empty()) {
-      f.open_object_section("retention");
-      encode_json("mode", su.retention_mode, &f);
-      encode_json("retain_until_date", su.retain_until, &f);
-      f.close_section();
-    }
-    if (!su.legal_hold.empty()) {
-      f.open_object_section("legal_hold");
-      encode_json("status", su.legal_hold, &f);
-      f.close_section();
-    }
-    f.close_section();
-  }
-  f.close_section();
-
-  std::ostringstream os;
-  f.flush(os);
-  const std::string doc = os.str();
-
-  int fd = ::openat(dir_fd, NB_CREATE_NAME.c_str(),
-		    O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
-  if (fd < 0) {
-    int ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: creating " << NB_CREATE_NAME << ": "
-		      << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  auto close_fd = make_scope_guard([fd] { ::close(fd); });
-  if (int mret = apply_create_mode(dpp, fd, file_create_mode(), null_yield);
-      mret < 0) {
-    return mret;
-  }
-
-  ssize_t w = ::pwrite(fd, doc.data(), doc.size(), 0);
-  if (w < 0) {
-    int ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: writing " << NB_CREATE_NAME << ": "
-		      << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  if (static_cast<size_t>(w) != doc.size()) {
-    ldpp_dout(dpp, 0) << "ERROR: short write of " << NB_CREATE_NAME
-		      << " (" << w << " of " << doc.size() << ")" << dendl;
-    return -EIO;
-  }
-  return 0;
+  return -ERR_INVALID_BUCKET_STATE;
 }
 
-/* NooBaa's part attributes:  the bytes on disk and where they begin.
- *
- * `stored` rather than `size`:  NooBaa's describes the file, and the two
- * differ whenever a filter between the op layer and the writer changed
- * the byte count.  NooBaa's assembly slices the size-keyed file by these
- * two numbers, so a value that is not the length on disk produces a
- * wrong object rather than a wrong report.
- *
- * No etag.  NooBaa's is `user.content_md5`, an MD5 of the part's bytes,
- * and what we hold at this point is an RGW etag, which for a part is
- * the same MD5 -- but only when no filter ran.  NooBaa's reader falls
- * back to the stat-derived form when it is absent, which is right, so
- * absent is better than wrong.
- */
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
 int NooBaaMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
 					 int dir_fd, std::string_view pname,
 					 const PartRecord& rec) const
 {
-  int fd = ::openat(dir_fd, std::string(pname).c_str(), O_RDONLY);
-  if (fd < 0) {
-    int ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: opening part " << pname << ": "
-		      << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  auto close_fd = make_scope_guard([fd] { ::close(fd); });
-
-  const std::string size = std::to_string(rec.stored);
-  const std::string offset = std::to_string(rec.offset);
-  if ((::fsetxattr(fd, NB_XATTR_PART_SIZE, size.data(), size.size(), 0) < 0) ||
-      (::fsetxattr(fd, NB_XATTR_PART_OFFSET, offset.data(), offset.size(),
-		   0) < 0)) {
-    int ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: writing part attributes on " << pname
-		      << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  return 0;
+  return -ERR_INVALID_BUCKET_STATE;
 }
 
 /* None recorded.  create_object_upload is a dump of the request
@@ -1314,6 +1147,9 @@ const ReservedNames& NooBaaMPUStrategy::reserved_names() const
   return names;
 }
 
+/* NooBaa's staging is read and never written (DECISIONS.md 2026-10-21):
+ * adoption carries an upload NooBaa started into RGW's layout, and a
+ * write to one it has not reached waits for it. */
 int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				int dir_fd,
 				const std::vector<PartPlacement>& parts,
@@ -1322,114 +1158,7 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				optional_yield y,
 				const FSIdentity& id) const
 {
-  if (!fs || parts.empty()) {
-    return -EINVAL;
-  }
-
-  /* NooBaa's three cases, `complete_object_upload`.  The placements carry
-   * what NooBaa's code reads from the part records, so the distinct-size
-   * count is taken from the run rather than accumulated with open file
-   * descriptors.
-   *
-   * Sparse numbering disables both fast paths, as it does for them:
-   * with a part missing, the file for a size no longer holds a
-   * contiguous prefix of the object. */
-  const bool continuous =
-      (parts.back().num == static_cast<uint32_t>(parts.size()));
-
-  size_t distinct = 0;
-  uint64_t body_size = 0;
-  bool tail_is_last = true;
-  for (size_t i = 0; i < parts.size(); ++i) {
-    if ((i == 0) || (parts[i].stored != parts[i - 1].stored)) {
-      ++distinct;
-      if (i == 0) {
-	body_size = parts[i].stored;
-      } else if (i + 1 != parts.size()) {
-	tail_is_last = false;
-      }
-    }
-  }
-
-  /* as `id`, who wrote the size file and so owns it:  linking a file
-   * one does not own is its owner's */
-  auto link_size_file = [&](uint64_t size) -> int {
-    const std::string sname = RGW_MP_SHARED_PREFIX + std::to_string(size);
-    return with_identity(dpp, id, [&]() -> int {
-      if (::linkat(dir_fd, sname.c_str(), dir_fd, output_name.c_str(),
-		   0) < 0) {
-	int ret = errno;
-	ldpp_dout(dpp, 0) << "ERROR: could not link " << sname << " to "
-			  << output_name << ": " << cpp_strerror(ret) << dendl;
-	return -ret;
-      }
-      return 0;
-    }, y);
-  };
-
-  /* every part the same size, in order:  the size file is the object */
-  if (continuous && (distinct == 1)) {
-    return link_size_file(body_size);
-  }
-
-  int out_fd = -1;
-  uint64_t total = 0;
-  size_t first_to_copy = 0;
-
-  /* a uniform body and a short final part:  link the body's file and
-   * append the tail, which is the copy NooBaa's scheme cannot avoid */
-  if (continuous && (distinct == 2) && tail_is_last) {
-    int ret = link_size_file(body_size);
-    if (ret < 0) {
-      return ret;
-    }
-    first_to_copy = parts.size() - 1;
-    total = body_size * first_to_copy;
-    /* the linked body is `id`'s, so is opened to append as `id` */
-    out_fd = with_identity(dpp, id, [&]() -> int {
-      const int fd = ::openat(dir_fd, output_name.c_str(), O_WRONLY);
-      return (fd < 0) ? -errno : fd;
-    }, y);
-  } else {
-    out_fd = create_output(dpp, id, dir_fd, output_name);
-  }
-  if (out_fd < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not open " << output_name << ": "
-		      << cpp_strerror(-out_fd) << dendl;
-    return out_fd;
-  }
-  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode(), y, id);
-      mret < 0) {
-    ::close(out_fd);
-    return mret;
-  }
-  auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
-
-  for (size_t i = first_to_copy; i < parts.size(); ++i) {
-    const auto& part = parts[i];
-    const std::string sname =
-	RGW_MP_SHARED_PREFIX + std::to_string(part.stored);
-    int part_fd = ::openat(dir_fd, sname.c_str(), O_RDONLY);
-    if (part_fd < 0) {
-      int ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open " << sname << ": "
-			<< cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-    auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
-
-    int ret = fs->copy_range(dpp, part_fd, part.offset, out_fd, total,
-			     part.stored);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not copy part " << part.num
-			<< " from " << sname << ": " << cpp_strerror(-ret)
-			<< dendl;
-      return ret;
-    }
-    total += part.stored;
-  }
-
-  return 0;
+  return -ERR_INVALID_BUCKET_STATE;
 }
 
 

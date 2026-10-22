@@ -4032,33 +4032,6 @@ TEST(NooBaaMPU, SharedFileNameIsNotADiscriminator)
   EXPECT_NE(nb.part_name(1), ours.part_name(1));
 }
 
-/* NooBaa's offset is the part's own size times (n - 1), not an upload-wide
- * stride (`namespace_fs.js` upload_multipart). */
-TEST(NooBaaMPU, PartTargetIsKeyedByTheSize)
-{
-  nsfs::NooBaaMPUStrategy nb;
-
-  auto t1 = nb.part_target(1, 64);
-  ASSERT_TRUE(t1.has_value());
-  EXPECT_EQ(t1->name, "parts-size-64");
-  EXPECT_EQ(t1->offset, 0u);
-  EXPECT_EQ(t1->extent, std::optional<uint64_t>{64});
-  EXPECT_TRUE(t1->shared);
-
-  auto t3 = nb.part_target(3, 64);
-  ASSERT_TRUE(t3.has_value());
-  EXPECT_EQ(t3->offset, 128u);
-
-  /* no size known yet:  the data goes to the part's own file, which for
-   * them is the record, and is copied into a size file afterwards */
-  auto t0 = nb.part_target(2, std::nullopt);
-  ASSERT_TRUE(t0.has_value());
-  EXPECT_EQ(t0->name, "part-2");
-  EXPECT_EQ(t0->offset, 0u);
-  EXPECT_FALSE(t0->shared);
-  EXPECT_EQ(t0->extent, std::nullopt);
-}
-
 /* Staging is found by what the directory holds, not by its name.
  *
  * `config.NSFS_TEMP_DIR_NAME` is a default in NooBaa's config.js, so the
@@ -4126,11 +4099,12 @@ TEST(NooBaaMPU, AQuiescentTempDirectoryIsFoundByShape)
   /* no uploads, so the read side has nothing to report */
   EXPECT_EQ(nb.staging_root(env->dpp, bfd), std::nullopt);
 
-  /* but the write side finds it and creates multipart-uploads/ inside
-   * it rather than inventing a second temp directory */
-  auto w = nb.staging_root_for_write(env->dpp, bfd);
-  ASSERT_TRUE(w.has_value());
-  EXPECT_EQ(*w, ".noobaa-nsfs_" + fake_uuid("one") + "/multipart-uploads");
+  /* and the write side finds nothing and makes nothing:  NooBaa's
+   * staging is read and never written (DECISIONS.md 2026-10-21) */
+  EXPECT_EQ(nb.staging_root_for_write(env->dpp, bfd), std::nullopt);
+  EXPECT_FALSE(sf::exists(b / (".noobaa-nsfs_" + fake_uuid("one"))
+			  / "multipart-uploads"))
+      << "the write side created NooBaa's staging";
 
   int n = 0;
   for (auto& e : sf::directory_iterator(b)) {
@@ -4164,10 +4138,9 @@ TEST(NooBaaMPU, ARenamedTempDirectoryIsStillFound)
   ASSERT_TRUE(r.has_value()) << "a renamed temp directory was not found";
   EXPECT_EQ(*r, renamed + "/multipart-uploads");
 
-  /* and the write side uses it rather than creating an nsfs one */
-  auto w = nb.staging_root_for_write(env->dpp, bfd);
-  ASSERT_TRUE(w.has_value());
-  EXPECT_EQ(*w, renamed + "/multipart-uploads");
+  /* and the write side does not use it:  NooBaa's staging is read and
+   * never written (DECISIONS.md 2026-10-21) */
+  EXPECT_EQ(nb.staging_root_for_write(env->dpp, bfd), std::nullopt);
   int n = 0;
   for (auto& e : sf::directory_iterator(b)) {
     if (sf::is_directory(e)) {
@@ -4187,80 +4160,6 @@ TEST(NooBaaMPU, StagingRootAbsentIsNotAnError)
   ASSERT_GE(bfd, 0);
   EXPECT_EQ(nb.staging_root(env->dpp, bfd), std::nullopt);
   ::close(bfd);
-}
-
-/* Uniform parts:  the size file already is the object, so completing
- * links it and copies nothing. */
-TEST(NooBaaMPU, AssembleUniformLinks)
-{
-  nsfs::NooBaaMPUStrategy nb;
-  nsfs::POSIXStrategy fs;
-  const std::string test = get_test_name();
-  NBStaging st(test, "b", "u");
-  ASSERT_GE(st.fd, 0);
-
-  const uint64_t size = 16;
-  st.write_uniform(size, 1, 3);
-
-  std::vector<nsfs::MPUStrategy::PartPlacement> parts{
-    {1, true, 0, size}, {2, true, size, size}, {3, true, 2 * size, size}};
-
-  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size, null_yield), 0);
-
-  const std::string out = read_all(st.upload / "final");
-  EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'c') +
-		 std::string(size, 'd'));
-  /* linked, not copied */
-  EXPECT_EQ(sf::hard_link_count(st.upload / "final"), 2u);
-}
-
-/* A short final part is the case NooBaa's scheme cannot place:  it lives
- * in a file of its own size, so completing links the body and copies
- * the tail. */
-TEST(NooBaaMPU, AssembleShortTailCopiesTheTail)
-{
-  nsfs::NooBaaMPUStrategy nb;
-  nsfs::POSIXStrategy fs;
-  const std::string test = get_test_name();
-  NBStaging st(test, "b", "u");
-  ASSERT_GE(st.fd, 0);
-
-  const uint64_t size = 16, tail = 5;
-  st.write_uniform(size, 1, 2);
-  st.write_uniform(tail, 3, 1);
-
-  std::vector<nsfs::MPUStrategy::PartPlacement> parts{
-    {1, true, 0, size}, {2, true, size, size}, {3, true, 2 * tail, tail}};
-
-  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size, null_yield), 0);
-
-  const std::string out = read_all(st.upload / "final");
-  EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'c') +
-		 std::string(tail, 'd'));
-}
-
-/* A gap in the part numbers disables both fast paths, as it does for
- * them:  the file for a size no longer holds a contiguous prefix. */
-TEST(NooBaaMPU, AssembleSparseNumberingCopies)
-{
-  nsfs::NooBaaMPUStrategy nb;
-  nsfs::POSIXStrategy fs;
-  const std::string test = get_test_name();
-  NBStaging st(test, "b", "u");
-  ASSERT_GE(st.fd, 0);
-
-  const uint64_t size = 16;
-  st.write_uniform(size, 1, 1);
-  st.write_uniform(size, 5, 1);
-
-  std::vector<nsfs::MPUStrategy::PartPlacement> parts{
-    {1, true, 0, size}, {5, true, 4 * size, size}};
-
-  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size, null_yield), 0);
-
-  const std::string out = read_all(st.upload / "final");
-  EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'f'));
-  EXPECT_EQ(sf::hard_link_count(st.upload / "final"), 1u);
 }
 
 /* Completion reads the parts as their uploader.
@@ -5257,11 +5156,11 @@ TEST(NooBaaMPU, StrategyReadsTheGeneratedTree)
   EXPECT_TRUE(sf::exists(tree.staging / nb.meta_name()));
   for (uint32_t k = 1; k <= tree.parts; ++k) {
     EXPECT_TRUE(sf::exists(tree.staging / nb.part_name(k))) << k;
-    auto t = nb.part_target(k, tree.part_size);
-    ASSERT_TRUE(t.has_value());
-    EXPECT_EQ(t->offset, (k - 1) * tree.part_size);
-    EXPECT_TRUE(sf::exists(tree.staging / t->name)) << t->name;
   }
+  /* the bytes, found as conversion finds them */
+  auto sn = nb.shared_name(tree.part_size);
+  ASSERT_TRUE(sn.has_value());
+  EXPECT_TRUE(sf::exists(tree.staging / *sn)) << *sn;
 
   /* and the nsfs strategy misreads nothing:  NooBaa's directory is
    * not an nsfs one, NooBaa's record names are not nsfs names, and

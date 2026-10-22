@@ -366,76 +366,30 @@ bool NooBaaXattrStrategy::disk_attrs(const std::string& key,
 				     xattr_map_t& to_write,
 				     std::vector<std::string>& to_remove) const
 {
+  /* Only ever a removal.  NooBaa's spelling is read and never written
+   * (DECISIONS.md 2026-10-21);  what reaches here empty is a conversion,
+   * or a removal on a bucket being converted, taking a key one format
+   * spreads over several names off the object.  A value to write is not
+   * claimed:  the placement falls to disk_name(), and
+   * FSEnt::write_attrs() rejects it, since this format does not write. */
+  if (val.length() != 0) {
+    return false;
+  }
   if (key == RGW_ATTR_OBJECT_LEGAL_HOLD) {
-    if (val.length() == 0) {
-      to_remove.push_back(NB_LEGAL_HOLD);
-      return true;
-    }
-    RGWObjectLegalHold lh;
-    try {
-      auto bufit = val.cbegin();
-      lh.decode(bufit);
-    } catch (buffer::error&) {
-      to_remove.push_back(NB_LEGAL_HOLD);
-      return true;
-    }
-    to_write.insert_or_assign(NB_LEGAL_HOLD, lh.get_status());
+    to_remove.push_back(NB_LEGAL_HOLD);
     return true;
   }
-
   if (key == RGW_ATTR_OBJECT_RETENTION) {
-    /* both or neither, the way NooBaa's reader takes it */
-    if (val.length() == 0) {
-      to_remove.push_back(NB_RETENTION_MODE);
-      to_remove.push_back(NB_RETENTION_DATE);
-      return true;
-    }
-    RGWObjectRetention r;
-    try {
-      auto bufit = val.cbegin();
-      r.decode(bufit);
-    } catch (buffer::error&) {
-      to_remove.push_back(NB_RETENTION_MODE);
-      to_remove.push_back(NB_RETENTION_DATE);
-      return true;
-    }
-    std::string iso;
-    rgw_to_iso8601(r.get_retain_until_date(), &iso);
-    to_write.insert_or_assign(NB_RETENTION_MODE, r.get_mode());
-    to_write.insert_or_assign(NB_RETENTION_DATE, iso);
+    to_remove.push_back(NB_RETENTION_MODE);
+    to_remove.push_back(NB_RETENTION_DATE);
     return true;
   }
-
   if (key != RGW_ATTR_TAGS) {
     return false;
   }
-
-  RGWObjTags tags;
-  if (val.length() > 0) {
-    try {
-      auto bufit = val.cbegin();
-      tags.decode(bufit);
-    } catch (buffer::error&) {
-      /* An unreadable tag set is not a reason to write half of one,
-       * and not a reason to leave the old one either:  claimed, with
-       * nothing written, so the supersede below clears it.  No dpp
-       * here to say so -- the caller has one and sees an object whose
-       * tags went away, which is the same information. */
-      tags.get_tags().clear();
-    }
-  }
-
-  for (const auto& [k, v] : tags.get_tags()) {
-    to_write.insert_or_assign(NB_TAG_PREFIX + k, v);
-  }
-
-  /* The set replaces, it does not merge -- which is S3's contract for
-   * PutObjectTagging and what NooBaa's own path does, clearing the whole
-   * prefix before writing (`namespace_fs.js:2258`).  Anything on disk
-   * this write does not name goes. */
   for (const auto& disk : current) {
     std::string tk;
-    if (nb_tag_name(disk, tk) && !to_write.contains(disk)) {
+    if (nb_tag_name(disk, tk)) {
       to_remove.push_back(disk);
     }
   }

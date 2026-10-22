@@ -41,6 +41,12 @@ class XattrStrategy {
 public:
   virtual ~XattrStrategy() = default;
 
+  /* Whether the driver writes attributes in this format.  NooBaa's is
+   * read and never written (DECISIONS.md 2026-10-21):
+   * FSEnt::write_attrs() rejects a write in a format that does not
+   * write, and lets its removals through. */
+  virtual bool writes() const { return true; }
+
   /* the on-disk xattr name for a logical attribute key, and the inverse.
    * parse_disk_name() returns false for a name this format does not own,
    * which is how a foreign attribute -- another gateway's, or a user's --
@@ -238,6 +244,7 @@ public:
   bool counted_string_value(const std::string& key) const override;
 
   const char* name() const override { return "noobaa"; }
+  bool writes() const override { return false; }
 };
 
 }}} // namespace rgw::sal::nsfs

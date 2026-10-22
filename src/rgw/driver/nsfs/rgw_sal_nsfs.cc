@@ -2817,6 +2817,17 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       }
     }
 
+    /* The driver never writes NooBaa's format (DECISIONS.md 2026-10-21).
+     * The gate keeps a client's write off a bucket in it, and this keeps
+     * every other writer off, below the gate.  Removals pass:  they are
+     * how a conversion leaves nothing of NooBaa's behind. */
+    if (!to_write.empty() && !xs->writes()) {
+      ldpp_dout(dpp, 0) << "ERROR: rejecting a write of " << to_write.size()
+	<< " attribute(s) to " << get_name() << " in the " << xs->name()
+	<< " format:  the driver never writes it" << dendl;
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+
     if (!to_remove.empty()) {
       ret = fs_strategy->remove_xattrs(dpp, afd, to_remove, y, aid);
       if (ret < 0) {
@@ -2827,7 +2838,21 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     return fs_strategy->set_xattrs(dpp, afd, to_write, y, aid);
   }
 
-  /* per-attr syscalls */
+  /* per-attr syscalls;  first the same rule as the strategy branch
+   * above, before anything is removed */
+  if (!xs->writes()) {
+    auto writing = [&](const Attrs& m) {
+      return std::any_of(m.begin(), m.end(),
+			 [](const auto& kv) { return kv.second.length() != 0; });
+    };
+    if (writing(attrs) || (extra_attrs && writing(*extra_attrs))) {
+      ldpp_dout(dpp, 0) << "ERROR: rejecting a write to " << get_name()
+	<< " in the " << xs->name() << " format:  the driver never writes it"
+	<< dendl;
+      return -ERR_INVALID_BUCKET_STATE;
+    }
+  }
+
   if (mode == AttrWriteMode::REPLACE_ALL) {
     Attrs old_attrs;
     ret = get_x_attrs(y, dpp, afd, old_attrs, get_name(), xs,
@@ -4867,25 +4892,17 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	}
 	const int bfd = bdir->get_fd();
 
-	/* Which layout staged this upload, found rather than assumed.
-	 *
-	 * The callback has a bucket name and nothing else:  it runs
-	 * from an eviction, and resolving the bucket's profile there
-	 * would mean load_bucket() and its I/O underneath the cache.
-	 * So each layout is asked where it stages and the one whose
-	 * directory is there is the one that wrote the parts --
-	 * recognition, with a fallback, as everywhere else.
-	 *
-	 * Before this the driver's own strategies were used
-	 * unconditionally.  A base bucket stages somewhere they do not
-	 * name, so the openat failed, the callback returned, and the
-	 * records it existed to persist went with the entry. */
-	nsfs::MPUStrategy* layouts[2] = { mpu_strategy.get(),
-					  nb_mpu_strategy.get() };
-	nsfs::XattrStrategy* xattrs[2] = { xattr_strategy.get(),
-					   nb_xattr_strategy.get() };
+	/* RGW's layout only.  NooBaa's staging is read and never written
+	 * (DECISIONS.md 2026-10-21):  its part records are on disk where
+	 * NooBaa wrote them, a part RGW takes into one of its uploads
+	 * waits until adoption has carried the upload into RGW's layout,
+	 * so nothing here has a record to persist into NooBaa's staging.
+	 * An entry for an upload still there finds no RGW staging and
+	 * writes nothing. */
+	nsfs::MPUStrategy* layouts[1] = { mpu_strategy.get() };
+	nsfs::XattrStrategy* xattrs[1] = { xattr_strategy.get() };
 
-	for (int i = 0; i < 2; ++i) {
+	for (int i = 0; i < 1; ++i) {
 	  auto* mpu = layouts[i];
 	  auto* xs = xattrs[i];
 	  auto root = mpu->staging_root(&dp, bfd);
@@ -4960,9 +4977,8 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 		return -errno;
 	      }
 
-	      /* and whatever the layout records for itself.  The nsfs
-	       * layout's is the attribute just written;  NooBaa's is its
-	       * three. */
+	      /* and whatever the layout records for itself:  the nsfs
+	       * layout's is the attribute just written */
 	      nsfs::MPUStrategy::PartRecord rec;
 	      rec.size = upi.size;
 	      rec.stored = upi.stored;
@@ -8743,6 +8759,22 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     ret = ourdir.open(dpp);
     if (ret < 0) {
       return ret;
+    }
+    /* Marked with this bucket's extension set, as a staging directory an
+     * upload RGW starts is (the shadow bucket's create()).  The shadow
+     * bucket a later part or completion opens over it resolves its format
+     * from this marker, and without it resolved base and wrote the part
+     * records in NooBaa's format, which the driver never writes.  Before
+     * the directory's ownership moves, while the gateway owns it. */
+    {
+      const std::string v = std::to_string(profile->extensions);
+      if (::fsetxattr(ourdir.get_fd(), nsfs::EXTENSIONS_XATTR, v.data(),
+		      v.size(), 0) < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: marking the staging for " << meta
+			  << ": " << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
     }
     /* whether any part now sits elsewhere than its record said;  see
      * the multipart cache below */
