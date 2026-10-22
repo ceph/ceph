@@ -3,6 +3,7 @@
 
 #include "ConfigMap.h"
 #include "crush/CrushWrapper.h"
+#include "common/dout.h"
 #include "common/entity_name.h"
 
 #include <boost/algorithm/string/split.hpp>
@@ -10,7 +11,7 @@
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#include "common/dout.h"
+#define dout_prefix *_dout
 
 #include <iomanip>
 
