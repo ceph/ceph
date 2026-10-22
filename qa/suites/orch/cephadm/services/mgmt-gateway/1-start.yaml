@@ -1,0 +1,28 @@
+# Three hosts: the gateway, the monitoring stack and the identity provider
+# each get their own, and two of them can carry gateways for the HA facets.
+# Every container comes from the cluster's own registries: the test IdP
+# (qa/tasks/cephadm_cases/services/oidc_idp.py) runs in the Ceph image.
+# Two mgrs so the tests can fail over the active one.
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - client.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+    # Deliberately empty: a failed or stray daemon while switching between
+    # security modes is a regression.
+    log-ignorelist: []
+tasks:
+- install:
+- cephadm:
