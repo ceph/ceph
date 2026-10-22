@@ -41,3 +41,11 @@ add_executable(unittest_objecter_direct_reads
   )
 add_ceph_unittest(unittest_objecter_direct_reads)
 target_link_libraries(unittest_objecter_direct_reads osdc global ${BLKID_LIBRARIES})
+
+# unittest_osd_shard_router
+# OSDShardRouter is header only.
+add_executable(unittest_osd_shard_router
+  test_osd_shard_router.cc
+  )
+add_ceph_unittest(unittest_osd_shard_router)
+target_link_libraries(unittest_osd_shard_router ${UNITTEST_LIBS})
