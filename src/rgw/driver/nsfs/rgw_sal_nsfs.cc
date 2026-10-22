@@ -17570,7 +17570,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["complete"] = "false";
     }
     if (completion) {
-      for (const char* cmd : {"identities", "import", "bucket", "run"}) {
+      for (const char* cmd : {"identities", "bucket", "run"}) {
 	if (params.count(cmd)) {
 	  if (out) {
 	    (*out)["why"] = "adoption is complete";
@@ -17581,19 +17581,14 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
     }
     /* The commands (DECISIONS.md 2026-10-11).  `identities=true`
-     * imports the store's identities;  `import=<name>` imports that
-     * bucket's record and leaves its objects alone;  `bucket=<name>`
-     * adopts that bucket -- imports its record and converts its tree --
-     * against identities already imported;  `run=true` runs what
-     * `automatic` runs at startup -- the identities, then every
-     * bucket. */
+     * imports the store's identities;  `bucket=<name>` adopts that
+     * bucket -- writes its state from NooBaa's configuration store, marks
+     * it, converts its tree -- against identities already imported;
+     * `run=true` runs what `automatic` runs at startup -- the
+     * identities, then every bucket. */
     auto ids = params.find("identities");
     if ((ids != params.end()) && (ids->second == "true")) {
       return adopt_identities(dpp, null_yield, out);
-    }
-    auto imp = params.find("import");
-    if (imp != params.end()) {
-      return import_noobaa_bucket(dpp, null_yield, imp->second, out);
     }
     auto one = params.find("bucket");
     if (one != params.end()) {

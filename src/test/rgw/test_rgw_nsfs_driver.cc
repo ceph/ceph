@@ -13258,7 +13258,7 @@ TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
 /* The import records the path NooBaa's record names, as the row that
  * places the bucket from then on (P6).  Importing again finds the row
  * it wrote and changes nothing, since adoption imports a bucket that
- * an earlier import= already did. */
+ * an earlier, interrupted adoption already did. */
 TEST_F(NooBaaBucketImportTest, TheImportRecordsTheBucketsPath)
 {
   write_their_record("DISABLED");
@@ -13772,7 +13772,10 @@ TEST_F(NooBaaCompletionTest, AfterCompletionTheStoreIsNotRead)
       << "NooBaa's record still held the name";
 
   std::map<std::string, std::string> out;
-  for (const char* cmd : {"identities", "import", "bucket", "run"}) {
+  /* and adoption's first step, called directly, finds nothing to read */
+  EXPECT_NE(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 nullptr), 0);
+  for (const char* cmd : {"identities", "bucket", "run"}) {
     out.clear();
     EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
 				  {{cmd, std::string(cmd) == "identities" ||
@@ -13881,7 +13884,10 @@ TEST_F(NooBaaAbandonTest, AbandoningAnUnimportedBucketLetsAdoptionComplete)
 TEST_F(NooBaaAbandonTest, AnUnconvertedBucketAbandonedStaysServed)
 {
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
-  ASSERT_EQ(ask({{"import", testname}})["configured"], "true");
+  /* adoption's first step alone:  the bucket's state written, the
+   * bucket not marked */
+  ASSERT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 nullptr), 0);
 
   nsfs::AbandonedRecord r;
   ASSERT_EQ(abandon(THEIR_BUCKET_ID, "left in NooBaa's format", &r), 0);
@@ -13912,8 +13918,8 @@ TEST_F(NooBaaAbandonTest, AnAbandonedRecordIsNotAdoptedByName)
 				&out), -EEXIST);
   EXPECT_EQ(out["why"], "abandoned:  not this one");
   out.clear();
-  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption", {{"import", testname}},
-				&out), -EEXIST);
+  EXPECT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 &out), -EEXIST);
   uint32_t had = 0;
   std::string had_profile;
   EXPECT_LT(driver->set_bucket_profile(env->dpp, null_yield, testname,
@@ -13933,7 +13939,10 @@ TEST_F(NooBaaAbandonTest, AnAbandonedRecordIsNotAdoptedByName)
 TEST_F(NooBaaAbandonTest, APartlyConvertedBucketCanBeAbandoned)
 {
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
-  ASSERT_EQ(ask({{"import", testname}})["configured"], "true");
+  /* adoption's first step alone:  the bucket's state written, the
+   * bucket not marked */
+  ASSERT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 nullptr), 0);
   {
     std::unique_ptr<rgw::sal::Bucket> b;
     ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &b,
@@ -13992,7 +14001,8 @@ TEST_F(NooBaaAbandonTest, AnAbandonedIdentityIsNotImported)
 		env->dpp, THEIR_OWNER_ID, owner), -ENOENT);
 }
 
-/* `import=` imports a bucket's record and nothing else.
+/* import_noobaa_bucket(), adoption's first step, imports a bucket's
+ * record and nothing else.
  *
  * The record lands as nsfs bucket state on the bucket directory --
  * owner, versioning, BucketOwnerEnforced -- and the objects are not
@@ -14016,8 +14026,9 @@ TEST_F(NooBaaModeTest, ImportWritesTheRecordAndNotTheObjects)
   EXPECT_FALSE(load()->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
       << "the premise is gone:  the record is there before the import";
 
-  auto imp = ask({{"import", testname}});
-  EXPECT_EQ(imp["configured"], "true") << imp["error"];
+  std::map<std::string, std::string> imp;
+  EXPECT_EQ(driver->import_noobaa_bucket(env->dpp, null_yield, testname,
+					 &imp), 0) << imp["error"];
   EXPECT_EQ(imp["buckets"], "1");
 
   std::unique_ptr<rgw::sal::User> user;
