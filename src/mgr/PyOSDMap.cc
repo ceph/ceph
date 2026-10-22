@@ -56,6 +56,41 @@ static PyObject *osdmap_dump(BasePyOSDMap* self, PyObject *obj)
   return f.get();
 }
 
+static PyObject *osdmap_dump_pools(BasePyOSDMap* self, PyObject *obj)
+{
+  PyFormatter f(false, true);
+  for (const auto &[pid, pdata] : self->osdmap->get_pools()) {
+    self->osdmap->dump_pool(g_ceph_context, pid, pdata, &f);
+  }
+  return f.get();
+}
+
+static PyObject *osdmap_get_ec_profile(BasePyOSDMap* self, PyObject *args)
+{
+  char *name = nullptr;
+  if (!PyArg_ParseTuple(args, "s:get_ec_profile", &name)) {
+    return nullptr;
+  }
+  const auto &profiles = self->osdmap->get_erasure_code_profiles();
+  auto it = profiles.find(name);
+  if (it == profiles.end()) {
+    Py_RETURN_NONE;
+  }
+  PyObject *dict = PyDict_New();
+  for (const auto &[k, v] : it->second) {
+    PyObject *val = PyUnicode_FromStringAndSize(v.data(), v.size());
+    PyDict_SetItemString(dict, k.c_str(), val);
+    Py_DECREF(val);
+  }
+  return dict;
+}
+
+static PyObject *osdmap_get_require_osd_release(BasePyOSDMap* self, PyObject *obj)
+{
+  auto rel = to_string(self->osdmap->require_osd_release);
+  return PyUnicode_FromStringAndSize(rel.data(), rel.size());
+}
+
 static PyObject *osdmap_new_incremental(BasePyOSDMap *self, PyObject *obj)
 {
   OSDMap::Incremental *inc = new OSDMap::Incremental;
@@ -347,6 +382,11 @@ PyMethodDef BasePyOSDMap_methods[] = {
   {"_get_crush_version", (PyCFunction)osdmap_get_crush_version, METH_NOARGS,
     "Get CRUSH version"},
   {"_dump", (PyCFunction)osdmap_dump, METH_NOARGS, "Dump OSDMap::Incremental"},
+  {"_dump_pools", (PyCFunction)osdmap_dump_pools, METH_NOARGS, "Dump OSDMap pools"},
+  {"_get_ec_profile", (PyCFunction)osdmap_get_ec_profile, METH_VARARGS,
+   "Get OSDMap erasure code profile"},
+  {"_get_require_osd_release", (PyCFunction)osdmap_get_require_osd_release, METH_NOARGS,
+   "Get require_osd_release"},
   {"_new_incremental", (PyCFunction)osdmap_new_incremental, METH_NOARGS,
    "Create OSDMap::Incremental"},
   {"_apply_incremental", (PyCFunction)osdmap_apply_incremental, METH_O,
