@@ -337,10 +337,19 @@ async fn owners_sequence(client: &aws_sdk_s3::Client, bucket: &str)
 /// the object is an identity's.  `safe_link()` takes an identity and
 /// none of its four call sites passes one;  that is phase D.
 ///
-/// Ignored until both land;  run it with `--run-ignored all`, and
+/// **Run again 2026-10-22, after raise site 1 (ceph `b06489fb743`):**
+/// the control column is clean -- phase D's demote carries the identity
+/// -- and the owned column passes every step but one:  placement and
+/// every bucket-state write succeed.  Multipart fails at create,
+/// `could not create bucket .multipart_...: (13) Permission denied`:
+/// staging is made by the gateway, which cannot write a bucket directory
+/// the account owns at 0770.  Who owns staging is raise site 4's open
+/// question.
+///
+/// Ignored until site 4 lands;  run it with `--run-ignored all`, and
 /// every step prints its outcome beside the control's, so the table
 /// says how much of (n) has arrived.
-#[ignore = "two steps fail until (n) phases D and E land"]
+#[ignore = "multipart fails on the account's directory until (n) raise site 4 decides who owns staging"]
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
 #[cfg_attr(feature = "fails_on_rados", ignore = "fails on rados")]
