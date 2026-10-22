@@ -43,6 +43,7 @@ CEPH_GIT_NICE_VER = "@CEPH_GIT_NICE_VER@"
 CEPH_RELEASE = "@CEPH_RELEASE@"
 CEPH_RELEASE_NAME = "@CEPH_RELEASE_NAME@"
 CEPH_RELEASE_TYPE = "@CEPH_RELEASE_TYPE@"
+CEPH_VENDOR_RELEASE = "@CEPH_VENDOR_RELEASE@"
 
 # priorities from src/common/perf_counters.h
 PRIO_CRITICAL = 10
@@ -972,11 +973,14 @@ def main():
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
-        print('ceph version {0} ({1}) {2} ({3})'.format(
+        version = 'ceph version {0} ({1}) {2} ({3})'.format(
             CEPH_GIT_NICE_VER,
             CEPH_GIT_VER,
             CEPH_RELEASE_NAME,
-            CEPH_RELEASE_TYPE))  # noqa
+            CEPH_RELEASE_TYPE)  # noqa
+        if CEPH_VENDOR_RELEASE:
+            version += ' release {0}'.format(CEPH_VENDOR_RELEASE)
+        print(version)
         return 0
 
     # --watch-channel|-W implies -w
