@@ -8321,6 +8321,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 
 int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 					  const string &erasure_code_profile,
+                                          bool ec_optimizations,
 					  uint32_t *stripe_width,
 					  ostream *ss)
 {
@@ -8343,7 +8344,8 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       if (stripe_unit == 0) {
         if (((erasure_code->get_supported_optimizations() & 
               ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0) &&
-            (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
+            (ec_optimizations ||
+             cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
             stripe_unit = 16 * 1024;
         } else {
           stripe_unit = 4 * 1024;
@@ -8718,7 +8720,8 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   uint32_t stripe_width = 0;
-  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
+  r = prepare_pool_stripe_width(pool_type, erasure_code_profile,
+                                enable_ec_optimizations, &stripe_width, ss);
   if (r) {
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
     return r;
@@ -8886,6 +8889,14 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
   }
 
+  if (enable_ec_optimizations) {
+    // User requested EC optimizations via command line
+    if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
+      *ss << r.error().message;
+      return r.error().error;
+    }
+  }
+
   maybe_enable_pool_split_ops(*pi);
 
   // Auto-enable omap support for replicated and fast EC pools
@@ -8894,14 +8905,6 @@ int OSDMonitor::prepare_new_pool(string& name,
       (pool_type == pg_pool_t::TYPE_REPLICATED ||
        (pi->allows_ecoptimizations() && !crimson))) {
     pi->set_flag(pg_pool_t::FLAG_OMAP);
-  }
-
-  if (enable_ec_optimizations) {
-    // User requested EC optimizations via command line
-    if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
-      *ss << r.error().message;
-      return r.error().error;
-    }
   }
 
   if (source_pool_id) {
