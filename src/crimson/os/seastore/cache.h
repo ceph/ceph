@@ -142,6 +142,7 @@ public:
     if (t.did_reset()) {
       SUBDEBUGT(seastore_t, "reset", t);
     }
+    release_lognode_reservations(t.get_trans_id());
     t.reset_preserve_handle();
   }
 
@@ -1080,7 +1081,7 @@ private:
 
   std::map<journal_seq_t, std::vector<ghobject_t>> pending_lognode_deltas_by_seq;
   std::map<ghobject_t, lognode_deltas_t> pending_lognode_deltas_by_oid;
-  std::map<ghobject_t, size_t> pending_lognode_deltas_by_oid_reserved;
+  std::map<ghobject_t, transaction_id_t> pending_lognode_deltas_by_oid_reserved;
 
   using backref_entry_query_mset_t = std::multiset<
       backref_entry_t, backref_entry_t::cmp_t>;
@@ -1650,9 +1651,17 @@ public:
     pending_lognode_deltas_by_oid_reserved.erase(oid);
   }
 
+  void release_lognode_reservations(transaction_id_t tid) {
+    std::erase_if(
+      pending_lognode_deltas_by_oid_reserved,
+      [tid](const auto& entry) {
+	return entry.second == tid;
+      });
+  }
+
 #define PENDING_MAX_NODE_DELTAS 18
   std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(
-    ghobject_t oid, bool force = false) {
+    ghobject_t oid, transaction_id_t trans_id, bool force = false) {
     LOG_PREFIX(Cache::get_pending_lognode_delta_by_oid);
     auto oid_iter = pending_lognode_deltas_by_oid.find(oid);
     if (oid_iter == pending_lognode_deltas_by_oid.end()) {
@@ -1664,7 +1673,7 @@ public:
     // If the transaction fails, reissue the conflicting transaction with reserved set to 1. 
     // This causes it to be handled as a normal transaction, after which reserved is reset to 0
     // in complete_commit
-    if (pending_lognode_deltas_by_oid_reserved[oid] >= 1) {
+    if (pending_lognode_deltas_by_oid_reserved.contains(oid)) {
       return std::nullopt;
     }
     lognode_deltas_t d;
@@ -1694,7 +1703,7 @@ public:
 	pending_lognode_deltas_by_oid[oid].size(),  p.trans_id, p.committed_seq);
     }
     ceph_assert(d.size() > 0);
-    pending_lognode_deltas_by_oid_reserved[oid] = 1;
+    pending_lognode_deltas_by_oid_reserved[oid] = trans_id;
     return std::make_pair(std::move(d), last_idx_to_delete);
   }
 

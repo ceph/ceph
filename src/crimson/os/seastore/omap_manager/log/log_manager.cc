@@ -148,7 +148,7 @@ LogManager::flush_logs(
   omap_root_t &log_root,
   Transaction &t) 
 {
-  auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, true);
+  auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, t.get_trans_id(), true);
   journal_seq_t flushed_through = JOURNAL_SEQ_NULL;
   transaction_id_t flushed_through_trans_id = TRANS_ID_NULL;
   size_t last_idx_to_delete = 0;
@@ -184,7 +184,7 @@ LogManager::omap_set_keys(
   LOG_PREFIX(LogManager::omap_set_keys);
   DEBUGT("enter kv size {}", t, kvs.size());
   assert(log_root.get_type() == omap_type_t::LOG);
-  auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid);
+  auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, t.get_trans_id());
   size_t last_idx_to_delete = 0;
   journal_seq_t flushed_through = JOURNAL_SEQ_NULL;
   transaction_id_t flushed_through_trans_id = TRANS_ID_NULL;
