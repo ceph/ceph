@@ -488,6 +488,19 @@ public:
     SetVal(g_conf(), "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
   }
+  void StartClaimRangeStress(bool stress, bool write_sentinel = true,
+                             const char* interval = "0.1") {
+    SetVal(g_conf(), "bluestore_block_size", stringify(2ull << 30).c_str());
+    SetVal(g_conf(), "bluestore_allocator", "avl");
+    SetVal(g_conf(), "bluestore_debug_claim_range_stress",
+           stress ? "true" : "false");
+    SetVal(g_conf(), "bluestore_debug_claim_range_stress_write_sentinel",
+           write_sentinel ? "true" : "false");
+    SetVal(g_conf(), "bluestore_debug_claim_range_stress_interval", interval);
+    SetVal(g_conf(), "bluestore_debug_claim_range_stress_min_free",
+           stringify(256ull << 20).c_str());
+    StartDeferred(4096);
+  }
 };
 
 struct MatrixArg
@@ -6165,6 +6178,35 @@ TEST_P(StoreTestSpecificAUSize, ZipperPatternSharded) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
+
+TEST_P(StoreTestSpecificAUSize, ClaimRangeStressSmallDeviceBaseline) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  StartClaimRangeStress(false);
+  doSyntheticTest(1000, 10000, 400*1024, 40*1024, 0);
+}
+
+TEST_P(StoreTestSpecificAUSize, ClaimRangeStressSmallDevice) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  StartClaimRangeStress(true);
+  doSyntheticTest(1000, 10000, 400*1024, 40*1024, 0);
+}
+
+// No sentinel writes, so claims are cheap: claim far more often, to stress
+// claim_range() against the allocate() and release() traffic of the workload
+TEST_P(StoreTestSpecificAUSize, ClaimRangeStressSmallDeviceInMem) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  // Use 16 MiB claims instead of the default 64 MiB, so that most claims
+  // land on space the thread does not already hold: the up to 16 held claims
+  // cover at most 256 MiB (16 x 16 MiB, 12.5%) of the 2 GiB device, instead
+  // of 1 GiB (16 x 64 MiB, 50%).
+  SetVal(g_conf(), "bluestore_debug_claim_range_stress_claim_length",
+          stringify(16ull << 20).c_str());
+  StartClaimRangeStress(true, false, "0.001");
+  doSyntheticTest(1000, 10000, 400*1024, 40*1024, 0);
 }
 
 class SyntheticMatrixCsumAlgorithm: public MatrixTest {};
