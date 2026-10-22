@@ -21,6 +21,7 @@
 #include "common/Formatter.h"
 
 #include <atomic>
+#include <utility> // for std::to_underlying()
 
 namespace librbd {
 
@@ -359,9 +360,9 @@ public:
              [io_ctx_impl, default_namespace_enabled](bufferlist* bl) {
                 if (io_ctx_impl->get_namespace().empty() &&
                     *default_namespace_enabled == false) {
-                  encode(cls::rbd::MIRROR_MODE_DISABLED, *bl);
+                  encode(std::to_underlying(cls::rbd::MIRROR_MODE_DISABLED), *bl);
                 } else {
-                  encode(cls::rbd::MIRROR_MODE_POOL, *bl);
+                  encode(std::to_underlying(cls::rbd::MIRROR_MODE_POOL), *bl);
                 }
               })),
           Return(r)));

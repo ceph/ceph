@@ -6,6 +6,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
+#include "include/ceph_release_numbers.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"

@@ -33,10 +33,10 @@ Make sure X (and, ideally, X+1) is defined:
 
 - [ ] src/common/ceph_releases.h (`ceph_release_t`)
 - [ ] src/common/ceph_strings.cc (`ceph_release_name()`)
-- [ ] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
+- [ ] src/include/ceph_release_numbers.h (`CEPH_RELEASE_*` and `MAX`)
 - [ ] src/include/rbd/librbd.h (`LIBRBD_VER_MINOR` to X)
 - [ ] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
-- [ ] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
+- [ ] src/mon/mon_feature_t.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
 
 Github Actions
 ~~~~~~~~~~~~~~

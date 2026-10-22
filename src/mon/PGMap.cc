@@ -5,7 +5,9 @@
 #include "mon/health_check.h"
 #include "common/ceph_context.h"
 
+#include "include/byte_u_t.h"
 #include "include/rados.h"
+#include "include/si_u_t.h"
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
@@ -14,6 +16,9 @@
 #include "common/TextTable.h"
 #include "global/global_context.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs.h" // for ceph_statfs
+#include "include/encoding_unordered_map.h"
+#include "include/encoding_vector.h"
 #include "include/health.h"
 #include "include/stringify.h"
 
@@ -53,6 +58,11 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMapDigest, pgmap_digest, pgmap);
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap, pgmap, pgmap);
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 
+void PGMapDigest::pg_count::dump(ceph::Formatter *f) const {
+  f->dump_int("acting", acting);
+  f->dump_int("up_not_acting", up_not_acting);
+  f->dump_int("primary", primary);
+}
 
 // ---------------------
 // PGMapDigest

@@ -6,10 +6,12 @@
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
 #include "messages/MMonGetVersion.h"
+#include "msg/MessageFmt.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/mon/MonClient.h"
 #include "mon/MonMap.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "common/LogFmt.h"
 #include "common/Graylog.h"
 
 using std::map;

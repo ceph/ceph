@@ -6,7 +6,7 @@
 
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "include/ceph_assert.h"
-#include "include/rados.h" // for CEPH_RELEASE_*
+#include "include/ceph_release_numbers.h"
 
 #include <list>
 #include <string>

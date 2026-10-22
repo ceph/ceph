@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 #include "common/Formatter.h"
@@ -78,14 +79,18 @@ struct rgw_placement_rule {
   }
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
+
     /* no ENCODE_START/END due to backward compatibility */
     std::string s = to_str();
-    ceph::encode(s, bl);
+    encode(s, bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+
     std::string s;
-    ceph::decode(s, bl);
+    decode(s, bl);
     from_str(s);
   }
 

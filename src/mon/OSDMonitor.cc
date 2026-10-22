@@ -21,6 +21,7 @@
 #include <boost/algorithm/string.hpp>
 #include <experimental/iterator>
 #include <locale>
+#include <iomanip>  // for std::quoted
 #include <sstream>
 
 #include "mon/OSDMonitor.h"
@@ -82,8 +83,10 @@
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
 
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/ceph_assert.h"
+#include "include/si_u_t.h"
 #include "include/stringify.h"
 #include "include/util.h"
 #include "common/cmdparse.h"
@@ -129,6 +132,7 @@ using ceph::make_timespan;
 using ceph::timespan_str;
 using namespace std::literals;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
@@ -793,7 +797,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     ceph_assert(latest_full > 0);
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     put_version_latest_full(t, latest_full);
     mon.store->apply_transaction(t);
     dout(10) << __func__ << " updated the on-disk full map version to "
@@ -823,7 +827,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   // walk through incrementals
-  MonitorDBStore::TransactionRef t;
+  MonitorDBStoreTransactionRef t;
   size_t tx_size = 0;
   while (version > osdmap.epoch) {
     bufferlist inc_bl;
@@ -849,7 +853,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     ceph_assert(err == 0);
 
     if (!t)
-      t.reset(new MonitorDBStore::Transaction);
+      t.reset(new MonitorDBStoreTransaction);
 
     // Write out the full map for all past epochs.  Encode the full
     // map with the same features as the incremental.  If we don't
@@ -918,7 +922,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
     if (tx_size > g_conf()->mon_sync_max_payload_size*2) {
       mon.store->apply_transaction(t);
-      t = MonitorDBStore::TransactionRef();
+      t = MonitorDBStoreTransactionRef();
       tx_size = 0;
     }
     for (auto [osd, state] : inc.new_state) {
@@ -1549,7 +1553,7 @@ void OSDMonitor::prime_pg_temp(
  * @note receiving a transaction in this function gives a fair amount of
  * freedom to the service implementation if it does need it. It shouldn't.
  */
-void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void OSDMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << "encode_pending e " << pending_inc.epoch
 	   << dendl;
@@ -2369,7 +2373,7 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   return floor;
 }
 
-void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
+void OSDMonitor::encode_trim_extra(MonitorDBStoreTransactionRef tx,
 				   version_t first)
 {
   dout(10) << __func__ << " including full map for e " << first << dendl;
@@ -2487,7 +2491,7 @@ bool OSDMonitor::should_prune() const
 }
 
 void OSDMonitor::_prune_update_trimmed(
-    MonitorDBStore::TransactionRef tx,
+    MonitorDBStoreTransactionRef tx,
     version_t first)
 {
   dout(10) << __func__
@@ -2616,7 +2620,7 @@ bool OSDMonitor::is_prune_supported() const {
  *
  * @returns true if has side-effects; false otherwise.
  */
-bool OSDMonitor::do_prune(MonitorDBStore::TransactionRef tx)
+bool OSDMonitor::do_prune(MonitorDBStoreTransactionRef tx)
 {
   bool enabled = is_prune_enabled();
 
@@ -7443,7 +7447,7 @@ void OSDMonitor::insert_purged_snap_update(
   int64_t pool,
   snapid_t start, snapid_t end,
   epoch_t epoch,
-  MonitorDBStore::TransactionRef t)
+  MonitorDBStoreTransactionRef t)
 {
   snapid_t before_begin, before_end;
   snapid_t after_begin, after_end;

@@ -20,14 +20,14 @@
 #include <string>
 #include <vector>
 
-#include "include/Context.h"
 #include "health_check.h"
-#include "MonitorDBStore.h"
+#include "MonitorDBStoreTransaction.h"
 #include "PaxosMap.h"
 #include "MonOpRequest.h"
 
 class Monitor;
 class Paxos;
+class Context;
 
 /**
  * A Paxos Service is an abstraction that easily allows one to obtain an
@@ -217,7 +217,7 @@ private:
 
   void _create_pending();
 
-  void _encode_pending(MonitorDBStore::TransactionRef t);
+  void _encode_pending(MonitorDBStoreTransactionRef t);
 
   void _update_from_paxos(bool* need_bootstrap);
 
@@ -337,7 +337,7 @@ public:
    *
    * @param t The transaction to hold all changes.
    */
-  virtual void encode_pending(MonitorDBStore::TransactionRef t) = 0;
+  virtual void encode_pending(MonitorDBStoreTransactionRef t) = 0;
 
   /**
    * Discard the pending state
@@ -627,7 +627,7 @@ public:
    * @param from the lower limit of the interval to be trimmed
    * @param to the upper limit of the interval to be trimmed (not including)
    */
-  void trim(MonitorDBStore::TransactionRef t, version_t from, version_t to);
+  void trim(MonitorDBStoreTransactionRef t, version_t from, version_t to);
 
   /**
    * encode service-specific extra bits into trim transaction
@@ -635,7 +635,7 @@ public:
    * @param tx transaction
    * @param first new first_committed value
    */
-  virtual void encode_trim_extra(MonitorDBStore::TransactionRef tx,
+  virtual void encode_trim_extra(MonitorDBStoreTransactionRef tx,
 				 version_t first) {}
 
   /**
@@ -670,7 +670,7 @@ public:
    *
    * @param t Transaction on which the full version shall be encoded.
    */
-  virtual void encode_full(MonitorDBStore::TransactionRef t) = 0;
+  virtual void encode_full(MonitorDBStoreTransactionRef t) = 0;
 
   /**
    * @}
@@ -693,7 +693,7 @@ public:
    *					   purposes
    * @{
    */
-  void put_first_committed(MonitorDBStore::TransactionRef t, version_t ver) {
+  void put_first_committed(MonitorDBStoreTransactionRef t, version_t ver) {
     t->put(get_service_name(), first_committed_name, ver);
   }
   /**
@@ -702,7 +702,7 @@ public:
    * @param t A transaction to which we add this put operation
    * @param ver The last committed version number being put
    */
-  void put_last_committed(MonitorDBStore::TransactionRef t, version_t ver) {
+  void put_last_committed(MonitorDBStoreTransactionRef t, version_t ver) {
     t->put(get_service_name(), last_committed_name, ver);
 
     /* We only need to do this once, and that is when we are about to make our
@@ -721,7 +721,7 @@ public:
    * @param ver The version to which we will add the value
    * @param bl A ceph::buffer::list containing the version's value
    */
-  void put_version(MonitorDBStore::TransactionRef t, version_t ver,
+  void put_version(MonitorDBStoreTransactionRef t, version_t ver,
 		   ceph::buffer::list& bl) {
     t->put(get_service_name(), ver, bl);
   }
@@ -733,7 +733,7 @@ public:
    * @param ver A version number
    * @param bl A ceph::buffer::list containing the version's value
    */
-  void put_version_full(MonitorDBStore::TransactionRef t,
+  void put_version_full(MonitorDBStoreTransactionRef t,
 			version_t ver, ceph::buffer::list& bl);
   /**
    * Put the version number in @p ver into the key pointing to the latest full
@@ -742,7 +742,7 @@ public:
    * @param t The transaction to which we will add this put operation
    * @param ver A version number
    */
-  void put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver);
+  void put_version_latest_full(MonitorDBStoreTransactionRef t, version_t ver);
   /**
    * Put the contents of @p bl into the key @p key.
    *
@@ -750,7 +750,7 @@ public:
    * @param key The key to which we will add the value
    * @param bl A ceph::buffer::list containing the value
    */
-  void put_value(MonitorDBStore::TransactionRef t,
+  void put_value(MonitorDBStoreTransactionRef t,
 		 const std::string& key, ceph::buffer::list& bl) {
     t->put(get_service_name(), key, bl);
   }
@@ -762,7 +762,7 @@ public:
    * @param key The key to which we will add the value
    * @param v An integer
    */
-  void put_value(MonitorDBStore::TransactionRef t,
+  void put_value(MonitorDBStoreTransactionRef t,
 		 const std::string& key, version_t v) {
     t->put(get_service_name(), key, v);
   }
