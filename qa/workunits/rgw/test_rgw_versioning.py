@@ -219,6 +219,34 @@ def main():
     assert head_resp['LastModified'] == null_version['LastModified'], \
       'null version mtime changed after a stale pending olh entry was removed'
 
+    # TESTCASE 'verify that the olh object is cleaned up after deleting the last version with a stale pending olh entry'
+    log.debug('TEST: verify that the olh object is cleaned up after deleting the last version with a stale pending olh entry\n')
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    key = str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")  # "null" version
+    connection.BucketVersioning(BUCKET_NAME).enable()
+    try:
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        exec_cmd('ceph config set client rgw_debug_inject_olh_cancel_modification_err true')
+        exec_cmd('ceph config set client rgw_olh_pending_timeout_sec 1')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+        try:
+            bucket.put_object(Key=key, Body=b"new data")
+        except Exception as e:
+            log.debug(e)
+        else:
+            raise AssertionError('versioned put did not fail as expected')
+        # wait past rgw_olh_pending_timeout_sec
+        time.sleep(2)
+        # deleting the only linked version clears the olh, removing the timed out pending entry first
+        connection.ObjectVersion(bucket.name, key, 'null').delete()
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_debug_inject_olh_cancel_modification_err')
+        exec_cmd('ceph config rm client rgw_olh_pending_timeout_sec')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+    assert not head_objects(key), 'olh object was not cleaned up'
+
     # TESTCASE 'verify that concurrent delete requests do not leave behind olh entries'
     log.debug('TEST: verify that concurrent delete requests do not leave behind olh entries\n')
     bucket.object_versions.all().delete()
