@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 serde_json = "1"
+aws-smithy-xml = "=0.60.15"
 ---
 //! Stand up NooBaa's NSFS gateway over a data root, so that the
 //! conversion corpus can be run against *their* implementation and the
@@ -32,6 +33,7 @@ serde_json = "1"
 //! Run `standup.rs list` to see the steps, `standup.rs <step>` to run
 //! one, `standup.rs up` to run every step through serving.
 
+use aws_smithy_xml::decode::{try_data, Document, ScopedDecoder};
 use std::collections::BTreeMap;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -993,7 +995,7 @@ fn iam_user(env: &Env) -> Result<(), String> {
     if !exists {
         let body = iam_call(env, &[("Action", "CreateUser"), ("UserName", &env.iam_user)])?;
         println!("iam-user {:?} created, NooBaa id {}", env.iam_user,
-                 xml_tag(&body, "UserId").unwrap_or("?"));
+                 xml_tag(&body, "UserId").unwrap_or_else(|| "?".into()));
     } else {
         println!("iam-user {:?} present without a recorded credential;  \
                   issuing a new one", env.iam_user);
@@ -2098,9 +2100,18 @@ fn adopt_by_profile(env: &Env, admin: &str, name: &str) -> Result<(), String> {
         return Err(format!("setting bucket {name} to shared failed ({status}):\n{body}"));
     }
     let (had, now) = (json_str(&body, "had_profile"), json_str(&body, "profile"));
-    if had.as_deref() != Some("base") || now.as_deref() != Some("shared") {
+    if let Some(why) = json_str(&body, "stopped") {
+        return Err(format!("converting bucket {name} stopped:  {why}\n{body}"));
+    }
+    if json_bool(&body, "converting") != Some(false) {
+        return Err(format!("bucket {name} is still converting:\n{body}"));
+    }
+    /* base on the first run;  shared on a run that resumes a conversion
+     * an earlier one stopped, whose marker the endpoint finishes */
+    if !matches!(had.as_deref(), Some("base") | Some("shared"))
+        || now.as_deref() != Some("shared") {
         return Err(format!(
-            "bucket {name} went from {had:?} to {now:?}, not base to shared:\n{body}"));
+            "bucket {name} went from {had:?} to {now:?}, not to shared:\n{body}"));
     }
     println!("adopt    bucket {name}:  profile shared by the profile endpoint");
     Ok(())
@@ -2127,35 +2138,40 @@ fn curl(args: &[&str]) -> Result<(u16, String), String> {
     Ok((status, body.to_string()))
 }
 
-/// The text of the first `<tag>`, for the IAM responses.
-fn xml_tag<'a>(body: &'a str, tag: &str) -> Option<&'a str> {
-    let open = format!("<{tag}>");
-    let start = body.find(&open)? + open.len();
-    let len = body[start..].find(&format!("</{tag}>"))?;
-    Some(&body[start..start + len])
-}
-
-/// A top-level boolean field of a flat JSON reply;  the driver hint
-/// renders `true` and `false` unquoted.
-fn json_bool(body: &str, key: &str) -> Option<bool> {
-    let pat = format!("\"{key}\":");
-    let rest = body[body.find(&pat)? + pat.len()..].trim_start();
-    if rest.starts_with("true") {
-        Some(true)
-    } else if rest.starts_with("false") {
-        Some(false)
-    } else {
+/// The text of the first `<tag>` at any depth, for the IAM responses.
+fn xml_tag(body: &str, tag: &str) -> Option<String> {
+    fn find(el: &mut ScopedDecoder<'_, '_>, tag: &str) -> Option<String> {
+        while let Some(mut child) = el.next_tag() {
+            if child.start_el().local() == tag {
+                return try_data(&mut child).ok().map(|t| t.into_owned());
+            }
+            if let Some(found) = find(&mut child, tag) {
+                return Some(found);
+            }
+        }
         None
     }
+    let mut doc = Document::new(body);
+    let mut root = doc.root_element().ok()?;
+    find(&mut root, tag)
 }
 
-/// A top-level string field of a flat JSON answer.  Enough for the
-/// Admin Ops replies this reads, whose values carry no escapes.
+/// A field of an Admin Ops or driver-hint reply.  The hint wraps its
+/// fields in `results`;  the other replies are flat.
+fn json_field(body: &str, key: &str) -> Option<serde_json::Value> {
+    let v = serde_json::from_str::<serde_json::Value>(body).ok()?;
+    v.get(key).or_else(|| v.get("results")?.get(key)).cloned()
+}
+
+/// A boolean field;  the driver hint renders `true` and
+/// `false` unquoted.
+fn json_bool(body: &str, key: &str) -> Option<bool> {
+    json_field(body, key)?.as_bool()
+}
+
+/// A string field.
 fn json_str(body: &str, key: &str) -> Option<String> {
-    let pat = format!("\"{key}\":");
-    let rest = body[body.find(&pat)? + pat.len()..].trim_start();
-    let rest = rest.strip_prefix('"')?;
-    Some(rest[..rest.find('"')?].to_string())
+    json_field(body, key)?.as_str().map(str::to_string)
 }
 
 /// The pid of the NooBaa endpoint this driver started, if it is up.
