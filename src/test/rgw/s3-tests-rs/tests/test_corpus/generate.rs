@@ -105,7 +105,15 @@ pub async fn bucket_ownership(
             .to_string(),
     };
     m.bucket(b, "ownership-controls", &controls);
-    if observing() && controls != "BucketOwnerEnforced" {
+    /* Adoption writes BucketOwnerEnforced, so only an adopted bucket
+     * must have it.  A bucket still in NooBaa's format -- profile
+     * `base`, served before its adoption -- keeps NooBaa's, which is
+     * no setting.  An unknown profile is held to the adopted rule. */
+    let adopted = match s3_tests_rs::admin::nsfs_get_profile(b).await {
+        Some(p) => p.get("profile").map(String::as_str) != Some("base"),
+        None => true,
+    };
+    if observing() && adopted && controls != "BucketOwnerEnforced" {
         problems.push(format!(
             "{b:?} is an adopted bucket and its object ownership is \
              {controls:?}, not BucketOwnerEnforced"

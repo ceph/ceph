@@ -127,14 +127,15 @@ unadopted:converted	md5-on	manifest		etag	equal	conversion renames the attribute
 
 noobaa:unadopted		manifest		listed-owner	differs	_get_object_owner() returns undefined always, so NooBaa objects have no owner;  answering from the inode uid is an RGW addition
 noobaa:unadopted		manifest		version.*.owner	differs	same cause as listed-owner, per version
-noobaa:unadopted		manifest		ownership-controls	differs	import writes BucketOwnerEnforced on every bucket it imports, because RGW records the bucket's owner on every object (DECISIONS.md 2026-10-11, the object-owner plan);  NooBaa has no setting and the axis reads Unknown
+noobaa:unadopted		manifest		ownership-controls	differs	NooBaa has no setting, and its GetBucketOwnershipControls error carries no code, so the axis reads Unknown;  RGW, serving the same bucket before adoption, returns OwnershipControlsNotFoundError
+unadopted:converted		manifest		ownership-controls	differs	adoption writes BucketOwnerEnforced on every bucket it adopts, because RGW records the bucket's owner on every object (DECISIONS.md 2026-10-11, the object-owner plan);  NooBaa has no setting, and before adoption the bucket reads as NooBaa's, OwnershipControlsNotFoundError
 noobaa:unadopted		manifest		in-flight-initiator	differs	NooBaa records no initiator for an upload and reports a placeholder;  RGW reports the bucket's owner, deduced (DECISIONS.md 2026-10-11, step 3b)
 noobaa:unadopted		manifest		in-flight-owner	differs	same as in-flight-initiator
 noobaa:unadopted		manifest		log-target-policy	absent	the outcome of applying a policy to the log target, which only the generating pass does;  an observing pass applies nothing (generate.rs)
 noobaa:unadopted		manifest		request-payment.payer-read	absent	NooBaa answers 501 NotImplemented to PutBucketRequestPayment, so its pass reads no payer back;  RGW reports its default payer, BucketOwner
-noobaa:unadopted		manifest	object sc-configured	refused	absent	NooBaa refuses the configured class with InvalidStorageClass, so the object is never written;  an outcome of a write, which only the generating pass has
-noobaa:unadopted		manifest	object sc-configured	declared-class	absent	same object:  the observing pass derives the class it would have asked for (storage.rs), and NooBaa's pass, refused, recorded none
-noobaa:unadopted		manifest		observed	absent	an observing pass's finding that an object it derived was never written;  the generating pass knows that from its own refusal, recorded as `refused`
+noobaa:unadopted		manifest	object sc-configured	error	absent	NooBaa rejects the configured class with InvalidStorageClass, so the object is never written;  an outcome of a write, which only the generating pass has
+noobaa:unadopted		manifest	object sc-configured	declared-class	absent	same object:  the observing pass derives the class it would have asked for (storage.rs), and NooBaa's pass, rejected, recorded none
+noobaa:unadopted		manifest		observed	absent	an observing pass's finding that an object it derived was never written;  the generating pass knows that from its own rejected write, recorded as `error`
 noobaa:unadopted		inventory		xattr:security.selinux	filtered	not written by either gateway;  the host's policy put it there and it differs per machine.  The inventory writer drops it rather than listing it here
 noobaa:unadopted		manifest		put-*	absent	the outcome of a write, and only the capture that wrote has one.  An observing pass -- how capture/rgw is taken, since it must not create objects in the tree it is describing -- records no put-status, put-refused or put-message.  Keyed on the prefix because a refused key has three of them.  `capture-mode` on the bucket says which kind of capture a manifest is
 noobaa:unadopted		manifest		capture-mode	differs	it says which kind of capture this is, so it differs by construction -- and the rows above are conditioned on it.  Listed rather than filtered, because a reader comparing two manifests needs to see which is which before trusting anything else
@@ -144,10 +145,11 @@ noobaa:unadopted		manifest		delete-marker-id-reported	absent	whether the DELETE 
 noobaa:unadopted		manifest		versions-before-suspend	absent	the axis counts what its own puts reported either side of suspending the bucket.  An observing pass suspends nothing and puts nothing;  what the tree holds is in version.* instead
 noobaa:unadopted		manifest		versions-after-suspend	absent	same
 noobaa:unadopted		manifest		*.accepted	absent	bucket configuration:  whether applying it succeeded.  An observing pass applies nothing -- and must not, since clearing and re-applying would destroy the configuration it is there to describe
-noobaa:unadopted		manifest		*.refused	absent	bucket configuration:  the code a refused apply returned.  Emitted with <none> when it was accepted, so it is always present in a generating capture and never in an observing one
+noobaa:unadopted		manifest		*.error	absent	bucket configuration:  the code a failed apply returned.  Emitted with <none> when it was accepted, so it is always present in a generating capture and never in an observing one
 noobaa:unadopted		manifest		warmed-with	differs	the key count a warming listing saw, taken partway through the run -- so it reports the harness's own sequence rather than the tree, and differs between any two passes that build the tree differently.  A fact about the capture, not about what was captured
 noobaa:unadopted		manifest		*.gained	absent	which stored names changed when the configuration was applied.  Differential, so it needs a before and an after that only an applying pass has
 noobaa:unadopted		manifest		*.present	absent	the observing pass's counterpart to `.gained`:  which stored names are there, absolutely rather than differentially.  Present only in an observed capture, which is the same kind of row in the other direction
+unadopted:converted		manifest		*.present	differs	which stored names hold the bucket's configuration:  before adoption, the fields of NooBaa's configuration store, `buckets/<name>.json`, which P5 reads in place;  adoption writes them as RGW's attributes on the bucket directory
 noobaa:unadopted		manifest		parts-listed	absent	from ListParts, which needs an upload id -- an outcome only the pass that created the upload has.  An observing capture does not ask
 noobaa:unadopted		manifest		part.*.size	absent	same:  the per-part facts come from ListParts on an upload still in flight
 
@@ -181,8 +183,8 @@ unadopted:converted		inventory		xattr:user.*	vanishes	user metadata is plain use
 #       (NB_KEYS, xattr_strategy.cc:131) rather than recomputing it.
 #       One tree, one set of ids, all three captures.
 #
-#   *.refused is **fixed in the generator**, not here:  the field is
-#       emitted whether or not a configuration was refused, with
+#   *.error is **fixed in the generator**, not here:  the field is
+#       emitted whether or not a configuration was rejected, with
 #       <none> where it was not, so a capability divergence is one
 #       changed value rather than a removed line and an added one.
 #       Same for log-target-policy, whose subject was a random bucket
