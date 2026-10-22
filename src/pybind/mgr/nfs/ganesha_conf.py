@@ -1,5 +1,5 @@
 import errno
-from typing import cast, List, Dict, Any, Optional, TYPE_CHECKING
+from typing import cast, List, Dict, Any, Optional, Set, TYPE_CHECKING
 from os.path import isabs
 
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
@@ -410,6 +410,13 @@ class CephUsers:
 
     def remove_fs(self, fs_name: str) -> None:
         self.users = [u for u in self.users if u.filesystem != fs_name]
+
+    def remove_users(self, fs_name: str, user_ids: Set[str]) -> None:
+        """Drop named identities from the pool of fs_name, keep the rest."""
+        self.users = [
+            u for u in self.users
+            if u.filesystem != fs_name or u.user_id not in user_ids
+        ]
 
 
 class Client:

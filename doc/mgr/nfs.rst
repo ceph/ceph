@@ -98,10 +98,18 @@ Pool users are removed when the last ``cmount_path=/`` export for that
 filesystem is deleted. They are rotated by ``ceph nfs cluster rotate-key``
 along with the other export keys, see `Rotate NFS Cluster Keys`_.
 
-``clients_per_pool`` is immutable after cluster creation. It cannot be set or
-changed on an already created nfs cluster. To change the pool size, delete
-the cluster and create a new one with the new value.
 RGW exports are not supported by client-pool mode.
+
+.. note:: ``clients_per_pool`` can be set on an NFS cluster that does not use
+          a pool yet, and raised on one that does, but never lowered. An apply
+          that does not mention ``clients_per_pool`` leaves the pool as it is
+          rather than turning it off. To shrink or disable a pool, delete the
+          cluster and create a new one.
+
+.. warning:: Enabling or raising ``clients_per_pool`` on an existing cluster is
+             disruptive. The pool size is part of the generated
+             ``ganesha.conf``, so the orchestrator redeploys every NFS daemon
+             of the cluster to apply it.
 
 To deploy NFS with a high-availability front-end (virtual IP and load balancer), add the
 ``--ingress`` flag and specify a virtual IP address. This will deploy a combination

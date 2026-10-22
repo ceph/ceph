@@ -4980,7 +4980,12 @@ Then run the following:
         return self._apply(spec)
 
     def _check_nfs_clients_per_pool(self, spec: NFSServiceSpec) -> None:
-        """clients_per_pool is immutable after NFS cluster creation."""
+        """clients_per_pool may be enabled or grown, never shrunk or removed.
+
+        Growing a pool only adds CephX users, so the exports keep working
+        through it. Shrinking one would have to retire users that a running
+        Ganesha still holds handles for, so it stays a recreate.
+        """
         name = spec.service_name()
         if name not in self.spec_store:
             return
@@ -4993,13 +4998,16 @@ Then run the following:
         old_n = getattr(existing, 'clients_per_pool', None)
         new_n = getattr(spec, 'clients_per_pool', None)
         if new_n is None:
+            # An apply that stays silent about the pool leaves it as it is
+            # rather than turning it off.
             spec.clients_per_pool = old_n
             return
-        if old_n != new_n:
+        if old_n is not None and new_n < old_n:
             raise OrchestratorError(
-                "clients_per_pool can only be set when creating an NFS cluster "
-                "and cannot be changed. Delete the cluster and create a new one "
-                "to use a different value."
+                f"clients_per_pool cannot be lowered from {old_n} to {new_n}. "
+                "It can be set on an NFS cluster that does not use a CephFS "
+                "client pool yet, or raised on one that does, but lowering it "
+                "requires deleting the cluster and creating a new one."
             )
 
     @handle_orch_error

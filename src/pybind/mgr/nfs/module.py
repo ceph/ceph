@@ -314,6 +314,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
 
+    # This method is called by the cephadm module (../cephadm/services/nfs.py)
+    # when an NFS service spec enables or raises clients_per_pool, just before
+    # the daemons are reconfigured for it. Do not change the interface without
+    # updating the cephadm code.
+    def reconcile_client_pool(self, cluster_id: str, clients_per_pool: int) -> List[str]:
+        """Top up the CephFS client pool of a cluster to clients_per_pool users.
+
+        Lets ``clients_per_pool`` be enabled or raised on an NFS cluster that
+        already has exports, without recreating them.
+        """
+        return self.export_mgr.reconcile_client_pool(cluster_id, clients_per_pool)
+
     def fetch_nfs_cluster_obj(self) -> NFSCluster:
         return self.nfs
 
