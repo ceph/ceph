@@ -748,7 +748,13 @@ The relevant erasure-code profile properties are as follows:
 
 .. prompt:: bash $
 
-   ceph osd crush rule create-erasure {name} {profile-name}
+   ceph osd crush rule create-erasure {name} {profile-name} [{num_zones}]
+
+``num_zones`` (default ``1``) is the number of zones that the rule spans. A
+rule over more than one zone places the ``k+m`` shards in each of
+``num_zones`` buckets of the profile's ``crush-zone-failure-domain`` type, or
+of :confval:`osd_pool_default_zone_failure_domain` if the profile does not set
+one.
 
 .. note:: When creating a new pool, it is not necessary to create the rule
    explicitly. If only the erasure-code profile is specified and the rule
@@ -763,31 +769,34 @@ Create the following CRUSH rule for a stretch cluster spread across geographical
       id 2
       type replicated
       step take {root}
-      step choose firstn {zones} type {zone-failure-domain}
-      step chooseleaf firstn {num-replica-per-zone} type {host-failure-domain}
+      step choose firstn {num_zones} type {zone_failure_domain}
+      step chooseleaf firstn {num_replica_per_zone} type {osd_failure_domain}
       step emit
    }
+
+If ``{osd_failure_domain}`` is ``osd``, the rule uses ``step choose firstn`` instead of
+``step chooseleaf firstn``.
 
 Unless the ``--force`` flag is used, the command performs several validation
 checks on the CRUSH hierarchy:
 
 1. **Number of zones**: The hierarchy under ``root`` must contain at least
-   ``zones`` buckets of type ``zone-failure-domain``.
-2. **Items per zone**: Each zone bucket must contain at least ``num-replica-per-zone`` items of type
-   ``osd-failure-domain``.
-3. **OSD presence**: Each ``osd-failure-domain`` bucket must contain at least
+   ``num_zones`` buckets of type ``zone_failure_domain``.
+2. **Items per zone**: Each zone bucket must contain at least ``num_replica_per_zone`` items of type
+   ``osd_failure_domain``.
+3. **OSD presence**: Each ``osd_failure_domain`` bucket must contain at least
    one OSD.
 
 To create a rule for a replicated pool in stretch mode, run a command of the following form:
 
 .. prompt:: bash $
 
-   ceph osd crush rule create-stretch-replicated [{name}] [{root}] [{zone-failure-domain}]
-   [{osd-failure-domain}] [{zones}] [{num-replica-per-zone}] [--force] [{class}]
+   ceph osd crush rule create-stretch-replicated [{rule_name}] [{root}] [{zone_failure_domain}]
+   [{osd_failure_domain}] [{num_zones}] [{num_replica_per_zone}] [--force] [{class}]
 
 For details on this command's parameters, see the following:
 
-``name``
+``rule_name``
    :Description: The name of the rule.
    :Type: String
    :Required: No
@@ -799,25 +808,25 @@ For details on this command's parameters, see the following:
    :Required: No
    :Default: ``osd_pool_default_root`` (``default``)
 
-``zone-failure-domain``
+``zone_failure_domain``
    :Description: The CRUSH bucket type used for the top-level distribution (zones).
    :Type: String
    :Required: No
    :Default: ``osd_pool_default_zone_failure_domain`` (``datacenter``)
 
-``osd-failure-domain``
+``osd_failure_domain``
    :Description: The CRUSH bucket type used for the second-level distribution within each zone.
    :Type: String
    :Required: No
    :Default: ``osd_pool_default_osd_failure_domain`` (``host``)
 
-``zones``
+``num_zones``
    :Description: The number of zones expected in the root.
    :Type: Integer
    :Required: No
    :Default: ``2``
 
-``num-replica-per-zone``
+``num_replica_per_zone``
    :Description: The expected number of replica failure-domain to choose per zone.
    :Type: Integer
    :Required: No

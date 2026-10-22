@@ -561,7 +561,7 @@ You may set values for the following keys:
 
 .. describe:: size
    
-   :Description: Sets the number of replicas for objects in the pool. For further details, see `Setting the Number of RADOS Object Replicas`_. This may be set only for ``replicated`` pools. EC pools will _report_ a ``size`` equal to K+M but this value may not be directly _set_.
+   :Description: Sets the number of replicas for objects in the pool. For further details, see `Setting the Number of RADOS Object Replicas`_. This may be set only for ``replicated`` pools with ``num_zones`` 1: for a pool over more zones, set ``replica``, the number of replicas in each zone, instead (see :ref:`stretch_mode`). EC pools will _report_ a ``size`` equal to K+M but this value may not be directly _set_.
    :Type: Integer
 
 .. _min_size:
@@ -1000,7 +1000,7 @@ To set values for a stretch pool, run a command of the following form:
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} \
        {peering_crush_bucket_target} {peering_crush_bucket_barrier} \
-       {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
+       {crush_rule} {size} {min_size}
 
 or, giving the replicas in each zone in place of ``{size}``:
 
@@ -1008,8 +1008,7 @@ or, giving the replicas in each zone in place of ``{size}``:
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} \
        {peering_crush_bucket_target} {peering_crush_bucket_barrier} \
-       {crush_rule} --min_size {min_size} --replica {replica} \
-       [--yes-i-really-mean-it]
+       {crush_rule} --min_size {min_size} --replica {replica}
 
 This command configures an individual stretch pool, which is an alternative to
 stretch mode. It fails while stretch mode is enabled, and stretch mode cannot be
@@ -1137,7 +1136,7 @@ Here are the breakdowns of the arguments:
    ``k+m``, and ``min_size`` must be between ``k`` and ``k+m``.
    
    :Type: Integer
-   :Required: Yes.
+   :Required: Yes, unless ``--replica`` is given.
 
 .. describe:: {min_size}
             

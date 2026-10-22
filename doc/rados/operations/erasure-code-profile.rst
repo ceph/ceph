@@ -153,9 +153,11 @@ Where:
 
 ``--force``
 
-:Description: Allow setting a non-4K-aligned stripe_unit.
+:Description: Allow setting a non-4K-aligned stripe_unit. With
+              ``--yes-i-really-mean-it``, also allow a ``blaum_roth``
+              profile whose ``w+1`` is not prime.
 
-:Type: String
+:Type: Boolean
 :Required: No.
 
 ``--yes-i-really-mean-it``
@@ -166,7 +168,7 @@ Where:
               pool's data. A profile that no pool uses, such as
               ``default``, can be changed without it.
 
-:Type: String
+:Type: Boolean
 :Required: No.
 
 osd erasure-code-profile rm
