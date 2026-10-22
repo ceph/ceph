@@ -27,6 +27,7 @@
                 <cds-tree-node
                   [node]="node"
                   [depth]="depth"
+                  (nodetoggle)="onNodeToggle($event)"
                 >
                   <ng-container *ngIf="node?.children && node?.children?.length">
                     <ng-container *ngFor="let child of node.children; let i = index">
