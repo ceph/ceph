@@ -16,7 +16,7 @@ void delta_t::replay(LogKVNodeLayout &l) {
   } else if (op == op_t::ADD_PREV) {
     l.set_prev_node(prev);
   } else if (op == op_t::ADD_DUP_ADDR) {
-    l.set_dup_tail(prev);
+    l.set_dup_head(prev);
   } else if (op == op_t::INIT) {
     l.set_last_pos(0); 
     l.set_size(0);
@@ -74,13 +74,13 @@ void LogNode::set_prev_addr(laddr_t l) {
   set_prev_node(l);
 }
 
-void LogNode::set_dup_tail_addr(laddr_t l) {
+void LogNode::set_dup_head_addr(laddr_t l) {
   auto p = maybe_get_delta_buffer();
   if (p) {
-    journal_append_dup_tail_addr(l, p);
+    journal_append_dup_head_addr(l, p);
     return;
   }
-  set_dup_tail(l);
+  set_dup_head(l);
 }
 
 void LogNode::set_init_vars() {
