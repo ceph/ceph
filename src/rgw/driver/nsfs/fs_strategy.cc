@@ -463,8 +463,16 @@ int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
     int ret = ::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0);
     if (ret < 0) {
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: fsetxattr " << name
-        << " failed: " << cpp_strerror(err) << dendl;
+      /* a denial is the caller's to handle -- raise site 1 retries it
+       * raised, the access model performs it, or the caller fails and
+       * says so -- so it is not an error here */
+      if ((err == EACCES) || (err == EPERM)) {
+        ldpp_dout(dpp, 10) << "fsetxattr " << name
+          << " denied: " << cpp_strerror(err) << dendl;
+      } else {
+        ldpp_dout(dpp, 0) << "ERROR: fsetxattr " << name
+          << " failed: " << cpp_strerror(err) << dendl;
+      }
       return -err;
     }
   }
@@ -482,8 +490,14 @@ int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
     int ret = ::fremovexattr(fd, name.c_str());
     if (ret < 0 && errno != ENODATA) {
       int err = errno;
-      ldpp_dout(dpp, 0) << "ERROR: fremovexattr " << name
-        << " failed: " << cpp_strerror(err) << dendl;
+      /* a denial is the caller's to handle, as set_xattrs()'s is */
+      if ((err == EACCES) || (err == EPERM)) {
+        ldpp_dout(dpp, 10) << "fremovexattr " << name
+          << " denied: " << cpp_strerror(err) << dendl;
+      } else {
+        ldpp_dout(dpp, 0) << "ERROR: fremovexattr " << name
+          << " failed: " << cpp_strerror(err) << dendl;
+      }
       return -err;
     }
   }
