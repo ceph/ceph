@@ -120,32 +120,11 @@ bool LogNode::is_removable() {
 }
 
 void LogNode::set_cur_bitmap(uint32_t begin, uint32_t end) {
-  d_bitmap_t bitmap = get_d_bitmap();
-  auto p = maybe_get_delta_buffer();
-  if (p) {
-    auto ret = p->get_latest_d_bitmap();
-    if (ret) {
-      auto biter = (*ret).cbegin();
-      decode(bitmap, biter);
-    }
-  } 
+  d_bitmap_t bitmap = get_live_bitmap();
   bitmap.set_bitmap_range(begin, end);
   bufferlist bl;
   encode(bitmap, bl);
   append_remove(bl);
-}
-
-d_bitmap_t LogNode::get_cur_bitmap() {
-  d_bitmap_t bitmap = get_d_bitmap();
-  auto p = maybe_get_delta_buffer();
-  if (p) {
-    auto ret = p->get_latest_d_bitmap();
-    if (ret) {
-      auto biter = (*ret).cbegin();
-      decode(bitmap, biter);
-    } 
-  } 
-  return bitmap;
 }
 
 void LogNode::set_bitmap(d_bitmap_t map) {
@@ -154,15 +133,13 @@ void LogNode::set_bitmap(d_bitmap_t map) {
   append_remove(bl);
 }
 
-d_bitmap_t LogNode::get_live_bitmap() {
-  d_bitmap_t bitmap;
+d_bitmap_t LogNode::get_live_bitmap() const {
+  d_bitmap_t bitmap = get_d_bitmap();
   if (auto p = maybe_get_delta_buffer()) {
     if (auto ret = p->get_latest_d_bitmap()) {
       auto it = (*ret).cbegin();
       decode(bitmap, it);
     }
-  } else {
-    bitmap = get_d_bitmap();
   }
   return bitmap;
 }
@@ -252,39 +229,40 @@ void LogNode::remove_last_entry()
 
 bool LogNode::log_less_than(std::string_view str) const
 {
-  std::string last_key = get_last_key();
-  if (is_log_key(last_key)) {
+  if (get_size() == 0) {
+    return false;
+  }
+  // the live log keys of a node are in order, so a live last key is enough
+  d_bitmap_t bitmap = get_live_bitmap();
+  std::string_view last_key = iter_rbegin()->get_key_view();
+  if (!bitmap.is_set(get_size() - 1) && is_log_key(last_key)) {
     return last_key < str;
   }
-  auto iter = iter_begin();
   bool all_less = false;
-  // perform full traversal to figure out last entry < str
-  while(iter != iter_end()) {
-    std::string key = iter->get_key();
-    if (is_log_key(key)) {
-      if (key >= str) {
-        return false;
-      }
-      all_less = key < str;
+  for_each_live_entry([&](const auto &ent, uint32_t index) -> bool {
+    std::string_view key = ent.get_key_view();
+    if (!is_log_key(key)) {
+      return false;
     }
-    iter++;
-  };
+    all_less = key < str;
+    return !all_less;
+  });
   return all_less;
 }
 
 bool LogNode::log_has_larger_than(std::string_view str) const
 {
-  auto iter = iter_begin();
-  // return true if the first log entry > str
-  while(iter != iter_end()) {
-    std::string key = iter->get_key();
+  // return true if the first live log entry > str
+  bool larger = false;
+  for_each_live_entry([&](const auto &ent, uint32_t index) -> bool {
+    std::string_view key = ent.get_key_view();
     if (!is_log_key(key)) {
-      iter++;
-      continue;
+      return false;
     }
-    return key > str;
-  };
-  return false;
+    larger = key > str;
+    return true;
+  });
+  return larger;
 }
 
 bool LogNode::can_ow()
