@@ -4883,6 +4883,63 @@ TEST_F(NSFSImpersonatedRenameTest, ATagRemovalRunsAsItsRequesterUnderEachModel)
 	 "other than the gateway";
 }
 
+/* The owner's demote and delete marker run as the owner (phase C's
+ * validation clause, the safe_link pair:  the writer's demote,
+ * `demote_current_version()`, and the delete marker's link and CAS
+ * unlink in `delete_obj()`).  Under posix-strict nothing raises, so
+ * each succeeds only with credentials that may write the owner's 0770
+ * `.versions` and link the owner's file -- which the gateway, unraised,
+ * cannot (the premise) -- and `raised()` not moving shows no raise did
+ * it.  The marker is a file the delete creates, so its uid is the
+ * identity observed directly.  The s3-native arms are
+ * UnderS3NativeAnotherIdentitysPutIsRaised and ...DeleteIsRaised. */
+TEST_F(NSFSImpersonatedRenameTest, TheOwnersDemoteAndMarkerRunAsTheOwner)
+{
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  const uint64_t before = raised();
+
+  /* the writer's demote */
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  ASSERT_EQ(versions_in("src").size(), 1u) << "the overwrite demoted nothing";
+
+  /* the premise:  the gateway, unraised, cannot link into `.versions` */
+  int premise = 0;
+  std::thread fresh([&] {
+    const int src = ::open((bucket_path() / "src").c_str(),
+			   O_RDONLY | O_DIRECTORY);
+    const int vfd = ::open((bucket_path() / "src" / ".versions").c_str(),
+			   O_RDONLY | O_DIRECTORY);
+    premise = ((src < 0) || (vfd < 0)) ? -errno
+	: ((::linkat(src, "k", vfd, "probe", 0) < 0) ? -errno : 0);
+    if (src >= 0) {
+      ::close(src);
+    }
+    if (vfd >= 0) {
+      ::close(vfd);
+    }
+  });
+  fresh.join();
+  EXPECT_TRUE((premise == -EACCES) || (premise == -EPERM))
+      << "the gateway could link into the owner's .versions: "
+      << cpp_strerror(-premise);
+
+  /* the delete marker's demote, its CAS unlink, and the marker */
+  const int ret = delete_as(alice, "src/k");
+  ASSERT_EQ(ret, 0) << "the delete failed: " << cpp_strerror(-ret);
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+  const auto hist = versions_in("src");
+  ASSERT_EQ(hist.size(), 3u) << "two demoted versions and the marker";
+  for (const auto& v : hist) {
+    EXPECT_EQ(owned("src/.versions/" + v).uid, owner_uid)
+	<< v << " is not the owner's";
+  }
+
+  EXPECT_EQ(raised(), before)
+      << "posix-strict raised, so the outcomes above do not name the "
+	 "credentials";
+}
+
 /* posix-strict:  another identity's rename out of the owner's key
  * directory is denied, and nothing moves. */
 TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
