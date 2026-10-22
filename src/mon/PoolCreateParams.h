@@ -45,6 +45,8 @@ struct PoolCreateParams {
   std::string autoscale_mode;
   bool bulk = false;
   bool crimson = false;
+  // allows a single-zone pool a stripe_unit that is not a multiple of 4096
+  bool yes_i_really_mean_it = false;
   std::set<std::string> given;  // the parameters given on the command line
 
   bool is_given(const std::string& param) const {

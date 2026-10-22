@@ -603,6 +603,40 @@ TEST_F(PoolParamsTest, ErasureProfileNormalized) {
   EXPECT_EQ("plugin refuses the profile", ss.str());
 }
 
+// Test a stripe unit that is not a multiple of 4096 fails, naming the
+// profile, unless --yes-i-really-mean-it is given
+TEST_F(PoolParamsTest, OddStripeUnitNeedsYesIReallyMeanIt) {
+  named_profile["stripe_unit"] = "2K";
+  PoolCreateParams p = with({}, ERASURE);
+  ASSERT_EQ(0, use_profile(p, "myprofile", &named_profile, &ss));
+  EXPECT_EQ(-EINVAL, check(p));
+  EXPECT_EQ("stripe_unit should be a multiple of 4096 bytes for best "
+            "performance, not 2K (erasure code profile 'myprofile'); only "
+            "ceph osd pool create --yes-i-really-mean-it accepts it",
+            ss.str());
+  apply_command_line(p, {{"yes_i_really_mean_it", true}});
+  EXPECT_EQ(0, check(p)) << ss.str();
+}
+
+// Test a pool over zones fails with such a stripe unit even then: it is a
+// FastEC pool
+TEST_F(PoolParamsTest, OddStripeUnitOverZonesFails) {
+  set("osd_pool_default_erasure_code_profile",
+      "plugin=isa k=2 m=1 stripe_unit=2048");
+  EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(2)},
+                                 {"yes_i_really_mean_it", true}}, ERASURE)));
+  EXPECT_EQ("stripe_unit should be a multiple of 4096 bytes, not 2048 "
+            "(erasure code profile 'default'): a pool over zones is a FastEC "
+            "pool, which needs one", ss.str());
+}
+
+// Test a stripe unit that is a multiple of 4096 needs no flag
+TEST_F(PoolParamsTest, AlignedStripeUnitSucceeds) {
+  set("osd_pool_default_erasure_code_profile",
+      "plugin=isa k=2 m=1 stripe_unit=8K");
+  EXPECT_EQ(0, check(with({}, ERASURE))) << ss.str();
+}
+
 // Test a replicated pool does not normalize a profile
 TEST_F(PoolParamsTest, ReplicatedDoesNotNormalize) {
   EXPECT_EQ(0, check(with({})));

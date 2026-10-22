@@ -17815,7 +17815,8 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(CrushWrapper& crush)
           << "'plugin' entry in the erasure_code_profile " << profile;
       return -EINVAL;
     }
-    return normalize_profile("", profile, false, ss);
+    // check_pool_params() checks the stripe unit itself
+    return normalize_profile("", profile, true, ss);
   };
   cluster.validate_stretch = [this, &crush](const string& zone,
                                            int64_t num_zones,

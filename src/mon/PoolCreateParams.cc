@@ -62,7 +62,7 @@ string PoolCreateParams::from_default(const string& param) const
   if (is_given(param)) {
     return "";
   }
-  if (param == "k" || param == "m") {
+  if (param == "k" || param == "m" || param == "stripe_unit") {
     return " (erasure code profile '" +
       (erasure_code_profile.empty() ? string("default") : erasure_code_profile) +
       "')";
@@ -181,6 +181,7 @@ void apply_command_line(PoolCreateParams& p, const cmdmap_t& cmdmap)
     p.crimson = b;
     give("crimson");
   }
+  cmd_getval(cmdmap, "yes_i_really_mean_it", p.yes_i_really_mean_it);
 }
 
 int check_command_line(const PoolCreateParams& p, PoolCommand command,
@@ -319,6 +320,26 @@ int check_pool_params(const PoolCreateParams& p,
     if (cluster.normalize_profile) {
       if (int r = cluster.normalize_profile(profile, ss); r < 0) {
         return r;
+      }
+    }
+    if (auto i = profile.find("stripe_unit"); i != profile.end()) {
+      string err;
+      const int64_t stripe_unit = strict_iecstrtoll(i->second, &err);
+      if (err.empty() && stripe_unit % 4096 != 0) {
+        if (p.num_zones > 1) {
+          *ss << "stripe_unit should be a multiple of 4096 bytes, not "
+              << i->second << p.from_default("stripe_unit")
+              << ": a pool over zones is a FastEC pool, which needs one";
+          return -EINVAL;
+        }
+        if (!p.yes_i_really_mean_it) {
+          *ss << "stripe_unit should be a multiple of 4096 bytes for best "
+              << "performance, not " << i->second
+              << p.from_default("stripe_unit")
+              << "; only ceph osd pool create --yes-i-really-mean-it "
+              << "accepts it";
+          return -EINVAL;
+        }
       }
     }
     // the LRC plugin checks its own k, m and l, and adds local parity chunks
