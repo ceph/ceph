@@ -238,6 +238,7 @@ public:
   const bool migration_ec_opts;
   const int migration_interval;
   std::optional<int> migration_pg_num;
+  std::optional<std::string> migration_ec_profile;
   int initial_migration_delay;
   std::thread pool_migration_thread;
 
@@ -260,6 +261,7 @@ public:
      const bool migration_ec_opts,
      const uint8_t migration_interval,
      std::optional<int> migration_pg_num,
+     std::optional<std::string> migration_ec_profile,
      uint8_t initial_migration_delay,
      uint64_t min_split_size = UINT64_MAX,
      const char *id = 0) :
@@ -289,6 +291,7 @@ public:
     migration_ec_opts(migration_ec_opts),
     migration_interval(migration_interval),
     migration_pg_num(migration_pg_num),
+    migration_ec_profile(migration_ec_profile),
     initial_migration_delay(initial_migration_delay)
     {
       timestamp = _timestamp;
@@ -846,11 +849,16 @@ public:
 
   int start_pool_migration(const std::string &source_name,
                            std::optional<int> pg_num,
-                           std::optional<bool> enable_ec_optimizations) {
+                           std::optional<bool> enable_ec_optimizations,
+                           std::optional<std::string> ec_profile) {
     auto const formatter = std::make_shared<JSONFormatter>(false);
     std::ostringstream oss;
     messaging::osd::OSDPoolMigrateRequest pool_mig_request{source_name, pg_num,
       enable_ec_optimizations, true};
+    if (ec_profile) {
+      pool_mig_request.pool_type = "erasure";
+      pool_mig_request.erasure_code_profile = ec_profile;
+    }
     encode_json("OSDPoolMigrateRequest", pool_mig_request, formatter.get());
     formatter.get()->flush(oss);
 
@@ -873,6 +881,7 @@ public:
     int initial_pg_num = get_pool_pg_num(pool_name);
     bool needs_wait = false;
     const bool source_is_erasure = is_pool_erasure(pool_name);
+    const auto initial_ec_profile = get_pool_all(pool_name).erasure_code_profile;
 
     if (initial_migration_delay > 0) {
       cout_prefix() << __func__ << " delaying for " << std::to_string(initial_migration_delay)
@@ -901,9 +910,19 @@ public:
         // the mon inherits the source pool's EC type/profile.
         std::optional<bool> req_ec_opts =
           migration_ec_opts ? std::optional<bool>{true} : std::nullopt;
+        // Alternate between the requested EC profile and the pool's initial
+        // one, so that every migration changes the pool's layout.
+        std::optional<std::string> req_ec_profile;
+        if (migration_ec_profile.has_value()) {
+          auto last_ec_profile = get_pool_all(pool_name).erasure_code_profile;
+          req_ec_profile = (last_ec_profile != migration_ec_profile)
+                             ? migration_ec_profile
+                             : initial_ec_profile;
+        }
         cout_prefix() << __func__ << " starting new pool migration on "
                       << pool_name << std::endl;
-        if (start_pool_migration(pool_name, req_pg_num, req_ec_opts) == -EBUSY) {
+        if (start_pool_migration(pool_name, req_pg_num, req_ec_opts,
+                                 req_ec_profile) == -EBUSY) {
           // not started yet; leave needs_wait unset to retry next iteration
         } else {
           needs_wait = true;
