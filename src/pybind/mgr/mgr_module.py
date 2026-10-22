@@ -1184,6 +1184,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                    runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
                                  'warning', '']))
+        if not [x for x in cls.MODULE_OPTIONS
+                if x['name'] == 'max_command_queue_length']:
+            cls.MODULE_OPTIONS.append(
+                Option(name='max_command_queue_length', type='uint',
+                       default=0, runtime=True,
+                       desc='Max commands queued or running in the module '
+                            'before new ones get EAGAIN (0 = unlimited)'))
 
         for o in cls.MODULE_OPTIONS:
             if 'default' in o:
