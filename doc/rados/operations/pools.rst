@@ -123,10 +123,55 @@ To show all hidden pools, pass the ``--show-all`` flag:
      pool 4 '.migrate-2' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32 autoscale_mode off last_change 119 flags hashpspool,nopgchange,split_reads,supports_omap stripe_width 0 read_balance_score 1.50
      pool 5 'test-pool' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32 autoscale_mode on last_change 119 flags hashpspool,split_reads,supports_omap stripe_width 0 read_balance_score 1.50
 
+In JSON format there is no indentation to convey the structure of a migration chain.
+Instead, the relationship is expressed through the ``migration_target``,
+``migration_root``, ``migrating_pgs`` and ``lowest_migrated_pg`` fields:
+
+.. prompt:: bash $
+
+   ceph osd pool ls detail --show-all -f json-pretty
+
+The following output describes the same chain as the plain-text example above
+(unrelated pool fields are omitted for brevity)::
+
+   [
+       {
+           "pool_id": 3,
+           "pool_name": ".migrate-1",
+           "migration_target": 5,
+           "migrating_pgs": "[]",
+           "lowest_migrated_pg": 0
+       },
+       {
+           "pool_id": 4,
+           "pool_name": ".migrate-2",
+           "migration_target": 5,
+           "migrating_pgs": "[]",
+           "lowest_migrated_pg": 0
+       },
+       {
+           "pool_id": 5,
+           "pool_name": "test-pool",
+           "migration_root": 3,
+           "migrating_pgs": "[]",
+           "lowest_migrated_pg": 0
+       }
+   ]
+
+Every source stub carries a ``migration_target`` pointing at the current target
+pool (pool 5 above), and the target pool carries a ``migration_root`` pointing
+back at the original source pool (pool 3). While a migration is actively running,
+the target pool additionally reports a ``migration_src`` field, the source pool
+being migrated lists its in-flight placement groups in ``migrating_pgs``, and
+``lowest_migrated_pg`` tracks how far the migration has progressed.
+
 A full pool migration chain is displayed with the original source pool
 (the source pool with the lowest pool ID) coming first, followed by the other
-pools in the migration chain indented and in assending pool ID order,
-with the last indented pool being the current target pool.
+pools in the migration chain indented and in ascending pool ID order,
+with the last indented pool being the current target pool. Every source pool is kept
+as a stub pool which points to the current target pool until the target pool is
+deleted. Deleting the current target pool deletes the entire pool migration chain in
+a single operation.
 
 To retrieve even more information, you can execute this command with the ``--format`` (or ``-f``) option and the ``json``, ``json-pretty``, ``xml`` or ``xml-pretty`` value.
 
@@ -285,7 +330,11 @@ PGs in the source pool (renamed to ``.migrate-<n>``) will be migrated to the new
 pool. The new pool will inherit any configuration values from the source pool that 
 are not explicitly specified in the command. This can be used to perform 
 non-disruptive configuration changes that would not otherwise be possible, 
-such as moving all objects from a replicated pool to an erasure coded pool.
+such as moving all objects from a replicated pool to an erasure coded pool or
+moving objects to a pool that uses a different erasure code profile (including a
+different plugin). This makes it possible to change an erasure coded pool's profile,
+for example to change the plugin or change the k and m values, which cannot otherwise
+be changed in place.
 
 
 .. _associate-pool-to-application:
