@@ -1076,7 +1076,7 @@ private:
 };
 
 class RGWS3VectorGetIndexStats : public RGWS3VectorBase {
-  rgw::s3vector::get_index_stats_t configuration;
+  rgw::s3vector::VectorBucketConfig<rgw::s3vector::get_index_stats_t> configuration;
   rgw::s3vector::get_index_stats_reply_t reply;
 public:
   explicit RGWS3VectorGetIndexStats(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
@@ -1095,7 +1095,7 @@ private:
   }
 
   void execute(optional_yield y) override {
-    const rgw_bucket bucket_id(bucket_ns.name(), configuration.vector_bucket_name);
+    const rgw_bucket bucket_id(bucket_ns.name(), configuration.rest_config.vector_bucket_name);
     std::unique_ptr<rgw::sal::VectorBucket> bucket;
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {

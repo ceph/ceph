@@ -1210,7 +1210,7 @@ namespace rgw::s3vector {
   }
 
   void get_index_stats_t::decode_json(JSONObj* obj) {
-    decode_index_name(vector_bucket_name, index_name, obj);
+    decode_index_name(vector_bucket_name, index_name, index_arn, obj);
   }
 
   void get_index_stats_reply_t::dump(ceph::Formatter* f) const {
@@ -1223,10 +1223,14 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  int get_index_stats(const get_index_stats_t& configuration, rgw::sal::Driver* driver, [[maybe_unused]] const rgw::sal::User* user, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply) {
+  int get_index_stats(const VectorBucketConfig<get_index_stats_t>& operation, rgw::sal::Driver* driver, [[maybe_unused]] const rgw::sal::User* user, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply) {
+    if (!operation.backend_config.storage_mode) {
+      return -EINVAL;
+    }
+    const auto& configuration = operation.rest_config;
     log_configuration(dpp, "GetIndexStats", configuration);
     int open_result = 0;
-    auto table_handle = open_table_with_session_handle(dpp, driver, ns, configuration.vector_bucket_name, configuration.index_name, open_result);
+    auto table_handle = open_table_with_session_handle(dpp, driver, ns, configuration.vector_bucket_name, configuration.index_name, operation.backend_config, open_result);
     if (!table_handle) {
       return -ENOENT;
     }

@@ -455,6 +455,7 @@ struct get_index_reply_t {
 struct get_index_stats_t {
   std::string index_name;
   std::string vector_bucket_name;
+  boost::optional<rgw::ARN> index_arn;
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
@@ -468,7 +469,7 @@ struct get_index_stats_reply_t {
   void dump(ceph::Formatter* f) const;
 };
 
-int get_index_stats(const get_index_stats_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply);
+int get_index_stats(const VectorBucketConfig<get_index_stats_t>& operation, rgw::sal::Driver* driver, const rgw::sal::User* user, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply);
 
 /*
   {
@@ -739,7 +740,7 @@ int query_vectors(const VectorBucketConfig<query_vectors_t>& operation, std::opt
 
 
 // utility functions used by the background manager
-LanceDBConnection* connect(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const bucket_namespace_t& ns, const std::string& vector_bucket_name, int& result);
+LanceDBConnection* connect(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const bucket_namespace_t& ns, const std::string& vector_bucket_name, const BackendConfig& backend_config, int& result);
 LanceDBTable* open_table(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const bucket_namespace_t& ns, const std::string& vector_bucket_name, const std::string& index_name, int& result);
 DistanceMetric get_distance_metric(const LanceDBTable* table, DoutPrefixProvider* dpp);
 LanceDBDistanceType to_lancedb_distance(DistanceMetric metric);

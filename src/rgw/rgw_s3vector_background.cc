@@ -1049,8 +1049,27 @@ private:
 
     // step 3: open table (namespace-scoped; connect uses ns.name() for the
     // vector-bucket storage key and ns.tenant for the backing SAL bucket)
+    // The background process has no per-request backend config, so derive it
+    // from the configured backend and (for the rgw backend) the bucket's
+    // immutable storage mode, mirroring the session-create path.
+    BackendConfig backend_config;
+    const std::string backend_str = cct->_conf.get_val<std::string>("rgw_s3vector_backend");
+    if (int ret = get_backend_type(backend_str, backend_config.backend_type); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: unrecognized backend type: " << backend_str << dendl;
+      return -EINVAL;
+    }
+    if (is_rgw_backend(backend_config.backend_type)) {
+      StorageMode mode;
+      if (int r = get_bucket_storage_mode(this, driver, table_name.ns, bucket_name, mode, null_yield); r < 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to read vector bucket storage mode for "
+            << bucket_name << ": " << r << dendl;
+        return r;
+      }
+      backend_config.storage_mode = mode;
+    }
+
     int connect_result = 0;
-    LanceDBConnection* conn = s3vector::connect(this, driver, table_name.ns, bucket_name, connect_result);
+    LanceDBConnection* conn = s3vector::connect(this, driver, table_name.ns, bucket_name, backend_config, connect_result);
     if (!conn) {
       ldpp_dout(this, 5) << "WARNING: cannot connect to database for "
           << bucket_name << ", skipping" << dendl;
