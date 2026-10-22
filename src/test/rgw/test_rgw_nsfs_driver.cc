@@ -15531,6 +15531,98 @@ TEST_F(NSFSPlaceBucketTest, AUserIsRejectedAsOwner)
       << "the control:  the account may own it";
 }
 
+/* Raise site 1:  a bucket placed over a directory another uid owns at
+ * 0770 still takes its state -- placement's marks, put_info()'s mtime,
+ * an attribute write and a profile change -- because each bucket-state
+ * write raises BUCKET_STATE_CAPS once the gateway is denied.  The
+ * premise is that the gateway, unraised, is denied;  n-plan §4 records
+ * placement rolled back on exactly that, under impersonation -- where
+ * the gateway holds read-search and so opens the directory, and only
+ * the write is denied.  Without impersonation it cannot open another
+ * uid's 0770 directory at all, and placement is refused there, which is
+ * right.  The account the directory belongs to has a row naming its
+ * uid, which placement under impersonation checks.  The driver calls
+ * run on a thread of their own:  a raise takes read-search for the life
+ * of the thread, which would spoil other tests' controls on this one. */
+TEST_F(NSFSPlaceBucketTest, ABucketOverAnotherUidsDirectoryTakesItsState)
+{
+  static constexpr uid_t theirs_uid = 70170;
+  auto impersonate = [](const char* v) {
+    g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
+    g_conf().apply_changes(nullptr);
+  };
+  nsfs::Identity row;
+  row.key = to_string(account);
+  row.uid = theirs_uid;
+  row.gid = theirs_uid;
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+  impersonate("true");
+  auto restore = make_scope_guard([&] { impersonate("false"); });
+  const sf::path at = elsewhere() / "theirs";
+  sf::create_directories(at);
+  ASSERT_EQ(::chmod(at.c_str(), 0770), 0);
+  const int cret = with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
+    [&]() -> int {
+      return (::chown(at.c_str(), theirs_uid, theirs_uid) < 0) ? -errno : 0;
+    });
+  if (cret == -EPERM) {
+    GTEST_SKIP() << "the binary cannot give the directory away;  run the "
+		    "setcap step";
+  }
+  ASSERT_EQ(cret, 0);
+  /* given back, pass or fail, so the fixture's teardown can remove it */
+  auto give_back = make_scope_guard([&] {
+    (void) with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
+      [&]() -> int {
+	return (::chown(at.c_str(), ::geteuid(), ::getegid()) < 0) ? -errno : 0;
+      });
+  });
+
+  int premise = 0;
+  std::thread fresh([&] {
+    premise = (::setxattr(at.c_str(), "user.nsfs.probe", "x", 1, 0) < 0)
+	? -errno : 0;
+  });
+  fresh.join();
+  ASSERT_EQ(premise, -EACCES)
+      << "the premise:  the gateway, unraised, could write the directory";
+
+  std::thread work([&] {
+    ASSERT_EQ(place("theirs", at), 0) << "placement's marks were denied";
+    std::unique_ptr<rgw::sal::Bucket> b;
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "theirs"}, &b,
+				  null_yield), 0);
+    b->get_info().flags |= BUCKET_VERSIONED;
+    EXPECT_EQ(b->put_info(env->dpp, false, ceph::real_clock::now(),
+			  null_yield), 0) << "put_info()'s mtime and info";
+    Attrs a;
+    bufferlist v;
+    v.append("site 1");
+    a["user.rgw.probe"] = v;
+    EXPECT_EQ(b->merge_and_store_attrs(env->dpp, a, null_yield), 0)
+	<< "an attribute write";
+    uint32_t had = 0;
+    std::string had_profile;
+    EXPECT_EQ(driver->set_bucket_profile(
+		  env->dpp, null_yield, "theirs",
+		  *nsfs::extensions_for_profile("strong"), &had, &had_profile),
+	      0) << "a profile change";
+
+    std::unique_ptr<rgw::sal::Bucket> again;
+    ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "theirs"}, &again,
+				  null_yield), 0);
+    EXPECT_TRUE(again->get_info().versioned()) << "the info did not persist";
+    EXPECT_TRUE(again->get_attrs().count("user.rgw.probe"))
+	<< "the attribute did not persist";
+    uint32_t ext = 0;
+    std::string pname;
+    ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, "theirs", &ext,
+					 &pname), 0);
+    EXPECT_EQ(pname, "strong") << "the profile change did not persist";
+  });
+  work.join();
+}
+
 /* Each rejection writes nothing:  no row, and nothing on the directory. */
 TEST_F(NSFSPlaceBucketTest, RejectionsWriteNothing)
 {

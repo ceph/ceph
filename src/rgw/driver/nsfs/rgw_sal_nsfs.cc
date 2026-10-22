@@ -7340,6 +7340,29 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 static constexpr uint64_t BUCKET_DELETE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE);
 
+/* What a bucket-state write raises, and nothing else raises (raise
+ * site 1):  `CAP_DAC_OVERRIDE` for an attribute on a bucket directory
+ * the gateway does not own, and `CAP_FOWNER` for put_info()'s explicit
+ * mtime on one, which DAC_OVERRIDE does not grant (n-plan §5.1,
+ * measured).  Taken only after the call is denied:  a gateway on its
+ * own directories never raises, so one started without the capability
+ * still serves them. */
+static constexpr uint64_t BUCKET_STATE_CAPS =
+  nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
+
+/* `fn` on the bucket directory as the gateway, raised if denied.  At the
+ * bucket-state operations themselves, not inside FSEnt::write_attrs(),
+ * which object attribute writes share (§5.2). */
+static int write_bucket_state(const DoutPrefixProvider* dpp,
+			      const std::function<int()>& fn)
+{
+  const int ret = fn();
+  if ((ret != -EACCES) && (ret != -EPERM)) {
+    return ret;
+  }
+  return nsfs::with_capabilities(dpp, BUCKET_STATE_CAPS, fn);
+}
+
 int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y)
@@ -7437,15 +7460,14 @@ int NSFSBucket::set_owns_storage(const DoutPrefixProvider* dpp, bool owns)
   if (ret < 0) {
     return ret;
   }
-  if (owns) {
-    if ((::fremovexattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR) < 0) &&
-	(errno != ENODATA)) {
-      ret = -errno;
+  ret = write_bucket_state(dpp, [&]() -> int {
+    if (owns) {
+      return ((::fremovexattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR) < 0) &&
+	      (errno != ENODATA)) ? -errno : 0;
     }
-  } else if (::fsetxattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR, "0", 1,
-			 0) < 0) {
-    ret = -errno;
-  }
+    return (::fsetxattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR, "0", 1,
+			0) < 0) ? -errno : 0;
+  });
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: recording whether bucket " << get_name()
       << " owns its storage: " << cpp_strerror(-ret) << dendl;
@@ -7486,9 +7508,11 @@ int NSFSBucket::unadopt(const DoutPrefixProvider* dpp)
     if (! std::string_view(name).starts_with(ours)) {
       continue;
     }
-    if ((::fremovexattr(dir->get_fd(), name.c_str()) < 0) &&
-	(errno != ENODATA)) {
-      ret = -errno;
+    ret = write_bucket_state(dpp, [&]() -> int {
+      return ((::fremovexattr(dir->get_fd(), name.c_str()) < 0) &&
+	      (errno != ENODATA)) ? -errno : 0;
+    });
+    if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: removing " << name << " from bucket "
 	<< get_name() << ": " << cpp_strerror(-ret) << dendl;
       return ret;
@@ -7653,9 +7677,11 @@ int NSFSBucket::mark_converting(const DoutPrefixProvider* dpp)
    * only other format there is;  `load()` rejects a value it has no
    * reader for rather than guessing. */
   const std::string v{nsfs::CONVERTING_FROM_NOOBAA};
-  if (::fsetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
-		  v.data(), v.size(), 0) < 0) {
-    ret = -errno;
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return (::fsetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
+			v.data(), v.size(), 0) < 0) ? -errno : 0;
+  });
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::CONVERTING_XATTR
       << " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -7676,9 +7702,11 @@ int NSFSBucket::clear_converting(const DoutPrefixProvider* dpp)
 
   /* Absent already is the state being asked for, so ENODATA is not an
    * error -- a resumed run clears a marker a previous one removed. */
-  if ((::fremovexattr(dir->get_fd(), nsfs::CONVERTING_XATTR) < 0) &&
-      (errno != ENODATA)) {
-    ret = -errno;
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return ((::fremovexattr(dir->get_fd(), nsfs::CONVERTING_XATTR) < 0) &&
+	    (errno != ENODATA)) ? -errno : 0;
+  });
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::CONVERTING_XATTR
       << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -7701,9 +7729,11 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  if ((::fremovexattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR) < 0) &&
-      (errno != ENODATA)) {
-    ret = -errno;
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return ((::fremovexattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR) < 0) &&
+	    (errno != ENODATA)) ? -errno : 0;
+  });
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::EXTENSIONS_XATTR
       << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -7901,9 +7931,11 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
     if ((current & nsfs::EXT_SHADOW) && !(target & nsfs::EXT_SHADOW)) {
-      if ((::unlinkat(dir->get_fd(), HIDDEN_SHADOW_PATH.c_str(),
-		      AT_REMOVEDIR) < 0) && (errno != ENOENT)) {
-	ret = -errno;
+      ret = write_bucket_state(dpp, [&]() -> int {
+	return ((::unlinkat(dir->get_fd(), HIDDEN_SHADOW_PATH.c_str(),
+			    AT_REMOVEDIR) < 0) && (errno != ENOENT)) ? -errno : 0;
+      });
+      if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: removing " << HIDDEN_SHADOW_PATH
 	  << " from bucket " << get_name() << ": " << cpp_strerror(-ret)
 	  << dendl;
@@ -9442,14 +9474,12 @@ int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  /* The gateway owns bucket directories (Directory::create), so
-   * this needs no identity. */
+  /* as the gateway, raised where the directory is not its own (site 1) */
   std::string v = std::to_string(version);
-  ret = 0;
-  if (::fsetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
-		  v.data(), v.size(), 0) < 0) {
-    ret = -errno;
-  }
+  ret = write_bucket_state(dpp, [&]() -> int {
+    return (::fsetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
+			v.data(), v.size(), 0) < 0) ? -errno : 0;
+  });
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::EXTENSIONS_XATTR
       << " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
@@ -9841,15 +9871,16 @@ int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::re
    * own name is the absolute path, so resolve it from the cwd -- the
    * same way `Directory::open()` does (P2). */
   const bool placed = (dir->get_parent() == nullptr);
-  int ret = utimensat(placed ? AT_FDCWD : dir->get_parent()->get_fd(),
+  int ret = write_bucket_state(dpp, [&]() -> int {
+    return (utimensat(placed ? AT_FDCWD : dir->get_parent()->get_fd(),
 		      placed ? dir->get_name().c_str()
 			     : get_fname().c_str(),
-		      ts, AT_SYMLINK_NOFOLLOW);
+		      ts, AT_SYMLINK_NOFOLLOW) < 0) ? -errno : 0;
+  });
   if (ret < 0) {
-    ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not set mtime on bucket " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
-    return -ret;
+      << cpp_strerror(-ret) << dendl;
+    return ret;
   }
 
   return write_attrs(dpp, y);
@@ -9867,7 +9898,9 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   Attrs extra_attrs;
   extra_attrs[nsfs::BUCKET_INFO_KEY] = bl;
 
-  return dir->write_attrs(dpp, y, attrs, &extra_attrs);
+  return write_bucket_state(dpp, [&]() -> int {
+    return dir->write_attrs(dpp, y, attrs, &extra_attrs);
+  });
 }
 
 int NSFSBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
