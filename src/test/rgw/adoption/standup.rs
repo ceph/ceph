@@ -292,7 +292,7 @@ const STEPS: &[(&str, &str)] = &[
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
-    ("import",   "RGW over the same tree;  import the identities and each bucket's record"),
+    ("import",   "RGW over the same tree;  import the identities, buckets left in NooBaa's format"),
     ("adopt",    "adopt every bucket:  import its record and convert its tree"),
     ("compare",  "judge the three captures against the expected-difference list"),
     ("conversion", "the conversion profile:  every step above, in order, on a fresh work directory"),
@@ -1125,11 +1125,11 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
      * would be refused outright. */
     let (observe, label) = match side {
         "noobaa" => (false, "noobaa"),
-        "rgw-unconverted" => (true, "rgw-unconverted"),
+        "rgw-unadopted" => (true, "rgw-unadopted"),
         "rgw-converted" => (true, "rgw-converted"),
         other => {
             return Err(format!(
-                "capture takes `noobaa`, `rgw-unconverted` or `rgw-converted`, \
+                "capture takes `noobaa`, `rgw-unadopted` or `rgw-converted`, \
                  not {other:?}.\n  noobaa generates the tree;  the rgw sides \
                  observe it after `import` and after `adopt`."));
         }
@@ -1570,7 +1570,7 @@ fn store_tests(env: &Env) -> Result<(), String> {
 /// accounts for and on one that breaks its row's class.
 fn compare(env: &Env) -> Result<(), String> {
     let root = env.work.join("capture");
-    for side in ["noobaa", "rgw-unconverted", "rgw-converted"] {
+    for side in ["noobaa", "rgw-unadopted", "rgw-converted"] {
         if !env.capture_dir(side).is_dir() {
             return Err(format!("no `{side}` capture under {};  run its \
                                 `capture` step first", root.display()));
@@ -1639,7 +1639,7 @@ fn conversion(env: &Env) -> Result<(), String> {
         ("stop", &stop),
         ("damage", &damage),
         ("import", &|e| adopt(e, "import")),
-        ("capture rgw-unconverted", &|e| capture(e, "rgw-unconverted")),
+        ("capture rgw-unadopted", &|e| capture(e, "rgw-unadopted")),
         ("adopt", &|e| adopt(e, "adopt")),
         ("capture rgw-converted", &|e| capture(e, "rgw-converted")),
         ("compare", &compare),
@@ -1722,10 +1722,9 @@ fn rgw_etag_opts(env: &Env) -> Vec<String> {
 /// `import` and `adopt`, which share everything but the command sent for
 /// each bucket.
 ///
-/// `import` imports the identities and each bucket's NooBaa record:
-/// RGW's bucket state is written onto the bucket directory and the
-/// objects are left as NooBaa wrote them.  `adopt` imports and converts
-/// each bucket.  Run after `import`, `adopt` reuses that gateway, so the
+/// `import` imports the identities and leaves every bucket in NooBaa's
+/// format, served with its configuration from NooBaa's configuration
+/// store.  `adopt` adopts each bucket.  Run after `import`, `adopt` reuses that gateway, so the
 /// identities it imported -- and their ids -- are the ones both captures
 /// see;  a restart would re-import them, because rgw-vstart.sh empties
 /// the userdb.
@@ -1882,6 +1881,11 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         println!("{tag} IAM user {:?} is {user};  granted nsfs=read", env.iam_user);
     }
 
+    if step == "import" {
+        println!("{tag} buckets left in NooBaa's format;  served from its configuration store");
+        return Ok(());
+    }
+
     let records = env.config_root().join("buckets");
     let mut names: Vec<String> = std::fs::read_dir(&records)
         .map_err(|e| format!("cannot read {}: {e}", records.display()))?
@@ -1893,15 +1897,6 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
     for name in &names {
         if damaged.is_some() && name == DAMAGED_BUCKET {
             println!("{tag} bucket {name}:  damaged by `damage`;  left for the escape hatch");
-            continue;
-        }
-        if step == "import" {
-            let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&import={name}"))?;
-            if status != 200 || json_bool(&body, "configured") != Some(true) {
-                return Err(format!(
-                    "importing bucket {name}'s record failed ({status}):\n{body}"));
-            }
-            println!("import   bucket {name}:  record imported;  objects untouched");
             continue;
         }
         if name == ENDPOINT_BUCKET {

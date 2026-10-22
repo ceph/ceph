@@ -100,8 +100,8 @@ the two capture formats in §7).
 ```sh
 ./standup.rs stop                      # leaves the tree
 ./standup.rs damage                    # one bucket record adoption cannot carry
-./standup.rs import                    # RGW over the tree;  identities and bucket records imported
-./standup.rs capture rgw-unconverted   # the corpus in observe mode
+./standup.rs import                    # RGW over the tree;  identities imported, buckets left as NooBaa's
+./standup.rs capture rgw-unadopted     # the corpus in observe mode
 ./standup.rs adopt                     # the same gateway;  every bucket adopted, then completion
 ./standup.rs capture rgw-converted     # the corpus in observe mode again
 ```
@@ -162,11 +162,10 @@ as.
 
 `import` and `adopt` produce the two RGW runs C2b compares
 (`docs/NSFS_ADOPTION_WORK_PLAN.md`).  `import` imports the identities
-and then each bucket's NooBaa record, with the `adoption` hint's
-`import=<bucket>`:  RGW's bucket state is written onto the bucket
-directory and the objects are left as NooBaa wrote them.  `adopt`
-adopts every bucket, which imports its record again and converts its
-tree;  `corpus-coverage-copy` goes through the profile endpoint.  When
+and leaves every bucket in NooBaa's format, served with its
+configuration from NooBaa's configuration store
+(`buckets/<name>.json`).  `adopt` adopts every bucket, which writes its
+state, marks it and converts its tree;  `corpus-coverage-copy` goes through the profile endpoint.  When
 the `adoption` hint reports that a gateway already serves this tree,
 `adopt` uses it rather than restarting:  a restart empties the userdb
 and would re-import the identities under new ids, so the two captures
@@ -187,10 +186,10 @@ as `[iam]` for that.
 
 The comparison is C2b of `docs/NSFS_ADOPTION_WORK_PLAN.md`:  a
 three-way judgement over the captures, `capture/noobaa`,
-`capture/rgw-unconverted` and `capture/rgw-converted`, by
+`capture/rgw-unadopted` and `capture/rgw-converted`, by
 `corpus-compare` (s3-tests-rs, `src/bin/corpus-compare.rs`).  Two pairs
-are compared.  In `noobaa:unconverted` a difference is an adoption
-defect;  in `unconverted:converted` it is a conversion defect.  Every
+are compared.  In `noobaa:unadopted` a difference is an adoption
+defect;  in `unadopted:converted` it is a conversion defect.  Every
 difference must be accounted for by a row of `expected-differences.tsv`
 beside this driver, whose header says what a row claims.  The step uses
 the modality the tree was written with.  It fails on a difference no

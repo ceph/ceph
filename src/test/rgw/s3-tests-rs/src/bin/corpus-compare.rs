@@ -4,10 +4,10 @@
 //! corpus-compare <capture-root> <expected-difference-list> <md5-on|md5-off>
 //! ```
 //!
-//! `<capture-root>` holds `noobaa/`, `rgw-unconverted/` and
+//! `<capture-root>` holds `noobaa/`, `rgw-unadopted/` and
 //! `rgw-converted/`, as `adoption/standup.rs` writes them.  Two pairs are
-//! compared:  `noobaa:unconverted`, where a difference no row accounts
-//! for is an adoption defect, and `unconverted:converted`, where it is a
+//! compared:  `noobaa:unadopted`, where a difference no row accounts
+//! for is an adoption defect, and `unadopted:converted`, where it is a
 //! conversion defect.  The rules are `s3_tests_rs::corpus::compare`.
 //!
 //! Exits 1 if any difference is unexpected, breaks its row's class, or
@@ -23,8 +23,8 @@ use s3_tests_rs::corpus::compare::{differences, judge, parse_rows, Capture, Clas
                                    Difference, Verdict};
 
 const PAIRS: [(&str, &str, &str, &str); 2] = [
-    ("noobaa:unconverted", "adoption", "noobaa", "rgw-unconverted"),
-    ("unconverted:converted", "conversion", "rgw-unconverted", "rgw-converted"),
+    ("noobaa:unadopted", "adoption", "noobaa", "rgw-unadopted"),
+    ("unadopted:converted", "conversion", "rgw-unadopted", "rgw-converted"),
 ];
 
 fn show(v: &Option<std::collections::BTreeSet<String>>) -> String {
