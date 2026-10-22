@@ -4538,11 +4538,15 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
       target_p.unset_flag(pg_pool_t::FLAG_NOPGCHANGE);
     }
     target_p.migration_src.reset();
+    // Migration completed: routing changed, so force clients to re-resolve on
+    // the new map instead of completing stale-map ops with -ENOENT.
+    source_p.set_last_force_op_resend(pending_inc.epoch);
+    target_p.set_last_force_op_resend(pending_inc.epoch);
     target_p.last_change = pending_inc.epoch;
   } else if (source_p.lowest_migrated_pg == 0) {
     dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
   } else {
-    const pg_pool_t target_p = std::as_const(*this).get_pg_pool(source_p.migration_target.value());
+    pg_pool_t& target_p = get_pg_pool(source_p.migration_target.value());
     auto migration_ratio = g_conf().get_val<double>("mon_pool_migration_max_pg_ratio");
     uint64_t migrating_pgs_target_total = calculate_migrating_pg_count(source_p.get_pg_num(), target_p.get_pg_num(), migration_ratio);
     uint64_t num_pgs_to_add = migrating_pgs_target_total > source_p.migrating_pgs.size()
@@ -4562,6 +4566,10 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
       source_p.migrating_pgs.emplace(source_pg);
       source_p.lowest_migrated_pg -= 1;
     }
+    // A PG advanced source -> target, so routing changed: force clients to
+    // re-resolve on the new map instead of completing stale-map ops with -ENOENT.
+    source_p.set_last_force_op_resend(pending_inc.epoch);
+    target_p.set_last_force_op_resend(pending_inc.epoch);
   }
 
   source_p.last_change = pending_inc.epoch;
@@ -9828,6 +9836,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->migration_target.reset();
     pi->migration_root = spi->migration_root.value_or(source_pool_id.value());
     spi->migration_root.reset();
+    // Routing changed: force clients to re-resolve on the new map so a stale
+    // client view of the migration state cannot synthesize a spurious -ENOENT.
+    spi->set_last_force_op_resend(pending_inc.epoch);
+    pi->set_last_force_op_resend(pending_inc.epoch);
 
     spi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
