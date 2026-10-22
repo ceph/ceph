@@ -61,6 +61,9 @@ private:
    *                  ATTACH_EXISTING_MIRROR_IMAGE           |
    *                           |                             |
    *                           v                             |
+   *                 CLEANUP_STANDALONE_SNAPSHOTS            |
+   *                           |                             |
+   *                           v                             |
    *                     GROUP_UNLINK_PEER <---------------- +
    *                           |
    *                           v
@@ -117,6 +120,8 @@ private:
    std::set<std::string> m_mirror_peer_uuids;
   std::vector<uint64_t> m_snap_ids;
   std::vector<std::string> m_global_image_ids;
+  std::vector<uint64_t> m_standalone_snap_ids;
+  size_t m_standalone_snap_index = 0;
 
   // Newly added image
   I *m_add_image_ctx = nullptr;
@@ -137,6 +142,10 @@ private:
   void handle_update_primary_group_snapshot(int r);
   void attach_existing_mirror_image();
   void handle_attach_existing_mirror_image(int r);
+
+  void cleanup_standalone_snapshots();
+  void cleanup_standalone_snapshot();
+  void handle_cleanup_standalone_snapshot(int r);
 
   void group_unlink_peer();
   void handle_group_unlink_peer(int r);
