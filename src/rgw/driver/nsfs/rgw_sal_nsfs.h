@@ -22,6 +22,8 @@
 #include "include/encoding.h"
 #include <cstdint>
 #include <memory>
+#include <atomic>
+#include <thread>
 #include "common/dout.h"
 #include "../posix/bucket_cache.h"
 #include "../posix/multipart_cache.h"
@@ -398,6 +400,36 @@ public:
   virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
+#ifdef __linux__
+class UserDBWatcher {
+  UserCache& user_cache;
+  CephContext* cct;
+  const DoutPrefix dp;
+  std::string db_path;
+  int inotify_fd{-1};
+  int event_fd{-1};
+  int watch_fd{-1};
+  std::atomic<bool> shutdown{false};
+  std::thread thrd;
+
+  void watch_loop();
+
+public:
+  UserDBWatcher(UserCache& _cache, CephContext* _cct,
+                const std::string& _db_path)
+    : user_cache(_cache),
+      cct(_cct),
+      dp(_cct, ceph_subsys_rgw, "UserDBWatcher: "),
+      db_path(_db_path)
+  {}
+
+  ~UserDBWatcher() { stop(); }
+
+  int start(const DoutPrefixProvider* dpp);
+  void stop();
+};
+#endif
+
 class NSFSDriver : public StoreDriver {
 protected:
   CephContext *cct;
@@ -407,6 +439,9 @@ protected:
   std::unique_ptr<nsfs::MultipartCache> multipart_cache;
   std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
   UserCache user_cache;
+#ifdef __linux__
+  std::unique_ptr<UserDBWatcher> userdb_watcher;
+#endif
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
   std::string base_path;
   std::unique_ptr<nsfs::Directory> root_dir;
