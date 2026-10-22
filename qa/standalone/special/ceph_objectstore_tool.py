@@ -114,7 +114,8 @@ def cat_file(level, filename):
     print("<EOF>")
 
 
-def vstart(new, opt="-o osd_pool_default_pg_autoscale_mode=off"):
+def vstart(new, opt="-o osd_pool_default_pg_autoscale_mode=off"
+                    " -o rados_replica_read_policy=default"):
     print("vstarting....", end="")
     NEW = new and "-n" or "-k"
     call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
