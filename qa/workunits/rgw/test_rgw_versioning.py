@@ -180,6 +180,45 @@ def main():
     assert head_resp['LastModified'] == null_version['LastModified'], \
       'null version mtime changed after failed olh upgrade raced with an overwrite'
 
+    # TESTCASE 'verify that null object version mtime matches its index entry after a stale pending olh entry is removed'
+    log.debug('TEST: verify that null object version mtime matches its index entry after a stale pending olh entry is removed\n')
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    key = str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")  # "null" version
+    connection.BucketVersioning(BUCKET_NAME).enable()
+    try:
+        # leave the pending olh entry on the head, as if the rollback never ran,
+        # and let it time out right away
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        exec_cmd('ceph config set client rgw_debug_inject_olh_cancel_modification_err true')
+        exec_cmd('ceph config set client rgw_olh_pending_timeout_sec 1')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+        try:
+            bucket.put_object(Key=key, Body=b"new data")
+        except Exception as e:
+            log.debug(e)
+        else:
+            raise AssertionError('versioned put did not fail as expected')
+        # wait past rgw_olh_pending_timeout_sec
+        time.sleep(2)
+        # reading the key removes the timed out pending entry from the head
+        bucket.Object(key).get()
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_debug_inject_olh_cancel_modification_err')
+        exec_cmd('ceph config rm client rgw_olh_pending_timeout_sec')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+    # the read must have removed the timed out pending entry
+    xattrs = exec_cmd(f'rados -p {DATA_POOL} listxattr {head_objects(key)[0]}')
+    assert b'user.rgw.olh.pending.' not in xattrs, 'timed out pending olh entry was not removed'
+    # removing the timed out pending entry must not change the null version's mtime
+    # (without the fix, the removal rewrote the shared head object with a new mtime)
+    head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
+    list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
+    null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
+    assert head_resp['LastModified'] == null_version['LastModified'], \
+      'null version mtime changed after a stale pending olh entry was removed'
+
     # TESTCASE 'verify that concurrent delete requests do not leave behind olh entries'
     log.debug('TEST: verify that concurrent delete requests do not leave behind olh entries\n')
     bucket.object_versions.all().delete()
