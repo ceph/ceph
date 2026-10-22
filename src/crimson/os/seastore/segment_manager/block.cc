@@ -339,7 +339,12 @@ SegmentManager::read_ertr::future<uint32_t> BlockSegmentManager::get_shard_nums(
   }).safe_then([this](auto sb) {
     ceph_assert(sb.config.spec.id == get_device_id());
     ceph_assert(sb.config.spec.dtype == get_device_type());
-    return read_ertr::make_ready_future<uint32_t>(sb.shard_num);
+    // The root device's driver is only used for this probe; the sharded
+    // devices open their own. Close it so the SPDK qpair and controller
+    // reference are released.
+    return driver->close().safe_then([shard_num = sb.shard_num] {
+      return read_ertr::make_ready_future<uint32_t>(shard_num);
+    });
   }).handle_error(
     crimson::ct_error::assert_all(
       "Invalid error in BlockSegmentManager::get_shard_nums"

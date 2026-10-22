@@ -2,14 +2,20 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 
+#include <stdexcept>
+
 #include <seastar/core/reactor.hh>
 
 #include "include/buffer.h"
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/errorator-utils.h"
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/block_io_driver.h"
+#ifdef HAVE_SPDK
+#include "crimson/os/seastore/spdk_block_io_driver.h"
+#endif
 
 SET_SUBSYS(seastore_device);
 
@@ -275,7 +281,27 @@ BlockIODriverRef make_block_io_driver(
   const std::string &path,
   device_type_t dtype)
 {
-  return std::make_unique<KernelBlockIODriver>();
+  auto trid = crimson::common::local_conf().get_val<std::string>(
+    "seastore_spdk_transport_id");
+  if (trid.empty()) {
+    return std::make_unique<KernelBlockIODriver>();
+  }
+  // SPDK requested (transport id set).
+  if (dtype == device_type_t::ZBD) {
+    // ZBD needs the ZNS command set, which BlockIODriver does not model — refuse
+    // rather than silently fall back or corrupt a zoned namespace. ZBD never
+    // routes through this factory in practice (see ZBDSegmentManager), but guard
+    // here too for safety.
+    throw std::invalid_argument(
+      "seastore_spdk_transport_id is set but device type is ZBD; "
+      "SPDK is not supported for zoned (ZNS) devices");
+  }
+#ifdef HAVE_SPDK
+  return std::make_unique<SPDKBlockIODriver>(trid);
+#else
+  throw std::invalid_argument(
+    "seastore_spdk_transport_id is set but this build has WITH_SPDK=OFF");
+#endif
 }
 
 }

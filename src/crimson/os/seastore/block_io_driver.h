@@ -89,13 +89,14 @@ using BlockIODriverRef = std::unique_ptr<BlockIODriver>;
 /**
  * make_block_io_driver
  *
- * The single point that selects the I/O transport. Currently always returns
- * the kernel/io_uring driver; path and dtype are accepted so that additional
- * transports can be selected here, and rejected for device types that cannot
- * use them, without changing callers.
+ * The single point that selects the I/O transport. Returns the SPDK driver
+ * when seastore_spdk_transport_id is configured (and supported for dtype),
+ * otherwise the kernel/io_uring driver. dtype lets the factory reject
+ * transports that a device type cannot use (e.g. SPDK for ZBD/ZNS).
  *
- * Construction is synchronous and non-blocking, so the result is the driver
- * directly rather than a future.
+ * Construction is synchronous and non-blocking for both transports (the SPDK
+ * driver defers env init / device probe to open()), so the result is the
+ * driver directly rather than a future.
  */
 BlockIODriverRef make_block_io_driver(
   const std::string &path,

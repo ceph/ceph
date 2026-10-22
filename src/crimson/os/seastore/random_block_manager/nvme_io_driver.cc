@@ -2,16 +2,21 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <strings.h>
+#include <stdexcept>
 
 #include <fcntl.h>
 #include <seastar/coroutine/parallel_for_each.hh>
 
 #include "crimson/common/log.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/errorator-utils.h"
 
 #include "include/buffer.h"
 #include "nvme_io_driver.h"
 #include "crimson/os/seastore/logging.h"
+#ifdef HAVE_SPDK
+#include "spdk_nvme_io_driver.h"
+#endif
 
 SET_SUBSYS(seastore_device);
 
@@ -422,7 +427,19 @@ public:
 
 NVMeIODriverRef make_nvme_io_driver(const std::string &path)
 {
-  // Phase 6 adds the SPDK branch keyed on seastore_spdk_transport_id.
+  auto trid = crimson::common::local_conf().get_val<std::string>(
+    "seastore_spdk_transport_id");
+#ifdef HAVE_SPDK
+  if (!trid.empty()) {
+    return std::make_unique<SPDKNVMeIODriver>(trid);
+  }
+#else
+  if (!trid.empty()) {
+    throw std::invalid_argument(
+      "seastore_spdk_transport_id is set but this build has WITH_SPDK=OFF");
+  }
+#endif
+  // RBM is never ZBD, so no zoned guard is needed here.
   return std::make_unique<KernelNVMeIODriver>();
 }
 

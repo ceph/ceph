@@ -65,6 +65,11 @@ public:
    */
   virtual void set_protection_info(bool enabled, uint32_t nvme_block_size) = 0;
 
+  /// Whether mkfs may Format NVM the namespace to enable PI through this
+  /// transport. When false, mkfs proceeds without PI, as for a device that
+  /// lacks the capability.
+  virtual bool supports_end_to_end_protection() const { return true; }
+
   /// Stream-aware write. stream is ignored when stream_id_count == 1. PI is
   /// applied internally per set_protection_info().
   virtual write_ertr::future<> write(
@@ -121,9 +126,10 @@ using NVMeIODriverRef = std::unique_ptr<NVMeIODriver>;
 /**
  * make_nvme_io_driver
  *
- * RBM transport factory. Returns the kernel NVMe driver today; Phase 6 adds the
- * SPDK branch keyed on seastore_spdk_transport_id. Synchronous, non-blocking
- * construction (env init / probe is deferred to open()).
+ * RBM transport factory. Returns the SPDK NVMe driver when
+ * seastore_spdk_transport_id is configured, otherwise the kernel NVMe driver.
+ * Synchronous, non-blocking construction (env init / probe is deferred to
+ * open()).
  */
 NVMeIODriverRef make_nvme_io_driver(const std::string &path);
 
