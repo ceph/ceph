@@ -2138,6 +2138,17 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_debug_allow_lrc_without_layer_plugin
+  type: bool
+  level: dev
+  desc: Allow LRC erasure-code profiles and pools without layer-plugin
+  long_desc: Testing only. The Monitor stops setting or preserving the LRC
+    layer-plugin key when an erasure-code profile is set, and allows pools to
+    be created against an LRC profile that does not set it. This reproduces
+    profiles created before layer-plugin existed.
+  default: false
+  services:
+  - mon
 - name: mon_debug_no_initial_persistent_features
   type: bool
   level: dev

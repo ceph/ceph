@@ -499,6 +499,130 @@ TEST(ErasureCodeLrc, set_lrc_layer_plugin_default)
   }
 }
 
+TEST(ErasureCodeLrc, resolve_lrc_layer_plugin)
+{
+  // new LRC profile gets the default
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(nullptr, p, &cerr));
+    EXPECT_EQ("isa", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // an explicit value is left alone, new or override
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "isa";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(nullptr, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // an override that omits the key keeps the recorded value
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p["crush-failure-domain"] = "host";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // an override of a keyless LRC profile that omits the key is refused
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(&existing, p, &ss));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+    EXPECT_NE(string::npos, ss.str().find(ceph::LRC_LAYER_PLUGIN_KEY));
+  }
+  // replacing a non-LRC profile with an LRC one gets the default
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "jerasure";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("isa", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // non-LRC profile is untouched
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(nullptr, p, &cerr));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+  }
+  // the key is refused on a non-LRC profile
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "isa";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(nullptr, p, &ss));
+    EXPECT_NE(string::npos, ss.str().find("only applies to the lrc plugin"));
+  }
+  // a value other than jerasure or isa is refused, new or override
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(nullptr, p, &ss));
+    EXPECT_NE(string::npos, ss.str().find("jerasue"));
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+  }
+  // an existing invalid value (stored by a release that ignored the key) is
+  // never carried over; it must be replaced explicitly
+  {
+    ErasureCodeProfile existing;
+    existing["plugin"] = "lrc";
+    existing[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    stringstream ss;
+    EXPECT_EQ(-EINVAL, ceph::resolve_lrc_layer_plugin(&existing, p, &ss));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+    EXPECT_NE(string::npos, ss.str().find("invalid"));
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_EQ(0, ceph::resolve_lrc_layer_plugin(&existing, p, &cerr));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+}
+
+TEST(ErasureCodeLrc, lrc_profile_layer_plugin_unusable)
+{
+  ErasureCodeProfile p;
+  p["plugin"] = "jerasure";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+  // a stray key on a non-LRC profile does not matter
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+
+  p.clear();
+  p["plugin"] = "lrc";
+  EXPECT_TRUE(ceph::lrc_profile_layer_plugin_unusable(p));
+  EXPECT_NE(string::npos, ceph::lrc_layer_plugin_problem(p).find("does not set"));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "isa";
+  EXPECT_FALSE(ceph::lrc_profile_layer_plugin_unusable(p));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasue";
+  EXPECT_TRUE(ceph::lrc_profile_layer_plugin_unusable(p));
+  EXPECT_NE(string::npos, ceph::lrc_layer_plugin_problem(p).find("'jerasue'"));
+  p[ceph::LRC_LAYER_PLUGIN_KEY] = "";
+  EXPECT_TRUE(ceph::lrc_profile_layer_plugin_unusable(p));
+}
+
 TEST(ErasureCodeLrc, layer_plugin_default_kml)
 {
   // k/m/l form: layer-plugin key applies to every layer
