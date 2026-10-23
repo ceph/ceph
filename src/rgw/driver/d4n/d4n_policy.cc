@@ -734,7 +734,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	ldpp_dout(dpp, 10) << __func__ << "(): e->key=" << e->key << dendl;
 	int op_ret;
 	if (e->delete_marker) {
-	  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = c_obj->get_delete_op();
+	  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op =
+	    c_obj->get_delete_op(rgw::sal::no_authenticated_user);
 	  del_op->params.obj_owner = owner;
 	  del_op->params.bucket_owner = c_bucket->get_owner();
 	  del_op->params.versioning_status = c_bucket->get_info().versioning_status();
@@ -761,7 +762,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 		  owner,
 		  NULL,
 		  0,
-		  "");
+		  "",
+		  rgw::sal::no_authenticated_user);
 
 	  op_ret = processor->prepare(null_yield);
 	  if (op_ret < 0) {

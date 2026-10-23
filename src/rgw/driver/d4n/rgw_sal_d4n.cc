@@ -134,9 +134,10 @@ int D4NFilterDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket
 
 int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
                             const CreateParams& params,
-                            optional_yield y)
+                            optional_yield y,
+                            const rgw_user& authenticated_user)
 {
-  return next->create(dpp, params, y);
+  return next->create(dpp, params, y, authenticated_user);
 }
 
 int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
@@ -653,7 +654,8 @@ constexpr int OBJECT_LIST_VAL = 1000;
 constexpr int PIPELINE_MAX = 10000;
 int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
 			    bool delete_children,
-			    optional_yield y)
+			    optional_yield y,
+			    const rgw_user& authenticated_user)
 {
   ListParams params;
   params.list_versions = true;
@@ -801,7 +803,7 @@ int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
   }
 
   ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): calling next->remove" << dendl;
-  return next->remove(dpp, delete_children, y);
+  return next->remove(dpp, delete_children, y, authenticated_user);
 }
 
 int D4NFilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
@@ -821,11 +823,13 @@ int D4NFilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y
 
 std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_user& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
   std::unique_ptr<MultipartUpload> nmu =
-    next->get_multipart_upload(oid, upload_id, owner, mtime);
+    next->get_multipart_upload(oid, authenticated_user, upload_id, owner,
+			       mtime);
 
   return std::make_unique<D4NFilterMultipartUpload>(std::move(nmu), this, this->filter);
 }
@@ -862,7 +866,8 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
 {
   bool write_to_cache = g_conf()->d4n_writecache_enabled;
   bool dirty{false};
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(
+    this->get_read_op(remote_user));
   read_op->params.mod_ptr = mod_ptr;
   read_op->params.unmod_ptr = unmod_ptr;
   read_op->params.high_precision_time = high_precision_time;
@@ -1875,11 +1880,13 @@ std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvi
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_user& authenticated_user)
 {
   std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, nextObject(obj),
 							   owner, ptail_placement_rule,
-							   olh_epoch, unique_tag);
+							   olh_epoch, unique_tag,
+							   authenticated_user);
 
   return std::make_unique<D4NFilterWriter>(std::move(writer), this, obj, dpp, true, y);
 }
@@ -1898,15 +1905,15 @@ void D4NFilterDriver::shutdown()
   next->shutdown();
 }
 
-std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()
+std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op(const rgw_user& authenticated_user)
 {
-  std::unique_ptr<ReadOp> r = next->get_read_op();
+  std::unique_ptr<ReadOp> r = next->get_read_op(authenticated_user);
   return std::make_unique<D4NFilterReadOp>(std::move(r), this);
 }
 
-std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op(const rgw_user& authenticated_user)
 {
-  std::unique_ptr<DeleteOp> d = next->get_delete_op();
+  std::unique_ptr<DeleteOp> d = next->get_delete_op(authenticated_user);
   return std::make_unique<D4NFilterDeleteOp>(std::move(d), this);
 }
 

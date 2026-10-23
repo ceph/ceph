@@ -712,12 +712,14 @@ std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size)
+				  uint64_t *cur_accounted_size,
+				  const rgw_user& authenticated_user)
 {
   std::unique_ptr<Writer> writer = next->get_append_writer(dpp, y, nextObject(obj),
 							   owner, ptail_placement_rule,
 							   unique_tag, position,
-							   cur_accounted_size);
+							   cur_accounted_size,
+							   authenticated_user);
 
   return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
@@ -728,11 +730,13 @@ std::unique_ptr<Writer> FilterDriver::get_atomic_writer(const DoutPrefixProvider
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_user& authenticated_user)
 {
   std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, nextObject(obj),
 							   owner, ptail_placement_rule,
-							   olh_epoch, unique_tag);
+							   olh_epoch, unique_tag,
+							   authenticated_user);
 
   return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
@@ -826,9 +830,10 @@ int FilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int ma
 
 int FilterBucket::remove(const DoutPrefixProvider* dpp,
 			 bool delete_children,
-			 optional_yield y)
+			 optional_yield y,
+			 const rgw_user& authenticated_user)
 {
-  return next->remove(dpp, delete_children, y);
+  return next->remove(dpp, delete_children, y, authenticated_user);
 }
 
 int FilterBucket::remove_bypass_gc(int concurrent_max,
@@ -847,9 +852,10 @@ int FilterBucket::set_acl(const DoutPrefixProvider* dpp,
 
 int FilterBucket::create(const DoutPrefixProvider* dpp,
                          const CreateParams& params,
-                         optional_yield y)
+                         optional_yield y,
+                         const rgw_user& authenticated_user)
 {
-  return next->create(dpp, params, y);
+  return next->create(dpp, params, y, authenticated_user);
 }
 
 int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
@@ -974,11 +980,13 @@ int FilterBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y
 
 std::unique_ptr<MultipartUpload> FilterBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_user& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
   std::unique_ptr<MultipartUpload> nmu =
-    next->get_multipart_upload(oid, upload_id, owner, mtime);
+    next->get_multipart_upload(oid, authenticated_user, upload_id, owner,
+			       mtime);
 
   return std::make_unique<FilterMultipartUpload>(std::move(nmu), this);
 }
@@ -990,13 +998,15 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated, optional_yield y)
+				  bool *is_truncated, optional_yield y,
+				  const rgw_user& authenticated_user)
 {
   std::vector<std::unique_ptr<MultipartUpload>> nup;
   int ret;
 
   ret = next->list_multiparts(dpp, prefix, marker, delim, max_uploads, nup,
-			      common_prefixes, is_truncated, y);
+			      common_prefixes, is_truncated, y,
+			      authenticated_user);
   if (ret < 0)
     return ret;
 
@@ -1200,15 +1210,15 @@ int FilterObject::swift_versioning_copy(const ACLOwner& owner,
   return next->swift_versioning_copy(owner, remote_user, dpp, y);
 }
 
-std::unique_ptr<Object::ReadOp> FilterObject::get_read_op()
+std::unique_ptr<Object::ReadOp> FilterObject::get_read_op(const rgw_user& authenticated_user)
 {
-  std::unique_ptr<ReadOp> r = next->get_read_op();
+  std::unique_ptr<ReadOp> r = next->get_read_op(authenticated_user);
   return std::make_unique<FilterReadOp>(std::move(r));
 }
 
-std::unique_ptr<Object::DeleteOp> FilterObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> FilterObject::get_delete_op(const rgw_user& authenticated_user)
 {
-  std::unique_ptr<DeleteOp> d = next->get_delete_op();
+  std::unique_ptr<DeleteOp> d = next->get_delete_op(authenticated_user);
   return std::make_unique<FilterDeleteOp>(std::move(d));
 }
 
@@ -1382,11 +1392,13 @@ std::unique_ptr<Writer> FilterMultipartUpload::get_writer(
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
-				  const std::string& part_num_str)
+				  const std::string& part_num_str,
+				  const rgw_user& authenticated_user)
 {
   std::unique_ptr<Writer> writer;
   writer = next->get_writer(dpp, y, nextObject(obj), owner,
-			    ptail_placement_rule, part_num, part_num_str);
+			    ptail_placement_rule, part_num, part_num_str,
+			    authenticated_user);
 
   return std::make_unique<FilterWriter>(std::move(writer), obj);
 }

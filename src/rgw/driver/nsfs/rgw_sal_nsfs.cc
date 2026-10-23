@@ -6154,7 +6154,8 @@ std::unique_ptr<Writer> NSFSDriver::get_append_writer(const DoutPrefixProvider *
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size)
+				  uint64_t *cur_accounted_size,
+				  const rgw_user& authenticated_user)
 {
   return nullptr;
 }
@@ -6165,10 +6166,12 @@ std::unique_ptr<Writer> NSFSDriver::get_atomic_writer(const DoutPrefixProvider *
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag)
+				  const std::string& unique_tag,
+				  const rgw_user& authenticated_user)
 {
 
-  return std::make_unique<NSFSAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
+  return std::make_unique<NSFSAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag,
+					    authenticated_user);
 }
 
 const std::string& NSFSDriver::get_compression_type(const rgw_placement_rule& rule) {
@@ -6289,7 +6292,8 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
 
 int NSFSBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
-			optional_yield y)
+			optional_yield y,
+			const rgw_user& authenticated_user)
 {
   info.owner = params.owner;
 
@@ -7233,7 +7237,8 @@ int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
     std::string marker = params.marker.name;
     int ret = list_multiparts(dpp, params.prefix, marker, params.delim,
 			      max, uploads, nullptr,
-			      &results.is_truncated, y);
+			      &results.is_truncated, y,
+			      rgw::sal::no_authenticated_user);
     if (ret < 0)
       return ret;
     for (auto& upload : uploads) {
@@ -7457,7 +7462,8 @@ static int write_bucket_state(const DoutPrefixProvider* dpp,
 
 int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
-			optional_yield y)
+			optional_yield y,
+			const rgw_user& authenticated_user)
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
@@ -7622,7 +7628,7 @@ int NSFSBucket::remove_bypass_gc(int concurrent_max,
 				  optional_yield y,
 				  const DoutPrefixProvider *dpp)
 {
-  return remove(dpp, true, y);
+  return remove(dpp, true, y, rgw::sal::no_authenticated_user);
 }
 
 /* The extensions marker, read with its own fgetxattr.
@@ -10168,10 +10174,12 @@ int NSFSBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 
 std::unique_ptr<MultipartUpload> NSFSBucket::get_multipart_upload(
 				  const std::string& oid,
+				  const rgw_user& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
-  return std::make_unique<NSFSMultipartUpload>(driver, this, oid, upload_id, owner, mtime);
+  return std::make_unique<NSFSMultipartUpload>(driver, this, oid, upload_id, owner, mtime,
+					       authenticated_user);
 }
 
 namespace {
@@ -10253,7 +10261,8 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated, optional_yield y)
+				  bool *is_truncated, optional_yield y,
+				  const rgw_user& authenticated_user)
 {
   /* S3 returns uploads ordered by key and then upload id, and a
    * directory offers no order.  Every entry is examined and the first
@@ -10401,7 +10410,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
     auto upload = std::make_unique<NSFSMultipartUpload>(
 	driver, this, ent.key, ent.upload_id, owner,
-	from_statx_timestamp(stx.stx_mtime));
+	from_statx_timestamp(stx.stx_mtime), authenticated_user);
 
     if (oret == -ENOENT) {
       rgw_placement_rule* rule{nullptr};
@@ -13231,14 +13240,14 @@ int NSFSObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> NSFSObject::get_read_op()
+std::unique_ptr<Object::ReadOp> NSFSObject::get_read_op(const rgw_user& authenticated_user)
 {
-  return std::make_unique<NSFSReadOp>(this);
+  return std::make_unique<NSFSReadOp>(this, authenticated_user);
 }
 
-std::unique_ptr<Object::DeleteOp> NSFSObject::get_delete_op()
+std::unique_ptr<Object::DeleteOp> NSFSObject::get_delete_op(const rgw_user& authenticated_user)
 {
-  return std::make_unique<NSFSDeleteOp>(this);
+  return std::make_unique<NSFSDeleteOp>(this, authenticated_user);
 }
 
 int NSFSObject::open(const DoutPrefixProvider* dpp, optional_yield y,
@@ -15382,7 +15391,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
     mc->remove({nsfs::mp_cache_bucket(bucket->get_tenant(),
 					bucket->get_name()), mp_obj.meta});
   }
-  shadow->remove(dpp, true, y);
+  shadow->remove(dpp, true, y, auth_user);
 
   return 0;
 }
@@ -16063,7 +16072,8 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
-				  const std::string& part_num_str)
+				  const std::string& part_num_str,
+				  const rgw_user& authenticated_user)
 {
   load(dpp);
 
@@ -16093,6 +16103,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
                                                 ptail_placement_rule, part_num,
 						mpu_strategy(),
 						std::move(cache_key),
+						authenticated_user,
 						base_offset, shared_target,
 						shared_name,
 						mp_obj.upload_id, extent,
@@ -17922,7 +17933,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       return ret;
     }
-    auto upload = bucket->get_multipart_upload(k_it->second, u_it->second);
+    auto upload = bucket->get_multipart_upload(k_it->second, rgw::sal::no_authenticated_user,
+					       u_it->second);
     auto* nu = static_cast<NSFSMultipartUpload*>(upload.get());
     ret = nu->load_for_hint(dpp);
     if (ret < 0) {

@@ -955,7 +955,8 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
     }
   }
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op =
+    obj->get_delete_op(rgw::sal::no_authenticated_user);
 
   del_op->params.bucket_owner = bucket->get_info().owner;
   del_op->params.obj_owner = policy.get_owner();

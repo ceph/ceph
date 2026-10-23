@@ -406,7 +406,8 @@ std::unique_ptr<struct ds3_bucket_info> DaosBucket::get_encoded_info(
 }
 
 int DaosBucket::remove(const DoutPrefixProvider* dpp,
-                       bool delete_children, optional_yield y) {
+                       bool delete_children, optional_yield y,
+                       const rgw_user& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: remove_bucket, delete_children="
                      << delete_children << dendl;
 
@@ -700,7 +701,8 @@ int DaosBucket::list_multiparts(
     const DoutPrefixProvider* dpp, const string& prefix, string& marker,
     const string& delim, const int& max_uploads,
     vector<std::unique_ptr<MultipartUpload>>& uploads,
-    map<string, bool>* common_prefixes, bool* is_truncated) {
+    map<string, bool>* common_prefixes, bool* is_truncated,
+    const rgw_user& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: list_multiparts" << dendl;
   // End of uploading
   if (max_uploads == 0) {
@@ -748,7 +750,8 @@ int DaosBucket::list_multiparts(
     ACLOwner owner(rgw_user(ent.meta.owner));
     owner.set_name(ent.meta.owner_display_name);
     uploads.push_back(this->get_multipart_upload(
-        name, mp.upload_id, std::move(owner), ent.meta.mtime));
+        name, authenticated_user, mp.upload_id, std::move(owner),
+        ent.meta.mtime));
   }
 
   // Sort uploads
@@ -1057,7 +1060,7 @@ int DaosObject::dump_obj_layout(const DoutPrefixProvider* dpp, optional_yield y,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-std::unique_ptr<Object::ReadOp> DaosObject::get_read_op() {
+std::unique_ptr<Object::ReadOp> DaosObject::get_read_op(const rgw_user& authenticated_user) {
   return std::make_unique<DaosObject::DaosReadOp>(this);
 }
 
@@ -1168,7 +1171,7 @@ int DaosObject::DaosReadOp::get_attr(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-std::unique_ptr<Object::DeleteOp> DaosObject::get_delete_op() {
+std::unique_ptr<Object::DeleteOp> DaosObject::get_delete_op(const rgw_user& authenticated_user) {
   return std::make_unique<DaosObject::DaosDeleteOp>(this);
 }
 
@@ -2011,7 +2014,8 @@ std::unique_ptr<Writer> DaosMultipartUpload::get_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
     rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t part_num,
-    const std::string& part_num_str) {
+    const std::string& part_num_str,
+    const rgw_user& authenticated_user) {
   ldpp_dout(dpp, 20) << "DaosMultipartUpload::get_writer(): enter part="
                      << part_num << " head_obj=" << _head_obj << dendl;
   return std::make_unique<DaosMultipartWriter>(
@@ -2169,7 +2173,8 @@ int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
 }
 
 std::unique_ptr<MultipartUpload> DaosBucket::get_multipart_upload(
-    const std::string& oid, std::optional<std::string> upload_id,
+    const std::string& oid,
+    const rgw_user& authenticated_user, std::optional<std::string> upload_id,
     ACLOwner owner, ceph::real_time mtime) {
   return std::make_unique<DaosMultipartUpload>(store, this, oid, upload_id,
                                                owner, mtime);
@@ -2180,7 +2185,8 @@ std::unique_ptr<Writer> DaosStore::get_append_writer(
     rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule,
     const std::string& unique_tag, uint64_t position,
-    uint64_t* cur_accounted_size) {
+    uint64_t* cur_accounted_size,
+    const rgw_user& authenticated_user) {
   DAOS_NOT_IMPLEMENTED_LOG(dpp);
   return nullptr;
 }
@@ -2189,7 +2195,8 @@ std::unique_ptr<Writer> DaosStore::get_atomic_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
     rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
-    const std::string& unique_tag) {
+    const std::string& unique_tag,
+    const rgw_user& authenticated_user) {
   ldpp_dout(dpp, 20) << "get_atomic_writer" << dendl;
   return std::make_unique<DaosAtomicWriter>(dpp, y, obj, this,
                                             owner, ptail_placement_rule,

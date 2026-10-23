@@ -402,7 +402,8 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
   if (!obj->get_bucket()->get_info().obj_lock_enabled()) {
     return true;
   }
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op =
+    obj->get_read_op(rgw::sal::no_authenticated_user);
   int ret = read_op->prepare(y, dpp);
   if (ret < 0) {
     if (ret == -ENOENT) {
@@ -817,7 +818,7 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   auto size = obj->get_size();
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
-    = obj->get_delete_op();
+    = obj->get_delete_op(rgw::sal::no_authenticated_user);
   del_op->params.versioning_status
     = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner.id = rgw_user{meta.owner};
@@ -988,7 +989,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
       rgw_obj_key key(obj.key);
-      auto mpu = target->get_multipart_upload(key.name);
+      auto mpu = target->get_multipart_upload(key.name,
+					      rgw::sal::no_authenticated_user);
       auto sal_obj = mpu->get_meta_obj();
 
       string etag;
@@ -1124,7 +1126,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
 static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, bufferlist& tags_bl, optional_yield y)
 {
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop =
+    obj->get_read_op(rgw::sal::no_authenticated_user);
 
   return rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, y);
 }

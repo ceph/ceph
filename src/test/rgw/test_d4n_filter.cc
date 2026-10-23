@@ -163,7 +163,8 @@ class D4NFilterFixture: public ::testing::Test {
       init_bucket(&b, "test_tenant", "test_name", "test_data_pool", "test_index_pool", "test_marker", "test_id");
 
       EXPECT_EQ(driver->load_bucket(env->dpp, b, &testBucket, optional_yield{yield}), -2);
-      ASSERT_EQ(testBucket->create(env->dpp, createParams, optional_yield{yield}), 0);
+      ASSERT_EQ(testBucket->create(env->dpp, createParams, optional_yield{yield},
+                                 rgw::sal::no_authenticated_user), 0);
       testBucket->get_info().bucket.bucket_id = "test_bucket_" + name;
     }
 
@@ -179,7 +180,8 @@ class D4NFilterFixture: public ::testing::Test {
 					      acl_owner,
 					      nullptr,
 					      0,
-					      "test_filter");
+					      "test_filter",
+					      rgw::sal::no_authenticated_user);
 
       const req_context rctx{env->dpp, optional_yield{yield}, nullptr};
       ceph::real_time mtime; 
@@ -218,7 +220,8 @@ class D4NFilterFixture: public ::testing::Test {
 					      acl_owner,
 					      nullptr,
 					      0,
-					      "test_filter");
+					      "test_filter",
+					      rgw::sal::no_authenticated_user);
 
       const req_context rctx{env->dpp, optional_yield{yield}, nullptr};
       ceph::real_time mtime; 
@@ -253,7 +256,8 @@ class D4NFilterFixture: public ::testing::Test {
 					      acl_owner,
 					      nullptr,
 					      0,
-					      "test_filter");
+					      "test_filter",
+					      rgw::sal::no_authenticated_user);
 
       const req_context rctx{env->dpp, optional_yield{yield}, nullptr};
       ceph::real_time mtime; 
@@ -342,7 +346,8 @@ TEST_F(D4NFilterFixture, PutObjectRead)
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -361,7 +366,7 @@ TEST_F(D4NFilterFixture, GetObjectRead)
 
     bufferlist bl;
     Read_CB cb(&bl);
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
     
@@ -411,7 +416,8 @@ TEST_F(D4NFilterFixture, GetObjectRead)
 
     testFile.close();
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver)); 
   }, rethrow);
@@ -503,7 +509,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
     /*
     // Read copy object
     Read_CB cb(&bl);
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(destObj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(destObj->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
 
@@ -523,7 +529,8 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
     */    
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -611,7 +618,8 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true);  
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -699,7 +707,8 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true);  
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -716,7 +725,7 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
     create_bucket(testName, yield);
     put_object(testName, yield);
 
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     ASSERT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
     ASSERT_EQ(read_op->iterate(env->dpp, 0, ofs, nullptr, optional_yield{yield}), 0);
 
@@ -745,7 +754,7 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
     EXPECT_EQ(del_op->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
     {
@@ -770,7 +779,8 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
     */
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -810,7 +820,8 @@ TEST_F(D4NFilterFixture, PutVersionedObjectRead)
     EXPECT_EQ(std::get<3>(resp).value().size(), 14);
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -832,14 +843,14 @@ TEST_F(D4NFilterFixture, GetVersionedObjectRead)
     // For version enabled object
     bufferlist blEnabled;
     Read_CB cbEnabled(&blEnabled);
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op_enabled->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op_enabled->iterate(env->dpp, 0, ofs, &cbEnabled, optional_yield{yield}), 0);
 
     // For version suspended object
     bufferlist blSuspended;
     Read_CB cbSuspended(&blSuspended);
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op_suspended->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op_suspended->iterate(env->dpp, 0, ofs, &cbSuspended, optional_yield{yield}), 0);
 
@@ -896,7 +907,8 @@ TEST_F(D4NFilterFixture, GetVersionedObjectRead)
 
     testFile.close();
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1037,7 +1049,8 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1178,7 +1191,8 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1319,7 +1333,8 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1338,11 +1353,11 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
     put_version_enabled_object(testName, instance, yield);
     put_version_suspended_object(testName, yield);
 
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op_enabled->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op_enabled->iterate(env->dpp, 0, ofs, nullptr, optional_yield{yield}), 0);
 
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op_suspended->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op_suspended->iterate(env->dpp, 0, ofs, nullptr, optional_yield{yield}), 0);
     std::string version;
@@ -1374,11 +1389,11 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
 
     // For version enabled object
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op(rgw::sal::no_authenticated_user);
     EXPECT_EQ(del_op_enabled->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
     // For version suspended object
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_suspended = objSuspended->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_suspended = objSuspended->get_delete_op(rgw::sal::no_authenticated_user);
     EXPECT_EQ(del_op_suspended->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
     {
@@ -1410,7 +1425,8 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
     */
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1525,7 +1541,8 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
     EXPECT_EQ(attr_val, "0");
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1545,7 +1562,7 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
 
     bufferlist bl;
     Read_CB cb(&bl);
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs-1), &cb, optional_yield{yield}), 0);
     
@@ -1598,7 +1615,8 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
 
     testFile.close();
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1722,7 +1740,8 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
 
     testFile.close();
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1846,7 +1865,8 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
 
     testFile.close();
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -1970,7 +1990,8 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 
     testFile.close();
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -2016,7 +2037,7 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
     EXPECT_EQ(del_op->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
     std::string key = TEST_BUCKET + testName + "#" + version + "#" + TEST_OBJ + testName; 
@@ -2053,7 +2074,8 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), false);     
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -2210,7 +2232,8 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
     EXPECT_EQ(attr_val, "0");
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -2232,7 +2255,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
     {
       bufferlist bl;
       Read_CB cb(&bl);
-      std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op());
+      std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op(rgw::sal::no_authenticated_user));
       EXPECT_EQ(read_op_enabled->prepare(optional_yield{yield}, env->dpp), 0);
       EXPECT_EQ(read_op_enabled->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
 
@@ -2301,7 +2324,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
     {
       bufferlist bl;
       Read_CB cb(&bl);
-      std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op());
+      std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op(rgw::sal::no_authenticated_user));
       EXPECT_EQ(read_op_suspended->prepare(optional_yield{yield}, env->dpp), 0);
       EXPECT_EQ(read_op_suspended->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
 
@@ -2361,7 +2384,8 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -2586,7 +2610,8 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -2811,7 +2836,8 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3036,7 +3062,8 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3094,11 +3121,11 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), true);  
 
     // For version enabled object
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op(rgw::sal::no_authenticated_user);
     EXPECT_EQ(del_op_enabled->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
     // For version suspended object
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_suspended = objSuspended->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_suspended = objSuspended->get_delete_op(rgw::sal::no_authenticated_user);
     EXPECT_EQ(del_op_suspended->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
     d4nFilter->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(env->dpp, 
@@ -3145,7 +3172,8 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), false);  
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3174,7 +3202,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
       instances.push_back(instance);
     }
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op(rgw::sal::no_authenticated_user);
     objEnabled->set_instance(""); // Simple delete
     EXPECT_EQ(del_op_enabled->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
@@ -3221,7 +3249,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
   net::spawn(io, [this] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), -2); // Simple read; should return -ENOENT
 
     /* TODO: 
@@ -3230,7 +3258,8 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
     EXPECT_EQ(attr_val, "0");*/ 
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3277,7 +3306,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
     std::string oid = instances[1] + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), true);  
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op(rgw::sal::no_authenticated_user);
     objEnabled->set_instance(instances[1]); // Latest version
     EXPECT_EQ(del_op_enabled->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
@@ -3297,7 +3326,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
 
     objEnabled->set_instance(""); // Simple get
 
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op(rgw::sal::no_authenticated_user));
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
     EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs - 1), nullptr, optional_yield{yield}), 0);
     EXPECT_EQ(objEnabled->get_instance(), instances[0]); // Next latest version
@@ -3337,14 +3366,15 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
       bufferlist bl;
       Read_CB cb(&bl);
       next->set_instance("");
-      std::unique_ptr<rgw::sal::Object::ReadOp> read_op(next->get_read_op());
+      std::unique_ptr<rgw::sal::Object::ReadOp> read_op(next->get_read_op(rgw::sal::no_authenticated_user));
       EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
       EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
       EXPECT_EQ(next->get_instance(), instances[0]); // Next latest version
     }
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3379,7 +3409,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
   net::spawn(io, [this, &testName, &bucketName] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op(rgw::sal::no_authenticated_user);
     objEnabled->set_instance(""); // Simple delete
     EXPECT_EQ(del_op_enabled->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
     
@@ -3397,7 +3427,8 @@ TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
     EXPECT_EQ(next->exists(), 1);
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3450,7 +3481,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
       EXPECT_EQ(attr_val, "0");
     }
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op(rgw::sal::no_authenticated_user);
     objEnabled->set_instance(instances[1]); // Latest version
     EXPECT_EQ(del_op_enabled->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
     
@@ -3471,7 +3502,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
       bufferlist bl;
       Read_CB cb(&bl);
       next->set_instance("");
-      std::unique_ptr<rgw::sal::Object::ReadOp> read_op(next->get_read_op());
+      std::unique_ptr<rgw::sal::Object::ReadOp> read_op(next->get_read_op(rgw::sal::no_authenticated_user));
       EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
       EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
       EXPECT_EQ(next->get_instance(), instances[0]); // Next latest version
@@ -3494,7 +3525,8 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
     */
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3537,7 +3569,8 @@ TEST_F(D4NFilterFixture, ListObjectVersions)
     EXPECT_EQ(results.objs[1].key.instance, instance);
 
     conn->cancel();
-    testBucket->remove(env->dpp, true, optional_yield{yield});
+    testBucket->remove(env->dpp, true, optional_yield{yield},
+                       rgw::sal::no_authenticated_user);
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
@@ -3582,7 +3615,8 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
       version_2 = std::get<2>(resp).value();
     }
     
-    EXPECT_EQ(testBucket->remove(env->dpp, true, yield), 0);
+    EXPECT_EQ(testBucket->remove(env->dpp, true, yield,
+                                 rgw::sal::no_authenticated_user), 0);
 
     {
       boost::system::error_code ec;
@@ -3691,7 +3725,8 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
     EXPECT_EQ(testBucket->check_empty(env->dpp, yield), -ENOTEMPTY);
-    EXPECT_EQ(testBucket->remove(env->dpp, true, yield), 0);
+    EXPECT_EQ(testBucket->remove(env->dpp, true, yield,
+                                 rgw::sal::no_authenticated_user), 0);
 
     {
       boost::system::error_code ec;
@@ -3768,7 +3803,7 @@ TEST_F(D4NFilterFixture, BucketRemoveDeleteMarker)
     create_bucket(testName, yield);
     testBucket->get_info().bucket.bucket_id = bucketName;
     put_version_enabled_object(testName, instance_1, yield);
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = objEnabled->get_delete_op();
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = objEnabled->get_delete_op(rgw::sal::no_authenticated_user);
     objEnabled->set_instance(""); 
     EXPECT_EQ(del_op->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
@@ -3789,7 +3824,8 @@ TEST_F(D4NFilterFixture, BucketRemoveDeleteMarker)
       version = std::get<0>(resp).value()[1];
     }
     
-    EXPECT_EQ(testBucket->remove(env->dpp, true, yield), 0);
+    EXPECT_EQ(testBucket->remove(env->dpp, true, yield,
+                                 rgw::sal::no_authenticated_user), 0);
 
     {
       boost::system::error_code ec;

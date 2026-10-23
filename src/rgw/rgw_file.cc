@@ -3199,7 +3199,8 @@ namespace rgw {
     }
     processor = get_driver()->get_atomic_writer(this, state->yield, state->object.get(),
 					 state->bucket_owner,
-					 &state->dest_placement, 0, state->req_id);
+					 &state->dest_placement, 0, state->req_id,
+					 rgw::sal::no_authenticated_user);
 
     op_ret = processor->prepare(state->yield);
     if (op_ret < 0) {

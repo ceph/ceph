@@ -505,7 +505,7 @@ class RGWLCStreamRead
       rgw::sal::Object *_obj, const real_time &_mtime,
       optional_yield _y) :
     cct(_cct), dpp(_dpp), obj(_obj), mtime(_mtime),
-    read_op(obj->get_read_op()), y(_y) {}
+    read_op(obj->get_read_op(rgw::sal::no_authenticated_user)), y(_y) {}
 
   ~RGWLCStreamRead() {};
   int set_range(off_t _ofs, off_t _end);

@@ -172,15 +172,21 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
 static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
 
-/* No authenticated identity, for the attribute writes that take one.
+/* No authenticated identity, for the operations that take one.
  *
- * The parameter is not defaulted, deliberately:  a driver that maps
- * an identity to filesystem credentials runs an unnamed write as the
- * daemon, which reaches more of the filesystem than any user it
- * would be acting for, so every caller is made to say which it is.
- * This names the cases that genuinely have nobody -- lifecycle,
- * restore, sync, a cache's own writeback -- and makes them greppable
- * as a set. */
+ * An `authenticated_user` parameter names who an operation is for:
+ * the identity the request authenticated as, which for a member of an
+ * account is the member and not the account that owns what it
+ * touches.  A driver that maps an identity to filesystem credentials
+ * needs the member, or every member of an account is served as one;
+ * a driver with no such mapping ignores it.
+ *
+ * The parameter is not defaulted, deliberately:  such a driver runs an
+ * unnamed operation as the daemon, which reaches more of the
+ * filesystem than any user it would be acting for, so every caller is
+ * made to say which it is.  This names the cases that genuinely have
+ * nobody -- lifecycle, restore, sync, a cache's own writeback -- and
+ * makes them greppable as a set. */
 inline const rgw_user no_authenticated_user{};
 
 enum class RGWRestoreStatus : uint8_t {
@@ -711,7 +717,8 @@ class Driver {
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::vector<RGWOIDCProviderInfo>& providers) = 0;
-    /** Get a Writer that appends to an object */
+    /** Get a Writer that appends to an object, for `authenticated_user`
+     * (see no_authenticated_user) */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -719,15 +726,18 @@ class Driver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
-				  uint64_t *cur_accounted_size) = 0;
-    /** Get a Writer that atomically writes an entire object */
+				  uint64_t *cur_accounted_size,
+				  const rgw_user& authenticated_user) = 0;
+    /** Get a Writer that atomically writes an entire object, for
+     * `authenticated_user` */
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
 				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
-				  const std::string& unique_tag) = 0;
+				  const std::string& unique_tag,
+				  const rgw_user& authenticated_user) = 0;
 
     /** Get the compression type of a placement rule */
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
@@ -965,8 +975,11 @@ class Bucket {
     virtual Attrs& get_attrs(void) = 0;
     /** Set the cached attributes on this bucket */
     virtual int set_attrs(Attrs a) = 0;
-    /** Remove this bucket from the backing store */
-    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
+    /** Remove this bucket from the backing store.  `authenticated_user`:
+     * see no_authenticated_user */
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		       optional_yield y,
+		       const rgw_user& authenticated_user) = 0;
     /** Remove this bucket, bypassing garbage collection.  May be removed */
     virtual int remove_bypass_gc(int concurrent_max, bool
 				 keep_index_consistent,
@@ -999,10 +1012,12 @@ class Bucket {
       const RGWEnv* env = nullptr;
     };
 
-    /// Create this bucket in the backing store.
+    /// Create this bucket in the backing store.  `authenticated_user`:
+    /// see no_authenticated_user.
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
-                       optional_yield y) = 0;
+                       optional_yield y,
+                       const rgw_user& authenticated_user) = 0;
 
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
@@ -1098,12 +1113,17 @@ class Bucket {
     /** Clone a copy of this bucket.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<Bucket> clone() = 0;
 
-    /** Create a multipart upload in this bucket */
+    /** Create a multipart upload in this bucket.  `authenticated_user`
+     * is who the upload's operations are for (see
+     * no_authenticated_user);  it precedes the defaulted parameters,
+     * which an undefaulted one cannot follow. */
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid,
+				const rgw_user& authenticated_user,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) = 0;
-    /** List multipart uploads currently in this bucket */
+    /** List multipart uploads currently in this bucket.  Each upload is
+     * for `authenticated_user`, as get_multipart_upload() makes one */
     virtual int list_multiparts(const DoutPrefixProvider *dpp,
 				const std::string& prefix,
 				std::string& marker,
@@ -1111,7 +1131,8 @@ class Bucket {
 				const int& max_uploads,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
-				bool *is_truncated, optional_yield y) = 0;
+				bool *is_truncated, optional_yield y,
+				const rgw_user& authenticated_user) = 0;
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct, optional_yield y) = 0;
@@ -1313,20 +1334,6 @@ public:
 
       virtual ~ReadOp() = default;
 
-      /**
-       * Name the authenticated identity this operation is for.
-       *
-       * Distinct from the owner the object is attributed to:  for a
-       * member of an account `s->owner` is the *account*, while this
-       * is the member.  A driver that maps an identity to filesystem
-       * credentials needs the latter, or every member of an account
-       * is served as one.
-       *
-       * Default does nothing, so a driver with no use for it is
-       * unaffected and none is obliged to implement it.
-       */
-      virtual void set_authenticated_user(const rgw_user& user) {}
-
       /** Prepare the Read op.  Must be called first */
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) = 0;
 
@@ -1380,20 +1387,6 @@ public:
       } result;
 
       virtual ~DeleteOp() = default;
-
-      /**
-       * Name the authenticated identity this operation is for.
-       *
-       * Distinct from the owner the object is attributed to:  for a
-       * member of an account `params.obj_owner` is the *account*,
-       * while this is the member.  A driver that maps an identity to
-       * filesystem credentials needs the latter, or every member of
-       * an account is served as one.
-       *
-       * Default does nothing, so a driver with no use for it is
-       * unaffected and none is obliged to implement it.
-       */
-      virtual void set_authenticated_user(const rgw_user& user) {}
 
       /** Delete the object */
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
@@ -1537,12 +1530,7 @@ public:
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future.
      *
-     * `authenticated_user` names who the write is for, as
-     * ReadOp::set_authenticated_user() does for a read:  for a member
-     * of an account that is the member and not the account.  It is
-     * undefaulted so that a caller with nobody says so --
-     * `rgw::sal::no_authenticated_user` -- rather than leaving a
-     * driver to run the write as the daemon by omission. */
+     * `authenticated_user`:  see no_authenticated_user. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			      Attrs* delattrs, optional_yield y, uint32_t flags,
 			      const rgw_user& authenticated_user) = 0;
@@ -1683,10 +1671,13 @@ public:
 				      const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;
 
-    /** Get a new ReadOp for this object */
-    virtual std::unique_ptr<ReadOp> get_read_op() = 0;
-    /** Get a new DeleteOp for this object */
-    virtual std::unique_ptr<DeleteOp> get_delete_op() = 0;
+    /** Get a new ReadOp for this object, for `authenticated_user` (see
+     * no_authenticated_user) */
+    virtual std::unique_ptr<ReadOp> get_read_op(
+				const rgw_user& authenticated_user) = 0;
+    /** Get a new DeleteOp for this object, for `authenticated_user` */
+    virtual std::unique_ptr<DeleteOp> get_delete_op(
+				const rgw_user& authenticated_user) = 0;
 
     /// Return stored torrent info or -ENOENT if there isn't any.
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
@@ -1794,19 +1785,6 @@ public:
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
 
-  /**
-   * Name the authenticated identity this upload's operations are for.
-   *
-   * Distinct from the upload's owner:  for a member of an account the
-   * owner is the *account*, while this is the member.  A driver that
-   * maps an identity to filesystem credentials needs the latter, or
-   * every member of an account is served as one.
-   *
-   * Default does nothing, so a driver with no use for it is
-   * unaffected and none is obliged to implement it.
-   */
-  virtual void set_authenticated_user(const rgw_user& user) {}
-
   /** Get the name of the object representing this upload in the backing store */
   virtual const std::string& get_meta() const = 0;
   /** Get the name of the target object for this upload */
@@ -1862,14 +1840,16 @@ public:
   /** Get placement and/or attribute info for this upload */
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
 
-  /** Get a Writer to write to a part of this upload */
+  /** Get a Writer to write to a part of this upload, for
+   * `authenticated_user` (see no_authenticated_user) */
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
 			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
-			  const std::string& part_num_str) = 0;
+			  const std::string& part_num_str,
+			  const rgw_user& authenticated_user) = 0;
 
   /** Print the Upload to @a out */
   virtual void print(std::ostream& out) const = 0;
@@ -2075,20 +2055,6 @@ class Writer : public ObjectProcessor {
 public:
   Writer() {}
   virtual ~Writer() = default;
-
-  /**
-   * Name the authenticated identity this operation is for.
-   *
-   * Distinct from the owner the object is attributed to:  for a
-   * member of an account the owner is the *account*, while this is
-   * the member.  A driver that maps an identity to filesystem
-   * credentials needs the latter, or every member of an account is
-   * served as one.
-   *
-   * Default does nothing, so a driver with no use for it is
-   * unaffected and none is obliged to implement it.
-   */
-  virtual void set_authenticated_user(const rgw_user& user) {}
 
   /** prepare to start processing object data */
   virtual int prepare(optional_yield y) = 0;

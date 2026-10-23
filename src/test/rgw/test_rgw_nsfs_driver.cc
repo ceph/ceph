@@ -857,7 +857,7 @@ TEST_F(NSFSDriverTest, BucketCreate)
 
   createparams.owner = owner;
 
-  int ret = bucket->create(env->dpp, createparams, null_yield);
+  int ret = bucket->create(env->dpp, createparams, null_yield, rgw::sal::no_authenticated_user);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
@@ -905,7 +905,7 @@ public:
 
     rgw::sal::Bucket::CreateParams createparams;
     createparams.owner = owner;
-    int ret = bucket->create(env->dpp, createparams, null_yield);
+    int ret = bucket->create(env->dpp, createparams, null_yield, rgw::sal::no_authenticated_user);
     EXPECT_EQ(ret, 0);
   }
 
@@ -2544,7 +2544,8 @@ TEST_F(NSFSBucketTest, ObjectWrite)
   EXPECT_NE(object.get(), nullptr);
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   int ret = writer->prepare(null_yield);
@@ -2606,7 +2607,8 @@ public:
     EXPECT_NE(obj.get(), nullptr);
 
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     EXPECT_NE(writer.get(), nullptr);
 
     int ret = writer->prepare(null_yield);
@@ -2659,7 +2661,7 @@ public:
 
 TEST_F(NSFSObjectTest, ObjectRead)
 {
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(object->get_read_op(rgw::sal::no_authenticated_user));
 
   int ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
@@ -2678,7 +2680,7 @@ TEST_F(NSFSObjectTest, ObjectDelete)
   sf::path tp{bp / "root" / testname / testname};
   EXPECT_TRUE(sf::exists(tp));
 
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = object->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = object->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -2691,7 +2693,8 @@ TEST_F(NSFSBucketTest, HierarchicalDelete)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -2723,7 +2726,7 @@ TEST_F(NSFSBucketTest, HierarchicalDelete)
   // Delete the object
   std::unique_ptr<rgw::sal::Object> obj =
     bucket->get_object(rgw_obj_key("dir1/dir2/file.txt"));
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -2738,7 +2741,8 @@ TEST_F(NSFSBucketTest, DeletePreservesNeighbors)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -2770,7 +2774,7 @@ TEST_F(NSFSBucketTest, DeletePreservesNeighbors)
   // Delete only a.txt
   std::unique_ptr<rgw::sal::Object> obj =
     bucket->get_object(rgw_obj_key("dir1/a.txt"));
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
   int ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -2885,7 +2889,8 @@ TEST_F(NSFSBucketTest, HierarchicalPut)
   EXPECT_NE(obj.get(), nullptr);
 
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
 
   int ret = writer->prepare(null_yield);
@@ -2927,7 +2932,8 @@ TEST_F(NSFSBucketTest, HierarchicalGet)
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(objname));
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
 
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
@@ -2955,7 +2961,7 @@ TEST_F(NSFSBucketTest, HierarchicalGet)
   {
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(objname));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
 
     int ret = read_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
@@ -2984,7 +2990,8 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(flat_name));
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
 
@@ -3011,7 +3018,8 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(hier_name));
     std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
 
@@ -3045,7 +3053,7 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
   {
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(flat_name));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     int ret = read_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
 
@@ -3064,7 +3072,7 @@ TEST_F(NSFSBucketTest, FlatAndHierarchicalCoexist)
   {
     std::unique_ptr<rgw::sal::Object> obj =
       bucket->get_object(rgw_obj_key(hier_name));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     int ret = read_op->prepare(null_yield, env->dpp);
     EXPECT_EQ(ret, 0);
 
@@ -3085,7 +3093,7 @@ TEST_F(NSFSBucketTest, MultipartUploadComplete)
   std::string objname = testname + "-mp";
   std::string upload_id = "c0ffee";
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(objname, upload_id);
+    bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -3100,7 +3108,8 @@ TEST_F(NSFSBucketTest, MultipartUploadComplete)
     std::string part_name = "part-" + fmt::format("{:0>5}", i);
     std::unique_ptr<rgw::sal::Writer> writer =
       upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-                         &placement, i, part_name);
+                         &placement, i, part_name,
+                         rgw::sal::no_authenticated_user);
     ASSERT_NE(writer.get(), nullptr);
 
     ret = writer->prepare(null_yield);
@@ -3157,7 +3166,7 @@ TEST_F(NSFSBucketTest, MultipartUploadComplete)
   EXPECT_FALSE(sf::exists(staging_path));
 
   // Verify content via GET
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(mp_obj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(mp_obj->get_read_op(rgw::sal::no_authenticated_user));
   ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
 
@@ -3173,7 +3182,7 @@ TEST_F(NSFSBucketTest, HierarchicalMultipart)
   std::string objname = "subdir/mp-object.bin";
   std::string upload_id = "beef42";
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(objname, upload_id);
+    bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -3185,7 +3194,8 @@ TEST_F(NSFSBucketTest, HierarchicalMultipart)
   std::string part_name = "part-00001";
   std::unique_ptr<rgw::sal::Writer> writer =
     upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-                       &placement, 1, part_name);
+                       &placement, 1, part_name,
+                       rgw::sal::no_authenticated_user);
   ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
 
@@ -3275,7 +3285,8 @@ TEST_F(NSFSBucketTest, ListWithDelimiter)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -3335,7 +3346,8 @@ TEST_F(NSFSBucketTest, ListWithPrefix)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -3425,7 +3437,8 @@ TEST_F(NSFSBucketTest, SideloadedList)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -3489,7 +3502,7 @@ TEST_F(NSFSBucketTest, DeletingABucketTheGatewayMadeRemovesTheDirectory)
   ASSERT_TRUE(sf::is_directory(d));
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  ASSERT_EQ(b->remove(env->dpp, false, null_yield), 0);
+  ASSERT_EQ(b->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_FALSE(sf::exists(d));
 }
 
@@ -3522,7 +3535,7 @@ TEST_F(NSFSBucketTest, DeletingAnAdoptedBucketLeavesItsDirectory)
   ASSERT_TRUE(sf::remove(d / "predates.txt"));
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  ASSERT_EQ(b->remove(env->dpp, false, null_yield), 0);
+  ASSERT_EQ(b->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
 
   EXPECT_TRUE(sf::is_directory(d))
       << "removed a directory the bucket was only lent";
@@ -3540,7 +3553,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectPut)
 {
   auto obj = bucket->get_object(rgw_obj_key("photos/"));
   auto writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   int ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
 
@@ -3578,7 +3592,8 @@ TEST_F(NSFSBucketTest, ASlashOnlyKeyIsTheRootObject)
   auto put = [&](const char* k, const std::string& body) {
     auto obj = bucket->get_object(rgw_obj_key(k));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     ASSERT_EQ(writer->prepare(null_yield), 0) << k;
     bufferlist bl;
     bl.append(body);
@@ -3594,7 +3609,7 @@ TEST_F(NSFSBucketTest, ASlashOnlyKeyIsTheRootObject)
   };
   auto get = [&](const char* k) -> std::string {
     auto obj = bucket->get_object(rgw_obj_key(k));
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(rgw::sal::no_authenticated_user));
     if (read_op->prepare(null_yield, env->dpp) < 0) {
       return "<absent>";
     }
@@ -3617,13 +3632,14 @@ TEST_F(NSFSBucketTest, ASlashOnlyKeyIsTheRootObject)
   {
     auto obj = bucket->get_object(rgw_obj_key(".folder"));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     EXPECT_EQ(writer->prepare(null_yield), -ERR_INVALID_OBJECT_NAME);
   }
   EXPECT_EQ(get("/"), "again");
 
   auto obj = bucket->get_object(rgw_obj_key("/"));
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(rgw::sal::no_authenticated_user);
   EXPECT_EQ(del_op->delete_obj(env->dpp, null_yield, 0), 0);
   EXPECT_FALSE(sf::exists(bucket_path() / ".folder"));
   EXPECT_EQ(get("/"), "<absent>");
@@ -3667,14 +3683,14 @@ TEST_F(NSFSBucketTest, TheRootObjectDoesNotKeepABucket)
   std::ofstream{bucket_path() / "x" / ".folder"} << "x";
   EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
       << "a directory object did not count as content";
-  EXPECT_LT(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_LT(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_TRUE(sf::exists(bucket_path() / "x" / ".folder"));
 
   sf::remove_all(bucket_path() / "x");
   std::ofstream{bucket_path() / ".folder"} << "root";
   EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
       << "the root object counted as content";
-  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
@@ -3683,7 +3699,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectGet)
   // PUT
   auto obj = bucket->get_object(rgw_obj_key("docs/"));
   auto writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   int ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
 
@@ -3706,7 +3723,7 @@ TEST_F(NSFSBucketTest, DirectoryObjectGet)
 
   // GET
   auto robj = bucket->get_object(rgw_obj_key("docs/"));
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op(rgw::sal::no_authenticated_user));
   ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(robj->get_size(), body.size());
@@ -3725,7 +3742,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectList)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -3774,7 +3792,8 @@ TEST_F(NSFSBucketTest, DirectoryObjectDelete)
   // PUT directory object
   auto obj = bucket->get_object(rgw_obj_key("todelete/"));
   auto writer = driver->get_atomic_writer(
-      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+      env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+      rgw::sal::no_authenticated_user);
   int ret = writer->prepare(null_yield);
   ASSERT_EQ(ret, 0);
   bufferlist bl;
@@ -3799,7 +3818,7 @@ TEST_F(NSFSBucketTest, DirectoryObjectDelete)
 
   // DELETE
   auto dobj = bucket->get_object(rgw_obj_key("todelete/"));
-  auto del_op = dobj->get_delete_op();
+  auto del_op = dobj->get_delete_op(rgw::sal::no_authenticated_user);
   ret = del_op->delete_obj(env->dpp, null_yield, 0);
   EXPECT_EQ(ret, 0);
 
@@ -3812,7 +3831,8 @@ TEST_F(NSFSBucketTest, HierarchicalCopy)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -3866,7 +3886,8 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     int ret = writer->prepare(null_yield);
     ASSERT_EQ(ret, 0);
     bufferlist bl;
@@ -3924,7 +3945,8 @@ TEST_F(NSFSBucketTest, CreateModesFollowRgwNsfsUmask)
   auto write = [&](const std::string& name) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto writer = driver->get_atomic_writer(
-        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname,
+        rgw::sal::no_authenticated_user);
     ASSERT_EQ(writer->prepare(null_yield), 0);
     bufferlist bl;
     bl.append("x");
@@ -4590,8 +4612,7 @@ protected:
     int ret = 0;
     std::thread deleter([&] {
       auto obj = bucket->get_object(rgw_obj_key(key));
-      auto del = obj->get_delete_op();
-      del->set_authenticated_user(who);
+      auto del = obj->get_delete_op(who);
       ret = del->delete_obj(env->dpp, null_yield, 0);
     });
     deleter.join();
@@ -4603,8 +4624,7 @@ protected:
     int ret = 0;
     std::thread deleter([&] {
       auto obj = bucket->get_object(rgw_obj_key(key, vid));
-      auto del = obj->get_delete_op();
-      del->set_authenticated_user(who);
+      auto del = obj->get_delete_op(who);
       ret = del->delete_obj(env->dpp, null_yield, 0);
     });
     deleter.join();
@@ -4628,8 +4648,7 @@ protected:
 			  const std::string& body) {
     auto obj = bucket->get_object(rgw_obj_key(key));
     auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
-					    acl_owner, nullptr, 0, "put");
-    writer->set_authenticated_user(who);
+					    acl_owner, nullptr, 0, "put", who);
     ASSERT_EQ(writer->prepare(null_yield), 0) << key;
     bufferlist bl;
     bl.append(body);
@@ -5132,7 +5151,7 @@ TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsRequesterIsDeleted)
   int ret = 0;
   bool still_raised = true;
   std::thread remover([&] {
-    ret = bucket->remove(env->dpp, false, null_yield);
+    ret = bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user);
     still_raised = nsfs::capability_is_effective(CAP_DAC_OVERRIDE);
   });
   remover.join();
@@ -5754,7 +5773,8 @@ std::string write_mp_part(rgw::sal::MultipartUpload* upload,
 {
   std::unique_ptr<rgw::sal::Writer> writer =
     upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-		       placement, num, std::to_string(num));
+		       placement, num, std::to_string(num),
+		       rgw::sal::no_authenticated_user);
   EXPECT_NE(writer.get(), nullptr);
   EXPECT_EQ(writer->prepare(null_yield), 0);
 
@@ -5803,7 +5823,7 @@ TEST_F(NSFSStridedBucketTest, StridedMultipartCompletes)
 {
   const std::string objname = testname + "-mp";
   const std::string upload_id = "c0ffee";
-  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -5846,7 +5866,7 @@ TEST_F(NSFSStridedBucketTest, StridedOversizedPartDiverts)
 {
   const std::string objname = testname + "-mp";
   const std::string upload_id = "c0ffee";
-  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -5925,7 +5945,7 @@ TEST_F(NSFSImpersonatedStridedTest, EveryFileAStridedUploadMakesIsTheUploaders)
    * step on a thread of its own, as put_as() */
   auto upload_as = [&](const rgw_user& who, uid_t uid,
 		       const std::string& objname) {
-    auto upload = bucket->get_multipart_upload(objname, "c0ffee");
+    auto upload = bucket->get_multipart_upload(objname, who, "c0ffee");
     rgw_placement_rule placement;
     std::map<int, std::string> etags;
     std::thread t([&] {
@@ -5937,8 +5957,7 @@ TEST_F(NSFSImpersonatedStridedTest, EveryFileAStridedUploadMakesIsTheUploaders)
 				    std::string(stride, 'c')};
       for (int n = 1; n <= 3; ++n) {
 	auto w = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-				    &placement, n, std::to_string(n));
-	w->set_authenticated_user(who);
+				    &placement, n, std::to_string(n), who);
 	ASSERT_EQ(w->prepare(null_yield), 0) << "part " << n;
 	bufferlist bl;
 	bl.append(bodies[n - 1]);
@@ -5971,7 +5990,6 @@ TEST_F(NSFSImpersonatedStridedTest, EveryFileAStridedUploadMakesIsTheUploaders)
 
     /* and the object assembly makes from them */
     std::thread c([&] {
-      upload->set_authenticated_user(who);
       EXPECT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
 			    etags), 0);
     });
@@ -6008,7 +6026,7 @@ TEST_F(NSFSStridedWritebackBucketTest, StrideSurvivesWriteback)
 {
   const std::string objname = testname + "-mp";
   const std::string upload_id = "c0ffee";
-  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -6055,7 +6073,8 @@ void short_tail_upload(rgw::sal::Bucket* bucket, ACLOwner& acl_owner,
 		       std::string& expected)
 {
   auto upload = bucket->get_multipart_upload(
-      objname, "11111111-2222-4333-8444-555555555555");
+      objname,
+      rgw::sal::no_authenticated_user, "11111111-2222-4333-8444-555555555555");
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -6136,7 +6155,7 @@ TEST_F(NSFSStridedEvictingBucketTest, AnEvictedPartRecordsItsPlacement)
 {
   const std::string objname = "evicted.bin";
   const std::string upload_id = "c0ffee";
-  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -6159,7 +6178,7 @@ TEST_F(NSFSStridedEvictingBucketTest, AnEvictedPartRecordsItsPlacement)
    * last reference goes, and the release that puts the second one
    * there is what finds the queue over its high-water mark. */
   {
-    auto other = bucket->get_multipart_upload("other.bin", "beef42");
+    auto other = bucket->get_multipart_upload("other.bin", rgw::sal::no_authenticated_user, "beef42");
     ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
 			  attrs), 0);
     write_mp_part(other.get(), acl_owner, &placement, 1,
@@ -6228,7 +6247,8 @@ static void put_object(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
 {
   auto obj = bucket->get_object(rgw_obj_key(key));
   auto writer = driver->get_atomic_writer(dpp, null_yield, obj.get(), owner,
-					  nullptr, 0, "put");
+					  nullptr, 0, "put",
+					  rgw::sal::no_authenticated_user);
   ASSERT_EQ(writer->prepare(null_yield), 0) << key;
   bufferlist bl;
   bl.append(body);
@@ -6300,7 +6320,7 @@ static ClientView client_view(rgw::sal::Bucket* bucket,
 {
   ClientView v;
   auto obj = bucket->get_object(rgw_obj_key(key));
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op(rgw::sal::no_authenticated_user));
   if (rop->prepare(null_yield, dpp) == 0) {
     v.exists = true;
     v.size = obj->get_size();
@@ -6556,7 +6576,7 @@ TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRejected)
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
 
   auto obj = bucket->get_object(rgw_obj_key("e/"));
-  EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0),
+  EXPECT_EQ(obj->get_delete_op(rgw::sal::no_authenticated_user)->delete_obj(env->dpp, null_yield, 0),
 	    -ERR_INVALID_BUCKET_STATE);
   EXPECT_TRUE(client_view(bucket.get(), env->dpp, "e/").exists);
   EXPECT_FALSE(sf::exists(bucket_path() / "e" / ".folder"))
@@ -6570,7 +6590,7 @@ static std::string read_version(rgw::sal::Bucket* bucket,
 				std::string* reported = nullptr)
 {
   auto obj = bucket->get_object(rgw_obj_key(key, vid));
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op());
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op(rgw::sal::no_authenticated_user));
   if (rop->prepare(null_yield, dpp) < 0) {
     return "<absent>";
   }
@@ -6674,14 +6694,15 @@ public:
     EXPECT_NE(b.get(), nullptr);
     rgw::sal::Bucket::CreateParams cp;
     cp.owner = owner;
-    EXPECT_EQ(b->create(env->dpp, cp, null_yield), 0);
+    EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
     return b;
   }
 
   int put(rgw::sal::Bucket* b, const std::string& key) {
     auto obj = b->get_object(rgw_obj_key(key));
     auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
-					    acl_owner, nullptr, 0, "put");
+					    acl_owner, nullptr, 0, "put",
+					    rgw::sal::no_authenticated_user);
     int r = writer->prepare(null_yield);
     if (r < 0) {
       return r;
@@ -6704,7 +6725,8 @@ public:
   int upload_part(rgw::sal::MultipartUpload* upload, int num) {
     rgw_placement_rule placement;
     auto writer = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
-				     &placement, num, std::to_string(num));
+				     &placement, num, std::to_string(num),
+				     rgw::sal::no_authenticated_user);
     if (!writer) {
       return -EINVAL;
     }
@@ -6774,7 +6796,7 @@ TEST_F(NSFSAdoptionGateTest, AClientWriteIsRejectedAndChangesNothing)
 	  env->dpp, RGW_ATTR_TAGS, null_yield, rgw_user());
     }},
     {"DeleteObject", [&] {
-      return bucket->get_object(rgw_obj_key("obj"))->get_delete_op()
+      return bucket->get_object(rgw_obj_key("obj"))->get_delete_op(rgw::sal::no_authenticated_user)
 	  ->delete_obj(env->dpp, null_yield, 0);
     }},
     {"CopyObject within", [&] {
@@ -6786,23 +6808,23 @@ TEST_F(NSFSAdoptionGateTest, AClientWriteIsRejectedAndChangesNothing)
 	  rgw::sal::Object::FLAG_RENAME_NONE, rgw_user());
     }},
     {"CreateMultipartUpload", [&] {
-      auto u = bucket->get_multipart_upload("started",
+      auto u = bucket->get_multipart_upload("started", rgw::sal::no_authenticated_user,
 					    "44444444-5555-4666-8777-888888888888");
       rgw_placement_rule placement;
       Attrs a;
       return u->init(env->dpp, null_yield, acl_owner, placement, a);
     }},
     {"UploadPart into theirs", [&] {
-      auto u = bucket->get_multipart_upload(tree.key, tree.upload_id);
+      auto u = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
       return upload_part(u.get(), 9);
     }},
     {"CompleteMultipartUpload of theirs", [&] {
-      auto u = bucket->get_multipart_upload(tree.key, tree.upload_id);
+      auto u = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
       std::map<int, std::string> etags;
       return complete_mp(bucket.get(), u.get(), owner, tree.key, etags);
     }},
     {"AbortMultipartUpload of theirs", [&] {
-      auto u = bucket->get_multipart_upload(tree.key, tree.upload_id);
+      auto u = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
       return u->abort(env->dpp, env->cct.get(), null_yield);
     }},
     {"bucket attributes", [&] {
@@ -6823,7 +6845,7 @@ TEST_F(NSFSAdoptionGateTest, AClientWriteIsRejectedAndChangesNothing)
       return b->chown(env->dpp, owner, "", null_yield);
     }},
     {"DeleteBucket", [&] {
-      return bucket->remove(env->dpp, false, null_yield);
+      return bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user);
     }},
   };
   for (const auto& [name, op] : ops) {
@@ -6847,7 +6869,8 @@ TEST_F(NSFSAdoptionGateTest, ReadsWriteNothing)
   std::string marker;
   bool truncated = false;
   EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
-				    nullptr, &truncated, null_yield), 0);
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
   EXPECT_EQ(uploads.size(), 1u) << "their upload in flight is listed";
   EXPECT_EQ(tree_snapshot(bucket_path()), before) << "a read wrote";
 }
@@ -6933,7 +6956,7 @@ TEST_F(NSFSBucketTest, TheUnmarkedBucketHintIsNarrow)
   EXPECT_NE(driver->driver_hint(env->dpp, "unmarked-bucket",
 				{{"bucket", testname}}, &out), 0)
       << "a bucket holding content was unmarked";
-  ASSERT_EQ(bucket->get_object(rgw_obj_key("content"))->get_delete_op()
+  ASSERT_EQ(bucket->get_object(rgw_obj_key("content"))->get_delete_op(rgw::sal::no_authenticated_user)
 	      ->delete_obj(env->dpp, null_yield, 0), 0);
 
   ASSERT_EQ(driver->driver_hint(env->dpp, "unmarked-bucket",
@@ -7022,7 +7045,7 @@ TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
   ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
   EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
       << "an empty temp directory counted as an upload in flight";
-  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
@@ -7035,7 +7058,7 @@ TEST_F(NSFSNooBaaBucketTest, ATempDirectoryHoldingAnUploadKeepsItsBucket)
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
       << "an upload in flight did not count as content";
-  EXPECT_LT(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_LT(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_TRUE(sf::is_directory(tree.staging)) << "the upload was destroyed";
 }
 
@@ -8338,7 +8361,8 @@ TEST_F(NSFSNooBaaBucketTest, ListsAnUploadTheyStarted)
   std::string marker;
   bool truncated = false;
   ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
-				    nullptr, &truncated, null_yield), 0);
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
 
   ASSERT_EQ(uploads.size(), 1u);
   EXPECT_EQ(uploads[0]->get_key(), tree.key);
@@ -8362,7 +8386,7 @@ TEST_F(NSFSNooBaaBucketTest, ListsAnUploadTheyStarted)
 TEST_F(NSFSBucketTest, ListsTheInitiatorAnNsfsUploadRecords)
 {
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload("initiated.bin", "cafe01");
+    bucket->get_multipart_upload("initiated.bin", rgw::sal::no_authenticated_user, "cafe01");
   ACLOwner initiator;
   initiator.id = rgw_user("", "somebody-else");
   initiator.display_name = "Somebody Else";
@@ -8377,7 +8401,8 @@ TEST_F(NSFSBucketTest, ListsTheInitiatorAnNsfsUploadRecords)
   std::string marker;
   bool truncated = false;
   ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
-				    nullptr, &truncated, null_yield), 0);
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
   ASSERT_EQ(uploads.size(), 1u);
   EXPECT_EQ(uploads[0]->get_owner().id, rgw_owner{initiator.id})
       << "an upload's recorded initiator was replaced by the bucket's owner";
@@ -8395,7 +8420,8 @@ TEST_F(NSFSNooBaaBucketTest, ListsNothingBeforeAnyUpload)
   std::string marker;
   bool truncated = false;
   EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
-				    nullptr, &truncated, null_yield), 0);
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
   EXPECT_TRUE(uploads.empty());
   EXPECT_FALSE(truncated);
 }
@@ -8409,7 +8435,7 @@ TEST_F(NSFSNooBaaBucketTest, ListsThePartsOfTheirUpload)
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
 
-  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   int next = 0;
@@ -8441,7 +8467,7 @@ TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
   ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0)
       << "adoption did not carry the upload across";
 
-  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   int next = 0;
@@ -8499,11 +8525,12 @@ TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionWaitsForIt)
   auto part = [&](rgw::sal::MultipartUpload* u) {
     auto writer = u->get_writer(env->dpp, null_yield, nullptr, acl_owner,
 				&placement, tree.parts + 1,
-				std::to_string(tree.parts + 1));
+				std::to_string(tree.parts + 1),
+				rgw::sal::no_authenticated_user);
     return writer ? writer->prepare(null_yield) : -EINVAL;
   };
   {
-    auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+    auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
     const auto before = tree_snapshot(bucket_path());
     EXPECT_EQ(part(upload.get()), -ERR_SERVICE_UNAVAILABLE)
 	<< "a part was taken into an upload the adoption had not reached";
@@ -8517,7 +8544,7 @@ TEST_F(NSFSNooBaaBucketTest, APartUploadedMidAdoptionWaitsForIt)
 
   /* adoption finishes;  the same part is taken, and all four complete */
   ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
-  auto after = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto after = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   write_mp_part(after.get(), acl_owner, &placement, tree.parts + 1, extra);
   int next = 0;
   bool truncated = false;
@@ -8553,7 +8580,7 @@ TEST_F(NSFSNooBaaBucketTest, GetInfoOnAnUploadTheyStarted)
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
 
-  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule* rule{nullptr};
@@ -8599,7 +8626,7 @@ TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesTheirCreateParams)
 	     "\"retain_until_date\":\"2030-01-01T00:00:00.000Z\"},"
 	     "\"legal_hold\":{\"status\":\"ON\"}}}");
 
-  auto upload = bucket->get_multipart_upload(key, upload_id);
+  auto upload = bucket->get_multipart_upload(key, rgw::sal::no_authenticated_user, upload_id);
   rgw_placement_rule* rule{nullptr};
   Attrs attrs;
   ASSERT_EQ(upload->get_info(env->dpp, null_yield, &rule, &attrs), 0);
@@ -8628,7 +8655,7 @@ TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesTheirCreateParams)
 TEST_F(NSFSBucketTest, GetInfoOnOurOwnUpload)
 {
   const std::string objname = "ours.bin";
-  auto upload = bucket->get_multipart_upload(objname, "c0ffee");
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, "c0ffee");
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -8640,7 +8667,7 @@ TEST_F(NSFSBucketTest, GetInfoOnOurOwnUpload)
   Attrs attrs;
   ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
 
-  auto reread = bucket->get_multipart_upload(objname, "c0ffee");
+  auto reread = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, "c0ffee");
   rgw_placement_rule* rule{nullptr};
   ASSERT_EQ(reread->get_info(env->dpp, null_yield, &rule, nullptr), 0);
   ASSERT_NE(rule, nullptr);
@@ -8657,7 +8684,8 @@ TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepOurNames)
   const std::string objname = "plain.bin";
   auto obj = bucket->get_object(rgw_obj_key(objname));
   auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
-					  acl_owner, nullptr, 0, testname);
+					  acl_owner, nullptr, 0, testname,
+					  rgw::sal::no_authenticated_user);
   ASSERT_EQ(writer->prepare(null_yield), 0);
   bufferlist bl;
   bl.append("some bytes");
@@ -8848,7 +8876,7 @@ TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepWaitsForIt)
 
   for (const char* k : {"e/", "c/"}) {
     auto obj = bucket->get_object(rgw_obj_key(k));
-    EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0),
+    EXPECT_EQ(obj->get_delete_op(rgw::sal::no_authenticated_user)->delete_obj(env->dpp, null_yield, 0),
 	      -ERR_SERVICE_UNAVAILABLE) << k;
     EXPECT_TRUE(client_view(bucket.get(), env->dpp, k).exists)
 	<< k << " was deleted before the sweep reached it";
@@ -8858,7 +8886,7 @@ TEST_F(NSFSConvertingBucketTest, ADeleteBeforeTheSweepWaitsForIt)
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, nullptr), 0);
   for (const char* k : {"e/", "c/"}) {
     auto obj = bucket->get_object(rgw_obj_key(k));
-    EXPECT_EQ(obj->get_delete_op()->delete_obj(env->dpp, null_yield, 0), 0) << k;
+    EXPECT_EQ(obj->get_delete_op(rgw::sal::no_authenticated_user)->delete_obj(env->dpp, null_yield, 0), 0) << k;
     const ClientView v = client_view(bucket.get(), env->dpp, k);
     EXPECT_FALSE(v.exists) << k << " survived its delete";
     EXPECT_FALSE(v.listed) << k << " listed after its delete";
@@ -9022,7 +9050,7 @@ TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotE
   ASSERT_FALSE(b->owns_storage(env->dpp));
   write_file(bucket_path() / "kept.txt", "kept");
 
-  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), -ENOTEMPTY)
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), -ENOTEMPTY)
       << "a non-empty bucket was deleted";
   EXPECT_GT(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
 		       nullptr, 0), 0)
@@ -9030,7 +9058,7 @@ TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotE
 
   /* the control:  emptied, it is removed, and its directory is left */
   sf::remove(bucket_path() / "kept.txt");
-  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_TRUE(sf::is_directory(bucket_path()))
       << "the directory the bucket did not own was deleted";
   EXPECT_LT(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
@@ -9996,13 +10024,14 @@ TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
   std::string marker;
   bool truncated = false;
   ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
-				    nullptr, &truncated, null_yield), 0);
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
   ASSERT_EQ(uploads.size(), 1u);
   EXPECT_EQ(uploads[0]->get_key(), tree.key);
   EXPECT_EQ(uploads[0]->get_upload_id(), tree.upload_id);
 
   /* its parts report the sizes they were staged with */
-  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   int next = 0;
   ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
 			       &truncated, null_yield), 0);
@@ -10042,7 +10071,7 @@ TEST_F(NSFSUpgradeTest, AnUploadListedBeforeTheUpgradeCompletesAfterIt)
   /* the client's view before:  warms the multipart cache */
   std::map<int, std::string> before;
   {
-    auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+    auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
     int next = 0;
     bool truncated = false;
     ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
@@ -10059,7 +10088,7 @@ TEST_F(NSFSUpgradeTest, AnUploadListedBeforeTheUpgradeCompletesAfterIt)
   ASSERT_FALSE(sf::exists(tree.staging)) << "the upload was not re-staged";
 
   /* the same listing after:  the same parts, the same ETags */
-  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   int next = 0;
   bool truncated = false;
   ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
@@ -10176,7 +10205,7 @@ TEST_F(NSFSBucketTest, DeletingALinksNameUnlinksTheLinkAndNotItsTarget)
   plant_links(bucket_path(), outside);
   for (const char* k : planted_links) {
     auto obj = bucket->get_object(rgw_obj_key(k));
-    auto del = obj->get_delete_op();
+    auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
     EXPECT_EQ(del->delete_obj(env->dpp, null_yield, 0), 0) << k;
     EXPECT_FALSE(is_link(bucket_path() / k)) << k << " is still there";
   }
@@ -10204,7 +10233,7 @@ TEST_F(NSFSBucketTest, ALinkDoesNotKeepABucket)
 
   EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
       << "a link counted as content";
-  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_FALSE(sf::exists(sf::symlink_status(bucket_path())));
   EXPECT_EQ(read_all(outside), "outside");
 }
@@ -10257,7 +10286,8 @@ TEST_F(NSFSBucketTest, APutOfALinksNameReplacesTheLink)
 
   auto obj = bucket->get_object(rgw_obj_key("l-file"));
   auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
-					  acl_owner, nullptr, 0, "put");
+					  acl_owner, nullptr, 0, "put",
+					  rgw::sal::no_authenticated_user);
   ASSERT_EQ(writer->prepare(null_yield), 0);
   bufferlist bl;
   bl.append("excl");
@@ -10292,7 +10322,7 @@ TEST_F(NSFSBucketTest, AVersionedWriteOverALinkMakesNoVersionOfIt)
       << "the link was demoted as a version";
 
   auto obj = bucket->get_object(rgw_obj_key("l-file"));
-  auto del = obj->get_delete_op();
+  auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
   EXPECT_EQ(del->delete_obj(env->dpp, null_yield, 0), 0);
   EXPECT_FALSE(is_link(bucket_path() / "l-file"));
   EXPECT_EQ(listed_versions(bucket.get(), env->dpp, "l-file").size(), 1u)
@@ -10395,7 +10425,7 @@ TEST_F(NSFSUpgradeTest, ReStagingDropsCachedPartsWhosePlacementChanged)
 					    tree.key + "." + tree.upload_id};
 
   {
-    auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+    auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
     int next = 0;
     bool truncated = false;
     ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
@@ -10417,7 +10447,7 @@ TEST_F(NSFSUpgradeTest, ReStagingDropsCachedPartsWhosePlacementChanged)
       << "a record of where NooBaa kept part 2 survived its re-staging";
 
   /* and listing again records where the part is now */
-  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   int next = 0;
   bool truncated = false;
   ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
@@ -10492,7 +10522,7 @@ TEST_F(NSFSUpgradeTest, StoppingMidUploadKeepsTheirStaging)
   EXPECT_TRUE(second.complete);
   EXPECT_FALSE(sf::exists(tree.staging));
 
-  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  auto upload = bucket->get_multipart_upload(tree.key, rgw::sal::no_authenticated_user, tree.upload_id);
   int next = 0;
   bool truncated = false;
   ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
@@ -10533,7 +10563,8 @@ TEST_F(NSFSUpgradeTest, AnUploadIsListedThroughoutTheConversion)
       bool truncated = false;
       EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100,
 					uploads, nullptr, &truncated,
-					null_yield), 0);
+					null_yield,
+					rgw::sal::no_authenticated_user), 0);
       counts.push_back(uploads.size());
       for (auto& u : uploads) {
 	EXPECT_EQ(u->get_key(), tree.key);
@@ -10794,7 +10825,8 @@ TEST_F(NSFSBucketTest, APutOverASideLoadedFileReplacesTheInode)
   rgw_owner acl_owner_id = owner;
   ACLOwner acl_owner{acl_owner_id, ""};
   auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
-					  acl_owner, nullptr, 0, testname);
+					  acl_owner, nullptr, 0, testname,
+					  rgw::sal::no_authenticated_user);
   ASSERT_NE(writer.get(), nullptr);
   ASSERT_EQ(writer->prepare(null_yield), 0);
 
@@ -11003,7 +11035,7 @@ TEST_F(NSFSNooBaaBucketTest, RejectsAnAmbiguousTree)
   sf::create_directories(bucket_path() /
 			 (".noobaa-nsfs_" + fake_uuid("someone-else")));
 
-  auto upload = bucket->get_multipart_upload("k", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+  auto upload = bucket->get_multipart_upload("k", rgw::sal::no_authenticated_user, "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
   rgw_placement_rule placement;
   Attrs attrs;
   EXPECT_LT(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
@@ -11078,7 +11110,8 @@ public:
     std::string marker;
     bool truncated = false;
     EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
-				      nullptr, &truncated, null_yield), 0);
+				      nullptr, &truncated, null_yield,
+				      rgw::sal::no_authenticated_user), 0);
     EXPECT_FALSE(truncated);
     return uploads.size();
   }
@@ -11097,7 +11130,7 @@ TEST_P(NSFSFormatTest, MultipartRoundTrip)
   ASSERT_STREQ(b->mpu_strategy()->name(), GetParam().mpu_name);
 
   const std::string objname = "written/by/us.bin";
-  auto upload = bucket->get_multipart_upload(objname, uniform_upload_id);
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, uniform_upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -11154,7 +11187,7 @@ TEST_P(NSFSFormatTest, MultipartShortFinalPart)
   ASSERT_STREQ(b->mpu_strategy()->name(), GetParam().mpu_name);
 
   const std::string objname = "short/tail.bin";
-  auto upload = bucket->get_multipart_upload(objname, uniform_upload_id);
+  auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, uniform_upload_id);
   ASSERT_NE(upload.get(), nullptr);
 
   rgw_placement_rule placement;
@@ -13808,7 +13841,7 @@ TEST_F(NooBaaBucketImportTest, CreationRejectsANameNooBaaHolds)
     auto b = driver->get_bucket(info);
     rgw::sal::Bucket::CreateParams cp;
     cp.owner = owner;
-    return b->create(env->dpp, cp, null_yield);
+    return b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user);
   };
   EXPECT_EQ(create("held"), -EEXIST);
   nsfs::BucketPlacement row;
@@ -14152,7 +14185,7 @@ TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRejected)
     auto b = driver->get_bucket(info);
     rgw::sal::Bucket::CreateParams cp;
     cp.owner = owner;
-    return b->create(env->dpp, cp, null_yield);
+    return b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user);
   };
   EXPECT_EQ(create("inner"), -EEXIST);
   EXPECT_FALSE(sf::exists(theirs / "inner")) << "the directory was made";
@@ -14543,7 +14576,7 @@ TEST_F(NooBaaCompletionTest, AfterCompletionTheStoreIsNotRead)
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
-  EXPECT_EQ(b->create(env->dpp, cp, null_yield), 0)
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0)
       << "NooBaa's record still held the name";
 
   std::map<std::string, std::string> out;
@@ -14949,7 +14982,7 @@ public:
     EXPECT_NE(b.get(), nullptr);
     rgw::sal::Bucket::CreateParams cp;
     cp.owner = owner;
-    EXPECT_EQ(b->create(env->dpp, cp, null_yield), 0);
+    EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
     return b;
   }
 };
@@ -15029,7 +15062,7 @@ TEST_F(NSFSPlacedBucketTest, AnOwnedPlacedBucketIsDeletedWithItsDirectory)
   ASSERT_TRUE(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
 		->owns_storage(env->dpp));
 
-  EXPECT_EQ(loaded->remove(env->dpp, false, null_yield), 0);
+  EXPECT_EQ(loaded->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_FALSE(sf::exists(at)) << "the owned directory was left";
   EXPECT_TRUE(sf::is_directory(elsewhere()))
       << "the delete reached past the bucket's own directory";
@@ -15133,7 +15166,7 @@ TEST_F(NSFSPlacedBucketTest, AnImportedOwnerWithoutAPathIsRejected)
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
-  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EACCES);
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), -EACCES);
   EXPECT_FALSE(sf::exists(bp / "root" / "rejected"));
   nsfs::BucketPlacement row;
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
@@ -15153,7 +15186,7 @@ TEST_F(NSFSPlacedBucketTest, ATenantsBucketIsNamedForItsTenant)
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
-  ASSERT_EQ(b->create(env->dpp, cp, null_yield), 0);
+  ASSERT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
 
   EXPECT_TRUE(sf::is_directory(bp / "root" / "same"));
   EXPECT_TRUE(sf::is_directory(bp / "root" / "t1$same"));
@@ -15175,7 +15208,7 @@ TEST_F(NSFSPlacedBucketTest, ATakenNameIsRejected)
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
-  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EEXIST);
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), -EEXIST);
 }
 
 /* A bucket is not created over a directory that is already there, as
@@ -15192,7 +15225,7 @@ TEST_F(NSFSPlacedBucketTest, CreationOverAnExistingDirectoryIsRejected)
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
-  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -EEXIST);
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), -EEXIST);
 
   EXPECT_LT(::getxattr(pre.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
       << "the rejected creation wrote to the directory";
@@ -15219,7 +15252,7 @@ TEST_F(NSFSPlacedBucketTest, AFailureAfterMkdirTakesBackTheDirectory)
     auto b = driver->get_bucket(info);
     rgw::sal::Bucket::CreateParams cp;
     cp.owner = owner;
-    return b->create(env->dpp, cp, null_yield);
+    return b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user);
   };
 
   ASSERT_EQ(driver->driver_hint(env->dpp, "inject-create-failure",
@@ -15253,7 +15286,7 @@ TEST_F(NSFSPlacedBucketTest, AFailedMkdirLeavesNoRow)
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
-  EXPECT_EQ(b->create(env->dpp, cp, null_yield), -ENOENT);
+  EXPECT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), -ENOENT);
 
   nsfs::BucketPlacement row;
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
@@ -15394,7 +15427,7 @@ TEST_F(NSFSPlacedBucketTest, ListBucketsIsPerTenant)
   auto b = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = owner;
-  ASSERT_EQ(b->create(env->dpp, cp, null_yield), 0);
+  ASSERT_EQ(b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
 
   rgw::sal::BucketList bl;
   ASSERT_EQ(driver->list_buckets(env->dpp, owner, "t1", "", "", 1000, false,
@@ -15421,7 +15454,7 @@ TEST_F(NSFSPlacedBucketTest, ListBucketsOpensOnlyTheCallersBuckets)
   auto theirs = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = other;
-  ASSERT_EQ(theirs->create(env->dpp, cp, null_yield), 0);
+  ASSERT_EQ(theirs->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
   const sf::path t = bp / "root" / "theirs";
   ASSERT_EQ(::chmod(t.c_str(), 0), 0);
   auto restore = make_scope_guard([&t] { ::chmod(t.c_str(), 0755); });
@@ -15499,7 +15532,7 @@ public:
     rgw::sal::Bucket::CreateParams cp;
     cp.owner = owner;
     cp.env = &env_;
-    return b->create(env->dpp, cp, null_yield);
+    return b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user);
   }
 
   std::string row_path(const std::string& name) {
@@ -15746,7 +15779,7 @@ TEST_F(NSFSPlaceBucketTest, DeletingAPlacedBucketLeavesItsDirectory)
   std::unique_ptr<rgw::sal::Bucket> loaded;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "lent"}, &loaded,
 				null_yield), 0);
-  ASSERT_EQ(loaded->remove(env->dpp, false, null_yield), 0);
+  ASSERT_EQ(loaded->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_TRUE(sf::is_directory(at));
   EXPECT_TRUE(nsfs_xattrs(at).empty());
   EXPECT_FALSE(has_row("lent"));
@@ -15825,7 +15858,7 @@ TEST_F(NSFSPlaceBucketTest, TheUnplacedDirectoryHintStaysOffBuckets)
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "lent"}, &loaded,
 				null_yield), 0);
   ASSERT_TRUE(sf::remove(at / "already.txt"));
-  ASSERT_EQ(loaded->remove(env->dpp, false, null_yield), 0);
+  ASSERT_EQ(loaded->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_EQ(hint({{"op", "remove"}, {"name", "lent"}}), 0);
   EXPECT_FALSE(sf::exists(at));
 }
@@ -16084,7 +16117,7 @@ TEST_F(NSFSPlacedBucketTest, RemovalDeletesTheRow)
   ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
 		env->dpp, "gone", "", row), 0);
 
-  ASSERT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  ASSERT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
 		env->dpp, "gone", "", row), -ENOENT);
 }
@@ -16095,7 +16128,7 @@ TEST_F(NSFSPlacedBucketTest, AStagingBucketGetsNoRow)
 {
   auto bucket = make_bucket("staged");
   const std::string upload_id = "c0ffee";
-  auto upload = bucket->get_multipart_upload("obj", upload_id);
+  auto upload = bucket->get_multipart_upload("obj", rgw::sal::no_authenticated_user, upload_id);
   rgw_placement_rule placement;
   Attrs attrs;
   ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs),
@@ -16167,14 +16200,15 @@ public:
     auto bucket = driver->get_bucket(info);
     rgw::sal::Bucket::CreateParams cp;
     cp.owner = owner;
-    ASSERT_EQ(bucket->create(env->dpp, cp, null_yield), 0);
+    ASSERT_EQ(bucket->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
     const std::string dname = tenant.empty() ? "evicting"
 					     : (tenant + "$evicting");
     ASSERT_TRUE(sf::is_directory(acct / dname));
 
     const std::string objname = "big.bin";
     auto upload = bucket->get_multipart_upload(
-	objname, "11111111-2222-4333-8444-555555555555");
+	objname,
+	rgw::sal::no_authenticated_user, "11111111-2222-4333-8444-555555555555");
     rgw_placement_rule placement;
     Attrs attrs;
     ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement,
@@ -16191,7 +16225,8 @@ public:
 
     /* the second upload evicts the first one's entry */
     auto other = bucket->get_multipart_upload(
-	"other.bin", "22222222-3333-4444-8555-666666666666");
+	"other.bin",
+	rgw::sal::no_authenticated_user, "22222222-3333-4444-8555-666666666666");
     ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
 			  attrs), 0);
     write_mp_part(other.get(), acl_owner, &placement, 1,

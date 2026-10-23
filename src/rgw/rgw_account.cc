@@ -354,7 +354,8 @@ int remove(const DoutPrefixProvider* dpp,
       }
 
       constexpr bool delete_objects = true;
-      ret = bucket->remove(dpp, delete_objects, y);
+      ret = bucket->remove(dpp, delete_objects, y,
+                           rgw::sal::no_authenticated_user);
       if (ret < 0) {
         err_msg = fmt::format("unable to delete bucket {}", ent.bucket.name);
         return ret;

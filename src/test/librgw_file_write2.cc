@@ -1383,7 +1383,8 @@ TEST(OPEN2, MULTIPART_ASSEMBLY_BUFFERED)
   rgw_placement_rule placement = bucket->get_info().placement_rule;
 
   auto obj = bucket->get_object(rgw_obj_key(key));
-  auto upload = bucket->get_multipart_upload(key, std::nullopt, owner);
+  auto upload = bucket->get_multipart_upload(key, rgw::sal::no_authenticated_user,
+					     std::nullopt, owner);
   ASSERT_NE(upload, nullptr);
 
   rgw::sal::Attrs init_attrs;
@@ -1405,7 +1406,8 @@ TEST(OPEN2, MULTIPART_ASSEMBLY_BUFFERED)
     const std::string etag = md5_hex(parts[i]);
 
     auto writer = upload->get_writer(&dp, null_yield, obj.get(), owner,
-				     &placement, pnum, pstr);
+				     &placement, pnum, pstr,
+				     rgw::sal::no_authenticated_user);
     ASSERT_NE(writer, nullptr) << "no writer for part " << pnum;
     ASSERT_EQ(writer->prepare(null_yield), 0);
 
@@ -5723,7 +5725,8 @@ TEST(OPEN2, MULTIPART_LIST_TRUNCATED_ADVANCES_MARKER)
   std::set<std::string> created;
   for (int i = 0; i < n_uploads; ++i) {
     const std::string key = fmt::format("mp-list-{:02d}", i);
-    auto upload = sal_bucket->get_multipart_upload(key, std::nullopt, owner);
+    auto upload = sal_bucket->get_multipart_upload(key, rgw::sal::no_authenticated_user,
+						   std::nullopt, owner);
     ASSERT_NE(upload, nullptr);
     rgw_placement_rule placement = sal_bucket->get_info().placement_rule;
     ASSERT_EQ(upload->init(&dp, null_yield, owner, placement, init_attrs), 0);
@@ -5754,7 +5757,7 @@ TEST(OPEN2, MULTIPART_LIST_TRUNCATED_ADVANCES_MARKER)
 
   for (const auto& meta : created) {
     auto upload = sal_bucket->get_multipart_upload(
-	std::string(), meta, owner);
+	std::string(), rgw::sal::no_authenticated_user, meta, owner);
     (void) upload->abort(&dp, g_ceph_context, null_yield);
   }
 }

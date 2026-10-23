@@ -116,14 +116,15 @@ static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, re
 
 // this probably should belong in the rgw_iam_policy_keywords, I'll get it to it
 // at some point
-/* Who an attribute write is for, where the SAL asks.
+/* Who an operation is for, where the SAL asks (see
+ * rgw::sal::no_authenticated_user).
  *
  * `s->user` is the authenticated user, which for a member of an
  * account is the member;  `s->owner` would be the account.  A
  * request with nothing authenticated -- anonymous, and the paths
  * that run with no req_state user -- says so rather than leaving a
- * driver to run the write as the daemon. */
-static const rgw_user& authenticated_user(const req_state* s)
+ * driver to run the operation as the daemon. */
+const rgw_user& authenticated_user(const req_state* s)
 {
   return s->user ? s->user->get_id() : rgw::sal::no_authenticated_user;
 }
@@ -352,7 +353,6 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   bufferlist bl;
   int ret = 0;
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
   /* The ACL read runs as the requester, not as the daemon.
    *
    * A driver which serves requests under the caller's filesystem
@@ -372,7 +372,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
    * A requester permitted by bucket policy but refused by the
    * filesystem now fails here rather than at the data read.  Same
    * status, same request, earlier. */
-  rop->set_authenticated_user(auth_user);
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op(auth_user);
 
   ret = rop->prepare(y, dpp);
   if (ret < 0) {
@@ -509,7 +509,8 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   // 'copy_src' is used to make this function backward compatible.
   if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
-    upload = bucket->get_multipart_upload(object->get_name(), upload_id);
+    upload = bucket->get_multipart_upload(object->get_name(),
+					  authenticated_user(s), upload_id);
     mpobj = upload->get_meta_obj();
     mpobj->set_in_extra_data(true);
     object = mpobj.get();
@@ -2095,10 +2096,8 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   part->set_atomic(true);
   part->set_prefetch_data();
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
-  if (s->user) {
-    read_op->set_authenticated_user(s->user->get_id());
-  }
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op =
+    part->get_read_op(authenticated_user(s));
 
   if (!swift_slo) {
     /* SLO etag is optional */
@@ -2714,13 +2713,8 @@ void RGWGetObj::execute(optional_yield y)
   auto counters = rgw::op_counters::get(s);
   rgw::op_counters::inc(counters, l_rgw_op_get_obj, 1);
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
-  /* s->user, not s->owner:  the owner is the *account* for a
-   * member of one, and a driver mapping an identity to
-   * filesystem credentials needs the member. */
-  if (s->user) {
-    read_op->set_authenticated_user(s->user->get_id());
-  }
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(
+    s->object->get_read_op(authenticated_user(s)));
   std::string etag;
 
   op_ret = get_params(y);
@@ -4347,7 +4341,7 @@ void RGWCreateBucket::execute(optional_yield y)
   }
 
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << s->bucket << dendl;
-  op_ret = s->bucket->create(this, createparams, y);
+  op_ret = s->bucket->create(this, createparams, y, authenticated_user(s));
 
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
@@ -4418,7 +4412,7 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->remove(this, false, y);
+  op_ret = s->bucket->remove(this, false, y, authenticated_user(s));
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
       // in either case, we've already called ctl.bucket->unlink_bucket()
@@ -4663,10 +4657,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   auto bucket = driver->get_bucket(copy_source_bucket_info);
   auto obj = bucket->get_object(rgw_obj_key(copy_source_object_name,
                                             copy_source_version_id));
-  auto read_op = obj->get_read_op();
-  if (s->user) {
-    read_op->set_authenticated_user(s->user->get_id());
-  }
+  auto read_op = obj->get_read_op(authenticated_user(s));
 
   ret = read_op->prepare(s->yield, this);
   if (ret < 0)
@@ -4905,7 +4896,8 @@ void RGWPutObj::execute(optional_yield y)
   if (multipart) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(s->object->get_name(),
-					 multipart_upload_id);
+					     authenticated_user(s),
+					     multipart_upload_id);
     op_ret = upload->get_info(this, s->yield, &pdest_placement);
 
     s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
@@ -4929,7 +4921,8 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 20) << "dest_placement for part=" << *pdest_placement << dendl;
     processor = upload->get_writer(this, s->yield, s->object.get(),
 				   s->owner, pdest_placement,
-				   multipart_part_num, multipart_part_str);
+				   multipart_part_num, multipart_part_str,
+				   authenticated_user(s));
   } else if(append) {
     if (s->bucket->versioned()) {
       op_ret = -ERR_INVALID_BUCKET_STATE;
@@ -4938,7 +4931,8 @@ void RGWPutObj::execute(optional_yield y)
     processor = driver->get_append_writer(this, s->yield, s->object.get(),
 					 s->owner,
 					 pdest_placement, s->req_id, position,
-					 &cur_accounted_size);
+					 &cur_accounted_size,
+					 authenticated_user(s));
   } else {
     if (s->bucket->versioning_enabled()) {
       if (!version_id.empty()) {
@@ -4947,13 +4941,8 @@ void RGWPutObj::execute(optional_yield y)
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
 					 s->owner,
-					 pdest_placement, olh_epoch, s->req_id);
-  }
-  /* s->user, not s->owner:  the owner is the *account* for a
-   * member of one, and a driver mapping an identity to
-   * filesystem credentials needs the member. */
-  if (processor && s->user) {
-    processor->set_authenticated_user(s->user->get_id());
+					 pdest_placement, olh_epoch, s->req_id,
+					 authenticated_user(s));
   }
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
     s->object->set_cache_request();
@@ -5457,10 +5446,8 @@ void RGWPostObj::execute(optional_yield y)
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 					 s->owner,
-					 &s->dest_placement, 0, s->req_id);
-    if (s->user) {
-      processor->set_authenticated_user(s->user->get_id());
-    }
+					 &s->dest_placement, 0, s->req_id,
+					 authenticated_user(s));
     op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
       return;
@@ -6150,12 +6137,8 @@ void RGWDeleteObj::execute(optional_yield y)
 	return;
       }
 
-      std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
-      /* who is deleting, as distinct from who the object belongs to:
-       * for a member of an account params.obj_owner is the account */
-      if (s->user) {
-        del_op->set_authenticated_user(s->user->get_id());
-      }
+      std::unique_ptr<rgw::sal::Object::DeleteOp> del_op =
+	s->object->get_delete_op(authenticated_user(s));
       del_op->params.obj_owner = s->owner;
       del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
@@ -7564,10 +7547,7 @@ void RGWInitMultipart::execute(optional_yield y)
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
-				       upload_id);
-  if (s->user) {
-    upload->set_authenticated_user(s->user->get_id());
-  }
+					   authenticated_user(s), upload_id);
 
   /* apparently, we are assured of upload */
   upload->obj_legal_hold = obj_legal_hold;
@@ -7777,10 +7757,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
-  if (s->user) {
-    upload->set_authenticated_user(s->user->get_id());
-  }
+  upload = s->bucket->get_multipart_upload(s->object->get_name(),
+					   authenticated_user(s), upload_id);
 
   rgw_placement_rule* dest_placement;
   op_ret = upload->get_info(this, s->yield, &dest_placement);
@@ -8137,10 +8115,8 @@ void RGWAbortMultipart::execute(optional_yield y)
   if (upload_id.empty() || rgw::sal::Object::empty(s->object.get()))
     return;
 
-  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
-  if (s->user) {
-    upload->set_authenticated_user(s->user->get_id());
-  }
+  upload = s->bucket->get_multipart_upload(s->object->get_name(),
+					   authenticated_user(s), upload_id);
   meta_obj = upload->get_meta_obj();
   meta_obj->set_in_extra_data(true);
   meta_obj->get_obj_attrs(s->yield, this);
@@ -8190,7 +8166,8 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  upload = s->bucket->get_multipart_upload(s->object->get_name(),
+					   authenticated_user(s), upload_id);
 
   rgw::sal::Attrs attrs;
   op_ret = upload->get_info(this, s->yield, &placement, &attrs);
@@ -8266,7 +8243,8 @@ void RGWListBucketMultiparts::execute(optional_yield y)
 
   op_ret = s->bucket->list_multiparts(this, prefix, marker_meta,
 				      delimiter, max_uploads, uploads,
-				      &common_prefixes, &is_truncated, y);
+				      &common_prefixes, &is_truncated, y,
+				      authenticated_user(s));
   if (op_ret < 0) {
     return;
   }
@@ -8418,10 +8396,8 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   obj->set_atomic(true);
 
   std::string version_id; // empty
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
-  if (s->user) {
-    del_op->set_authenticated_user(s->user->get_id());
-  }
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op =
+    obj->get_delete_op(authenticated_user(s));
   del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
@@ -8631,10 +8607,8 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(path.obj_key);
     obj->set_atomic(true);
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
-    if (s->user) {
-      del_op->set_authenticated_user(s->user->get_id());
-    }
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op =
+      obj->get_delete_op(authenticated_user(s));
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner.id;
@@ -8656,7 +8630,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
         goto delop_fail;
       }
     }
-    ret = bucket->remove(dpp, false, s->yield);
+    ret = bucket->remove(dpp, false, s->yield, authenticated_user(s));
     if (ret < 0) {
       goto delop_fail;
     }
@@ -8923,7 +8897,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
     createparams.creation_time = master_info.creation_time;
   }
 
-  return bucket->create(this, createparams, y);
+  return bucket->create(this, createparams, y, authenticated_user(s));
 }
 
 
@@ -8996,10 +8970,8 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = driver->get_atomic_writer(this, s->yield, obj.get(), bowner,
-				       &s->dest_placement, 0, s->req_id);
-  if (s->user) {
-    processor->set_authenticated_user(s->user->get_id());
-  }
+				       &s->dest_placement, 0, s->req_id,
+				       authenticated_user(s));
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot prepare processor due to ret=" << op_ret << dendl;

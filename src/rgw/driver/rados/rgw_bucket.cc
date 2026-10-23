@@ -1068,7 +1068,8 @@ int rgw_object_get_attr(const DoutPrefixProvider *dpp,
 			rgw::sal::Driver* driver, rgw::sal::Object* obj,
 			const char* attr_name, bufferlist& out_bl, optional_yield y)
 {
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop =
+    obj->get_read_op(rgw::sal::no_authenticated_user);
 
   return rop->get_attr(dpp, attr_name, out_bl, y);
 }
@@ -1487,7 +1488,8 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
   if (bypass_gc)
     ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
   else
-    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
+    ret = bucket->remove(dpp, op_state.will_delete_children(), y,
+			 rgw::sal::no_authenticated_user);
   if (ret < 0)
     return ret;
 

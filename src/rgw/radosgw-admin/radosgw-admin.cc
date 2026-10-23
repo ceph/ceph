@@ -1886,7 +1886,8 @@ int check_obj_locator_underscore(rgw::sal::Object* obj, bool fix, bool remove_ba
   f->dump_string("oid", oid);
   f->dump_string("locator", locator);
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op =
+    obj->get_read_op(rgw::sal::no_authenticated_user);
 
   int ret = read_op->prepare(null_yield, dpp());
   bool needs_fixing = (ret == -ENOENT);
