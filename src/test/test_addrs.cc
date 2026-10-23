@@ -364,8 +364,7 @@ TEST(Msgr, TestAddrEncodingIsPortable)
   ASSERT_EQ(addr, decoded);
 }
 
-// decode() rejects an address longer than the sockaddr it is decoded into,
-// with the same bound on every platform.
+// The same for IPv6, whose family number differs between platforms.
 TEST(Msgr, TestAddr6EncodingIsPortable)
 {
   // AF_INET6 is 10 on Linux, 23 on Windows, 28 on FreeBSD and 30 on macOS;
@@ -398,6 +397,23 @@ TEST(Msgr, TestAddr6EncodingIsPortable)
   ASSERT_TRUE(decoded.is_ipv6());
 }
 
+// entity_addrvec_t::decode() reads a single msgr2 address itself; it must
+// map the family the same way entity_addr_t::decode() does.
+TEST(Msgr, TestAddr6DecodedAsAddrvecIsPortable)
+{
+  entity_addr_t addr;
+  ASSERT_TRUE(addr.parse("v2:[::1]:6789/12345"));
+  bufferlist bl;
+  encode(addr, bl, CEPH_FEATURES_ALL);
+
+  entity_addrvec_t decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+  ASSERT_EQ(1u, decoded.v.size());
+  ASSERT_TRUE(decoded.v[0].is_ipv6());
+  ASSERT_EQ(addr, decoded.v[0]);
+}
+
 TEST(Msgr, TestAddr6LegacyEncodingIsPortable)
 {
   entity_addr_t addr;
@@ -416,9 +432,12 @@ TEST(Msgr, TestAddr6LegacyEncodingIsPortable)
   ASSERT_EQ(addr.get_port(), decoded.get_port());
 }
 
+// decode() rejects an address longer than the sockaddr it is decoded into,
+// with the same bound on every platform.
 TEST(Msgr, TestAddrDecodeRejectsOversizedAddr)
 {
-  // as above, but with elen and the data one byte too long
+  // as in TestAddrEncodingIsPortable, but with elen and the data one byte
+  // too long
   const unsigned char bad[] = {
     0x01,
     0x01, 0x01,
