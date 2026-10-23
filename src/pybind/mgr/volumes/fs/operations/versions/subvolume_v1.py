@@ -20,6 +20,7 @@ from ..snapshot_util import mksnap, rmsnap
 from ..access import allow_access, deny_access
 from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException, EvictionError
 from ...fs_util import listsnaps, is_inherited_snap, create_base_dir
+from ...utils import safe_join
 from ..template import SubvolumeOpType
 from ..group import Group
 from ..rankevicter import RankEvicter
@@ -29,7 +30,18 @@ from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
-class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
+
+class V3Compat:
+    '''
+    Contains stuff that is overriden code in v3 subvol class, which in turn
+    allows max code reuse.
+    '''
+
+    def has_snap(self):
+        return self.list_snapshots()
+
+
+class SubvolumeV1(SubvolumeBase, SubvolumeTemplate, V3Compat):
     """
     Version 1 subvolumes creates a subvolume with path as follows,
         volumes/<group-name>/<subvolume-name>/<uuid>/
@@ -45,10 +57,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     component in the path.
     """
     VERSION = 1
-
-    @staticmethod
-    def version():
-        return SubvolumeV1.VERSION
 
     @property
     def path(self):
@@ -113,7 +121,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
-            self.init_config(SubvolumeV1.VERSION, subvolume_type, qpath, initial_state)
+            self.init_config(self.VERSION, subvolume_type, qpath, initial_state)
             self.mark_subvolume()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
@@ -183,7 +191,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
-            self.metadata_mgr.init(SubvolumeV1.VERSION, subvolume_type.value, qpath, initial_state.value)
+            self.metadata_mgr.init(self.VERSION, subvolume_type.value, qpath, initial_state.value)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
@@ -702,9 +710,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
     def create_snapshot(self, snapname):
         try:
-            group_snapshot_path = os.path.join(self.group.path,
-                                               self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                                               snapname.encode('utf-8'))
+            group_snapshot_path = safe_join(self.group.path,
+                                            self.vol_spec.snapshot_dir_prefix,
+                                            snapname)
             self.fs.stat(group_snapshot_path)
         except cephfs.Error as e:
             if e.args[0] == errno.ENOENT:
@@ -804,10 +812,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def remove_snapshot(self, snapname, force=False):
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
-        snappath = self.snapshot_path(snapname)
+        snappath = self.snapshot_data_path(snapname)
         try:
             self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
             self.metadata_mgr.flush()
+
+            rmsnap(self.fs, snappath)
         except MetadataMgrException as me:
             if force:
                 log.info(f"Allowing snapshot removal on failure of it's metadata removal with force on "
@@ -819,7 +829,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                           f"group={self.group_name} reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
                 raise VolumeException(-errno.EAGAIN,
                                       f"failed to remove snapshot metadata on snap={snapname} reason={me.args[0]} {me.args[1]}")
-        rmsnap(self.fs, snappath)
 
     def snapshot_info(self, snapname):
         if is_inherited_snap(snapname):
@@ -846,7 +855,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def list_snapshots(self):
         try:
             dirpath = self.snapshot_base_path()
-            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+            return listsnaps(self.fs, self.vol_spec, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []

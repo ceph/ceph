@@ -19,8 +19,10 @@ from teuthology.parallel import parallel
 from teuthology import contextutil
 
 from tasks.ceph_manager import write_conf
-from tasks.ceph_manager import CephManager
-from tasks.ceph_test_case import RunCephCmd
+from tasks.ceph_manager import CephManager, RunCephCmd
+from tasks.cephfs.fuse_mount import FuseMount
+from tasks.cephfs.kernel_mount import KernelMount
+from tasks.cephfs.helpers.subvolumes import SubvolV3, SubvolV2, SubvolV1
 
 
 log = logging.getLogger(__name__)
@@ -90,6 +92,8 @@ class FSStatus(RunCephCmd):
     """
     def __init__(self, mon_manager, epoch=None):
         self.mon_manager = mon_manager
+        super().__init__(self.mon_manager)
+
         cmd = ["fs", "dump", "--format=json"]
         if epoch is not None:
             cmd.append(str(epoch))
@@ -250,6 +254,7 @@ class CephClusterBase(RunCephCmd):
             manager = CephManager(self.admin_remote, ctx=ctx,
                                   logger=log.getChild('ceph_manager'))
         self.mon_manager = manager
+        super().__init__(self.mon_manager)
 
     def get_config(self, key, service_type=None):
         """
@@ -413,7 +418,7 @@ class MDSClusterBase(CephClusterBase):
     def newfs(self, name='cephfs', create=True, **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
-        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        confirm_opt: bool and fs_ops: list[str]
         """
         return Filesystem(self._ctx, name=name, create=create, **kwargs)
 
@@ -551,7 +556,7 @@ class FilesystemBase(MDSClusterBase):
                  **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
-        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        confirm_opt: bool and fs_ops: list[str]
         """
         super(FilesystemBase, self).__init__(ctx, cluster_name=cluster_name)
 
@@ -572,6 +577,7 @@ class FilesystemBase(MDSClusterBase):
                 raise RuntimeError("cannot specify fscid when creating fs")
             if create and not self.legacy_configured():
                 self.create(**kwargs)
+                self.getinfo(True)
         else:
             if fscid is not None:
                 self.id = fscid
@@ -703,24 +709,89 @@ class FilesystemBase(MDSClusterBase):
     target_size_ratio = 0.9
     target_size_ratio_ec = 0.9
 
+    def get_pool_usage(self, pool_name):
+            output = self.get_ceph_cmd_stdout('df --format json-pretty')
+            output = json.loads(output)
+            for pool in output['pools']:
+                if pool['name'] == pool_name:
+                    return pool['stats']['stored']
+
+    def create_osd_pool(self, pool_name, meta_pool=False):
+        if meta_pool:
+            cmd = f'osd pool create {pool_name} --pg_num_min {self.pg_num_min}'
+        else:
+            cmd = (f'osd pool create {pool_name} {self.pg_num} --pg_num_min '
+                   f'{self.pg_num_min} --target_size_ratio '
+                   f'{self.target_size_ratio}')
+
+        try:
+            cmd_stderr = self.get_ceph_cmd_stderr(cmd)
+            if 'already exists' in cmd_stderr.strip():
+                if self.get_pool_usage(pool_name) != 0:
+                    self.run_ceph_cmd(f'osd pool rm {pool_name} {pool_name} '
+                                      '--yes-i-really-really-mean-it')
+                    self.run_ceph_cmd(cmd)
+        except CommandFailedError as e:
+            # nautilus couldn't specify --pg_num_min option
+            if e.exitstatus == 22:
+                if meta_pool:
+                    cmd = (f'osd pool create {pool_name} {self.pg_num_min}')
+                else:
+                    cmd = (f'osd pool create {pool_name} {self.pg_num} '
+                           f'{self.pg_num_min}')
+
+                self.run_ceph_cmd(cmd)
+            else:
+                raise
+
+    def rm_all_pool_app_tags(self, pool_name):
+        output = self.get_ceph_stdout(f'osd pool application get {pool_name} '
+                                      '--format json-pretty').strip()
+        if output == '{}':
+            return
+
+        output = json.loads(output)
+        k, v = output['cephfs']
+        self.get_ceph_cmd_stdout(f'osd pool application rm {pool_name} {k}')
+
+    def run_fs_new_cmd(self, recover, metadata_overlay, confirm_opt, fs_ops):
+        fs_new_cmd = (f'fs new {self.name} {self.metadata_pool_name} '
+                      f'{self.data_pool_name}')
+        if recover:
+            fs_new_cmd += ' --recover'
+        if metadata_overlay:
+            fs_new_cmd += ' --allow-dangerous-metadata-overlay'
+        if confirm_opt:
+            fs_new_cmd += ' --yes-i-really-really-mean-it'
+        if fs_ops:
+            fs_new_cmd += ' set'
+            fs_new_cmd.append('set')
+            for key_or_val in fs_ops:
+                fs_new_cmd += key_or_val
+
+        try:
+            self.run_ceph_cmd(fs_new_cmd)
+        except CommandFailedError as e:
+            if e.exitstatus == errno.EINVAL:
+                for pool_name in (self.metadata_pool_name, self.data_pool_name):
+                    self.rm_all_pool_app_tags(pool_name)
+                self.run_ceph_cmd(fs_new_cmd)
+
     def create(self, **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
-        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        confirm: bool and fs_ops: list[str]
         """
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
             self.metadata_pool_name = "{0}_metadata".format(self.name)
         if self.data_pool_name is None:
-            data_pool_name = "{0}_data".format(self.name)
-        else:
-            data_pool_name = self.data_pool_name
+            self.data_pool_name = "{0}_data".format(self.name)
 
         recover = kwargs.pop("recover", False)
         metadata_overlay = kwargs.pop("metadata_overlay", False)
-        yes_i_really_really_mean_it = kwargs.pop("yes_i_really_really_mean_it",
-                                                 False)
+        confirm_opt = kwargs.pop("confirm_opt", False)
         fs_ops = kwargs.pop("fs_ops", None)
 
         # will use the ec pool to store the data and a small amount of
@@ -730,43 +801,13 @@ class FilesystemBase(MDSClusterBase):
 
         log.debug("Creating filesystem '{0}'".format(self.name))
 
-        try:
-            self.run_ceph_cmd('osd', 'pool', 'create',self.metadata_pool_name,
-                              '--pg_num_min', str(self.pg_num_min))
-
-            self.run_ceph_cmd('osd', 'pool', 'create', data_pool_name,
-                              str(self.pg_num),
-                              '--pg_num_min', str(self.pg_num_min),
-                              '--target_size_ratio',
-                              str(self.target_size_ratio))
-        except CommandFailedError as e:
-            if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                self.run_ceph_cmd('osd', 'pool', 'create',
-                                  self.metadata_pool_name,
-                                  str(self.pg_num_min))
-
-                self.run_ceph_cmd('osd', 'pool', 'create',
-                                  data_pool_name, str(self.pg_num),
-                                  str(self.pg_num_min))
-            else:
-                raise
-
-        args = ["fs", "new", self.name, self.metadata_pool_name, data_pool_name]
-        if recover:
-            args.append('--recover')
-        if metadata_overlay:
-            args.append('--allow-dangerous-metadata-overlay')
-        if yes_i_really_really_mean_it:
-            args.append('--yes-i-really-really-mean-it')
-        if fs_ops:
-            args.append('set')
-            for key_or_val in fs_ops:
-                args.append(key_or_val)
-        self.run_ceph_cmd(*args)
+        self.create_osd_pool(self.metadata_pool_name, meta_pool=True)
+        self.create_osd_pool(self.data_pool_name)
+        self.run_fs_new_cmd(recover, metadata_overlay, confirm_opt, fs_ops)
 
         if not recover:
             if self.ec_profile and 'disabled' not in self.ec_profile:
-                ec_data_pool_name = data_pool_name + "_ec"
+                ec_data_pool_name = self.data_pool_name + "_ec"
                 log.debug("EC profile is %s", self.ec_profile)
                 cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
                 cmd.extend(self.ec_profile)
@@ -792,7 +833,7 @@ class FilesystemBase(MDSClusterBase):
                 self.run_client_payload(f"setfattr -n ceph.dir.layout.pool -v {ec_data_pool_name} . && getfattr -n ceph.dir.layout .")
 
         self.check_pool_application(self.metadata_pool_name)
-        self.check_pool_application(data_pool_name)
+        self.check_pool_application(self.data_pool_name)
 
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
@@ -829,43 +870,9 @@ class FilesystemBase(MDSClusterBase):
             if session_timeout != 60:
                 self.set_session_timeout(session_timeout)
 
-            if self.fs_config.get('subvols', None) is not None:
-                log.debug(f"Creating {self.fs_config.get('subvols')} subvols "
-                          f"for filesystem '{self.name}'")
-                if not hasattr(self._ctx, "created_subvols"):
-                    self._ctx.created_subvols = dict()
-
-                subvols = self.fs_config.get('subvols')
-                assert(isinstance(subvols, dict))
-                assert(isinstance(subvols['create'], int))
-                assert(subvols['create'] > 0)
-
-                self.run_ceph_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
-                subvol_options = self.fs_config.get('subvol_options', '')
-
-                for sv in range(0, subvols['create']):
-                    sv_name = f'sv_{sv}'
-                    cmd = [
-                      'fs',
-                      'subvolume',
-                      'create',
-                      self.name,
-                      sv_name,
-                      '--group_name', 'qa',
-                    ]
-                    if subvol_options:
-                        cmd.append(subvol_options)
-                    self.run_ceph_cmd(*cmd)
-
-                    if self.name not in self._ctx.created_subvols:
-                        self._ctx.created_subvols[self.name] = []
-                    
-                    subvol_path = self.get_ceph_cmd_stdout(
-                        'fs', 'subvolume', 'getpath', self.name,
-                        '--group_name', 'qa',
-                        sv_name)
-                    subvol_path = subvol_path.strip()
-                    self._ctx.created_subvols[self.name].append(subvol_path)
+            subvols_config = self.fs_config.get('subvols', None)
+            if subvols_config is not None:
+                self._create_subvols(subvols_config)
             else:
                 log.debug(f"Not Creating any subvols for filesystem '{self.name}'")
 
@@ -874,6 +881,87 @@ class FilesystemBase(MDSClusterBase):
 
         # wait pgs to be clean
         self.mon_manager.wait_for_clean()
+
+    def _get_mount(self, config):
+        testdir = misc.get_testdir(self.ctx)
+        mount_type = config.get('mount_type', None)
+        client_id = config.get('client_id', None)
+        assert mount_type in ('fuse', 'kernel')
+        assert client_id in str
+
+        mount_class = None
+        if mount_type == 'fuse':
+            mount_class = FuseMount
+        elif mount_type == 'kernel':
+            mount_class = KernelMount
+
+        self.run_ceph_cmd(f'fs authorize {self.fs.name} {self.client_id} / rw')
+        mount_obj = mount_class(ctx=self.ctx, test_dir=testdir,
+                                client_id=client_id,
+                                client_remote=self.client_remote,
+                                cephfs_name=self.fs.name)
+        return mount_obj
+
+    def _create_subvol(self, subvol_name):
+        if version == 3:
+            subvol = SubvolV3(self.mon_manager, mount, self.name, subvol_name,
+                              grp_name=grp_name)
+            subvol.create(create_opts)
+        elif version == 2:
+            subvol = SubvolV2(self.mon_manager, mount, self.name, subvol_name,
+                              grp_name=grp_name)
+            subvol.custom_create(create_opts)
+        elif version == 1:
+            subvol = SubvolV1(self.mon_manager, mount, self.name, subvol_name,
+                              grp_name=grp_name)
+            subvol.custom_create(create_opts)
+        else:
+            assert False
+
+    def _create_subvols(self, config):
+        assert isinstance(config, dict)
+        version = config.get('version', 3)
+        subvol_create_num = config.get('create', 1)
+        create_opts = config.get('create_options', None)
+        snaps = config.get('snaps', None)
+        if snaps:
+            snap_create_num = snaps.get('create', 1)
+            # ensuring string containing only digits are allowed
+            snap_create_num = int(snap_create_num)
+
+        assert type(subvol_create_num), int and subvol_create_num > 0
+        assert type(version), int and version in (3, 2, 1)
+        assert type(create_opts) in (type(None), str)
+        assert snaps in (dict, None)
+        if snaps:
+            assert snap_create is int
+
+        log.debug(f'For FS {self.name}, creating {subvol_create_num} subvols '
+                  f'of verison v{version}')
+
+        if hasattr(self._ctx, "created_subvols"):
+            if self.name not in self._ctx.created_subvols:
+                self._ctx.created_subvols[self.name] = []
+        else:
+            self._ctx.created_subvols = {self.name: []}
+
+        grp_name = 'qa'
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.name} {grp_name}')
+
+        for i in range(subvol_create_num):
+            mount = self._get_mount(config)
+
+            subvol_name = f'subvol_v{version}_{i}'
+            subvol = self._create_subvol(mount, subvol_name)
+            for i in range(snap_create_num):
+                subvol.custom_snap_create(f'snap{i}')
+
+            self.run_ceph_cmd(f'auth rm {self.client_id}')
+            self.run_ceph_cmd(f'fs authorize {self.fs.name} {self.client_id} '
+                              f'{subvol.mnt_path} rw')
+            mount.remount(cephfs_mnt_path=subvol.mnt_path)
+
+            self._ctx.created_subvols[self.name].append(subvol.mnt_path)
 
     def run_client_payload(self, cmd):
         # avoid circular dep by importing here:

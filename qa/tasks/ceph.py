@@ -534,8 +534,8 @@ def cephfs_setup(ctx, config):
             temp = deepcopy(cephfs_config)
             teuthology.deep_merge(temp, fs_config)
             subvols = config.get('subvols', None)
-            if subvols:
-                teuthology.deep_merge(temp, {'subvols': subvols})
+            teuthology.deep_merge(temp, {'subvols': subvols})
+
             fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
             fss.append(fs)
 

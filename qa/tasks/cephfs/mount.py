@@ -12,12 +12,11 @@ from contextlib import contextmanager
 from textwrap import dedent
 
 from teuthology.contextutil import safe_while
-from teuthology.misc import get_file, write_file
+from teuthology.misc import get_file, get_first_mon
 from teuthology.orchestra import run
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
-from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
@@ -32,14 +31,16 @@ class DirectoryNotEmptyError(SystemError):
 class OperationNotPermittedError(SystemError):
     pass
 
+
 class CephFSMountBase(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
-                 client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
-                 client_config=None):
+                 client_keyring=None, client_keyring_path=None,
+                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
+                 client_config=None, brxnet=None):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
+        :param client_keyring: keyring of given client_id as str
         :param client_keyring_path: path to keyring for given client_id
         :param client_remote: Remote instance for the host where client will
                               run
@@ -51,6 +52,7 @@ class CephFSMountBase(object):
         """
         self.ctx = ctx
         self.test_dir = test_dir
+        self._init_mon_manager()
 
         self._verify_attrs(client_id=client_id,
                            client_keyring_path=client_keyring_path,
@@ -62,8 +64,16 @@ class CephFSMountBase(object):
         self.client_config = client_config
 
         self.cephfs_name = cephfs_name
+
         self.client_id = client_id
+        self.client_keyring = client_keyring
         self.client_keyring_path = client_keyring_path
+        # don't pass both
+        assert not (self.client_keyring and self.client_keyring_path)
+        if self.client_keyring:
+            self.client_keyring_path = self.write_keyring()
+            self.client_keyring = None
+
         self.client_remote = client_remote
         self.cluster_name = 'ceph' # TODO: use config['cluster']
         self.fs = None
@@ -95,6 +105,32 @@ class CephFSMountBase(object):
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
+
+
+    def _init_mon_manager(self):
+        cluster_name = 'ceph'
+        try:
+            self.mon_manager = self.ctx.managers[cluster_name]
+        except Exception as e:
+            log.warn(f'Couldn\'t get a mon_manager for cluster {cluster_name} '
+                     f'from the context; exception: {e}')
+
+            first_mon = get_first_mon(self.ctx, None)
+            admin_remote = self.ctx.cluster.only(first_mon).remotes.keys()
+
+            self.mon_manager = CephManager(admin_remote, ctx=self.ctx,
+                                           logger=log.getChild('ceph_manager'))
+
+        # allow access to these methods just like every else.
+        self.run_ceph_cmd = self.mon_manager.run_ceph_cmd
+        self.get_ceph_cmd_stdout = self.mon_manager.get_ceph_cmd_stdout
+
+    def write_keyring(self):
+        assert self.client_keyring
+
+        return self.client_remote.mktemp(
+                suffix=f'ceph.client.{self.client_id}.keyring',
+                data=self.client_keyring)
 
     # This will cleanup the stale netnses, which are from the
     # last failed test cases.
@@ -193,13 +229,11 @@ class CephFSMountBase(object):
                               sudo=True).decode())
 
     def is_blocked(self):
-        self.fs = Filesystem(self.ctx, name=self.cephfs_name)
-
         try:
-            output = self.fs.get_ceph_cmd_stdout('osd blocklist ls')
+            output = self.get_ceph_cmd_stdout('osd blocklist ls')
         except CommandFailedError:
             # Fallback for older Ceph cluster
-            output = self.fs.get_ceph_cmd_stdout('osd blacklist ls')
+            output = self.get_ceph_cmd_stdout('osd blacklist ls')
 
         return self.addr in output
 
@@ -230,15 +264,6 @@ class CephFSMountBase(object):
         else:
             log.debug(f"not mounted; /proc/self/mounts is:\n{file}")
             return False
-
-    def setupfs(self, name=None):
-        if name is None and self.fs is not None:
-            # Previous mount existed, reuse the old name
-            name = self.fs.name
-        self.fs = Filesystem(self.ctx, name=name)
-        log.info('Wait for MDS to reach steady state...')
-        self.fs.wait_for_daemons()
-        log.info('Ready to start {}...'.format(type(self).__name__))
 
     def _create_mntpt(self):
         self.client_remote.run(args=f'mkdir -p -v {self.hostfs_mntpt}',
@@ -567,6 +592,9 @@ class CephFSMountBase(object):
                                    f'or None. {k} - {v}')
 
     def update_attrs(self, **kwargs):
+        self.client_keyring = kwargs.get('client_keyring', None)
+        self.client_keyring_path = kwargs.get('client_keyring_path', None)
+
         verify_keys = [
           'client_id',
           'client_keyring_path',
@@ -581,6 +609,14 @@ class CephFSMountBase(object):
             v = kwargs.get(k)
             if v is not None:
                 setattr(self, k, v)
+
+        # don't pass both
+        assert not (self.client_keyring and self.client_keyring_path), \
+            (f'self.client_keyring = {self.client_keyring} '
+             f'self.client_keyring_path = {self.client_keyring_path}')
+        if self.client_keyring:
+            self.client_keyring_path = self.write_keyring()
+            self.client_keyring = None
 
     def remount(self, **kwargs):
         """
@@ -751,7 +787,7 @@ class CephFSMountBase(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        write_file(self.client_remote, path, data, **kwargs)
+        self.client_remote.write_file(path, data, **kwargs)
 
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
@@ -803,6 +839,27 @@ class CephFSMountBase(object):
         p = self._run_python(pyscript, py_version, sudo=sudo, timeout=timeout)
         p.wait()
         return p.stdout.getvalue().strip()
+
+    def run_libcephfs_pybind_code(self, code):
+        final_code = dedent("""
+        import cephfs as libcephfs
+
+        global cephfs
+        cephfs = libcephfs.LibCephFS(conffile='')
+        cephfs.mount()
+        """)
+
+        # appending separately so that dedent() has intended effect regardless
+        # of indentation present in "code".
+        final_code += dedent(f"""
+        {code}
+        """)
+
+        final_code += dedent("""
+        cephfs.shutdown()
+        """)
+
+        self.run_python(final_code)
 
     def run_shell(self, args, **kwargs):
         kwargs.setdefault('cwd', self.mountpoint)
