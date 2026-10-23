@@ -284,15 +284,13 @@ public:
   read_extent_iertr::future<TCachedExtentRef<T>> read_indexed_extent(
     Transaction &t,
     laddr_t laddr,
-    extent_len_t length,
     lextent_init_func_t<T> &maybe_init) {
-    auto indexed = cache->laddr_index_lookup(t, T::TYPE, laddr, length);
-    if (!indexed) {
+    // laddr_index_lookup returns the extent already viewable by t
+    // (same as read_pin() for a linked child)
+    auto ext = co_await cache->laddr_index_lookup(t, T::TYPE, laddr);
+    if (!ext) {
       co_return TCachedExtentRef<T>();
     }
-    // same as read_pin() for a linked child
-    auto ext = co_await cache->get_extent_viewable_by_trans(
-      t, std::move(indexed));
     auto extent = ext->template cast<T>();
     if (!extent->is_seen_by_users()) {
       maybe_init(*extent);
@@ -324,7 +322,7 @@ public:
               t, offset, length, T::TYPE);
     cache->account_laddr_lookup(t, T::TYPE);
     auto indexed = co_await read_indexed_extent<T>(
-      t, offset, length, maybe_init);
+      t, offset, maybe_init);
     if (indexed) {
       co_return maybe_indirect_extent_t<T>{
         std::move(indexed), std::nullopt, false};
@@ -358,7 +356,7 @@ public:
               t, offset, T::TYPE);
     cache->account_laddr_lookup(t, T::TYPE);
     auto indexed = co_await read_indexed_extent<T>(
-      t, offset, 0, maybe_init);
+      t, offset, maybe_init);
     if (indexed) {
       co_return maybe_indirect_extent_t<T>{
         std::move(indexed), std::nullopt, false};
