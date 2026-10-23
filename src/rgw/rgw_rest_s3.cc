@@ -6858,6 +6858,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_SYNC_MDLOG_NOTIFY:
         case RGW_OP_PERIOD_POST:
         case RGW_OP_SET_BUCKET_WEBSITE:
+        case RGW_OP_DELETE_BUCKET_WEBSITE:
         case RGW_OP_PUT_BUCKET_POLICY:
         case RGW_OP_PUT_OBJ_TAGGING:
 	case RGW_OP_PUT_BUCKET_TAGGING:
