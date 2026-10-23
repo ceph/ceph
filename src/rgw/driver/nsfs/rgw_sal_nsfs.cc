@@ -216,7 +216,7 @@ static bool is_reserved_name(std::string_view name,
 static bool dir_has_content(int parent_fd, const char* dname,
 			    std::string_view ignore = {})
 {
-  int fd = ::openat(parent_fd, dname, O_RDONLY | O_DIRECTORY);
+  int fd = ::openat(parent_fd, dname, O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
   if (fd < 0) {
     return false;
   }
@@ -781,7 +781,7 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
   ACLOwner recorded;
   const nsfs::Credentials reader = inout;	/* the file's own owner */
   auto read_owner = [&]() -> int {
-    int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
+    int fd = ::openat(dir_fd, name.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0) {
       return -errno;
     }
@@ -1083,7 +1083,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
           << ";  the object lists twice" << dendl;
       }
       /* remove non_current_timestamp on the promoted file */
-      int pfd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+      int pfd = ::openat(parent_fd, leaf.c_str(), O_RDONLY | O_NOFOLLOW);
       if (pfd < 0) {
         ldpp_dout(dpp, 0) << "ERROR: promote_version: " << leaf
           << " promoted, but it cannot be opened: " << cpp_strerror(errno)
@@ -1237,7 +1237,7 @@ static int open_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
 		     O_RDONLY | O_DIRECTORY);
   }
   int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-                     O_RDONLY | O_DIRECTORY);
+                     O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
   if (vfd < 0) {
     return -errno;
   }
@@ -1266,7 +1266,7 @@ static int list_leaf_versions(int parent_fd, const std::string& leaf,
     (void) nsfs::hold_thread_capabilities(nullptr);
   }
   int vfd = ::openat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-		     O_RDONLY | O_DIRECTORY);
+		     O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
   if (vfd < 0) {
     /* no .versions/ at all just means no history */
     return (errno == ENOENT) ? 0 : -errno;
@@ -1428,7 +1428,7 @@ static bool rename_intent_present(const nsfs::XattrStrategy* xs,
     (void) nsfs::hold_thread_capabilities(nullptr);
   }
   int vfd = ::openat(src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-		     O_RDONLY | O_DIRECTORY);
+		     O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
   if (vfd < 0) {
     return false;
   }
@@ -1506,7 +1506,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
   }
 
   int src_vfd = ::openat(src_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-			 O_RDONLY | O_DIRECTORY);
+			 O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
   if (src_vfd < 0) {
     /* the record we just read lives on that directory */
     return -errno;
@@ -1527,7 +1527,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
     int dst_vfd = -1;
     if (! stranded.empty()) {
       dst_vfd = ::openat(dst_parent_fd, HIDDEN_VERSIONS_PATH.c_str(),
-			 O_RDONLY | O_DIRECTORY);
+			 O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
       if (dst_vfd < 0) {
 	ret = -errno;
 	::close(src_vfd);
@@ -1654,7 +1654,7 @@ static int open_versions_lockfile(const DoutPrefixProvider* dpp,
     return fd;
   }
   int fd = ::openat(parent_fd, VERSIONS_LOCKFILE.c_str(),
-                    O_RDWR | O_CREAT, nsfs::file_create_mode());
+                    O_RDWR | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
   if (fd < 0) {
     return -errno;
   }
@@ -1915,7 +1915,7 @@ static int open_shadow_dir(int parent_fd)
     return ret;
   }
   int sfd = ::openat(parent_fd, HIDDEN_SHADOW_PATH.c_str(),
-		     O_RDONLY | O_DIRECTORY);
+		     O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
   if (sfd < 0) {
     return -errno;
   }
@@ -3103,7 +3103,13 @@ int File::open(const DoutPrefixProvider* dpp)
      * without an identity takes it here, once */
     (void) nsfs::hold_thread_capabilities(dpp);
   }
-  int flags = (ro ? O_RDONLY : O_RDWR) | (direct_io ? O_DIRECT : 0);
+  /* O_NOFOLLOW:  a File stands only for a regular file (get_ent()
+   * and stat() refuse anything else), so a link here is the entry
+   * swapped between the stat and this open -- refused rather than
+   * followed, as the gateway with read-search would follow it to
+   * anything it can read. */
+  int flags = (ro ? O_RDONLY : O_RDWR) | O_NOFOLLOW |
+	      (direct_io ? O_DIRECT : 0);
 
   int ret;
   if (identity.active()) {
@@ -4263,7 +4269,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       (void) nsfs::hold_thread_capabilities(dpp);
     }
     int vfd = ::openat(get_fd(), HIDDEN_VERSIONS_PATH.c_str(),
-                       O_RDONLY | O_DIRECTORY);
+                       O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
     if (vfd >= 0) {
       /* Notice an interrupted move;  do not repair it.  Repair needs the
        * version lock, and taking it here would put a mutation on the read
@@ -4334,7 +4340,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
           bde.flags = rgw_bucket_dir_entry::FLAG_VER;
 
           /* check delete marker */
-          int tfd = ::openat(vfd, de->d_name, O_RDONLY);
+          int tfd = ::openat(vfd, de->d_name, O_RDONLY | O_NOFOLLOW);
           if (tfd >= 0) {
             char buf[8];
             std::string dm_xattr = xattr_strategy->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
@@ -4914,7 +4920,7 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	  if (*root != ".") {
 	    path = *root + "/" + path;
 	  }
-	  int dir_fd = ::openat(bfd, path.c_str(), O_RDONLY | O_DIRECTORY);
+	  int dir_fd = ::openat(bfd, path.c_str(), O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
 	  if (dir_fd < 0) {
 	    continue;
 	  }
@@ -4946,7 +4952,7 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	      }
 	    }
 	    auto write_record = [&]() -> int {
-	      int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
+	      int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR | O_NOFOLLOW);
 	      if (pfd < 0) {
 		return -errno;
 	      }
@@ -8315,7 +8321,7 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   for (const auto& name : entries) {
-    int fd = ::openat(vers.get_fd(), name.c_str(), O_RDONLY);
+    int fd = ::openat(vers.get_fd(), name.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0) {
       /* deleted under us;  one version, not a failed conversion */
       continue;
@@ -8406,7 +8412,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
    * while the gateway still owns the file, because the ids are
    * taken from the directory below. */
   int sfd = ::openat(dir_fd, sname.c_str(),
-		     O_RDONLY | O_CREAT, nsfs::file_create_mode());
+		     O_RDONLY | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
   if (sfd < 0) {
     ret = -errno;
     ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
@@ -8636,7 +8642,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   for (const auto& name : files) {
-    int fd = ::openat(d->get_fd(), name.c_str(), O_RDONLY);
+    int fd = ::openat(d->get_fd(), name.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0) {
       /* deleted under us;  one object, not a failed conversion */
       continue;
@@ -8843,7 +8849,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     {
       const std::string mname = ours->meta_name();
       int mfd = ::openat(ourdir.get_fd(), mname.c_str(),
-			 O_RDWR | O_CREAT, nsfs::file_create_mode());
+			 O_RDWR | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
       if (mfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: creating " << mname << " for "
@@ -8928,7 +8934,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
 
       Attrs pattrs;
-      int pfd = ::openat(theirdir.get_fd(), pname.c_str(), O_RDONLY);
+      int pfd = ::openat(theirdir.get_fd(), pname.c_str(), O_RDONLY | O_NOFOLLOW);
       if (pfd >= 0) {
 	get_x_attrs(y, dpp, pfd, pattrs, pname, xattr_strategy(),
 		    xattr_fallback());
@@ -8990,7 +8996,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	}
 	sname = *sn;
       }
-      int sfd = ::openat(theirdir.get_fd(), sname.c_str(), O_RDONLY);
+      int sfd = ::openat(theirdir.get_fd(), sname.c_str(), O_RDONLY | O_NOFOLLOW);
       if (sfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: opening " << sname << " for " << pname
@@ -9002,7 +9008,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
       const std::string ourname = ours->part_name(*num);
       int dfd = ::openat(ourdir.get_fd(), ourname.c_str(),
-			 O_RDWR | O_CREAT | O_TRUNC, nsfs::file_create_mode());
+			 O_RDWR | O_NOFOLLOW | O_CREAT | O_TRUNC, nsfs::file_create_mode());
       if (dfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: creating " << ourname << " for " << meta
@@ -11301,7 +11307,7 @@ int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
 
   if (::faccessat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), F_OK, 0) == 0) {
     sdir_fd = ::openat(parent_fd, HIDDEN_SHADOW_PATH.c_str(),
-		       O_RDONLY | O_DIRECTORY);
+		       O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
     if ((sdir_fd >= 0) &&
 	(::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0)) {
       dir_fd = sdir_fd;
@@ -11332,7 +11338,7 @@ int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
 
     /* xattrs need a descriptor;  it is transient, unlike the ones an
      * FSIO handle retains */
-    int fd = ::openat(dir_fd, attr_path.c_str(), O_RDONLY);
+    int fd = ::openat(dir_fd, attr_path.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0) {
       if ((errno == ENOENT) && (attr_path != leaf)) {
 	goto out; /* no sentinel:  no attributes, not a failure */
@@ -11499,7 +11505,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 
   if (shadow_exists) {
     /* rendezvous: reuse existing shadow */
-    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
+    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR | O_NOFOLLOW);
     if (hdl->shadow_fd < 0) {
       return FSIOResult{-errno, nullptr};
     }
@@ -11537,7 +11543,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
      * published object.  readers never construct a shadow--if a
      * writer creates one, reclone() dup2()s it onto this fd and the
      * reader follows it */
-    hdl->shadow_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+    hdl->shadow_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY | O_NOFOLLOW);
     if (hdl->shadow_fd < 0) {
       return FSIOResult{-errno, nullptr};
     }
@@ -11586,14 +11592,14 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       return FSIOResult{ret, nullptr};
     }
-    build_fd = ::openat(sdir_fd, tmp_name.c_str(), O_RDWR);
+    build_fd = ::openat(sdir_fd, tmp_name.c_str(), O_RDWR | O_NOFOLLOW);
     if (build_fd < 0) {
       int err = -errno;
       ::unlinkat(sdir_fd, tmp_name.c_str(), 0);
       return FSIOResult{err, nullptr};
     }
     /* carry the source's attributes onto the clone */
-    int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+    int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY | O_NOFOLLOW);
     if (src_fd >= 0) {
       copy_xattrs_fd(dpp, src_fd, build_fd);
       ::close(src_fd);
@@ -11687,7 +11693,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     /* another instance forked the same shadow first.  Join the winner
      * rather than clobbering it;  this one is discarded unnamed. */
     ::close(build_fd);
-    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
+    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR | O_NOFOLLOW);
     if (hdl->shadow_fd < 0) {
       return FSIOResult{-errno, nullptr};
     }
@@ -11986,7 +11992,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
     } else if (ret < 0) {
       return ret;
     } else {
-      new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
+      new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR | O_NOFOLLOW);
     }
   } else {
     new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(),
@@ -12005,7 +12011,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
 
   if (joined) {
     /* another instance re-forked first;  adopt its shadow */
-    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
+    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR | O_NOFOLLOW);
   }
   if (new_fd < 0) {
     return -errno;
@@ -12013,7 +12019,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
 
   if (src_exists && ! joined) {
     /* copy xattrs from published object to new shadow */
-    int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
+    int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY | O_NOFOLLOW);
     if (src_fd >= 0) {
       copy_xattrs_fd(dpp, src_fd, new_fd);
       ::close(src_fd);
@@ -12904,7 +12910,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
   if (bk && bk->get_info().versioned() && ent->get_parent()) {
     int pfd = ent->get_parent()->get_fd();
     if (pfd >= 0) {
-      int tfd = ::openat(pfd, ent->get_name().c_str(), O_RDONLY);
+      int tfd = ::openat(pfd, ent->get_name().c_str(), O_RDONLY | O_NOFOLLOW);
       if (tfd >= 0) {
         char buf[8];
         std::string dm_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
@@ -13859,7 +13865,7 @@ static void cache_promoted_current(NSFSDriver* driver,
    * id and the delete-marker flag all arrive in pattrs, and the separate
    * fgetxattr() for each is redundant with the sweep. */
   Attrs pattrs;
-  int fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+  int fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY | O_NOFOLLOW);
   if (fd >= 0) {
     get_x_attrs(null_yield, dpp, fd, pattrs, leaf, xs);
     ::close(fd);
@@ -14477,7 +14483,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         const int tret = nsfs::with_identity_or_raise(dpp, identity, model,
                                                       RAISED_KEYDIR_CAPS,
                                                       [&]() -> int {
-          const int dfd = ::openat(vfd, ver_name.c_str(), O_RDONLY);
+          const int dfd = ::openat(vfd, ver_name.c_str(), O_RDONLY | O_NOFOLLOW);
           if (dfd < 0) {
             return -errno;
           }
@@ -15363,7 +15369,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   /* write xattrs on assembled file, as its owner:  the assembled file is
    * the identity's, and fsetxattr(2) asks the caller's credentials */
   ret = nsfs::with_identity(dpp, identity, [&]() -> int {
-    int afd = openat(staging_fd, assembled_name.c_str(), O_RDWR);
+    int afd = openat(staging_fd, assembled_name.c_str(), O_RDWR | O_NOFOLLOW);
     if (afd < 0) {
       return -errno;
     }
@@ -15407,7 +15413,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   /* conditional write checks against existing target object */
   if (if_match || if_nomatch) {
-    int existing_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
+    int existing_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY | O_NOFOLLOW);
     bool target_exists = (existing_fd >= 0);
     std::string existing_etag;
     if (target_exists) {
@@ -15492,7 +15498,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       /* as the object's owner, for the same reason as the attributes
        * above */
       nsfs::with_identity(dpp, identity, [&]() -> int {
-        int obj_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY);
+        int obj_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY | O_NOFOLLOW);
         if (obj_fd >= 0) {
           std::string vid_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
           ::fsetxattr(obj_fd, vid_xattr.c_str(),
@@ -18063,7 +18069,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	return (r > 0) ? -EEXIST : r;
       }
       r = acting([&]() -> int {
-	const int fd = ::openat(pfd, leaf, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	const int fd = ::openat(pfd, leaf, O_RDONLY | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC);
 	if (fd < 0) {
 	  return -errno;
 	}

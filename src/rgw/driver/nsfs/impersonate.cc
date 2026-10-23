@@ -795,8 +795,10 @@ int open_as(const DoutPrefixProvider* dpp, const FSIdentity& id,
   if (ret < 0) {
     return ret;
   }
-  return rgw::sal::posix_uring_openat2(dpp, dirfd, path, flags, mode,
-				       ref.id());
+  /* O_NOFOLLOW for every caller:  nothing nsfs opens by name is a link
+   * (n-plan, "Symlinks") */
+  return rgw::sal::posix_uring_openat2(dpp, dirfd, path, flags | O_NOFOLLOW,
+				       mode, ref.id());
 }
 
 static std::atomic<uint64_t> raised_ops{0};
@@ -860,7 +862,7 @@ int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
     *raised = false;
   }
   const auto plain = [&]() -> int {
-    const int fd = ::openat(dirfd, path, flags, mode);
+    const int fd = ::openat(dirfd, path, flags | O_NOFOLLOW, mode);
     return (fd < 0) ? -errno : fd;
   };
   if (! id.active()) {

@@ -541,7 +541,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 
   int src_fd = -1;
   auto open_src = [&]() -> int {
-    src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
+    src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY | O_NOFOLLOW);
     return (src_fd < 0) ? -errno : 0;
   };
   int oret = nsfs::with_identity(dpp, id, open_src, y);
@@ -576,7 +576,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
+  int dst_flags = O_WRONLY | O_NOFOLLOW | O_CREAT | (excl ? O_EXCL : O_TRUNC);
   int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags,
 			file_create_mode());
   if (dst_fd < 0) {
@@ -949,7 +949,7 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   /* open the target to get an fd; gpfs_unlinkat removes the entry
    * only if its inode matches this fd */
-  int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
+  int fd = ::openat(dir_fd, name.c_str(), O_RDONLY | O_NOFOLLOW);
   if (fd < 0) {
     int err = errno;
     if (err == ENOENT) {
@@ -1127,7 +1127,7 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
   }
 
   std::string snap_name = clone_parent_name(name);
-  int fd = ::openat(dir_fd, snap_name.c_str(), O_RDONLY);
+  int fd = ::openat(dir_fd, snap_name.c_str(), O_RDONLY | O_NOFOLLOW);
   if (fd < 0) {
     return;
   }

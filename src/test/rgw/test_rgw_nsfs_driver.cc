@@ -932,6 +932,35 @@ public:
   }
 };
 
+/* A File is opened O_NOFOLLOW (the symlink policy, n-plan "Symlinks").
+ * A File stands only for a regular file -- get_ent() and stat() refuse
+ * anything else -- so the case is the race:  the entry stat'ed as a
+ * regular file, then swapped for a link before the open.  The open
+ * refuses it rather than reaching the link's target, here a file
+ * outside the bucket.  The control is the same sequence without the
+ * swap. */
+TEST_F(NSFSBucketTest, AFileSwappedForALinkAfterItsStatIsNotOpened)
+{
+  auto* dir = static_cast<rgw::sal::NSFSBucket*>(bucket.get())->get_dir();
+  ASSERT_EQ(dir->open(env->dpp), 0);
+  const sf::path outside = bp / "outside-the-bucket";
+  for (const sf::path& p : {outside, bucket_path() / "plain",
+			    bucket_path() / "swapped"}) {
+    std::ofstream(p) << "x";
+  }
+
+  nsfs::File control("plain", dir, env->cct.get());
+  ASSERT_EQ(control.stat(env->dpp), 0);
+  EXPECT_EQ(control.open(env->dpp), 0) << "the control did not open";
+
+  nsfs::File f("swapped", dir, env->cct.get());
+  ASSERT_EQ(f.stat(env->dpp), 0) << "stat'ed as a regular file";
+  ASSERT_TRUE(sf::remove(bucket_path() / "swapped"));
+  sf::create_symlink(outside, bucket_path() / "swapped");
+  EXPECT_EQ(f.open(env->dpp), -ELOOP)
+      << "the link swapped in after the stat was followed";
+}
+
 /* A file that arrives in a marked bucket without going through RGW is
  * its bucket owner's.
  *
@@ -4771,6 +4800,47 @@ TEST_F(NSFSImpersonatedRenameTest, TheRenameRecordsTheIdentityItChose)
   (void) rename_as(alice, "never-here", "nowhere");
   EXPECT_EQ(ran_as(), std::to_string(moved_uid))
       << "the row moved and the rename's choice did not follow it";
+}
+
+/* The identity's open refuses a link swapped in after the stat, as the
+ * gateway's does (AFileSwappedForALinkAfterItsStatIsNotOpened):
+ * open_as() adds O_NOFOLLOW for every caller.  The entry is alice's
+ * object;  the bucket directory is the gateway's, so the test can
+ * replace it.  The control is the same open without the swap. */
+TEST_F(NSFSImpersonatedRenameTest, AnIdentitysOpenRefusesALinkSwappedIn)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "plain", "alice's"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "swapped", "alice's"));
+  const sf::path outside = bp / "outside-the-bucket";
+  std::ofstream(outside) << "x";
+  const nsfs::FSIdentity id{alice, creds_for(owner_uid)};
+
+  int control = 0, swapped = 0;
+  std::thread t([&] {
+    auto* dir = static_cast<rgw::sal::NSFSBucket*>(bucket.get())->get_dir();
+    if (dir->open(env->dpp) < 0) {
+      control = swapped = -EBADF;
+      return;
+    }
+    nsfs::File c("plain", dir, env->cct.get());
+    c.set_identity(id);
+    control = (c.stat(env->dpp) < 0) ? -EIO : c.open(env->dpp);
+
+    nsfs::File f("swapped", dir, env->cct.get());
+    f.set_identity(id);
+    if (f.stat(env->dpp) < 0) {
+      swapped = -EIO;
+      return;
+    }
+    std::error_code ec;
+    sf::remove(bucket_path() / "swapped", ec);
+    sf::create_symlink(outside, bucket_path() / "swapped", ec);
+    swapped = ec ? -EIO : f.open(env->dpp);
+  });
+  t.join();
+  EXPECT_EQ(control, 0) << "the control did not open";
+  EXPECT_EQ(swapped, -ELOOP)
+      << "the link swapped in after the stat was followed";
 }
 
 /* A tag removal runs as its requester (phase C's validation clause,
