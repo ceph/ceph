@@ -36,23 +36,23 @@ std::unique_ptr<Keyring> Keyring::get_best() {
 tl::expected<std::unique_ptr<KeyringSecret>, std::error_code>
 UnsupportedKeyring::add(
     const std::string& key, const std::string& secret) noexcept {
-  return tl::unexpected(std::error_code(-ENOSYS, std::system_category()));
+  return tl::unexpected(std::error_code(ENOSYS, std::system_category()));
 }
 
 bool UnsupportedKeyring::supported(std::error_code* ec) noexcept {
   if (ec != nullptr) {
-    *ec = {-ENOSYS, std::system_category()};
+    *ec = {ENOSYS, std::system_category()};
   }
   return false;
 }
 
 [[nodiscard]] std::error_code UnsupportedKeyringSecret::read(
     std::string& out) const {
-  return {-ENOSYS, std::system_category()};
+  return {ENOSYS, std::system_category()};
 }
 
 [[nodiscard]] std::error_code UnsupportedKeyringSecret::remove() const {
-  return {-ENOSYS, std::system_category()};
+  return {ENOSYS, std::system_category()};
 }
 
 [[nodiscard]] bool UnsupportedKeyringSecret::initialized() const {
@@ -120,7 +120,7 @@ std::error_code LinuxKeyringSecret::initialize_process_keyring() noexcept {
   if (ret == -1) {
     return {errno, std::system_category()};
   } else if (static_cast<size_t>(ret) != _len) {
-    return {-EINVAL, std::generic_category()};
+    return {EINVAL, std::generic_category()};
   }
   return {};
 }
@@ -135,7 +135,7 @@ std::error_code LinuxKeyringSecret::initialize_process_keyring() noexcept {
 
 [[nodiscard]] std::error_code LinuxKeyringSecret::reset() {
   if (_serial == -1) {
-    return {-EINVAL, std::generic_category()};
+    return {EINVAL, std::generic_category()};
   }
   if (const auto ret = remove(); ret) {
     return ret;
