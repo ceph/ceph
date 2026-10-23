@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from ..exceptions import DashboardException
 
@@ -19,6 +19,20 @@ class ListPaginator:
         self.searchable_params = searchable_params
         self.sortable_params = sortable_params
         self.count = len(self.input_list)
+
+    @classmethod
+    def doc(cls, default_limit: int) -> Dict[str, Tuple[type, str, bool, Any]]:
+        """
+        EndpointDoc parameters for the query parameters a paginated list takes:
+
+            @EndpointDoc("...", parameters=ListPaginator.doc(default_limit=5))
+        """
+        return {
+            'offset': (int, 'Offset into the list (0-based)', True, 0),
+            'limit': (int, 'Number of items to return (-1 for all)', True, default_limit),
+            'sort': (str, 'Sort field, prefix with - for descending', True, ''),
+            'search': (str, 'Search string to filter the list by', True, ''),
+        }
 
     def get_count(self):
         return self.count
