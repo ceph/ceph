@@ -104,7 +104,10 @@ private:
 
   Client* client;
 
-  void queue_user_cb(IoCallback cb, int64_t result, bufferlist data);
+  /// Deliver @p cb on objecter_finisher (never store ZeroCopyClient* in I/O ctxs —
+  /// callers often construct a stack ZeroCopyClient for a single submit).
+  static void queue_user_cb(Client* clnt, IoCallback cb, int64_t result,
+                            bufferlist data);
 };
 
 } // namespace ceph

@@ -70,8 +70,7 @@ struct ceph_io_completion {
 };
 
 /**
- * Zero-copy async read/write (ceph::ZeroCopyClient). Not implemented until
- * the Filer path lands; currently returns -ENOTSUP.
+ * Zero-copy async read/write (ceph::ZeroCopyClient, Filer → Objecter).
  *
  * async_read: on success, @c cb receives an owned @p data handle (put after use).
  * async_write: consumes @p data on successful submit.
