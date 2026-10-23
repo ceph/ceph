@@ -1672,7 +1672,8 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   bufferlist addbl;
   encode(addattr, addbl);
 
-  ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp);
+  ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp,
+				 rgw::sal::no_authenticated_user);
   EXPECT_EQ(ret, 0);
 
   EXPECT_EQ(object->get_attrs().size(), 3);
@@ -1680,7 +1681,8 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
-  ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield);
+  ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield,
+				 rgw::sal::no_authenticated_user);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
