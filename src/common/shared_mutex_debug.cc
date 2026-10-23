@@ -74,6 +74,7 @@ void shared_mutex_debug::lock()
       unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
           ? lockstat_detail::lockstat_clock::now()
           : lockstat_detail::lockstat_clock::zero();
+  const uint32_t waiting = begin_waiting();
   int r = 0;
   if (is_tripwire_enabled()) {
     struct timespec timeout_tripwire;
@@ -83,6 +84,7 @@ void shared_mutex_debug::lock()
     r = pthread_rwlock_wrlock(&rwlock);
   }
   if (r != 0) {
+    end_waiting(waiting);
     throw std::system_error(r, std::generic_category());
   }
 #else
@@ -92,12 +94,13 @@ void shared_mutex_debug::lock()
 #endif
 
 #ifdef CEPH_LOCKSTAT
+  end_waiting(waiting);
   if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
                get_traits())) {
     m_write_hold_start = lockstat_detail::lockstat_clock::now();
     m_write_hold_mode = lockstat_detail::LockMode::WRITE;
     record_wait_time(
-        m_write_hold_start - wait_start_clock, m_write_hold_mode);
+        m_write_hold_start - wait_start_clock, m_write_hold_mode, waiting);
   }
 #endif
   if (_enable_lockdep()) {
@@ -173,6 +176,7 @@ void shared_mutex_debug::lock_shared()
       unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
           ? lockstat_detail::lockstat_clock::now()
           : lockstat_detail::lockstat_clock::zero();
+  const uint32_t waiting = begin_waiting();
   int r = 0;
   if (is_tripwire_enabled()) {
     struct timespec timeout_tripwire;
@@ -182,6 +186,7 @@ void shared_mutex_debug::lock_shared()
     r = pthread_rwlock_rdlock(&rwlock);
   }
   if (r != 0) {
+    end_waiting(waiting);
     throw std::system_error(r, std::generic_category());
   }
 #else
@@ -191,11 +196,12 @@ void shared_mutex_debug::lock_shared()
 #endif
 
 #ifdef CEPH_LOCKSTAT
+  end_waiting(waiting);
   if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
                get_traits())) {
     record_wait_time(
         lockstat_detail::lockstat_clock::now() - wait_start_clock,
-        lockstat_detail::LockMode::READ);
+        lockstat_detail::LockMode::READ, waiting);
     begin_shared_hold(lockstat_detail::LockMode::READ);
   }
 #endif

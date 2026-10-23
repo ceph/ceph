@@ -105,6 +105,8 @@ The `dump` output contains several columns to help identify contended locks:
 *   **usec/wait[W/R]**: Average wait time per acquisition for that mode.
 *   **max_wait**: The maximum single wait time recorded for this lock, in 
     microseconds.
+*   **max_waiters**: The maximum number of threads observed concurrently
+    waiting to acquire this lock (peak wait concurrency for the lock site).
 *   **busy ratio**: Total wait time for all modes divided by the total 
     elapsed time since profiling started. Values close to 1.0 or higher 
     (due to multiple threads waiting) indicate high contention.
