@@ -2452,6 +2452,10 @@ public:
   off_t real_ofs;
   size_t bytes_written;
   bool eio;
+  /* client xattrs (RGW_ATTR_META_PREFIX*) of the existing object, snapshotted
+   * when the write starts and re-applied in exec_finish; RGWLibFS::setxattrs
+   * and rmxattrs return -EBUSY while this request exists */
+  std::map<std::string, buffer::list> xattr_snapshot;
   rgw::op_counters::CountersContainer counters;
 
   RGWWriteRequest(rgw::sal::Driver* driver, const RGWProcessEnv& penv,
