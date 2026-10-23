@@ -22,3 +22,12 @@ export interface HardwareSummary {
   };
   host: Record<string, { flawed: boolean } | number>;
 }
+
+export interface CompressionStats {
+  fcm_drive_count: number;
+  phy_util_percent: number | null;
+  log_util_percent: number | null;
+  savings_bytes: number | null;
+  compression_ratio: number | null;
+  efficiency_percent: number | null;
+}

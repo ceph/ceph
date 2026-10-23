@@ -53,6 +53,25 @@ describe('OverviewStorageService', () => {
     });
   });
 
+  describe('getSavingsTrend', () => {
+    it('should query the saved-bytes series relative to the start of the range', () => {
+      const promSpy = jest.spyOn(service['prom'], 'getRangeQueriesData').mockReturnValue({} as any);
+
+      service.getSavingsTrend(1000, 2000, 86400);
+
+      expect(promSpy).toHaveBeenCalledWith(
+        { start: 1000, end: 2000, step: 86400 },
+        {
+          SAVINGS: expect.stringContaining('min_over_time')
+        },
+        true
+      );
+      const savingsQuery = promSpy.mock.calls[0][1].SAVINGS;
+      expect(savingsQuery).toContain('ceph_extblkdev_dev_log_util');
+      expect(savingsQuery).toContain('ceph_extblkdev_dev_phy_util');
+    });
+  });
+
   describe('getAverageConsumption', () => {
     it('should format bytes per day correctly', (done) => {
       jest

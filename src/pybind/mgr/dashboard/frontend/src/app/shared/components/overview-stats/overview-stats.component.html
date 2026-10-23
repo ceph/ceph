@@ -1,0 +1,33 @@
+<div
+  cdsStack="vertical"
+  gap="4"
+>
+  @for (stat of stats(); track stat.label) {
+    <div
+      cdsStack="vertical"
+      gap="1"
+    >
+      @if (stat.value !== null) {
+        <span class="cds--type-heading-03">{{ stat.value }}</span>
+      } @else {
+        <span
+          class="cds--type-body-02 overview-stats-unavailable"
+          i18n
+          >Not available</span
+        >
+      }
+      <div class="overview-stats-label">
+        <cds-tooltip-definition
+          [autoAlign]="true"
+          [highContrast]="true"
+          [openOnHover]="false"
+          [dropShadow]="true"
+          [caret]="true"
+          [description]="stat.description"
+        >
+          {{ stat.label }}
+        </cds-tooltip-definition>
+      </div>
+    </div>
+  }
+</div>
