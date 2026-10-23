@@ -824,10 +824,12 @@ struct WaitUpdate : ScrubState<WaitUpdate, ChunkState> {
   explicit WaitUpdate(my_context ctx);
 
   using reactions = boost::mpl::list<
-    sc::custom_reaction<ScrubContext::reserve_range_complete_t>
+    sc::custom_reaction<ScrubContext::reserve_range_complete_t>,
+    sc::custom_reaction<ScrubContext::await_update_complete_t>
     >;
 
   sc::result react(const ScrubContext::reserve_range_complete_t &e);
+  sc::result react(const ScrubContext::await_update_complete_t &);
 };
 
 struct ScanRange : ScrubState<ScanRange, ChunkState> {

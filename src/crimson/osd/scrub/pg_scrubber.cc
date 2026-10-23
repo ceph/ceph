@@ -2330,6 +2330,11 @@ void PGScrubber::clear_pgscrub_state()
 
   m_local_osd_resource.reset();
 
+  // a scrub that is torn down (abort, interval change, completion) while
+  // parked in WaitUpdate must not leave a stale waiter behind, or the next
+  // await_update() would trip its !waiting_for_update assert.
+  waiting_for_update = std::nullopt;
+
   reset_internal_state();
   m_flags = scrub_flags_t{};
 
