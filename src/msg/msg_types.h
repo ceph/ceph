@@ -514,6 +514,12 @@ struct entity_addr_t {
     }
     if (marker != 1)
       throw ceph::buffer::malformed_input("entity_addr_t marker != 1");
+    decode_after_marker(bl);
+  }
+  /// the msgr2 encoding, once decode() or entity_addrvec_t::decode() has
+  /// read marker 1
+  void decode_after_marker(ceph::buffer::list::const_iterator& bl) {
+    using ceph::decode;
     DECODE_START(1, bl);
     decode(type, bl);
     decode(nonce, bl);
