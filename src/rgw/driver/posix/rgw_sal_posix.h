@@ -560,8 +560,6 @@ public:
     return *this;
   }
 
-  bool have_fsio() const override { return true; }
-
   /* Construct the multipart part cache.  Sizing is the caller's, because
    * it decides whether eviction -- and so the stabilize callback -- is
    * ever reached;  initialize() passes the configured values and a test
