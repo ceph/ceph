@@ -1,5 +1,6 @@
 set(libclient_srcs
   Client.cc
+  ZeroCopyClient.cc
   Dentry.cc
   Fh.cc
   Inode.cc
