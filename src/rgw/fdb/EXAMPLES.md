@@ -1050,7 +1050,7 @@ const std::string object_name = "photos/2026/beach.jpg";
 const auto object_head =
   fdbc::keyspace("object-cache") / "object" / bucket_id / version / object_name;
 
-lfdb::set(dbh, object_head, object_metadata);
+lfdb::set(dbh, object_head, metadata);
 ```
 
 The result is a compiled key that follows FoundationDB rules. Content keys are
@@ -1138,6 +1138,31 @@ This is equivalent to the path-style form:
 ```cpp
 auto k = fdbc::keyspace("tenant") / "bucket" / "object";
 ```
+
+`/` is the natural incremental form: an lvalue prefix is preserved, while a
+temporary reuses its owned buffer as the chain grows. When all segments are
+already available together, `key()` can reserve for the complete segment pack
+in one pass. It also accepts a compiled prefix, which is useful when several
+keys share a root:
+
+```cpp
+const auto object = fdbc::key("tenant", bucket_id, object_name);
+const auto head = fdbc::key(object, "head");
+const auto block = fdbc::key(object, "block", block_id);
+```
+
+An exclusively owned key can instead be extended in place. `/=` adds one
+segment, while `append()` adds one or more with one sizing pass:
+
+```cpp
+auto key = object;
+key /= "block";
+key.append(block_id, version);
+```
+
+These mutating forms may invalidate views into the compiled bytes; their
+segment arguments must not refer to those same bytes. Ordinary domain strings
+are unaffected by this restriction.
 
 `keyspace()` is mainly ergonomic. It makes the root segment visually clear and
 lets callers assemble keys piecewise:
