@@ -14,81 +14,24 @@
       </td>
       <td class="w-75">{{ rateLimitConfig.enabled | booleanText }}</td>
     </tr>
-    <tr>
-      <td
-        i18n
-        class="bold"
-      >
-        Maximum Read Ops
-      </td>
-      @if (!rateLimitConfig.enabled) {
-        <td>-</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_ops <= 0) {
-        <td i18n>Unlimited</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_ops > 0) {
-        <td>
-          {{ rateLimitConfig.max_read_ops }}
+    @for (field of limitFields; track field.apiKey) {
+      <tr>
+        <td
+          class="bold"
+          [attr.title]="field.tooltip"
+        >
+          {{ field.detailLabel }}
         </td>
-      }
-    </tr>
-    <tr>
-      <td
-        i18n
-        class="bold"
-      >
-        Maximum Write Ops
-      </td>
-      @if (!rateLimitConfig.enabled) {
-        <td>-</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_ops <= 0) {
-        <td i18n>Unlimited</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_ops > 0) {
-        <td>
-          {{ rateLimitConfig.max_write_ops }}
-        </td>
-      }
-    </tr>
-    <tr>
-      <td
-        i18n
-        class="bold"
-      >
-        Maximum Read Bytes
-      </td>
-      @if (!rateLimitConfig.enabled) {
-        <td>-</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_bytes <= 0) {
-        <td i18n>Unlimited</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_bytes > 0) {
-        <td>
-          {{ rateLimitConfig.max_read_bytes | dimlessBinaryPerMinute }}
-        </td>
-      }
-    </tr>
-    <tr>
-      <td
-        i18n
-        class="bold"
-      >
-        Maximum Write Bytes
-      </td>
-      @if (!rateLimitConfig.enabled) {
-        <td>-</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_bytes <= 0) {
-        <td i18n>Unlimited</td>
-      }
-      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_bytes > 0) {
-        <td>
-          {{ rateLimitConfig.max_write_bytes | dimlessBinaryPerMinute }}
-        </td>
-      }
-    </tr>
+        @if (!rateLimitConfig.enabled) {
+          <td>-</td>
+        } @else if (isUnlimited(field.apiKey)) {
+          <td i18n>Unlimited</td>
+        } @else if (field.kind === 'bytes') {
+          <td>{{ rateLimitConfig[field.apiKey] | dimlessBinaryPerMinute }}</td>
+        } @else {
+          <td>{{ rateLimitConfig[field.apiKey] }}</td>
+        }
+      </tr>
+    }
   </tbody>
 </table>
