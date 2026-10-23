@@ -96,13 +96,14 @@ TEST(ZeroCopyClientBuffer, BufferlistToIovec)
   EXPECT_EQ(0, ceph::ZeroCopyClient::bufferlist_to_iovec(empty, out, 4));
 }
 
-TEST(ZeroCopyClientBuffer, AsyncStubbed)
+TEST(ZeroCopyClientBuffer, AsyncRequiresClient)
 {
   ceph::ZeroCopyClient zc(nullptr);
-  EXPECT_EQ(-ENOTSUP, zc.async_read(nullptr, 0, 0, [](ceph::IoResult&&) {}));
-  EXPECT_EQ(-ENOTSUP, zc.async_write(
-                          nullptr, 0, ceph::bufferlist{},
-                          [](ceph::IoResult&&) {}, false, false));
-  EXPECT_EQ(-ENOTSUP, zc.read(nullptr, 0, 0, nullptr));
-  EXPECT_EQ(-ENOTSUP, zc.write(nullptr, 0, ceph::bufferlist{}, false));
+  EXPECT_EQ(-EINVAL, zc.async_read(nullptr, 0, 0, [](ceph::IoResult&&) {}));
+  EXPECT_EQ(-EINVAL, zc.async_write(
+                         nullptr, 0, ceph::bufferlist{},
+                         [](ceph::IoResult&&) {}, false, false));
+  // empty write payload rejected before client check
+  EXPECT_EQ(-EINVAL, zc.write(nullptr, 0, ceph::bufferlist{}, false));
+  EXPECT_EQ(-EINVAL, zc.read(nullptr, 0, 0, nullptr));
 }
