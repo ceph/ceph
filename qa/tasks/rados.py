@@ -73,8 +73,13 @@ def task(ctx, config):
           write_fadvise_dontneed: write behavior like with LIBRADOS_OP_FLAG_FADVISE_DONTNEED.
                                   This mean data don't access in the near future.
                                   Let osd backend don't keep data in cache.
+          balance_reads: read with the balance-reads flag, also used when the
+                         cluster's rados_replica_read_policy is balance
+          localize_reads: read with the localize-reads flag
           pct_update_delay: delay before primary propogates pct on write pause,
-                            defaults to 5s if balance_reads is set
+                            defaults to 5s when balance_reads or
+                            localize_reads is set, or when the cluster's
+                            rados_replica_read_policy is not default
 
     For example::
 
@@ -179,6 +184,8 @@ def task(ctx, config):
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
     pct_update_delay = None
+    cluster = config.get('cluster', 'ceph')
+    cluster_conf = ctx.ceph[cluster].conf.get('global', {})
     args = [
         'adjust-ulimits',
         'ceph-coverage',
@@ -207,16 +214,23 @@ def task(ctx, config):
         args.extend(['--dedup_chunk_algo', config.get('dedup_chunk_algo', None)])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
-    if config.get('balance_reads', False):
+    read_policy = cluster_conf.get('rados_replica_read_policy')
+    if read_policy is None:
+        read_policy = ctx.managers[cluster].raw_cluster_cmd(
+            'config', 'get', 'client', 'rados_replica_read_policy').strip()
+    if config.get('balance_reads', False) or read_policy == 'balance':
         args.extend(['--balance-reads'])
         pct_update_delay = config.get('pct_update_delay', 5)
     if config.get('osd_min_split_replica_read_size', None) is not None:
         args.extend(['--min-split-size',
                      str(config.get('osd_min_split_replica_read_size'))])
-    if config.get('localize_reads', False):
+    if config.get('localize_reads', False) or read_policy == 'localize':
         args.extend(['--localize-reads'])
+        pct_update_delay = config.get('pct_update_delay', 5)
     if config.get('max_attr_len', None):
         args.extend(['--max-attr-len', str(config.get('max_attr_len'))])
+    if read_policy != 'default':
+        pct_update_delay = config.get('pct_update_delay', 5)
     args.extend([
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
