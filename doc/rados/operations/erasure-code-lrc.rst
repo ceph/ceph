@@ -153,12 +153,133 @@ Where:
 :Required: No.
 :Default: /usr/lib/ceph/erasure-code
 
+``layer-plugin={plugin}``
+
+:Description: The erasure code plugin used for any layer that does not set
+              its own ``plugin`` (see `Low Level Plugin Configuration`_).
+              ``jerasure`` and ``isa`` are *not* interchangeable: they agree
+              on the first coding chunk but diverge on later ones, so a pool
+              must always be read and recovered with the same sub-plugin it
+              was written with. Only ``jerasure`` and ``isa`` are
+              accepted, and only on an LRC profile. See
+              `Choosing the layer sub-plugin`_.
+
+:Type: String
+:Required: No.
+:Default: isa
+
 ``--force``
 
 :Description: Override an existing profile by the same name.
 
 :Type: String
 :Required: No.
+
+Choosing the layer sub-plugin
+=============================
+
+Each LRC layer is itself an erasure code computed by another plugin. By
+default the *lrc* plugin uses *isa* for any layer that does not set its own
+``plugin``. The two candidate sub-plugins, ``jerasure`` and ``isa``, compute
+identical first coding chunks but **diverge on subsequent coding chunks**.
+A pool must therefore always be recovered and read with the same sub-plugin
+it was written with.
+
+To make this unambiguous, the sub-plugin is recorded in the profile under the
+``layer-plugin`` key. New LRC profiles created without an explicit value
+default to ``isa``, and overriding a profile (``--force``) without
+``layer-plugin`` keeps the value it already records. The sub-plugin of a
+profile with no ``layer-plugin`` set is never guessed: creating a pool against
+it is rejected, overriding it requires ``layer-plugin`` to be given explicitly,
+and OSDs will not serve the PGs of its pools until it is set. A value other
+than ``jerasure`` or ``isa`` is treated the same way; the monitor rejects one,
+but releases without the ``layer-plugin`` key stored whatever was given. The
+monitors raise the ``LRC_LAYER_PLUGIN_UNSET`` health check while any LRC
+profile has no valid ``layer-plugin``. Changing the value on a profile that a
+pool uses prints a warning, because data already written is then decoded with
+the new sub-plugin.
+
+.. note::
+
+   Releases before Tentacle did not record ``layer-plugin`` and always used
+   ``jerasure``. Before upgrading a cluster that has LRC pools from a release
+   without layer-plugin support to one with it, set ``layer-plugin`` on every
+   LRC profile so the correct sub-plugin is preserved. Use the value the data
+   was actually written with:
+
+   * ``jerasure`` if the profile's existing pools were written before Tentacle;
+   * ``isa`` otherwise, including profiles created on an existing Tentacle
+     cluster -- every Tentacle release defaulted to ``isa``,
+     so any pool created on Tentacle was written with ``isa``.
+
+   A profile that no pool uses holds no data, so either value is correct for
+   it. You can also remove it with ``ceph osd erasure-code-profile rm {name}``.
+
+   Because ``erasure-code-profile set`` replaces the whole profile, read the
+   current settings first and re-specify them all:
+
+   .. prompt:: bash #
+
+      ceph osd erasure-code-profile get {name}
+      ceph osd erasure-code-profile set {name} <all existing settings> \
+         layer-plugin=<jerasure|isa> --force --yes-i-really-mean-it
+
+   A release without layer-plugin support does not check the value, so if you
+   set it on one, confirm with ``ceph osd erasure-code-profile get {name}``
+   that it reads exactly ``layer-plugin=jerasure`` or ``layer-plugin=isa``. A
+   release with layer-plugin support rejects any other value, and raises the
+   ``LRC_LAYER_PLUGIN_UNSET`` health check for every LRC profile that still
+   needs setting.
+
+   cephadm blocks ``ceph orch upgrade start`` (and pauses an in-progress
+   upgrade with the ``UPGRADE_LRC_LAYER_PLUGIN_UNSET`` health alert) while any
+   LRC profile is missing ``layer-plugin``. Other upgrade methods (manual
+   package upgrades, Rook, ceph-ansible) have no such check. Once the monitors
+   are upgraded they raise the ``LRC_LAYER_PLUGIN_UNSET`` health check; set the
+   key before restarting any OSD.
+
+.. warning::
+
+   Upgrade directly to a release that contains the ``layer-plugin`` key.
+   Releases without it, including earlier Tentacle releases, ignore
+   ``layer-plugin`` and always use their built-in default: ``jerasure`` before
+   Tentacle, ``isa`` on earlier Tentacle releases. Upgrading to such a release,
+   or rolling back to one, after setting ``layer-plugin=jerasure`` reads
+   ``jerasure`` data with ``isa`` and corrupts it on recovery and degraded
+   reads.
+
+.. note::
+
+   If a cluster was upgraded without setting ``layer-plugin`` first, an
+   upgraded OSD that holds PGs of an affected LRC pool does not boot: it stays
+   down and logs a cluster error naming the profile(s). While it waits, it
+   serves none of its PGs, including those of other pools, so upgrading a whole
+   host or failure domain of such OSDs degrades every pool on them. When
+   upgrading OSDs manually, restart a single OSD first and check that it boots.
+   Upgraded OSDs also refuse to create PGs of the affected pools rather than
+   guess. OSDs that have not been upgraded keep serving those pools, so the
+   pools become unavailable as more OSDs are upgraded. To recover, set
+   ``layer-plugin`` on the affected profile(s) as above. The waiting OSDs then
+   load their PGs and boot on their own, without a restart.
+
+.. warning::
+
+   Changing an existing ``layer-plugin`` value, for example to correct a
+   mistake, only takes effect on an OSD when it restarts. Running OSDs keep the
+   sub-plugin they loaded the pool's PGs with. While OSDs disagree, recovery
+   and degraded reads can return or write corrupt data, and restarting OSDs
+   degrades PGs. So stop client I/O and recovery first, then change the value,
+   restart every OSD that serves the pool, and resume I/O and recovery.
+
+.. note::
+
+   Do not create new LRC pools during an upgrade until every OSD has been
+   upgraded. OSDs running a release without the ``layer-plugin`` key ignore it
+   and write the layers with their built-in default (``jerasure`` before
+   Tentacle, ``isa`` on earlier Tentacle releases), whatever the profile says.
+   Data written in that window would then be read with a different sub-plugin
+   once those OSDs upgrade. Wait until the OSD upgrade is complete before
+   creating LRC pools.
 
 Low Level Plugin Configuration
 ==============================
