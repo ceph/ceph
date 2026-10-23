@@ -3,56 +3,47 @@
   [data]="data"
   [columns]="poolConfigurationColumns"
   identifier="name"
-  >
+>
 </cd-table>
 
 <ng-template
   #configurationSourceTpl
   let-value="data.value"
-  >
+>
   <div>
     @switch (value) {
       @case ('global') {
-        <span
-          i18n
-          >Global</span
-          >
-        }
-        @case ('image') {
-          <strong
-            i18n
-            >Image</strong
-            >
-          }
-          @case ('pool') {
-            <strong
-              i18n
-              >Pool</strong
-              >
-            }
-          }
-        </div>
-      </ng-template>
+        <span i18n>Global</span>
+      }
+      @case ('image') {
+        <strong i18n>Image</strong>
+      }
+      @case ('pool') {
+        <strong i18n>Pool</strong>
+      }
+    }
+  </div>
+</ng-template>
 
-      <ng-template
-        #configurationValueTpl
-        let-row="data.row"
-        let-value="data.value"
-        >
-        <div>
-          @switch (row.type) {
-            @case (typeField.bps) {
-              <span>{{ value | dimlessBinaryPerSecond }}</span>
-            }
-            @case (typeField.milliseconds) {
-              <span>{{ value | milliseconds }}</span>
-            }
-            @case (typeField.iops) {
-              <span>{{ value | iops }}</span>
-            }
-            @default {
-              <span>{{ value }}</span>
-            }
-          }
-        </div>
-      </ng-template>
+<ng-template
+  #configurationValueTpl
+  let-row="data.row"
+  let-value="data.value"
+>
+  <div>
+    @switch (row.type) {
+      @case (typeField.bps) {
+        <span>{{ value | dimlessBinaryPerSecond }}</span>
+      }
+      @case (typeField.milliseconds) {
+        <span>{{ value | milliseconds }}</span>
+      }
+      @case (typeField.iops) {
+        <span>{{ value | iops }}</span>
+      }
+      @default {
+        <span>{{ value }}</span>
+      }
+    }
+  </div>
+</ng-template>

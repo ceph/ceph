@@ -4,162 +4,160 @@
       type="error"
       i18n
       >Failed to retrieve SMART data.</cd-alert-panel
+    >
+  }
+  @if (incompatible) {
+    <cd-alert-panel
+      type="warning"
+      i18n
+      >The data received has the JSON format version 2.x and is currently incompatible with the
+      dashboard.</cd-alert-panel
+    >
+  }
+  @if (!error && !incompatible) {
+    @if (data | pipeFunction: isEmpty) {
+      <cd-alert-panel
+        type="info"
+        i18n
+        >No SMART data available.</cd-alert-panel
       >
     }
-    @if (incompatible) {
-      <cd-alert-panel
-        type="warning"
-        i18n
-        >The data received has the JSON format version 2.x and is currently incompatible with the
-    dashboard.</cd-alert-panel
-        >
-      }
-      @if (!error && !incompatible) {
-        @if (data | pipeFunction: isEmpty) {
-          <cd-alert-panel
-            type="info"
-            i18n
-            >No SMART data available.</cd-alert-panel
-            >
-          }
-          @if (!(data | pipeFunction: isEmpty)) {
-            <nav
-              ngbNav
-              #nav="ngbNav"
-              class="nav-tabs"
-              >
-              @for (device of data | keyvalue; track device) {
-                <ng-container
-                  ngbNavItem
+    @if (!(data | pipeFunction: isEmpty)) {
+      <nav
+        ngbNav
+        #nav="ngbNav"
+        class="nav-tabs"
+      >
+        @for (device of data | keyvalue; track device) {
+          <ng-container ngbNavItem>
+            <a ngbNavLink>{{ device.value.device }} ({{ device.value.identifier }})</a>
+            <ng-template ngbNavContent>
+              @if (device.value.error) {
+                <cd-alert-panel
+                  id="alert-error"
+                  type="warning"
+                  >{{ device.value.userMessage }}</cd-alert-panel
+                >
+              } @else {
+                @if (device.value.info?.smart_status | pipeFunction: isEmpty) {
+                  <cd-alert-panel
+                    id="alert-self-test-unknown"
+                    size="slim"
+                    type="warning"
+                    i18n-title
+                    title="SMART overall-health self-assessment test result"
+                    i18n
+                    >unknown</cd-alert-panel
                   >
-                  <a ngbNavLink>{{ device.value.device }} ({{ device.value.identifier }})</a>
-                  <ng-template ngbNavContent>
-                    @if (device.value.error) {
-                      <cd-alert-panel
-                        id="alert-error"
-                        type="warning"
-                        >{{ device.value.userMessage }}</cd-alert-panel
-                        >
-                      } @else {
-                        @if (device.value.info?.smart_status | pipeFunction: isEmpty) {
-                          <cd-alert-panel
-                            id="alert-self-test-unknown"
-                            size="slim"
-                            type="warning"
-                            i18n-title
-                            title="SMART overall-health self-assessment test result"
-                            i18n
-                            >unknown</cd-alert-panel
-                            >
-                          } @else {
-                            <!-- HDD/NVMe self test -->
-                            @if (device.value.info.smart_status.passed) {
-                              <cd-alert-panel
-                                id="alert-self-test-passed"
-                                size="slim"
-                                type="info"
-                                i18n-title
-                                title="SMART overall-health self-assessment test result"
-                                i18n
-                                >passed</cd-alert-panel
-                                >
-                              } @else {
-                                <cd-alert-panel
-                                  id="alert-self-test-failed"
-                                  size="slim"
-                                  type="warning"
-                                  i18n-title
-                                  title="SMART overall-health self-assessment test result"
-                                  i18n
-                                  >failed</cd-alert-panel
-                                  >
-                                }
-                              }
-                            }
-                            @if (
-                              !(device.value.info | pipeFunction: isEmpty) ||
-                              !(device.value.smart | pipeFunction: isEmpty)
-                              ) {
-                              <nav
-                                ngbNav
-                                #innerNav="ngbNav"
-                                class="nav-tabs"
-                                >
-                                <li [ngbNavItem]="1">
-                                  <a
-                                    ngbNavLink
-                                    i18n
-                                    >Device Information</a
-                                    >
-                                    <ng-template ngbNavContent>
-                                      @if (!(device.value.info | pipeFunction: isEmpty)) {
-                                        <cd-table-key-value
-                                          [renderObjects]="true"
-                                          [data]="device.value.info"
-                                        ></cd-table-key-value>
-                                      }
-                                      @if (device.value.info | pipeFunction: isEmpty) {
-                                        <cd-alert-panel
-                                          id="alert-device-info-unavailable"
-                                          type="info"
-                                          i18n
-                                          >No device information available for this device.</cd-alert-panel
-                                          >
-                                        }
-                                      </ng-template>
-                                    </li>
-                                    <li [ngbNavItem]="2">
-                                      <a
-                                        ngbNavLink
-                                        i18n
-                                        >SMART</a
-                                        >
-                                        <ng-template ngbNavContent>
-                                          @if (device.value.smart?.attributes) {
-                                            <cd-table
-                                              [data]="device.value.smart.attributes.table"
-                                              updateSelectionOnRefresh="never"
-                                              [columns]="smartDataColumns"
-                                            ></cd-table>
-                                          }
-                                          @if (device.value.smart?.scsi_error_counter_log) {
-                                            <cd-table-key-value
-                                              [renderObjects]="true"
-                                              [data]="device.value.smart"
-                                              updateSelectionOnRefresh="never"
-                                            ></cd-table-key-value>
-                                          }
-                                          @if (device.value.smart?.nvmeData) {
-                                            <cd-table-key-value
-                                              [renderObjects]="true"
-                                              [data]="device.value.smart.nvmeData"
-                                              updateSelectionOnRefresh="never"
-                                            ></cd-table-key-value>
-                                          }
-                                          @if (
-                                            !device.value.smart?.attributes &&
-                                            !device.value.smart?.nvmeData &&
-                                            !device.value.smart?.scsi_error_counter_log
-                                            ) {
-                                            <cd-alert-panel
-                                              id="alert-device-smart-data-unavailable"
-                                              type="info"
-                                              i18n
-                                              >No SMART data available for this device.</cd-alert-panel
-                                              >
-                                            }
-                                          </ng-template>
-                                        </li>
-                                      </nav>
-                                      <div [ngbNavOutlet]="innerNav"></div>
-                                    }
-                                  </ng-template>
-                                </ng-container>
-                              }
-                            </nav>
-                            <div [ngbNavOutlet]="nav"></div>
-                          }
-                        }
-                      } @else {
-                        <cd-loading-panel i18n>SMART data is loading.</cd-loading-panel>
+                } @else {
+                  <!-- HDD/NVMe self test -->
+                  @if (device.value.info.smart_status.passed) {
+                    <cd-alert-panel
+                      id="alert-self-test-passed"
+                      size="slim"
+                      type="info"
+                      i18n-title
+                      title="SMART overall-health self-assessment test result"
+                      i18n
+                      >passed</cd-alert-panel
+                    >
+                  } @else {
+                    <cd-alert-panel
+                      id="alert-self-test-failed"
+                      size="slim"
+                      type="warning"
+                      i18n-title
+                      title="SMART overall-health self-assessment test result"
+                      i18n
+                      >failed</cd-alert-panel
+                    >
+                  }
+                }
+              }
+              @if (
+                !(device.value.info | pipeFunction: isEmpty) ||
+                !(device.value.smart | pipeFunction: isEmpty)
+              ) {
+                <nav
+                  ngbNav
+                  #innerNav="ngbNav"
+                  class="nav-tabs"
+                >
+                  <li [ngbNavItem]="1">
+                    <a
+                      ngbNavLink
+                      i18n
+                      >Device Information</a
+                    >
+                    <ng-template ngbNavContent>
+                      @if (!(device.value.info | pipeFunction: isEmpty)) {
+                        <cd-table-key-value
+                          [renderObjects]="true"
+                          [data]="device.value.info"
+                        ></cd-table-key-value>
                       }
+                      @if (device.value.info | pipeFunction: isEmpty) {
+                        <cd-alert-panel
+                          id="alert-device-info-unavailable"
+                          type="info"
+                          i18n
+                          >No device information available for this device.</cd-alert-panel
+                        >
+                      }
+                    </ng-template>
+                  </li>
+                  <li [ngbNavItem]="2">
+                    <a
+                      ngbNavLink
+                      i18n
+                      >SMART</a
+                    >
+                    <ng-template ngbNavContent>
+                      @if (device.value.smart?.attributes) {
+                        <cd-table
+                          [data]="device.value.smart.attributes.table"
+                          updateSelectionOnRefresh="never"
+                          [columns]="smartDataColumns"
+                        ></cd-table>
+                      }
+                      @if (device.value.smart?.scsi_error_counter_log) {
+                        <cd-table-key-value
+                          [renderObjects]="true"
+                          [data]="device.value.smart"
+                          updateSelectionOnRefresh="never"
+                        ></cd-table-key-value>
+                      }
+                      @if (device.value.smart?.nvmeData) {
+                        <cd-table-key-value
+                          [renderObjects]="true"
+                          [data]="device.value.smart.nvmeData"
+                          updateSelectionOnRefresh="never"
+                        ></cd-table-key-value>
+                      }
+                      @if (
+                        !device.value.smart?.attributes &&
+                        !device.value.smart?.nvmeData &&
+                        !device.value.smart?.scsi_error_counter_log
+                      ) {
+                        <cd-alert-panel
+                          id="alert-device-smart-data-unavailable"
+                          type="info"
+                          i18n
+                          >No SMART data available for this device.</cd-alert-panel
+                        >
+                      }
+                    </ng-template>
+                  </li>
+                </nav>
+                <div [ngbNavOutlet]="innerNav"></div>
+              }
+            </ng-template>
+          </ng-container>
+        }
+      </nav>
+      <div [ngbNavOutlet]="nav"></div>
+    }
+  }
+} @else {
+  <cd-loading-panel i18n>SMART data is loading.</cd-loading-panel>
+}

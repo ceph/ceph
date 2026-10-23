@@ -11,7 +11,7 @@
             selectionType="single"
             forceIdentifier="true"
             (updateSelection)="updateKeysSelection($event)"
-            >
+          >
             <cd-table-actions
               class="table-actions"
               [permission]="{ read: true }"
@@ -24,42 +24,42 @@
       <legend i18n>Details</legend>
       <table
         class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
-        >
+      >
         <tbody>
           <tr>
             <td
               i18n
               class="bold w-25"
-              >
-            Tenant
-          </td>
+            >
+              Tenant
+            </td>
             <td class="w-75">{{ user.tenant }}</td>
           </tr>
           <tr>
             <td
               i18n
               class="bold w-25"
-              >
-            User ID
-          </td>
+            >
+              User ID
+            </td>
             <td class="w-75">{{ user.uid }}</td>
           </tr>
           <tr>
             <td
               i18n
               class="bold w-25"
-              >
-            Username
-          </td>
+            >
+              Username
+            </td>
             <td class="w-75">{{ user.uid }}</td>
           </tr>
           <tr>
             <td
               i18n
               class="bold"
-              >
-            Full name
-          </td>
+            >
+              Full name
+            </td>
             <td>{{ user.display_name }}</td>
           </tr>
           @if (user.email?.length) {
@@ -67,9 +67,9 @@
               <td
                 i18n
                 class="bold"
-                >
-            Email address
-          </td>
+              >
+                Email address
+              </td>
               <td>{{ user.email }}</td>
             </tr>
           }
@@ -77,27 +77,27 @@
             <td
               i18n
               class="bold"
-              >
-            Suspended
-          </td>
+            >
+              Suspended
+            </td>
             <td>{{ user.suspended | booleanText }}</td>
           </tr>
           <tr>
             <td
               i18n
               class="bold"
-              >
-            System user
-          </td>
+            >
+              System user
+            </td>
             <td>{{ user.system | booleanText }}</td>
           </tr>
           <tr>
             <td
               i18n
               class="bold"
-              >
-            Maximum buckets
-          </td>
+            >
+              Maximum buckets
+            </td>
             <td>{{ user.max_buckets | map: maxBucketsMap }}</td>
           </tr>
           @if (user.type === 'rgw' && selection.account?.id) {
@@ -105,9 +105,9 @@
               <td
                 i18n
                 class="bold"
-                >
-              Managed policies
-            </td>
+              >
+                Managed policies
+              </td>
               <td i18n>{{ extractPolicyNamesFromArns(user.managed_user_policies) }}</td>
             </tr>
           }
@@ -116,14 +116,12 @@
               <td
                 i18n
                 class="bold"
-                >
-            Subusers
-          </td>
+              >
+                Subusers
+              </td>
               <td>
                 @for (subuser of user.subusers; track subuser) {
-                  <div>
-                    {{ subuser.id }} ({{ subuser.permissions }})
-                  </div>
+                  <div>{{ subuser.id }} ({{ subuser.permissions }})</div>
                 }
               </td>
             </tr>
@@ -133,9 +131,9 @@
               <td
                 i18n
                 class="bold"
-                >
-            Capabilities
-          </td>
+              >
+                Capabilities
+              </td>
               <td>
                 @for (cap of user.caps; track cap) {
                   <div>{{ cap.type }} ({{ cap.perm }})</div>
@@ -148,9 +146,9 @@
               <td
                 i18n
                 class="bold"
-                >
-            MFAs(Id)
-          </td>
+              >
+                MFAs(Id)
+              </td>
               <td>{{ user.mfa_ids | join }}</td>
             </tr>
           }
@@ -161,48 +159,48 @@
         <table
           class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
           id="accountsDetails"
-          >
+        >
           <tbody>
             <tr>
               <td
                 i18n
                 class="bold w-25"
-                >
-              Account ID
-            </td>
+              >
+                Account ID
+              </td>
               <td class="w-75">{{ selection.account?.id }}</td>
             </tr>
             <tr>
               <td
                 i18n
                 class="bold w-25"
-                >
-              Name
-            </td>
+              >
+                Name
+              </td>
               <td class="w-75">{{ selection.account?.name }}</td>
             </tr>
             <tr>
               <td
                 i18n
                 class="bold w-25"
-                >
-              Tenant
-            </td>
+              >
+                Tenant
+              </td>
               <td class="w-75">{{ selection.account?.tenant || '-' }}</td>
             </tr>
             <tr>
               <td
                 i18n
                 class="bold w-25"
-                >
-              User type
-            </td>
+              >
+                User type
+              </td>
               <td
                 class="w-75"
                 i18n
-                >
-              {{ user?.type === 'root' ? 'Account root user' : 'rgw user' }}
-            </td>
+              >
+                {{ user?.type === 'root' ? 'Account root user' : 'rgw user' }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -213,33 +211,29 @@
           <legend i18n>User quota</legend>
           <table
             class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
-            >
+          >
             <tbody>
               <tr>
                 <td
                   i18n
                   class="bold w-25"
-                  >
-              Enabled
-            </td>
+                >
+                  Enabled
+                </td>
                 <td class="w-75">{{ user.user_quota.enabled | booleanText }}</td>
               </tr>
               <tr>
                 <td
                   i18n
                   class="bold"
-                  >
-              Maximum size
-            </td>
+                >
+                  Maximum size
+                </td>
                 @if (!user.user_quota.enabled) {
                   <td>-</td>
                 }
                 @if (user.user_quota.enabled && user.user_quota.max_size <= -1) {
-                  <td
-                    i18n
-                    >
-              Unlimited
-            </td>
+                  <td i18n>Unlimited</td>
                 }
                 @if (user.user_quota.enabled && user.user_quota.max_size > -1) {
                   <td>
@@ -251,18 +245,14 @@
                 <td
                   i18n
                   class="bold"
-                  >
-              Maximum objects
-            </td>
+                >
+                  Maximum objects
+                </td>
                 @if (!user.user_quota.enabled) {
                   <td>-</td>
                 }
                 @if (user.user_quota.enabled && user.user_quota.max_objects <= -1) {
-                  <td
-                    i18n
-                    >
-              Unlimited
-            </td>
+                  <td i18n>Unlimited</td>
                 }
                 @if (user.user_quota.enabled && user.user_quota.max_objects > -1) {
                   <td>
@@ -280,33 +270,29 @@
           <legend i18n>Bucket quota</legend>
           <table
             class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
-            >
+          >
             <tbody>
               <tr>
                 <td
                   i18n
                   class="bold w-25"
-                  >
-              Enabled
-            </td>
+                >
+                  Enabled
+                </td>
                 <td class="w-75">{{ user.bucket_quota.enabled | booleanText }}</td>
               </tr>
               <tr>
                 <td
                   i18n
                   class="bold"
-                  >
-              Maximum size
-            </td>
+                >
+                  Maximum size
+                </td>
                 @if (!user.bucket_quota.enabled) {
                   <td>-</td>
                 }
                 @if (user.bucket_quota.enabled && user.bucket_quota.max_size <= -1) {
-                  <td
-                    i18n
-                    >
-              Unlimited
-            </td>
+                  <td i18n>Unlimited</td>
                 }
                 @if (user.bucket_quota.enabled && user.bucket_quota.max_size > -1) {
                   <td>
@@ -318,18 +304,14 @@
                 <td
                   i18n
                   class="bold"
-                  >
-              Maximum objects
-            </td>
+                >
+                  Maximum objects
+                </td>
                 @if (!user.bucket_quota.enabled) {
                   <td>-</td>
                 }
                 @if (user.bucket_quota.enabled && user.bucket_quota.max_objects <= -1) {
-                  <td
-                    i18n
-                    >
-              Unlimited
-            </td>
+                  <td i18n>Unlimited</td>
                 }
                 @if (user.bucket_quota.enabled && user.bucket_quota.max_objects > -1) {
                   <td>

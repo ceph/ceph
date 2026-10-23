@@ -3,12 +3,12 @@
   [open]="open"
   [hasScrollingContent]="true"
   (overlaySelected)="closeModal()"
-  >
+>
   <cds-modal-header (closeSelect)="closeModal()">
     <h3
       cdsModalHeaderHeading
       i18n
-      >
+    >
       {{ action | titlecase }} {{ resource | upperFirst }}
     </h3>
   </cds-modal-header>
@@ -20,7 +20,7 @@
         #formDir="ngForm"
         [formGroup]="snapScheduleForm"
         novalidate
-        >
+      >
         <!-- Directory -->
         <div class="form-item">
           <cds-text-label
@@ -34,10 +34,10 @@
             [invalidText]="directoryError"
             [skeleton]="directoryStore.isLoading"
             modal-primary-focus
-            >
+          >
             @if (!directoryStore.isLoading) {
-Directory (required)
-}
+              Directory (required)
+            }
             <input
               cdsText
               type="text"
@@ -58,189 +58,187 @@ Directory (required)
                 class="invalid-feedback"
                 i18n
                 >This field is required.</span
-                >
-              }
-              @if (snapScheduleForm.showError('directory', formDir, 'notUnique')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >A snapshot schedule for this path already exists.</span
-                  >
-                }
-              </ng-template>
-            </div>
-
-            <!--Start date -->
-            <cd-date-time-picker
-              name="Start Date"
-              helperText="The time zone is assumed to be UTC"
-              [control]="snapScheduleForm.get('startDate')"
-              [disabled]="isEdit"
-            ></cd-date-time-picker>
-            @if (snapScheduleForm.showError('startDate', formDir, 'required')) {
+              >
+            }
+            @if (snapScheduleForm.showError('directory', formDir, 'notUnique')) {
               <span
                 class="invalid-feedback"
                 i18n
-                >This field is required.</span
-                >
-              }
+                >A snapshot schedule for this path already exists.</span
+              >
+            }
+          </ng-template>
+        </div>
 
-              <!-- Repeat interval -->
-              <div
-                class="form-item form-item-append"
-                cdsRow
-                >
-                <div cdsCol>
-                  <cds-number
-                    [id]="'repeatInterval'"
-                    [name]="'repeatInterval'"
-                    [formControlName]="'repeatInterval'"
-                    [label]="'Schedule'"
-                    [min]="1"
+        <!--Start date -->
+        <cd-date-time-picker
+          name="Start Date"
+          helperText="The time zone is assumed to be UTC"
+          [control]="snapScheduleForm.get('startDate')"
+          [disabled]="isEdit"
+        ></cd-date-time-picker>
+        @if (snapScheduleForm.showError('startDate', formDir, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >This field is required.</span
+          >
+        }
+
+        <!-- Repeat interval -->
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <cds-number
+              [id]="'repeatInterval'"
+              [name]="'repeatInterval'"
+              [formControlName]="'repeatInterval'"
+              [label]="'Schedule'"
+              [min]="1"
               [invalid]="
                 !snapScheduleForm.controls.repeatInterval.valid &&
                 snapScheduleForm.controls.repeatInterval.dirty
               "
-                    [invalidText]="repeatIntervalError"
-                    cdRequiredField="Schedule"
+              [invalidText]="repeatIntervalError"
+              cdRequiredField="Schedule"
+            ></cds-number>
+          </div>
+          <div cdsCol>
+            @if (repeatFrequencies) {
+              <cds-select
+                id="repeatFrequency"
+                name="repeatFrequency"
+                formControlName="repeatFrequency"
+                label="Frequency"
+                [invalid]="
+                  !snapScheduleForm.controls.repeatFrequency.valid &&
+                  snapScheduleForm.controls.repeatFrequency.dirty
+                "
+                [invalidText]="repeatFrequencyError"
+              >
+                @for (freq of repeatFrequencies; track freq) {
+                  <option [value]="freq[1]">
+                    {{ freq[0] }}
+                  </option>
+                }
+              </cds-select>
+            }
+            <ng-template #repeatFrequencyError>
+              @if (snapScheduleForm.showError('repeatFrequency', formDir, 'notUnique')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This schedule already exists for the selected directory.</span
+                >
+              }
+            </ng-template>
+            <ng-template #repeatIntervalError>
+              @if (snapScheduleForm.showError('repeatInterval', formDir, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
+              @if (snapScheduleForm.showError('repeatInterval', formDir, 'min')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >Choose a value greater than 0.</span
+                >
+              }
+            </ng-template>
+          </div>
+        </div>
+
+        <!-- Retention policies -->
+        @for (
+          retentionPolicy of retentionPolicies.controls;
+          track retentionPolicy;
+          let i = $index
+        ) {
+          <ng-container formArrayName="retentionPolicies">
+            <ng-container [formGroupName]="i">
+              <div
+                cdsRow
+                class="form-item form-item-append"
+              >
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 8 }"
+                >
+                  <cds-number
+                    [id]="'retentionInterval' + i"
+                    [name]="'retentionInterval' + i"
+                    [formControlName]="'retentionInterval'"
+                    [label]="'Retention policy'"
+                    [min]="1"
+                    [invalid]="
+                      snapScheduleForm.controls['retentionPolicies'].controls[i].invalid &&
+                      snapScheduleForm.controls['retentionPolicies'].dirty
+                    "
+                    [invalidText]="retentionPolicyError"
                   ></cds-number>
                 </div>
-                <div cdsCol>
-                  @if (repeatFrequencies) {
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 7 }"
+                >
+                  @if (retentionFrequencies) {
                     <cds-select
-                      id="repeatFrequency"
-                      name="repeatFrequency"
-                      formControlName="repeatFrequency"
+                      id="retentionFrequency"
+                      name="retentionFrequency"
+                      formControlName="retentionFrequency"
                       label="Frequency"
-              [invalid]="
-                !snapScheduleForm.controls.repeatFrequency.valid &&
-                snapScheduleForm.controls.repeatFrequency.dirty
-              "
-                      [invalidText]="repeatFrequencyError"
-                      >
-                      @for (freq of repeatFrequencies; track freq) {
-                        <option
-                          [value]="freq[1]"
-                          >
+                    >
+                      @for (freq of retentionFrequencies; track freq) {
+                        <option [value]="freq[1]">
                           {{ freq[0] }}
                         </option>
                       }
                     </cds-select>
                   }
-                  <ng-template #repeatFrequencyError>
-                    @if (snapScheduleForm.showError('repeatFrequency', formDir, 'notUnique')) {
-                      <span
-                        class="invalid-feedback"
-                        i18n
-                        >This schedule already exists for the selected directory.</span
-                        >
-                      }
-                    </ng-template>
-                    <ng-template #repeatIntervalError>
-                      @if (snapScheduleForm.showError('repeatInterval', formDir, 'required')) {
-                        <span
-                          class="invalid-feedback"
-                          i18n
-                          >This field is required.</span
-                          >
-                        }
-                        @if (snapScheduleForm.showError('repeatInterval', formDir, 'min')) {
-                          <span
-                            class="invalid-feedback"
-                            i18n
-                            >Choose a value greater than 0.</span
-                            >
-                          }
-                        </ng-template>
-                      </div>
-                    </div>
+                </div>
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 1 }"
+                  class="item-action-btn"
+                >
+                  <cds-icon-button
+                    kind="danger"
+                    size="sm"
+                    (click)="removeRetentionPolicy(i)"
+                  >
+                    <svg
+                      cdsIcon="trash-can"
+                      size="32"
+                      class="cds--btn__icon"
+                    ></svg>
+                  </cds-icon-button>
+                </div>
+              </div>
+              <ng-template #retentionPolicyError>
+                @if (snapScheduleForm.controls['retentionPolicies'].controls[i].invalid) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This retention policy already exists for the selected directory.</span
+                  >
+                }
+              </ng-template>
+            </ng-container>
+          </ng-container>
+        }
 
-                    <!-- Retention policies -->
-                    @for (retentionPolicy of retentionPolicies.controls; track retentionPolicy; let i = $index) {
-                      <ng-container
-                        formArrayName="retentionPolicies"
-                        >
-                        <ng-container [formGroupName]="i">
-                          <div
-                            cdsRow
-                            class="form-item form-item-append"
-                            >
-                            <div
-                              cdsCol
-                              [columnNumbers]="{ lg: 8 }"
-                              >
-                              <cds-number
-                                [id]="'retentionInterval' + i"
-                                [name]="'retentionInterval' + i"
-                                [formControlName]="'retentionInterval'"
-                                [label]="'Retention policy'"
-                                [min]="1"
-                  [invalid]="
-                    snapScheduleForm.controls['retentionPolicies'].controls[i].invalid &&
-                    snapScheduleForm.controls['retentionPolicies'].dirty
-                  "
-                                [invalidText]="retentionPolicyError"
-                              ></cds-number>
-                            </div>
-                            <div
-                              cdsCol
-                              [columnNumbers]="{ lg: 7 }"
-                              >
-                              @if (retentionFrequencies) {
-                                <cds-select
-                                  id="retentionFrequency"
-                                  name="retentionFrequency"
-                                  formControlName="retentionFrequency"
-                                  label="Frequency"
-                                  >
-                                  @for (freq of retentionFrequencies; track freq) {
-                                    <option
-                                      [value]="freq[1]"
-                                      >
-                                      {{ freq[0] }}
-                                    </option>
-                                  }
-                                </cds-select>
-                              }
-                            </div>
-                            <div
-                              cdsCol
-                              [columnNumbers]="{ lg: 1 }"
-                              class="item-action-btn"
-                              >
-                              <cds-icon-button
-                                kind="danger"
-                                size="sm"
-                                (click)="removeRetentionPolicy(i)"
-                                >
-                                <svg
-                                  cdsIcon="trash-can"
-                                  size="32"
-                                  class="cds--btn__icon"
-                                ></svg>
-                              </cds-icon-button>
-                            </div>
-                          </div>
-                          <ng-template #retentionPolicyError>
-                            @if (snapScheduleForm.controls['retentionPolicies'].controls[i].invalid) {
-                              <span
-                                class="invalid-feedback"
-                                i18n
-                                >This retention policy already exists for the selected directory.</span
-                                >
-                              }
-                            </ng-template>
-                          </ng-container>
-                        </ng-container>
-                      }
-
-                      <div class="form-item">
-                        <button
-                          cdsButton="tertiary"
-                          type="button"
-                          (click)="addRetentionPolicy()"
-                          i18n
-                          >
+        <div class="form-item">
+          <button
+            cdsButton="tertiary"
+            type="button"
+            (click)="addRetentionPolicy()"
+            i18n
+          >
             Add retention policy
             <svg
               cdsIcon="add"
@@ -249,14 +247,14 @@ Directory (required)
               icon
             ></svg>
           </button>
-                      </div>
-                    </form>
-                  </div>
-                  <cd-form-button-panel
-                    (submitActionEvent)="submit()"
-                    [form]="snapScheduleForm"
-                    [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                    [modalForm]="true"
-                  ></cd-form-button-panel>
-                </ng-container>
-              </cds-modal>
+        </div>
+      </form>
+    </div>
+    <cd-form-button-panel
+      (submitActionEvent)="submit()"
+      [form]="snapScheduleForm"
+      [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+  </ng-container>
+</cds-modal>

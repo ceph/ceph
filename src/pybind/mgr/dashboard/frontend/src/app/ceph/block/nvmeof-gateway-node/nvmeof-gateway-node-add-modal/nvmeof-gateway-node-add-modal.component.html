@@ -2,18 +2,18 @@
   [open]="open"
   (overlaySelected)="closeModal()"
   [size]="'lg'"
-  >
+>
   <cds-modal-header (closeSelect)="closeModal()">
     <h4
       class="cds--type-heading-04 cds-ml-3"
       i18n
-      >
+    >
       Add gateway nodes
     </h4>
     <p
       class="cds--type-body-compact-01 cds-ml-3"
       i18n
-      >
+    >
       Select NVMe-oF gateway nodes to associate with this gateway group.
     </p>
   </cds-modal-header>
@@ -22,17 +22,17 @@
       <div
         cdsStack="vertical"
         gap="1"
-        >
+      >
         <div
           class="cds--type-heading-01"
           i18n
-          >
+        >
           Select gateway nodes
         </div>
         <div
           class="cds--type-label-01"
           i18n
-          >
+        >
           Nodes to run NVMe-oF target service
         </div>
       </div>
@@ -45,13 +45,13 @@
         [columns]="columns"
         (updateSelection)="updateSelection($event)"
         [autoReload]="false"
-        >
+      >
       </cd-table>
 
       <ng-template
         #addrTemplate
         let-value="data.value"
-        >
+      >
         <span>{{ value || '-' }}</span>
       </ng-template>
 
@@ -59,12 +59,12 @@
         #statusTemplate
         let-value="data.value"
         let-row="data.row"
-        >
+      >
         <div
           class="status-cell"
           cdsStack="horizontal"
           gap="3"
-          >
+        >
           @if (value === HostStatus.AVAILABLE) {
             <cd-icon type="success"></cd-icon>
           }
@@ -75,28 +75,25 @@
       <ng-template
         #labelsTemplate
         let-value="data.value"
-        >
+      >
         @if (value && value.length > 0) {
           @for (label of value; track label) {
-            <cds-tag
-              class="tag tag-dark"
-              >{{ label }}</cds-tag
-              >
-            }
-          } @else {
-            <span>-</span>
+            <cds-tag class="tag tag-dark">{{ label }}</cds-tag>
           }
-        </ng-template>
-      </div>
-    </section>
-    <cd-form-button-panel
-      [modalForm]="true"
-      [showSubmit]="true"
-      submitText="Add"
-      i18n-submitText
-      [disabled]="selection.selected.length === 0"
-      (submitActionEvent)="onSubmit()"
-      (backActionEvent)="closeModal()"
-      >
-    </cd-form-button-panel>
-  </cds-modal>
+        } @else {
+          <span>-</span>
+        }
+      </ng-template>
+    </div>
+  </section>
+  <cd-form-button-panel
+    [modalForm]="true"
+    [showSubmit]="true"
+    submitText="Add"
+    i18n-submitText
+    [disabled]="selection.selected.length === 0"
+    (submitActionEvent)="onSubmit()"
+    (backActionEvent)="closeModal()"
+  >
+  </cd-form-button-panel>
+</cds-modal>

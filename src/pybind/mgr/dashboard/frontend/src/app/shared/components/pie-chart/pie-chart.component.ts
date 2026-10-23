@@ -1,4 +1,3 @@
-
 import { Component, Input, OnChanges, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { PieChartOptions, ChartTabularData, ChartsModule } from '@carbon/charts-angular';
 

@@ -3,13 +3,13 @@
   #formDir="ngForm"
   [formGroup]="rbdmirroringForm"
   novalidate
-  >
+>
   <div class="form-item">
     <div
       cdsCol
       [columnNumbers]="{ md: 4 }"
       class="d-flex"
-      >
+    >
       <cds-text-label
         for="siteName"
         i18n
@@ -30,21 +30,19 @@
             [title]="editing ? 'Save' : 'Edit'"
           >
             @if (!editing) {
-<svg
-              [cdsIcon]="icons.edit"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-             
-            ></svg>
-}
+              <svg
+                [cdsIcon]="icons.edit"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+              ></svg>
+            }
             @if (editing) {
-<svg
-              [cdsIcon]="icons.check"
-              [size]="icons.size32"
-              class="cds--btn__icon"
-             
-            ></svg>
-}
+              <svg
+                [cdsIcon]="icons.check"
+                [size]="icons.size32"
+                class="cds--btn__icon"
+              ></svg>
+            }
           </cds-icon-button>
           <cd-copy-2-clipboard-button
             [source]="siteName"
@@ -67,7 +65,7 @@
               [attr.aria-label]="action.name"
               [attr.data-testid]="action.name"
               [preserveFragment]="action.preserveFragment ? '' : null"
-              >
+            >
               <span i18n>{{ action.name }}</span>
               <svg
                 class="cds--btn__icon"

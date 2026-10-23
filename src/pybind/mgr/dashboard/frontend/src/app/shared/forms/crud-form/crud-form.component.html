@@ -1,19 +1,17 @@
 <div class="cd-col-form">
   @if (formUISchema$ | async; as formUISchema) {
-    <div
-      class="card pb-0"
-      >
+    <div class="card pb-0">
       <div
         i18n="form title"
         class="card-header"
-        >
-      {{ formUISchema.title }}
-    </div>
+      >
+        {{ formUISchema.title }}
+      </div>
       @if (formUISchema.uiSchema) {
         <form
           [formGroup]="form"
           (ngSubmit)="submit(model, formUISchema.taskInfo)"
-          >
+        >
           <div class="card-body position-relative">
             <formly-form
               [form]="form"

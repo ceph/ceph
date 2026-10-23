@@ -1,54 +1,57 @@
-@if ({
-  ftMap: featureToggleMap$ | async,
-  daemons: rgwDaemonService.daemons$ | async,
-  selectedDaemon: rgwDaemonService.selectedDaemon$ | async
-  }; as data) {
+@if (
+  {
+    ftMap: featureToggleMap$ | async,
+    daemons: rgwDaemonService.daemons$ | async,
+    selectedDaemon: rgwDaemonService.selectedDaemon$ | async
+  };
+  as data
+) {
   @if (
     data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1
-    ) {
+  ) {
     <div class="cd-context-bar pt-3 pb-3">
       <span
         class="me-1"
         i18n
         >Object gateway:</span
+      >
+      <div
+        ngbDropdown
+        placement="bottom-left"
+        class="d-inline-block ms-2"
+      >
+        <button
+          ngbDropdownToggle
+          class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
+          i18n-title
+          title="Object gateway"
+          type="button"
         >
-        <div
-          ngbDropdown
-          placement="bottom-left"
-          class="d-inline-block ms-2"
+          {{ data.selectedDaemon.id }}
+          <cds-tag
+            type="blue"
+            size="sm"
+            >{{ data.selectedDaemon.zonegroup_name }}</cds-tag
           >
-          <button
-            ngbDropdownToggle
-            class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
-            i18n-title
-            title="Object gateway"
-            type="button"
+        </button>
+        <div ngbDropdownMenu>
+          @for (daemon of data.daemons; track daemon) {
+            <button
+              ngbDropdownItem
+              class="ctx-bar-available-rgw-daemon"
+              (click)="onDaemonSelection(daemon)"
+              type="button"
             >
-            {{ data.selectedDaemon.id }}
-            <cds-tag
-              type="blue"
-              size="sm"
-              >{{ data.selectedDaemon.zonegroup_name }}</cds-tag
+              {{ daemon.id }}
+              <cds-tag
+                type="blue"
+                size="sm"
+                >{{ daemon.zonegroup_name }}</cds-tag
               >
             </button>
-            <div ngbDropdownMenu>
-              @for (daemon of data.daemons; track daemon) {
-                <button
-                  ngbDropdownItem
-                  class="ctx-bar-available-rgw-daemon"
-                  (click)="onDaemonSelection(daemon)"
-                  type="button"
-                  >
-                  {{ daemon.id }}
-                  <cds-tag
-                    type="blue"
-                    size="sm"
-                    >{{ daemon.zonegroup_name }}</cds-tag
-                    >
-                  </button>
-                }
-              </div>
-            </div>
-          </div>
-        }
-      }
+          }
+        </div>
+      </div>
+    </div>
+  }
+}

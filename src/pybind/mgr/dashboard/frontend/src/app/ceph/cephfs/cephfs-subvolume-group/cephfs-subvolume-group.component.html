@@ -8,7 +8,7 @@
       [hasDetails]="false"
       (fetchData)="fetchData()"
       (updateSelection)="updateSelection($event)"
-      >
+    >
       <div class="table-actions">
         <cd-table-actions
           [permission]="permissions.cephfs"
@@ -16,7 +16,7 @@
           class="btn-group"
           id="cephfs-subvolumegropup-actions"
           [tableActions]="tableActions"
-          >
+        >
         </cd-table-actions>
       </div>
     </cd-table>
@@ -26,7 +26,7 @@
 <ng-template
   #quotaUsageTpl
   let-row="data.row"
-  >
+>
   @if (row.info.bytes_pcent && row.info.bytes_pcent !== 'undefined') {
     <cd-usage-bar
       [total]="row.info.bytes_quota"
@@ -39,30 +39,30 @@
       <span
         ngbTooltip="Quota limit is not set"
         i18n-ngbTooltip
-        >
+      >
         {{ row.info.bytes_used | dimlessBinary }}</span
-        >
-      }
+      >
     }
-  </ng-template>
+  }
+</ng-template>
 
-  <ng-template
-    #typeTpl
-    let-value="data.value"
-    >
-    <cd-label [value]="value"></cd-label>
-  </ng-template>
+<ng-template
+  #typeTpl
+  let-value="data.value"
+>
+  <cd-label [value]="value"></cd-label>
+</ng-template>
 
-  <ng-template
-    #modeToHumanReadableTpl
-    let-value="data.value"
+<ng-template
+  #modeToHumanReadableTpl
+  let-value="data.value"
+>
+  @for (result of value | octalToHumanReadable; track result) {
+    <cds-tag
+      [class]="result.class"
+      [ngbTooltip]="result.toolTip"
     >
-    @for (result of value | octalToHumanReadable; track result) {
-      <cds-tag
-        [class]="result.class"
-        [ngbTooltip]="result.toolTip"
-        >
-        {{ result.content }}
-      </cds-tag>
-    }
-  </ng-template>
+      {{ result.content }}
+    </cds-tag>
+  }
+</ng-template>

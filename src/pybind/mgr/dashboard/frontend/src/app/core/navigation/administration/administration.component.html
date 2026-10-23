@@ -2,29 +2,27 @@
   [customTrigger]="customTrigger"
   [flip]="true"
   description=""
-  >
+>
   <li class="cds--overflow-menu-options__option mb-2">
     <button
       routerLink="/user-management"
       class="cds--overflow-menu-options__btn"
       type="button"
       i18n
-      >
+    >
       User management
     </button>
   </li>
   @if (configOptPermission.read) {
-    <li
-      class="cds--overflow-menu-options__option mb-2"
-      >
+    <li class="cds--overflow-menu-options__option mb-2">
       <button
         routerLink="/telemetry"
         class="cds--overflow-menu-options__btn"
         type="button"
         i18n
-        >
-      Telemetry configuration
-    </button>
+      >
+        Telemetry configuration
+      </button>
     </li>
   }
 </cds-overflow-menu>
@@ -41,5 +39,5 @@
     i18n
     class="d-md-none"
     >Dashboard Settings</span
-    >
-  </ng-template>
+  >
+</ng-template>

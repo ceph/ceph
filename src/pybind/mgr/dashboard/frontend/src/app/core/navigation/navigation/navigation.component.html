@@ -12,7 +12,7 @@
     name="Ceph Dashboard"
     class="cd-navbar-top"
     [brand]="brandTemplate"
-    >
+  >
     <cds-hamburger
       [active]="showMenuSidebar"
       data-testid="main-menu-toggler"
@@ -22,19 +22,17 @@
     <!-- CLUSTER SWITCHER TEMPLATE -->
     <!-- ************************* -->
     @if (clustersMap?.size > 1) {
-      <cds-header-navigation
-        class="cluster-switcher"
-        >
+      <cds-header-navigation class="cluster-switcher">
         <cds-header-menu
           [title]="currentClusterName"
           data-testid="selected-cluster"
-          >
+        >
           @for (cluster of clustersMap | keyvalue; track trackByFn($index, cluster)) {
             <cds-header-item
               (click)="onClusterSelection(cluster.value)"
               [class.disabled]="cluster.value.cluster_connection_status === 1"
               data-testid="select-a-cluster"
-              >
+            >
               {{ cluster.value.name }} - {{ cluster.value?.cluster_alias }} -
               {{ cluster.value?.user }}
             </cds-header-item>
@@ -52,16 +50,14 @@
         (click)="onNotificationSelected($event)"
         tabindex="0"
         (keydown.enter)="onNotificationSelected($event)"
-        >
+      >
         <cd-notifications></cd-notifications>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
       @if (permissions.user.read) {
-        <div
-          class="cds--btn cds--btn--icon-only cds--header__action"
-          >
+        <div class="cds--btn cds--btn--icon-only cds--header__action">
           <cd-administration></cd-administration>
         </div>
       }
@@ -77,11 +73,11 @@
     <a
       class="cds--header__name navbar-brand ms-3"
       routerLink="/overview"
-      >
+    >
       <img
         src="assets/Ceph_Ceph_Logo_with_text_white.svg"
         alt="Ceph"
-        />
+      />
     </a>
   </ng-template>
   <!-- **************************************** -->
@@ -92,14 +88,14 @@
     <nav
       id="sidebar"
       [ngClass]="{ active: !showMenuSidebar }"
-      >
+    >
       <ng-container *ngTemplateOutlet="cd_menu"></ng-container>
     </nav>
     <!-- Page Content -->
     <div
       id="content"
       [ngClass]="{ active: !showMenuSidebar, 'content-theme': true }"
-      >
+    >
       <ng-content></ng-content>
     </div>
   </div>
@@ -113,7 +109,7 @@
         class="mt-5"
         (click)="onMenuClick($event)"
         #sidenavContainer
-        >
+      >
         <!-- Overview -->
         <cds-sidenav-item
           route="/overview"
@@ -121,7 +117,7 @@
           title="Overview"
           i18n-title
           class="nav-item tc_menuitem_overview"
-          >
+        >
           <svg
             cdsIcon="template"
             icon
@@ -134,7 +130,7 @@
           <cds-sidenav-menu
             title="Multi-cluster"
             i18n-title
-            >
+          >
             <svg
               cdsIcon="edge-cluster"
               icon
@@ -147,287 +143,279 @@
               [useRouter]="true"
               class="tc_submenuitem tc_submenuitem_multiCluster_overview"
               ><span i18n>Overview</span></cds-sidenav-item
-              >
+            >
+            <cds-sidenav-item
+              route="/multi-cluster/manage-clusters"
+              title="Manage clusters"
+              i18n-title
+              [useRouter]="true"
+              class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"
+              ><span i18n>Manage clusters</span></cds-sidenav-item
+            >
+          </cds-sidenav-menu>
+        }
+        <!-- Cluster -->
+        @if (
+          permissions.hosts.read ||
+          permissions.monitor.read ||
+          permissions.osd.read ||
+          permissions.pool.read
+        ) {
+          <cds-sidenav-menu
+            title="Cluster"
+            i18n-title
+            class="tc_menuitem_cluster"
+          >
+            <svg
+              cdsIcon="web-services--cluster"
+              icon
+              size="20"
+            ></svg>
+            @if (permissions.pool.read) {
               <cds-sidenav-item
-                route="/multi-cluster/manage-clusters"
-                title="Manage clusters"
-                i18n-title
+                route="/pool"
                 [useRouter]="true"
-                class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"
-                ><span i18n>Manage clusters</span></cds-sidenav-item
-                >
-              </cds-sidenav-menu>
-            }
-            <!-- Cluster -->
-            @if (
-              permissions.hosts.read ||
-              permissions.monitor.read ||
-              permissions.osd.read ||
-              permissions.pool.read
-              ) {
-              <cds-sidenav-menu
-                title="Cluster"
+                title="Pools"
                 i18n-title
-                class="tc_menuitem_cluster"
-                >
-                <svg
-                  cdsIcon="web-services--cluster"
-                  icon
-                  size="20"
-                ></svg>
-                @if (permissions.pool.read) {
-                  <cds-sidenav-item
-                    route="/pool"
-                    [useRouter]="true"
-                    title="Pools"
-                    i18n-title
-                    class="tc_submenuitem tc_submenuitem_cluster_pool"
-                    ><span i18n>Pools</span></cds-sidenav-item
-                    >
+                class="tc_submenuitem tc_submenuitem_cluster_pool"
+                ><span i18n>Pools</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.hosts.read) {
+              <cds-sidenav-item
+                route="/hosts"
+                [useRouter]="true"
+                title="Hosts"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_cluster_hosts"
+                ><span i18n>Hosts</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.osd.read) {
+              <cds-sidenav-item
+                route="/osd"
+                [useRouter]="true"
+                title="OSDs"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_cluster_osds"
+                ><span i18n>OSDs</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.hosts.read) {
+              <cds-sidenav-item
+                route="/inventory"
+                [useRouter]="true"
+                title="Physical disks"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_cluster_inventory"
+                ><span i18n>Physical disks</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.osd.read) {
+              <cds-sidenav-item
+                route="/crush-map"
+                [useRouter]="true"
+                title="CRUSH map"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_cluster_crush"
+                ><span i18n>CRUSH map</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.monitor.read) {
+              <cds-sidenav-item
+                route="/monitor"
+                [useRouter]="true"
+                title="Monitors"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_cluster_monitor"
+                ><span i18n>Monitors</span></cds-sidenav-item
+              >
+            }
+          </cds-sidenav-menu>
+        }
+        <!-- Block Storage -->
+        @if (
+          (permissions.rbdImage.read || permissions.rbdMirroring.read || permissions.iscsi.read) &&
+          (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)
+        ) {
+          <cds-sidenav-menu
+            title="Block"
+            i18n-title
+            class="tc_menuitem_block"
+          >
+            <svg
+              cdsIcon="datastore"
+              icon
+              size="20"
+            ></svg>
+            @if (permissions.rbdImage.read && enabledFeature.rbd) {
+              <cds-sidenav-item
+                route="/block/rbd"
+                [useRouter]="true"
+                title="Images"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_block_images"
+                ><span i18n>Images</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.rbdMirroring.read && enabledFeature.mirroring) {
+              <cds-sidenav-item
+                route="/block/mirroring"
+                [useRouter]="true"
+                title="Mirroring"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_block_mirroring"
+              >
+                <span i18n
+                  >Mirroring
+                  @if (summaryData?.rbd_mirroring?.warnings !== 0) {
+                    <cds-tag class="tag-warning content-theme">
+                      {{ summaryData?.rbd_mirroring?.warnings }}
+                    </cds-tag>
                   }
-                  @if (permissions.hosts.read) {
-                    <cds-sidenav-item
-                      route="/hosts"
-                      [useRouter]="true"
-                      title="Hosts"
-                      i18n-title
-                      class="tc_submenuitem tc_submenuitem_cluster_hosts"
-                      ><span i18n>Hosts</span></cds-sidenav-item
-                      >
-                    }
-                    @if (permissions.osd.read) {
-                      <cds-sidenav-item
-                        route="/osd"
-                        [useRouter]="true"
-                        title="OSDs"
-                        i18n-title
-                        class="tc_submenuitem tc_submenuitem_cluster_osds"
-                        ><span i18n>OSDs</span></cds-sidenav-item
-                        >
-                      }
-                      @if (permissions.hosts.read) {
-                        <cds-sidenav-item
-                          route="/inventory"
-                          [useRouter]="true"
-                          title="Physical disks"
-                          i18n-title
-                          class="tc_submenuitem tc_submenuitem_cluster_inventory"
-                          ><span i18n>Physical disks</span></cds-sidenav-item
-                          >
-                        }
-                        @if (permissions.osd.read) {
-                          <cds-sidenav-item
-                            route="/crush-map"
-                            [useRouter]="true"
-                            title="CRUSH map"
-                            i18n-title
-                            class="tc_submenuitem tc_submenuitem_cluster_crush"
-                            ><span i18n>CRUSH map</span></cds-sidenav-item
-                            >
-                          }
-                          @if (permissions.monitor.read) {
-                            <cds-sidenav-item
-                              route="/monitor"
-                              [useRouter]="true"
-                              title="Monitors"
-                              i18n-title
-                              class="tc_submenuitem tc_submenuitem_cluster_monitor"
-                              ><span i18n>Monitors</span></cds-sidenav-item
-                              >
-                            }
-                          </cds-sidenav-menu>
-                        }
-                        <!-- Block Storage -->
-                        @if (
-                          (permissions.rbdImage.read ||
-                          permissions.rbdMirroring.read ||
-                          permissions.iscsi.read) &&
-                          (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)
-                          ) {
-                          <cds-sidenav-menu
-                            title="Block"
-                            i18n-title
-                            class="tc_menuitem_block"
-                            >
-                            <svg
-                              cdsIcon="datastore"
-                              icon
-                              size="20"
-                            ></svg>
-                            @if (permissions.rbdImage.read && enabledFeature.rbd) {
-                              <cds-sidenav-item
-                                route="/block/rbd"
-                                [useRouter]="true"
-                                title="Images"
-                                i18n-title
-                                class="tc_submenuitem tc_submenuitem_block_images"
-                                ><span i18n>Images</span></cds-sidenav-item
-                                >
-                              }
-                              @if (permissions.rbdMirroring.read && enabledFeature.mirroring) {
-                                <cds-sidenav-item
-                                  route="/block/mirroring"
-                                  [useRouter]="true"
-                                  title="Mirroring"
-                                  i18n-title
-                                  class="tc_submenuitem tc_submenuitem_block_mirroring"
-                                  >
-                                  <span i18n
-                                    >Mirroring
-              @if (summaryData?.rbd_mirroring?.warnings !== 0) {
-<cds-tag
-               
-                class="tag-warning content-theme"
+                  @if (summaryData?.rbd_mirroring?.errors !== 0) {
+                    <cds-tag class="tag-danger content-theme">
+                      {{ summaryData?.rbd_mirroring?.errors }}
+                    </cds-tag>
+                  }
+                </span>
+              </cds-sidenav-item>
+            }
+            @if (permissions.iscsi.read && enabledFeature.iscsi) {
+              <cds-sidenav-item
+                route="/block/iscsi"
+                [useRouter]="true"
+                title="iSCSI"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_block_iscsi"
+                ><span i18n>iSCSI</span></cds-sidenav-item
               >
-                {{ summaryData?.rbd_mirroring?.warnings }}
-              </cds-tag>
-}
-              @if (summaryData?.rbd_mirroring?.errors !== 0) {
-<cds-tag
-               
-                class="tag-danger content-theme"
+            }
+            <cds-sidenav-item
+              route="/block/nvmeof"
+              [useRouter]="true"
+              title="NVMe/TCP"
+              i18n-title
+              class="tc_submenuitem tc_submenuitem_block_nvme"
+              ><span i18n>NVMe/TCP</span></cds-sidenav-item
+            >
+          </cds-sidenav-menu>
+        }
+        <!-- Object Storage -->
+        @if (permissions.rgw.read && enabledFeature.rgw) {
+          <cds-sidenav-menu
+            title="Object"
+            i18n-title
+            class="nav-item tc_menuitem_rgw"
+          >
+            <svg
+              cdsIcon="object-storage"
+              icon
+              size="20"
+            ></svg>
+            <cds-sidenav-item
+              route="/rgw/overview"
+              title="Overview"
+              i18n-title
+              [useRouter]="true"
+              class="tc_submenuitem tc_submenuitem_rgw_overview"
+              ><span i18n>Overview</span></cds-sidenav-item
+            >
+            <cds-sidenav-item
+              route="/rgw/user"
+              title="User management"
+              i18n-title
+              [useRouter]="true"
+              class="tc_submenuitem tc_submenuitem_rgw_users"
+              ><span i18n>User management</span></cds-sidenav-item
+            >
+            <cds-sidenav-item
+              route="/rgw/bucket"
+              title="Buckets"
+              i18n-title
+              [useRouter]="true"
+              class="tc_submenuitem tc_submenuitem_rgw_buckets"
+              ><span i18n>Buckets</span></cds-sidenav-item
+            >
+            <cds-sidenav-item
+              route="/rgw/destination"
+              [useRouter]="true"
+              title="Notification destination"
+              i18n-title
+              class="tc_submenuitem tc_submenuitem_rgw_notification"
+              ><span i18n>Notification destination</span></cds-sidenav-item
+            >
+            <cds-sidenav-item
+              route="/rgw/storage-class"
+              title="Storage class"
+              i18n-title
+              [useRouter]="true"
+              class="tc_submenuitem tc_submenuitem_rgw_storage_class"
+              ><span i18n>Storage class</span></cds-sidenav-item
+            >
+            <cds-sidenav-item
+              route="/rgw/multisite"
+              title="Multi-site"
+              i18n-title
+              [useRouter]="true"
+              class="tc_submenuitem tc_submenuitem_rgw_multi-site"
+              ><span i18n>Multi-site</span></cds-sidenav-item
+            >
+            <cds-sidenav-item
+              route="/rgw/daemon"
+              title="Gateways"
+              i18n-title
+              [useRouter]="true"
+              class="tc_submenuitem tc_submenuitem_rgw_daemons"
+              ><span i18n>Gateways</span></cds-sidenav-item
+            >
+            @if (permissions.nfs.read && enabledFeature.nfs) {
+              <cds-sidenav-item
+                route="/rgw/nfs"
+                [useRouter]="true"
+                title="NFS"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_rgw_nfs"
+                ><span i18n>NFS</span></cds-sidenav-item
               >
-                {{ summaryData?.rbd_mirroring?.errors }}
-              </cds-tag>
-}
-            </span>
-                                </cds-sidenav-item>
-                              }
-                              @if (permissions.iscsi.read && enabledFeature.iscsi) {
-                                <cds-sidenav-item
-                                  route="/block/iscsi"
-                                  [useRouter]="true"
-                                  title="iSCSI"
-                                  i18n-title
-                                  class="tc_submenuitem tc_submenuitem_block_iscsi"
-                                  ><span i18n>iSCSI</span></cds-sidenav-item
-                                  >
-                                }
-                                <cds-sidenav-item
-                                  route="/block/nvmeof"
-                                  [useRouter]="true"
-                                  title="NVMe/TCP"
-                                  i18n-title
-                                  class="tc_submenuitem tc_submenuitem_block_nvme"
-                                  ><span i18n>NVMe/TCP</span></cds-sidenav-item
-                                  >
-                                </cds-sidenav-menu>
-                              }
-                              <!-- Object Storage -->
-                              @if (permissions.rgw.read && enabledFeature.rgw) {
-                                <cds-sidenav-menu
-                                  title="Object"
-                                  i18n-title
-                                  class="nav-item tc_menuitem_rgw"
-                                  >
-                                  <svg
-                                    cdsIcon="object-storage"
-                                    icon
-                                    size="20"
-                                  ></svg>
-                                  <cds-sidenav-item
-                                    route="/rgw/overview"
-                                    title="Overview"
-                                    i18n-title
-                                    [useRouter]="true"
-                                    class="tc_submenuitem tc_submenuitem_rgw_overview"
-                                    ><span i18n>Overview</span></cds-sidenav-item
-                                    >
-                                    <cds-sidenav-item
-                                      route="/rgw/user"
-                                      title="User management"
-                                      i18n-title
-                                      [useRouter]="true"
-                                      class="tc_submenuitem tc_submenuitem_rgw_users"
-                                      ><span i18n>User management</span></cds-sidenav-item
-                                      >
-                                      <cds-sidenav-item
-                                        route="/rgw/bucket"
-                                        title="Buckets"
-                                        i18n-title
-                                        [useRouter]="true"
-                                        class="tc_submenuitem tc_submenuitem_rgw_buckets"
-                                        ><span i18n>Buckets</span></cds-sidenav-item
-                                        >
-                                        <cds-sidenav-item
-                                          route="/rgw/destination"
-                                          [useRouter]="true"
-                                          title="Notification destination"
-                                          i18n-title
-                                          class="tc_submenuitem tc_submenuitem_rgw_notification"
-                                          ><span i18n>Notification destination</span></cds-sidenav-item
-                                          >
-                                          <cds-sidenav-item
-                                            route="/rgw/storage-class"
-                                            title="Storage class"
-                                            i18n-title
-                                            [useRouter]="true"
-                                            class="tc_submenuitem tc_submenuitem_rgw_storage_class"
-                                            ><span i18n>Storage class</span></cds-sidenav-item
-                                            >
-                                            <cds-sidenav-item
-                                              route="/rgw/multisite"
-                                              title="Multi-site"
-                                              i18n-title
-                                              [useRouter]="true"
-                                              class="tc_submenuitem tc_submenuitem_rgw_multi-site"
-                                              ><span i18n>Multi-site</span></cds-sidenav-item
-                                              >
-                                              <cds-sidenav-item
-                                                route="/rgw/daemon"
-                                                title="Gateways"
-                                                i18n-title
-                                                [useRouter]="true"
-                                                class="tc_submenuitem tc_submenuitem_rgw_daemons"
-                                                ><span i18n>Gateways</span></cds-sidenav-item
-                                                >
-                                                @if (permissions.nfs.read && enabledFeature.nfs) {
-                                                  <cds-sidenav-item
-                                                    route="/rgw/nfs"
-                                                    [useRouter]="true"
-                                                    title="NFS"
-                                                    i18n-title
-                                                    class="tc_submenuitem tc_submenuitem_rgw_nfs"
-                                                    ><span i18n>NFS</span></cds-sidenav-item
-                                                    >
-                                                  }
-                                                  <cds-sidenav-item
-                                                    route="/rgw/configuration"
-                                                    [useRouter]="true"
-                                                    title="Configuration"
-                                                    i18n-title
-                                                    class="tc_submenuitem tc_submenuitem_rgw_configuration"
-                                                    ><span i18n>Configuration</span></cds-sidenav-item
-                                                    >
-                                                  </cds-sidenav-menu>
-                                                }
-                                                <!-- Filesystem -->
-                                                @if (
-                                                  (permissions.nfs.read && enabledFeature.nfs) ||
-                                                  (permissions.cephfs.read && enabledFeature.cephfs) ||
-                                                  permissions?.smb?.read
-                                                  ) {
-                                                  <cds-sidenav-menu
-                                                    title="File"
-                                                    i18n-title
-                                                    class="tc_menuitem_file"
-                                                    >
-                                                    <svg
-                                                      cdsIcon="file-storage"
-                                                      icon
-                                                      size="20"
-                                                    ></svg>
-                                                    @if (permissions.cephfs.read && enabledFeature.cephfs) {
-                                                      <cds-sidenav-item
-                                                        route="/cephfs/fs"
-                                                        [useRouter]="true"
-                                                        title="File systems"
-                                                        i18n-title
-                                                        class="tc_submenuitem tc_submenuitem_file_cephfs"
-                                                        ><span i18n>File systems</span></cds-sidenav-item
-                                                        >
-                                                      }
-                                                      <!-- Removed for umbrella release, will be re-enabled in next release
+            }
+            <cds-sidenav-item
+              route="/rgw/configuration"
+              [useRouter]="true"
+              title="Configuration"
+              i18n-title
+              class="tc_submenuitem tc_submenuitem_rgw_configuration"
+              ><span i18n>Configuration</span></cds-sidenav-item
+            >
+          </cds-sidenav-menu>
+        }
+        <!-- Filesystem -->
+        @if (
+          (permissions.nfs.read && enabledFeature.nfs) ||
+          (permissions.cephfs.read && enabledFeature.cephfs) ||
+          permissions?.smb?.read
+        ) {
+          <cds-sidenav-menu
+            title="File"
+            i18n-title
+            class="tc_menuitem_file"
+          >
+            <svg
+              cdsIcon="file-storage"
+              icon
+              size="20"
+            ></svg>
+            @if (permissions.cephfs.read && enabledFeature.cephfs) {
+              <cds-sidenav-item
+                route="/cephfs/fs"
+                [useRouter]="true"
+                title="File systems"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_file_cephfs"
+                ><span i18n>File systems</span></cds-sidenav-item
+              >
+            }
+            <!-- Removed for umbrella release, will be re-enabled in next release
                                                       <cds-sidenav-item route="/cephfs/mirroring"
                                                         [useRouter]="true"
                                                         title="Mirroring"
@@ -435,144 +423,140 @@
                                                         *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
                                                         class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>Mirroring</span></cds-sidenav-item>
                                                         -->
-                                                        @if (permissions.nfs.read && enabledFeature.nfs) {
-                                                          <cds-sidenav-item
-                                                            route="/cephfs/nfs"
-                                                            [useRouter]="true"
-                                                            title="NFS"
-                                                            i18n-title
-                                                            class="tc_submenuitem tc_submenuitem_file_nfs"
-                                                            ><span i18n>NFS</span></cds-sidenav-item
-                                                            >
-                                                          }
-                                                          @if (permissions?.smb?.read) {
-                                                            <cds-sidenav-item
-                                                              route="/cephfs/smb"
-                                                              [useRouter]="true"
-                                                              title="SMB"
-                                                              i18n-title
-                                                              class="tc_submenuitem tc_submenuitem_file_smb"
-                                                              ><span i18n>SMB</span></cds-sidenav-item
-                                                              >
-                                                            }
-                                                          </cds-sidenav-menu>
-                                                        }
-                                                        <!-- Observability -->
-                                                        @if (permissions.log.read || permissions.prometheus.read) {
-                                                          <cds-sidenav-menu
-                                                            title="Observability"
-                                                            i18n-title
-                                                            class="tc_menuitem_observe"
-                                                            >
-                                                            <svg
-                                                              cdsIcon="observed--hail"
-                                                              icon
-                                                              size="20"
-                                                            ></svg>
-                                                            @if (permissions.log.read) {
-                                                              <cds-sidenav-item
-                                                                route="/logs"
-                                                                [useRouter]="true"
-                                                                title="Logs"
-                                                                i18n-title
-                                                                class="tc_submenuitem tc_submenuitem_observe_log"
-                                                                ><span i18n>Logs</span></cds-sidenav-item
-                                                                >
-                                                              }
-                                                              @if (permissions.prometheus.read) {
-                                                                <cds-sidenav-item
-                                                                  route="/monitoring"
-                                                                  [useRouter]="true"
-                                                                  title="Alerts"
-                                                                  i18n-title
-                                                                  class="tc_submenuitem tc_submenuitem_observe_monitoring"
-                                                                  >
-                                                                  <span i18n>
-              <ng-container>Alerts</ng-container>
-              @if (prometheusAlertService.activeCriticalAlerts > 0) {
-<cds-tag
-               
-                class="tag-danger ms-1 content-theme"
-                >{{ prometheusAlertService.activeCriticalAlerts }}</cds-tag
+            @if (permissions.nfs.read && enabledFeature.nfs) {
+              <cds-sidenav-item
+                route="/cephfs/nfs"
+                [useRouter]="true"
+                title="NFS"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_file_nfs"
+                ><span i18n>NFS</span></cds-sidenav-item
               >
-}
-              @if (prometheusAlertService.activeWarningAlerts > 0) {
-<cds-tag
-               
-                class="tag-warning ms-1 content-theme"
-                >{{ prometheusAlertService.activeWarningAlerts }}</cds-tag
+            }
+            @if (permissions?.smb?.read) {
+              <cds-sidenav-item
+                route="/cephfs/smb"
+                [useRouter]="true"
+                title="SMB"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_file_smb"
+                ><span i18n>SMB</span></cds-sidenav-item
               >
-}
-            </span>
-                                                                    </cds-sidenav-item>
-                                                                  }
-                                                                </cds-sidenav-menu>
-                                                              }
-                                                              <!-- Administration -->
-                                                              @if (permissions.configOpt.read || permissions.hosts.read) {
-                                                                <cds-sidenav-menu
-                                                                  title="Administration"
-                                                                  i18n-title
-                                                                  class="tc_menuitem_admin"
-                                                                  >
-                                                                  <svg
-                                                                    cdsIcon="network--admin-control"
-                                                                    icon
-                                                                    size="20"
-                                                                  ></svg>
-                                                                  @if (permissions.hosts.read) {
-                                                                    <cds-sidenav-item
-                                                                      route="/services/"
-                                                                      [useRouter]="true"
-                                                                      title="Services"
-                                                                      i18n-title
-                                                                      class="tc_submenuitem tc_submenuitem_admin_services"
-                                                                      ><span i18n>Services</span></cds-sidenav-item
-                                                                      >
-                                                                    }
-                                                                    @if (permissions.configOpt.read) {
-                                                                      <cds-sidenav-item
-                                                                        route="/upgrade"
-                                                                        [useRouter]="true"
-                                                                        title="Upgrade"
-                                                                        i18n-title
-                                                                        class="tc_submenuitem tc_submenuitem_admin_upgrade"
-                                                                        ><span i18n>Upgrade</span></cds-sidenav-item
-                                                                        >
-                                                                      }
-                                                                      @if (permissions.configOpt.read) {
-                                                                        <cds-sidenav-item
-                                                                          route="/ceph-users"
-                                                                          [useRouter]="true"
-                                                                          title="Ceph users"
-                                                                          i18n-title
-                                                                          class="tc_submenuitem tc_submenuitem_admin_users"
-                                                                          ><span i18n>Ceph users</span></cds-sidenav-item
-                                                                          >
-                                                                        }
-                                                                        @if (permissions.configOpt.read) {
-                                                                          <cds-sidenav-item
-                                                                            route="/mgr-modules"
-                                                                            [useRouter]="true"
-                                                                            title="Manager modules"
-                                                                            i18n-title
-                                                                            class="tc_submenuitem tc_submenuitem_admin_modules"
-                                                                            ><span i18n>Manager modules</span></cds-sidenav-item
-                                                                            >
-                                                                          }
-                                                                          @if (permissions.configOpt.read) {
-                                                                            <cds-sidenav-item
-                                                                              route="/configuration"
-                                                                              [useRouter]="true"
-                                                                              title="Configuration"
-                                                                              i18n-title
-                                                                              class="tc_submenuitem tc_submenuitem_admin_configuration"
-                                                                              ><span i18n>Configuration</span></cds-sidenav-item
-                                                                              >
-                                                                            }
-                                                                          </cds-sidenav-menu>
-                                                                        }
-                                                                      </cds-sidenav>
-                                                                    }
-                                                                  </ng-template>
-                                                                </div>
+            }
+          </cds-sidenav-menu>
+        }
+        <!-- Observability -->
+        @if (permissions.log.read || permissions.prometheus.read) {
+          <cds-sidenav-menu
+            title="Observability"
+            i18n-title
+            class="tc_menuitem_observe"
+          >
+            <svg
+              cdsIcon="observed--hail"
+              icon
+              size="20"
+            ></svg>
+            @if (permissions.log.read) {
+              <cds-sidenav-item
+                route="/logs"
+                [useRouter]="true"
+                title="Logs"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_observe_log"
+                ><span i18n>Logs</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.prometheus.read) {
+              <cds-sidenav-item
+                route="/monitoring"
+                [useRouter]="true"
+                title="Alerts"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_observe_monitoring"
+              >
+                <span i18n>
+                  <ng-container>Alerts</ng-container>
+                  @if (prometheusAlertService.activeCriticalAlerts > 0) {
+                    <cds-tag class="tag-danger ms-1 content-theme">{{
+                      prometheusAlertService.activeCriticalAlerts
+                    }}</cds-tag>
+                  }
+                  @if (prometheusAlertService.activeWarningAlerts > 0) {
+                    <cds-tag class="tag-warning ms-1 content-theme">{{
+                      prometheusAlertService.activeWarningAlerts
+                    }}</cds-tag>
+                  }
+                </span>
+              </cds-sidenav-item>
+            }
+          </cds-sidenav-menu>
+        }
+        <!-- Administration -->
+        @if (permissions.configOpt.read || permissions.hosts.read) {
+          <cds-sidenav-menu
+            title="Administration"
+            i18n-title
+            class="tc_menuitem_admin"
+          >
+            <svg
+              cdsIcon="network--admin-control"
+              icon
+              size="20"
+            ></svg>
+            @if (permissions.hosts.read) {
+              <cds-sidenav-item
+                route="/services/"
+                [useRouter]="true"
+                title="Services"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_admin_services"
+                ><span i18n>Services</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.configOpt.read) {
+              <cds-sidenav-item
+                route="/upgrade"
+                [useRouter]="true"
+                title="Upgrade"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_admin_upgrade"
+                ><span i18n>Upgrade</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.configOpt.read) {
+              <cds-sidenav-item
+                route="/ceph-users"
+                [useRouter]="true"
+                title="Ceph users"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_admin_users"
+                ><span i18n>Ceph users</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.configOpt.read) {
+              <cds-sidenav-item
+                route="/mgr-modules"
+                [useRouter]="true"
+                title="Manager modules"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_admin_modules"
+                ><span i18n>Manager modules</span></cds-sidenav-item
+              >
+            }
+            @if (permissions.configOpt.read) {
+              <cds-sidenav-item
+                route="/configuration"
+                [useRouter]="true"
+                title="Configuration"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_admin_configuration"
+                ><span i18n>Configuration</span></cds-sidenav-item
+              >
+            }
+          </cds-sidenav-menu>
+        }
+      </cds-sidenav>
+    }
+  </ng-template>
+</div>

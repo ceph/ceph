@@ -2,19 +2,19 @@
   <cds-tabs
     type="contained"
     theme="light"
-    >
+  >
     <cds-tab heading="Details">
       <table
         class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
         data-testid="rgw-storage-details"
-        >
+      >
         <tbody>
           @if (isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)) {
             <tr>
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Target Path
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -28,7 +28,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Access key
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -41,14 +41,14 @@
                   cdsCol
                   [columnNumbers]="{ md: 4 }"
                   class="d-flex"
-                  >
+                >
                   <input
                     cdsPassword
                     type="password"
                     readonly
                     id="access_key"
                     [value]="selection?.access_key"
-                    />
+                  />
                   <button
                     type="button"
                     class="btn btn-light"
@@ -66,7 +66,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Host Style
                 <cd-helper class="text-pre-wrap">
                   <span>{{ hostStyleText }}</span>
@@ -78,7 +78,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Head Object (Stub File)
                 <cd-helper class="text-pre-wrap">
                   <span> {{ retainHeadObjectText }}</span>
@@ -90,7 +90,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Allow Read Through
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -104,12 +104,12 @@
           @if (
             isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) &&
             selection?.allow_read_through
-            ) {
+          ) {
             <tr>
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Read through Restore Days
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -128,7 +128,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Glacier Restore Days
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -145,7 +145,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Glacier Restore Tier Type
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -161,7 +161,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Restore Storage Class
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -175,7 +175,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Multipart Minimum Part Size
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -189,7 +189,7 @@
               <td
                 class="bold"
                 i18n
-                >
+              >
                 Multipart Sync Threshold
                 <cd-helper class="text-pre-wrap">
                   <span>
@@ -205,7 +205,7 @@
               <td
                 class="bold w-25"
                 i18n
-                >
+              >
                 ACLs
               </td>
               <td>
@@ -216,11 +216,11 @@
                       <div
                         [cdsStack]="'horizontal'"
                         class="mt-1"
-                        >
+                      >
                         <cds-tag
                           size="sm"
                           class="tags-background-gray"
-                          >
+                        >
                           {{ item.source_id }} : {{ item.dest_id }}
                         </cds-tag>
                       </div>
@@ -247,7 +247,7 @@
                     [lines]="1"
                     [minLineWidth]="100"
                     [maxLineWidth]="200"
-                    >
+                  >
                   </cds-skeleton-text>
                 } @else {
                   <span>{{ localStorageClassDetails?.zone_name }}</span>
@@ -269,7 +269,7 @@
                     [lines]="1"
                     [minLineWidth]="100"
                     [maxLineWidth]="200"
-                    >
+                  >
                   </cds-skeleton-text>
                 } @else {
                   <span>{{ localStorageClassDetails?.data_pool }}</span>

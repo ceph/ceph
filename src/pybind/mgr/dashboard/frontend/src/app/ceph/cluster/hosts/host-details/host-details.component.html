@@ -4,93 +4,84 @@
     #nav="ngbNav"
     class="nav-tabs"
     cdStatefulTab="host-details"
-    >
+  >
     <ng-container ngbNavItem="devices">
       <a
         ngbNavLink
         i18n
         >Devices</a
+      >
+      <ng-template ngbNavContent>
+        <cd-device-list [hostname]="selection['hostname']"></cd-device-list>
+      </ng-template>
+    </ng-container>
+    @if (permissions.hosts.read) {
+      <ng-container ngbNavItem="inventory">
+        <a
+          ngbNavLink
+          i18n
+          >Physical Disks</a
         >
         <ng-template ngbNavContent>
-          <cd-device-list [hostname]="selection['hostname']"></cd-device-list>
+          <cd-inventory [hostname]="selectedHostname"></cd-inventory>
         </ng-template>
       </ng-container>
-      @if (permissions.hosts.read) {
-        <ng-container
-          ngbNavItem="inventory"
+    }
+    @if (permissions.hosts.read) {
+      <ng-container ngbNavItem="daemons">
+        <a
+          ngbNavLink
+          i18n
+          >Daemons</a
+        >
+        <ng-template ngbNavContent>
+          <cd-service-daemon-list
+            [hostname]="selectedHostname"
+            flag="hostDetails"
+            [hiddenColumns]="['hostname']"
           >
-          <a
-            ngbNavLink
+          </cd-service-daemon-list>
+        </ng-template>
+      </ng-container>
+    }
+    @if (permissions.grafana.read) {
+      <ng-container ngbNavItem="performance-details">
+        <a
+          ngbNavLink
+          i18n
+          >Performance Details</a
+        >
+        <ng-template ngbNavContent>
+          <cd-grafana
+            i18n-title
+            title="Host details"
+            [grafanaPath]="'ceph-host-details?var-ceph_hosts=' + selectedHostname"
+            [type]="'metrics'"
+            uid="rtOg0AiWz"
+            grafanaStyle="five"
+          >
+          </cd-grafana>
+        </ng-template>
+      </ng-container>
+    }
+    <ng-container ngbNavItem="device-health">
+      <a
+        ngbNavLink
+        i18n
+        >Device health</a
+      >
+      <ng-template ngbNavContent>
+        @if (selectedHostname) {
+          <cd-smart-list [hostname]="selectedHostname"></cd-smart-list>
+        } @else {
+          <cd-alert-panel
+            type="error"
             i18n
-            >Physical Disks</a
-            >
-            <ng-template ngbNavContent>
-              <cd-inventory [hostname]="selectedHostname"></cd-inventory>
-            </ng-template>
-          </ng-container>
+            >No hostname found.</cd-alert-panel
+          >
         }
-        @if (permissions.hosts.read) {
-          <ng-container
-            ngbNavItem="daemons"
-            >
-            <a
-              ngbNavLink
-              i18n
-              >Daemons</a
-              >
-              <ng-template ngbNavContent>
-                <cd-service-daemon-list
-                  [hostname]="selectedHostname"
-                  flag="hostDetails"
-                  [hiddenColumns]="['hostname']"
-                  >
-                </cd-service-daemon-list>
-              </ng-template>
-            </ng-container>
-          }
-          @if (permissions.grafana.read) {
-            <ng-container
-              ngbNavItem="performance-details"
-              >
-              <a
-                ngbNavLink
-                i18n
-                >Performance Details</a
-                >
-                <ng-template ngbNavContent>
-                  <cd-grafana
-                    i18n-title
-                    title="Host details"
-          [grafanaPath]="'ceph-host-details?var-ceph_hosts=' + selectedHostname"
-          [type]="'metrics'"
-                    uid="rtOg0AiWz"
-                    grafanaStyle="five"
-                    >
-                  </cd-grafana>
-                </ng-template>
-              </ng-container>
-            }
-            <ng-container ngbNavItem="device-health">
-              <a
-                ngbNavLink
-                i18n
-                >Device health</a
-                >
-                <ng-template ngbNavContent>
-                  @if (selectedHostname) {
-                    <cd-smart-list
-                      [hostname]="selectedHostname"
-                    ></cd-smart-list>
-                  } @else {
-                    <cd-alert-panel
-                      type="error"
-                      i18n
-                      >No hostname found.</cd-alert-panel
-                      >
-                    }
-                  </ng-template>
-                </ng-container>
-              </nav>
-              <div [ngbNavOutlet]="nav"></div>
-            }
-
+      </ng-template>
+    </ng-container>
+  </nav>
+  <div [ngbNavOutlet]="nav"></div>
+}

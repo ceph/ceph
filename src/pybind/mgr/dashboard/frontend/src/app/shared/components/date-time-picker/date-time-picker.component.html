@@ -2,7 +2,7 @@
   <div
     cdsRow
     class="form-item-append"
-    >
+  >
     <cds-text-label
       >{{ name }}
       <cds-date-picker
@@ -26,16 +26,16 @@
             [(ngModel)]="time"
             [disabled]="disabled"
             pattern="(1[012]|[0-9]):[0-5][0-9]"
-            >
+          >
             <cds-timepicker-select
               [(ngModel)]="ampm"
               [disabled]="disabled"
               (valueChange)="onModelChange($event)"
-              >
+            >
               <option
                 selected
                 value="AM"
-                >
+              >
                 AM
               </option>
               <option value="PM">PM</option>

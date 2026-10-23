@@ -2,12 +2,12 @@
   size="md"
   [open]="open"
   (overalSelected)="closeModal()"
-  >
+>
   <cds-modal-header (closeSelect)="closeModal()">
     <h3
       cdsModalHeaderHeading
       i18n
-      >
+    >
       {{ action | titlecase }} {{ resource | upperFirst }}
     </h3>
   </cds-modal-header>
@@ -18,7 +18,7 @@
       #formDir="ngForm"
       [formGroup]="snapshotForm"
       novalidate
-      >
+    >
       <!-- Name -->
       <div class="form-item">
         <cds-text-label
@@ -32,7 +32,7 @@
             snapshotForm.controls['snapshotName'].dirty
           "
           [invalidText]="snapshotError"
-          >
+        >
           <input
             cdsText
             type="text"
@@ -53,60 +53,56 @@
             autofocus
           />
           @if (
-              (mirroring === 'snapshot' ? true : null) &&
-              snapshotForm.getValue('mirrorImageSnapshot') === true
-                ? true
-                : null
-            ) {
-<span
-           
-          >
-            Snapshot mode is enabled on image <b>{{ imageName }}</b
-            >: snapshot names are auto generated</span
-          >
-}
+            (mirroring === 'snapshot' ? true : null) &&
+            snapshotForm.getValue('mirrorImageSnapshot') === true
+              ? true
+              : null
+          ) {
+            <span>
+              Snapshot mode is enabled on image <b>{{ imageName }}</b
+              >: snapshot names are auto generated</span
+            >
+          }
         </cds-text-label>
-          <ng-template #snapshotError>
-            @if (snapshotForm.showError('snapshotName', formDir, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-                >
-              }
-              @if (snapshotForm.showError('snapshotName', formDir, 'pattern')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >The snapshot name cannot start with "." and cannot contain "/" and "&#64;".</span
-                  >
-                }
-              </ng-template>
-            </div>
+        <ng-template #snapshotError>
+          @if (snapshotForm.showError('snapshotName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (snapshotForm.showError('snapshotName', formDir, 'pattern')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >The snapshot name cannot start with "." and cannot contain "/" and "&#64;".</span
+            >
+          }
+        </ng-template>
+      </div>
 
-            @if (mirroring === 'snapshot') {
-              @if (peerConfigured$ | async; as peerConfigured) {
-                <div
-                  class="form-item"
-                  >
-                  <cds-checkbox
-                    id="mirrorImageSnapshot"
-                    formControlName="mirrorImageSnapshot"
-                    name="mirrorImageSnapshot"
-                    (checkedChange)="onMirrorCheckBoxChange()"
-                    [attr.disabled]="!peerConfigured.length > 0 ? true : null"
-                    i18n
-                    >Mirror Image Snapshot
-          </cds-checkbox>
-                </div>
-              }
-            }
-          </form>
-        </section>
-        <cd-form-button-panel
-          (submitActionEvent)="submit()"
-          [form]="snapshotForm"
-          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-          [modalForm]="true"
-        ></cd-form-button-panel>
-      </cds-modal>
+      @if (mirroring === 'snapshot') {
+        @if (peerConfigured$ | async; as peerConfigured) {
+          <div class="form-item">
+            <cds-checkbox
+              id="mirrorImageSnapshot"
+              formControlName="mirrorImageSnapshot"
+              name="mirrorImageSnapshot"
+              (checkedChange)="onMirrorCheckBoxChange()"
+              [attr.disabled]="!peerConfigured.length > 0 ? true : null"
+              i18n
+              >Mirror Image Snapshot
+            </cds-checkbox>
+          </div>
+        }
+      }
+    </form>
+  </section>
+  <cd-form-button-panel
+    (submitActionEvent)="submit()"
+    [form]="snapshotForm"
+    [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+    [modalForm]="true"
+  ></cd-form-button-panel>
+</cds-modal>

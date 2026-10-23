@@ -2,7 +2,7 @@
   <legend
     i18n
     class="cd-header"
-    >
+  >
     Notification Configuration
     <cd-help-text>
       Configure bucket notification to trigger alerts for specific events, such as object creation
@@ -21,52 +21,50 @@
     [autoReload]="true"
     (updateSelection)="updateSelection($event)"
     (fetchData)="fetchData()"
-    >
+  >
     <cd-table-actions
       class="table-actions"
       [permission]="permission"
       [selection]="selection"
       [tableActions]="tableActions"
-      >
+    >
     </cd-table-actions>
   </cd-table>
 }
 <ng-template
   #filterTpl
   let-config="data.value"
-  >
+>
   @if (config) {
     @for (item of config | keyvalue; track item) {
       @if (item.value?.FilterRule?.length) {
         <div class="cds--label">{{ item.key }}:</div>
         @for (rule of item.value.FilterRule; track rule) {
-          <div
-            [cdsStack]="'horizontal'"
-            >
+          <div [cdsStack]="'horizontal'">
             <cds-tag
               size="sm"
               class="tag-background-gray"
               >{{ rule.Name }}: {{ rule.Value }}</cds-tag
-              >
-            </div>
-          }
-          <br />
+            >
+          </div>
         }
+        <br />
       }
     }
-  </ng-template>
-  <ng-template
-    #eventTpl
-    let-events="data.value"
-    >
-    @if (events && events.length) {
-      @for (event of events; track event) {
-        <cds-tag
-          size="sm"
-          class="tag-background-primary"
-          >
-          {{ event }}
-        </cds-tag>
-      }
+  }
+</ng-template>
+<ng-template
+  #eventTpl
+  let-events="data.value"
+>
+  @if (events && events.length) {
+    @for (event of events; track event) {
+      <cds-tag
+        size="sm"
+        class="tag-background-primary"
+      >
+        {{ event }}
+      </cds-tag>
     }
-  </ng-template>
+  }
+</ng-template>
