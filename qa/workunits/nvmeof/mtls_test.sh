@@ -6,7 +6,47 @@ source /etc/ceph/nvmeof.env
 # install yq
 wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq && chmod +x /tmp/yq
 
-subjectAltName=$(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | sed 's/,/,IP:/g')
+total_gateways_count=$(( $(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | tr -cd ',' | wc -c) + 1 ))
+
+wait_for_service() {
+    MAX_RETRIES=30
+    for ((i=1; i<=MAX_RETRIES; i++)); do
+        running=$(ceph orch ps --service-name nvmeof.mypool.mygroup0 | grep -o 'running' | wc -l)
+        if [ "$running" -eq "$total_gateways_count" ]; then
+            echo "[nvmeof.mtls] nvmeof service is running ($running/$total_gateways_count daemons)"
+            ceph orch ps
+            ceph orch ls
+            return 0
+        fi
+        echo "[nvmeof.mtls] Waiting for nvmeof service ($running/$total_gateways_count running, attempt $i/$MAX_RETRIES)..."
+        sleep 10
+    done
+    echo "[nvmeof.mtls] Timed out waiting for nvmeof service"
+    ceph orch ps
+    ceph orch ls
+    exit 1
+}
+
+# https://tracker.ceph.com/issues/76988
+# Retry CLI commands to allow services to fully initialize before queries
+retry() {
+    local max_retries=5
+    local delay=10
+    local attempt
+    local rc=0
+    for ((attempt=1; attempt<=max_retries; attempt++)); do
+        "$@" && return 0
+        rc=$?
+        if [ "$attempt" -lt "$max_retries" ]; then
+            echo "[nvmeof.mtls] '$*' failed (rc=$rc, attempt $attempt/$max_retries), retrying in ${delay}s..."
+            sleep $delay
+        fi
+    done
+    echo "[nvmeof.mtls] '$*' still failing after $max_retries attempts (rc=$rc)"
+    return $rc
+}
+
+echo "[nvmeof.mtls] Starting test with certs in spec file (server/client + root CA)"
 
 # create mtls spec files
 ceph orch ls nvmeof --export > /tmp/gw-conf-original.yaml
@@ -70,6 +110,7 @@ IFS=',' read -ra gateway_ips <<< "$NVMEOF_GATEWAY_IP_ADDRESSES"
 for i in "${!gateway_ips[@]}"
 do
     ip="${gateway_ips[i]}"
+    retry ceph nvmeof subsystem list --server-address $ip
     sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $ip --server-port $NVMEOF_SRPORT \
         --format json subsystem list
 done
