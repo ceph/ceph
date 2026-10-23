@@ -2079,13 +2079,13 @@ tests:
  # Power supply degraded
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="power",component="PSU0",hostname="node1",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="power",component="PSU0",hostname="node1",cluster="mycluster"}'
       values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="power"} == 1
+     - expr: ceph_hardware_status{category="power"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="power",component="PSU0",hostname="node1",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="power",component="PSU0",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
@@ -2106,13 +2106,13 @@ tests:
  # Power supply failed
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="power",component="PSU1",hostname="node2",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="power",component="PSU1",hostname="node2",cluster="mycluster"}'
       values: '2 2 2 2 2 2 2 2 2'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="power"} == 2
+     - expr: ceph_hardware_status{category="power"} == 2
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="power",component="PSU1",hostname="node2",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="power",component="PSU1",hostname="node2",cluster="mycluster"}'
            value: 2
    alert_rule_test:
     - eval_time: 1m
@@ -2134,13 +2134,13 @@ tests:
  # Cooling degraded
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="fans",component="FAN0",hostname="node1",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="fans",component="FAN0",hostname="node1",cluster="mycluster"}'
       values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="fans"} == 1
+     - expr: ceph_hardware_status{category="fans"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="fans",component="FAN0",hostname="node1",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="fans",component="FAN0",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
@@ -2161,13 +2161,13 @@ tests:
  # Cooling failed
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="fans",component="FAN1",hostname="node2",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="fans",component="FAN1",hostname="node2",cluster="mycluster"}'
       values: '2 2 2 2 2 2 2 2 2'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="fans"} == 2
+     - expr: ceph_hardware_status{category="fans"} == 2
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="fans",component="FAN1",hostname="node2",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="fans",component="FAN1",hostname="node2",cluster="mycluster"}'
            value: 2
    alert_rule_test:
     - eval_time: 1m
@@ -2186,16 +2186,179 @@ tests:
         exp_annotations:
           summary: "Fan FAN1 failed on node2 on cluster mycluster"
           description: "A cooling fault has been detected on node2. A cooling FAN within the enclosure has failed."
+ # Cooling not enabled: sensors are grouped per host and state
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_status{category="fans",component="FAN1_TACH_IN",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+    - series: 'ceph_hardware_status{category="fans",component="FAN1_TACH_OUT",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+    - series: 'ceph_hardware_status{category="fans",component="FAN2_TACH_IN",hostname="node1",state="UnavailableOffline",cluster="mycluster"}'
+      values: '0+0x20'
+    - series: 'ceph_hardware_status{category="fans",component="FAN3_TACH_IN",hostname="node1",state="Enabled",cluster="mycluster"}'
+      values: '0+0x20'
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: CoolingNotEnabled
+    - eval_time: 16m
+      alertname: CoolingNotEnabled
+      exp_alerts:
+      - exp_labels:
+          hostname: node1
+          state: Disabled
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.8
+        exp_annotations:
+          summary: "2 fan component(s) are in Disabled state on node1 on cluster mycluster"
+          description: "2 fan component(s) on node1 are in Disabled state."
+      - exp_labels:
+          hostname: node1
+          state: UnavailableOffline
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.8
+        exp_annotations:
+          summary: "1 fan component(s) are in UnavailableOffline state on node1 on cluster mycluster"
+          description: "1 fan component(s) on node1 are in UnavailableOffline state."
+ # PowerSupplyNotEnabled
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_status{category="power",component="PSU1",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: PowerSupplyNotEnabled
+    - eval_time: 16m
+      alertname: PowerSupplyNotEnabled
+      exp_alerts:
+      - exp_labels:
+          hostname: node1
+          state: Disabled
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.7
+        exp_annotations:
+          summary: "1 power supply component(s) are in Disabled state on node1 on cluster mycluster"
+          description: "1 power supply component(s) on node1 are in Disabled state."
+ # NVMeDriveNotEnabled
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_status{category="storage",component="nvme0n1",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: NVMeDriveNotEnabled
+    - eval_time: 16m
+      alertname: NVMeDriveNotEnabled
+      exp_alerts:
+      - exp_labels:
+          hostname: node1
+          state: Disabled
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.9
+        exp_annotations:
+          summary: "1 storage device component(s) are in Disabled state on node1 on cluster mycluster"
+          description: "1 storage device component(s) on node1 are in Disabled state."
+ # MemoryNotEnabled
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_status{category="memory",component="DIMM_A1",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: MemoryNotEnabled
+    - eval_time: 16m
+      alertname: MemoryNotEnabled
+      exp_alerts:
+      - exp_labels:
+          hostname: node1
+          state: Disabled
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.10
+        exp_annotations:
+          summary: "1 memory module component(s) are in Disabled state on node1 on cluster mycluster"
+          description: "1 memory module component(s) on node1 are in Disabled state."
+ # ProcessorNotEnabled
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_status{category="processors",component="cpu1",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: ProcessorNotEnabled
+    - eval_time: 16m
+      alertname: ProcessorNotEnabled
+      exp_alerts:
+      - exp_labels:
+          hostname: node1
+          state: Disabled
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.11
+        exp_annotations:
+          summary: "1 processor component(s) are in Disabled state on node1 on cluster mycluster"
+          description: "1 processor component(s) on node1 are in Disabled state."
+ # NetworkNotEnabled
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_status{category="network",component="nic0",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: NetworkNotEnabled
+    - eval_time: 16m
+      alertname: NetworkNotEnabled
+      exp_alerts:
+      - exp_labels:
+          hostname: node1
+          state: Disabled
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.12
+        exp_annotations:
+          summary: "1 network interface component(s) are in Disabled state on node1 on cluster mycluster"
+          description: "1 network interface component(s) on node1 are in Disabled state."
+ # TemperatureSensorNotEnabled
+ - interval: 1m
+   input_series:
+    - series: 'ceph_hardware_status{category="temperatures",component="CPU1_TEMP",hostname="node1",state="Disabled",cluster="mycluster"}'
+      values: '0+0x20'
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: TemperatureSensorNotEnabled
+    - eval_time: 16m
+      alertname: TemperatureSensorNotEnabled
+      exp_alerts:
+      - exp_labels:
+          hostname: node1
+          state: Disabled
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.13
+        exp_annotations:
+          summary: "1 temperature sensor component(s) are in Disabled state on node1 on cluster mycluster"
+          description: "1 temperature sensor component(s) on node1 are in Disabled state."
  # NVMe drive degraded
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="storage",component="nvme0n1",hostname="node1",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="storage",component="nvme0n1",hostname="node1",cluster="mycluster"}'
       values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="storage"} == 1
+     - expr: ceph_hardware_status{category="storage"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="storage",component="nvme0n1",hostname="node1",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="storage",component="nvme0n1",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
@@ -2216,13 +2379,13 @@ tests:
  # NVMe drive failed
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="storage",component="nvme1n1",hostname="node2",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="storage",component="nvme1n1",hostname="node2",cluster="mycluster"}'
       values: '2 2 2 2 2 2 2 2 2'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="storage"} == 2
+     - expr: ceph_hardware_status{category="storage"} == 2
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="storage",component="nvme1n1",hostname="node2",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="storage",component="nvme1n1",hostname="node2",cluster="mycluster"}'
            value: 2
    alert_rule_test:
     - eval_time: 1m
@@ -2244,13 +2407,13 @@ tests:
  # Memory degraded
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="memory",component="DIMM_A0",hostname="node1",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="memory",component="DIMM_A0",hostname="node1",cluster="mycluster"}'
       values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="memory"} == 1
+     - expr: ceph_hardware_status{category="memory"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="memory",component="DIMM_A0",hostname="node1",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="memory",component="DIMM_A0",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
@@ -2271,13 +2434,13 @@ tests:
  # Memory failed
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="memory",component="DIMM_B0",hostname="node2",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="memory",component="DIMM_B0",hostname="node2",cluster="mycluster"}'
       values: '2 2 2 2 2 2 2 2 2'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="memory"} == 2
+     - expr: ceph_hardware_status{category="memory"} == 2
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="memory",component="DIMM_B0",hostname="node2",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="memory",component="DIMM_B0",hostname="node2",cluster="mycluster"}'
            value: 2
    alert_rule_test:
     - eval_time: 1m
@@ -2299,13 +2462,13 @@ tests:
  # Processor degraded
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="processors",component="CPU0",hostname="node1",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="processors",component="CPU0",hostname="node1",cluster="mycluster"}'
       values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="processors"} == 1
+     - expr: ceph_hardware_status{category="processors"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="processors",component="CPU0",hostname="node1",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="processors",component="CPU0",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
@@ -2326,13 +2489,13 @@ tests:
  # Processor failed
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="processors",component="CPU1",hostname="node2",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="processors",component="CPU1",hostname="node2",cluster="mycluster"}'
       values: '2 2 2 2 2 2 2 2 2'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="processors"} == 2
+     - expr: ceph_hardware_status{category="processors"} == 2
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="processors",component="CPU1",hostname="node2",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="processors",component="CPU1",hostname="node2",cluster="mycluster"}'
            value: 2
    alert_rule_test:
     - eval_time: 1m
@@ -2354,13 +2517,13 @@ tests:
  # Network degraded
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="network",component="eth0",hostname="node1",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="network",component="eth0",hostname="node1",cluster="mycluster"}'
       values: '1 1 1 1 1 1 1 1 1'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="network"} == 1
+     - expr: ceph_hardware_status{category="network"} == 1
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="network",component="eth0",hostname="node1",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="network",component="eth0",hostname="node1",cluster="mycluster"}'
            value: 1
    alert_rule_test:
     - eval_time: 1m
@@ -2381,13 +2544,13 @@ tests:
  # Network failed
  - interval: 1m
    input_series:
-    - series: 'ceph_hardware_health{category="network",component="eth1",hostname="node2",cluster="mycluster"}'
+    - series: 'ceph_hardware_status{category="network",component="eth1",hostname="node2",cluster="mycluster"}'
       values: '2 2 2 2 2 2 2 2 2'
    promql_expr_test:
-     - expr: ceph_hardware_health{category="network"} == 2
+     - expr: ceph_hardware_status{category="network"} == 2
        eval_time: 2m
        exp_samples:
-         - labels: 'ceph_hardware_health{category="network",component="eth1",hostname="node2",cluster="mycluster"}'
+         - labels: 'ceph_hardware_status{category="network",component="eth1",hostname="node2",cluster="mycluster"}'
            value: 2
    alert_rule_test:
     - eval_time: 1m
