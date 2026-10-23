@@ -73,7 +73,8 @@ Dedup estimate process skips the following objects:
 - Objects with different storage classes.
 
 The full dedup process skips all of the above and additionally skips
-**compressed** and **user-encrypted** objects.
+**compressed** and **user-encrypted** objects and objects written with
+AppendObject.
 
 The minimum size object for dedup is controlled by the following
 configuration option:
