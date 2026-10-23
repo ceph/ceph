@@ -4431,6 +4431,51 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_resize_valid_unit(self):
+        """
+        That a subvolume can be resized when provided with valid value
+        (both int and float accepted) and unit.
+        """
+        readable_values = {"10B": 10, "10K": 10240, "200KB": 204800,
+                           "300Ki": 307200, "300KiB": 307200,
+                           "300.67KiB": 307886, "10M": 10485760,
+                           "100MB": 104857600, "100Mi": 104857600,
+                           "100MiB": 104857600, "100.123MiB": 104986574,
+                           "2G": 2147483648, "2GB": 2147483648,
+                           "4Gi": 4294967296, "4GiB": 4294967296,
+                           "4.2GiB": 4509715660, "1T": 1099511627776,
+                           "2TB": 2199023255552, "2Ti": 2199023255552,
+                           "2TiB": 2199023255552, "2.2TiB": 2418925581107}
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        for readable_value in readable_values:
+            self._fs_cmd("subvolume", "resize", self.volname, subvolume,
+                         readable_value)
+            subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+            self.assertEqual(subvol_info["bytes_quota"], readable_values.get(readable_value))
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_resize_invalid_unit(self):
+        """
+        That a subvolume resize fails when provided with invalid value
+        and/or unit.
+        """
+        invalid_values = ("10A", "1y00Ki", "af00", "G", "", " ", "-1t", "-1",
+                          "1GT", "2MM", "5Di", "8Bi", "i", "7iB", "1.K", ".MB",
+                          ".10.G", "10Ki.B", "1.0.3TiB", "20G/.", "Gi32Ki",
+                          "10.64B", "1.B", ".B", "B.1", "KB1", "GB.1", "TB1.1")
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        for invalid_value in invalid_values:
+            with self.assertRaises(CommandFailedError):
+                self._fs_cmd("subvolume", "resize", self.volname, subvolume,
+                             invalid_value)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._wait_for_trash_empty()
+
     def test_subvolume_rm_force(self):
         # test removing non-existing subvolume with --force
         subvolume = self._gen_subvol_name()
