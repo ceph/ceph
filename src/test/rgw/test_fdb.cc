@@ -1499,6 +1499,110 @@ TEST_CASE("half-open range conversion preserves reserved keyspace bounds", "[fdb
  CHECK(converted.options.reverse_order);
 }
 
+TEST_CASE("partitions produce algebra-compatible managed work ranges", "[fdb]")
+{
+ namespace lq = ceph::libfdb::query;
+
+ struct nondefault_partition_result final
+ {
+  std::vector<lfdb::select> values;
+
+  explicit nondefault_partition_result(std::vector<lfdb::select>&& source)
+   : values(std::move(source))
+  {}
+
+  auto begin() noexcept { return std::begin(values); }
+  auto end() noexcept { return std::end(values); }
+  auto size() const noexcept { return std::size(values); }
+ };
+
+ janitor dbh;
+ constexpr auto entries_per_group = 64;
+ constexpr std::int64_t target_bytes = 256;
+
+ write_monotonic_kvs(dbh, entries_per_group, "partition-a");
+ write_monotonic_kvs(dbh, entries_per_group, "partition-c");
+ write_monotonic_kvs(dbh, entries_per_group, "partition-gap");
+
+ const auto selection = lq::set_union(
+   lq::prefix(make_key_prefix("partition-a")),
+   lq::prefix(make_key_prefix("partition-c")));
+ auto read_keys = [&dbh](const auto& query) {
+  auto txn = lfdb::make_transaction(dbh);
+
+  return lfdb::scan(txn, query)
+       | std::views::keys
+       | std::ranges::to<std::vector<std::string>>();
+ };
+ const auto expected = read_keys(selection);
+ auto txn = lfdb::make_transaction(dbh);
+ const auto planned = lfdb::partitions(txn, selection, target_bytes);
+
+ STATIC_REQUIRE(lq::expression<
+   std::ranges::range_value_t<decltype(planned)>>);
+ REQUIRE(2 <= std::size(planned));
+ CHECK(2 * entries_per_group == std::size(expected));
+
+ std::vector<std::string> actual;
+
+ for (const auto& partition : planned) {
+  const auto within_selection = lq::intersection(partition, selection);
+  auto keys = read_keys(within_selection);
+
+  std::ranges::move(keys, std::back_inserter(actual));
+ }
+
+ CHECK_THAT(actual, Catch::Matchers::RangeEquals(expected));
+ CHECK(std::ranges::none_of(actual, [](const std::string_view key) {
+  return key.starts_with(make_key_prefix("partition-gap"));
+ }));
+
+ const auto deque_partitions =
+   lfdb::partitions<std::deque<lfdb::select>>(
+     dbh, selection, target_bytes);
+
+ CHECK(std::size(planned) == std::size(deque_partitions));
+ CHECK_THAT(deque_partitions, Catch::Matchers::RangeEquals(planned));
+
+ STATIC_REQUIRE_FALSE(std::default_initializable<nondefault_partition_result>);
+
+ const auto nondefault_partitions =
+   lfdb::partitions<nondefault_partition_result>(
+     dbh, selection, target_bytes);
+
+ CHECK(std::size(planned) == std::size(nondefault_partitions));
+
+ const auto reverse_selection = lq::with_options(
+   selection,
+   lq::query_options {
+    .result_limit = 7,
+    .reverse_order = true
+   });
+ const auto reverse_expected = read_keys(reverse_selection);
+ const auto reverse_partitions = lfdb::partitions(
+   dbh, reverse_selection, target_bytes);
+ std::vector<std::string> reverse_actual;
+
+ for (const auto& partition : reverse_partitions) {
+  CHECK(reverse_selection.options == partition.options);
+
+  auto keys = read_keys(partition);
+  std::ranges::move(keys, std::back_inserter(reverse_actual));
+ }
+
+ CHECK_THAT(reverse_actual,
+            Catch::Matchers::RangeEquals(reverse_expected));
+
+ const auto empty_selection = lq::difference(selection, selection);
+
+ CHECK(std::empty(lfdb::partitions(dbh, empty_selection, target_bytes)));
+ CHECK_THROWS_AS(lfdb::partitions(dbh, selection, 0),
+                 lfdb::libfdb_exception);
+ CHECK_THROWS_AS(lfdb::partitions(
+                   lfdb::transaction_handle {}, selection, target_bytes),
+                 lfdb::libfdb_exception);
+}
+
 static_assert(not std::default_initializable<lfdb::watch_handle>);
 static_assert(not std::copy_constructible<lfdb::watch_handle>);
 static_assert(std::move_constructible<lfdb::watch_handle>);
@@ -3188,6 +3292,33 @@ TEST_CASE("for_each provides callback-scoped raw range values", "[fdb]")
 
  const auto kvs_in = write_monotonic_kvs(j, nkeys);
 
+ SECTION("retains the transaction when a callback releases the caller's handle") {
+  auto txn = lfdb::make_transaction(j);
+  const std::weak_ptr<lfdb::transaction> owner = txn;
+  auto selector = lfdb::select {make_key(0), make_key(nkeys)};
+  selector.options.result_limit = 1;
+  const auto count = lfdb::for_each(lfdb::raw, txn, selector,
+   [&](std::span<const std::uint8_t>, std::span<const std::uint8_t>) {
+    txn.reset();
+    CHECK_FALSE(owner.expired());
+   });
+  CHECK(count == nkeys);
+  CHECK(owner.expired());
+ }
+
+ SECTION("borrows noncopyable consumers with an explicit read mode") {
+  auto consumer = [calls = std::make_unique<std::size_t>(0)](
+                    std::span<const std::uint8_t>, std::span<const std::uint8_t>) mutable {
+   ++*calls;
+  };
+  static_assert(not std::copy_constructible<decltype(consumer)>);
+  const auto selector = lfdb::select {make_key(0), make_key(nkeys)};
+  const auto txn = lfdb::make_transaction(j);
+  CHECK(lfdb::for_each(lfdb::raw, txn, selector, lfdb::read_mode::snapshot, consumer) == nkeys);
+  CHECK(lfdb::for_each(lfdb::raw, j.dbh(), lfdb::transaction_options {}, selector,
+                       lfdb::read_mode::snapshot, consumer) == nkeys);
+ }
+
  auto check_traversal = [&kvs_in](auto source, auto selector, auto expected,
                                   const auto expected_end) {
   const auto nread = lfdb::for_each(
@@ -3422,7 +3553,7 @@ TEST_CASE("for_each provides callback-scoped raw range values", "[fdb]")
       [&callbacks, not_committed](std::span<const std::uint8_t>,
                                   std::span<const std::uint8_t>) {
         ++callbacks;
-        throw lfdb::libfdb_exception(not_committed);
+        throw lfdb::libfdb_exception(lfdb::fdb_error_code::not_committed);
       }),
     lfdb::libfdb_exception);
 
@@ -3479,6 +3610,19 @@ TEST_CASE("managed read helpers accept transaction options", "[fdb]")
                       | std::ranges::to<std::vector<std::string>>();
 
   CHECK_THAT(keys, Catch::Matchers::RangeEquals(expected));
+ }
+
+ SECTION("configured callbacks borrow noncopyable lvalues") {
+  auto consumer = [state = std::make_unique<int>(0)](string_pair&&) mutable { ++*state; };
+  CHECK(lfdb::for_each(j.dbh(), options, selector, lfdb::read_mode::snapshot, consumer) == nkeys);
+  auto transform_key = [state = std::make_unique<int>(0)](string_pair&& row) mutable {
+   ++*state;
+   return std::move(row.first);
+  };
+  std::vector<std::string> keys;
+  lfdb::transform(j.dbh(), options, selector, std::back_inserter(keys),
+                   lfdb::read_mode::snapshot, transform_key);
+  CHECK_THAT(keys, Catch::Matchers::RangeEquals(kvs_in | std::views::keys));
  }
 
  SECTION("paged scan runs with transaction options") {

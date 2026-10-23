@@ -7,10 +7,10 @@
 ----
 Network, Database and Transaction Options:
 
-The experimental network_options, database_options and transaction_options
+The network_options, database_options, and transaction_options
 aliases use owning option_list sequences. Every entry applies in written order,
 including repeated codes. This replaces option_map and its map-style interface;
-operator[] is unavailable. See EXAMPLES.md, "Options (Experimental)", for the
+operator[] is unavailable. See EXAMPLES.md, "Options", for the
 breaking-change notice, insertion and replacement rules, and migration examples.
 Core and both experimental async backends share application and replay semantics.
 

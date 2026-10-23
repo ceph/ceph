@@ -211,7 +211,7 @@ auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
                                              const concepts::libfdb_key auto& key)
 {
  return detail::in_transaction(std::move(dbh), options,
-          [key](transaction_handle& txn) {
+          [&key](transaction_handle& txn) {
             return make_watch(txn, key);
           });
 }

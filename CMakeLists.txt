@@ -604,6 +604,7 @@ option(WITH_RADOSGW_KAFKA_ENDPOINT "RADOS Gateway's pubsub support for Kafka pus
 option(WITH_SYSTEM_RDKAFKA "build against system librdkafka instead of the bundled submodule" OFF)
 option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
+include(cmake/modules/LibfdbConcurrency.cmake)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 if(WITH_RADOSGW_DAOS)
