@@ -4067,7 +4067,16 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   int rc = m->get_result();
 
-  if (m->is_redirect_reply()) {
+  if (m->is_redirect_reply() && m->get_redirect().is_pool_migration() &&
+      (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD)) {
+    // A direct read is planned for the shards of the pool that it was sent
+    // to, and resent unrouted it would go to the same shard: it takes the
+    // -EAGAIN path, as a direct read does when its PG changes.
+    ldout(cct, 5) << " got pool migration redirect for direct read" << dendl;
+    m->get_redirect().update_migration_watermark(
+      pool_migration_watermarks[m->get_pg()]);
+    rc = -EAGAIN;
+  } else if (m->is_redirect_reply()) {
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     const request_redirect_t& r = m->get_redirect();
 

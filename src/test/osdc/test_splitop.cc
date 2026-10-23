@@ -30,10 +30,17 @@
 #include <gtest/gtest.h>
 #include <numeric>
 
+#include "common/Cond.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
+#include "mon/MonClient.h"
+#include "msg/Messenger.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
+#include "osdc/Objecter.h"
 #include "osdc/SplitOp.h"
 #include "include/rados.h"
+#include "test/osd/MockConnection.h"
 #include "test/osd/OSDMapTestHelpers.h"
 
 // ---------------------------------------------------------------------------
@@ -808,4 +815,170 @@ TEST_F(TestSplitOpPoolMigration, ECSourceReplicatedTargetNoDirectRead)
   EXPECT_FALSE(op->target.flags & CEPH_OSD_FLAG_FORCE_OSD);
   EXPECT_EQ(shard_id_t::NO_SHARD, op->target.actual_pgid.shard);
   op->put();
+}
+
+// ===========================================================================
+// Section 7: direct reads redirected by a pool migration
+//
+// An OSD of a migration's source redirects an op on an object that has
+// migrated.  The Objecter has a session per OSD whose connection records the
+// MOSDOps sent on it, and replies are delivered through ms_dispatch2().  PG
+// 1.0 of a 2+1 EC pool has acting [0,1,2].
+// ===========================================================================
+
+class RecordingConnection : public MockConnection {
+public:
+  using MockConnection::MockConnection;
+  std::vector<MessageRef> sent;
+
+protected:
+  int send_msg(MessageRef&& m) override {
+    sent.push_back(std::move(m));
+    return 0;
+  }
+};
+
+class TestSplitOpMigrationRedirect : public ::testing::Test {
+protected:
+  static constexpr int num_osds = 3;
+  static constexpr int64_t pool_id = 1;
+  static constexpr int primary = 0;
+
+  boost::asio::io_context ioc;
+  MonClient monc{g_ceph_context, ioc};
+  std::unique_ptr<Messenger> msgr{
+    Messenger::create_client_messenger(g_ceph_context, "client")};
+  std::unique_ptr<Objecter> objecter;
+  std::map<int, ceph::ref_t<RecordingConnection>> cons;
+  C_SaferCond done;
+
+  void SetUp() override
+  {
+    objecter = std::make_unique<Objecter>(g_ceph_context, msgr.get(), &monc, ioc);
+    objecter->init();
+
+    OSDMap map;
+    uuid_d fsid;
+    fsid.generate_random();
+    ceph_assert(map.build_simple(g_ceph_context, 1, fsid, num_osds) == 0);
+    for (int i = 0; i < num_osds; i++) {
+      map.set_state(i, CEPH_OSD_EXISTS | CEPH_OSD_UP);
+    }
+    pg_pool_t ec = make_ec_pool(2, 1, 4096);
+    ec.set_pg_num(1);
+    ec.set_pgp_num(1);
+    OSDMapTestHelpers::add_pool(map, pool_id, ec);
+    OSDMapTestHelpers::set_pg_acting(map, pg_t(0, pool_id), {0, 1, 2});
+
+    objecter->start(&map);
+
+    for (int osd = 0; osd < num_osds; osd++) {
+      auto s = new Objecter::OSDSession(g_ceph_context, osd);
+      cons[osd] = ceph::make_ref<RecordingConnection>(osd);
+      s->con = cons[osd];
+      s->con->set_priv(RefCountedPtr{s});
+      objecter->osd_sessions[osd] = s;
+    }
+  }
+
+  void TearDown() override
+  {
+    objecter->shutdown();
+    objecter.reset();
+  }
+
+  void poll()
+  {
+    ioc.restart();
+    ioc.poll();
+  }
+
+  ceph_tid_t submit_read(uint64_t off, uint64_t len)
+  {
+    osdc_opvec ops(1);
+    ops[0].op.op = CEPH_OSD_OP_READ;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    auto op = new Objecter::Op(object_t("obj"), object_locator_t(pool_id),
+                               std::move(ops),
+                               CEPH_OSD_FLAG_READ | CEPH_OSD_FLAG_BALANCE_READS,
+                               &done, nullptr);
+    ceph_tid_t tid = 0;
+    objecter->op_submit(op, &tid);
+    poll();
+    return tid;
+  }
+
+  std::vector<std::pair<ceph_tid_t, shard_id_t>> sent_to(int osd)
+  {
+    std::vector<std::pair<ceph_tid_t, shard_id_t>> ops;
+    for (auto& m : cons[osd]->sent) {
+      ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
+      auto op = boost::static_pointer_cast<_mosdop::MOSDOp<osdc_opvec>>(m);
+      ops.emplace_back(op->get_tid(), op->get_spg().shard);
+    }
+    return ops;
+  }
+
+  void reply(int osd, const MessageRef& m)
+  {
+    auto op = boost::static_pointer_cast<_mosdop::MOSDOp<osdc_opvec>>(m);
+    auto r = ceph::make_message<MOSDOpReply>();
+    r->set_tid(op->get_tid());
+    r->set_op_returns(std::vector<pg_log_op_return_item_t>(op->ops.size()));
+    r->set_connection(cons[osd]);
+    objecter->ms_dispatch2(r);
+    poll();
+  }
+
+  // The reply of an OSD of a pool migration's source to an op on an object
+  // that has migrated: -ENOENT and a redirect to the target
+  void reply_migration_redirect(int osd, const MessageRef& m)
+  {
+    auto op = boost::static_pointer_cast<_mosdop::MOSDOp<osdc_opvec>>(m);
+    spg_t pgid = op->get_spg();
+    auto req = ceph::make_message<MOSDOp>(0, op->get_tid(), op->get_hobj(),
+                                          pgid, op->get_map_epoch(), 0, 0);
+    req->ops.assign(op->ops.begin(), op->ops.end());
+    auto r = ceph::make_message<MOSDOpReply>(req.get(), -ENOENT,
+                                             op->get_map_epoch(), 0, true);
+    r->set_redirect(request_redirect_t(object_locator_t(pgid.pool()),
+                                       pgid.pool() + 100,
+                                       hobject_t(hobject_t::get_max())));
+    // encoding marks the reply as a redirect, as sending it does
+    r->encode_payload(CEPH_FEATURES_SUPPORTED_DEFAULT);
+    r->set_connection(cons[osd]);
+    objecter->ms_dispatch2(r);
+    poll();
+  }
+};
+
+// Planned for the shards of the pool it was sent to, a redirected direct
+// read is not sent to the same shard again but goes to the primary.
+TEST_F(TestSplitOpMigrationRedirect, DirectReadGoesToPrimary)
+{
+  submit_read(4096, 4096);
+  ASSERT_EQ(1u, sent_to(1).size());
+  reply_migration_redirect(1, cons[1]->sent.back());
+  EXPECT_EQ(1u, sent_to(1).size());
+  ASSERT_EQ(1u, sent_to(primary).size());
+  EXPECT_EQ(shard_id_t(primary), sent_to(primary).back().second);
+  reply(primary, cons[primary]->sent.back());
+  EXPECT_EQ(0, done.wait_for(0));
+}
+
+// A redirected sub-read of a split read fails it back, and the read is
+// redriven to the primary.
+TEST_F(TestSplitOpMigrationRedirect, SplitReadRedrivenToPrimary)
+{
+  ceph_tid_t parent = submit_read(0, 8192);
+  ASSERT_EQ(1u, sent_to(primary).size());
+  ASSERT_EQ(1u, sent_to(1).size());
+  reply(primary, cons[primary]->sent.back());
+  reply_migration_redirect(1, cons[1]->sent.back());
+  EXPECT_EQ(1u, sent_to(1).size());
+  ASSERT_EQ(2u, sent_to(primary).size());
+  EXPECT_EQ(parent, sent_to(primary).back().first);
+  reply(primary, cons[primary]->sent.back());
+  EXPECT_EQ(0, done.wait_for(0));
 }
