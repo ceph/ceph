@@ -2115,7 +2115,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    if (get_num_snap_items() == 0) {
+    // a partial fetch should not advance the marker otherwise a later
+    // fetch will skip the stale check for snap dentries it never saw.
+    if (complete && get_num_snap_items() == 0) {
       const_cast<snapid_t&>(fnode->snap_purged_thru) = realm->get_last_destroyed();
       force_dirty = true;
     }
