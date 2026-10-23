@@ -52,8 +52,8 @@ using IoCallback = std::function<void(IoResult&&)>;
  * not extend @c ceph_ll_io_info with zerocopy/release fields; callers that need
  * a C ABI should use the opaque @c ceph_bufferlist helpers in ceph_buffer.h.
  *
- * Data path is Filer → Objecter only (no ObjectCacher). Async I/O methods are
- * stubbed until the Filer path lands; buffer helpers are usable now.
+ * Data path is Filer → Objecter only (no ObjectCacher). Buffer helpers and
+ * async/sync I/O are implemented; FSCrypt is identity (passthrough) for v1.
  *
  * Write ownership rule: @c async_write consumes the caller's @c bufferlist at
  * submit. If the caller needs a view after submit, it must retain its own
@@ -98,7 +98,13 @@ public:
   int64_t write(Fh* fh, uint64_t off, bufferlist data, bool fsync = false);
 
 private:
+  friend class C_ZC_Read;
+  friend class C_ZC_Write;
+  friend class C_ZC_Fsync;
+
   Client* client;
+
+  void queue_user_cb(IoCallback cb, int64_t result, bufferlist data);
 };
 
 } // namespace ceph
