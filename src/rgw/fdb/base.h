@@ -714,7 +714,7 @@ class option_list final
    const auto count = std::ranges::size(values);
 
    if (count > entries.max_size() - entries.size()) {
-    throw std::length_error("too many option entries");
+    throw libfdb_exception(std::errc::value_too_large, "too many option entries");
    }
 
    entries.reserve(entries.size() + count);

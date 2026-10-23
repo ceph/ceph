@@ -458,9 +458,9 @@ class transaction_source final
   : dbh(std::move(database))
  {}
 
- transaction_source(database_handle database, const transaction_options& opts)
+ transaction_source(database_handle database, transaction_options opts)
   : dbh(std::move(database)),
-    options(opts)
+    options(std::move(opts))
  {}
 
  public:
