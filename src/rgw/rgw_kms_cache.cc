@@ -83,7 +83,8 @@ std::future<void> KMSCache::make_ttl_reaper_async(
           timer.expires_after(ttl);
           boost::system::error_code ec;
           timer.async_wait(yield[ec]);
-          if (ec == boost::asio::error::operation_aborted) {
+          if (ec == boost::asio::error::operation_aborted ||
+              !!yield.get_cancellation_state().cancelled()) {
             ldout(cct, 10) << "KMS Cache: Stopping async TTL reaper" << dendl;
             break;
           }
