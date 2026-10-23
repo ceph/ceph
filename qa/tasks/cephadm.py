@@ -628,12 +628,14 @@ def setup_ca_signed_keys(ctx, config):
             'sudo', 'tee', '-a', '/etc/ssh/ca-key.pub',
         ])
         # make sshd accept the CA signed key
+        # NOTE: the SSH server systemd unit is named 'ssh' on Debian/Ubuntu
+        # and 'sshd' on RHEL/CentOS/Rocky -- try both, but only after the
+        # config write itself has succeeded (grouped with parens so the
+        # restart fallback doesn't mask a failed config write).
         remote.run(args=[
-            'sudo', 'echo', 'TrustedUserCAKeys /etc/ssh/ca-key.pub',
-            run.Raw('|'),
-            'sudo', 'tee', '-a', '/etc/ssh/sshd_config',
-            run.Raw('&&'),
-            'sudo', 'systemctl', 'restart', 'sshd',
+            'sudo', 'sh', '-c',
+            "echo 'TrustedUserCAKeys /etc/ssh/ca-key.pub' | sudo tee -a /etc/ssh/sshd_config && "
+            "(sudo systemctl restart ssh || sudo systemctl restart sshd)"
         ])
 
     # generate a new key pair and sign the pub key to make a cert
