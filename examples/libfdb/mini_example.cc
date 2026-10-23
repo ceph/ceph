@@ -59,7 +59,7 @@ static int run_example()
 try
 {
  auto dbh = lfdb::create_database();
- // Experimental option lists preserve both tag applications in written order.
+ // Option lists preserve both tag applications in written order.
  const lfdb::transaction_options options {
   {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}},
   {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},

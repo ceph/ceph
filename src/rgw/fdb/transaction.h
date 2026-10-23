@@ -578,6 +578,28 @@ noexcept(std::is_nothrow_invocable_v<retry_if<PolicyT>&, const transaction_failu
                        txn, policy);
 }
 
+template <typename PolicyT>
+std::optional<fdb_error_t> retryable_error(const std::exception_ptr& error,
+                                         const transaction_handle& txn,
+                                         retry_if<PolicyT>& policy)
+noexcept(std::is_nothrow_invocable_v<retry_if<PolicyT>&, const transaction_failure&>)
+try
+{
+ if (not error) {
+  return std::nullopt;
+ }
+
+ std::rethrow_exception(error);
+}
+catch (const libfdb_exception& failure)
+{
+ return retryable_error(failure, txn, policy);
+}
+catch (...)
+{
+ return std::nullopt;
+}
+
 template <typename FnT, typename ...ArgTs>
 using transaction_invocation_result_t =
  std::invoke_result_t<FnT&, transaction_handle&, ArgTs&...>;

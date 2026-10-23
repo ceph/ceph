@@ -33,7 +33,7 @@ when an operation fails.
 **Breaking API changes:**
 
 - Option containers preserve insertion order and repeated codes. Map-specific
-  code must migrate; see [Options (Experimental)](#options-experimental).
+  code must migrate; see [Options](#options).
 - `commit(txn)` returns `void` on success, and `commit(with_result, txn)` reports
   commit-future errors through `std::expected<void, std::error_code>`. Both submit
   once. Callers using the former commit/transactor result records must migrate;
@@ -137,9 +137,9 @@ The source type makes the distinction explicit: a string is a FoundationDB
 connection string, while a cluster-file name must be passed as a
 `std::filesystem::path`.
 
-## Options (Experimental)
+## Options
 
-The ordered options interface is experimental. `network_options`,
+The ordered options interface is part of core libfdb. `network_options`,
 `database_options` and `transaction_options` are aliases of `option_list<CodeT>`.
 Each owns a contiguous sequence of `(code, option_value)` pairs. FoundationDB
 receives every entry in insertion order, including repeated codes and identical
