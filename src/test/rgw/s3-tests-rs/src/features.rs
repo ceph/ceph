@@ -183,7 +183,14 @@ pub async fn lifecycle_day_secs() -> Option<Option<u64>> {
 /// Pass it to `unless_posix_governs_data!` rather than reading it deep
 /// inside a helper, so a test says at its call site which model it is
 /// asserting against.
+///
+/// The model applies only under impersonation:  without it every
+/// request runs as the gateway, which the filesystem denies nothing, so
+/// S3 is the only authority and the answer is yes whatever the model.
 pub async fn cross_account_data() -> Option<bool> {
+    if feature_bool("impersonate").await == Some(false) {
+        return Some(true);
+    }
     match access_model().await.as_deref() {
         Some("s3-native") => Some(true),
         Some("s3-metadata") | Some("posix-strict") => Some(false),
@@ -201,7 +208,13 @@ pub async fn cross_account_data() -> Option<bool> {
 /// `posix-strict` does not, as NooBaa does not.  `None` is unknown;
 /// `Some(false)` is a backend that reported a model which does not do
 /// this.
+///
+/// Yes without impersonation, whatever the model, as for
+/// [`cross_account_data`].
 pub async fn cross_account_metadata() -> Option<bool> {
+    if feature_bool("impersonate").await == Some(false) {
+        return Some(true);
+    }
     match access_model().await.as_deref() {
         Some("s3-metadata") | Some("s3-native") => Some(true),
         Some("posix-strict") => Some(false),
