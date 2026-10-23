@@ -2752,45 +2752,68 @@ Then run the following:
                 raise OrchestratorError(
                     msg + '\nNote: Warnings can be bypassed with the --force flag', errno=rc)
 
-            if 'nvmeof' in host_daemons:
-                _updated, nvmeof_err = self._set_nvmeof_gateways_admin_state(
-                    hostname, enabled=False)
-                if nvmeof_err:
-                    if yes_i_really_mean_it:
-                        self.log.warning(
-                            f"maintenance mode request for {hostname} failed to disable "
-                            f"some NVMe-oF gateways: {nvmeof_err}")
-                    else:
-                        raise OrchestratorError(
-                            f"Unable to disable NVMe-oF gateways on {hostname}: {nvmeof_err}",
-                            errno=errno.EIO)
-
-            # call the host-maintenance function
-            with self.async_timeout_handler(hostname, 'cephadm host-maintenance enter'):
-                _out, _err, _code = self.wait_async(
-                    CephadmServe(self)._run_cephadm(
-                        hostname, cephadmNoImage, "host-maintenance",
-                        ["enter"],
-                        error_ok=True))
-            returned_msg = _err[0].split('\n')[-1]
-            if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')) and not yes_i_really_mean_it:
-                raise OrchestratorError(f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}", errno=errno.EPERM)
+            # Set noout before any daemon is stopped, so that a failure
+            # here does not leave the host with its daemons stopped while
+            # not being marked as in maintenance.
+            noout_targets: List[str] = []
             if "osd" in host_daemons:
                 crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
+                noout_targets = [crush_node]
                 rc, out, err = self.mon_command({
                     'prefix': 'osd set-group',
                     'flags': 'noout',
-                    'who': [crush_node],
+                    'who': noout_targets,
                     'format': 'json'
                 })
-                if rc and not yes_i_really_mean_it:
+                if rc:
+                    noout_targets = []
                     self.log.warning(
-                        f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc})")
-                    raise OrchestratorError(
-                        f"Unable to set the osds on {hostname} to noout (rc={rc})", errno=errno.EIO)
-                elif not rc:
+                        f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc}): {err}")
+                    if not yes_i_really_mean_it:
+                        raise OrchestratorError(
+                            f"Unable to set the osds on {hostname} to noout (rc={rc}): {err}", errno=errno.EIO)
+                else:
                     self.log.info(
                         f"maintenance mode request for {hostname} has SET the noout group")
+
+            try:
+                if 'nvmeof' in host_daemons:
+                    _updated, nvmeof_err = self._set_nvmeof_gateways_admin_state(
+                        hostname, enabled=False)
+                    if nvmeof_err:
+                        if yes_i_really_mean_it:
+                            self.log.warning(
+                                f"maintenance mode request for {hostname} failed to disable "
+                                f"some NVMe-oF gateways: {nvmeof_err}")
+                        else:
+                            raise OrchestratorError(
+                                f"Unable to disable NVMe-oF gateways on {hostname}: {nvmeof_err}",
+                                errno=errno.EIO)
+
+                # call the host-maintenance function
+                with self.async_timeout_handler(hostname, 'cephadm host-maintenance enter'):
+                    _out, _err, _code = self.wait_async(
+                        CephadmServe(self)._run_cephadm(
+                            hostname, cephadmNoImage, "host-maintenance",
+                            ["enter"],
+                            error_ok=True))
+                returned_msg = _err[0].split('\n')[-1]
+                if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')) and not yes_i_really_mean_it:
+                    raise OrchestratorError(f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}", errno=errno.EPERM)
+            except Exception:
+                if noout_targets:
+                    # roll back, the host is not going into maintenance
+                    rc, _rb_out, rb_err = self.mon_command({
+                        'prefix': 'osd unset-group',
+                        'flags': 'noout',
+                        'who': noout_targets,
+                        'format': 'json'
+                    })
+                    if rc:
+                        self.log.warning(
+                            f"maintenance mode request for {hostname} failed to roll back "
+                            f"the noout group (rc={rc}): {rb_err}")
+                raise
 
         # update the host status in the inventory
         tgt_host["status"] = "maintenance"
