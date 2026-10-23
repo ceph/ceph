@@ -230,10 +230,14 @@ public: // Methods
   ///
   /// @brief record the wait time of a lock
   ///
+  /// @param waiters concurrent waiter depth sampled for this wait (0 to skip)
+  ///
   static void record_wait_time(
       const LockStatTraits* traits,
       lockstat_clock::duration wait_time,
-      LockMode mode);
+      LockMode mode,
+      uint32_t waiters = 0,
+      bool record_stats = true);
 
   ///
   /// @brief record the hold time of a lock
@@ -522,6 +526,11 @@ public: // member variables
   std::atomic<lockstat_clock::duration> m_max_hold;
 
   ///
+  /// @brief Highest concurrent waiter count observed for this lock site
+  ///
+  std::atomic<uint32_t> m_max_waiters;
+
+  ///
   /// @brief Type of lock for tracking
   ///
   LockStatTraits::LockStatType m_lock_type;
@@ -597,20 +606,29 @@ public: // Methods
   ///
   /// @brief Record the lock's wait time for its trait's
   ///
+  /// @param waiters concurrent waiter depth; peak is updated even when wait
+  ///        time is below the recording threshold
+  ///
   void
-  record_wait_time(lockstat_clock::duration wait_time, LockMode mode) const
+  record_wait_time(
+      lockstat_clock::duration wait_time,
+      LockMode mode,
+      uint32_t waiters = 0) const
   {
     if (!m_lockstat_traits) {
       return;
     }
     // record stats if wait threshold exceeded and if record_iopath_locks is set
     // only record stats for threads with thread_iopath_flag set
-    if (unlikely(
+    const bool record_stats =
+        unlikely(
             wait_time >= g_threshold_cycles.load(std::memory_order_relaxed)) &&
         unlikely(
             !m_record_iopath_locks.load(std::memory_order_relaxed) ||
-            m_thread_iopath_flag)) {
-      LockStatTraits::record_wait_time(m_lockstat_traits, wait_time, mode);
+            m_thread_iopath_flag);
+    if (unlikely(record_stats || waiters)) {
+      LockStatTraits::record_wait_time(
+          m_lockstat_traits, wait_time, mode, waiters, record_stats);
     }
   }
 
@@ -631,6 +649,29 @@ public: // Methods
             !m_record_iopath_locks.load(std::memory_order_relaxed) ||
             m_thread_iopath_flag)) {
       LockStatTraits::record_hold_time(m_lockstat_traits, hold_time, mode);
+    }
+  }
+
+  ///
+  /// @brief Increment per-instance waiter depth; returns depth (0 if disabled)
+  ///
+  uint32_t
+  begin_waiting()
+  {
+    if (likely(!is_lockstat_enabled())) {
+      return 0;
+    }
+    return m_waiting.fetch_add(1, std::memory_order_relaxed) + 1;
+  }
+
+  ///
+  /// @brief Decrement per-instance waiter depth after a wait completes
+  ///
+  void
+  end_waiting(uint32_t waiting)
+  {
+    if (waiting) {
+      m_waiting.fetch_sub(1, std::memory_order_relaxed);
     }
   }
 
@@ -734,6 +775,11 @@ protected: // Data
   /// @brief The traits for this lock
   ///
   const LockStatTraits* m_lockstat_traits;
+
+  ///
+  /// @brief Threads currently in a blocking acquire path on this instance
+  ///
+  std::atomic<uint32_t> m_waiting{0};
 
   ///
   /// @brief non-0 when recording lockstats
