@@ -1204,6 +1204,14 @@ protected:
 
   /// current watermark tracking pool migration progress
   hobject_t pool_migration_watermark;
+  /// watermark that clients are redirected with: every object below it has
+  /// been deleted on every shard (primary only)
+  hobject_t pool_migration_committed_watermark;
+  /// watermarks waiting for their deletes to commit on every shard, each with
+  /// the version that was projected when it was set (primary only)
+  std::deque<std::pair<eversion_t, hobject_t>> pool_migration_uncommitted_watermarks;
+  /// ops on migrated objects whose deletes have not yet committed on every shard
+  std::list<OpRequestRef> waiting_for_pool_migration_commit;
   /// currently migrating objects
   std::set<hobject_t> pool_migrations_in_flight;
   /// new writes blocked by pool migration
@@ -1264,7 +1272,18 @@ protected:
   void update_migration_watermark(const hobject_t &watermark) override
   {
     pool_migration_watermark = watermark;
+    if (is_primary()) {
+      pool_migration_uncommitted_watermarks.emplace_back(projected_last_update,
+                                                         watermark);
+    }
   }
+  void init_migration_watermark(const hobject_t &watermark)
+  {
+    pool_migration_watermark = watermark;
+    pool_migration_committed_watermark = watermark;
+    pool_migration_uncommitted_watermarks.clear();
+  }
+  void commit_migration_watermark(const eversion_t &committed);
   std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,

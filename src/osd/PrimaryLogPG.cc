@@ -2472,23 +2472,40 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       osd->reply_op_error(op, -EIO);
       return;
     }
-    bool migrated = m->get_hobj().is_snap() ?
-                    m->get_hobj().get_head() < pool_migration_watermark.get_head() :
-                    m->get_hobj() < pool_migration_watermark;
-    if (migrated) {
+    auto below = [&m](const hobject_t &watermark) {
+      return m->get_hobj().is_snap() ?
+             m->get_hobj().get_head() < watermark.get_head() :
+             m->get_hobj() < watermark;
+    };
+    if (below(pool_migration_watermark)) {
+      // Only the primary knows when every shard has deleted the object, and
+      // until then a shard that has not can still serve its old data
+      if (!is_primary()) {
+        dout(20) << __func__ << ": object " << m->get_hobj()
+                 << " has been migrated, bouncing to primary" << dendl;
+        osd->reply_op_error(op, -EAGAIN);
+        return;
+      }
+      if (!below(pool_migration_committed_watermark)) {
+        dout(20) << __func__ << ": object " << m->get_hobj()
+                 << " waiting for its migration delete to commit" << dendl;
+        waiting_for_pool_migration_commit.push_back(op);
+        op->mark_delayed("waiting for pool migration delete to commit");
+        return;
+      }
       // object has been migrated to the target pool - request
       // Op is redirected and provide client with updated
       // migration watermark
       dout(20) << __func__ << ": object " << m->get_hobj()
 	       << " has been migrated to pool " << *pi->migration_target
-               << " watermark " << pool_migration_watermark << dendl;
+               << " watermark " << pool_migration_committed_watermark << dendl;
       auto m = op->get_req<MOSDOp>();
       int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
       MOSDOpReply *reply = new MOSDOpReply(m, -ENOENT, get_osdmap_epoch(),
                                        flags, false);
       request_redirect_t redir(m->get_object_locator(),
 			       *pool.info.migration_target,
-			       pool_migration_watermark);
+			       pool_migration_committed_watermark);
       reply->set_redirect(redir);
       m->get_connection()->send_message(reply);
       return;
@@ -12223,6 +12240,9 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
   // ondisk?
   if (repop->all_committed) {
     dout(10) << " commit: " << *repop << dendl;
+    if (repop->v != eversion_t()) {
+      commit_migration_watermark(repop->v);
+    }
     for (auto p = repop->on_committed.begin();
 	 p != repop->on_committed.end();
 	 repop->on_committed.erase(p++)) {
@@ -13909,6 +13929,22 @@ hobject_t PrimaryLogPG::next_pool_migration(std::optional<hobject_t> start)
   return current;
 }
 
+void PrimaryLogPG::commit_migration_watermark(const eversion_t &committed)
+{
+  auto &pending = pool_migration_uncommitted_watermarks;
+  if (pending.empty() || pending.front().first > committed) {
+    return;
+  }
+  while (!pending.empty() && pending.front().first <= committed) {
+    pool_migration_committed_watermark =
+      std::min(pending.front().second, pool_migration_watermark);
+    pending.pop_front();
+  }
+  dout(20) << __func__ << " " << committed << " committed watermark "
+           << pool_migration_committed_watermark << dendl;
+  requeue_ops(waiting_for_pool_migration_commit);
+}
+
 std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std::set<hobject_t> &deleted)
 {
   if (deleted.contains(pool_migration_watermark)) {
@@ -13999,7 +14035,7 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
 
     hobject_t earliest = earliest_pool_migration();
     pool_migration_info.begin = earliest;
-    update_migration_watermark(earliest);
+    init_migration_watermark(earliest);
     dout(10) << __func__ << " pool_migration_info.begin=" << pool_migration_info.begin
              << " pool_migration_watermark=" << pool_migration_watermark << dendl;
     if (is_primary()) {
@@ -14007,9 +14043,9 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
     }
     new_pool_migration_interval = true;
   } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
-    update_migration_watermark(hobject_t::get_max());
+    init_migration_watermark(hobject_t::get_max());
   } else {
-    update_migration_watermark(hobject_t());
+    init_migration_watermark(hobject_t());
   }
   last_pool_migration_started = pool_migration_watermark;
 
@@ -14164,6 +14200,8 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   requeue_ops(waiting_for_active);
   requeue_ops(waiting_for_readable);
   requeue_ops(waiting_for_coro_op);
+  requeue_ops(waiting_for_pool_migration_commit);
+  pool_migration_uncommitted_watermarks.clear();
   if (active_coro_op) {
     requeue_op(active_coro_op);
     active_coro_op = nullptr;
@@ -15595,6 +15633,9 @@ void PrimaryLogPG::update_range(
               last_pool_migration_started = e.soid;
               if (e.soid < pool_migration_watermark) {
                 pool_migration_watermark = e.soid;
+              }
+              if (e.soid < pool_migration_committed_watermark) {
+                pool_migration_committed_watermark = e.soid;
               }
             }
           }
