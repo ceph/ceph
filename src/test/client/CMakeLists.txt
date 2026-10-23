@@ -20,6 +20,7 @@ if(${WITH_CEPHFS})
     ll_api.cc
     ops.cc
     nonblocking.cc
+    zerocopy_io.cc
     commands.cc
     syncio.cc
     fscrypt_conf.cc
