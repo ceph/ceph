@@ -7034,8 +7034,7 @@ TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
  * and `multipart-uploads/` inside it, and leaves both behind when the
  * last upload completes.  Matched by name alone it counted as an upload
  * in flight forever, and a bucket that listed empty answered
- * BucketNotEmpty.  An upload that is still open is content, as S3 has
- * it, and the delete must still be rejected. */
+ * BucketNotEmpty. */
 TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
 {
   sf::create_directories(bucket_path() / ".noobaa-nsfs_6ace0000aaaabbbbccccdddd"
@@ -7049,17 +7048,31 @@ TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
   EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
-TEST_F(NSFSNooBaaBucketTest, ATempDirectoryHoldingAnUploadKeepsItsBucket)
+/* An upload in progress does not keep its bucket, and deleting the
+ * bucket aborts it, as RADOS does:  check_bucket_empty() counts only
+ * the objects' namespace and RadosBucket::remove() aborts the uploads.
+ * One NooBaa started, carried through adoption. */
+TEST_F(NSFSNooBaaBucketTest, DeletingABucketAbortsTheUploadTheyStarted)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
   ASSERT_TRUE(sf::is_directory(tree.staging));
-
+  /* adopted first:  a bucket not taken over takes no DeleteBucket */
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
-      << "an upload in flight did not count as content";
-  EXPECT_LT(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
-  EXPECT_TRUE(sf::is_directory(tree.staging)) << "the upload was destroyed";
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 10, uploads,
+				    nullptr, &truncated, null_yield,
+				    rgw::sal::no_authenticated_user), 0);
+  ASSERT_EQ(uploads.size(), 1u) << "nothing to abort:  no upload listed";
+
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "an upload in progress kept its bucket";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+  EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
 /* A base bucket whose state is where NooBaa keeps it.
@@ -10236,6 +10249,43 @@ TEST_F(NSFSBucketTest, ALinkDoesNotKeepABucket)
   EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
   EXPECT_FALSE(sf::exists(sf::symlink_status(bucket_path())));
   EXPECT_EQ(read_all(outside), "outside");
+}
+
+/* An upload in progress does not keep its bucket, and deleting the
+ * bucket aborts it, as RADOS does (check_bucket_empty(),
+ * RadosBucket::remove()).  The control is the same bucket with an
+ * object:  refused, and the refusal leaves the upload in place. */
+TEST_F(NSFSBucketTest, DeletingABucketAbortsItsUploads)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(testname + "-mp", rgw::sal::no_authenticated_user, "c0ffee");
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs),
+	    0);
+  auto count_uploads = [&]() -> size_t {
+    std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+    std::string marker;
+    bool truncated = false;
+    EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 10, uploads,
+				      nullptr, &truncated, null_yield,
+				      rgw::sal::no_authenticated_user), 0);
+    return uploads.size();
+  };
+  ASSERT_EQ(count_uploads(), 1u);
+
+  write_file(bucket_path() / "o00", "o00");
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
+      << "the control:  an object did not count as content";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), -ENOTEMPTY);
+  EXPECT_EQ(count_uploads(), 1u) << "a refused delete aborted the upload";
+  sf::remove(bucket_path() / "o00");
+
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "an upload in progress kept its bucket";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield, rgw::sal::no_authenticated_user), 0);
+  EXPECT_FALSE(sf::exists(bucket_path()));
 }
 
 /* An entry readdir returned and a concurrent DELETE removed before the

@@ -696,7 +696,7 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
    * never uploaded to has the one and not the other.  Returning a
    * path that does not exist would send an enumeration at it. */
   const std::string root = *found + "/" + NB_MPU_ROOT;
-  if (::faccessat(bucket_fd, root.c_str(), F_OK, 0) != 0) {
+  if (::faccessat(bucket_fd, root.c_str(), F_OK, AT_EACCESS) != 0) {
     return std::nullopt;
   }
   return root;
@@ -788,7 +788,7 @@ static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
     /* the one that holds uploads, whatever it is called */
     const std::string probe = std::string(n) + "/" + NB_MPU_ROOT;
     const bool holds_uploads =
-	(::faccessat(bucket_fd, probe.c_str(), F_OK, 0) == 0);
+	(::faccessat(bucket_fd, probe.c_str(), F_OK, AT_EACCESS) == 0);
 
     if (!holds_uploads && !nb_uuid_suffixed(n)) {
       continue;

@@ -242,33 +242,6 @@ static bool dir_has_content(int parent_fd, const char* dname,
   return found;
 }
 
-/* Does anything other than a directory lie beneath `dname`?  An entry
- * that is not a directory is itself such a thing.  Directories alone,
- * however deep, are a tree with nothing in it. */
-static bool tree_holds_file(int parent_fd, const char* dname)
-{
-  int fd = ::openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-  if (fd < 0) {
-    return errno != ENOENT;
-  }
-  DIR* d = ::fdopendir(fd);
-  if (!d) {
-    ::close(fd);
-    return true;
-  }
-  bool found = false;
-  struct dirent* de;
-  while (!found && ((de = ::readdir(d)) != nullptr)) {
-    std::string_view n = de->d_name;
-    if ((n == ".") || (n == "..")) {
-      continue;
-    }
-    found = tree_holds_file(::dirfd(d), de->d_name);
-  }
-  ::closedir(d);
-  return found;
-}
-
 static bool key_hits_reserved_name(std::string_view key,
 				   const nsfs::ReservedNames& rn)
 {
@@ -314,11 +287,10 @@ static bool entry_is_content(int parent_fd, std::string_view name,
   }
   for (const auto& p : rn.staging_prefixes) {
     if (name.starts_with(p)) {
-      /* An incomplete upload, as S3 has it -- while one is there.  nsfs's
-       * own staging always holds its `.meta`, but NooBaa's temp directory
-       * outlives every upload, left with an empty `multipart-uploads/`
-       * when the last one ends, and an empty one is scaffolding. */
-      return tree_holds_file(parent_fd, std::string(name).c_str());
+      /* An upload in progress does not keep its bucket, as RADOS's
+       * check_bucket_empty() counts only the objects' namespace:
+       * deleting the bucket aborts it (NSFSBucket::abort_multiparts()). */
+      return false;
     }
   }
   /* remaining reserved names are scaffolding */
@@ -1204,20 +1176,11 @@ static int promote_version(int parent_fd, const std::string& leaf,
   return -EAGAIN;
 }
 
-/* Under impersonation as every directory nsfs makes, sticky and
- * writable (NSFS_IMPERSONATION.md 8a):  an identity reading a version
- * entry needs search permission here, as on a key's directories. */
-static mode_t hidden_dir_mode()
-{
-  return nsfs::impersonation_enabled() ? (S_ISVTX | 0777)
-				       : nsfs::dir_create_mode();
-}
-
 /* `.versions` beside `parent_fd`, made if it is missing.
  *
  * As `id`, at NooBaa's mode, where `id` is active:  it is the key
  * directory's, and so the requester's (call-site table §11.1).  The
- * gateway's at hidden_dir_mode() otherwise.  `dpp` may be null only
+ * gateway's, at the same mode, otherwise.  `dpp` may be null only
  * when `id` is inactive. */
 static int ensure_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
 			       const nsfs::FSIdentity& id,
@@ -1242,7 +1205,7 @@ static int ensure_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
     }
     return chown_raised_dir(dpp, parent_fd, HIDDEN_VERSIONS_PATH.c_str());
   }
-  const mode_t mode = hidden_dir_mode();
+  const mode_t mode = nsfs::dir_create_mode();
   int ret = ::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), mode);
   if (ret < 0) {
     return (errno == EEXIST) ? 0 : -errno;
@@ -1492,7 +1455,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 				 int src_parent_fd, const RenameIntent& in)
 {
   const bool at_src = (::faccessat(src_parent_fd, in.leaf.c_str(), F_OK,
-				   AT_SYMLINK_NOFOLLOW) == 0);
+				   AT_SYMLINK_NOFOLLOW | AT_EACCESS) == 0);
 
   /* The destination may be gone entirely -- a bucket deleted since the
    * crash, or intermediate directories never created.  Create nothing while
@@ -1524,7 +1487,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
 
   const bool at_dst = (dst_parent_fd >= 0)
     && (::faccessat(dst_parent_fd, dst_leaf.c_str(), F_OK,
-		    AT_SYMLINK_NOFOLLOW) == 0);
+		    AT_SYMLINK_NOFOLLOW | AT_EACCESS) == 0);
 
   if (at_src == at_dst) {
     ldpp_dout(dpp, 0) << "ERROR: rename recovery: " << in.leaf << " -> "
@@ -1932,7 +1895,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 
 static int ensure_shadow_dir(int parent_fd)
 {
-  const mode_t mode = hidden_dir_mode();
+  const mode_t mode = nsfs::dir_create_mode();
   int ret = ::mkdirat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), mode);
   if (ret < 0) {
     return (errno == EEXIST) ? 0 : -errno;
@@ -2493,6 +2456,19 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
+/* A denial is the caller's to handle -- raise site 3 and the access
+ * model retry it raised, and a refusal that stands is reported where
+ * it stands -- so it is not an error here (efe009fbcad, for site 1). */
+static int removal_log_level(int err)
+{
+  return ((err == EACCES) || (err == EPERM)) ? 10 : 0;
+}
+
+static const char* removal_log_prefix(int err)
+{
+  return removal_log_level(err) ? "" : "ERROR: ";
+}
+
 static int delete_directory(int parent_fd, const char* dname, bool delete_children,
 		     const DoutPrefixProvider* dpp,
 		     const nsfs::ReservedNames& rn)
@@ -2505,7 +2481,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (dir_fd < 0) {
     dir_fd = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open subdir " << dname << ": "
+    ldpp_dout(dpp, removal_log_level(dir_fd)) << removal_log_prefix(dir_fd)
+                      << "could not open subdir " << dname << ": "
                       << cpp_strerror(dir_fd) << dendl;
     return -dir_fd;
   }
@@ -2513,7 +2490,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   dir = fdopendir(dir_fd);
   if (dir == NULL) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << dname
+    ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
+                      << "could not open bucket " << dname
                       << " for listing: " << cpp_strerror(ret) << dendl;
     ::close(dir_fd);
     return -ret;
@@ -2542,7 +2520,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 		      &stx);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name
+      ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
+                        << "could not stat object " << entry->d_name
                         << ": " << cpp_strerror(ret) << dendl;
       closedir(dir);
       return -ret;
@@ -2563,7 +2542,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     ret = unlinkat(dir_fd, entry->d_name, 0);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not remove file " << entry->d_name
+      ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
+                        << "could not remove file " << entry->d_name
                         << ": " << cpp_strerror(ret) << dendl;
       closedir(dir);
       return -ret;
@@ -2575,7 +2555,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   if (ret < 0) {
     ret = errno;
     if (errno != ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: could not remove bucket " << dname << ": "
+      ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
+	<< "could not remove bucket " << dname << ": "
 	<< cpp_strerror(ret) << dendl;
       return -ret;
     }
@@ -3450,6 +3431,12 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
 	return ret;
       }
     } else if (ret >= 0) {
+      /* as the requester, whom copy_object() gave this entry:  the
+       * bucket directory is not the gateway's (raise site 4), and a
+       * leaf directory resolve_key_path() did not make carries no
+       * identity of its own */
+      del->set_identity(identity);
+      del->set_access_model(access_model);
       ret = del->remove(dpp, y, /*delete_children=*/true);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
@@ -3595,26 +3582,11 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  /* The gateway owns bucket directories, even under impersonation.
-   *
-   * The bucket is the gateway's metadata and the objects are the
-   * users' data, and the ownership follows that:  the gateway can
-   * then write bucket_info, the policy, tags and lifecycle as
-   * itself, and nothing about a bucket operation needs an identity.
-   *
-   * Identities still create objects inside, which needs write
-   * permission on the parent -- hence the group and other write
-   * bits -- and the sticky bit then stops one identity unlinking
-   * another's objects, which per-identity ownership of the
-   * directory would otherwise have given us.
-   *
-   * The permissive mode is reachable only through the gateway.  An
-   * impersonated open is openat2(bucket_dirfd, name, ...), which
-   * starts from a descriptor the gateway holds and never resolves
-   * the path above it -- so the data root's own mode, not this
-   * one, decides who can reach a bucket from outside. */
-  const mode_t dir_mode = nsfs::impersonation_enabled()
-      ? (S_ISVTX | 0777) : nsfs::dir_create_mode();
+  /* As the gateway, at NooBaa's mode.  A client's bucket directory is
+   * then given to its owner (NSFSBucket::create(), raise site 4), so it
+   * is the account's at 0770 with no sticky bit, as NooBaa's is
+   * (DECISIONS.md 2026-10-15). */
+  const mode_t dir_mode = nsfs::dir_create_mode();
   /* A bucket at a stored path has no parent entry, and its fname is the
    * whole path:  AT_FDCWD, as Directory::open() resolves one. */
   const int at = parent ? parent->get_fd() : AT_FDCWD;
@@ -3635,22 +3607,12 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  /* mkdir(2) masks the mode with the process umask, which on a
-   * typical host strips exactly the write bits an identity needs.
-   * The gateway owns this directory, so it sets the mode outright
-   * rather than asking for it.
-   *
-   * Only a directory this call made.  On EEXIST the directory is
-   * already somebody else's -- an adopted NooBaa bucket at 0770, or
-   * one an operator placed -- and a create that found it there does
-   * not widen it. */
-  if (nsfs::impersonation_enabled() && made &&
-      (::fchmodat(at, fname.c_str(), S_ISVTX | 0777, 0) < 0)) {
-    ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
-      << ": " << cpp_strerror(errno) << dendl;
-    return -errno;
-  }
-  if (!nsfs::impersonation_enabled() && made) {
+  /* mkdir(2) masks the mode with the process umask, so the mode is set
+   * outright.  Only on a directory this call made:  on EEXIST the
+   * directory is already somebody else's -- an adopted NooBaa bucket,
+   * or one an operator placed -- and a create that found it there does
+   * not change it. */
+  if (made) {
     ret = nsfs::apply_create_mode_at(dpp, at, fname.c_str(), dir_mode);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
@@ -3913,6 +3875,12 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
 	return ret;
       }
     } else if (ret >= 0) {
+      /* as the requester, whom copy_object() gave this entry:  the
+       * bucket directory is not the gateway's (raise site 4), and a
+       * leaf directory resolve_key_path() did not make carries no
+       * identity of its own */
+      del->set_identity(identity);
+      del->set_access_model(access_model);
       ret = del->remove(dpp, y, /*delete_children=*/true);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
@@ -4175,6 +4143,9 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
   } else if (ret >= 0) {
+    /* as the requester;  see File::copy() */
+    del->set_identity(identity);
+    del->set_access_model(access_model);
     ret = del->remove(dpp, y, /*delete_children=*/true);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << name << dendl;
@@ -4500,9 +4471,43 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
     path = get_name();
   }
 
-  /* see Directory::create on the mode */
-  const mode_t dir_mode = nsfs::impersonation_enabled()
-      ? (S_ISVTX | 0777) : nsfs::dir_create_mode();
+  const mode_t dir_mode = nsfs::dir_create_mode();
+
+  /* Staging is its uploader's, as NooBaa makes it
+   * (`namespace_fs.js:1785`, DECISIONS.md 2026-10-23).  Where the
+   * access model performs a denied create, the gateway gives the
+   * directory to the uploader, as it gives a raised object to its
+   * requester. */
+  if (identity.active()) {
+    const int pfd = parent->get_fd();
+    bool raised = false;
+    const int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+						 RAISED_CREATE_CAPS,
+						 [&]() -> int {
+      if (::mkdirat(pfd, path.c_str(), dir_mode) < 0) {
+	return -errno;
+      }
+      return nsfs::apply_create_mode_at(dpp, pfd, path.c_str(), dir_mode);
+    }, y, &raised);
+    if (ret == -EEXIST) {
+      if (existed != nullptr) {
+	*existed = true;
+      }
+      return 0;
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not create staging " << get_name()
+			<< " as uid " << identity.cred.uid << ": "
+			<< cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    if (raised) {
+      return chown_raised(dpp, pfd, path.c_str(), identity.cred.uid,
+			  identity.cred.gid);
+    }
+    return 0;
+  }
+
   int ret = mkdirat(parent->get_fd(), path.c_str(), dir_mode);
   const bool made = (ret == 0);
   if (ret < 0) {
@@ -4522,13 +4527,7 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* see Directory::create:  the mode is set outright, and only on a
    * directory this call made */
-  if (nsfs::impersonation_enabled() && made &&
-      (::fchmodat(parent->get_fd(), path.c_str(), S_ISVTX | 0777, 0) < 0)) {
-    ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
-      << ": " << cpp_strerror(errno) << dendl;
-    return -errno;
-  }
-  if (!nsfs::impersonation_enabled() && made) {
+  if (made) {
     ret = nsfs::apply_create_mode_at(dpp, parent->get_fd(), path.c_str(),
 				     dir_mode);
     if (ret < 0) {
@@ -6384,7 +6383,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp,
   }
 
   bool existed = false;
-  ret = create(dpp, y, &existed);
+  ret = create(dpp, y, &existed, authenticated_user);
   if (ret < 0) {
     if (!is_internal()) {
       driver->get_identity_db()->remove_bucket_placement(dpp, get_name(),
@@ -7433,9 +7432,15 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
  * completion share (§5.2).  In the gateway's permitted set already,
  * so this names a site and not a new capability.  Taken only after the
  * removal is denied:  a gateway on its own directories never raises,
- * so one started without the capability still deletes its buckets. */
+ * so one started without the capability still deletes its buckets.
+ *
+ * And `CAP_FOWNER` for the directory itself where its parent is sticky
+ * -- a bucket placed under `/tmp` -- since the directory is its
+ * creator's (raise site 4) and the sticky bit lets only the owner of
+ * the entry or of the parent remove it;  DAC_OVERRIDE does not reach
+ * that check.  NooBaa removes it as the requester, its owner. */
 static constexpr uint64_t BUCKET_DELETE_CAPS =
-  nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
 /* What a bucket-state write raises, and nothing else raises (raise
  * site 1):  `CAP_DAC_OVERRIDE` for an attribute on a bucket directory
@@ -7490,13 +7495,29 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
       return r;
     }
   }
+  /* uploads in progress end with the bucket, as RadosBucket::remove()
+   * ends them */
+  if (!is_internal()) {
+    int r = abort_multiparts(dpp, driver->ctx(), y);
+    if (r < 0) {
+      return r;
+    }
+  }
   if (owns && !delete_children) {
     int r = 0;
     if (const auto* ps = path_strategy(); ps) {
       const std::string root_folder = ps->folder_object_name();
-      if ((::unlinkat(dir->get_fd(), root_folder.c_str(), 0) < 0) &&
-	  (errno != ENOENT)) {
-	r = -errno;
+      /* raised as the removal below is, after a denial:  the bucket
+       * directory is its owner's (raise site 4) */
+      auto unlink_root = [&]() -> int {
+	return ((::unlinkat(dir->get_fd(), root_folder.c_str(), 0) < 0) &&
+		(errno != ENOENT)) ? -errno : 0;
+      };
+      r = unlink_root();
+      if ((r == -EACCES) || (r == -EPERM)) {
+	r = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, unlink_root);
+      }
+      if (r < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: removing " << root_folder
 	  << " from bucket " << get_name() << ": " << cpp_strerror(-r)
 	  << dendl;
@@ -7511,6 +7532,11 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
       ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, [&]() -> int {
 	return dir->remove(dpp, y, delete_children);
       });
+      if (ret < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << ":  its "
+	  << "directory could not be removed even raised: "
+	  << cpp_strerror(-ret) << dendl;
+      }
     }
   } else {
     ret = unadopt(dpp);
@@ -9295,12 +9321,32 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
      * which a listing that scans one root at a time reports once;
      * removing it first would lose the parts if anything below
      * failed. */
+    struct statx tdstx{};
+    ret = statx_ids(theirdir.get_fd(), tdstx);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cannot stat the staging of " << meta
+	<< " to give it its owner: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
     theirdir.close();
     ret = delete_directory(root.get_fd(), dname.c_str(), true, dpp,
 			   driver->get_reserved_names());
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: removing their staging for " << meta
 			<< ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    /* The staging re-expresses NooBaa's, so it takes its ids, as the
+     * meta object and the parts did:  staging is its uploader's
+     * (DECISIONS.md 2026-10-23).  After theirs is gone, so a run
+     * stopped before it resumes into a directory the gateway still
+     * owns. */
+    ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
+      return inherit_ids(dpp, ourdir.get_fd(), tdstx,
+			 driver->no_chown_injected(), meta);
+    });
+    if (ret < 0) {
       return ret;
     }
 
@@ -9446,7 +9492,7 @@ bool NSFSBucket::upload_awaits_conversion(const DoutPrefixProvider* dpp,
     path = *root + "/" + path;
   }
   return ::faccessat(dir->get_fd(), path.c_str(), F_OK,
-		     AT_SYMLINK_NOFOLLOW) == 0;
+		     AT_SYMLINK_NOFOLLOW | AT_EACCESS) == 0;
 }
 
 NSFSMutationGuard::NSFSMutationGuard(const DoutPrefixProvider* dpp,
@@ -9657,11 +9703,14 @@ int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  /* as the gateway, raised where the directory is not its own (site 1) */
+  /* as the gateway, raised where the directory is not its own (site 1);
+   * a staging directory's as its uploader, who owns it */
   std::string v = std::to_string(version);
   ret = write_bucket_state(dpp, [&]() -> int {
-    return (::fsetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
-			v.data(), v.size(), 0) < 0) ? -errno : 0;
+    return nsfs::with_identity(dpp, dir->get_identity(), [&]() -> int {
+      return (::fsetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
+			  v.data(), v.size(), 0) < 0) ? -errno : 0;
+    }, null_yield);
   });
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::EXTENSIONS_XATTR
@@ -10424,12 +10473,55 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+/* Every upload in progress, aborted, as RadosBucket::abort_multiparts()
+ * aborts them:  an upload does not keep its bucket (check_empty()), so
+ * deleting the bucket ends it.  No requester:  each abort runs as the
+ * gateway, raised after a denial, since staging is its uploader's and
+ * this is the bucket delete's scaffolding (raise site 3). */
 int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y)
 {
+  constexpr int max = 1000;
+  std::vector<std::unique_ptr<MultipartUpload>> uploads;
+  std::string marker;
+  const std::string empty;
+  bool is_truncated = false;
+  int num_aborted = 0;
+
+  do {
+    uploads.clear();
+    int ret = list_multiparts(dpp, empty, marker, empty, max, uploads,
+			      nullptr, &is_truncated, y,
+			      rgw::sal::no_authenticated_user);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: listing the uploads of bucket "
+	<< get_name() << " to abort them: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    for (const auto& upload : uploads) {
+      auto abort = [&]() -> int { return upload->abort(dpp, cct, y); };
+      ret = abort();
+      if ((ret == -EACCES) || (ret == -EPERM)) {
+	ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, abort);
+      }
+      if ((ret < 0) && (ret != -ENOENT) && (ret != -ERR_NO_SUCH_UPLOAD)) {
+	ldpp_dout(dpp, 0) << "ERROR: aborting upload " << upload->get_meta()
+	  << " of bucket " << get_name() << ": " << cpp_strerror(-ret)
+	  << dendl;
+	return ret;
+      }
+      ++num_aborted;
+    }
+  } while (is_truncated);
+
+  if (num_aborted) {
+    ldpp_dout(dpp, 4) << "nsfs: aborted " << num_aborted << " uploads in "
+      << "progress in bucket " << get_name() << dendl;
+  }
   return 0;
 }
 
-int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* existed)
+int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* existed,
+		       const rgw_user& creator)
 {
   int ret = dir->create(dpp, y, existed);
   if (ret < 0) {
@@ -10464,6 +10556,36 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
   }
   if (ret == 0) {
     ret = write_attrs(dpp, y);
+  }
+
+  /* Raise site 4:  a client's bucket directory is its creator's, as
+   * NooBaa's mkdir as the performing account makes it
+   * (bucketspace_fs.js:1055-1062, DECISIONS.md 2026-10-23);  the owner's
+   * where no request made it.  Given last, so the gateway writes the
+   * state above on a directory it still owns.  One with no identity
+   * leaves it the gateway's:  nothing is written as them. */
+  if ((ret == 0) && made && !is_internal() &&
+      nsfs::impersonation_enabled()) {
+    nsfs::Credentials cred;
+    if (!creator.empty()) {
+      /* the user's row, else its account's, as pin_personality_for()
+       * resolves a requester */
+      rgw_account_id account;
+      std::unique_ptr<User> u = driver->get_user(creator);
+      if (u->load_user(dpp, y) == 0) {
+	account = u->get_info().account_id;
+      }
+      ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
+				      creator, account, cred);
+    } else {
+      ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
+				      info.owner, cred);
+    }
+    if (ret == 0) {
+      ret = chown_raised(dpp, dir->get_fd(), "", cred.uid, cred.gid);
+    } else if (ret == -ENOENT) {
+      ret = 0;
+    }
   }
 
   /* A client's bucket that failed here is taken back whole:  the
@@ -11504,11 +11626,11 @@ int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
   int dir_fd = parent_fd;
   int sdir_fd = -1;
 
-  if (::faccessat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), F_OK, 0) == 0) {
+  if (::faccessat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), F_OK, AT_EACCESS) == 0) {
     sdir_fd = ::openat(parent_fd, HIDDEN_SHADOW_PATH.c_str(),
 		       O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
     if ((sdir_fd >= 0) &&
-	(::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0)) {
+	(::faccessat(sdir_fd, leaf.c_str(), F_OK, AT_EACCESS) == 0)) {
       dir_fd = sdir_fd;
     }
   }
@@ -11549,7 +11671,7 @@ int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
     ::close(fd);
   } else if (!st) {
     /* existence only */
-    if (::faccessat(dir_fd, leaf.c_str(), F_OK, 0) < 0) {
+    if (::faccessat(dir_fd, leaf.c_str(), F_OK, AT_EACCESS) < 0) {
       ret = -errno;
     }
   }
@@ -11668,7 +11790,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   if (sdir_fd < 0) {
     return FSIOResult{sdir_fd, nullptr};
   }
-  bool shadow_exists = (::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0);
+  bool shadow_exists = (::faccessat(sdir_fd, leaf.c_str(), F_OK, AT_EACCESS) == 0);
   bool ephemeral = (flags & FSIOObject::OPEN_FLAG_EPHEMERAL) != 0;
   bool for_write = (flags & FSIOObject::OPEN_FLAG_WRITE) != 0;
 
@@ -11726,7 +11848,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   /* Ask the resolved parent directly rather than going through ent,
    * which is null for a hierarchical key even when the object is on
    * disk.  reclone() already tests it this way. */
-  bool src_exists = (::faccessat(parent_fd, leaf.c_str(), F_OK, 0) == 0);
+  bool src_exists = (::faccessat(parent_fd, leaf.c_str(), F_OK, AT_EACCESS) == 0);
 
   if (!src_exists && !(flags & FSIOObject::OPEN_FLAG_CREATE)) {
     ::close(sdir_fd);
@@ -12181,7 +12303,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
   int new_fd{-1};
   bool joined{false};
   bool src_exists =
-    (::faccessat(parent_fd, leaf_name.c_str(), F_OK, 0) == 0);
+    (::faccessat(parent_fd, leaf_name.c_str(), F_OK, AT_EACCESS) == 0);
 
   if (src_exists) {
     int ret = driver->get_fs_strategy()->clone_file(
@@ -13286,13 +13408,11 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
   /* The publish is on the access-model axis, and the model decides it
    * before the first syscall rather than after a denial.
    *
-   * A bucket directory is `1777` under impersonation, so a requester
-   * may create a new entry in it but may not rename over one it does
-   * not own -- the sticky bit -- and the kernel says `EPERM` where an
-   * ordinary permission failure says `EACCES`.  Overwriting another
-   * identity's object therefore fails at the publish even after the
-   * open and the bytes have succeeded, which is what `s3-native` is
-   * for.
+   * A bucket directory is its owner's at `0770`, and a requester
+   * outside its group may open and write an `O_TMPFILE` there under a
+   * raise, and still be denied the link and the rename that publish
+   * it.  The write therefore fails at the publish even after the open
+   * and the bytes have succeeded, which is what `s3-native` is for.
    *
    * It cannot be a retry.  The publish links the `O_TMPFILE` into the
    * directory under a temp name and then renames it onto the object,
@@ -13305,15 +13425,12 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    * (probes/tmpfile/relinkprobe.c).
    *
    * So under a model that permits it the whole publish is the
-   * gateway's, for every write and not only a denied one.  The bucket
-   * directory is the gateway's property under that model, and the
+   * gateway's, for every write and not only a denied one.  The
    * published inode is still the requester's `O_TMPFILE` -- only the
    * directory operations move.
    *
-   * `CAP_FOWNER`, and only the link needs it.  The rename needs
-   * nothing -- a directory's owner may rename over anything inside it
-   * whatever the sticky bit says -- but the link is of the requester's
-   * inode, and `fs.protected_hardlinks` allows a hardlink to another's
+   * `CAP_FOWNER`, and only the link needs it.  The link is of the
+   * requester's inode, and `fs.protected_hardlinks` allows a hardlink to another's
    * inode only to its owner or to someone holding read *and* write on
    * it.  The gateway holds `CAP_DAC_READ_SEARCH`, so
    * `safe_hardlink_source()` returns false and the kernel falls to
@@ -13322,9 +13439,9 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    * returns EPERM.  The same rule bit the demote from the other side
    * (`d75e5561a39`).
    *
-   * And `CAP_DAC_OVERRIDE`, where the directory is a key directory
-   * another identity made at 0770:  the gateway does not own that
-   * one, and both the link and the rename write in it. */
+   * And `CAP_DAC_OVERRIDE`, because the directory is not the
+   * gateway's -- a bucket's is its owner's and a key directory its
+   * maker's, at 0770 -- and both the link and the rename write in it. */
   static constexpr uint64_t PUBLISH_AS_GATEWAY_CAPS =
     nsfs::cap_bit(CAP_FOWNER) | nsfs::cap_bit(CAP_DAC_OVERRIDE);
   const bool as_gateway = ent->get_identity().active() &&
@@ -15099,12 +15216,19 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
 
     std::string staging_name = get_fname();
     std::unique_ptr<Directory> mpdir = std::make_unique<MPDirectory>(staging_name, staging_parent, driver->ctx());
+    /* Placed as the uploader init() pinned;  read as the gateway
+     * (DECISIONS.md 2026-10-15, ListParts) */
+    if (create && identity.active()) {
+      mpdir->set_identity(identity);
+      mpdir->set_access_model(driver->get_access_strategy());
+    }
 
     shadow = std::make_unique<NSFSBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), mp_obj.upload_id), mp_ns);
 
     ret = shadow->load_bucket(dpp, null_yield);
     if (ret == -ENOENT && create) {
-      ret = shadow->create(dpp, null_yield, nullptr);
+      ret = shadow->create(dpp, null_yield, nullptr,
+			   rgw::sal::no_authenticated_user);
     }
   }
 
@@ -15156,6 +15280,14 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   }
   int ret;
 
+  /* who staging, the meta object and its record are made as */
+  {
+    const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
+
   /* Create the shadow bucket */
   ret = load(dpp, true);
   if (ret < 0) {
@@ -15169,6 +15301,10 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   meta_obj = get_meta_obj();
 
+  if (identity.active()) {
+    static_cast<NSFSObject*>(meta_obj.get())->set_access(identity,
+							 /*ro=*/false);
+  }
   ret = static_cast<NSFSObject*>(meta_obj.get())->open(dpp, y, true);
   if (ret < 0) {
     return ret;
@@ -15194,19 +15330,10 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_NSFS_ATTR_MPUPLOAD] = bl;
 
-  /* The gateway's, deliberately.  Staging and the meta object stay
-   * the gateway's (DECISIONS.md 2026-10-15), so naming the uploader
-   * here makes the attribute write run as them -- and the meta
-   * object is a file they do not own, so the kernel denies it:
-   * CreateMultipartUpload with a tagging header returned 403.
-   *
-   * The parameter says who a write is *for*, and for this file the
-   * answer is nobody:  it is the gateway's own bookkeeping, not the
-   * uploader's object.  The uploader's object is written as them at
-   * complete(). */
+  /* As the uploader, who made the meta object (DECISIONS.md
+   * 2026-10-23). */
   ret = meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y,
-				rgw::sal::FLAG_LOG_OP,
-				rgw::sal::no_authenticated_user);
+				rgw::sal::FLAG_LOG_OP, auth_user);
   if (ret < 0) {
     return ret;
   }
@@ -15387,13 +15514,49 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
     return ret;
   }
 
+  /* Nobody asked when the bucket's deletion aborts it
+   * (NSFSBucket::abort_multiparts()), which raises for it itself. */
+  if (!auth_user.empty()) {
+    const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
+  /* a denial is the abort's answer;  any other failure leaves what it
+   * could not remove, as the removal always has */
+  ret = remove_staging(dpp, y);
+  if ((ret == -EACCES) || (ret == -EPERM)) {
+    return ret;
+  }
   if (auto* mc = driver->get_multipart_cache()) {
     mc->remove({nsfs::mp_cache_bucket(bucket->get_tenant(),
 					bucket->get_name()), mp_obj.meta});
   }
-  shadow->remove(dpp, true, y, auth_user);
 
   return 0;
+}
+
+/* As the requester, through the access model (DECISIONS.md
+ * 2026-10-23):  staging is its uploader's, so another identity is
+ * denied under posix-strict and performed for under s3-native.  Under
+ * the staging root, which is the bucket directory only where the
+ * format stages there.  Removing `<bucket>/<name>` left NooBaa's
+ * staging in place, and the upload was still listed after it had
+ * completed. */
+int NSFSMultipartUpload::remove_staging(const DoutPrefixProvider* dpp,
+					optional_yield y)
+{
+  NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
+  const int at = staging_root_dir ? staging_root_dir->get_fd()
+				  : pb->get_dir()->get_fd();
+  const std::string name = get_fname();
+  shadow->get_dir()->close();
+  return nsfs::with_identity_or_raise(dpp, identity,
+				      driver->get_access_strategy(),
+				      RAISED_KEYDIR_CAPS, [&]() -> int {
+    return delete_directory(at, name.c_str(), true, dpp,
+			    driver->get_reserved_names());
+  }, y);
 }
 
 int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
@@ -15697,18 +15860,22 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       return dret;
     }
 
-    ret = renameat(staging_fd, assembled_name.c_str(),
-		   leaf_fd, leaf_name.c_str());
+    /* As the requester:  the assembled file leaves the uploader's
+     * staging (DECISIONS.md 2026-10-23), as NooBaa's completion moves
+     * it.  Under the version lock. */
+    ret = renameat_as(dpp, identity, driver->get_access_strategy(),
+		      staging_fd, assembled_name.c_str(),
+		      leaf_fd, leaf_name.c_str());
   } else {
-    ret = renameat(staging_fd, assembled_name.c_str(),
-		   leaf_fd, leaf_name.c_str());
+    ret = renameat_as(dpp, identity, driver->get_access_strategy(),
+		      staging_fd, assembled_name.c_str(),
+		      leaf_fd, leaf_name.c_str());
   }
 
   if (ret < 0) {
-    ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: failed to rename assembled file to "
-                      << target_key << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
+                      << target_key << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
   }
 
   /* versioned: compute version ID from published file's stat */
@@ -15828,15 +15995,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     mc->remove({nsfs::mp_cache_bucket(bucket->get_tenant(),
 					bucket->get_name()), mp_obj.meta});
   }
-  shadow->get_dir()->close();
-  /* under the staging root, which is the bucket directory only where
-   * the format stages there.  Removing `<bucket>/<name>` left NooBaa's
-   * staging in place, and the upload was still listed after it had
-   * completed. */
-  delete_directory(staging_root_dir ? staging_root_dir->get_fd()
-				    : pb->get_dir()->get_fd(),
-                   get_fname().c_str(), true, dpp,
-                   driver->get_reserved_names());
+  (void) remove_staging(dpp, y);
 
   // update bucket cache
   target_obj->set_obj_size(ofs);
@@ -16059,7 +16218,7 @@ NSFSMultipartUpload::established_stride(const DoutPrefixProvider* dpp,
   if (!sname) {
     return std::nullopt;
   }
-  if (faccessat(dir->get_fd(), sname->c_str(), F_OK, 0) != 0) {
+  if (faccessat(dir->get_fd(), sname->c_str(), F_OK, AT_EACCESS) != 0) {
     return std::nullopt;
   }
   return stored;
@@ -18262,12 +18421,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * neither touches a bucket's.
      *
      * as=<user>:  the directory is that user's, as a NooBaa bucket's is
-     * its account's, made and changed and removed as the user on the
-     * helper pool.  The base path is the gateway's, where no identity
-     * may create, so the gateway makes `<name>` sticky and writable,
-     * as it makes every directory under impersonation, and the user's
-     * directory is `<name>/d`;  that is the path reported, and remove
-     * takes both. */
+     * its account's, changed and emptied as the user on the helper
+     * pool.  The base path is the gateway's, where no identity may
+     * create, so the gateway makes `<name>` at 0711 and `<name>/d` in
+     * it, and gives `d` to the user as it gives a bucket directory to
+     * its owner;  that is the path reported, and remove takes both. */
     auto op = params.find("op");
     auto nm = params.find("name");
     if ((op == params.end()) || (nm == params.end())) {
@@ -18313,10 +18471,10 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	return r;
       }
       if (as) {
-	if (::mkdir(parent.c_str(), 01777) < 0) {
+	if (::mkdir(parent.c_str(), 0711) < 0) {
 	  return -errno;
 	}
-	if (::chmod(parent.c_str(), 01777) < 0) {
+	if (::chmod(parent.c_str(), 0711) < 0) {
 	  return -errno;
 	}
       }
@@ -18343,8 +18501,17 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (void) mode_of(m);
       auto f = params.find("file");
       auto c = params.find("content");
-      int r = acting([&]() -> int {
+      if (as) {
 	if (::mkdirat(pfd, leaf, m) < 0) {
+	  return -errno;
+	}
+	const int r = chown_raised(dpp, pfd, leaf, as->uid, as->gid);
+	if (r < 0) {
+	  return r;
+	}
+      }
+      int r = acting([&]() -> int {
+	if (!as && (::mkdirat(pfd, leaf, m) < 0)) {
 	  return -errno;
 	}
 	/* not subject to the umask */
@@ -18413,12 +18580,14 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	  }
 	}
 	::closedir(d);
-	return (::unlinkat(pfd, leaf, AT_REMOVEDIR) < 0) ? -errno : 0;
+	/* `d` itself is in the gateway's `<name>` */
+	return (!as && (::unlinkat(pfd, leaf, AT_REMOVEDIR) < 0)) ? -errno : 0;
       });
       if (r < 0) {
 	return r;
       }
-      if (as && (::rmdir(parent.c_str()) < 0)) {
+      if (as && ((::unlinkat(pfd, leaf, AT_REMOVEDIR) < 0) ||
+		 (::rmdir(parent.c_str()) < 0))) {
 	return -errno;
       }
     } else {

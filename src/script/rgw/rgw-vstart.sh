@@ -56,6 +56,10 @@
 #   --bucket-profile P  shared | strong:  the profile new nsfs buckets are
 #                       marked with.  The driver defaults to shared;  FSIO
 #                       (librgw, the librgw_file tests) needs strong.
+#   --access-model M    posix-strict | s3-metadata | s3-native:  what nsfs
+#                       does when S3 authorises an operation the filesystem
+#                       denies the requester (rgw_nsfs_access_model).  The
+#                       driver defaults to posix-strict.
 #   --data-root DIR     Serve objects from DIR/root instead of the build
 #                       directory (e.g. --data-root /mnt/nvme for fast
 #                       storage, or a tree another gateway wrote).
@@ -93,6 +97,7 @@ DATA_ROOT=""
 NOOBAA_CONFIG_ROOT=""
 ADOPTION_MODE=""
 BUCKET_PROFILE=""
+ACCESS_MODEL=""
 PERF=false
 PROFILE=false
 GPFS_ROOT=/mnt/rgw/nsfs
@@ -119,6 +124,7 @@ while [[ $# -gt 0 ]]; do
 		--noobaa-config-root) NOOBAA_CONFIG_ROOT="$2"; shift 2 ;;
 		--adoption-mode) ADOPTION_MODE="$2"; shift 2 ;;
 		--bucket-profile) BUCKET_PROFILE="$2"; shift 2 ;;
+		--access-model) ACCESS_MODEL="$2"; shift 2 ;;
 		--perf) PERF=true; shift ;;
 		--profile) PROFILE=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
@@ -219,10 +225,14 @@ for sub in lmdb root userdb; do
 		rm -f "$d" 2>/dev/null || true
 	else
 		rm -rf "$d"/* 2>/dev/null || true
-		# An impersonated run leaves entries other uids own, which
-		# the developer cannot remove;  vstart.sh's own clean then fails.
+		# An impersonated run leaves entries other uids own -- every
+		# bucket directory is its creator's -- which the developer
+		# cannot remove;  vstart.sh's own clean then fails.  Removed
+		# with sudo, which prompts where it must, as the fixture's
+		# chmod does;  refused only where nothing can answer a prompt.
 		if compgen -G "$d/*" >/dev/null; then
-			if sudo -n true 2>/dev/null; then
+			if sudo -n true 2>/dev/null || [[ -t 0 ]]; then
+				echo "==> removing entries other uids own in $d (sudo)"
 				sudo rm -rf "${d:?}"/*
 			else
 				echo "error: $d holds entries other uids own, left by a" >&2
@@ -323,6 +333,16 @@ if [[ -n "$BUCKET_PROFILE" ]]; then
 		   exit 1 ;;
 	esac
 	VSTART_OPTS+=(-o "rgw_nsfs_bucket_profile=$BUCKET_PROFILE")
+fi
+
+if [[ -n "$ACCESS_MODEL" ]]; then
+	case "$ACCESS_MODEL" in
+		posix-strict|s3-metadata|s3-native) ;;
+		*) echo "error: --access-model must be posix-strict," \
+			"s3-metadata or s3-native" >&2
+		   exit 1 ;;
+	esac
+	VSTART_OPTS+=(-o "rgw_nsfs_access_model=$ACCESS_MODEL")
 fi
 
 if $INOTIFY; then
@@ -714,11 +734,11 @@ if $IMPERSONATE; then
 	IMP_AK=0555b35654ad1656d804
 	IMP_SK='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
 
-	# The data root stays as the gateway made it.  Bucket
-	# directories are owned by the gateway and created sticky and
-	# writable, so identities create objects inside them without
-	# needing to reach them by path -- an impersonated open starts
-	# from the descriptor the gateway already holds.
+	# The data root stays as the gateway made it.  A bucket
+	# directory belongs to the identity that created the bucket, at
+	# 0770 with no sticky bit, as NooBaa makes it (DECISIONS
+	# 2026-10-23), so the developer cannot see inside one:  sudo for
+	# every look.
 
 	# testid is bound to the fixture uid so the seeded objects are
 	# owned by a real identity rather than by the gateway -- and so
@@ -751,7 +771,7 @@ if $IMPERSONATE; then
 	fi
 
 	IMP_DIR="$DATA_DIR/$IMP_BUCKET"
-	if [[ ! -f "$IMP_DIR/grouped.txt" ]]; then
+	if ! sudo test -f "$IMP_DIR/grouped.txt"; then
 		echo "error: $IMP_DIR/grouped.txt absent after creation;" \
 			"is $DATA_DIR the data root?" >&2
 		exit 1
@@ -760,25 +780,15 @@ if $IMPERSONATE; then
 	# Everything here now belongs to the identity that wrote it,
 	# so the developer cannot chmod any of it -- sudo throughout.
 	#
-	# Bucket directories under impersonation are gateway-owned and
-	# 1777:  writable, so identities can create objects in them.
-	#
-	# The sticky bit is not load-bearing.  A directory's owner may
-	# unlink anything inside it regardless, and the gateway owns
-	# every bucket directory -- so sticky does not stop one
-	# identity's object being removed on behalf of another, and
-	# deletion deliberately does not run under the requester's
-	# identity.  It is kept as a true statement about the
-	# filesystem rather than about RGW:  an identity reaching this
-	# directory by path, outside the gateway, cannot unlink
-	# another's objects.
-	#
-	# Asserted rather than set, so a change to that decision shows
-	# up here rather than silently.
-	case "$(stat -c %a "$IMP_DIR")" in
-		1777) ;;
-		*) echo "warning: $IMP_BUCKET is $(stat -c %a "$IMP_DIR")," \
-			"expected 1777" >&2 ;;
+	# The bucket directory is its creator's -- testid, so
+	# $IMP_UID_A -- at 0770 (raise site 4).  Asserted rather than
+	# set, so a change to that decision shows up here rather than
+	# silently.
+	case "$(sudo stat -c '%a %u' "$IMP_DIR")" in
+		"770 $IMP_UID_A") ;;
+		*) echo "warning: $IMP_BUCKET is" \
+			"$(sudo stat -c '%a %u' "$IMP_DIR")," \
+			"expected 770 $IMP_UID_A" >&2 ;;
 	esac
 
 	# the control:  readable by anyone, so a test that cannot read

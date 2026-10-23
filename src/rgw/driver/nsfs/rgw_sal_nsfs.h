@@ -2329,7 +2329,10 @@ public:
 			       CephContext* cct, optional_yield y) override;
 
   /* Internal APIs */
-  int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
+  /* `creator` is who the directory is given to (raise site 4), or
+   * no_authenticated_user where no request made it */
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed,
+	     const rgw_user& creator);
   nsfs::Directory* get_dir() { return dir.get(); }
   int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
   /* TODO dang Escape the bucket name for file use */
@@ -2806,9 +2809,10 @@ public:
   /* complete() resolves the requester and makes the object as it:  the
    * assembled file is created, or a data file linked in, and its
    * attributes written, as the identity.  Parts are written as their
-   * uploader by the part writer, as NooBaa writes them;  staging and the
-   * meta object stay the gateway's, as do ListParts and abort
-   * (DECISIONS.md 2026-10-15). */
+   * uploader by the part writer, as NooBaa writes them.  init() makes
+   * staging and the meta object as the uploader, and abort() removes
+   * staging as the requester (DECISIONS.md 2026-10-23);  ListParts
+   * stays the gateway's (DECISIONS.md 2026-10-15). */
 
   virtual const std::string& get_meta() const override { return mp_obj.meta; }
   virtual const std::string& get_key() const override { return mp_obj.oid; }
@@ -2883,6 +2887,8 @@ private:
    * directory keeps a raw parent pointer into it. */
   std::unique_ptr<nsfs::Directory> staging_root_dir;
   int load(const DoutPrefixProvider *dpp, bool create=false);
+  /* this upload's staging directory, as `identity`;  0 or -errno */
+  int remove_staging(const DoutPrefixProvider* dpp, optional_yield y);
 };
 
 class NSFSAtomicWriter : public StoreWriter {

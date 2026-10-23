@@ -516,10 +516,14 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
                                    bool src_as_gateway)
 {
   /* A copy is a read of the source and a write of the destination,
-   * and only the read is on the access-model axis.  The read can be
-   * an operation S3 authorised against an object the requester does
-   * not own;  the destination is the requester's and must stay so, or
-   * a copy they are entitled to lands owned by the gateway.
+   * and both are on the access-model axis.  The read can be an
+   * operation S3 authorised against an object the requester does not
+   * own;  the write can be a create S3 authorised in a directory the
+   * requester cannot write, a bucket another identity created.  Either
+   * is performed raised where the model permits it (`src_as_gateway`,
+   * the model's answer for data), and the destination is then given to
+   * the requester, as every raised create is (DECISIONS.md 2026-10-20),
+   * so a copy they are entitled to never lands owned by the gateway.
    *
    * A retry rather than a decision, unlike the publish
    * (NSFSObject::link_temp_file):  opening the source is idempotent,
@@ -538,6 +542,10 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
    * writes. */
   static constexpr uint64_t COPY_SOURCE_CAPS =
     nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  /* the destination's create, and then what gives it its owner */
+  static constexpr uint64_t COPY_DEST_CAPS =
+    nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  static constexpr uint64_t COPY_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
 
   int src_fd = -1;
   auto open_src = [&]() -> int {
@@ -565,28 +573,64 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     }
   });
 
-  /* the rest as `id`:  the destination is created as the requester */
-  return nsfs::with_identity(dpp, id, [&]() -> int {
+  /* The destination as `id`, and raised where the filesystem denies it
+   * and the model permits;  hoisted out of the identity block below
+   * for the same reason as the source.  A raised create is the
+   * gateway's until the chown, so its mode is set first, while the
+   * gateway may still set it. */
+  const int dst_flags =
+    O_WRONLY | O_NOFOLLOW | O_CREAT | (excl ? O_EXCL : O_TRUNC);
+  int dst_fd = -1;
+  auto open_dst = [&]() -> int {
+    dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags,
+		      file_create_mode());
+    return (dst_fd < 0) ? -errno : 0;
+  };
+  bool dst_raised = false;
+  int dret = nsfs::with_identity(dpp, id, open_dst, y);
+  if (((dret == -EACCES) || (dret == -EPERM)) && src_as_gateway &&
+      id.active()) {
+    dret = nsfs::with_capabilities(dpp, COPY_DEST_CAPS, open_dst);
+    if (dret == 0) {
+      dst_raised = true;
+      dret = apply_create_mode(dpp, dst_fd, file_create_mode(), null_yield);
+    }
+    if (dret == 0) {
+      dret = nsfs::with_capabilities(dpp, COPY_CHOWN_CAPS, [&]() -> int {
+	return (::fchown(dst_fd, id.cred.uid, id.cred.gid) < 0) ? -errno : 0;
+      });
+    }
+    if (dret == 0) {
+      ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem denied the"
+	" requester the destination " << dst_name << " and the gateway made"
+	" it as theirs, which the access model permits" << dendl;
+    } else if (dst_fd >= 0) {
+      ::close(dst_fd);
+      dst_fd = -1;
+      (void) nsfs::with_capabilities(dpp, COPY_DEST_CAPS, [&]() -> int {
+	return ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+      });
+    }
+  }
+  if (dret < 0) {
+    if (excl && (dret == -EEXIST)) {
+      /* lost the race;  the caller joins the winner's file */
+      return -EEXIST;
+    }
+    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat dst=" << dst_name
+      << " failed: " << cpp_strerror(-dret) << dendl;
+    return dret;
+  }
+
+  /* the rest as `id`, who now owns the destination either way */
+  int ret = nsfs::with_identity(dpp, id, [&]() -> int {
   struct statx stx;
   int ret = nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx);
   if (ret < 0) {
     int err = errno;
     ldpp_dout(dpp, 0) << "ERROR: clone_file: statx src=" << src_name
       << " failed: " << cpp_strerror(err) << dendl;
-    return -err;
-  }
-
-  int dst_flags = O_WRONLY | O_NOFOLLOW | O_CREAT | (excl ? O_EXCL : O_TRUNC);
-  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags,
-			file_create_mode());
-  if (dst_fd < 0) {
-    int err = errno;
-    if (excl && (err == EEXIST)) {
-      /* lost the race;  the caller joins the winner's file */
-      return -EEXIST;
-    }
-    ldpp_dout(dpp, 0) << "ERROR: clone_file: openat dst=" << dst_name
-      << " failed: " << cpp_strerror(err) << dendl;
+    ::close(dst_fd);
     return -err;
   }
 
@@ -599,10 +643,20 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: clone_file: copy " << src_name
       << " → " << dst_name << " failed: " << cpp_strerror(-ret) << dendl;
-    ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+    if (!dst_raised) {
+      ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+    }
   }
   return ret;
   }, y);
+  /* a raised destination is in a directory the requester cannot write,
+   * so its removal is the gateway's too */
+  if ((ret < 0) && dst_raised) {
+    (void) nsfs::with_capabilities(dpp, COPY_DEST_CAPS, [&]() -> int {
+      return ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
+    });
+  }
+  return ret;
 }
 
 int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
@@ -1047,7 +1101,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
    * has_clone(), and an active identity falls back to the copy
    * above. */
   if (excl &&
-      (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, 0) == 0)) {
+      (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, AT_EACCESS) == 0)) {
     return -EEXIST;
   }
 
