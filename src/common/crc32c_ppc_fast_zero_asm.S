@@ -1,6 +1,6 @@
 /*
  * Use the fixed point version of Barrett reduction to compute a mod n
- * over GF(2) for n = 0x104c11db7 using POWER8 instructions. We use k = 32.
+ * over GF(2) for n = 0x11edc6f41 using POWER8 instructions. We use k = 32.
  *
  * http://en.wikipedia.org/wiki/Barrett_reduction
  *
@@ -36,7 +36,6 @@
  * This is because the assembler has no builtin support for
  * registers, and we should either define them ourselves or
  * use their indexes explicitly like:
- *       addis   4,2,.bit_reflected_constants@toc@ha
  */
 #ifndef r2
 #define r2 2
@@ -44,26 +43,29 @@
 
 	.section	.data
 .balign 16
-.constants:
+
+/*
+* Barrett reduction for CRC-32C (Castagnoli polynomial 0x1EDC6F41).
+*
+* Adapted from the hand-written barrett_reduction.S in crc32-vpmsum:
+* https://github.com/antonblanchard/crc32-vpmsum
+* Upstream's barrett_reduction_constants.c hardcodes the IEEE 802.3
+* polynomial, so its barrett_reduction.S is CRC-32, not CRC-32C. To
+* regenerate the constants below, set CRC=0x1EDC6F41 / CRC_FULL=0x11EDC6F41
+* in barrett_reduction_constants.c, build and run it, and paste its output.
+*/
+.barrett_fz_constants:
 	/* Barrett constant m - (4^32)/n */
-	.octa 0x00000000000000000000000104d101df
+	.octa 0x0000000000000000000000011f91caf6	/* x^64 div p(x) */
 
 	/* Barrett constant n */
-	.octa 0x00000000000000000000000104c11db7
+	.octa 0x0000000000000000000000011edc6f41
 
-.bit_reflected_constants:
-	/* 33 bit reflected Barrett constant m - (4^32)/n */
-	.octa 0x000000000000000000000001f7011641
-
-	/* 33 bit reflected Barrett constant n */
-	.octa 0x000000000000000000000001db710641
-
-	.text
-
+.text
 /* unsigned int barrett_reduction(unsigned long val) */
 FUNC_START(barrett_reduction)
-	addis   r4,r2,.constants@toc@ha
-	addi    r4,r4,.constants@toc@l
+	addis	r4,r2,.barrett_fz_constants@toc@ha
+	addi	r4,r4,.barrett_fz_constants@toc@l
 
 	li	r5,16
 	vxor	v1,v1,v1	/* zero v1 */
@@ -97,47 +99,3 @@ FUNC_START(barrett_reduction)
 
 	blr
 FUNC_END(barrett_reduction)
-
-/* unsigned int barrett_reduction_reflected(unsigned long val) */
-FUNC_START(barrett_reduction_reflected)
-	addis   r4,r2,.bit_reflected_constants@toc@ha
-	addi    r4,r4,.bit_reflected_constants@toc@l
-
-	li	r5,16
-	vxor	v1,v1,v1	/* zero v1 */
-
-	/* Get a into v0 */
-	MTVRD(v0, r3)
-	vsldoi	v0,v1,v0,8	/* shift into bottom 64 bits, this is a */
-
-	/* Load constants */
-	lvx	v2,0,r4		/* m */
-	lvx	v3,r5,r4	/* n */
-
-	vspltisw v5,-1		/* all ones */
-	vsldoi	v6,v1,v5,4	/* bitmask with low 32 bits set */
-
-	/*
-	 * Now for the Barrett reduction algorithm. Instead of bit reflecting
-	 * our data (which is expensive to do), we bit reflect our constants
-	 * and our algorithm, which means the intermediate data in our vector
-	 * registers goes from 0-63 instead of 63-0. We can reflect the
-	 * algorithm because we don't carry in mod 2 arithmetic.
-	 */
-	vand	v4,v0,v6	/* bottom 32 bits of a */
-	VPMSUMD(v4,v4,v2)	/* ma */
-	vand	v4,v4,v6	/* bottom 32bits of ma */
-	VPMSUMD(v4,v4,v3)	/* qn */
-	vxor	v0,v0,v4	/* a - qn, subtraction is xor in GF(2) */
-
-	/*
-	 * Since we are bit reflected, the result (ie the low 32 bits) is in the
-	 * high 32 bits. We just need to shift it left 4 bytes
-	 * V0 [ 0 1 X 3 ]
-	 * V0 [ 0 X 2 3 ]
-	 */
-	vsldoi	v0,v0,v1,4	/* shift result into top 64 bits of v0 */
-	MFVRD(r3, v0)
-
-	blr
-FUNC_END(barrett_reduction_reflected)
