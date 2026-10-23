@@ -13,7 +13,7 @@
  *
  * Whee! A mini-demo for libfdb! 
  *
- * This shows how to take a user-defined data stucture and both store and
+ * This shows how to take a user-defined data structure and both store and
  * retrieve it in FoundationDB. 
  *
 */
@@ -46,12 +46,12 @@ static const vector<person> nifty_people {
   {
     .name = "Albrecht Duerer",
     .year_born = 1471,
-    .titles = { "Painter", "Printmaker", "Northern Renaissance artist" },
+    .titles = { "Painter", "Printmaker", "Northern Renaissance artist" }
   },
   {
     .name = "Maria Theresa",
     .year_born = 1717,
-    .titles = { "Habsburg ruler", "Archduchess of Austria", "Queen of Hungary and Bohemia" },
+    .titles = { "Habsburg ruler", "Archduchess of Austria", "Queen of Hungary and Bohemia" }
   }
 };
 
@@ -59,7 +59,7 @@ static int run_example()
 try
 {
  auto dbh = lfdb::create_database();
- // Experimental option lists preserve both tag applications in written order.
+ // Preserve both tag applications in written order.
  const lfdb::transaction_options options {
   {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}},
   {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},

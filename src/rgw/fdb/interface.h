@@ -3,7 +3,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2025-2026 International Business Machines Corp. (IBM)
- *      
+ *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
@@ -12,7 +12,7 @@
 */
 
 #ifndef CEPH_FDB_INTERFACE_H
-#define CEPH_FDB_INTERFACE_H
+ #define CEPH_FDB_INTERFACE_H
 
 #include "conversion.h"
 #include "transaction.h"
@@ -20,23 +20,23 @@
 #include <boost/container/small_vector.hpp>
 
 #include <span>
-#include <tuple>
 #include <string>
-#include <vector>
 #include <string_view>
+#include <tuple>
+#include <vector>
 
-#include <ranges>
-#include <iterator>
 #include <algorithm>
+#include <iterator>
+#include <ranges>
 
-#include <memory>
-#include <cstdint>
-#include <utility>
 #include <concepts>
-#include <functional>
-#include <stop_token>
+#include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <memory>
+#include <stop_token>
 #include <type_traits>
+#include <utility>
 
 namespace ceph::libfdb {
 
@@ -65,7 +65,7 @@ concept key_value_forward_range =
 /* This should be called when the application is all done with FoundationDB: */
 inline void shutdown_libfdb()
 {
- ceph::libfdb::detail::database_system::shutdown_fdb();
+ ::ceph::libfdb::detail::database_system::shutdown_fdb();
 }
 
 // By default, libfdb applies its internal database defaults:
@@ -110,7 +110,7 @@ namespace api {
  const auto *version = fdb_get_client_version();
 
  if (nullptr == version) {
-  throw libfdb_exception("invalid FDB client version");
+  throw libfdb_exception(libfdb_error_code::invalid_result, "invalid FDB client version");
  }
 
  return std::string(version);
@@ -171,10 +171,16 @@ namespace detail {
 // fallback for larger values:
 using scalar_encoding_buffer = boost::container::small_vector<std::uint8_t, 256>;
 
-inline auto encode_scalar_value(const auto& value,
-                                scalar_encoding_buffer& buffer)
+inline auto encode_scalar_value(const auto& value, scalar_encoding_buffer& buffer)
 {
  return convert_to_buffer(value, buffer, zpp::bits::exact_enlarger {});
+}
+
+// String-like values share the length-prefixed byte encoding, including literals:
+inline auto encode_scalar_value(const concepts::stringview_convertible auto& value,
+                                scalar_encoding_buffer& buffer)
+{
+ return convert_to_buffer(std::string_view(value), buffer, zpp::bits::exact_enlarger {});
 }
 
 template <typename OutValuesT>
@@ -184,9 +190,6 @@ struct value_collector_t final
 
  void operator()(std::span<const std::uint8_t> out_data) const;
 };
-
-template <typename OutValuesT>
-auto value_collector(OutValuesT& out_values) -> value_collector_t<OutValuesT>;
 
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>
@@ -199,13 +202,12 @@ template <typename OutputTargetOrFnT>
 requires (not concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>)
 auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
 {
- return value_collector(output_target_or_fn);
+ return value_collector_t {output_target_or_fn};
 }
 
 } // namespace detail
 
-[[nodiscard]] inline watch_handle make_watch(database_handle dbh,
-                                             const transaction_options& options,
+[[nodiscard]] inline watch_handle make_watch(database_handle dbh, const transaction_options& options,
                                              std::string_view key)
 {
  return detail::in_transaction(std::move(dbh), options,
@@ -214,14 +216,12 @@ auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
           });
 }
 
-[[nodiscard]] inline watch_handle make_watch(database_handle dbh,
-                                             std::string_view key)
+[[nodiscard]] inline watch_handle make_watch(database_handle dbh, std::string_view key)
 {
  return make_watch(std::move(dbh), transaction_options {}, key);
 }
 
-[[nodiscard]] inline std::string get_key(database_handle dbh,
-                                         const transaction_options& options,
+[[nodiscard]] inline std::string get_key(database_handle dbh, const transaction_options& options,
                                          const key_selector& selector,
                                          const read_mode mode = read_mode::serializable)
 {
@@ -231,8 +231,7 @@ auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
           });
 }
 
-[[nodiscard]] inline std::string get_key(database_handle dbh,
-                                         const key_selector& selector,
+[[nodiscard]] inline std::string get_key(database_handle dbh, const key_selector& selector,
                                          const read_mode mode = read_mode::serializable)
 {
  return get_key(std::move(dbh), transaction_options {}, selector, mode);
@@ -243,13 +242,11 @@ concept watch_callback =
  std::invocable<FnT&, std::string_view> &&
  std::is_void_v<std::invoke_result_t<FnT&, std::string_view>>;
 
-template <typename FnT>
-requires watch_callback<FnT>
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
                   std::string_view key,
                   std::stop_token stop_token,
-                  FnT&& fn)
+                  watch_callback auto&& fn)
 {
  std::string watched_key(key);
 
@@ -260,37 +257,32 @@ void watched_loop(database_handle dbh,
  }
 }
 
-template <typename FnT>
-requires watch_callback<FnT>
 void watched_loop(database_handle dbh,
                   std::string_view key,
                   std::stop_token stop_token,
-                  FnT&& fn)
+                  watch_callback auto&& fn)
 {
- return watched_loop(std::move(dbh), transaction_options {}, key,
-                     stop_token, std::forward<FnT>(fn));
+ watched_loop(std::move(dbh), transaction_options {}, key,
+              stop_token, std::forward<decltype(fn)>(fn));
 }
 
 /* watched_loop() runs until the watch is cancelled or an exception escapes.
  * For more complex stop behavior, see make_watch(), ready(), cancel(), and
  * wait_for_event(): */
-template <typename FnT>
-requires watch_callback<FnT>
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
                   std::string_view key,
-                  FnT&& fn)
+                  watch_callback auto&& fn)
 {
- return watched_loop(std::move(dbh), options, key,
-                     std::stop_token {}, std::forward<FnT>(fn));
+ watched_loop(std::move(dbh), options, key,
+              std::stop_token {}, std::forward<decltype(fn)>(fn));
 }
 
-template <typename FnT>
-requires watch_callback<FnT>
-void watched_loop(database_handle dbh, std::string_view key, FnT&& fn)
+void watched_loop(database_handle dbh, std::string_view key,
+                  watch_callback auto&& fn)
 {
- return watched_loop(std::move(dbh), transaction_options {}, key,
-                     std::forward<FnT>(fn));
+ watched_loop(std::move(dbh), transaction_options {}, key,
+              std::forward<decltype(fn)>(fn));
 }
 
 inline void set(transaction_handle txn,
@@ -306,7 +298,7 @@ inline void set(transaction_handle txn,
           });
 }
 
-// If someone gives us an explicit transaction handle, they almost certainly don't want to commit 
+// If someone gives us an explicit transaction handle, they almost certainly don't want to commit
 // it (though they can always specify otherwise):
 inline void set(transaction_handle txn,
                 const concepts::libfdb_key auto& k,
@@ -316,18 +308,16 @@ inline void set(transaction_handle txn,
 }
 
 // ...conversely, with a database handle given, we can assume they DO want to auto-commit:
-inline void set(database_handle dbh,
-                const transaction_options& options,
+inline void set(database_handle dbh, const transaction_options& options,
                 const concepts::libfdb_key auto& k, const auto& v)
 {
  return detail::in_transaction(std::move(dbh), options,
-          [&k, &v](transaction_handle& txn) {
+          detail::invoke_user_callback(std::in_place, [&k, &v](transaction_handle& txn) {
             return set(txn, k, v, commit_after_op::no_commit);
-          });
+          }));
 }
 
-inline void set(database_handle dbh,
-                const concepts::libfdb_key auto& k, const auto& v)
+inline void set(database_handle dbh, const concepts::libfdb_key auto& k, const auto& v)
 {
  return set(std::move(dbh), transaction_options {}, k, v);
 }
@@ -339,27 +329,24 @@ inline void set(transaction_handle txn,
 {
  return detail::commit_noreplay(txn, commit_after,
           [&b, &e](const transaction_handle& active_txn) {
-            std::vector<std::uint8_t> fixed_buffer;
+            detail::scalar_encoding_buffer encoded;
 
-            std::ranges::for_each(std::ranges::subrange(b, e),
-                      [&active_txn, &fixed_buffer](const auto& kv) {
-                        detail::transaction_set_kv_bytes(active_txn,
-                                  detail::as_byte_view(kv.first),
-                                  ceph::libfdb::to::convert(kv.second, fixed_buffer));
-                      });
+            for (const auto& kv : std::ranges::subrange(b, e)) {
+             detail::transaction_set_kv_bytes(active_txn,
+                       detail::as_byte_view(kv.first),
+                       detail::encode_scalar_value(kv.second, encoded));
+            }
           });
 }
 
 template <concepts::key_value_iterator IteratorT>
 requires std::forward_iterator<IteratorT>
-inline void set(database_handle dbh,
-                const transaction_options& options,
-                IteratorT b, IteratorT e)
+inline void set(database_handle dbh, const transaction_options& options, IteratorT b, IteratorT e)
 {
  return detail::in_transaction(std::move(dbh), options,
-          [b, e](transaction_handle& txn) {
+          detail::invoke_user_callback(std::in_place, [b, e](transaction_handle& txn) {
             return set(txn, b, e, commit_after_op::no_commit);
-          });
+          }));
 }
 
 template <concepts::key_value_iterator IteratorT>
@@ -384,61 +371,16 @@ inline void set(transaction_handle txn, concepts::key_value_range auto&& kvs)
  return set(txn, kvs, commit_after_op::no_commit);
 }
 
-inline void set(database_handle dbh,
-                const transaction_options& options,
+inline void set(database_handle dbh, const transaction_options& options,
                 concepts::key_value_forward_range auto&& kvs)
 {
  // Database-handle operations may replay on retry, so the range must be multipass.
- return detail::in_transaction(std::move(dbh), options,
-          [&kvs](transaction_handle& txn) {
-            return set(txn, kvs, commit_after_op::no_commit);
-          });
+ return set(std::move(dbh), options, std::ranges::begin(kvs), std::ranges::end(kvs));
 }
 
 inline void set(database_handle dbh, concepts::key_value_forward_range auto&& kvs)
 {
- return set(std::move(dbh), transaction_options {},
-            std::forward<decltype(kvs)>(kvs));
-}
-
-// Note that we force things into a span so that byte streams get the proper encoding expected by zpp_bits:
-inline void set(transaction_handle txn,
-                const concepts::libfdb_key auto& k,
-                const ceph::libfdb::concepts::stringview_convertible auto& v,
-                const commit_after_op commit_after)
-{
- return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_byte_view(k), value = std::string_view(v)](const transaction_handle& active_txn) {
-            detail::scalar_encoding_buffer encoded;
-
-            return detail::transaction_set_kv_bytes(
-              active_txn, key, detail::encode_scalar_value(value, encoded));
-          });
-}
-
-inline void set(transaction_handle txn,
-                const concepts::libfdb_key auto& k,
-                const ceph::libfdb::concepts::stringview_convertible auto& v)
-{
- return set(txn, k, v, commit_after_op::no_commit);
-}
-
-inline void set(database_handle dbh,
-                const transaction_options& options,
-                const concepts::libfdb_key auto& k,
-                const ceph::libfdb::concepts::stringview_convertible auto& v)
-{
- return detail::in_transaction(std::move(dbh), options,
-          [&k, value = std::string_view(v)](transaction_handle& txn) {
-            return set(txn, k, value, commit_after_op::no_commit);
-          });
-}
-
-inline void set(database_handle dbh,
-                const concepts::libfdb_key auto& k,
-                const ceph::libfdb::concepts::stringview_convertible auto& v)
-{
- return set(std::move(dbh), transaction_options {}, k, v);
+ return set(std::move(dbh), transaction_options {}, std::forward<decltype(kvs)>(kvs));
 }
 
 inline void set(transaction_handle txn,
@@ -450,8 +392,7 @@ inline void set(transaction_handle txn,
           [&k, &v](const transaction_handle& active_txn) {
             detail::scalar_encoding_buffer encoded;
 
-            return active_txn->set(
-              k, detail::encode_scalar_value(v, encoded));
+            return active_txn->set(k, detail::encode_scalar_value(v, encoded));
           });
 }
 
@@ -462,20 +403,16 @@ inline void set(transaction_handle txn,
  return set(txn, k, v, commit_after_op::no_commit);
 }
 
-inline void set(database_handle dbh,
-                const transaction_options& options,
-                const versioned_bytes& k,
-                const auto& v)
+inline void set(database_handle dbh, const transaction_options& options,
+                const versioned_bytes& k, const auto& v)
 {
  return detail::in_transaction(std::move(dbh), options,
-          [&k, &v](transaction_handle& txn) {
+          detail::invoke_user_callback(std::in_place, [&k, &v](transaction_handle& txn) {
             return set(txn, k, v, commit_after_op::no_commit);
-          });
+          }));
 }
 
-inline void set(database_handle dbh,
-                const versioned_bytes& k,
-                const auto& v)
+inline void set(database_handle dbh, const versioned_bytes& k, const auto& v)
 {
  return set(std::move(dbh), transaction_options {}, k, v);
 }
@@ -490,10 +427,8 @@ inline void set(transaction_handle,
                 const versioned_bytes&,
                 const versioned_bytes&) = delete;
 
-inline void set(database_handle,
-                const transaction_options&,
-                const versioned_bytes&,
-                const versioned_bytes&) = delete;
+inline void set(database_handle, const transaction_options&,
+                const versioned_bytes&, const versioned_bytes&) = delete;
 
 inline void set(database_handle,
                 const versioned_bytes&,
@@ -517,20 +452,16 @@ inline void set(transaction_handle txn,
  return set(txn, k, v, commit_after_op::no_commit);
 }
 
-inline void set(database_handle dbh,
-                const transaction_options& options,
-                const concepts::libfdb_key auto& k,
-                const versioned_bytes& v)
+inline void set(database_handle dbh, const transaction_options& options,
+                const concepts::libfdb_key auto& k, const versioned_bytes& v)
 {
  return detail::in_transaction(std::move(dbh), options,
-          [&k, &v](transaction_handle& txn) {
+          detail::invoke_user_callback(std::in_place, [&k, &v](transaction_handle& txn) {
             return set(txn, k, v, commit_after_op::no_commit);
-          });
+          }));
 }
 
-inline void set(database_handle dbh,
-                const concepts::libfdb_key auto& k,
-                const versioned_bytes& v)
+inline void set(database_handle dbh, const concepts::libfdb_key auto& k, const versioned_bytes& v)
 {
  return set(std::move(dbh), transaction_options {}, k, v);
 }
@@ -574,7 +505,7 @@ namespace detail {
 
 inline auto byte_span(const std::string_view bytes)
 {
- return ceph::libfdb::detail::as_byte_view(bytes);
+ return ::ceph::libfdb::detail::as_byte_view(bytes);
 }
 
 template <typename FDBBytesT>
@@ -586,9 +517,9 @@ inline auto byte_span(const FDBBytesT& bytes)
 
 inline constexpr auto integral_param =
  []<typename ValueT>(const ValueT value)
- requires ceph::libfdb::detail::fdb_integer_value<ValueT>
+ requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
  {
-  return ceph::libfdb::detail::little_endian_bytes(value);
+  return ::ceph::libfdb::detail::little_endian_bytes(value);
  };
 
 inline constexpr auto byte_param =
@@ -605,22 +536,20 @@ inline void atomic_op(transaction_handle txn,
                       const ParamT& param,
                       const commit_after_op commit_after)
 {
- return ceph::libfdb::detail::commit_noreplay(txn, commit_after,
-          [key = ceph::libfdb::detail::as_byte_view(k),
+ return ::ceph::libfdb::detail::commit_noreplay(txn, commit_after,
+          [key = ::ceph::libfdb::detail::as_byte_view(k),
            value = MaterializeParam(param)](const transaction_handle& active_txn) {
-            return ceph::libfdb::detail::transaction_atomic_op(
+            return ::ceph::libfdb::detail::transaction_atomic_op(
              active_txn, key, std::span<const std::uint8_t>(value), MutationKind);
           });
 }
 
 template <FDBMutationType MutationKind, auto MaterializeParam, typename ParamT>
 requires requires(const ParamT& value) { MaterializeParam(value); }
-inline void managed_atomic_op(database_handle dbh,
-                              const transaction_options& options,
-                              const concepts::libfdb_key auto& k,
-                              const ParamT& param)
+inline void managed_atomic_op(database_handle dbh, const transaction_options& options,
+                              const concepts::libfdb_key auto& k, const ParamT& param)
 {
- return ceph::libfdb::detail::in_transaction(std::move(dbh), options,
+ return ::ceph::libfdb::detail::in_transaction(std::move(dbh), options,
           [&k, &param](transaction_handle& txn) {
             return atomic_op<MutationKind, MaterializeParam>(
              txn, k, param, commit_after_op::no_commit);
@@ -629,9 +558,7 @@ inline void managed_atomic_op(database_handle dbh,
 
 template <FDBMutationType MutationKind, auto MaterializeParam, typename ParamT>
 requires requires(const ParamT& value) { MaterializeParam(value); }
-inline void atomic_op(database_handle dbh,
-                      const concepts::libfdb_key auto& k,
-                      const ParamT& param)
+inline void atomic_op(database_handle dbh, const concepts::libfdb_key auto& k, const ParamT& param)
 {
  return managed_atomic_op<MutationKind, MaterializeParam>(
   std::move(dbh), transaction_options {}, k, param);
@@ -640,7 +567,7 @@ inline void atomic_op(database_handle dbh,
 } // namespace detail
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void add(transaction_handle txn,
                 const concepts::libfdb_key auto& k,
                 const ValueT value,
@@ -651,18 +578,16 @@ inline void add(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
-inline void add(database_handle dbh,
-                const transaction_options& options,
-                const concepts::libfdb_key auto& k,
-                const ValueT value)
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
+inline void add(database_handle dbh, const transaction_options& options,
+                const concepts::libfdb_key auto& k, const ValueT value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_ADD, detail::integral_param>(
   std::move(dbh), options, k, value);
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void add(database_handle dbh,
                 const concepts::libfdb_key auto& k,
                 const ValueT value)
@@ -683,10 +608,8 @@ inline void min(transaction_handle txn,
 
 template <typename ValueT>
 requires (std::unsigned_integral<ValueT> && not std::same_as<ValueT, bool>)
-inline void min(database_handle dbh,
-                const transaction_options& options,
-                const concepts::libfdb_key auto& k,
-                const ValueT value)
+inline void min(database_handle dbh, const transaction_options& options,
+                const concepts::libfdb_key auto& k, const ValueT value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_MIN, detail::integral_param>(
   std::move(dbh), options, k, value);
@@ -694,9 +617,7 @@ inline void min(database_handle dbh,
 
 template <typename ValueT>
 requires (std::unsigned_integral<ValueT> && not std::same_as<ValueT, bool>)
-inline void min(database_handle dbh,
-                const concepts::libfdb_key auto& k,
-                const ValueT value)
+inline void min(database_handle dbh, const concepts::libfdb_key auto& k, const ValueT value)
 {
  return min(std::move(dbh), transaction_options {}, k, value);
 }
@@ -714,10 +635,8 @@ inline void max(transaction_handle txn,
 
 template <typename ValueT>
 requires (std::unsigned_integral<ValueT> && not std::same_as<ValueT, bool>)
-inline void max(database_handle dbh,
-                const transaction_options& options,
-                const concepts::libfdb_key auto& k,
-                const ValueT value)
+inline void max(database_handle dbh, const transaction_options& options,
+                const concepts::libfdb_key auto& k, const ValueT value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_MAX, detail::integral_param>(
   std::move(dbh), options, k, value);
@@ -733,7 +652,7 @@ inline void max(database_handle dbh,
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_and(transaction_handle txn,
                     const concepts::libfdb_key auto& k,
                     const ValueT value,
@@ -744,18 +663,16 @@ inline void bit_and(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
-inline void bit_and(database_handle dbh,
-                    const transaction_options& options,
-                    const concepts::libfdb_key auto& k,
-                    const ValueT value)
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
+inline void bit_and(database_handle dbh, const transaction_options& options,
+                    const concepts::libfdb_key auto& k, const ValueT value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_BIT_AND, detail::integral_param>(
   std::move(dbh), options, k, value);
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_and(database_handle dbh,
                     const concepts::libfdb_key auto& k,
                     const ValueT value)
@@ -764,7 +681,7 @@ inline void bit_and(database_handle dbh,
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_or(transaction_handle txn,
                    const concepts::libfdb_key auto& k,
                    const ValueT value,
@@ -775,27 +692,23 @@ inline void bit_or(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
-inline void bit_or(database_handle dbh,
-                   const transaction_options& options,
-                   const concepts::libfdb_key auto& k,
-                   const ValueT value)
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
+inline void bit_or(database_handle dbh, const transaction_options& options,
+                   const concepts::libfdb_key auto& k, const ValueT value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_BIT_OR, detail::integral_param>(
   std::move(dbh), options, k, value);
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
-inline void bit_or(database_handle dbh,
-                   const concepts::libfdb_key auto& k,
-                   const ValueT value)
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
+inline void bit_or(database_handle dbh, const concepts::libfdb_key auto& k, const ValueT value)
 {
  return bit_or(std::move(dbh), transaction_options {}, k, value);
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_xor(transaction_handle txn,
                     const concepts::libfdb_key auto& k,
                     const ValueT value,
@@ -806,21 +719,17 @@ inline void bit_xor(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
-inline void bit_xor(database_handle dbh,
-                    const transaction_options& options,
-                    const concepts::libfdb_key auto& k,
-                    const ValueT value)
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
+inline void bit_xor(database_handle dbh, const transaction_options& options,
+                    const concepts::libfdb_key auto& k, const ValueT value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_BIT_XOR, detail::integral_param>(
   std::move(dbh), options, k, value);
 }
 
 template <typename ValueT>
-requires ceph::libfdb::detail::fdb_integer_value<ValueT>
-inline void bit_xor(database_handle dbh,
-                    const concepts::libfdb_key auto& k,
-                    const ValueT value)
+requires ::ceph::libfdb::detail::fdb_integer_value<ValueT>
+inline void bit_xor(database_handle dbh, const concepts::libfdb_key auto& k, const ValueT value)
 {
  return bit_xor(std::move(dbh), transaction_options {}, k, value);
 }
@@ -838,10 +747,8 @@ inline void byte_min(transaction_handle txn,
 
 template <typename FDBBytesT>
 requires requires(const FDBBytesT& value) { detail::byte_span(value); }
-inline void byte_min(database_handle dbh,
-                     const transaction_options& options,
-                     const concepts::libfdb_key auto& k,
-                     const FDBBytesT& value)
+inline void byte_min(database_handle dbh, const transaction_options& options,
+                     const concepts::libfdb_key auto& k, const FDBBytesT& value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_BYTE_MIN, detail::byte_param>(
   std::move(dbh), options, k, value);
@@ -849,9 +756,7 @@ inline void byte_min(database_handle dbh,
 
 template <typename FDBBytesT>
 requires requires(const FDBBytesT& value) { detail::byte_span(value); }
-inline void byte_min(database_handle dbh,
-                     const concepts::libfdb_key auto& k,
-                     const FDBBytesT& value)
+inline void byte_min(database_handle dbh, const concepts::libfdb_key auto& k, const FDBBytesT& value)
 {
  return byte_min(std::move(dbh), transaction_options {}, k, value);
 }
@@ -869,10 +774,8 @@ inline void byte_max(transaction_handle txn,
 
 template <typename FDBBytesT>
 requires requires(const FDBBytesT& value) { detail::byte_span(value); }
-inline void byte_max(database_handle dbh,
-                     const transaction_options& options,
-                     const concepts::libfdb_key auto& k,
-                     const FDBBytesT& value)
+inline void byte_max(database_handle dbh, const transaction_options& options,
+                     const concepts::libfdb_key auto& k, const FDBBytesT& value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_BYTE_MAX, detail::byte_param>(
   std::move(dbh), options, k, value);
@@ -900,10 +803,8 @@ inline void append_if_fits(transaction_handle txn,
 
 template <typename FDBBytesT>
 requires requires(const FDBBytesT& value) { detail::byte_span(value); }
-inline void append_if_fits(database_handle dbh,
-                           const transaction_options& options,
-                           const concepts::libfdb_key auto& k,
-                           const FDBBytesT& value)
+inline void append_if_fits(database_handle dbh, const transaction_options& options,
+                           const concepts::libfdb_key auto& k, const FDBBytesT& value)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_APPEND_IF_FITS, detail::byte_param>(
   std::move(dbh), options, k, value);
@@ -912,8 +813,7 @@ inline void append_if_fits(database_handle dbh,
 template <typename FDBBytesT>
 requires requires(const FDBBytesT& value) { detail::byte_span(value); }
 inline void append_if_fits(database_handle dbh,
-                           const concepts::libfdb_key auto& k,
-                           const FDBBytesT& value)
+                           const concepts::libfdb_key auto& k, const FDBBytesT& value)
 {
  return append_if_fits(std::move(dbh), transaction_options {}, k, value);
 }
@@ -931,10 +831,8 @@ inline void compare_and_clear(transaction_handle txn,
 
 template <typename FDBBytesT>
 requires requires(const FDBBytesT& value) { detail::byte_span(value); }
-inline void compare_and_clear(database_handle dbh,
-                              const transaction_options& options,
-                              const concepts::libfdb_key auto& k,
-                              const FDBBytesT& expected)
+inline void compare_and_clear(database_handle dbh, const transaction_options& options,
+                              const concepts::libfdb_key auto& k, const FDBBytesT& expected)
 {
  return detail::managed_atomic_op<FDB_MUTATION_TYPE_COMPARE_AND_CLEAR, detail::byte_param>(
   std::move(dbh), options, k, expected);
@@ -943,11 +841,9 @@ inline void compare_and_clear(database_handle dbh,
 template <typename FDBBytesT>
 requires requires(const FDBBytesT& value) { detail::byte_span(value); }
 inline void compare_and_clear(database_handle dbh,
-                              const concepts::libfdb_key auto& k,
-                              const FDBBytesT& expected)
+                              const concepts::libfdb_key auto& k, const FDBBytesT& expected)
 {
- return compare_and_clear(
-  std::move(dbh), transaction_options {}, k, expected);
+ return compare_and_clear(std::move(dbh), transaction_options {}, k, expected);
 }
 
 } // namespace atomic
@@ -956,25 +852,23 @@ inline void compare_and_clear(database_handle dbh,
 
 namespace ceph::libfdb {
 // erase() in libfdb is clear() in FDB parlance:
-inline void erase(ceph::libfdb::transaction_handle txn,
-                  const query::expression auto& selection,
+inline void erase(::ceph::libfdb::transaction_handle txn, const query::expression auto& selection,
                   const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
           [&selection](const transaction_handle& active_txn) {
-            query::for_each_interval(selection, [&active_txn](const ceph::libfdb::select& interval) {
+            query::for_each_interval(selection, [&active_txn](const ::ceph::libfdb::select& interval) {
               detail::transaction_clear_range(active_txn, interval);
             });
           });
 }
 
-inline void erase(ceph::libfdb::transaction_handle txn, const query::expression auto& selection)
+inline void erase(::ceph::libfdb::transaction_handle txn, const query::expression auto& selection)
 {
  return erase(txn, selection, commit_after_op::no_commit);
 }
 
-inline void erase(ceph::libfdb::database_handle dbh,
-                  const transaction_options& options,
+inline void erase(::ceph::libfdb::database_handle dbh, const transaction_options& options,
                   const query::expression auto& selection)
 {
  return detail::in_transaction(std::move(dbh), options,
@@ -983,14 +877,12 @@ inline void erase(ceph::libfdb::database_handle dbh,
           });
 }
 
-inline void erase(ceph::libfdb::database_handle dbh,
-                  const query::expression auto& selection)
+inline void erase(::ceph::libfdb::database_handle dbh, const query::expression auto& selection)
 {
  return erase(std::move(dbh), transaction_options {}, selection);
 }
 
-inline void erase(ceph::libfdb::transaction_handle txn,
-                  const concepts::libfdb_key auto& k,
+inline void erase(::ceph::libfdb::transaction_handle txn, const concepts::libfdb_key auto& k,
                   const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
@@ -999,13 +891,12 @@ inline void erase(ceph::libfdb::transaction_handle txn,
           });
 }
 
-inline void erase(ceph::libfdb::transaction_handle txn, const concepts::libfdb_key auto& k)
+inline void erase(::ceph::libfdb::transaction_handle txn, const concepts::libfdb_key auto& k)
 {
  return erase(txn, k, commit_after_op::no_commit);
 }
 
-inline void erase(ceph::libfdb::database_handle dbh,
-                  const transaction_options& options,
+inline void erase(::ceph::libfdb::database_handle dbh, const transaction_options& options,
                   const concepts::libfdb_key auto& k)
 {
  return detail::in_transaction(std::move(dbh), options,
@@ -1014,8 +905,7 @@ inline void erase(ceph::libfdb::database_handle dbh,
           });
 }
 
-inline void erase(ceph::libfdb::database_handle dbh,
-                  const concepts::libfdb_key auto& k)
+inline void erase(::ceph::libfdb::database_handle dbh, const concepts::libfdb_key auto& k)
 {
  return erase(std::move(dbh), transaction_options {}, k);
 }
@@ -1028,7 +918,7 @@ inline void mark_conflict(transaction_handle txn,
 {
  bool marked = false;
 
- query::for_each_interval(selection, [&](const ceph::libfdb::select& interval) {
+ query::for_each_interval(selection, [&txn, &marked, type](const ::ceph::libfdb::select& interval) {
   transaction_mark_conflict_range(txn, interval, type);
   marked = true;
  });
@@ -1084,11 +974,9 @@ inline void mark_conflict_write(transaction_handle txn,
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
-inline bool get(ceph::libfdb::transaction_handle txn,
-                const concepts::libfdb_key auto& key,
-                OutputTargetOrFnT&& output_target_or_fn,
-                const read_mode mode,
-                const commit_after_op commit_after)
+inline bool get(::ceph::libfdb::transaction_handle txn,
+                const concepts::libfdb_key auto& key, OutputTargetOrFnT&& output_target_or_fn,
+                const read_mode mode, const commit_after_op commit_after)
 {
  return detail::commit_noreplay(
    txn, commit_after,
@@ -1103,9 +991,8 @@ inline bool get(ceph::libfdb::transaction_handle txn,
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
-inline bool get(ceph::libfdb::transaction_handle txn,
-                const concepts::libfdb_key auto& key,
-                OutputTargetOrFnT&& output_target_or_fn,
+inline bool get(::ceph::libfdb::transaction_handle txn,
+                const concepts::libfdb_key auto& key, OutputTargetOrFnT&& output_target_or_fn,
                 const commit_after_op commit_after)
 {
  return get(txn, key, std::forward<OutputTargetOrFnT>(output_target_or_fn),
@@ -1115,9 +1002,8 @@ inline bool get(ceph::libfdb::transaction_handle txn,
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
-inline bool get(ceph::libfdb::transaction_handle txn,
-                const concepts::libfdb_key auto& key,
-                OutputTargetOrFnT&& output_target_or_fn,
+inline bool get(::ceph::libfdb::transaction_handle txn,
+                const concepts::libfdb_key auto& key, OutputTargetOrFnT&& output_target_or_fn,
                 const read_mode mode = read_mode::serializable)
 {
  return get(txn, key, std::forward<OutputTargetOrFnT>(output_target_or_fn),
@@ -1127,36 +1013,26 @@ inline bool get(ceph::libfdb::transaction_handle txn,
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
-inline bool get(ceph::libfdb::database_handle dbh,
-                const transaction_options& options,
-                const concepts::libfdb_key auto& key,
-                OutputTargetOrFnT&& output_target_or_fn,
+inline bool get(::ceph::libfdb::database_handle dbh, const transaction_options& options,
+                const concepts::libfdb_key auto& key, OutputTargetOrFnT&& output_target_or_fn,
                 const read_mode mode = read_mode::serializable)
-try
 {
  return detail::in_read_transaction(dbh, options,
           [&key, &output_target_or_fn, mode](transaction_handle& txn) {
             auto&& output = detail::get_output_for(output_target_or_fn);
 
             return get(txn, key,
-                       [&output](const std::span<const std::uint8_t> value) {
-                         detail::invoke_user_callback(output, value);
-                       },
+                       detail::invoke_user_callback(std::in_place, std::ref(output)),
                        mode,
                        commit_after_op::no_commit);
           });
-}
-catch (const detail::user_callback_failure& failure)
-{
- std::rethrow_exception(failure.cause);
 }
 
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
-inline bool get(ceph::libfdb::database_handle dbh,
-                const concepts::libfdb_key auto& key,
-                OutputTargetOrFnT&& output_target_or_fn,
+inline bool get(::ceph::libfdb::database_handle dbh,
+                const concepts::libfdb_key auto& key, OutputTargetOrFnT&& output_target_or_fn,
                 const read_mode mode = read_mode::serializable)
 {
  return get(std::move(dbh), transaction_options {}, key,
@@ -1204,8 +1080,7 @@ inline bool key_exists(transaction_handle txn,
  return key_exists(txn, k, mode, commit_after_op::no_commit);
 }
 
-inline bool key_exists(database_handle dbh,
-                       const transaction_options& options,
+inline bool key_exists(database_handle dbh, const transaction_options& options,
                        const concepts::libfdb_key auto& k,
                        const read_mode mode = read_mode::serializable)
 {
@@ -1215,8 +1090,7 @@ inline bool key_exists(database_handle dbh,
           });
 }
 
-inline bool key_exists(database_handle dbh,
-                       const concepts::libfdb_key auto& k,
+inline bool key_exists(database_handle dbh, const concepts::libfdb_key auto& k,
                        const read_mode mode = read_mode::serializable)
 {
  return key_exists(std::move(dbh), transaction_options {}, k, mode);
@@ -1227,13 +1101,7 @@ namespace detail {
 template <typename OutValuesT>
 void value_collector_t<OutValuesT>::operator()(std::span<const std::uint8_t> out_data) const
 {
- ceph::libfdb::from::convert(out_data, out_values);
-}
-
-template <typename OutValuesT>
-auto value_collector(OutValuesT& out_values) -> value_collector_t<OutValuesT>
-{
- return { out_values };
+ ::ceph::libfdb::from::convert(out_data, out_values);
 }
 
 } // namespace detail

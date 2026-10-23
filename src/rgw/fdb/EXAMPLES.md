@@ -7,6 +7,14 @@ Welcome, traveller. This is a cookbook-style tour of libfdb. It starts with
 ordinary key/value operations and then moves toward transactions, selectors,
 query algebra, content keys, watches, and system utilities.
 
+That gives us three natural usage patterns:
+
+| Need | Usual interface |
+|---|---|
+| A simple operation | Free functions taking a database handle |
+| A logical transaction with managed recovery | A transactor |
+| Explicit transaction boundaries and recovery | Free functions taking a transaction handle |
+
 Errata: Please report errata, or contact with examples you would like to see.
 
 See `examples/libfdb/` for small standalone programs.
@@ -18,18 +26,31 @@ make -C examples/libfdb -j8 CEPH_BUILD="$PWD/build"
 ```
 
 The program writes and reads `example/people`, verifies the round trip, and
-demonstrates repeated transaction tags with the experimental options API. It
-releases its handles and stops the client network before exiting, including
-when an operation fails.
+demonstrates repeated transaction tags with the options API
+(application programming interface). It releases its handles and stops the
+client network before exiting, including when an operation fails.
 
-**Breaking API change:** option containers now preserve insertion order and
-repeated codes. Map-specific code must be migrated, and existing initializers
-can apply differently. See [Options (Experimental)](#options-experimental).
+**Breaking API changes:**
+
+- Option containers now preserve insertion order and repeated codes. Map-specific
+  code must be migrated, and existing initializers can apply differently. See
+  [Options](#options).
+- `commit(txn)` returns `void` on success, and `commit(with_result, txn)` reports
+  native failures through `std::expected<void, std::error_code>`. Both submit
+  once. Callers using the former commit/transactor result records must migrate;
+  see [Transactions](#transactions) for commit and recovery examples.
+- `libfdb_exception` derives from `std::system_error`. Use `code()` for the
+  authoritative error; the constructor taking a bare integer and the mutable
+  `fdb_error_value` field are removed. See
+  [Error Codes and Exceptions](#error-codes-and-exceptions).
 
 The examples use aliases to keep the code readable:
 
 ```cpp
 #include "rgw/fdb/fdb.h"
+
+#include <iostream>
+#include <map>
 
 namespace lfdb = ceph::libfdb;
 namespace q = lfdb::query;
@@ -37,6 +58,25 @@ namespace fdbc = lfdb::layer::content;
 
 using namespace std::string_literals;
 ```
+
+The snippets share the database opened in Setup. Application record types and
+functions such as `use_name()` stand for the application's own data and work.
+The recovery examples below contain their entire transaction bodies.
+
+Choose the failure interface at the operation boundary:
+
+| Operation | Success | Failure |
+| --- | --- | --- |
+| Database-handle write helper or transactor | The logical operation committed, after any managed replay | An exception; an earlier attempt may have committed if its outcome was uncertain |
+| `commit(txn)` | The one submitted attempt committed | Native failure throws `libfdb_exception`; recovery remains with the caller |
+| `commit(with_result, txn)` | A successful `std::expected<void, std::error_code>` confirms commit | Every native commit failure is an error value; local, contract, and allocation failures may throw |
+| `stamp.resolved_bytes(with_result)` | Borrowed stamp bytes | A recorded stamp error, independent of commit success; pending access is a contract error |
+
+An exception is not a general rollback guarantee. Managed replay includes
+`commit_unknown_result` (1021) by default. Use an idempotent transaction design,
+or select a policy that stops on uncertain outcomes. Ordinary C++ exceptions
+from application code propagate unchanged. See [Transactions](#transactions),
+[Versioned Data](#versioned-data), and the [exception summary](#appendix-exception-summary).
 
 ## Setup
 
@@ -61,11 +101,11 @@ and the C API database-opening documentation:
 // use lfdb::option_flag because they have no value. Network options are applied
 // only during the first FoundationDB network initialization.
 lfdb::database_options dbopts{
-  { FDB_DB_OPTION_TRANSACTION_TIMEOUT, std::int64_t{5000} },
+  { FDB_DB_OPTION_TRANSACTION_TIMEOUT, std::int64_t{5000} }
 };
 
 lfdb::network_options netopts{
-  { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag },
+  { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag }
 };
 
 auto dbh = lfdb::create_database(dbopts, netopts);
@@ -89,10 +129,10 @@ The source type makes the distinction explicit: a string is a FoundationDB
 connection string, while a cluster-file name must be passed as a
 `std::filesystem::path`.
 
-## Options (Experimental)
+## Options
 
-The ordered options interface is experimental. `network_options`,
-`database_options` and `transaction_options` are aliases of `option_list<CodeT>`.
+The ordered options interface is part of core libfdb. `network_options`,
+`database_options`, and `transaction_options` are aliases of `option_list<CodeT>`.
 Each owns a contiguous sequence of `(code, option_value)` pairs. FoundationDB
 receives every entry in insertion order, including repeated codes and identical
 flags. This supports additive options such as transaction tags and options whose
@@ -100,7 +140,7 @@ order matters.
 
 **Migration from `option_map`:** the former sorted, unique-key container and
 `option_map` alias are removed. Map-specific operations such as `find()`,
-`insert_or_assign()` and `operator[]` are unavailable. The braced initializer
+`insert_or_assign()`, and `operator[]` are unavailable. The braced initializer
 syntax still compiles, but its behavior changes: entries apply in written order
 instead of numerical code order, and duplicate codes are retained instead of
 discarded. Review existing initializers as well as map-style edits. `size()` now
@@ -156,12 +196,12 @@ list affects future construction. Passing an owned list as an rvalue to
 `make_transaction()` transfers its storage.
 Validation occurs when options are applied, rather than during list editing;
 FoundationDB enforces value types and limits, and may defer an error until a
-subsequent request. Failures retain the native `fdb_error_value` in
-`libfdb_exception`; failures reported while setting an option also include its
+subsequent request. Failures retain the native value and category in
+`libfdb_exception::code()`; failures reported while setting an option also include its
 code in the message.
 
 On replay, libfdb reapplies every nonpersistent entry once, in recorded order.
-FoundationDB retains timeout, retry limit, maximum retry delay and authorization
+FoundationDB retains timeout, retry limit, maximum retry delay, and authorization
 token options, so libfdb does not reapply those entries after `on_error()`.
 
 ## Basic Operations
@@ -222,7 +262,7 @@ transaction:
 std::map<std::string, std::string> people{
   { "person/saladin/name", "Saladin" },
   { "person/al-khwarizmi/name", "Al-Khwarizmi" },
-  { "person/albrecht-duerer/name", "Albrecht Duerer" },
+  { "person/albrecht-duerer/name", "Albrecht Duerer" }
 };
 
 lfdb::set(dbh, people);
@@ -255,7 +295,7 @@ lfdb::get(dbh, "person/grace-hopper/roles", out_roles);
 ```cpp
 std::map<std::string, std::string> profile{
   { "name", "Maria Theresa" },
-  { "title", "Archduchess of Austria" },
+  { "title", "Archduchess of Austria" }
 };
 
 lfdb::set(dbh, "person/maria-theresa/profile", profile);
@@ -279,7 +319,7 @@ struct person_profile
 auto profile = person_profile{
   .name = "Edsger Dijkstra",
   .field = "computer science",
-  .tags = std::vector{ "algorithms"s, "formal-methods"s },
+  .tags = std::vector{ "algorithms"s, "formal-methods"s }
 };
 
 lfdb::set(dbh, "person/edsger-dijkstra/profile", profile);
@@ -291,7 +331,9 @@ lfdb::get(dbh, "person/edsger-dijkstra/profile", out_profile);
 ## Transactions
 
 Pass a transaction handle when several operations must be grouped in the same
-transaction. Do not use the transaction after `commit()`.
+transaction. After a confirmed commit, do not reuse the transaction for more
+operations. Ordinary `commit()` returns `void` on success and throws
+`libfdb_exception` on a FoundationDB failure:
 
 ```cpp
 auto txn = lfdb::make_transaction(dbh);
@@ -299,25 +341,94 @@ auto txn = lfdb::make_transaction(dbh);
 lfdb::set(txn, "person/barbara-moo/name", "Barbara Moo");
 lfdb::set(txn, "person/barbara-moo/book", "Accelerated C++");
 
-if (not lfdb::commit(txn)) {
-  retry_transaction_body();
-}
+lfdb::commit(txn);
 ```
 
-When the caller owns replay and needs the FoundationDB error that prepared it,
-use the result-reporting overload:
+Both `commit(txn)` and `commit(with_result, txn)` submit exactly once. Neither
+prepares a retry, resets the transaction, or backs off. The tagged overload
+returns `std::expected<void, std::error_code>`: success confirms the commit;
+failure carries the native error, including terminal errors and
+`commit_unknown_result` (1021). That error means the write may have committed.
+Local failures, allocation failures, and contract violations may still throw.
+The ordinary overload explicitly throws `libfdb_exception` for a failed result.
+
+An error before commit submission leaves manual transaction boundaries with the
+caller. For example, if encoding one record fails, earlier valid writes and
+registered stamp outputs remain pending; the caller may finish those writes or
+discard the transaction. A managed transactor instead abandons the failed body.
+
+This synchronous key/value example writes a name, retries only errors classified
+as definitely uncommitted, and reads the value back after confirmed success.
+It uses the `dbh` opened in Setup and the includes and aliases above. Timeout
+and retry limits apply across attempts on the same transaction:
 
 ```cpp
-auto txn = lfdb::make_transaction(dbh);
+const std::string key = "example/sync-commit/name";
+const std::string expected = "Frances Allen";
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},
+  {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}}
+};
 
-lfdb::set(txn, "person/frances-allen/name", "Frances Allen");
+auto txn = lfdb::make_transaction(dbh, options);
 
-const auto result = lfdb::commit(lfdb::with_result, txn);
+try {
+  for (;;) {
+    // Rebuild the entire transaction body after each reset.
+    lfdb::set(txn, key, expected);
 
-if (not result.committed and 0 != result.replay_error) {
-  retry_transaction_body(result.replay_error);
+    const auto result = lfdb::commit(lfdb::with_result, txn);
+
+    if (result) {
+      break;
+    }
+
+    if (not lfdb::retryable_not_committed(result.error())) {
+      // Includes 1021: preserve the error and stop instead of blindly replaying.
+      throw lfdb::libfdb_exception {result.error()};
+    }
+
+    // Prepare explicitly, then rebuild the body using the same native budgets.
+    lfdb::reset_for_replay(txn, result.error().value());
+  }
 }
+catch (const lfdb::libfdb_exception& error) {
+  if (lfdb::maybe_committed(error.code())) {
+    std::cerr << "The write may have committed; resolve its outcome before replay.\n";
+  }
+
+  std::cerr << "Commit/retry error: " << error.what() << '\n';
+  throw;
+}
+
+// Use a separate read transaction, not the transaction that just committed.
+std::string actual;
+if (not lfdb::get(dbh, options, key, actual) or expected != actual) {
+  throw std::runtime_error {"committed key/value did not round-trip"};
+}
+
+std::cout << key << " = " << actual << '\n';
 ```
+
+Only `retryable_not_committed()` permits another attempt in this example;
+`retryable()` also accepts 1021. `reset_for_replay()` runs native `on_error()`,
+including its backoff and retry budget, then restores managed options. If
+preparation fails, it throws the actual preparation error, which can differ
+from the commit error. The application owns any history it needs to retain.
+
+The catch reports uncertain results converted to exceptions above, and failures
+from retry preparation, then rethrows. It does not start a fresh transaction to
+bypass exhausted budgets. Other exceptions propagate too. An exception after
+submission is not proof that the write did not commit. A stamp error is reported
+separately after a confirmed commit; it never requests replay of that commit.
+
+The final readback assumes no other writer changes this example key. A missing
+or different value, or a read error, fails that check after the commit has
+already succeeded; it does not undo the write. Reading the expected value after
+an uncertain commit would not, by itself, prove that this particular attempt
+performed the write. Resolving an uncertain outcome requires application
+knowledge, such as a durable operation identifier, or a deliberate decision
+that replaying the whole operation is safe.
 
 `committed_version()` is available after a successful commit. `set_read_version()`
 pins another transaction to that version, and `read_version()` reports the
@@ -329,16 +440,15 @@ auto write_txn = lfdb::make_transaction(dbh);
 
 lfdb::set(write_txn, "person/grace-hopper/name", "Grace Hopper");
 
-if (lfdb::commit(write_txn)) {
-  const auto version = lfdb::committed_version(write_txn);
+lfdb::commit(write_txn);
+const auto version = lfdb::committed_version(write_txn);
 
-  auto read_txn = lfdb::make_transaction(dbh);
-  lfdb::set_read_version(read_txn, version);
+auto read_txn = lfdb::make_transaction(dbh);
+lfdb::set_read_version(read_txn, version);
 
-  std::string name;
-  if (lfdb::get(read_txn, "person/grace-hopper/name", name)) {
-    record_observation(name, lfdb::read_version(read_txn));
-  }
+std::string name;
+if (lfdb::get(read_txn, "person/grace-hopper/name", name)) {
+  record_observation(name, lfdb::read_version(read_txn));
 }
 ```
 
@@ -354,30 +464,31 @@ for (const auto& object : objects_to_index) {
   lfdb::set(txn, object.index_key, object.index_record);
 
   if (soft_limit < lfdb::approximate_commit_bytes(txn)) {
-    finish_batch(txn);
+    lfdb::commit(txn);
     txn = lfdb::make_transaction(dbh);
   }
 }
+
+lfdb::commit(txn);
 ```
 
-Create an explicit transaction with transaction options. The transaction owns a
-copy of the options. After a successful `on_error()`, libfdb reapplies the
-options FoundationDB resets before the caller replays the operation:
+Each commit submits once. If a later batch fails, earlier batches remain
+committed; the application owns progress and resumption across those boundaries.
+Use a transactor per batch when managed replay is appropriate.
+
+Pass transaction options when constructing a transaction or transactor. Each
+transaction owns an option snapshot. Managed replay reapplies the options that
+FoundationDB resets after a successful `on_error()`:
 
 ```cpp
 const lfdb::transaction_options options {
   {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
 };
 
-auto txn = lfdb::make_transaction(dbh, options);
-
-for (;;) {
+auto update = lfdb::make_transactor(dbh, options);
+update([](auto txn) {
   lfdb::set(txn, "person/hypatia/name", "Hypatia");
-
-  if (lfdb::commit(txn)) {
-    break;
-  }
-}
+});
 ```
 
 Options set directly through the raw FoundationDB handle cannot be tracked or
@@ -389,24 +500,39 @@ cumulative.
 `reset_for_replay()` is the lower-level hook for application-managed replay. Most
 callers should use a transactor instead; use this when the application needs to
 keep its own progress marker before re-running part of a larger operation.
-`commit()` already resets the transaction before returning `false`; call
-`reset_for_replay()` only for retryable errors that escape before commit.
+Call `reset_for_replay()` after deciding that the entire transaction body may
+be replayed, for a failure from either the body or commit. A successful reset
+prepares another attempt; a failed reset throws and ends this recovery loop.
 
 ```cpp
-auto txn = lfdb::make_transaction(dbh);
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},
+  {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}}
+};
+auto txn = lfdb::make_transaction(dbh, options);
 
-try {
-  rebuild_cache_index(txn, marker);
-
-  if (not lfdb::commit(txn)) {
-    retry_from(marker);
+for (;;) {
+  try {
+    std::uint64_t count = 0;
+    lfdb::get(txn, "example/manual/count", count);
+    lfdb::set(txn, "example/manual/count", count + 1);
+    lfdb::commit(txn);
+    break;
+  }
+  catch (const lfdb::libfdb_exception& e) {
+    if (not lfdb::retryable_not_committed(e.code())) {
+      throw;
+    }
+    lfdb::reset_for_replay(txn, e.code().value());
   }
 }
-catch (const lfdb::libfdb_exception& e) {
-  lfdb::reset_for_replay(txn, e.fdb_error_value);
-  retry_from(marker);
-}
 ```
+
+The catch covers both the read and commit. It permits replay only when the
+current attempt is definitely uncommitted; it propagates 1021 so the application
+can resolve whether the increment happened. The reset runs in the handler, so
+a preparation failure escapes without starting another attempt. This example
+assumes the stored unsigned count has room for one more increment.
 
 Transactors are function objects created with `make_transactor()`. Creating a
 transactor does not start a transaction; calling `operator()` creates the
@@ -422,6 +548,50 @@ txr([](auto& txn) {
   lfdb::set(txn, "person/eleanor-of-aquitaine/title", "Duchess of Aquitaine");
 });
 ```
+
+### Return Values And Application Failures
+
+A normal return from the transaction body tells libfdb to attempt a commit.
+A negative status such as `-EINVAL` is only an application return value; it does
+not abort the transaction. The transactor returns that value after a confirmed
+commit, including any writes made before the return:
+
+```cpp
+#include <cerrno>
+
+auto txr = lfdb::make_transactor(dbh);
+
+const auto status = txr([](auto& txn) {
+  lfdb::set(txn, "example/transactor-status", "committed");
+  return -EINVAL;
+});
+
+// status == -EINVAL, but the key now holds "committed".
+```
+
+To reject an update before commit, throw an application exception and let it
+escape the body. Catch or translate it into an error code outside the
+transactor. Catching it inside the body and returning a negative status still
+leads to a commit attempt:
+
+```cpp
+try {
+  txr([](auto& txn) {
+    lfdb::set(txn, "example/transactor-status", "rejected");
+    throw std::invalid_argument {"invalid update"};
+  });
+}
+catch (const std::invalid_argument& e) {
+  handle_contract_error(e);
+}
+
+// This attempt did not commit; the key still holds "committed".
+```
+
+Retryable `lfdb::libfdb_exception` errors request recovery and replay instead;
+use an application exception for application rejection. Throwing stops the
+current attempt, but does not undo an earlier attempt whose commit outcome was
+unknown.
 
 ### Staged Proxies
 
@@ -501,25 +671,88 @@ Gotchas:
   and non-idempotent database writes after `commit_unknown_result` still need
   their own replay-safe design.
 
-Any outcome without a confirmed commit leaves the target unchanged. An ordinary
-transactor throws on retry exhaustion; `with_result` reports it with
-`committed == false`.
+Any outcome without a confirmed commit leaves the staged target unchanged.
+Transactors return the body's value after a confirmed commit and throw when
+recovery fails or retry limits are exhausted.
 
-Use `with_result` when application code needs to report or resume after retry
-exhaustion. The transaction body must return `void` because the result describes
-transaction progress rather than an application value:
+Automatic replay uses FoundationDB's transaction retry limit and timeout, with
+no additional libfdb attempt limit. Configure these options when an operation
+must finish within a budget; unlimited native settings can allow indefinite
+replay. A retry limit of zero permits the initial attempt without replay.
+
+Pass `retry_if(callable)` when the application needs to choose replay. The
+callable receives `transaction_failure {code, phase}`; `phase` is
+`transaction_phase::body` or `transaction_phase::commit`. It sees the original
+native error before preparation, including terminal errors for observation.
+For example, stop rather than replay an uncertain commit:
 
 ```cpp
-const auto result = txr(lfdb::with_result, [](auto& txn) {
-  lfdb::set(txn, "person/murasaki-shikibu/title", "Novelist");
+auto update = lfdb::make_transactor(dbh);
+update(lfdb::retry_if([](const lfdb::transaction_failure& failure) {
+  return lfdb::retryable_not_committed(failure.code);
+}), [](auto txn) {
+  lfdb::set(txn, "person/frances-allen/name", "Frances Allen");
 });
-
-if (not result.committed) {
-  record_retry_exhaustion(result.attempts,
-                          result.replay_count,
-                          result.last_error);
-}
 ```
+
+Returning false propagates the original error without preparation. Returning
+true requests native preparation and replay; it cannot override native
+eligibility, budgets, cancellation, or a confirmed commit. Ordinary calls keep
+automatic replay of native-eligible failures, including 1021. Stamp failure
+after a confirmed commit never invokes this policy.
+
+The selector owns one callable for the logical invocation and reuses it across
+attempts. Mutable and move-only callables work; use `std::ref` to borrow an
+application-owned callable explicitly. Keep counters, metrics, and any history
+you need there. Local and ordinary user errors bypass native policy. Exceptions
+from the policy propagate unchanged and never invoke it recursively. A failed
+preparation reports its actual error without calling the policy again.
+
+### Resolving An Uncertain Commit
+
+For an operation that must be applied once, store a durable operation identifier
+in the same transaction as its effects. This example uses the default replay
+policy, including 1021, and increments the count only when its marker is absent:
+
+```cpp
+const std::string operation_id = "job-42";
+const std::string marker = "example/once/applied/" + operation_id;
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},
+  {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}}
+};
+auto update = lfdb::make_transactor(dbh, options);
+
+update([&marker](auto& txn) {
+  if (lfdb::key_exists(txn, marker)) {
+    return;
+  }
+
+  std::uint64_t count = 0;
+  lfdb::get(txn, "example/once/count", count);
+  lfdb::set(txn, "example/once/count", count + 1);
+  lfdb::set(txn, marker, true);
+});
+```
+
+Generate a distinct identifier for each logical operation and retain it across
+attempts, later reconciliation, and process restarts. Never reuse one identifier
+for different work. Serializable marker reads prevent concurrent attempts with
+the same identifier from both applying the increment. Keep the marker as long
+as the operation may be retried, and assume the count has room to increment.
+
+If this call throws after an uncertain attempt, retrying the same logical
+operation with the same identifier remains safe. FoundationDB guarantees that
+an attempt reporting 1021 is no longer in flight. Other errors, such as timeout
+after submission, can leave a commit in flight; an absent marker in a separate
+read then does not prove that the commit cannot still finish. See the pinned
+[FoundationDB failure guarantees](https://github.com/apple/foundationdb/blob/7.3.79/documentation/sphinx/source/developer-guide.rst#L824-L843).
+
+This design covers database effects; external messages or payments need their
+own deduplication or a transactional outbox. The library does not retain attempt
+counts, cumulative uncertainty, or reconciliation history for you.
+
+### Transaction Options And Failure Boundaries
 
 Options are applied to each transaction the transactor creates:
 
@@ -904,9 +1137,7 @@ auto txn = lfdb::make_transaction(dbh);
 lfdb::mark_conflict_read(txn, "object/index/marker");
 lfdb::set(txn, "object/index/update", "pending");
 
-if (not lfdb::commit(txn)) {
-  retry_update();
-}
+lfdb::commit(txn);
 ```
 
 The same functions accept exact keys, begin/end ranges, selectors, and query
@@ -1181,13 +1412,13 @@ for (const auto& block : lfdb::blocks<object_metadata>(
 It may also be useful to group flat `scan()` output into discrete groups of N
 items. That is different from `blocks()`: the scan has already chosen its
 transaction behavior, and `std::views::chunk()` only changes the shape seen by
-the caller.
+the caller. Move the generator into the view because it owns a single traversal.
 
 ```cpp
 auto txn = lfdb::make_transaction(dbh);
 auto keys = lfdb::scan(txn, q::prefix("key_"));
 
-for (const auto& chunk : keys | std::views::chunk(100)) {
+for (const auto& chunk : std::move(keys) | std::views::chunk(100)) {
   for (const auto& [key, value] : chunk) {
     process(key, value);
   }
@@ -1469,9 +1700,41 @@ if (q::contains(fdbc::prefix(objects), candidate)) {
 ## Versioned Data
 
 Version stamps let FoundationDB write commit-versioned bytes into keys or
-values. They become readable and orderable only after commit resolution. Trying
-to read an unresolved stamp is a `std::invalid_argument`; trying to reuse a
-resolved stamp as a new commit output is also a `std::invalid_argument`.
+values. A stamp is a shared result handle: copies observe the same completion.
+`is_ready()` means it holds bytes or an error; `has_value()` means it holds bytes.
+Inspect the result after operation completion, or use external synchronization;
+the shared handle does not synchronize concurrent access to its result.
+Reading a pending stamp throws `std::invalid_argument`. A failed stamp throws
+`libfdb_exception` with its recorded code from `resolved_bytes()`, or returns
+that code from `resolved_bytes(with_result)`.
+
+Commit and stamp outcomes are independent. A read-only transaction can commit
+successfully while its stamp reports `no_commit_version`. A stamp retrieval
+failure after confirmed commit leaves commit successful. Do not replay a
+confirmed transaction to recover its stamp.
+
+The ordinary accessor borrows a const array reference; the tagged accessor
+returns `std::expected<std::span<const std::uint8_t, 10>, std::error_code>`.
+Keep a copy of the stamp handle alive while using borrowed bytes. Access from
+temporary handles is deleted. Valid bytes are immutable; parsing the identical
+bytes again is permitted without replacing their storage. Parsing malformed
+bytes, overwriting valid bytes, and parsing into an active or failed output are
+contract errors reported as `std::invalid_argument`.
+
+A failed output retains its error until explicitly registered as an output
+again. Registration clears the shared failure for the new attempt; an error
+copied from an earlier expected result remains independent. An output omitted
+from replay retains its previous failure. Abandoning a registered pending output
+records `std::errc::operation_canceled`. One pending handle may serve several
+operations in one transaction; registering it with another transaction is
+rejected before changing native data. A handle holding bytes cannot be reused
+as a commit output.
+
+Managed failure and stopped completion settle abandoned registered outputs before
+reporting completion, even if an application retains the transaction handle.
+A known libfdb failure records its code; other abandonment records standard
+`operation_canceled`. A manual operation that fails before submitting commit
+leaves existing outputs registered for the caller's transaction.
 
 ```cpp
 lfdb::versionstamp stamp;
@@ -1495,10 +1758,32 @@ lfdb::versionstamp stamp;
 
 lfdb::set(txn, "person/alonzo-church/name", "Alonzo Church");
 
-if (lfdb::commit(txn, stamp)) {
-  const auto& version_stamp_bytes = stamp.resolved_bytes();
+lfdb::commit(txn, stamp);
+const auto& version_stamp_bytes = stamp.resolved_bytes();
+```
+
+Handle a stamp failure separately from the commit. A read-only transaction
+illustrates the distinction without requiring a fault:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+lfdb::versionstamp stamp;
+std::string name;
+lfdb::get(txn, "person/alonzo-church/name", name);
+
+lfdb::commit(txn, stamp);
+// Commit succeeded. Any error below concerns only the requested stamp.
+const auto bytes = stamp.resolved_bytes(lfdb::with_result);
+if (not bytes) {
+  std::cerr << "Committed, but no stamp: " << bytes.error().message() << '\n';
 }
 ```
+
+Here the stamp reports `fdb_error_code::no_commit_version`. On a write transaction,
+use the same check before consuming bytes. Reporting or recovering unavailable
+stamp metadata must not replay the already committed transaction. The ordinary
+accessor can throw at this point; keep that error boundary separate from any
+manual commit retry loop.
 
 Use one versionstamp for several operations in the same transaction when those
 records should share the same commit order:
@@ -1517,9 +1802,8 @@ lfdb::set(txn,
           "person/grace-hopper/version",
           lfdb::versioned("", stamp));
 
-if (lfdb::commit(txn) && stamp.is_resolved()) {
-  const auto& version_stamp_bytes = stamp.resolved_bytes();
-}
+lfdb::commit(txn);
+const auto& version_stamp_bytes = stamp.resolved_bytes();
 ```
 
 Note that version stamping a key or a value is strictly an either/or
@@ -1545,9 +1829,7 @@ lfdb::set(txn, "person/grace-hopper/name", "Grace Hopper");
 lfdb::atomic::add(txn, "stats/person-count", std::uint64_t{1});
 lfdb::atomic::bit_or(txn, "stats/person-flags", std::uint64_t{0x01});
 
-if (not lfdb::commit(txn)) {
-  retry_person_update();
-}
+lfdb::commit(txn);
 ```
 
 Numeric atomic mutations use FoundationDB's little-endian integer parameter
@@ -1602,9 +1884,8 @@ version. Commit the transaction before waiting on the watch:
 auto txn = lfdb::make_transaction(dbh);
 auto watch = lfdb::make_watch(txn, "person/jose-capablanca/title");
 
-if (lfdb::commit(txn)) {
-  watch.wait();
-}
+lfdb::commit(txn);
+watch.wait();
 ```
 
 ```cpp
@@ -1803,14 +2084,17 @@ lfdb::set(txn,
           "put");
 lfdb::atomic::add(txn, "d4n/stats/object-writes", std::uint64_t{1});
 
-if (lfdb::commit(txn) && event_version.is_resolved()) {
-  publish_ordered_event(event_version.resolved_bytes());
-}
+lfdb::commit(txn);
+publish_ordered_event(event_version.resolved_bytes());
 ```
 
 The explicit transaction keeps the state update, event append, and counter
 mutation atomic. The versionstamped event key is commit ordered without an
-application sequence counter.
+application sequence counter. If commit throws, propagate its outcome to the
+application's recovery boundary. Stamp access and publication happen after
+confirmed commit; their failure does not permit replaying these mutations.
+In particular, blindly replaying 1021 can append another event and increment
+the counter again. Use a durable operation marker when automatic replay is needed.
 
 ### Prefix Page With Marker
 
@@ -1854,14 +2138,15 @@ auto txn = lfdb::make_transaction(dbh);
 
 for (const auto& [key, metadata] :
      lfdb::scan<cache_metadata>(txn, fdbc::prefix(objects), lfdb::read_mode::snapshot)) {
-  if (metadata.expired(cutoff)) {
+  if (metadata.etag.empty()) {
     report_stale_object(key, metadata);
   }
 }
 ```
 
 Snapshot mode is useful for advisory scans where another transaction changing a
-read key should not by itself make this transaction fail.
+read key should not by itself make this transaction fail. This example reports
+records with missing ETags; it does not make a concurrent update safe to overwrite.
 
 ### Conflict-Protected Promotion
 
@@ -1878,13 +2163,13 @@ const auto previous = lfdb::collect<object_version>(txn,
 lfdb::mark_conflict_read(txn, head);
 lfdb::set(txn, head, choose_new_head(previous));
 
-if (not lfdb::commit(txn)) {
-  retry_promotion();
-}
+lfdb::commit(txn);
 ```
 
 The snapshot scan avoids broad read conflicts, while the explicit conflict range
-keeps the narrow correctness dependency visible.
+keeps the narrow correctness dependency visible. This assumes every writer of
+the version records also changes `head` in the same transaction; otherwise,
+read those records serializably or mark their range as a conflict dependency.
 
 ### Maintenance Pass
 
@@ -1918,7 +2203,9 @@ The query expression says exactly what should be touched: cache records, minus
 reserved subspaces, further trimmed by a cursor. `blocks()` keeps discovery
 bounded, while the transactor keeps each mutation block replayable. The body
 only does transaction-local work, so replay does not repeat external side
-effects.
+effects. This compact recipe assumes the discovered records remain unchanged
+until archived. For mutable records, read and validate each current value inside
+the transactor before archiving and deleting it.
 
 ## Running Tests And Benchmarks
 
@@ -1948,11 +2235,61 @@ to avoid an overly fine-grained exception taxonomy.
 
 | Condition | Exception |
 | --- | --- |
-| FoundationDB C API returns `fdb_error_t` | `lfdb::libfdb_exception` |
+| FoundationDB C API reports an operational failure | `lfdb::libfdb_exception`; tagged commit returns native failures as error values |
 | FoundationDB option setup fails | `lfdb::libfdb_exception` |
 | Retry recovery fails or retry limit is exceeded | `lfdb::libfdb_exception` |
-| zpp_bits cannot decode stored bytes into the requested type | `lfdb::libfdb_exception` |
+| zpp_bits returns an encoding or decoding failure | `lfdb::libfdb_exception` with the original standard error code and category |
+| A user serializer, converter, or callback throws | The original exception, with its type and contents preserved |
 | Invalid result at the FoundationDB boundary | `lfdb::libfdb_exception` |
 | Caller uses libfdb after shutdown | `lfdb::libfdb_exception` |
 | Caller passes an impossible selector prefix or invalid versionstamp bytes | `std::invalid_argument` |
-| Caller reads, compares, reuses, or overwrites a versionstamp in the wrong state; or asks for a committed version before commit | `std::invalid_argument` |
+| Caller accesses a pending stamp, reuses a stamp holding bytes, registers an output with two transactions, overwrites immutable bytes, or asks for a committed version before commit | `std::invalid_argument` |
+| Stamp completed with an error | `resolved_bytes()` throws `lfdb::libfdb_exception`; `resolved_bytes(with_result)` returns the recorded error |
+
+### Error Codes and Exceptions
+
+`lfdb::libfdb_exception` derives from `std::system_error`, exposing one
+authoritative error through `code()` and diagnostic text through `what()`.
+The message-only constructor is retained for general local library failures;
+it assigns the nonzero `lfdb::libfdb_error_code::operation_failed` code in
+`lfdb::libfdb_error_category()`. When a native or more specific local code is
+available, supply that code explicitly, with any useful operation context.
+
+Native errors use `lfdb::fdb_error_category()`, whose diagnostic name is
+"FoundationDB". Local errors use `lfdb::libfdb_error_category()`, named "libfdb".
+The native `enum struct fdb_error_code : int` retains the pinned FoundationDB
+names and numbers; unknown native integers remain representable. Both enums
+convert to `std::error_code`. At a raw C API boundary, construct
+`std::error_code(raw, lfdb::fdb_error_category())` explicitly. The old bare-int
+exception constructor and mutable raw-code field have been removed.
+
+`lfdb::retryable(code)`, `lfdb::maybe_committed(code)`, and
+`lfdb::retryable_not_committed(code)` query the loaded C client's predicates
+only for native-category codes. Equal integers in a local or standard category
+do not become native failures. Predicate results concern the native error;
+false does not generally establish that an earlier submitted attempt rolled back.
+
+Serialization and conversion distinguish returned failure statuses from thrown
+exceptions:
+
+| Failure source | Reporting |
+| --- | --- |
+| A zpp_bits archive returns a failure status | `lfdb::libfdb_exception` carrying the original standard error code and category, with operation context |
+| A user serializer, converter, or callback throws an exception | The original exception propagates unchanged, preserving its type and contents |
+| FoundationDB returns a native failure | The throwing interface reports `lfdb::libfdb_exception` carrying the exact native code in `lfdb::fdb_error_category()` |
+
+The returned-status rule applies consistently to encoding, decoding, direct
+conversions, managed writes, typed point reads, and typed scans. A catch for the
+standard `std::system_error` base type also handles these library exceptions.
+
+Database-handle read and write helpers propagate a thrown serializer, converter,
+or callback exception at the operation boundary. A native code on that user
+exception does not make it an internal retry request. A transactor applies its
+policy to native `libfdb_exception` errors escaping its body; use an application
+exception type to reject application work.
+
+The conversion boundary inspects the archive's returned status directly.
+It does not catch and reconstruct exceptions from `what()`. Exceptions thrown
+by user code retain their identity even when they derive from
+`std::system_error`. Serializer status codes retain their standard category;
+FoundationDB retry predicates apply only to codes in the native category.

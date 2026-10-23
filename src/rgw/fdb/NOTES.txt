@@ -5,17 +5,17 @@
   scan.h.
 
 ----
-Network, Database and Transaction Options:
+Network, Database, and Transaction Options:
 
-The experimental network_options, database_options and transaction_options
+The network_options, database_options, and transaction_options
 aliases use owning option_list sequences. Every entry applies in written order,
 including repeated codes. This replaces option_map and its map-style interface;
-operator[] is unavailable. See EXAMPLES.md, "Options (Experimental)", for the
+operator[] is unavailable. See EXAMPLES.md, "Options", for the
 breaking-change notice, insertion and replacement rules, and migration examples.
 Core and both experimental async backends share application and replay semantics.
 
-FoundationDB defines option values and limits in its generated API documentation
-and source file fdbclient/vexillographer/fdb.options. Value validation belongs to
+FoundationDB defines option values and limits in its generated API (application programming interface)
+documentation and source file fdbclient/vexillographer/fdb.options. Value validation belongs to
 FoundationDB; it can report errors when setting an option or on a later request.
 
 ----
