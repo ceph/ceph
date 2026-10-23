@@ -2416,6 +2416,10 @@ Then run the following:
         return self.node_proxy_cache.list_hosts()
 
     @handle_orch_error
+    def node_proxy_fullreports(self, hostnames: List[str]) -> Dict[str, Any]:
+        return self.node_proxy_cache.fullreports(hostnames)
+
+    @handle_orch_error
     def node_proxy_fullreport(self, hostname: Optional[str] = None) -> Dict[str, Any]:
         return self.node_proxy_cache.fullreport(hostname=hostname)
 

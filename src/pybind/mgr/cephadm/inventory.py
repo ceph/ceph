@@ -1921,6 +1921,12 @@ class NodeProxyCache:
         return sorted(host for host, report in self.data.items()
                       if all(key in report for key in NODE_PROXY_REPORT_KEYS))
 
+    def fullreports(self, hostnames: List[str]) -> Dict[str, Any]:
+        # The reports of the given hosts, so a caller fetches one page in one call.
+        # Unknown hosts and incomplete reports are left out.
+        return {host: self.data[host] for host in hostnames
+                if all(key in self.data.get(host, {}) for key in NODE_PROXY_REPORT_KEYS)}
+
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves the full report for the specified hostname.

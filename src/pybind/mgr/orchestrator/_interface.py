@@ -365,6 +365,13 @@ class Orchestrator(object):
         """Return hostnames that have reported node-proxy data."""
         raise NotImplementedError()
 
+    def node_proxy_fullreports(self, hostnames: List[str]) -> OrchResult[Dict[str, Any]]:
+        """
+        Return the node-proxy reports of the given hosts in one call, keyed by hostname.
+        Hosts without a complete report are left out.
+        """
+        raise NotImplementedError()
+
     def node_proxy_summary(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
         Return node-proxy summary

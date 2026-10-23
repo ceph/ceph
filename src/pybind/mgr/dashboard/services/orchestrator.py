@@ -209,6 +209,10 @@ class HardwareManager(ResourceManager):
     def list_hosts(self) -> List[str]:
         return self.api.node_proxy_list_hosts()
 
+    @wait_api_result
+    def fullreports(self, hostnames: List[str]) -> NodeProxyRawData:
+        return self.api.node_proxy_fullreports(hostnames)
+
     def fullreport(self, hostname: str) -> RawHostReport:
         """
         Return this host's node-proxy report.

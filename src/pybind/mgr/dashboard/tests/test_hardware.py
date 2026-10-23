@@ -515,17 +515,14 @@ class HardwareHostsControllerTest(ControllerTestCase):
         """
         Build a mock OrchClient where:
           hardware.list_hosts() returns hostnames
-          hardware.fullreport(h) returns blobs[h], or raises HardwareNoReport
+          hardware.fullreports(names) returns the blobs of those names that exist
         """
-        def fullreport(hostname):
-            try:
-                return blobs[hostname]
-            except KeyError:
-                raise HardwareNoReport(f"Host '{hostname}' has no node-proxy data")
+        def fullreports(names):
+            return {name: blobs[name] for name in names if name in blobs}
 
         fake_client = mock.Mock()
         fake_client.hardware.list_hosts.return_value = hostnames
-        fake_client.hardware.fullreport.side_effect = fullreport
+        fake_client.hardware.fullreports.side_effect = fullreports
         return fake_client
 
     @mock.patch('dashboard.controllers.hardware.OrchClient.instance')
@@ -651,7 +648,7 @@ class HardwareHostsControllerTest(ControllerTestCase):
 
     @mock.patch('dashboard.controllers.hardware.OrchClient.instance')
     def test_host_removed_after_listing_is_skipped(self, mock_instance):
-        # host1 vanishes between list_hosts() and fullreport()
+        # host1 vanishes between list_hosts() and fullreports()
         blobs = {f'host{i}': {**MOCK_HOST_BLOB, 'host': f'host{i}'} for i in range(3)}
         fake_client = self._make_mock_client(list(blobs.keys()), blobs)
 
@@ -664,11 +661,20 @@ class HardwareHostsControllerTest(ControllerTestCase):
     def test_other_orchestrator_error_is_not_skipped(self, mock_instance):
         # Only a missing report is skipped; other orchestrator failures surface.
         fake_client = self._make_mock_client(['host0'], {})
-        fake_client.hardware.fullreport.side_effect = OrchestratorError('orchestrator down')
+        fake_client.hardware.fullreports.side_effect = OrchestratorError('orchestrator down')
         mock_instance.return_value = fake_client
         self._get(f'{self.URL}?offset=0&limit=10')
         self.assertStatus(400)
         self.assertIn('orchestrator down', self.json_body()['detail'])
+
+    @mock.patch('dashboard.controllers.hardware.OrchClient.instance')
+    def test_page_reports_fetched_in_one_call(self, mock_instance):
+        blobs = {f'host{i}': {**MOCK_HOST_BLOB, 'host': f'host{i}'} for i in range(5)}
+        fake_client = self._make_mock_client(list(blobs.keys()), blobs)
+        mock_instance.return_value = fake_client
+        self._list(offset=1, limit=2)
+        fake_client.hardware.fullreports.assert_called_once_with(['host1', 'host2'])
+        fake_client.hardware.fullreport.assert_not_called()
 
     @mock.patch('dashboard.controllers.hardware.OrchClient.instance')
     def test_no_orchestrator_is_503(self, mock_instance):
@@ -701,6 +707,7 @@ class HardwareHostDetailControllerTest(ControllerTestCase):
         # One representation for both endpoints.
         mock_instance.return_value.hardware.list_hosts.return_value = ['host1']
         mock_instance.return_value.hardware.fullreport.return_value = MOCK_HOST_BLOB
+        mock_instance.return_value.hardware.fullreports.return_value = {'host1': MOCK_HOST_BLOB}
         self._get(f'{self.URL}/host1')
         detail = self.json_body()
         self._get(self.URL)

@@ -1,14 +1,15 @@
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import cherrypy
 from orchestrator import HardwareNoReport
 
-from ..model.hardware import HardwareHostResponse, RawHostReport
+from ..model.hardware import HardwareHostResponse
+from ..plugins.ttl_cache import ttl_cache
 from ..services._paginate import ListPaginator
 from ..services.exception import handle_custom_error, handle_orchestrator_error
 from ..services.hardware import HardwareService
-from ..services.orchestrator import HardwareManager, OrchClient
+from ..services.orchestrator import OrchClient
 from . import APIDoc, APIRouter, EndpointDoc, Param, RESTController
 from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
@@ -78,25 +79,8 @@ class HardwareHosts(RESTController):
     @handle_orchestrator_error('hardware')
     def list(self, offset: int = 0, limit: int = 5, sort: str = '',
              search: str = '') -> List[Dict[str, object]]:
-        hardware = OrchClient.instance().hardware
-
-        # Paginate cheap hostname refs first, then load blobs only for this page:
-        # O(limit) blobs per request regardless of cluster size.
-        paginator = ListPaginator(
-            int(offset), int(limit), sort, search,
-            input_list=[{'hostname': h} for h in hardware.list_hosts()],
-            searchable_params=['hostname'],
-            sortable_params=['hostname'],
-            default_sort='+hostname',
-        )
-        hosts = [
-            HardwareHostResponse.from_raw(report).to_dict()
-            for ref in paginator.list()
-            if (report := _report_if_present(hardware, ref['hostname']))
-        ]
-
-        # The paginator only knows the filtered count once list() is consumed.
-        cherrypy.response.headers['X-Total-Count'] = paginator.get_count()
+        hosts, total = _hosts_page(int(offset), int(limit), sort, search)
+        cherrypy.response.headers['X-Total-Count'] = total
         return hosts
 
     @EndpointDoc(
@@ -114,15 +98,26 @@ class HardwareHosts(RESTController):
             OrchClient.instance().hardware.fullreport(hostname)).to_dict()
 
 
-def _report_if_present(hardware: HardwareManager, hostname: str) -> Optional[RawHostReport]:
-    """
-    The host's node-proxy report, or None if it has none or it is incomplete.
+# node-proxy reports change every few minutes, while every open dashboard
+# tab polls this list; cache each page briefly instead of calling cephadm each time.
+@ttl_cache(30, label='hardware_hosts')
+def _hosts_page(offset: int, limit: int, sort: str,
+                search: str) -> Tuple[List[Dict[str, object]], int]:
+    hardware = OrchClient.instance().hardware
 
-    TOCTOU: a host removed between list_hosts() and this call makes
-    fullreport() raise HardwareNoReport; treat it as gone and skip it.
-    Any other orchestrator error is a real failure and propagates.
-    """
-    try:
-        return hardware.fullreport(hostname)
-    except HardwareNoReport:
-        return None
+    # Paginate the cheap hostname list first, then fetch the reports of this page
+    # in one call: the cost grows with the page size, not the cluster size.
+    paginator = ListPaginator(
+        offset, limit, sort, search,
+        input_list=[{'hostname': h} for h in hardware.list_hosts()],
+        searchable_params=['hostname'],
+        sortable_params=['hostname'],
+        default_sort='+hostname',
+    )
+    hostnames = [ref['hostname'] for ref in paginator.list()]
+    reports = hardware.fullreports(hostnames)
+    # A host removed after list_hosts() is missing from reports and skipped.
+    hosts = [HardwareHostResponse.from_raw(reports[hostname]).to_dict()
+             for hostname in hostnames if hostname in reports]
+    # The paginator only knows the filtered count once list() is consumed.
+    return hosts, paginator.get_count()

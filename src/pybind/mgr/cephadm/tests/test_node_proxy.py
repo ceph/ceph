@@ -465,3 +465,14 @@ def test_node_proxy_cache_list_hosts_skips_incomplete_reports():
         'host04': {'host': 'host04', 'status': {}},
     }
     assert cache.list_hosts() == ['host01', 'host02']
+
+
+def test_node_proxy_cache_fullreports_returns_only_complete_known_hosts():
+    cache = NodeProxyCache(MagicMock())
+    cache.data = {
+        'host01': node_proxy_data.full_set['host01'],
+        'host02': node_proxy_data.full_set['host02'],
+        'host03': {'host': 'host03', 'status': {}},
+    }
+    reports = cache.fullreports(['host01', 'host03', 'host09'])
+    assert reports == {'host01': node_proxy_data.full_set['host01']}
