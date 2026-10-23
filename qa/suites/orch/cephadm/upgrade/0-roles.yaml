@@ -1,11 +1,3 @@
-os_type: centos
-os_version: "9.stream"
-
-tasks:
-- cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:tentacle
-    compiled_cephadm_branch: tentacle
-
 roles:
 - - mon.a
   - mon.c
