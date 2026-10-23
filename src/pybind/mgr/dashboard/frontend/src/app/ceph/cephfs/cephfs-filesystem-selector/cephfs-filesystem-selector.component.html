@@ -82,19 +82,19 @@
       let-row="row"
       let-col="col"
     >
-      <ng-container [ngSwitch]="col.prop">
-        <ng-container *ngSwitchCase="'pools'">
+      @switch (col.prop) {
+        @case ('pools') {
           @for (pool of row.pools; track $index; let last = $last) {
             <cd-badge>{{ pool }}</cd-badge>
             @if (!last) {
               <span>, </span>
             }
           }
-        </ng-container>
-        <ng-container *ngSwitchDefault>
+        }
+        @default {
           {{ row[col.prop] }}
-        </ng-container>
-      </ng-container>
+        }
+      }
     </ng-template>
   </cd-table>
 </div>

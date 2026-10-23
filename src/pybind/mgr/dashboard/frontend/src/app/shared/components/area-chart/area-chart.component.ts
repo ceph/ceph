@@ -15,7 +15,7 @@ import {
   ScaleTypes,
   ChartsModule
 } from '@carbon/charts-angular';
-import merge from 'lodash.merge';
+import { merge } from 'lodash';
 import { NumberFormatterService } from '../../services/number-formatter.service';
 import { DatePipe } from '@angular/common';
 import { ChartPoint } from '../../models/area-chart-point';

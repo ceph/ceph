@@ -4,7 +4,7 @@
   >
 </ng-template>
 
-<ng-container *ngIf="selection && selection.source !== 'REMOVING'">
+@if (selection && selection.source !== 'REMOVING') {
   <nav
     ngbNav
     #nav="ngbNav"
@@ -96,9 +96,11 @@
                 Features
               </td>
               <td>
-                <span *ngFor="let feature of selection.features_name">
-                  <cds-tag class="tag-dark me-2">{{ feature }}</cds-tag>
-                </span>
+                @for (feature of selection.features_name; track feature) {
+                  <span>
+                    <cds-tag class="tag-dark me-2">{{ feature }}</cds-tag>
+                  </span>
+                }
               </td>
             </tr>
             <tr cdstablerow>
@@ -109,18 +111,22 @@
                 Provisioned
               </td>
               <td>
-                <span *ngIf="selection.features_name?.indexOf('fast-diff') === -1">
-                  <span
-                    class="form-text text-muted"
-                    [ngbTooltip]="usageNotAvailableTooltipTpl"
-                    placement="top"
-                    i18n
-                    >N/A</span
-                  >
-                </span>
-                <span *ngIf="selection.features_name?.indexOf('fast-diff') !== -1">
-                  {{ selection.disk_usage | dimlessBinary }}
-                </span>
+                @if (selection.features_name?.indexOf('fast-diff') === -1) {
+                  <span>
+                    <span
+                      class="form-text text-muted"
+                      [ngbTooltip]="usageNotAvailableTooltipTpl"
+                      placement="top"
+                      i18n
+                      >N/A</span
+                    >
+                  </span>
+                }
+                @if (selection.features_name?.indexOf('fast-diff') !== -1) {
+                  <span>
+                    {{ selection.disk_usage | dimlessBinary }}
+                  </span>
+                }
               </td>
             </tr>
             <tr cdstablerow>
@@ -131,18 +137,22 @@
                 Total provisioned
               </td>
               <td>
-                <span *ngIf="selection.features_name?.indexOf('fast-diff') === -1">
-                  <span
-                    class="form-text text-muted"
-                    [ngbTooltip]="usageNotAvailableTooltipTpl"
-                    placement="top"
-                    i18n
-                    >N/A</span
-                  >
-                </span>
-                <span *ngIf="selection.features_name?.indexOf('fast-diff') !== -1">
-                  {{ selection.total_disk_usage | dimlessBinary }}
-                </span>
+                @if (selection.features_name?.indexOf('fast-diff') === -1) {
+                  <span>
+                    <span
+                      class="form-text text-muted"
+                      [ngbTooltip]="usageNotAvailableTooltipTpl"
+                      placement="top"
+                      i18n
+                      >N/A</span
+                    >
+                  </span>
+                }
+                @if (selection.features_name?.indexOf('fast-diff') !== -1) {
+                  <span>
+                    {{ selection.total_disk_usage | dimlessBinary }}
+                  </span>
+                }
               </td>
             </tr>
             <tr cdstablerow>
@@ -171,13 +181,18 @@
                 Parent
               </td>
               <td>
-                <span *ngIf="selection.parent"
-                  >{{ selection.parent.pool_name
-                  }}<span *ngIf="selection.parent.pool_namespace"
-                    >/{{ selection.parent.pool_namespace }}</span
-                  >/{{ selection.parent.image_name }}&#64;{{ selection.parent.snap_name }}</span
-                >
-                <span *ngIf="!selection.parent">-</span>
+                @if (selection.parent) {
+                  <span
+                    >{{ selection.parent.pool_name }}
+                    @if (selection.parent.pool_namespace) {
+                      <span>/{{ selection.parent.pool_namespace }}</span>
+                    }
+                    /{{ selection.parent.image_name }}&#64;{{ selection.parent.snap_name }}</span
+                  >
+                }
+                @if (!selection.parent) {
+                  <span>-</span>
+                }
               </td>
             </tr>
             <tr cdstablerow>
@@ -241,7 +256,6 @@
         ></cd-rbd-configuration-table>
       </ng-template>
     </ng-container>
-
     <ng-container ngbNavItem="performance">
       <a
         ngbNavLink
@@ -261,30 +275,36 @@
       </ng-template>
     </ng-container>
   </nav>
-
   <div [ngbNavOutlet]="nav"></div>
-</ng-container>
-<ng-container *ngIf="selection && selection.source === 'REMOVING'">
+}
+@if (selection && selection.source === 'REMOVING') {
   <cd-alert-panel
     type="warning"
     i18n
     >Information can not be displayed for RBD in status 'Removing'.</cd-alert-panel
   >
-</ng-container>
+}
 
 <ng-template
   #poolConfigurationSourceTpl
   let-row="data.row"
   let-value="data.value"
 >
-  <ng-container *ngIf="+value; else global">
+  @if (+value) {
     <strong
       i18n
       i18n-ngbTooltip
       ngbTooltip="This setting overrides the global value"
       >Image</strong
     >
-  </ng-container>
+  } @else {
+    <span
+      i18n
+      i18n-ngbTooltip
+      ngbTooltip="This is the global value. No value for this option has been set for this image."
+      >Global</span
+    >
+  }
   <ng-template #global>
     <span
       i18n

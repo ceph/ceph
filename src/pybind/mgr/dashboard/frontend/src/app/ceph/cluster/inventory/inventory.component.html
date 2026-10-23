@@ -1,5 +1,7 @@
-<cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
-<ng-container *ngIf="orchStatus?.available">
+@if (showDocPanel) {
+  <cd-orchestrator-doc-panel></cd-orchestrator-doc-panel>
+}
+@if (orchStatus?.available) {
   <legend i18n>Physical Disks</legend>
   <div class="row">
     <div class="col-md-12">
@@ -13,4 +15,4 @@
       </cd-inventory-devices>
     </div>
   </div>
-</ng-container>
+}

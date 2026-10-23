@@ -1,4 +1,4 @@
-<ng-container *ngIf="selection">
+@if (selection) {
   <nav
     ngbNav
     #nav="ngbNav"
@@ -82,7 +82,6 @@
             </tr>
           </tbody>
         </table>
-
         <!-- Bucket quota -->
         <div>
           <legend i18n>Bucket quota</legend>
@@ -100,7 +99,7 @@
                 </td>
                 <td class="w-75">{{ selection.bucket_quota.enabled | booleanText }}</td>
               </tr>
-              <ng-container *ngIf="selection.bucket_quota.enabled">
+              @if (selection.bucket_quota.enabled) {
                 <tr>
                   <td
                     i18n
@@ -108,15 +107,14 @@
                   >
                     Maximum size
                   </td>
-                  <td
-                    *ngIf="selection.bucket_quota.max_size <= -1"
-                    i18n
-                  >
-                    Unlimited
-                  </td>
-                  <td *ngIf="selection.bucket_quota.max_size > -1">
-                    {{ selection.bucket_quota.max_size | dimless }}
-                  </td>
+                  @if (selection.bucket_quota.max_size <= -1) {
+                    <td i18n>Unlimited</td>
+                  }
+                  @if (selection.bucket_quota.max_size > -1) {
+                    <td>
+                      {{ selection.bucket_quota.max_size | dimless }}
+                    </td>
+                  }
                 </tr>
                 <tr>
                   <td
@@ -125,21 +123,19 @@
                   >
                     Maximum objects
                   </td>
-                  <td
-                    *ngIf="selection.bucket_quota.max_objects <= -1"
-                    i18n
-                  >
-                    Unlimited
-                  </td>
-                  <td *ngIf="selection.bucket_quota.max_objects > -1">
-                    {{ selection.bucket_quota.max_objects }}
-                  </td>
+                  @if (selection.bucket_quota.max_objects <= -1) {
+                    <td i18n>Unlimited</td>
+                  }
+                  @if (selection.bucket_quota.max_objects > -1) {
+                    <td>
+                      {{ selection.bucket_quota.max_objects }}
+                    </td>
+                  }
                 </tr>
-              </ng-container>
+              }
             </tbody>
           </table>
         </div>
-
         <!-- Locking -->
         <legend i18n>Locking</legend>
         <table
@@ -156,7 +152,7 @@
               </td>
               <td class="w-75">{{ selection.lock_enabled | booleanText }}</td>
             </tr>
-            <ng-container *ngIf="selection.lock_enabled">
+            @if (selection.lock_enabled) {
               <tr>
                 <td
                   i18n
@@ -175,40 +171,39 @@
                 </td>
                 <td>{{ selection.lock_retention_period_days }}</td>
               </tr>
-            </ng-container>
+            }
           </tbody>
         </table>
-
         <!-- Tags -->
-        <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
+        @if ((selection.tagset | keyvalue)?.length) {
           <legend i18n>Tags</legend>
           <table
             class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
           >
             <tbody>
-              <tr *ngFor="let tag of selection.tagset | keyvalue">
-                <td
-                  i18n
-                  class="bold w-25"
-                >
-                  {{ tag.key }}
-                </td>
-                <td class="w-75">{{ tag.value }}</td>
-              </tr>
+              @for (tag of selection.tagset | keyvalue; track tag) {
+                <tr>
+                  <td
+                    i18n
+                    class="bold w-25"
+                  >
+                    {{ tag.key }}
+                  </td>
+                  <td class="w-75">{{ tag.value }}</td>
+                </tr>
+              }
             </tbody>
           </table>
-        </ng-container>
-
+        }
         <!-- Bucket Rate Limit -->
-        <ng-container *ngIf="!!bucketRateLimit">
+        @if (!!bucketRateLimit) {
           <cd-rgw-rate-limit-details
             [rateLimitConfig]="bucketRateLimit"
             [type]="'bucket'"
           ></cd-rgw-rate-limit-details>
-        </ng-container>
+        }
       </ng-template>
     </ng-container>
-
     <ng-container ngbNavItem="permissions">
       <a
         ngbNavLink
@@ -238,70 +233,70 @@
                   class="bold w-25"
                 >
                   Lifecycle
-                  <div
-                    *ngIf="(selection.lifecycle | json) !== '{}'"
-                    class="input-group"
-                  >
-                    <button
-                      type="button"
-                      class="btn btn-light"
-                      [ngClass]="{ active: lifecycleFormat === 'json' }"
-                      (click)="updateLifecycleFormatTo('json')"
-                    >
-                      JSON
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-light"
-                      [ngClass]="{ active: lifecycleFormat === 'xml' }"
-                      (click)="updateLifecycleFormatTo('xml')"
-                    >
-                      XML
-                    </button>
-                  </div>
+                  @if ((selection.lifecycle | json) !== '{}') {
+                    <div class="input-group">
+                      <button
+                        type="button"
+                        class="btn btn-light"
+                        [ngClass]="{ active: lifecycleFormat === 'json' }"
+                        (click)="updateLifecycleFormatTo('json')"
+                      >
+                        JSON
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-light"
+                        [ngClass]="{ active: lifecycleFormat === 'xml' }"
+                        (click)="updateLifecycleFormatTo('xml')"
+                      >
+                        XML
+                      </button>
+                    </div>
+                  }
                 </td>
                 <td>
-                  <cds-code-snippet
-                    display="multi"
-                    *ngIf="lifecycleFormat === 'json'"
-                  >
-                    {{ selection.lifecycle | json }}
-                  </cds-code-snippet>
-                  <cds-code-snippet
-                    display="multi"
-                    *ngIf="lifecycleFormat === 'xml'"
-                  >
-                    {{ (selection.lifecycle | xml: { Rules: 'Rule' }) || '-' }}
-                  </cds-code-snippet>
+                  @if (lifecycleFormat === 'json') {
+                    <cds-code-snippet display="multi">
+                      {{ selection.lifecycle | json }}
+                    </cds-code-snippet>
+                  }
+                  @if (lifecycleFormat === 'xml') {
+                    <cds-code-snippet display="multi">
+                      {{ (selection.lifecycle | xml: { Rules: 'Rule' }) || '-' }}
+                    </cds-code-snippet>
+                  }
                 </td>
               </tr>
-              <tr *ngIf="selection.lifecycle_progress?.length > 0">
-                <td
-                  i18n
-                  class="bold w-25"
-                >
-                  Lifecycle progress
-                </td>
-                <td>
-                  <cds-tooltip
-                    [description]="lifecycleProgressMap.get(lifecycleProgress.status)?.description"
-                    [align]="'top'"
+              @if (selection.lifecycle_progress?.length > 0) {
+                <tr>
+                  <td
+                    i18n
+                    class="bold w-25"
                   >
-                    <cds-tag
-                      size="md"
-                      [type]="lifecycleProgressMap.get(lifecycleProgress.status)?.color"
+                    Lifecycle progress
+                  </td>
+                  <td>
+                    <cds-tooltip
+                      [description]="
+                        lifecycleProgressMap.get(lifecycleProgress.status)?.description
+                      "
+                      [align]="'top'"
                     >
-                      {{ lifecycleProgress.status }}
-                    </cds-tag>
-                  </cds-tooltip>
-                  <div
-                    *ngIf="lifecycleProgress?.status !== 'UNINITIAL'"
-                    class="spacing-left"
-                  >
-                    {{ lifecycleProgress?.started }}
-                  </div>
-                </td>
-              </tr>
+                      <cds-tag
+                        size="md"
+                        [type]="lifecycleProgressMap.get(lifecycleProgress.status)?.color"
+                      >
+                        {{ lifecycleProgress.status }}
+                      </cds-tag>
+                    </cds-tooltip>
+                    @if (lifecycleProgress?.status !== 'UNINITIAL') {
+                      <div class="spacing-left">
+                        {{ lifecycleProgress?.started }}
+                      </div>
+                    }
+                  </td>
+                </tr>
+              }
               <tr>
                 <td
                   i18n
@@ -359,7 +354,6 @@
         </div>
       </ng-template>
     </ng-container>
-
     <ng-container ngbNavItem="tiering">
       <a
         ngbNavLink
@@ -384,6 +378,5 @@
       </ng-template>
     </ng-container>
   </nav>
-
   <div [ngbNavOutlet]="nav"></div>
-</ng-container>
+}

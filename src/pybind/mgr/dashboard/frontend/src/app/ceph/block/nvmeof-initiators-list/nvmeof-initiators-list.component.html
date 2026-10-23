@@ -1,36 +1,37 @@
-<cd-alert-panel
-  *ngIf="hasAllHostsAllowed()"
-  type="info"
-  [showTitle]="false"
->
-  <div
-    cdsStack="horizontal"
-    gap="2"
+@if (hasAllHostsAllowed()) {
+  <cd-alert-panel
+    type="info"
+    [showTitle]="false"
   >
     <div
-      cdsStack="vertical"
+      cdsStack="horizontal"
       gap="2"
     >
-      <strong i18n>Host access: All hosts allowed</strong>
-      <p
-        class="cds-mb-0 cds-mt-1"
-        i18n
+      <div
+        cdsStack="vertical"
+        gap="2"
       >
-        Allowing all hosts grants access to every initiator on the network. Authentication is not
-        supported in this mode, which may expose the subsystem to unauthorized access.
-      </p>
+        <strong i18n>Host access: All hosts allowed</strong>
+        <p
+          class="cds-mb-0 cds-mt-1"
+          i18n
+        >
+          Allowing all hosts grants access to every initiator on the network. Authentication is not
+          supported in this mode, which may expose the subsystem to unauthorized access.
+        </p>
+      </div>
+      <a
+        cdsLink
+        class="text-nowrap cds-ml-3 text-muted"
+        (click)="editHostAccess()"
+        tabindex="0"
+        (keydown.enter)="editHostAccess()"
+        i18n
+        >Edit host access</a
+      >
     </div>
-    <a
-      cdsLink
-      class="text-nowrap cds-ml-3 text-muted"
-      (click)="editHostAccess()"
-      tabindex="0"
-      (keydown.enter)="editHostAccess()"
-      i18n
-      >Edit host access</a
-    >
-  </div>
-</cd-alert-panel>
+  </cd-alert-panel>
+}
 
 <cd-table
   [data]="hasAllHostsAllowed() ? [] : initiators"

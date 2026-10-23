@@ -10,22 +10,18 @@
   #configurationSourceTpl
   let-value="data.value"
 >
-  <div [ngSwitch]="value">
-    <span
-      *ngSwitchCase="'global'"
-      i18n
-      >Global</span
-    >
-    <strong
-      *ngSwitchCase="'image'"
-      i18n
-      >Image</strong
-    >
-    <strong
-      *ngSwitchCase="'pool'"
-      i18n
-      >Pool</strong
-    >
+  <div>
+    @switch (value) {
+      @case ('global') {
+        <span i18n>Global</span>
+      }
+      @case ('image') {
+        <strong i18n>Image</strong>
+      }
+      @case ('pool') {
+        <strong i18n>Pool</strong>
+      }
+    }
   </div>
 </ng-template>
 
@@ -34,10 +30,20 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <div [ngSwitch]="row.type">
-    <span *ngSwitchCase="typeField.bps">{{ value | dimlessBinaryPerSecond }}</span>
-    <span *ngSwitchCase="typeField.milliseconds">{{ value | milliseconds }}</span>
-    <span *ngSwitchCase="typeField.iops">{{ value | iops }}</span>
-    <span *ngSwitchDefault>{{ value }}</span>
+  <div>
+    @switch (row.type) {
+      @case (typeField.bps) {
+        <span>{{ value | dimlessBinaryPerSecond }}</span>
+      }
+      @case (typeField.milliseconds) {
+        <span>{{ value | milliseconds }}</span>
+      }
+      @case (typeField.iops) {
+        <span>{{ value | iops }}</span>
+      }
+      @default {
+        <span>{{ value }}</span>
+      }
+    }
   </div>
 </ng-template>

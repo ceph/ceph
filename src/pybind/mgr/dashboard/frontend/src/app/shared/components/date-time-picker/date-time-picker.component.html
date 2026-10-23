@@ -17,29 +17,32 @@
         cdsTheme="theme"
       ></cds-date-picker>
     </cds-text-label>
-    <cds-text-label *ngIf="hasTime"
-      >Select a time
-      <cds-timepicker
-        (valueChange)="onModelChange($event)"
-        [(ngModel)]="time"
-        [disabled]="disabled"
-        pattern="(1[012]|[0-9]):[0-5][0-9]"
-        *ngIf="hasTime"
-      >
-        <cds-timepicker-select
-          [(ngModel)]="ampm"
-          [disabled]="disabled"
-          (valueChange)="onModelChange($event)"
-        >
-          <option
-            selected
-            value="AM"
+    @if (hasTime) {
+      <cds-text-label
+        >Select a time
+        @if (hasTime) {
+          <cds-timepicker
+            (valueChange)="onModelChange($event)"
+            [(ngModel)]="time"
+            [disabled]="disabled"
+            pattern="(1[012]|[0-9]):[0-5][0-9]"
           >
-            AM
-          </option>
-          <option value="PM">PM</option>
-        </cds-timepicker-select>
-      </cds-timepicker>
-    </cds-text-label>
+            <cds-timepicker-select
+              [(ngModel)]="ampm"
+              [disabled]="disabled"
+              (valueChange)="onModelChange($event)"
+            >
+              <option
+                selected
+                value="AM"
+              >
+                AM
+              </option>
+              <option value="PM">PM</option>
+            </cds-timepicker-select>
+          </cds-timepicker>
+        }
+      </cds-text-label>
+    }
   </div>
 </div>

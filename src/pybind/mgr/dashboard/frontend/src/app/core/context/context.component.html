@@ -1,15 +1,14 @@
-<ng-container
-  *ngIf="{
+@if (
+  {
     ftMap: featureToggleMap$ | async,
     daemons: rgwDaemonService.daemons$ | async,
     selectedDaemon: rgwDaemonService.selectedDaemon$ | async
-  } as data"
->
-  <ng-container
-    *ngIf="
-      data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1
-    "
-  >
+  };
+  as data
+) {
+  @if (
+    data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1
+  ) {
     <div class="cd-context-bar pt-3 pb-3">
       <span
         class="me-1"
@@ -36,7 +35,7 @@
           >
         </button>
         <div ngbDropdownMenu>
-          <ng-container *ngFor="let daemon of data.daemons">
+          @for (daemon of data.daemons; track daemon) {
             <button
               ngbDropdownItem
               class="ctx-bar-available-rgw-daemon"
@@ -50,9 +49,9 @@
                 >{{ daemon.zonegroup_name }}</cds-tag
               >
             </button>
-          </ng-container>
+          }
         </div>
       </div>
     </div>
-  </ng-container>
-</ng-container>
+  }
+}
