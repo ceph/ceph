@@ -14936,35 +14936,66 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 
     if (snap_set->r == 0) {
       auto &clones = snap_set->snaps.clones;
-      auto it1 = std::find_if(clones.begin(), clones.end(),
-			      [snapid1](const librados::clone_info_t &clone)
-			      {
-				return snapid1 == clone.cloneid ||
-				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid1) != clone.snaps.end());
-			      });
-      // point to "head" if not found
-      if (it1 == clones.end()) {
-	it1 = std::prev(it1);
+      if (clones.empty()) {
+        dout(10) << __func__ << ": no clones for objectid=" << snap_set->objectid << dendl;
+        continue;
       }
-      auto it2 = std::find_if(clones.begin(), clones.end(),
-			      [snapid2](const librados::clone_info_t &clone)
-			      {
-				return snapid2 == clone.cloneid ||
-				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid2) != clone.snaps.end());
-			      });
-      // point to "head" if not found
-      if (it2 == clones.end()) {
-	it2 = std::prev(it2);
-      }
+
+      // Select the version for @snapid using the OSD's object lookup rules.
+      // snapset.seq is the latest SnapContext sequence processed by the object.
+      // Use head when @snapid > snapset.seq; otherwise use the first historical
+      // clone with cloneid >= @snapid and require @snapid in its snaps vector.
+      // A clone's snaps vector lists the snapshot IDs covered by that version.
+      // Return clones.end() when no version exists, including an absent head.
+      // This does not apply read-time truncate_seq/truncate_size trimming.
+      // Use the requested snapids: in->last can be a global COW boundary,
+      // including another realm's snapshot or a snapshot-removal sequence.
+      auto head = clones.back().cloneid == CEPH_NOSNAP ? std::prev(clones.end()) : clones.end();
+      auto find_clone = [&](snapid_t snapid) {
+        if (snapid > snap_set->snaps.seq) {
+          return head;
+        }
+        auto it = std::find_if(clones.begin(), head,
+                               [snapid](const librados::clone_info_t &clone) {
+                                 return clone.cloneid >= snapid;
+                               });
+        if (it == head ||
+            std::find(it->snaps.begin(), it->snaps.end(), snapid) == it->snaps.end()) {
+          return clones.end();
+        }
+        return it;
+      };
+
+      auto it1 = find_clone(snapid1);
+      auto it2 = find_clone(snapid2);
+
+      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+                                                 snap_set->objectid, 0);
 
       if (it1 == it2) {
-	dout(10) << __func__ << ": both snaps in same clone" << dendl;
-	continue;
+        dout(10) << __func__ << ": objectid=" << snap_set->objectid
+                 << (it1 == clones.end() ? " exists in neither snap" : " is the same version in both snaps")
+                 << " (seq=" << snap_set->snaps.seq << ")" << dendl;
+        continue;
       }
 
+      // If the object exists in only one snapshot, report that version's full
+      // data extent. CephFS reads a removed object as a hole in the newer
+      // snapshot.
+      if (it1 == clones.end() || it2 == clones.end()) {
+        bool created = it1 == clones.end();
+        auto sz = created ? it2->size : it1->size;
+        dout(10) << __func__ << ": objectid=" << snap_set->objectid << " exists only in snap "
+                 << (created ? snapid2 : snapid1) << " (seq=" << snap_set->snaps.seq << "): ["
+                 << offset << "~" << sz << "]" << dendl;
+        extents.union_insert(offset, sz);
+        dout(20) << __func__ << ": (modified) extents=" << extents << dendl;
+        continue;
+      }
+
+      ceph_assert(snapid1 < snapid2);
+      ceph_assert(it1 < it2);
       interval_set<uint64_t> extent;
-      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
-						 snap_set->objectid, 0);
 
       for (auto hops = std::distance(it1, it2); hops > 0; --hops) {
 	dout(20) << __func__ << ": [cloneid: " << it1->cloneid << " snaps: " << it1->snaps
