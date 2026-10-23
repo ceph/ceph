@@ -1997,6 +1997,29 @@ protected:
   void resume_creating_pg();
 
   void load_pgs();
+  PGRef _load_pg(const coll_t& coll, spg_t pgid, epoch_t map_epoch);
+
+  // PGs on disk whose pool uses an LRC erasure-code profile (tracker 81369).
+  // They are not loaded, and the OSD does not boot, until it has the latest
+  // map and that map names a valid sub-plugin. Protected by osd_lock.
+  struct deferred_lrc_pg_t {
+    coll_t coll;
+    epoch_t map_epoch;
+    // Holds the PG's map in the map cache, as a loaded PG does, so
+    // trim_maps() cannot remove it from disk while the PG waits
+    OSDMapRef pgosdmap;
+  };
+  std::map<spg_t, deferred_lrc_pg_t> deferred_lrc_pgs;
+  bool deferred_lrc_pgs_logged = false;
+  bool load_deferred_lrc_pgs(const OSDMapRef& osdmap,
+                             std::set<std::string> *waiting_profiles);
+  bool _preboot_lrc_ready(const OSDMapRef& osdmap);
+
+  // Pools whose PG creation has been refused because their LRC profile has no
+  // layer-plugin set; used to log the refusal once per pool
+  ceph::mutex lrc_refused_pools_lock =
+    ceph::make_mutex("OSD::lrc_refused_pools_lock");
+  std::set<int64_t> lrc_refused_pools;
 
   epoch_t last_pg_create_epoch;
 
