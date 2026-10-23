@@ -993,6 +993,7 @@ void *SQLiteDB::openDB(const DoutPrefixProvider *dpp)
   }
 
   exec(dpp, "PRAGMA foreign_keys=ON", NULL);
+  exec(dpp, "PRAGMA busy_timeout=5000", NULL);
 
 out:
   return db;
