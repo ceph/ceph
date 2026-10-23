@@ -209,14 +209,21 @@ static size_t get_lockstat_cpu_index(const LockStatEntry* lockstat_entry)
   return cpu_index;
 }
 
-void LockStatTraits::record_wait_time(const LockStatTraits* traits,
-                                      const lockstat_clock::duration wait_time,
-                                      const LockMode mode)
+void LockStatTraits::record_wait_time(
+    const LockStatTraits* traits, const lockstat_clock::duration wait_time,
+    const LockMode mode, const uint32_t waiters, const bool record_stats)
 {
   if (!traits_is_valid(traits)) {
     return;
   }
   LockStatEntry* lockstat_entry = traits->m_lockstat_entry;
+
+  if (waiters) {
+    atomic_max(lockstat_entry->m_max_waiters, waiters);
+  }
+  if (!record_stats) {
+    return;
+  }
 
   LockStatEntry::LockStats& stats(
       lockstat_entry->m_stats_table[get_lockstat_cpu_index(lockstat_entry)]);
@@ -342,7 +349,7 @@ LockStatEntry::LockStats& LockStatEntry::LockStats::operator+=(
 }
 
 LockStatEntry::LockStatEntry() :
-  m_lock_id(0), m_num_instances(0), m_max_wait{}, m_max_hold{},
+  m_lock_id(0), m_num_instances(0), m_max_wait{}, m_max_hold{}, m_max_waiters{},
   m_lock_type(LockStatTraits::LockStatType::UNKNOWN), m_tripwire_enabled(false)
 
 {
@@ -351,9 +358,11 @@ LockStatEntry::LockStatEntry() :
 
 LockStatEntry::LockStatEntry(const LockStatEntry& other) :
   m_stats_table(other.m_stats_table), m_lock_id(other.m_lock_id),
-  m_num_instances(other.m_num_instances.load(std::memory_order_relaxed)),
-  m_lock_name(other.m_lock_name), m_lock_type(other.m_lock_type),
-  m_tripwire_enabled(other.m_tripwire_enabled)
+  m_num_instances(other.m_num_instances.load()), m_lock_name(other.m_lock_name),
+  m_max_wait(other.m_max_wait.load(std::memory_order_relaxed)),
+  m_max_hold(other.m_max_hold.load(std::memory_order_relaxed)),
+  m_max_waiters(other.m_max_waiters.load(std::memory_order_relaxed)),
+  m_lock_type(other.m_lock_type), m_tripwire_enabled(other.m_tripwire_enabled)
 
 {}
 
@@ -393,6 +402,9 @@ void LockStatEntry::reset()
   for (LockStats& stats : m_stats_table) {
     stats.reset();
   }
+  m_max_wait.store(lockstat_clock::duration{}, std::memory_order_relaxed);
+  m_max_hold.store(lockstat_clock::duration{}, std::memory_order_relaxed);
+  m_max_waiters.store(0, std::memory_order_relaxed);
 }
 
 LockStatEntry::LockStats LockStatEntry::get_stats_sum() const
@@ -522,6 +534,8 @@ void LockStatEntry::dump_formatted(Formatter* f)
                          std::chrono::duration_cast<std::chrono::nanoseconds>(
                              li.m_max_hold.load(std::memory_order_relaxed))
                              .count());
+        f->dump_unsigned("max_waiters",
+                         li.m_max_waiters.load(std::memory_order_relaxed));
 
         f->open_array_section("stats");
         auto dump_mode_stats = [&](LockMode mode, const char* mode_name) {

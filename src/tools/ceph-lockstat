@@ -295,6 +295,7 @@ def render_dump(data: Dict[str, Any], detail: bool):
         "hold_usec",
         "usec/hold",
         "max_wait",
+        "max_waiters",
         "busy ratio",
         "(r + w)/w",
         "num_instances",
@@ -317,7 +318,7 @@ def render_dump(data: Dict[str, Any], detail: bool):
 
     # Column widths
     col_widths = [len(h) for h in headers]
-    base_cols = 13  # columns before histogram bins / name
+    base_cols = 14  # columns before histogram bins / name
     if detail:
         # Set histogram columns to 12 chars width as requested
         # Histogram columns start after the base columns
@@ -364,6 +365,7 @@ def render_dump(data: Dict[str, Any], detail: bool):
         )
 
         max_wait_ns = entry.get("max_wait_ns", 0)
+        max_waiters = entry.get("max_waiters", 0)
         num_instances = entry.get("num_instances", 0)
         name = entry.get("name", "unknown")
 
@@ -378,6 +380,7 @@ def render_dump(data: Dict[str, Any], detail: bool):
             f"{hold_usec:.3f}",
             f"{avg_hold:.3f}",
             f"{max_wait_ns/1000.0:.3f}",
+            str(max_waiters),
             f"{busy_ratio:.6f}",
             f"{r_plus_w_over_w:.3f}",
             str(num_instances),

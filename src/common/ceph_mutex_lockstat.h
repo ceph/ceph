@@ -92,6 +92,7 @@ public:
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
+    const uint32_t waiting = begin_waiting();
     if (is_tripwire_enabled()) {
       if constexpr (has_try_lock_for_v<mutex_base>) {
         if (!mutex_base::try_lock_for(
@@ -104,10 +105,11 @@ public:
     } else {
       mutex_base::lock();
     }
+    end_waiting(waiting);
     if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
       m_hold_start = lockstat_clock::now();
       m_hold_mode = LockMode::WRITE;
-      record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
+      record_wait_time(m_hold_start - wait_start_clock, m_hold_mode, waiting);
     }
   }
 
@@ -151,15 +153,24 @@ public:
           unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
               ? lockstat_clock::now()
               : lockstat_clock::zero();
+      const uint32_t waiting = begin_waiting();
       if (mutex_base::try_lock_for(awhile)) {
+        end_waiting(waiting);
         if (unlikely(wait_start_clock != lockstat_clock::zero() &&
                      get_traits())) {
           m_hold_start = lockstat_clock::now();
           m_hold_mode = LockMode::TRY_WRITE;
-          record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
+          record_wait_time(m_hold_start - wait_start_clock, m_hold_mode,
+                           waiting);
         }
         return true;
       } else {
+        end_waiting(waiting);
+        if (unlikely(wait_start_clock != lockstat_clock::zero() &&
+                     get_traits())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE, waiting);
+        }
         return false;
       }
     } else {
@@ -176,15 +187,24 @@ public:
           unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
               ? lockstat_clock::now()
               : lockstat_clock::zero();
+      const uint32_t waiting = begin_waiting();
       if (mutex_base::try_lock_until(when)) {
+        end_waiting(waiting);
         if (unlikely(wait_start_clock != lockstat_clock::zero() &&
                      get_traits())) {
           m_hold_start = lockstat_clock::now();
           m_hold_mode = LockMode::TRY_WRITE;
-          record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
+          record_wait_time(m_hold_start - wait_start_clock, m_hold_mode,
+                           waiting);
         }
         return true;
       } else {
+        end_waiting(waiting);
+        if (unlikely(wait_start_clock != lockstat_clock::zero() &&
+                     get_traits())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE, waiting);
+        }
         return false;
       }
     } else {
@@ -241,6 +261,7 @@ public:
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
+    const uint32_t waiting = begin_waiting();
     if (is_tripwire_enabled()) {
       if constexpr (has_try_lock_for_v<mutex_base>) {
         if (!mutex_base::try_lock_for(
@@ -253,10 +274,12 @@ public:
     } else {
       mutex_base::lock();
     }
+    end_waiting(waiting);
     if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
       m_write_hold_start = lockstat_clock::now();
       m_write_hold_mode = LockMode::WRITE;
-      record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
+      record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode,
+                       waiting);
     }
   }
 
@@ -301,16 +324,24 @@ public:
           unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
               ? lockstat_clock::now()
               : lockstat_clock::zero();
+      const uint32_t waiting = begin_waiting();
       if (mutex_base::try_lock_for(awhile)) {
+        end_waiting(waiting);
         if (unlikely(wait_start_clock != lockstat_clock::zero() &&
                      get_traits())) {
           m_write_hold_start = lockstat_clock::now();
           m_write_hold_mode = LockMode::TRY_WRITE;
           record_wait_time(m_write_hold_start - wait_start_clock,
-                           m_write_hold_mode);
+                           m_write_hold_mode, waiting);
         }
         return true;
       } else {
+        end_waiting(waiting);
+        if (unlikely(wait_start_clock != lockstat_clock::zero() &&
+                     get_traits())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE, waiting);
+        }
         return false;
       }
     } else {
@@ -326,16 +357,24 @@ public:
           unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
               ? lockstat_clock::now()
               : lockstat_clock::zero();
+      const uint32_t waiting = begin_waiting();
       if (mutex_base::try_lock_until(when)) {
+        end_waiting(waiting);
         if (unlikely(wait_start_clock != lockstat_clock::zero() &&
                      get_traits())) {
           m_write_hold_start = lockstat_clock::now();
           m_write_hold_mode = LockMode::TRY_WRITE;
           record_wait_time(m_write_hold_start - wait_start_clock,
-                           m_write_hold_mode);
+                           m_write_hold_mode, waiting);
         }
         return true;
       } else {
+        end_waiting(waiting);
+        if (unlikely(wait_start_clock != lockstat_clock::zero() &&
+                     get_traits())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_WRITE, waiting);
+        }
         return false;
       }
     } else {
@@ -350,6 +389,7 @@ public:
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
+    const uint32_t waiting = begin_waiting();
     if (is_tripwire_enabled()) {
       if constexpr (has_try_lock_shared_for_v<mutex_base>) {
         if (!mutex_base::try_lock_shared_for(
@@ -362,8 +402,10 @@ public:
     } else {
       mutex_base::lock_shared();
     }
+    end_waiting(waiting);
     if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
-      record_wait_time(lockstat_clock::now() - wait_start_clock, LockMode::READ);
+      record_wait_time(lockstat_clock::now() - wait_start_clock, LockMode::READ,
+                       waiting);
       begin_shared_hold(LockMode::READ);
     }
   }
@@ -401,15 +443,23 @@ public:
           unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
               ? lockstat_clock::now()
               : lockstat_clock::zero();
+      const uint32_t waiting = begin_waiting();
       if (mutex_base::try_lock_shared_for(awhile)) {
+        end_waiting(waiting);
         if (unlikely(wait_start_clock != lockstat_clock::zero() &&
                      get_traits())) {
           record_wait_time(lockstat_clock::now() - wait_start_clock,
-                           LockMode::TRY_READ);
+                           LockMode::TRY_READ, waiting);
           begin_shared_hold(LockMode::TRY_READ);
         }
         return true;
       } else {
+        end_waiting(waiting);
+        if (unlikely(wait_start_clock != lockstat_clock::zero() &&
+                     get_traits())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_READ, waiting);
+        }
         return false;
       }
     } else {
@@ -428,15 +478,23 @@ public:
           unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
               ? lockstat_clock::now()
               : lockstat_clock::zero();
+      const uint32_t waiting = begin_waiting();
       if (mutex_base::try_lock_shared_until(when)) {
+        end_waiting(waiting);
         if (unlikely(wait_start_clock != lockstat_clock::zero() &&
                      get_traits())) {
           record_wait_time(lockstat_clock::now() - wait_start_clock,
-                           LockMode::TRY_READ);
+                           LockMode::TRY_READ, waiting);
           begin_shared_hold(LockMode::TRY_READ);
         }
         return true;
       } else {
+        end_waiting(waiting);
+        if (unlikely(wait_start_clock != lockstat_clock::zero() &&
+                     get_traits())) {
+          record_wait_time(lockstat_clock::now() - wait_start_clock,
+                           LockMode::TRY_READ, waiting);
+        }
         return false;
       }
     } else {
