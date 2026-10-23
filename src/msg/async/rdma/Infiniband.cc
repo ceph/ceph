@@ -490,9 +490,14 @@ int Infiniband::QueuePair::to_dead()
   beacon.wr_id = BEACON_WRID;
   beacon.opcode = IBV_WR_SEND;
   beacon.send_flags = IBV_SEND_SIGNALED;
-  if (ibv_post_send(qp, &beacon, &bad_wr)) {
-    lderr(cct) << __func__ << " failed to send a beacon: " << cpp_strerror(errno) << dendl;
-    return -errno;
+  // ibv_post_send() returns the error code; it does not set errno.
+  if (int rc = ibv_post_send(qp, &beacon, &bad_wr); rc) {
+    if (rc == EAGAIN) {
+      ldout(cct, 20) << __func__ << " failed to send a beacon: " << cpp_strerror(rc) << dendl;
+    } else {
+      lderr(cct) << __func__ << " failed to send a beacon: " << cpp_strerror(rc) << dendl;
+    }
+    return -rc;
   }
   ldout(cct, 20) << __func__ << " trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn << " Beacon sent " << dendl;
   dead = true;
