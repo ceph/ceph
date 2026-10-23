@@ -36,6 +36,10 @@ class ServicesTestCase(CephadmTestCase):
     # probe results are nested JSON; a missing level while a daemon restarts
     # shows up as TypeError
     POLL_TRANSIENT = CephadmTestCase.POLL_TRANSIENT + (TypeError,)
+    # the tests check settings cephadm writes when it deploys a service
+    # (dashboard API URLs, standby behaviour, SSO); the only option they set
+    # themselves, secure_monitoring_stack, is reset by the tests using it
+    RESET_CONFIG_AFTER_TEST = False
 
     @classmethod
     def setUpClass(cls) -> None:
