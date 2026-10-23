@@ -2532,11 +2532,19 @@ int CrushWrapper::add_simple_stretch_rule_at(
     CRUSH_RULE_CHOOSE_FIRSTN,
     num_failure_domains,
     zone_type);
-  crush_rule_set_step(
-      rule, step++,
-      mode == "firstn" ? CRUSH_RULE_CHOOSELEAF_FIRSTN : CRUSH_RULE_CHOOSELEAF_INDEP,
-      num_replica_per_zone,
-      osd_type);
+  // as add_simple_rule_at(): chooseleaf of type 0 can return OSDs that are out
+  if (osd_type)
+    crush_rule_set_step(
+        rule, step++,
+        mode == "firstn" ? CRUSH_RULE_CHOOSELEAF_FIRSTN : CRUSH_RULE_CHOOSELEAF_INDEP,
+        num_replica_per_zone,
+        osd_type);
+  else
+    crush_rule_set_step(
+        rule, step++,
+        mode == "firstn" ? CRUSH_RULE_CHOOSE_FIRSTN : CRUSH_RULE_CHOOSE_INDEP,
+        num_replica_per_zone,
+        0);
   crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
 
   int ret = crush_add_rule(crush, rule, rno);

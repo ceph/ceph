@@ -1642,6 +1642,51 @@ TEST_F(CrushWrapperTest, stretch_ec) {
 
 }
 
+// With the osd failure domain, a zone with fewer OSDs in than copies per zone
+// must leave holes, not map OSDs that are out.
+TEST_F(CrushWrapperTest, stretch_osd_failure_domain_skips_out_osds) {
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  c->create();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "datacenter");
+  c->set_type_name(3, "root");
+  int bno;
+  ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                             3, 0, NULL, NULL, &bno));
+  c->set_item_name(bno, "default");
+  for (int i = 0; i < 8; ++i) {
+    map<string,string> loc = {{"root", "default"},
+                              {"datacenter", i < 4 ? "a" : "b"},
+                              {"host", i < 4 ? "a0" : "b0"}};
+    c->insert_item(cct, i, 1.0, "osd." + to_string(i), loc);
+  }
+  ostringstream err;
+  int ec_rule = c->add_simple_stretch_rule("ec", "default", "datacenter", "osd",
+    2, 3, "", "indep", pg_pool_t::TYPE_ERASURE, false, &err);
+  ASSERT_GE(ec_rule, 0) << err.str();
+  int rep_rule = c->add_simple_stretch_rule("rep", "default", "datacenter", "osd",
+    2, 3, "", "firstn", pg_pool_t::TYPE_REPLICATED, false, &err);
+  ASSERT_GE(rep_rule, 0) << err.str();
+  c->finalize();
+
+  std::vector<uint32_t> weight(c->get_max_devices(), 0x10000);
+  weight[5] = 0;
+  weight[6] = 0;
+  for (int rule : {ec_rule, rep_rule}) {
+    for (int x = 0; x < 200; ++x) {
+      std::vector<int> out;
+      c->do_rule(rule, x, out, 6, weight, 0);
+      for (int osd : out) {
+        if (osd != CRUSH_ITEM_NONE) {
+          ASSERT_NE(0u, weight[osd]) << "rule " << rule << " x " << x
+                                     << " mapped out osd." << osd;
+        }
+      }
+    }
+  }
+}
+
 // Three-zone device-class stretch EC rule: zone-contiguous blocks that stay put when OSDs go out.
 TEST_F(CrushWrapperTest, stretch_ec_three_zones_device_class) {
   std::unique_ptr<CrushWrapper> c(new CrushWrapper);
