@@ -117,7 +117,10 @@ int main(int argc, char *argv[])
 
 #if defined(__linux__)
   // defined in keyring.cc under the same guard
-  LinuxKeyringSecret::initialize_process_keyring();
+  if (const auto ec = LinuxKeyringSecret::initialize_process_keyring(); ec) {
+    ldpp_dout(&dp, 0) << "failed to install the process keyring: "
+                      << ec.message() << dendl;
+  }
 #else
   ldpp_dout(&dp, 0) << "the Linux kernel keyring is not available on this "
 		    << "platform, so the SSE-KMS key cache is disabled" << dendl;
