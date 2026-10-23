@@ -30,5 +30,6 @@ tasks:
         - nvmeof/fio_test.sh --rbd_iostat
     env:
       RBD_POOL: mypool
+      NVMEOF_POOL: mypool
       IOSTAT_INTERVAL: '10'
       RUNTIME: '600'

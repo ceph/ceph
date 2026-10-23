@@ -78,7 +78,7 @@ done
 cat $fio_file
 
 status_log() {
-    POOL="${RBD_POOL:-mypool}"
+    POOL="${NVMEOF_POOL:-mypool}"
     GROUP="${NVMEOF_GROUP:-mygroup0}"
     ceph -s
     ceph orch host ls

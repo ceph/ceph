@@ -20,7 +20,7 @@ nvmeof_cli () {
     shift
     for attempt in 1 2 3; do
         if [ "$NVMEOF_NATIVE_CLI" = "true" ]; then
-            ceph nvmeof --server-address $server_ip "$@" && return 0
+            ceph nvmeof "$@" --server-address $server_ip && return 0
         else
             sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $server_ip --server-port $NVMEOF_SRPORT "$@" && return 0
         fi

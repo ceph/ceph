@@ -40,6 +40,7 @@ tasks:
         - nvmeof/basic_tests.sh
         - nvmeof/fio_test.sh --rbd_iostat
     env:
+      NVMEOF_POOL: mypool
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage
       NVMEOF_NATIVE_CLI: 'true'
@@ -57,5 +58,7 @@ tasks:
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c,nvmeof.d
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c
     env:
+      NVMEOF_POOL: mypool
+      RBD_POOL: mypool
       SCALING_DELAYS: '400'
       RUNTIME: '1200'

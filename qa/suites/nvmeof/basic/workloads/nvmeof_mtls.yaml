@@ -24,6 +24,7 @@ tasks:
         - nvmeof/basic_tests.sh
         - nvmeof/fio_test.sh --rbd_iostat
     env:
+      NVMEOF_POOL: mypool
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage
       NVMEOF_NATIVE_CLI: 'true'
