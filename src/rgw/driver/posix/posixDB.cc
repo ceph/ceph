@@ -66,6 +66,36 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
   ldpp_dout(dpp, 0) << "POSIXUserDB successfully initialized - name:" \
     << db_name << "" << dendl;
 
+  /* install triggers for user table change tracking */
+  {
+    auto user_tbl = getUserTable();
+    auto setup_sql = fmt::format(
+      "BEGIN;"
+      "CREATE TABLE IF NOT EXISTS user_changes ("
+      "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+      "  UserID TEXT NOT NULL"
+      ");"
+      "CREATE TRIGGER IF NOT EXISTS user_change_on_update "
+      "AFTER UPDATE ON '{}' "
+      "BEGIN INSERT INTO user_changes (UserID) VALUES (NEW.UserID); END;"
+      "CREATE TRIGGER IF NOT EXISTS user_change_on_delete "
+      "AFTER DELETE ON '{}' "
+      "BEGIN INSERT INTO user_changes (UserID) VALUES (OLD.UserID); END;"
+      "COMMIT;",
+      user_tbl, user_tbl, user_tbl);
+    ret = sqlite3_exec(static_cast<sqlite3*>(db), setup_sql.c_str(),
+                       nullptr, nullptr, nullptr);
+    if (ret != SQLITE_OK) {
+      ldpp_dout(dpp, 0) << "WARNING: failed to set up user changelog triggers"
+        << dendl;
+      sqlite3_exec(static_cast<sqlite3*>(db), "ROLLBACK;",
+                   nullptr, nullptr, nullptr);
+    } else {
+      ldpp_dout(dpp, 1) << "user changelog triggers installed on "
+        << user_tbl << dendl;
+    }
+  }
+/*
   // Create default user that corresponds to vstart user (TODO: Temporary fix)
   dbops = SQLiteDB::dbops;
   DBOpParams params = {};
@@ -95,7 +125,7 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
       ldpp_dout(dpp, 20)<<"Successfully processed fop(InsertUser)" << dendl;
     }
   } 
-
+*/
   return ret;
 }
 
@@ -106,6 +136,76 @@ int POSIXUserDB::Destroy(const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20)<<"POSIXUserDB successfully destroyed - name:" \
     <<db_name << dendl;
 
+  return 0;
+}
+
+static int changelog_callback(void* data, int ncols, char** values, char** names)
+{
+  auto* user_ids = static_cast<std::vector<std::string>*>(data);
+  if (ncols > 0 && values[0]) {
+    user_ids->emplace_back(values[0]);
+  }
+  return 0;
+}
+
+int POSIXUserDB::read_and_clear_changelog(const DoutPrefixProvider* dpp,
+                                           std::vector<std::string>& user_ids)
+{
+  auto* sdb = static_cast<sqlite3*>(db);
+  ldpp_dout(dpp, 0) << "read_and_clear_changelog: Starting. " << dendl;
+
+  int ret = sqlite3_exec(sdb, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr);
+  if (ret != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "failed to begin changelog transaction: " << ret << dendl;
+    return -EIO;
+  }
+
+  sqlite3_stmt* stmt = nullptr;
+  ret = sqlite3_prepare_v2(sdb, "SELECT DISTINCT UserID FROM user_changes;", -1, &stmt, nullptr);
+  if (ret == SQLITE_OK) {
+    while ((ret = sqlite3_step(stmt)) == SQLITE_ROW) {
+    // Extract column value and populate user_ids, e.g.:
+      const unsigned char* userId = sqlite3_column_text(stmt, 0);
+      user_ids.emplace_back(std::string(reinterpret_cast<const char*>(userId)));
+    }
+    sqlite3_finalize(stmt);
+  }
+
+  if (ret != SQLITE_DONE) {
+    ldpp_dout(dpp, 0) << "failed to read changelog: " << sqlite3_errmsg(sdb) << dendl;
+    sqlite3_exec(sdb, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return -EIO;
+  }
+
+  if (!user_ids.empty()) {
+/*
+    ret = sqlite3_exec(sdb, "DELETE FROM user_changes;",
+                       nullptr, nullptr, nullptr);
+    if (ret != SQLITE_OK) {
+      ldpp_dout(dpp, 0) << "failed to clear changelog: " << sqlite3_errmsg(sdb) << dendl;
+      sqlite3_exec(sdb, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return -EIO;
+    }
+*/
+    ret = sqlite3_prepare_v2(sdb, "DELETE FROM user_changes;", -1, &stmt, nullptr);
+    if (ret == SQLITE_OK) {
+      ret = sqlite3_step(stmt);
+      if (ret != SQLITE_DONE) {
+        ldpp_dout(dpp, 0) << "failed to clear changelog: " << sqlite3_errmsg(sdb) << dendl;
+      } else {
+        ldpp_dout(dpp, 0) << "Successfully cleared changelog. " << dendl;
+      }
+
+    // Always finalize the statement to release resources and avoid memory leaks
+      sqlite3_finalize(stmt);
+    }
+  }
+  ret = sqlite3_exec(sdb, "COMMIT;", nullptr, nullptr, nullptr);
+  if (ret != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "failed to commit changelog transaction: " << sqlite3_errmsg(sdb) << dendl;
+    sqlite3_exec(sdb, "ROLLBACK;", nullptr, nullptr, nullptr);
+    return -EIO;
+  }
   return 0;
 }
 
