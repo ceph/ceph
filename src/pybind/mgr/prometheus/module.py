@@ -194,7 +194,7 @@ HW_CPU_LABELS = ('hostname', 'cpu', 'manufacturer', 'model', 'total_threads')
 HW_MEMORY_LABELS = ('hostname', 'dimm', 'type')
 MIB_TO_BYTES = 1048576
 
-HW_HEALTH_LABELS = ('hostname', 'component', 'category')
+HW_STATUS_LABELS = ('hostname', 'component', 'category', 'state')
 
 HW_TEMP_LABELS = ('hostname', 'sensor_name')
 
@@ -208,6 +208,8 @@ HEALTH_STATUS_MAP = {
     'Degraded': 1,
     'Error': 2,
     'Critical': 2,
+    # Health not reported by the BMC
+    'unknown': -1,
 }
 
 sensor_metric = namedtuple('sensor_metric', 'metric description labels')
@@ -1124,11 +1126,12 @@ class Module(MgrModule, OrchestratorClientMixin):
             HW_MEMORY_LABELS
         )
 
-        metrics['hardware_health'] = Metric(
+        metrics['hardware_status'] = Metric(
             'gauge',
-            'hardware_health',
-            'Hardware component health status (0=OK, 1=Warning, 2=Error)',
-            HW_HEALTH_LABELS
+            'hardware_status',
+            'Hardware component health (-1=Unknown, 0=OK, 1=Warning, 2=Error), '
+            'labelled with the Redfish state of the component',
+            HW_STATUS_LABELS
         )
 
         for sensor in SENSOR_METRICS.values():
@@ -2159,17 +2162,21 @@ class Module(MgrModule, OrchestratorClientMixin):
         except Exception as e:
             self.log.error(f"Failed to get SMB metadata: {str(e)}")
 
+    @staticmethod
+    def _hw_status_value(status_val: Any, field: str) -> str:
+        """Return the value of a Redfish Status field (e.g. state, health), 'unknown' if missing."""
+        status = status_val if isinstance(status_val, dict) else {}
+        return status.get(field, 'unknown')
+
     def _hw_get_health_value(
             self, status_val: Any, hostname: str = '',
             comp_id: str = '', category: str = ''
     ) -> Optional[int]:
-        """Map a Redfish health status to a numeric value (0=OK, 1=Warning, 2=Error)."""
-        if isinstance(status_val, dict):
-            health_str = status_val.get('health', 'Unknown')
-        elif isinstance(status_val, str):
+        """Map a Redfish health status to a numeric value (-1=Unknown, 0=OK, 1=Warning, 2=Error)."""
+        if isinstance(status_val, str):
             health_str = status_val
         else:
-            health_str = 'Unknown'
+            health_str = self._hw_status_value(status_val, 'health')
 
         value = HEALTH_STATUS_MAP.get(health_str)
         if value is None:
@@ -2184,14 +2191,19 @@ class Module(MgrModule, OrchestratorClientMixin):
             self, status_val: Any, hostname: str,
             comp_id: str, category: str
     ) -> None:
-        """Set hardware_health gauge for a single component."""
+        """Set hardware_status gauge for a single component.
+
+        The value is the Redfish health, the Redfish state is exported as a label.
+        """
+        state = self._hw_status_value(status_val, 'state')
         health_value = self._hw_get_health_value(
             status_val, hostname, comp_id, category
         )
-        if health_value is not None:
-            self.metrics['hardware_health'].set(
-                health_value, (hostname, comp_id, category)
-            )
+        if health_value is None:
+            return
+        self.metrics['hardware_status'].set(
+            health_value, (hostname, comp_id, category, state)
+        )
 
     def _hw_iter_components(
             self, status: Dict[str, Any], category: str
