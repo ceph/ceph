@@ -9609,6 +9609,55 @@ TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
   }
 }
 
+/* Adoption reports every link (n-plan, "One rule:  a link is an object
+ * only beneath the bucket"):  the conversion counts each by what it
+ * resolves to, as NooBaa resolved it, and converts none.  An absolute
+ * link into the bucket is among them, which NooBaa served;  so are links
+ * in a subdirectory, one to the bucket itself and one climbing out of
+ * it, which make the walk recover the bucket's real path from below its
+ * root. */
+TEST_F(NSFSUpgradeTest, TheConversionCountsEveryLinkByWhatItResolvesTo)
+{
+  their_object("photo.jpg", "image/jpeg");
+  const sf::path bdir = bucket_path();
+  const sf::path outside = bp / "outside-the-bucket";
+  write_file(outside, "outside");
+  sf::create_directories(bdir / "sub");
+  const std::array<sf::path, 7> links{
+    bdir / "l-file", bdir / "l-abs", bdir / "sub" / "l-up",
+    bdir / "l-out", bdir / "sub" / "l-climb", bdir / "l-dangling",
+    bdir / "l-loop"};
+  sf::create_symlink("photo.jpg", links[0]);
+  sf::create_symlink(sf::canonical(bdir) / "photo.jpg", links[1]);
+  sf::create_symlink("..", links[2]);
+  sf::create_symlink(outside, links[3]);
+  sf::create_symlink("../..", links[4]);
+  sf::create_symlink("nowhere", links[5]);
+  sf::create_symlink("l-loop", links[6]);
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_TRUE(prog.complete);
+  EXPECT_EQ(prog.objects, 1u) << "a link was converted as an object";
+  EXPECT_EQ(prog.links.file, 2u) << "relative and absolute, into the bucket";
+  EXPECT_EQ(prog.links.directory, 1u) << "sub/l-up, the bucket itself";
+  EXPECT_EQ(prog.links.outside, 2u) << "l-out and sub/l-climb";
+  EXPECT_EQ(prog.links.dangling, 1u);
+  EXPECT_EQ(prog.links.loop, 1u);
+
+  for (const auto& l : links) {
+    EXPECT_TRUE(sf::is_symlink(sf::symlink_status(l))) << l << " was touched";
+  }
+  EXPECT_EQ(read_all(outside), "outside");
+  char names[4096];
+  const ssize_t len = ::listxattr(outside.c_str(), names, sizeof(names));
+  ASSERT_GE(len, 0) << cpp_strerror(errno);
+  for (ssize_t i = 0; i < len; i += std::strlen(names + i) + 1) {
+    EXPECT_FALSE(std::string_view(names + i).starts_with("user."))
+	<< names + i << ":  the conversion wrote through a link";
+  }
+}
+
 /* The severe one.  NooBaa's delete marker is user.noobaa.delete_marker and
  * nsfs's is user.nsfs.delete_marker;  every read resolves the name
  * through the bucket's strategy, and there is no chaining reader, so a

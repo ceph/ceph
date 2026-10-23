@@ -156,6 +156,14 @@ public:
     f->dump_unsigned("uploads", prog.uploads);
     f->dump_unsigned("parts", prog.parts);
     f->close_section();
+    /* not objects, so not converted:  what is no longer served */
+    f->open_object_section("links");
+    f->dump_unsigned("file", prog.links.file);
+    f->dump_unsigned("directory", prog.links.directory);
+    f->dump_unsigned("outside", prog.links.outside);
+    f->dump_unsigned("dangling", prog.links.dangling);
+    f->dump_unsigned("loop", prog.links.loop);
+    f->close_section();
     if (!prog.complete && (ret < 0)) {
       /* why it stopped, for an operator deciding whether to reissue
        * or to look at the log first */

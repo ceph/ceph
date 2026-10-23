@@ -8666,6 +8666,80 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* The path a descriptor is open on, or empty. */
+static std::string fd_path(int fd)
+{
+  char proc[64];
+  char buf[PATH_MAX];
+  snprintf(proc, sizeof(proc), "/proc/self/fd/%d", fd);
+  const ssize_t n = ::readlink(proc, buf, sizeof(buf) - 1);
+  return (n < 0) ? std::string() : std::string(buf, n);
+}
+
+/* Count and log one symbolic link met by the conversion walk.  `dir_fd`
+ * is the directory the walk reached at `prefix` without following a
+ * link, so the bucket's real path is that directory's with `prefix`
+ * taken off.  The link resolves as NooBaa resolved it:  following it,
+ * then comparing its real path with the bucket's. */
+static void count_link(const DoutPrefixProvider* dpp, int dir_fd,
+		       const std::string& prefix, const char* name,
+		       nsfs::ConvertProgress& progress)
+{
+  const std::string key = prefix + name;
+  char target[PATH_MAX];
+  const ssize_t tlen = ::readlinkat(dir_fd, name, target, sizeof(target) - 1);
+  const std::string to = (tlen < 0) ? std::string("?")
+				     : std::string(target, tlen);
+
+  /* With read-search, as the gateway's other reads take it, so the
+   * count describes the tree and not the uid the gateway runs as */
+  if (nsfs::impersonation_enabled()) {
+    (void) nsfs::hold_thread_capabilities(dpp);
+  }
+  const char* what = nullptr;
+  const int fd = ::openat(dir_fd, name, O_PATH | O_CLOEXEC);
+  if (fd < 0) {
+    const int err = errno;
+    if (err == ELOOP) {
+      ++progress.links.loop;
+      what = "loops";
+    } else {
+      ++progress.links.dangling;
+      what = "resolves to nothing";
+      if ((err != ENOENT) && (err != ENOTDIR)) {
+	/* a filesystem error, not a kind of link:  counted, and the
+	 * conversion goes on, since a link is not converted */
+	ldpp_dout(dpp, 0) << "ERROR: nsfs: convert: link " << key << " -> "
+	  << to << " cannot be resolved: " << cpp_strerror(err)
+	  << ";  counted dangling" << dendl;
+      }
+    }
+  } else {
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+    std::string root = fd_path(dir_fd);
+    if (root.size() >= prefix.size()) {
+      root.resize(root.size() - prefix.size());
+    }
+    const std::string real = fd_path(fd);
+    const bool inside = !root.empty() &&
+      ((real == root) || real.starts_with(root + "/"));
+    struct stat st{};
+    if (!inside) {
+      ++progress.links.outside;
+      what = "leaves the bucket";
+    } else if ((::fstat(fd, &st) == 0) && S_ISDIR(st.st_mode)) {
+      ++progress.links.directory;
+      what = "is a directory in the bucket";
+    } else {
+      ++progress.links.file;
+      what = "is a file in the bucket";
+    }
+  }
+  ldpp_dout(dpp, 1) << "nsfs: convert: " << key << " is a symbolic link ("
+    << to << "), which " << what << ";  a link is not an object, and it "
+    << "is not served" << dendl;
+}
+
 /* One directory of the tree, and everything under it.
  *
  * Depth first, and the order within a directory is readdir's, so a
@@ -8720,6 +8794,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       subdirs.emplace_back(name);
     } else if (S_ISREG(stx.stx_mode)) {
       files.emplace_back(name);
+    } else if (S_ISLNK(stx.stx_mode)) {
+      count_link(dpp, d->get_fd(), prefix, name, progress);
     }
     return 0;
   });
@@ -9555,6 +9631,15 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
     << " directory objects, " << prog.versions << " versions, "
     << prog.uploads << " uploads ("
     << prog.parts << " parts)" << dendl;
+  if (prog.links.total() > 0) {
+    ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " holds "
+      << prog.links.total() << " symbolic links, not served:  "
+      << prog.links.file << " to a file in the bucket, "
+      << prog.links.directory << " to a directory in the bucket, "
+      << prog.links.outside << " out of the bucket, "
+      << prog.links.dangling << " dangling, "
+      << prog.links.loop << " looping" << dendl;
+  }
   return 0;
 }
 
@@ -17589,6 +17674,11 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   put_report("versions", std::to_string(prog.versions));
   put_report("uploads", std::to_string(prog.uploads));
   put_report("parts", std::to_string(prog.parts));
+  put_report("links_file", std::to_string(prog.links.file));
+  put_report("links_directory", std::to_string(prog.links.directory));
+  put_report("links_outside", std::to_string(prog.links.outside));
+  put_report("links_dangling", std::to_string(prog.links.dangling));
+  put_report("links_loop", std::to_string(prog.links.loop));
   put_report("profile_set", prog.profile_set ? "true" : "false");
   put_report("profile", static_cast<NSFSBucket*>(b.get())->profile_name());
   if (ret < 0) {

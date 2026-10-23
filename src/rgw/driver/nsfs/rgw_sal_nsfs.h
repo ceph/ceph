@@ -135,6 +135,23 @@ struct ConvertProgress {
   uint64_t versions{0};
   uint64_t uploads{0};
   uint64_t parts{0};
+  /* Symbolic links, which are not objects and are not converted
+   * (n-plan, "One rule:  a link is an object only beneath the
+   * bucket").  Counted by what each resolves to as NooBaa resolved it,
+   * its real path against the bucket's, with read-search held so the
+   * count does not depend on the gateway's uid, and so an operator sees
+   * what the gateway no longer serves.  A link a filesystem error keeps
+   * from resolving is counted dangling, and logged as an error. */
+  struct Links {
+    uint64_t file{0};       /* to a file in the bucket */
+    uint64_t directory{0};  /* to a directory in the bucket */
+    uint64_t outside{0};    /* out of the bucket */
+    uint64_t dangling{0};   /* to nothing */
+    uint64_t loop{0};       /* to itself, directly or through others */
+    uint64_t total() const {
+      return file + directory + outside + dangling + loop;
+    }
+  } links;
   bool complete{false};    /* nothing foreign left;  the marker is gone */
   /* the mask was written, so the bucket IS in the target profile.
    *
