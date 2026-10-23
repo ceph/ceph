@@ -47,6 +47,22 @@ components have distinct responsibilities:
 - The **ceph-exporter daemon** exposes only Ceph daemon performance counters
   as Prometheus metrics, running on each host in the cluster.
 
+Histograms
+----------
+
+``ceph-exporter`` does not export histogram performance counters by
+default. To export the 1D histograms of selected loggers, list the
+loggers in :confval:`exporter_histograms` (or pass ``--histograms``).
+Use ``ALL`` to export the histograms of every logger. Exporting 2D
+histograms, for example the OSD op histograms, is not supported.
+
+Each histogram is exported as a Prometheus histogram named
+``ceph_<logger>_<counter>`` with ``_bucket``, ``_sum`` and ``_count``
+series. Time histograms get the suffix ``_seconds``. Byte histograms
+get the suffix ``_bytes``.
+
+.. confval:: exporter_histograms
+
 Configuration
 -------------
 
