@@ -6,10 +6,11 @@
 
 The ``require_osd_release`` field of the OSDMap is the cluster-wide
 declaration that every OSD is running at least the named release. It is
-set by the operator at the tail of a cluster upgrade, once all OSDs have
-been upgraded to the new binary. Raising it unlocks features that would
-otherwise be rejected as unsafe, and it bounds how far ahead of the
-cluster a new OSD release is allowed to boot.
+raised at the tail of a cluster upgrade, once all OSDs have been upgraded
+to the new binary. cephadm (``ceph orch upgrade``) and Rook raise it
+automatically; on other clusters, the operator raises it. Raising it unlocks
+features that would otherwise be rejected as unsafe, and it bounds how far
+ahead of the cluster a new OSD release is allowed to boot.
 
 Unlike :ref:`require_min_compat_client`, which can be lowered when
 features in use permit, ``require_osd_release`` can only move forward.
@@ -28,8 +29,8 @@ For example, after finishing an upgrade to *tentacle*:
    ceph osd require-osd-release tentacle
 
 Monitors only accept a small set of recent release names. The current
-accepted targets are ``squid``, ``tentacle``, and ``umbrella``; any
-older release name is rejected with ``not supported for this release``.
+accepted targets are ``squid``, ``tentacle``, and ``umbrella``; any older
+release name is rejected.
 The accepted set slides forward as new Ceph releases are added.
 
 The target release must be in the accepted set and must not be older
@@ -41,6 +42,10 @@ with ``--yes-i-really-mean-it``, but any up OSD that lacks the feature
 is then marked down. Once the flag is raised, the Monitors refuse the
 boot of an OSD of an earlier release and do not send it OSD maps (see
 `OSD boot window`_).
+
+The Monitors also refuse the command, unless you pass
+``--yes-i-really-mean-it``, when the current value is older than ``squid``
+or when no OSD is ``up``.
 
 Checking the current value
 ==========================
@@ -80,9 +85,10 @@ OSD boot window
 ===============
 
 An OSD of a release earlier than ``require_osd_release`` cannot boot.
-An OSD also refuses to boot if it is running a release that is more than
-two ahead of ``require_osd_release``. For example, with
-``require_osd_release`` set to ``reef``:
+The Monitors refuse the boot of an OSD whose release is more than two
+releases ahead of ``require_osd_release``. Monitors of this release also
+refuse any OSD older than ``squid``. For example, on a cluster whose
+Monitors run Umbrella 21 and whose ``require_osd_release`` is ``reef``:
 
 .. list-table::
    :header-rows: 1
@@ -92,8 +98,9 @@ two ahead of ``require_osd_release``. For example, with
      - Boots?
      - Notes
    * - ``reef``
-     - yes
-     - Same release.
+     - **no**
+     - ``disallowing boot of OSD ... because the osd lacks
+       CEPH_FEATURE_SERVER_SQUID``
    * - ``squid``
      - yes
      - One release ahead.
@@ -120,9 +127,9 @@ a ``HEALTH_WARN`` check ``OSD_UPGRADE_FINISHED`` with the message::
 
    all OSDs are running <release> or later but require_osd_release < <release>
 
-The appearance of this warning is the normal cue to run
-``ceph osd require-osd-release <release>``; the warning clears once the
-flag has been raised.
+On a cluster where no orchestrator raises the flag, the appearance of this
+warning is the normal cue to run ``ceph osd require-osd-release <release>``;
+the warning clears once the flag has been raised.
 
 Initial value on new clusters
 =============================
