@@ -205,6 +205,13 @@ add_executable(unittest_context
 add_ceph_unittest(unittest_context)
 target_link_libraries(unittest_context ceph-common)
 
+# unittest_memory_target_scale
+add_executable(unittest_memory_target_scale
+  test_memory_target_scale.cc
+  )
+add_ceph_unittest(unittest_memory_target_scale)
+target_link_libraries(unittest_memory_target_scale ceph-common)
+
 # unittest_safe_io
 add_executable(unittest_safe_io
   test_safe_io.cc

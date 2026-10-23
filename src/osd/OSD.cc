@@ -56,6 +56,7 @@
 #include "osdc/Objecter.h"
 
 #include "common/errno.h"
+#include "common/memory_target_scale.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
@@ -3698,6 +3699,7 @@ int OSD::init()
   ceph_assert(store);  // call pre_init() first!
 
   store->set_cache_shards(get_num_cache_shards());
+  update_memory_target_limits();
 
  int rotating_auth_attempts = 0;
  auto rotating_auth_timeout =
@@ -9789,10 +9791,30 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
   return true;
 }
 
+void OSD::update_memory_target_limits()
+{
+  // Limits sized for the default osd_memory_target, scaled down for a
+  // smaller one while they are at their defaults.  Cached because the PG log
+  // reads them on every write.
+  service.pg_log_entries_per_osd.store(
+    ceph::osd_memory_target_scaled<uint64_t>(
+      cct->_conf, "osd_target_pg_log_entries_per_osd"),
+    std::memory_order_relaxed);
+  set_pg_log_dups_tracked(ceph::osd_memory_target_scaled<uint64_t>(
+    cct->_conf, "osd_pg_log_dups_tracked"));
+  dout(1) << __func__ << " osd_memory_target "
+          << cct->_conf.get_val<Option::size_t>("osd_memory_target")
+          << ": pg log entries per osd " << service.pg_log_entries_per_osd
+          << ", dups tracked " << pg_log_dups_tracked(cct) << dendl;
+}
+
 unsigned OSDService::get_target_pg_log_entries() const
 {
   auto num_pgs = osd->get_num_pgs();
-  auto target = cct->_conf->osd_target_pg_log_entries_per_osd;
+  uint64_t target = pg_log_entries_per_osd.load(std::memory_order_relaxed);
+  if (!target) {
+    target = cct->_conf->osd_target_pg_log_entries_per_osd;
+  }
   if (num_pgs > 0 && target > 0) {
     // target an even spread of our budgeted log entries across all
     // PGs.  note that while we only get to control the entry count
@@ -10163,6 +10185,9 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "fsid"s,
     "osd_recovery_delay_start"s,
     "osd_client_message_size_cap"s,
+    "osd_memory_target"s,
+    "osd_target_pg_log_entries_per_osd"s,
+    "osd_pg_log_dups_tracked"s,
     "osd_client_message_cap"s,
     "osd_heartbeat_min_size"s,
     "osd_heartbeat_interval"s,
@@ -10286,8 +10311,15 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       pol.throttler_messages->reset_max(newval);
     }
   }
-  if (changed.count("osd_client_message_size_cap")) {
-    uint64_t newval = cct->_conf->osd_client_message_size_cap;
+  if (changed.count("osd_memory_target") ||
+      changed.count("osd_target_pg_log_entries_per_osd") ||
+      changed.count("osd_pg_log_dups_tracked")) {
+    update_memory_target_limits();
+  }
+  if (changed.count("osd_client_message_size_cap") ||
+      changed.count("osd_memory_target")) {
+    uint64_t newval = ceph::osd_memory_target_scaled<Option::size_t>(
+      cct->_conf, "osd_client_message_size_cap");
     Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
     if (pol.throttler_bytes) {
       pol.throttler_bytes->reset_max(newval);

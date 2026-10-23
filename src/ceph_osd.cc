@@ -46,6 +46,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
+#include "common/memory_target_scale.h"
 
 #include "log/Log.h"
 #include "perfglue/heap_profiler.h"
@@ -585,8 +586,8 @@ flushjournal_out:
 		    "(no journal)" : journal_path)
           << dendl;
 
-  uint64_t message_size =
-    g_conf().get_val<Option::size_t>("osd_client_message_size_cap");
+  uint64_t message_size = ceph::osd_memory_target_scaled<Option::size_t>(
+    g_conf(), "osd_client_message_size_cap");
   boost::scoped_ptr<Throttle> client_byte_throttler(
     new Throttle(g_ceph_context, "osd_client_bytes", message_size));
   uint64_t message_cap = g_conf().get_val<uint64_t>("osd_client_message_cap");

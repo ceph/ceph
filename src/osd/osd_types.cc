@@ -21,6 +21,7 @@
 #include "BloomHitSet.h"
 
 #include <algorithm>
+#include <atomic>
 #include <list>
 #include <map>
 #include <ostream>
@@ -6066,6 +6067,19 @@ list<pg_log_t> pg_log_t::generate_test_instances()
   return o;
 }
 
+static std::atomic<unsigned> scaled_pg_log_dups_tracked{0};
+
+void set_pg_log_dups_tracked(unsigned v)
+{
+  scaled_pg_log_dups_tracked.store(v, std::memory_order_relaxed);
+}
+
+unsigned pg_log_dups_tracked(CephContext *cct)
+{
+  const unsigned v = scaled_pg_log_dups_tracked.load(std::memory_order_relaxed);
+  return v ? v : cct->_conf->osd_pg_log_dups_tracked;
+}
+
 static void _handle_dups(CephContext* cct, pg_log_t &target, const pg_log_t &other, unsigned maxdups)
 {
   auto earliest_dup_version =
@@ -6114,7 +6128,7 @@ void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
     lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
     log.push_front(*i);
   }
-  _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
+  _handle_dups(cct, *this, other, pg_log_dups_tracked(cct));
   lgeneric_subdout(cct, osd, 20) << __func__ << " END v " << v
 				 << " dups.size()=" << dups.size()
 				 << " other.dups.size()=" << other.dups.size() << dendl;
@@ -6138,7 +6152,7 @@ void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
     lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
     log.push_front(*i);
   }
-  _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
+  _handle_dups(cct, *this, other, pg_log_dups_tracked(cct));
   lgeneric_subdout(cct, osd, 20) << __func__ << " END max " << max
 				 << " dups.size()=" << dups.size()
 				 << " other.dups.size()=" << other.dups.size() << dendl;
