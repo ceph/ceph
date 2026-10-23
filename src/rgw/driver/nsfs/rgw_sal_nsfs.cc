@@ -293,6 +293,12 @@ static bool key_hits_reserved_name(std::string_view key,
 static bool entry_is_content(int parent_fd, std::string_view name,
 			     const nsfs::ReservedNames& rn)
 {
+  /* a link is not an object, so it does not keep its bucket */
+  struct statx stx;
+  if ((nsfs::statx(parent_fd, std::string(name).c_str(), AT_SYMLINK_NOFOLLOW,
+		   STATX_MODE, &stx) == 0) && S_ISLNK(stx.stx_mode)) {
+    return false;
+  }
   if (name == HIDDEN_VERSIONS_PATH) {
     /* version entries are user data;  the lock file is nsfs's */
     return dir_has_content(parent_fd, std::string(name).c_str(),
@@ -878,6 +884,29 @@ static int unlinkat_as(const DoutPrefixProvider* dpp,
 				      [&]() -> int {
     return (::unlinkat(dirfd, name, 0) < 0) ? -errno : 0;
   }, null_yield);
+}
+
+/* A symbolic link is not an object (n-plan, "One rule:  a link is an
+ * object only beneath the bucket"), so a write or a delete that lands on
+ * a name a link holds unlinks the link, never its target.  Returns 0
+ * whether or not there was a link, or -errno. */
+static int unlink_if_link(const DoutPrefixProvider* dpp,
+			  const nsfs::FSIdentity& id,
+			  const nsfs::AccessStrategy* model,
+			  int dirfd, const char* name)
+{
+  struct statx stx;
+  if ((nsfs::statx(dirfd, name, AT_SYMLINK_NOFOLLOW, STATX_MODE, &stx) != 0) ||
+      !S_ISLNK(stx.stx_mode)) {
+    return 0;
+  }
+  const int ret = unlinkat_as(dpp, id, model, dirfd, name);
+  if ((ret < 0) && (ret != -ENOENT)) {
+    return ret;
+  }
+  ldpp_dout(dpp, 10) << "nsfs: " << name
+    << " is a symbolic link, which is not an object;  unlinked" << dendl;
+  return 0;
 }
 
 static int renameat_as(const DoutPrefixProvider* dpp,
@@ -1810,6 +1839,10 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
   if (nsfs::statx(parent_fd, leaf.c_str(),
 	    AT_SYMLINK_NOFOLLOW, STATX_ALL, &cur_stx) != 0) {
     return 0;
+  }
+  if (S_ISLNK(cur_stx.stx_mode)) {
+    /* not an object, so not a version:  nothing is demoted */
+    return unlink_if_link(dpp, id, model, parent_fd, leaf.c_str());
   }
 
   /* Demoted under the id it was recorded with, so a client holding it
@@ -3128,6 +3161,12 @@ int File::open(const DoutPrefixProvider* dpp)
     << (ro ? " O_RDONLY" : " O_RDWR")
     << " as " << (identity.active() ? identity.key.to_str() : "the gateway")
     << " -> " << ret << dendl;
+  if (ret == -ELOOP) {
+    /* O_NOFOLLOW met a link swapped in after the stat:  not an object */
+    ldpp_dout(dpp, 10) << "nsfs: " << get_name()
+      << " is a symbolic link, which is not an object" << dendl;
+    return -ENOENT;
+  }
   if (ret < 0) {
     ret = -ret;
     ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name()
@@ -3192,6 +3231,15 @@ int File::stat(const DoutPrefixProvider* dpp, bool force)
     return ret;
   }
 
+  if (S_ISLNK(stx.stx_mode)) {
+    /* Not an object, so not cached as one:  a publish replaces the link
+     * and stats this entry again, and must see what it published. */
+    ldpp_dout(dpp, 10) << "nsfs: " << get_name()
+      << " is a symbolic link, which is not an object" << dendl;
+    stat_done = false;
+    exist = false;
+    return -ENOENT;
+  }
   if (!S_ISREG(stx.stx_mode)) {
     /* Not a file */
     ldpp_dout(dpp, 0) << "ERROR: " << get_name() << " is not a file" << dendl;
@@ -3394,7 +3442,14 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
   {
     std::unique_ptr<FSEnt> del;
     int ret = dst_dir->get_ent(dpp, y, dst_name, std::string(), del);
-    if (ret >= 0) {
+    if (ret == -ENOENT) {
+      ret = unlink_if_link(dpp, dst_dir->get_identity(),
+			   dst_dir->get_access_model(), dst_dir->get_fd(),
+			   dst_name.c_str());
+      if (ret < 0) {
+	return ret;
+      }
+    } else if (ret >= 0) {
       ret = del->remove(dpp, y, /*delete_children=*/true);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
@@ -3850,7 +3905,14 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   {
     std::unique_ptr<FSEnt> del;
     ret = dst_dir->get_ent(dpp, y, dst_name, std::string(), del);
-    if (ret >= 0) {
+    if (ret == -ENOENT) {
+      ret = unlink_if_link(dpp, dst_dir->get_identity(),
+			   dst_dir->get_access_model(), dst_dir->get_fd(),
+			   dst_name.c_str());
+      if (ret < 0) {
+	return ret;
+      }
+    } else if (ret >= 0) {
       ret = del->remove(dpp, y, /*delete_children=*/true);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
@@ -3893,6 +3955,10 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     }
 
     int r = this->get_ent(dpp, y, name, std::string(), sobj);
+    if ((r == -ENOENT) || (r == -EINVAL)) {
+      /* not an object, or gone since readdir:  nothing to copy */
+      return 0;
+    }
     if (r < 0)
       return r;
     return sobj->copy(dpp, y, dest.get(), name, src_as_gateway);
@@ -3952,6 +4018,11 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
       ldpp_dout(dpp, 0) << "ERROR: invalid type " << type << dendl;
       return -EINVAL;
     }
+  } else if (S_ISLNK(nstx.stx_mode)) {
+    /* not an object:  no object is at this name */
+    ldpp_dout(dpp, 10) << "nsfs: " << name << " in dir " << get_name()
+      << " is a symbolic link, which is not an object" << dendl;
+    return -ENOENT;
   } else {
     return -EINVAL;
   }
@@ -4096,7 +4167,14 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
    * attributes are written by the caller, as for any copy. */
   std::unique_ptr<FSEnt> del;
   int ret = dst_dir->get_ent(dpp, y, name, std::string(), del);
-  if (ret >= 0) {
+  if (ret == -ENOENT) {
+    ret = unlink_if_link(dpp, dst_dir->get_identity(),
+			 dst_dir->get_access_model(), dst_dir->get_fd(),
+			 name.c_str());
+    if (ret < 0) {
+      return ret;
+    }
+  } else if (ret >= 0) {
     ret = del->remove(dpp, y, /*delete_children=*/true);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << name << dendl;
@@ -4186,6 +4264,14 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
     }
 
     int ret = get_ent(dpp, y, name, std::string(), ent);
+    if ((ret == -ENOENT) || (ret == -EINVAL)) {
+      /* Not an object -- a link, or not a file or a directory -- or
+       * removed since readdir returned it.  Ending the walk here would
+       * end the listing here, since the cache keeps what it has. */
+      ldpp_dout(dpp, 10) << "nsfs: listing skips " << name << " in "
+	<< get_name() << ": " << cpp_strerror(-ret) << dendl;
+      return 0;
+    }
     if (ret < 0)
       return ret;
 
@@ -9651,6 +9737,10 @@ int NSFSBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 
     std::unique_ptr<FSEnt> dent;
     int ret = dir->get_ent(dpp, y, name, std::string(), dent);
+    if ((ret == -ENOENT) || (ret == -EINVAL)) {
+      /* not an object, or gone since readdir:  nothing to count */
+      return 0;
+    }
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not get ent for object " << name << ": "
@@ -10346,8 +10436,23 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
   int ret = stat(dpp);
   if (ret < 0) {
       if (ret == -ENOENT) {
-	// Nothing to do
-	return 0;
+	/* No object, but the name may hold a link, which is not one, and
+	 * a DELETE of its name unlinks it */
+	std::vector<std::unique_ptr<Directory>> chain;
+	Directory* leaf_dir;
+	std::string leaf_name;
+	if ((resolve_key_path(dpp, b->get_dir(), state.obj.key,
+			      get_fname(/*use_version=*/false),
+			      driver->get_reserved_names(), b->is_internal(),
+			      /*create_dirs=*/false, driver->ctx(),
+			      chain, leaf_dir, leaf_name, pending_identity,
+			      driver->get_access_strategy()) < 0) ||
+	    (leaf_dir->open(dpp) < 0)) {
+	  return 0;
+	}
+	return unlink_if_link(dpp, pending_identity,
+			      driver->get_access_strategy(),
+			      leaf_dir->get_fd(), leaf_name.c_str());
       }
       return ret;
   }
@@ -13131,6 +13236,18 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
   const bool as_gateway = ent->get_identity().active() &&
     driver->get_access_strategy()->permits(nsfs::AccessClass::data);
 
+  if (excl) {
+    /* If-None-Match:  * finds no object in a link, and the exclusive
+     * link would fail on it */
+    const int lret = unlink_if_link(dpp, ent->get_identity(),
+				    driver->get_access_strategy(),
+				    ent->get_parent()->get_fd(),
+				    ent->get_name().c_str());
+    if (lret < 0) {
+      return lret;
+    }
+  }
+
   int ret;
   if (as_gateway) {
     ret = nsfs::with_capabilities(dpp, PUBLISH_AS_GATEWAY_CAPS,
@@ -14425,6 +14542,17 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
   }
 
+  if (ret == -ENOENT) {
+    /* no current version, but the name may hold a link:  not an object,
+     * so not a version, and the delete unlinks it before the marker */
+    const int lret = unlink_if_link(dpp, identity, model, parent_fd,
+				    dm_leaf.c_str());
+    if (lret < 0) {
+      ::close(vfd);
+      return lret;
+    }
+  }
+
   std::string demoted_ver_id;
   bool did_demote = false;
 
@@ -15074,7 +15202,9 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 	    return 0;
 	  }
 	  auto pf = std::make_unique<nsfs::File>(sname, dir, driver->ctx());
-	  if (pf->stat(dpp, y) < 0) {
+	  if (const int sret = pf->stat(dpp, y); sret < 0) {
+	    ldpp_dout(dpp, 10) << "nsfs: list_parts skips " << sname
+	      << ": " << cpp_strerror(-sret) << dendl;
 	    return 0;
 	  }
 	  file::listing::MultipartPartInfo pi;

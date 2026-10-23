@@ -343,6 +343,7 @@ public:
    * unlink is performed by the gateway where it permits
    * AccessClass::data (with_identity_or_raise()). */
   void set_access_model(const nsfs::AccessStrategy* m) { access_model = m; }
+  const nsfs::AccessStrategy* get_access_model() const { return access_model; }
 
   /* Ask for no more access than the caller needs.
    *

@@ -936,9 +936,9 @@ public:
  * A File stands only for a regular file -- get_ent() and stat() refuse
  * anything else -- so the case is the race:  the entry stat'ed as a
  * regular file, then swapped for a link before the open.  The open
- * refuses it rather than reaching the link's target, here a file
- * outside the bucket.  The control is the same sequence without the
- * swap. */
+ * finds no object there, since a link is not one, rather than reaching
+ * the link's target, here a file outside the bucket.  The control is
+ * the same sequence without the swap. */
 TEST_F(NSFSBucketTest, AFileSwappedForALinkAfterItsStatIsNotOpened)
 {
   auto* dir = static_cast<rgw::sal::NSFSBucket*>(bucket.get())->get_dir();
@@ -957,7 +957,7 @@ TEST_F(NSFSBucketTest, AFileSwappedForALinkAfterItsStatIsNotOpened)
   ASSERT_EQ(f.stat(env->dpp), 0) << "stat'ed as a regular file";
   ASSERT_TRUE(sf::remove(bucket_path() / "swapped"));
   sf::create_symlink(outside, bucket_path() / "swapped");
-  EXPECT_EQ(f.open(env->dpp), -ELOOP)
+  EXPECT_EQ(f.open(env->dpp), -ENOENT)
       << "the link swapped in after the stat was followed";
 }
 
@@ -4839,7 +4839,7 @@ TEST_F(NSFSImpersonatedRenameTest, AnIdentitysOpenRefusesALinkSwappedIn)
   });
   t.join();
   EXPECT_EQ(control, 0) << "the control did not open";
-  EXPECT_EQ(swapped, -ELOOP)
+  EXPECT_EQ(swapped, -ENOENT)
       << "the link swapped in after the stat was followed";
 }
 
@@ -10048,6 +10048,215 @@ static std::vector<std::string> listing_rows(rgw::sal::Bucket* bucket,
 	e.meta.storage_class, e.flags, e.exists));
   }
   return rows;
+}
+
+/* A symbolic link is not an object (n-plan, "One rule:  a link is an
+ * object only beneath the bucket").  One link of each kind the rule
+ * covers:  to a file in the bucket, to a directory in the bucket, out of
+ * the bucket, to nothing, and to itself.  `o00` and `sub/inner` are
+ * objects. */
+static void plant_links(const sf::path& bucket_dir, const sf::path& outside)
+{
+  write_file(bucket_dir / "o00", "o00");
+  sf::create_directories(bucket_dir / "sub");
+  write_file(bucket_dir / "sub" / "inner", "inner");
+  write_file(outside, "outside");
+  sf::create_symlink("o00", bucket_dir / "l-file");
+  sf::create_symlink("sub", bucket_dir / "l-dir");
+  sf::create_symlink(outside, bucket_dir / "l-out");
+  sf::create_symlink("nowhere", bucket_dir / "l-dangling");
+  sf::create_symlink("l-loop", bucket_dir / "l-loop");
+}
+
+static const std::array<const char*, 5> planted_links{
+  "l-file", "l-dir", "l-out", "l-dangling", "l-loop"};
+
+static bool is_link(const sf::path& p)
+{
+  return sf::is_symlink(sf::symlink_status(p));
+}
+
+/* One link in a directory ended that directory's listing:  the walk
+ * returned get_ent()'s refusal, and BucketCache::fill() kept what it had
+ * collected.  Twenty objects and a link of every kind, so readdir order
+ * cannot put the links last;  every object lists and no link does. */
+TEST_F(NSFSBucketTest, ALinkIsNotListedAndDoesNotEndTheListing)
+{
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+  std::set<std::string> want{"o00", "sub/inner"};
+  for (int i = 1; i < 20; ++i) {
+    const std::string k = fmt::format("o{:02}", i);
+    write_file(bucket_path() / k, k);
+    want.insert(k);
+  }
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+  std::set<std::string> got;
+  for (const auto& e : results.objs) {
+    got.insert(e.key.name);
+  }
+  for (const auto& k : want) {
+    EXPECT_TRUE(got.count(k)) << k << " is missing from the listing";
+  }
+  for (const auto& k : got) {
+    EXPECT_FALSE(k.starts_with("l-")) << k << ", a link, was listed";
+  }
+}
+
+/* A key that names a link is NoSuchKey, whatever the link points at.
+ * The control is the object `o00`, which `l-file` names. */
+TEST_F(NSFSBucketTest, ALinkReadsAsNoSuchKey)
+{
+  plant_links(bucket_path(), bp / "outside-the-bucket");
+  for (const char* k : planted_links) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    EXPECT_EQ(obj->load_obj_state(env->dpp, null_yield), -ENOENT) << k;
+  }
+  auto control = bucket->get_object(rgw_obj_key("o00"));
+  EXPECT_EQ(control->load_obj_state(env->dpp, null_yield), 0);
+}
+
+/* A DELETE of a link's name unlinks the link and never its target --
+ * the one S3 operation that clears a name no listing shows. */
+TEST_F(NSFSBucketTest, DeletingALinksNameUnlinksTheLinkAndNotItsTarget)
+{
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+  for (const char* k : planted_links) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    auto del = obj->get_delete_op();
+    EXPECT_EQ(del->delete_obj(env->dpp, null_yield, 0), 0) << k;
+    EXPECT_FALSE(is_link(bucket_path() / k)) << k << " is still there";
+  }
+  EXPECT_EQ(read_all(bucket_path() / "o00"), "o00");
+  EXPECT_EQ(read_all(bucket_path() / "sub" / "inner"), "inner");
+  EXPECT_EQ(read_all(outside), "outside");
+}
+
+/* A bucket is empty when it lists nothing (DECISIONS.md 2026-10-13), so
+ * links do not keep it, and its delete removes them -- the links, not
+ * what they point at.  The control is the same bucket with an object. */
+TEST_F(NSFSBucketTest, ALinkDoesNotKeepABucket)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const sf::path outside = bp / "outside-the-bucket";
+  write_file(outside, "outside");
+  sf::create_symlink(outside, bucket_path() / "l-out");
+  sf::create_symlink("nowhere", bucket_path() / "l-dangling");
+  sf::create_symlink("l-loop", bucket_path() / "l-loop");
+
+  write_file(bucket_path() / "o00", "o00");
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
+      << "the control:  an object did not count as content";
+  sf::remove(bucket_path() / "o00");
+
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "a link counted as content";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_FALSE(sf::exists(sf::symlink_status(bucket_path())));
+  EXPECT_EQ(read_all(outside), "outside");
+}
+
+/* An entry readdir returned and a concurrent DELETE removed before the
+ * walk reached it ended the listing as a link did.  readdir hands the
+ * walk a batch of names, so the callback removing every other object
+ * when the first is emitted stands in for the DELETE:  the names are
+ * still in the batch and the files are gone. */
+TEST_F(NSFSBucketTest, AnEntryRemovedDuringTheWalkIsSkipped)
+{
+  std::set<std::string> names;
+  for (int i = 0; i < 20; ++i) {
+    const std::string k = fmt::format("o{:02}", i);
+    write_file(bucket_path() / k, k);
+    names.insert(k);
+  }
+  auto* dir = static_cast<rgw::sal::NSFSBucket*>(bucket.get())->get_dir();
+  ASSERT_EQ(dir->open(env->dpp), 0);
+
+  int emitted = 0;
+  const sf::path bdir = bucket_path();
+  nsfs::fill_cache_cb_t cb =
+    [&](const DoutPrefixProvider*, rgw_bucket_dir_entry& bde) -> int {
+      if (emitted++ == 0) {
+	for (const auto& k : names) {
+	  if (k != bde.key.name) {
+	    sf::remove(bdir / k);
+	  }
+	}
+      }
+      return 0;
+    };
+  EXPECT_EQ(dir->fill_cache(env->dpp, null_yield, cb, 0, acl_owner), 0);
+  EXPECT_EQ(emitted, 1) << "an entry that was gone was emitted";
+}
+
+/* A PUT of a link's name replaces the link with the object, and the
+ * link's target is untouched -- including under If-None-Match:  *, since
+ * a link is not an object for the condition to find. */
+TEST_F(NSFSBucketTest, APutOfALinksNameReplacesTheLink)
+{
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "l-out",
+	     "replaced", "text/plain");
+  EXPECT_FALSE(is_link(bucket_path() / "l-out"));
+  EXPECT_EQ(read_all(bucket_path() / "l-out"), "replaced");
+  EXPECT_EQ(read_all(outside), "outside");
+
+  auto obj = bucket->get_object(rgw_obj_key("l-file"));
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, "put");
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+  bufferlist bl;
+  bl.append("excl");
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, 4), 0);
+  Attrs attrs;
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  EXPECT_EQ(writer->complete(4, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, "*",
+			     nullptr, nullptr, nullptr, rctx, 0), 0)
+      << "If-None-Match:  * found a link to refuse on";
+  EXPECT_FALSE(is_link(bucket_path() / "l-file"));
+  EXPECT_EQ(read_all(bucket_path() / "l-file"), "excl");
+  EXPECT_EQ(read_all(bucket_path() / "o00"), "o00");
+}
+
+/* In a versioned bucket a link is not a version:  a PUT of its name
+ * demotes nothing, and a DELETE of it leaves only a delete marker.  No
+ * link reaches `.versions`. */
+TEST_F(NSFSBucketTest, AVersionedWriteOverALinkMakesNoVersionOfIt)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  const sf::path outside = bp / "outside-the-bucket";
+  plant_links(bucket_path(), outside);
+
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "l-out",
+	     "replaced", "text/plain");
+  EXPECT_EQ(listed_versions(bucket.get(), env->dpp, "l-out").size(), 1u)
+      << "the link was demoted as a version";
+
+  auto obj = bucket->get_object(rgw_obj_key("l-file"));
+  auto del = obj->get_delete_op();
+  EXPECT_EQ(del->delete_obj(env->dpp, null_yield, 0), 0);
+  EXPECT_FALSE(is_link(bucket_path() / "l-file"));
+  EXPECT_EQ(listed_versions(bucket.get(), env->dpp, "l-file").size(), 1u)
+      << "a version besides the delete marker";
+
+  const sf::path vers = bucket_path() / ".versions";
+  if (sf::exists(vers)) {
+    for (const auto& e : sf::directory_iterator(vers)) {
+      EXPECT_FALSE(is_link(e.path())) << e.path() << " is a link";
+    }
+  }
+  EXPECT_EQ(read_all(bucket_path() / "o00"), "o00");
+  EXPECT_EQ(read_all(outside), "outside");
 }
 
 /* The listing cache needs no invalidation when a bucket is converted
