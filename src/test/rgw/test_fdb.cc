@@ -938,6 +938,22 @@ TEST_CASE("approximate range size composes with selections", "[fdb][query]")
  CHECK(0 == lfdb::approximate_range_size(dbh, lfdb::select { prefix, prefix }));
 }
 
+TEST_CASE("half-open range conversion preserves reserved keyspace bounds", "[fdb][query]")
+{
+ auto selection = lfdb::select {"a", "b"};
+ selection.begin_inclusive = false;
+ selection.end_key = std::string {"\xff\0", 2};
+ selection.end_inclusive = true;
+ selection.options.reverse_order = true;
+
+ const auto converted = lfdb::detail::as_half_open_select(std::move(selection));
+ CHECK(std::string("a\0", 2) == converted.begin_key);
+ CHECK(std::string("\xff", 1) == converted.end_key);
+ CHECK(converted.begin_inclusive);
+ CHECK_FALSE(converted.end_inclusive);
+ CHECK(converted.options.reverse_order);
+}
+
 static_assert(not std::default_initializable<lfdb::watch_handle>);
 static_assert(not std::copy_constructible<lfdb::watch_handle>);
 static_assert(std::move_constructible<lfdb::watch_handle>);

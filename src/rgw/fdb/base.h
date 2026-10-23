@@ -626,13 +626,20 @@ inline std::string key_after(std::string_view key)
  return std::string(key) + '\0';
 }
 
-inline select as_half_open_select(const select& selection)
+inline select as_half_open_select(select selection)
 {
- auto half_open = select {
-  selection.begin_inclusive ? selection.begin_key : key_after(selection.begin_key),
-  selection.end_inclusive ? key_after(selection.end_key) : selection.end_key
- };
+ if (not selection.begin_inclusive) {
+  selection.begin_key.push_back('\0');
+ }
 
+ if (selection.end_inclusive) {
+  selection.end_key.push_back('\0');
+ }
+
+ // Preserve the constructor's reserved-key clamping while transferring buffers.
+ auto half_open = select {
+  std::move(selection.begin_key), std::move(selection.end_key), true, false
+ };
  half_open.options = selection.options;
 
  return half_open;
