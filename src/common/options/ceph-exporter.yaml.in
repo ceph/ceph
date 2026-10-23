@@ -67,12 +67,12 @@ options:
   flags:
   - runtime
 - name: exporter_histograms
-  type: bool
+  type: str
   level: advanced
-  desc: Export perf counter histograms
-  long_desc: Histograms are considerably larger than scalar counters so fetching them adds
-    substantially to the size of every scrape.
-  default: false
+  desc: Perf counter loggers to export histograms of
+  long_desc: Comma or space separated list of perf counter logger names, e.g.
+    rgw_op_hist, or ALL.
+  default:
   services:
   - ceph-exporter
   flags:

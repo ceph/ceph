@@ -1806,6 +1806,17 @@ static void setup_test_mixed_counters(CephContext* cct) {
                          PerfHistogramCommon::axis_config_d::web_latency("lat"),
                          "A latency histogram");
   cct->get_perfcounters_collection()->add(bld.create_perf_counters());
+
+  // histograms of labeled loggers are selected by their key name
+  PerfCountersBuilder labeled(cct,
+      ceph::perf_counters::key_create("test_perfcounter_labeled", {{"op", "a"}}),
+      TEST_PERFCOUNTERS_MIXED_FIRST, TEST_PERFCOUNTERS_MIXED_LAST);
+  labeled.add_u64_counter(TEST_PERFCOUNTERS_MIXED_SCALAR, "labeled_count",
+                          "A labeled scalar counter");
+  labeled.add_time_histogram(TEST_PERFCOUNTERS_MIXED_HIST, "labeled_hist_counter",
+                             PerfHistogramCommon::axis_config_d::web_latency("lat"),
+                             "A labeled latency histogram");
+  cct->get_perfcounters_collection()->add(labeled.create_perf_counters());
 }
 
 TEST(PerfCounters, HistogramSelection) {
@@ -1829,25 +1840,47 @@ TEST(PerfCounters, HistogramSelection) {
   ASSERT_TRUE(has(msg, "scalar_counter"));
   ASSERT_FALSE(has(msg, "hist_counter"));
 
-  // plain `counter dump` does not dump histograms by default
+  for (const char* prefix : {"counter dump", "counter schema"}) {
+    const auto request = [&](const char* histograms) {
+      return fmt::format(
+          R"({{ "prefix": "{}", "histograms": [{}], "format": "raw" }})",
+          prefix, histograms);
+    };
+
+    // no histograms by default
   ASSERT_EQ("", client.do_request(
-      R"({ "prefix": "counter dump", "format": "raw" })", &msg));
+        fmt::format(R"({{ "prefix": "{}", "format": "raw" }})", prefix), &msg));
   ASSERT_TRUE(has(msg, "scalar_counter"));
   ASSERT_FALSE(has(msg, "hist_counter"));
+    ASSERT_FALSE(has(msg, "labeled_hist_counter"));
+    ASSERT_EQ("", client.do_request(request(""), &msg));
+    ASSERT_TRUE(has(msg, "scalar_counter"));
+    ASSERT_FALSE(has(msg, "hist_counter"));
+    ASSERT_FALSE(has(msg, "labeled_hist_counter"));
+
+    // histograms of the listed loggers only, scalars of all
+    ASSERT_EQ("", client.do_request(request(R"("test_perfcounter_mixed")"), &msg));
+    ASSERT_TRUE(has(msg, "scalar_counter"));
+    ASSERT_TRUE(has(msg, "\"hist_counter"));
+    ASSERT_FALSE(has(msg, "labeled_hist_counter"));
+    ASSERT_EQ("", client.do_request(request(R"("test_perfcounter_labeled")"), &msg));
+    ASSERT_TRUE(has(msg, "scalar_counter"));
+    ASSERT_FALSE(has(msg, "\"hist_counter"));
+    ASSERT_TRUE(has(msg, "labeled_hist_counter"));
   ASSERT_EQ("", client.do_request(
-      R"({ "prefix": "counter schema", "format": "raw" })", &msg));
+        request(R"("test_perfcounter_mixed", "test_perfcounter_labeled")"), &msg));
+    ASSERT_TRUE(has(msg, "\"hist_counter"));
+    ASSERT_TRUE(has(msg, "labeled_hist_counter"));
+    ASSERT_EQ("", client.do_request(request(R"("no_such_logger")"), &msg));
   ASSERT_TRUE(has(msg, "scalar_counter"));
   ASSERT_FALSE(has(msg, "hist_counter"));
 
-  // --histograms adds histograms to the scalar output
-  ASSERT_EQ("", client.do_request(
-      R"({ "prefix": "counter dump", "histograms": true, "format": "raw" })", &msg));
+    // ALL selects the histograms of every logger
+    ASSERT_EQ("", client.do_request(request(R"("ALL")"), &msg));
   ASSERT_TRUE(has(msg, "scalar_counter"));
-  ASSERT_TRUE(has(msg, "hist_counter"));
-  ASSERT_EQ("", client.do_request(
-      R"({ "prefix": "counter schema", "histograms": true, "format": "raw" })", &msg));
-  ASSERT_TRUE(has(msg, "scalar_counter"));
-  ASSERT_TRUE(has(msg, "hist_counter"));
+    ASSERT_TRUE(has(msg, "\"hist_counter"));
+    ASSERT_TRUE(has(msg, "labeled_hist_counter"));
+  }
 
   g_ceph_context->get_perfcounters_collection()->clear();
 }

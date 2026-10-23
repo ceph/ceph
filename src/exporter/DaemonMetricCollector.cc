@@ -341,6 +341,16 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
         std::unique_ptr<UnorderedMetricsBuilder>(new UnorderedMetricsBuilder());
   }
   auto prio_limit = counter_prio;
+  const auto histogram_loggers =
+      g_conf().get_val<std::string>("exporter_histograms");
+  boost::json::array histograms;
+  for (const auto logger : ceph::split(histogram_loggers)) {
+    histograms.emplace_back(logger);
+  }
+  const auto counter_request = [&histograms](std::string_view prefix) {
+    return boost::json::serialize(
+        boost::json::object{{"prefix", prefix}, {"histograms", histograms}});
+  };
   for (auto &[daemon_name, sock_client] : clients) {
     if (sockClientsPing) {
       bool ok;
@@ -357,15 +367,14 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
         continue;
       }
     }
-    bool histograms = g_conf().get_val<bool>("exporter_histograms");
     std::string counter_dump_response = dump_response.size() > 0 ? dump_response :
-       asok_request(sock_client, fmt::format("{{\"prefix\": \"counter dump\", \"histograms\": {}}}", histograms), daemon_name);
+       asok_request(sock_client, counter_request("counter dump"), daemon_name);
     if (counter_dump_response.size() == 0) {
         failures++;
         continue;
     }
     std::string counter_schema_response = schema_response.size() > 0 ? schema_response :
-       asok_request(sock_client, fmt::format("{{\"prefix\": \"counter schema\", \"histograms\": {}}}", histograms), daemon_name);
+       asok_request(sock_client, counter_request("counter schema"), daemon_name);
     if (counter_schema_response.size() == 0) {
       failures++;
       continue;
