@@ -224,7 +224,7 @@ void StrayManager::_purge_stray_purged(
       // Nobody should be taking new references to an inode when it
       // is being purged (aside from it were 
 
-      derr << "Rogue reference after purge to " << *dn << dendl;
+      derr << "Rogue reference after purge to " << *dn << " " << *in << dendl;
       ceph_abort_msg("rogue reference to purging inode");
     }
 
