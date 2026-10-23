@@ -59,6 +59,15 @@ namespace fdbc = lfdb::layer::content;
 using namespace std::string_literals;
 ```
 
+The examples use the spellings below. The compatibility names perform the same
+operations and remain available for existing callers.
+
+| Purpose | Examples use | Compatibility name |
+| --- | --- | --- |
+| Stream rows | `lfdb::scan()` | `lfdb::pair_generator()` |
+| Stream blocks of rows | `lfdb::blocks()` | `lfdb::block_generator()` |
+| Compile content keys | `fdbc::key()` | `fdbc::assemble()` |
+
 The snippets share the database opened in Setup. Application record types and
 functions such as `use_name()` stand for the application's own data and work.
 The recovery examples below contain their entire transaction bodies.
@@ -191,9 +200,10 @@ options.erase(FDB_TR_OPTION_TIMEOUT);
 options.emplace_back(FDB_TR_OPTION_TIMEOUT, std::int64_t {5000});
 ```
 
-The container owns string and byte values. A transaction or transactor retains its own option snapshot; editing the original
+The container owns string and byte values. A transaction, transactor, or lazy
+asynchronous transaction retains its own option snapshot; editing the original
 list affects future construction. Passing an owned list as an rvalue to
-`make_transaction()` transfers its storage.
+`make_transaction()` or experimental `transact()` transfers its storage.
 Validation occurs when options are applied, rather than during list editing;
 FoundationDB enforces value types and limits, and may defer an error until a
 subsequent request. Failures retain the native value and category in
@@ -203,6 +213,7 @@ code in the message.
 On replay, libfdb reapplies every nonpersistent entry once, in recorded order.
 FoundationDB retains timeout, retry limit, maximum retry delay, and authorization
 token options, so libfdb does not reapply those entries after `on_error()`.
+Core operations and both experimental async backends share these semantics.
 
 ## Basic Operations
 
@@ -246,6 +257,363 @@ lfdb::get(dbh, "person/konrad-zuse/name",
             copy_or_decode(bytes);
           });
 ```
+
+### Experimental Sender Operations
+
+Concurrency is experimental and disabled by default. Select one backend with
+`LIBFDB_EXPERIMENTAL_CONCURRENCY=OFF|ASIO|NVIDIA_STDEXEC`.
+`NVIDIA_STDEXEC` supplies directly composable senders using NVIDIA's
+implementation of the C++26 execution model:
+
+```sh
+ARGS="-DWITH_RADOSGW_FDB=ON -DLIBFDB_EXPERIMENTAL_CONCURRENCY=NVIDIA_STDEXEC" ./do_cmake.sh
+ninja -C build -j8 unittest_fdb_execution
+```
+
+Only `NVIDIA_STDEXEC` fetches the pinned stdexec dependency. `ASIO` provides
+deferred operations and asynchronous transaction replay without fetching or
+including stdexec. Build its tests with `unittest_fdb_asio`. Both selections
+require `WITH_RADOSGW_FDB=ON`; ordinary libfdb consumers remain independent of
+both extensions. Replace the former `EXPERIMENTAL_NVIDIA_STDEXEC=ON` option
+with the selector above.
+
+Link `rgw_fdb_execution` and include `rgw/fdb/experimental/concurrency.h` to use
+the extension. `rgw/fdb/execution.h` remains a compatibility include:
+
+```cmake
+target_link_libraries(my_fdb_consumer PRIVATE rgw_fdb_execution)
+```
+
+The interface target supplies the selected backend and its compile-time
+definition. Do not define it manually. Including the experimental header
+without linking the enabled target produces a focused compile-time diagnostic.
+The sender composition examples below select `NVIDIA_STDEXEC`; the common
+operation names, owning results and Ceph wait boundary are available in both
+modes. See [the experimental contract](experimental/README.md) for the ASIO
+capabilities and native composition examples.
+
+Operations are lazy: constructing a sender does not contact FoundationDB. This
+first example uses `sync_wait()` only because it deliberately ends at a
+synchronous boundary:
+
+```cpp
+namespace ex = stdexec;
+namespace lfdbx = lfdb::experimental;
+
+auto txn = lfdb::make_transaction(dbh);
+auto completed = ex::sync_wait(lfdbx::get(lfdb::raw, txn, object_key));
+
+if (completed) {
+  auto result = std::move(std::get<0>(*completed));
+
+  if (const auto bytes = result.bytes()) {
+    std::string object;
+    lfdb::from::convert(*bytes, object);
+  }
+}
+```
+
+`point_read_result` owns the FoundationDB future and transaction behind its
+byte view. It is move-only, and `bytes()` remains valid only while that result
+is alive and has not been moved from. A missing key is a successful result
+whose `bytes()` is empty. The bytes are the stored FoundationDB value; call
+`lfdb::from::convert()` when libfdb decoding is desired.
+
+Independent reads on one transaction compose directly with `when_all()`:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+auto completed = ex::sync_wait(ex::when_all(
+  lfdbx::get(lfdb::raw, txn, metadata_key),
+  lfdbx::get(lfdb::raw, txn, policy_key)));
+
+if (completed) {
+  const auto& [metadata, policy] = *completed;
+  const auto metadata_bytes = metadata.bytes();
+  const auto policy_bytes = policy.bytes();
+
+  if (metadata_bytes and policy_bytes) {
+    use_object_state(*metadata_bytes, *policy_bytes);
+  }
+}
+```
+
+Mutating transactions can commit without blocking a client thread. Tagged
+commit reports one native submission, leaving recovery to the caller:
+
+```cpp
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},
+  {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}}
+};
+auto txn = lfdb::make_transaction(dbh, options);
+
+for (;;) {
+  lfdb::set(txn, object_key, encoded_object);
+  auto completed = ex::sync_wait(lfdbx::commit(lfdb::with_result, txn));
+
+  if (not completed) {
+    throw std::runtime_error("commit stopped before submission");
+  }
+
+  const auto outcome = std::get<0>(*completed);
+  if (outcome) {
+    break;
+  }
+  if (not lfdb::retryable_not_committed(outcome.error())) {
+    throw lfdb::libfdb_exception {outcome.error()};
+  }
+
+  if (not ex::sync_wait(lfdbx::reset_for_replay(txn, outcome.error()))) {
+    throw std::runtime_error("replay preparation stopped before initiation");
+  }
+}
+```
+
+This loop stops on 1021 and terminal errors, preserving their native code.
+This example waits at a synchronous boundary for both native operations. The
+preparation operation itself composes asynchronously; use it in the selected
+backend's native composition, or prefer `transact()` for managed recovery.
+
+Ordinary `commit()` has no success payload and sends native failures through
+the error channel. `commit(with_result, txn)` sends
+`std::expected<void, std::error_code>` through the value channel, including
+terminal native failures. Both forms submit once without retry preparation.
+Cancellation is honored before submission; a later stop request cannot erase
+the actual commit disposition. Local failures still use the error channel.
+An error after submission must not be interpreted as proof that the transaction
+did not commit. Stamp retrieval failure after confirmed commit belongs to the
+stamp handle and leaves commit successful.
+
+A commit is the terminal operation for one transaction attempt. Do not place it
+in `when_all()` beside reads on that same transaction; sequence it after every
+operation whose result or conflict range belongs to the attempt.
+
+`transact()` composes a sender-producing transaction body with commit and FDB
+replay. It creates the transaction only when started, invokes the body once per
+attempt, and publishes values only after a confirmed commit:
+
+```cpp
+lfdb::transaction_options options {
+  {FDB_TR_OPTION_TAG, "object"},
+  {FDB_TR_OPTION_TAG, "cache"}
+};
+auto work = lfdbx::transact(
+  dbh, std::move(options),
+  [object_key, encoded_object](lfdb::transaction_handle& txn) {
+    lfdb::set(txn, object_key, encoded_object);
+
+    return ex::just();
+  });
+
+if (not ex::sync_wait(std::move(work))) {
+  // The operation stopped before it was safe to commit.
+}
+```
+
+The body may compose several asynchronous reads. Its one successful completion
+shape may contain any number of owning, movable values, so `when_all()` results
+flow through naturally:
+
+```cpp
+auto completed = ex::sync_wait(lfdbx::transact(
+  dbh,
+  [metadata_key, policy_key](lfdb::transaction_handle& txn) {
+    return ex::when_all(
+      lfdbx::get(lfdb::raw, txn, metadata_key),
+      lfdbx::get(lfdb::raw, txn, policy_key));
+  }));
+
+if (completed) {
+  const auto& [metadata, policy] = *completed;
+  const auto metadata_bytes = metadata.bytes();
+  const auto policy_bytes = policy.bytes();
+
+  if (metadata_bytes and policy_bytes) {
+    use_object_state(*metadata_bytes, *policy_bytes);
+  }
+}
+```
+
+Use the sender's values for ordinary new results. Use `staged()` when the body
+must update an existing output parameter, especially when several outputs are
+published together:
+
+```cpp
+std::vector<CacheBlock> blocks;
+
+auto completed = ex::sync_wait(lfdbx::transact(
+  dbh,
+  [object_key](lfdb::transaction_handle& txn, auto& replacement) {
+    return lfdbx::get(lfdb::raw, txn, object_key) |
+           ex::then([&replacement](auto object) {
+             if (const auto bytes = object.bytes()) {
+               // Application-specific decoding:
+               replacement.push_back(decode_cache_block(*bytes));
+             }
+           });
+  },
+  lfdb::staged(blocks, std::in_place)));
+
+if (not completed) {
+  throw std::runtime_error("transaction stopped before commit");
+}
+```
+
+Each replay gets fresh staged state; `blocks` changes only after a confirmed
+commit. The target must remain alive and must not be accessed concurrently
+until terminal completion. Staging protects local C++ state, not remote side
+effects or a non-idempotent database design after `commit_unknown_result`.
+
+`transact()` preserves body errors and adds `std::exception_ptr` for internal
+libfdb failures. A retryable `libfdb_exception`, whether reported directly or
+carried by an exception pointer, prepares and replays the same transaction.
+Non-retryable errors and the exact last FDB error after retry exhaustion reach
+the receiver. A stop is honored before commit; after commit submission the
+actual commit disposition wins.
+
+As with the lower-level senders, untransferred continuations can run on
+FoundationDB's network thread. They must not perform blocking FDB work. Use
+standard execution composition to transfer application work to the appropriate
+scheduler, or compose another asynchronous operation as the next sender.
+
+For a range, the selection remains an immutable description of the desired
+keys while `scan_cursor` records execution progress through its normalized
+intervals and FDB result pages:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+auto cursor = lfdbx::scan_cursor {
+  q::difference(q::prefix(object_blocks), q::prefix(expired_blocks))
+};
+
+while (cursor) {
+  auto completed = ex::sync_wait(
+    lfdbx::read_window(lfdb::raw, txn, std::move(cursor)));
+
+  if (not completed) {
+    break;
+  }
+
+  auto window = std::move(std::get<0>(*completed));
+
+  for (const auto [key, value] : window.rows()) {
+    consume_block(key, value);
+  }
+
+  cursor = std::move(window).next();
+}
+```
+
+The selection is compiled once when the cursor is constructed. A cursor is
+move-only and consumed by each read; `next()` supplies its continuation after
+the current rows have been consumed. `scan_window` owns the FoundationDB future
+behind its rows, so neither the row view nor its byte spans may outlive the
+window. Reverse traversal reverses both the rows within each interval and the
+order of disjoint intervals. In these `sync_wait()` examples an empty result
+means the operation was stopped; sender errors are rethrown.
+
+### Compose Results with Standard Ranges
+
+libfdb does not wrap ordinary transformation and reduction. Once an application
+has collected owning results, standard range operations express both directly:
+
+```cpp
+const auto total_rows = std::ranges::fold_left(
+  windows | std::views::transform([](const auto& window) {
+    return std::size(window.rows());
+  }),
+  std::size_t {0}, std::plus {});
+```
+
+The binary form is a lazy `zip_transform()` followed by the same fold:
+
+```cpp
+const auto weighted_rows = std::ranges::fold_left(
+  std::views::zip_transform(
+    [](const auto& window, const double weight) {
+      return weight * std::size(window.rows());
+    },
+    windows, weights),
+  0.0, std::plus {});
+```
+
+Here `windows` is an application-owned range of completed `scan_window`
+objects, and `weights` is an equally sized application range. The same
+composition works with values produced by point reads or application-defined
+partition jobs. Keep scheduling outside this expression: the application
+chooses the transaction and concurrency bound while libfdb supplies the owning
+results and scheduler-neutral operations. `fold_left()` preserves order; use a
+reordering or parallel reduction only when its operation tolerates regrouping.
+
+At an RGW `optional_yield` boundary, include `rgw/ceph_fdb_execution.h` and use
+`wait()`. A real yield context suspends the coroutine and resumes it on its
+associated executor or strand; `null_yield` instead blocks the calling thread:
+
+```cpp
+auto result = lfdbx::wait(
+  lfdbx::get(lfdb::raw, lfdb::make_transaction(dbh), object_key), y);
+
+if (const auto bytes = result.bytes()) {
+  std::string object;
+  lfdb::from::convert(*bytes, object);
+}
+```
+
+The same boundary preserves all values from fixed-arity composition:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+auto [metadata, policy] = lfdbx::wait(ex::when_all(
+  lfdbx::get(lfdb::raw, txn, metadata_key),
+  lfdbx::get(lfdb::raw, txn, policy_key)), y);
+
+const auto metadata_bytes = metadata.bytes();
+const auto policy_bytes = policy.bytes();
+
+if (metadata_bytes and policy_bytes) {
+  use_object_state(*metadata_bytes, *policy_bytes);
+}
+```
+
+Metadata operations use the same `wait()` boundary under either backend:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+auto selection = q::prefix(object_blocks);
+auto version = lfdbx::wait(lfdbx::read_version(txn), y);
+auto pending_bytes = lfdbx::wait(lfdbx::approximate_commit_bytes(txn), y);
+auto stored_bytes = lfdbx::wait(lfdbx::approximate_range_size(txn, selection), y);
+auto partitions = lfdbx::wait(lfdbx::partitions(txn, selection, 1 << 20), y);
+```
+
+The range results own their selectors and preserve the selection's bounds,
+options and traversal order. Estimates and partition sizes are approximate;
+the application chooses how to schedule work on the returned partitions.
+
+`async_wait(sender, token)` exposes the same bridge to other Asio completion
+tokens. Sender errors retain their exception type. Cancellation is forwarded
+to the sender, and stopped completion is reported as Asio's
+`operation_aborted` exception. The bridge accepts one successful completion
+shape and an `std::exception_ptr` error channel. It represents no values as
+`std::tuple<>`, leaves one value unwrapped, and collects several values in an
+`std::tuple`.
+
+The direct `when_all()` example submits several reads on one transaction before
+waiting, which lets their FDB futures overlap. Do not independently schedule
+starts against one transaction from different application threads: libfdb's
+transaction owns ordering-sensitive mutable state. Use separate transactions
+or serialize those starts. Copy the shared transaction handle into every branch
+as shown; do not move it into one argument of the same function call, because
+C++ does not specify argument evaluation order.
+
+The RGW bridge moves only terminal completion to the token's executor. Earlier
+sender stages still require `continues_on()` before they perform application
+work; otherwise they may run inline on the starting thread or on FoundationDB's
+network thread. FDB failures normally arrive through the error channel as an
+`std::exception_ptr` containing `lfdb::libfdb_exception`; other exceptions
+retain their original type. A stop request uses the stopped channel when the
+operation can still be cancelled safely.
 
 Check for a key and erase it if it exists:
 
@@ -389,7 +757,7 @@ try {
     }
 
     // Prepare explicitly, then rebuild the body using the same native budgets.
-    lfdb::reset_for_replay(txn, result.error().value());
+    lfdb::reset_for_replay(txn, result.error());
   }
 }
 catch (const lfdb::libfdb_exception& error) {
@@ -503,6 +871,8 @@ keep its own progress marker before re-running part of a larger operation.
 Call `reset_for_replay()` after deciding that the entire transaction body may
 be replayed, for a failure from either the body or commit. A successful reset
 prepares another attempt; a failed reset throws and ends this recovery loop.
+Pass the complete error code: its category must identify a nonzero native FDB
+error. A libfdb or application error is rejected before changing the transaction.
 
 ```cpp
 const lfdb::transaction_options options {
@@ -523,7 +893,7 @@ for (;;) {
     if (not lfdb::retryable_not_committed(e.code())) {
       throw;
     }
-    lfdb::reset_for_replay(txn, e.code().value());
+    lfdb::reset_for_replay(txn, e.code());
   }
 }
 ```
@@ -539,6 +909,12 @@ transactor does not start a transaction; calling `operator()` creates the
 transaction, invokes the body, and commits it. The body may be called more than
 once after retryable FoundationDB errors. Keep it deterministic and free of
 non-idempotent external side effects.
+
+Synchronous transactors borrow the body for the duration of the call, including
+when additional arguments are bound. Noncopyable lvalue bodies work directly,
+and mutations of their state remain visible to the caller. Bound arguments
+retain their existing owned/staged semantics for replay. Asynchronous
+`transact()` operations own their bodies because execution may start later.
 
 ```cpp
 auto txr = lfdb::make_transactor(dbh);
@@ -782,9 +1158,6 @@ try {
 catch (const lfdb::libfdb_exception& e) {
   handle_libfdb_error(e);
 }
-catch (const std::invalid_argument& e) {
-  handle_contract_error(e);
-}
 catch (const std::exception& e) {
   handle_application_error(e);
 }
@@ -896,6 +1269,21 @@ for (const auto& [key, value] : lfdb::scan(dbh, people)) {
 ```
 
 ### Query Algebra
+
+`compile_intervals(expr)` and `compile_intervals<N>(expr)` return the same
+executable interval values, including their query options. The latter stores
+at most `N` intervals without allocating container storage and throws
+`libfdb_exception` with `std::errc::value_too_large` if that capacity is exceeded.
+Interval keys still own strings.
+Geometric predicates such as `is_universal()` ignore execution options.
+
+Union and intersection preserve matching options. When only one operand has
+non-default options, those options apply to the result. Conflicting non-default
+options throw `libfdb_exception` with `std::errc::invalid_argument`. Configure the
+operands consistently, or combine unconfigured geometry and apply
+`with_options()` to the result.
+Difference retains its left operand's options; complement retains its operand's
+options.
 
 Underneath the friendly selection helpers, libfdb queries are a compiled
 interval algebra. A query expression emits zero or more canonical `lfdb::select`
@@ -1253,6 +1641,18 @@ Use `collect()` when a materialized container is exactly what the caller needs:
 auto people = lfdb::collect<person_record>(dbh, q::prefix("person/"));
 ```
 
+Each database-handle scan window uses an independently retried transaction, so
+later windows may observe a newer read version. `collect(dbh, ...)` retains that
+streaming contract while assembling its return value. Use an explicit transaction
+when the whole traversal must share one read version.
+
+Range `get(dbh, selection, output)` instead reads the entire selection in one
+managed transaction, retries before publishing, and then appends or merges the
+materialized rows into the output. This is useful for bounded reads requiring one
+read version. Existing map values remain authoritative on key collisions. A
+publication failure can still leave partial output; materializing first protects
+against publishing rows from a failed database attempt.
+
 ### Borrowing Raw Range Results
 
 Use `for_each(lfdb::raw, ...)` when an operation can consume FoundationDB
@@ -1291,7 +1691,9 @@ again, so externally visible effects must be idempotent or staged.
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
 need a composable generator. The callback is a row consumer and must return
-`void`; use `transform()` when each row should produce a value.
+`void`; traversal returns the number of rows delivered. Use `transform()` when
+each row should produce a value. Synchronous callbacks are borrowed for the call,
+including noncopyable lvalues; their mutable state remains visible to the caller.
 
 ```cpp
 auto txn = lfdb::make_transaction(dbh);
@@ -1302,10 +1704,11 @@ lfdb::for_each(txn, q::prefix("person/"), [](auto&& row) {
 });
 ```
 
-The database-handle overload is a convenience for bounded, retryable work that
-should run in one managed transaction. The callback may run again if the
-transaction is retried, so keep it replay-safe. An exception thrown by the
-callback itself escapes directly, even when it is a `libfdb_exception`:
+The database-handle overload consumes the same independently retried windows as
+`scan(dbh, ...)`. A delivered callback is never replayed by the helper. Callback
+exceptions propagate unchanged, including native-category `libfdb_exception`
+objects. If the caller puts the traversal inside a transactor, an outer replay
+can still invoke the whole traversal again:
 
 ```cpp
 lfdb::for_each<person_record>(dbh, q::prefix("person/"), [](auto&& row) {
@@ -1323,16 +1726,17 @@ std::vector<std::string> names;
 
 lfdb::transform<person_record>(txn,
                                q::prefix("person/"),
+                               std::back_inserter(names),
                                [](auto&& row) {
                                  return std::move(row.second.name);
-                               },
-                               std::back_inserter(names));
+                               });
 ```
 
 When the transformed values should be materialized directly, let `transform()`
-return the vector. The transform function is evaluated inside managed
-transaction work, so it should also be replay-safe. Its own exceptions escape
-without being interpreted as FoundationDB retry requests:
+return the vector. Database-handle transforms use the same window and callback
+contract as `for_each()`. Explicit-output forms stream into the output and return
+its advanced iterator; a later failure leaves earlier output in place. The
+allocating form returns its vector only after traversal succeeds:
 
 ```cpp
 auto names = lfdb::transform<person_record>(
@@ -1343,9 +1747,21 @@ auto names = lfdb::transform<person_record>(
   });
 ```
 
+Reference results are consumed while the source row is alive; the vector form
+materializes values before advancing. Pointer and view results retain their
+normal referent-lifetime requirements. The callable is always last. Pass an
+explicit read mode immediately before it:
+
+```cpp
+auto names = lfdb::transform<person_record>(
+  dbh, q::prefix("person/"), lfdb::read_mode::snapshot,
+  [](auto&& row) { return std::move(row.second.name); });
+```
+
 Use `erase_if()` when the delete decision depends on the decoded row. It returns
 the number of keys cleared; database-handle predicates are evaluated inside the
-managed transaction loop:
+managed write transaction and may run again after a native database failure.
+Predicate and decoder exceptions propagate unchanged without requesting replay:
 
 ```cpp
 const auto removed = lfdb::erase_if<person_record>(
@@ -1621,17 +2037,10 @@ fdbc::prefix(fdbc::keyspace("tenant") / bucket_id);
 fdbc::prefix(fdbc::key("tenant", bucket_id));
 ```
 
-`assemble()` is the explicit compiler entry point used under the nicer
-interfaces. Use it when you want the validation/lowering step to be visible, for
-example in tests, generated schemas, or other code that builds key layouts as
-data.
+Use `key()` to build the complete object key:
 
 ```cpp
-const auto object_head = fdbc::assemble("object-cache",
-                                        "object",
-                                        bucket_id,
-                                        version,
-                                        object_name);
+const auto object_head = fdbc::key("object-cache", "object", bucket_id, version, object_name);
 ```
 
 Invalid segment types are rejected at compile time, and invalid keyspace roots
@@ -1641,12 +2050,13 @@ throw during assembly:
 static_assert(fdbc::key_segments<std::string_view, std::string_view>);
 static_assert(!fdbc::key_segments<int>);
 
-const auto object_records = fdbc::assemble("object-cache", "object");
+const auto object_records = fdbc::key("object-cache", "object");
 ```
 
-Only the root segment has the non-empty and non-`0xFF` root restriction.
-Subsequent segments are encoded as data under that root, so empty strings or
-segments beginning with `0xFF` remain valid when the domain needs them.
+The root segment must be non-empty. A root beginning with `0xFF` is valid:
+segment encoding starts with a tuple type byte, so the compiled key remains in
+ordinary FoundationDB keyspace. Later segments may also be empty or begin with
+`0xFF`.
 
 The lowering code is written to be constexpr-friendly, but the current compiled
 target owns a `std::string`. A future fixed-size/literal compiled target would
@@ -1704,7 +2114,8 @@ values. A stamp is a shared result handle: copies observe the same completion.
 `is_ready()` means it holds bytes or an error; `has_value()` means it holds bytes.
 Inspect the result after operation completion, or use external synchronization;
 the shared handle does not synchronize concurrent access to its result.
-Reading a pending stamp throws `std::invalid_argument`. A failed stamp throws
+Reading a pending stamp throws `libfdb_exception` with
+`std::errc::invalid_argument`. A failed stamp throws
 `libfdb_exception` with its recorded code from `resolved_bytes()`, or returns
 that code from `resolved_bytes(with_result)`.
 
@@ -1719,7 +2130,7 @@ Keep a copy of the stamp handle alive while using borrowed bytes. Access from
 temporary handles is deleted. Valid bytes are immutable; parsing the identical
 bytes again is permitted without replacing their storage. Parsing malformed
 bytes, overwriting valid bytes, and parsing into an active or failed output are
-contract errors reported as `std::invalid_argument`.
+contract errors reported as `libfdb_exception` with `std::errc::invalid_argument`.
 
 A failed output retains its error until explicitly registered as an output
 again. Registration clears the shared failure for the new attempt; an error
@@ -1859,6 +2270,12 @@ the transaction that created the watch. If watches are unsupported by the local
 FoundationDB configuration, or the transaction cannot create watches, waiting on
 the watch throws `lfdb::libfdb_exception`.
 
+Watch keys use the same key concept as `get()` and `set()`: string literals,
+`std::string_view`, strings, and compiled content keys all work directly. For
+example, `make_watch(dbh, fdbc::key("people", "person", "title"))` watches a
+compiled key. `watched_loop()` owns a copy of the resolved key bytes for its
+repeated watches and passes those bytes to its callback as a string view.
+
 Note that watches do not report the triggering value. If you need the value,
 read it in a separate transaction. For the underlying semantics, see the
 FoundationDB Developer Guide and the C API entry for `fdb_transaction_watch()`.
@@ -1876,6 +2293,55 @@ if (lfdb::watch_event::changed == watch.wait_for_event()) {
   handle_title_change();
 }
 ```
+
+With `LIBFDB_EXPERIMENTAL_CONCURRENCY=NVIDIA_STDEXEC`, an existing watch can instead become a
+scheduler-neutral sender. The sender consumes the one-shot handle, reports a
+change through its value channel, and reports stop-token cancellation as
+stopped:
+
+```cpp
+auto watch = lfdb::make_watch(dbh, "person/jose-capablanca/title");
+
+if (not ex::sync_wait(lfdbx::when_changed(std::move(watch)))) {
+  return; // stopped
+}
+
+handle_title_change();
+```
+
+Independent watches compose with standard execution algorithms:
+
+```cpp
+auto title = lfdb::make_watch(dbh, title_key);
+auto rating = lfdb::make_watch(dbh, rating_key);
+
+auto changed = ex::sync_wait(ex::when_all(
+  lfdbx::when_changed(std::move(title)),
+  lfdbx::when_changed(std::move(rating))));
+
+if (changed) {
+  refresh_player();
+}
+```
+
+At an RGW coroutine boundary, the same sender uses the Asio adapter without a
+helper thread:
+
+```cpp
+auto watch = lfdb::make_watch(dbh, title_key);
+
+lfdbx::wait(lfdbx::when_changed(std::move(watch)), y);
+refresh_title();
+```
+
+`when_changed()` neither creates nor rearms a watch. A watch is relative to the
+transaction that created it, becomes active only after that transaction
+commits, and reports a commit failure through the watch future. When the action
+depends on the value observed, read the value and create the watch in the same
+transaction, commit that transaction, then act on the value and wait for the
+one-shot watch. A watch reports only that the value changed; read it again to
+learn the new value. Explicitly cancelling the handle before passing it to
+`when_changed()` remains a FoundationDB error rather than a receiver stop.
 
 Create a watch inside a transaction when it must share that transaction's read
 version. Commit the transaction before waiting on the watch:
@@ -2224,14 +2690,21 @@ Benchmarks are hidden from default test runs. Run all libfdb benchmarks with:
 
 ## Appendix: Exception Summary
 
-libfdb tries to keep its exception surface small. Ordinary library operation
-failures are reported as `lfdb::libfdb_exception`; direct caller contract
-violations use standard exceptions.
+Library-generated failures, including rejected arguments and invalid operation
+states, use `lfdb::libfdb_exception`. Its error code distinguishes native errors,
+library-specific failures, and standard conditions such as
+`std::errc::invalid_argument` or `std::errc::value_too_large`; callers need one
+exception handler while retaining the failure's category, code, and context.
 
-The categories are intentionally coarse: they are meant to be useful to
-callers, not to divide every possible misuse into a separate exception type. For
-example, some versionstamp state violations are treated as `std::invalid_argument`
-to avoid an overly fine-grained exception taxonomy.
+Code that caught `std::invalid_argument` or `std::length_error` for a libfdb
+validation failure should now catch `lfdb::libfdb_exception` and inspect `code()`
+when it needs that distinction.
+
+Exceptions thrown by application serializers, converters, callbacks, or native
+continuations retain their original type and identity. Standard allocation
+failures also propagate normally. The generic interval core remains independent
+of FoundationDB; the libfdb query boundary translates its fixed-capacity failure
+into `libfdb_exception`.
 
 | Condition | Exception |
 | --- | --- |
@@ -2242,8 +2715,8 @@ to avoid an overly fine-grained exception taxonomy.
 | A user serializer, converter, or callback throws | The original exception, with its type and contents preserved |
 | Invalid result at the FoundationDB boundary | `lfdb::libfdb_exception` |
 | Caller uses libfdb after shutdown | `lfdb::libfdb_exception` |
-| Caller passes an impossible selector prefix or invalid versionstamp bytes | `std::invalid_argument` |
-| Caller accesses a pending stamp, reuses a stamp holding bytes, registers an output with two transactions, overwrites immutable bytes, or asks for a committed version before commit | `std::invalid_argument` |
+| Caller passes an impossible selector prefix or invalid versionstamp bytes | `lfdb::libfdb_exception` with `std::errc::invalid_argument` |
+| Caller accesses a pending stamp, reuses a stamp holding bytes, registers an output with two transactions, overwrites immutable bytes, or asks for a committed version before commit | `lfdb::libfdb_exception` with `std::errc::invalid_argument` |
 | Stamp completed with an error | `resolved_bytes()` throws `lfdb::libfdb_exception`; `resolved_bytes(with_result)` returns the recorded error |
 
 ### Error Codes and Exceptions
@@ -2256,7 +2729,9 @@ it assigns the nonzero `lfdb::libfdb_error_code::operation_failed` code in
 available, supply that code explicitly, with any useful operation context.
 
 Native errors use `lfdb::fdb_error_category()`, whose diagnostic name is
-"FoundationDB". Local errors use `lfdb::libfdb_error_category()`, named "libfdb".
+"FoundationDB". Library-specific codes use `lfdb::libfdb_error_category()`, named
+"libfdb". Standard conditions retain their standard category. The constructor
+`libfdb_exception(std::errc, context)` accepts a standard condition directly.
 The native `enum struct fdb_error_code : int` retains the pinned FoundationDB
 names and numbers; unknown native integers remain representable. Both enums
 convert to `std::error_code`. At a raw C API boundary, construct

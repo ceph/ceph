@@ -31,7 +31,6 @@
 #include <exception>
 #include <functional>
 #include <memory>
-#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -333,7 +332,7 @@ void validate_staged_arguments(const ArgTs& ...arguments)
   };
 
   if (std::ranges::adjacent_find(addresses, same_target) != std::ranges::end(addresses)) {
-   throw std::invalid_argument("cannot stage one target more than once");
+   throw libfdb_exception(std::errc::invalid_argument, "cannot stage one target more than once");
   }
  }
 }
@@ -459,9 +458,9 @@ class transaction_source final
   : dbh(std::move(database))
  {}
 
- transaction_source(database_handle database, const transaction_options& opts)
+ transaction_source(database_handle database, transaction_options opts)
   : dbh(std::move(database)),
-    options(opts)
+    options(std::move(opts))
  {}
 
  public:
@@ -476,28 +475,28 @@ class transaction_source final
 
 // Submit once, without retry preparation. Native failures are returned as values;
 // precondition and local failures may throw. Use reset_for_replay before replay.
-[[nodiscard]] inline auto commit(with_result_t, transaction_handle& txn)
+[[nodiscard]] inline auto commit(with_result_t, const transaction_handle& txn)
  -> std::expected<void, std::error_code>
 {
  if (not txn or not *txn) {
-  throw std::invalid_argument("commit() requires a transaction");
+  throw libfdb_exception(std::errc::invalid_argument, "commit() requires a transaction");
  }
 
  return txn->commit(with_result);
 }
 
-inline void commit(transaction_handle& txn)
+inline void commit(const transaction_handle& txn)
 {
  if (const auto result = commit(with_result, txn); not result) {
   throw libfdb_exception(result.error());
  }
 }
 
-[[nodiscard]] inline auto commit(with_result_t, transaction_handle& txn, const versionstamp& stamp)
+[[nodiscard]] inline auto commit(with_result_t, const transaction_handle& txn, const versionstamp& stamp)
  -> std::expected<void, std::error_code>
 {
  if (not txn or not *txn) {
-  throw std::invalid_argument("commit() requires a transaction");
+  throw libfdb_exception(std::errc::invalid_argument, "commit() requires a transaction");
  }
 
  txn->mark_version(stamp);
@@ -505,7 +504,7 @@ inline void commit(transaction_handle& txn)
  return commit(with_result, txn);
 }
 
-inline void commit(transaction_handle& txn, const versionstamp& stamp)
+inline void commit(const transaction_handle& txn, const versionstamp& stamp)
 {
  if (const auto result = commit(with_result, txn, stamp); not result) {
   throw libfdb_exception(result.error());
@@ -540,9 +539,10 @@ inline void set_read_version(const transaction_handle& txn, const std::int64_t v
 }
 
 // Prepare an uncommitted transaction for replay after a native failure:
-inline void reset_for_replay(transaction_handle& txn, fdb_error_t error);
+inline void reset_for_replay(const transaction_handle& txn, std::error_code error);
 
-[[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key)
+[[nodiscard]] inline watch_handle make_watch(transaction_handle txn,
+                                             const concepts::libfdb_key auto& key)
 {
  return txn->make_watch(detail::as_byte_view(key));
 }
@@ -732,11 +732,13 @@ class transactor final
  }
 
  template <typename FnT, typename ...ArgTs>
- requires (0 < sizeof...(ArgTs) && detail::bound_transaction_op<FnT, ArgTs...>)
+ requires (0 < sizeof...(ArgTs) &&
+           detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>,
+                                        ArgTs...>)
  decltype(auto) operator()(FnT&& fn, ArgTs&& ...args) const
  {
   auto bound = detail::bind_transaction_invocation(
-    std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
+    std::ref(fn), std::forward<ArgTs>(args)...);
 
   return (*this)(bound);
  }
@@ -749,11 +751,13 @@ class transactor final
  }
 
  template <typename PolicyT, typename FnT, typename ...ArgTs>
- requires (0 < sizeof...(ArgTs) && detail::bound_transaction_op<FnT, ArgTs...>)
+ requires (0 < sizeof...(ArgTs) &&
+           detail::bound_transaction_op<std::reference_wrapper<std::remove_reference_t<FnT>>,
+                                        ArgTs...>)
  decltype(auto) operator()(retry_if<PolicyT> policy, FnT&& fn, ArgTs&& ...args) const
  {
   auto bound = detail::bind_transaction_invocation(
-   std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
+   std::ref(fn), std::forward<ArgTs>(args)...);
 
   return (*this)(std::move(policy), bound);
  }
@@ -773,7 +777,7 @@ inline transactor make_transactor(database_handle dbh, const transaction_options
  return transactor(std::move(dbh), opts);
 }
 
-inline void reset_for_replay(transaction_handle& txn, const fdb_error_t error)
+inline void reset_for_replay(const transaction_handle& txn, const std::error_code error)
 {
  auto preparation = detail::block_until_ready(detail::reset_for_replay_if_needed(txn, error));
  detail::transaction_replay_ready(*txn);
@@ -834,7 +838,7 @@ try
    result.emplace(invocation_result_traits<ResultT>::store(txn, fn));
   } catch (const libfdb_exception& e) {
    if (const auto replay_error = retryable_error(e, txn, policy)) {
-    reset_for_replay(txn, *replay_error);
+    reset_for_replay(txn, std::error_code(*replay_error, ::ceph::libfdb::fdb_error_category()));
     continue;
    }
 
@@ -850,7 +854,7 @@ try
   if (not commit_state) {
    if (const auto replay_error = retryable_error(
          transaction_failure {commit_state.error(), transaction_phase::commit}, txn, policy)) {
-    reset_for_replay(txn, *replay_error);
+    reset_for_replay(txn, std::error_code(*replay_error, ::ceph::libfdb::fdb_error_category()));
     continue;
    }
 

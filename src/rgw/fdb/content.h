@@ -64,7 +64,8 @@ constexpr void append_encoded_string_segment(std::string& out, const std::string
 constexpr void require_valid_keyspace_root(const std::string_view segment)
 {
  if (segment.empty()) {
-  throw ::ceph::libfdb::libfdb_exception("content key assembly requires a non-empty keyspace root");
+  throw ::ceph::libfdb::libfdb_exception(std::errc::invalid_argument,
+    "content key assembly requires a non-empty keyspace root");
  }
 }
 
@@ -74,7 +75,7 @@ constexpr std::string_view segment_view(const char (&segment)[N])
  // Char array overloads model NUL-terminated string literals; raw byte arrays
  // should use std::string_view so that the intended size is explicit.
  if ('\0' != segment[N - 1]) {
-  throw ::ceph::libfdb::libfdb_exception("segment must be NUL-terminated");
+  throw ::ceph::libfdb::libfdb_exception(std::errc::invalid_argument, "segment must be NUL-terminated");
  }
 
  return std::string_view(segment, N - 1);
@@ -104,7 +105,7 @@ constexpr void append_encoded_string_segments(std::string& out, const auto& ...s
 
 template <typename ...Segments>
 concept key_segments = 0 < sizeof...(Segments) && (concepts::stringview_convertible<Segments> && ...);
-struct compiled_key final
+class compiled_key final
 {
  std::string encoded_bytes;
 

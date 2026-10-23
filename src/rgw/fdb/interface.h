@@ -208,15 +208,15 @@ auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
 } // namespace detail
 
 [[nodiscard]] inline watch_handle make_watch(database_handle dbh, const transaction_options& options,
-                                             std::string_view key)
+                                             const concepts::libfdb_key auto& key)
 {
  return detail::in_transaction(std::move(dbh), options,
-          [key](transaction_handle& txn) {
+          [&key](transaction_handle& txn) {
             return make_watch(txn, key);
           });
 }
 
-[[nodiscard]] inline watch_handle make_watch(database_handle dbh, std::string_view key)
+[[nodiscard]] inline watch_handle make_watch(database_handle dbh, const concepts::libfdb_key auto& key)
 {
  return make_watch(std::move(dbh), transaction_options {}, key);
 }
@@ -244,11 +244,11 @@ concept watch_callback =
 
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
-                  std::string_view key,
+                  const concepts::libfdb_key auto& key,
                   std::stop_token stop_token,
                   watch_callback auto&& fn)
 {
- std::string watched_key(key);
+ std::string watched_key(detail::as_libfdb_key_view(key));
 
  while (not stop_token.stop_requested() &&
         watch_event::changed ==
@@ -258,7 +258,7 @@ void watched_loop(database_handle dbh,
 }
 
 void watched_loop(database_handle dbh,
-                  std::string_view key,
+                  const concepts::libfdb_key auto& key,
                   std::stop_token stop_token,
                   watch_callback auto&& fn)
 {
@@ -271,14 +271,14 @@ void watched_loop(database_handle dbh,
  * wait_for_event(): */
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
-                  std::string_view key,
+                  const concepts::libfdb_key auto& key,
                   watch_callback auto&& fn)
 {
  watched_loop(std::move(dbh), options, key,
               std::stop_token {}, std::forward<decltype(fn)>(fn));
 }
 
-void watched_loop(database_handle dbh, std::string_view key,
+void watched_loop(database_handle dbh, const concepts::libfdb_key auto& key,
                   watch_callback auto&& fn)
 {
  watched_loop(std::move(dbh), transaction_options {}, key,
@@ -322,16 +322,17 @@ inline void set(database_handle dbh, const concepts::libfdb_key auto& k, const a
  return set(std::move(dbh), transaction_options {}, k, v);
 }
 
-template <concepts::key_value_iterator IteratorT>
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
 inline void set(transaction_handle txn,
-                IteratorT b, IteratorT e,
+                IteratorT b, SentinelT e,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
           [&b, &e](const transaction_handle& active_txn) {
             detail::scalar_encoding_buffer encoded;
 
-            for (const auto& kv : std::ranges::subrange(b, e)) {
+            for (; b != e; ++b) {
+             const auto& kv = *b;
              detail::transaction_set_kv_bytes(active_txn,
                        detail::as_byte_view(kv.first),
                        detail::encode_scalar_value(kv.second, encoded));
@@ -339,9 +340,15 @@ inline void set(transaction_handle txn,
           });
 }
 
-template <concepts::key_value_iterator IteratorT>
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
+inline void set(transaction_handle txn, IteratorT b, SentinelT e)
+{
+ return set(std::move(txn), std::move(b), std::move(e), commit_after_op::no_commit);
+}
+
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
 requires std::forward_iterator<IteratorT>
-inline void set(database_handle dbh, const transaction_options& options, IteratorT b, IteratorT e)
+inline void set(database_handle dbh, const transaction_options& options, IteratorT b, SentinelT e)
 {
  return detail::in_transaction(std::move(dbh), options,
           detail::invoke_user_callback(std::in_place, [b, e](transaction_handle& txn) {
@@ -349,9 +356,9 @@ inline void set(database_handle dbh, const transaction_options& options, Iterato
           }));
 }
 
-template <concepts::key_value_iterator IteratorT>
+template <concepts::key_value_iterator IteratorT, std::sentinel_for<IteratorT> SentinelT>
 requires std::forward_iterator<IteratorT>
-inline void set(database_handle dbh, IteratorT b, IteratorT e)
+inline void set(database_handle dbh, IteratorT b, SentinelT e)
 {
  return set(std::move(dbh), transaction_options {}, b, e);
 }
@@ -479,7 +486,7 @@ template <fdb_integer_value ValueT>
 constexpr auto little_endian_integer(const std::span<const std::uint8_t> bytes)
 {
  if (sizeof(ValueT) < std::size(bytes)) {
-  throw std::invalid_argument {"FoundationDB integer value is too large"};
+  throw libfdb_exception {std::errc::invalid_argument, "FoundationDB integer value is too large"};
  }
 
  using unsigned_t = std::make_unsigned_t<ValueT>;
@@ -924,7 +931,7 @@ inline void mark_conflict(transaction_handle txn,
  });
 
  if (not marked) {
-  throw std::invalid_argument(
+  throw libfdb_exception(std::errc::invalid_argument,
     "conflict expression must contain a non-empty range");
  }
 }

@@ -518,6 +518,10 @@ struct libfdb_exception final : std::system_error
                       std::string(context))
  {}
 
+ libfdb_exception(const std::errc code, const std::string_view context)
+  : std::system_error(std::make_error_code(code), std::string(context))
+ {}
+
  public:
  [[nodiscard]] bool retryable() const noexcept
  {
