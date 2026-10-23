@@ -975,6 +975,9 @@ namespace rgw {
       return -EINVAL;
     }
 
+    /* wait while write_finish is committing the object */
+    std::shared_lock xlk(rgw_fh->xattr_mtx);
+
     int rc, rc2, rc3;
     string obj_name{rgw_fh->relative_object_name2()};
 
@@ -1058,6 +1061,9 @@ namespace rgw {
       return -EINVAL;
     }
 
+    /* wait while write_finish is committing the object */
+    std::shared_lock xlk(rgw_fh->xattr_mtx);
+
     int rc, rc2, rc3;
     string obj_name{rgw_fh->relative_object_name2()};
 
@@ -1107,6 +1113,9 @@ namespace rgw {
       return -EINVAL;
     }
 
+    /* wait while write_finish is committing the object */
+    std::shared_lock xlk(rgw_fh->xattr_mtx);
+
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name2()};
 
@@ -1147,6 +1156,9 @@ namespace rgw {
 	(rgw_fh->is_root()))  {
       return -EINVAL;
     }
+
+    /* wait while write_finish is committing the object */
+    std::shared_lock xlk(rgw_fh->xattr_mtx);
 
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name2()};
@@ -1751,6 +1763,47 @@ namespace rgw {
 	<< __func__
 	<< " finishing write trans on " << object_name()
 	<< dendl;
+      /* Block RGWLibFS xattr calls while the object is committed: the
+       * write_full in _do_write_meta replaces all xattrs of the object,
+       * so the client xattrs are read first and re-applied by
+       * exec_finish.  Held only for this commit phase, not while data is
+       * being written. */
+      std::unique_lock xlk(xattr_mtx);
+
+      /* No instance is set on this request, so in a versioned bucket
+       * this reads the current version. */
+      {
+        std::string oname = relative_object_name();
+        RGWGetAttrsRequest greq(
+          fs->get_context(),
+          g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+          bucket_name(), oname);
+        int grc = g_rgwlib->get_fe()->execute_req(&greq);
+        if (! grc) {
+          grc = greq.get_ret();
+        }
+        if (grc == 0) {
+          for (const auto& [k, v] : greq.get_attrs()) {
+            if (v &&
+                (k.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1,
+                           RGW_ATTR_META_PREFIX) == 0)) {
+              f->write_req->saved_xattrs.emplace(k, *v);
+            }
+          }
+        } else if (grc != -ENOENT) {
+          /* cannot preserve the xattrs, so do not replace the object;
+           * -ENOENT (new file) just means there is nothing to carry */
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__
+            << " failed to read xattrs of " << object_name()
+            << " (" << grc << "), write aborted"
+            << dendl;
+          delete f->write_req;
+          f->write_req = nullptr;
+          return grc;
+        }
+      }
+
       rc = g_rgwlib->get_fe()->finish_req(f->write_req);
       if (! rc) {
 	rc = f->write_req->get_ret();
@@ -2026,6 +2079,12 @@ namespace rgw {
       goto done;
     }
     encode_delete_at_attr(delete_at, attrs);
+
+    /* re-apply client xattrs read by write_finish(), since write_full
+     * drops existing ones; emplace does not override what is set above */
+    for (const auto& [k, v] : saved_xattrs) {
+      attrs.emplace(k, v);
+    }
 
     /* Add a custom metadata to expose the information whether an object
      * is an SLO or not. Appending the attribute must be performed AFTER
