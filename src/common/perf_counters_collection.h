@@ -25,7 +25,8 @@ public:
                       select_histograms_t histograms =
                           select_histograms_t::exclude,
                       const std::string &logger = "",
-                      const std::string &counter = "");
+                      const std::string &counter = "",
+                      const std::vector<std::string> &histogram_loggers = {});
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
                                  const std::string &logger = "",
                                  const std::string &counter = "");

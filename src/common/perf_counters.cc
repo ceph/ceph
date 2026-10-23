@@ -21,6 +21,7 @@
 #include "include/common_fwd.h"
 #include "include/utime.h"
 
+#include <algorithm>
 #include <optional>
 #include <sstream>
 
@@ -115,6 +116,8 @@ bool PerfCountersCollectionImpl::reset(std::string_view name)
  * @param schema if true, output schema instead of current data.
  * @param histograms whether to dump only histogram counters, only scalar counters,
  *                   or both
+ * @param histogram_loggers with select_histograms_t::include, if not empty,
+ *                          dump histograms only of loggers with these key names
  */
 void PerfCountersCollectionImpl::dump_formatted_generic(
     Formatter *f,
@@ -122,9 +125,21 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     select_histograms_t histograms,
     select_labeled_t dump_labeled,
     const std::string &logger,
-    const std::string &counter) const
+    const std::string &counter,
+    const std::vector<std::string> &histogram_loggers) const
 {
   Formatter::ObjectSection collection_section(*f, "perfcounter_collection"sv);
+
+  const auto histograms_for = [&](const PerfCounters& l) {
+    if (histograms != select_histograms_t::include ||
+        histogram_loggers.empty() ||
+        std::find(histogram_loggers.begin(), histogram_loggers.end(),
+                          ceph::perf_counters::key_name(l.get_name())) !=
+            histogram_loggers.end()) {
+      return histograms;
+    }
+    return select_histograms_t::exclude;
+  };
 
   if (dump_labeled == select_labeled_t::labeled) {
     // dump all counters (labeled and unlabeled), using the "labeled format"
@@ -136,9 +151,9 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
         // close previous set of counters before dumping new one
         array_section.emplace(*f, key_name);
         prev_key_name = key_name;
-        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, ""s);
+        (*l)->dump_formatted_generic(f, schema, histograms_for(**l), select_labeled_t::labeled, ""s);
       } else {
-        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, ""s);
+        (*l)->dump_formatted_generic(f, schema, histograms_for(**l), select_labeled_t::labeled, ""s);
       }
     }
   } else {
@@ -146,14 +161,14 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     if (logger.empty()) {
       // dump all loggers
       for (auto& l : m_loggers) {
-        l->dump_formatted_generic(f, schema, histograms,
+        l->dump_formatted_generic(f, schema, histograms_for(*l),
                                   select_labeled_t::unlabeled, counter);
       }
     } else {
       // dump only specified logger
       auto l = m_loggers.find(logger);
       if (l != m_loggers.end()) {
-        (*l)->dump_formatted_generic(f, schema, histograms,
+        (*l)->dump_formatted_generic(f, schema, histograms_for(**l),
                                      select_labeled_t::unlabeled, counter);
       }
     }

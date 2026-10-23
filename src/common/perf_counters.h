@@ -393,15 +393,19 @@ public:
   // a parameter of "all" resets all counters
   bool reset(std::string_view name);
 
+  /// With select_histograms_t::include, a non-empty histogram_loggers
+  /// restricts histograms to the loggers whose key name it lists.
   void dump_formatted(
       ceph::Formatter *f,
       bool schema,
       select_labeled_t dump_labeled,
       select_histograms_t histograms,
       const std::string &logger = "",
-      const std::string &counter = "") const {
+      const std::string &counter = "",
+      const std::vector<std::string> &histogram_loggers = {}) const {
     dump_formatted_generic(
-	f, schema, histograms, dump_labeled, logger, counter);
+	f, schema, histograms, dump_labeled, logger, counter,
+	histogram_loggers);
   }
 
   void dump_formatted_histograms(
@@ -411,7 +415,7 @@ public:
       const std::string &counter = "") const {
     dump_formatted_generic(
 	f, schema, select_histograms_t::only, select_labeled_t::unlabeled,
-	logger, counter);
+	logger, counter, {});
   }
 
   // A reference to a perf_counter_data_any_d, with an accompanying
@@ -435,7 +439,8 @@ private:
       select_histograms_t histograms,
       select_labeled_t dump_labeled,
       const std::string &logger,
-      const std::string &counter) const;
+      const std::string &counter,
+      const std::vector<std::string> &histogram_loggers) const;
 
   perf_counters_set_t m_loggers;
 
