@@ -2567,6 +2567,60 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.HostCache.get_daemons_by_type")
     @mock.patch("cephadm.module.HostCache.get_daemon_types")
     @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_enter_noout_failure_keeps_daemons_running(
+            self, _hosts, _get_daemon_types, _get_daemons_by_type, _host_ok,
+            _run_cephadm, _mon_command, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        _host_ok.return_value = 0, 'it is okay'
+        _get_daemon_types.return_value = ['osd']
+        _get_daemons_by_type.return_value = [
+            DaemonDescription(daemon_type='osd', daemon_id='0', hostname=hostname)]
+        _hosts.return_value = [hostname, 'other_host']
+        _mon_command.return_value = (-22, '', 'unable to parse')  # EINVAL
+        cephadm_module.inventory.add_host(HostSpec(hostname))
+
+        with pytest.raises(OrchestratorError, match='Unable to set the osds on host1 to noout'):
+            cephadm_module.enter_host_maintenance(hostname)
+        # the daemons must not have been stopped
+        _run_cephadm.assert_not_called()
+        assert not cephadm_module.inventory._inventory[hostname]['status']
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")
+    @mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_enter_failure_rolls_back_noout(
+            self, _hosts, _get_daemon_types, _get_daemons_by_type, _host_ok,
+            _run_cephadm, _mon_command, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        _run_cephadm.side_effect = async_side_effect(
+            ([''], ['something\nfailed - disable the target'], 0))
+        _host_ok.return_value = 0, 'it is okay'
+        _get_daemon_types.return_value = ['osd']
+        _get_daemons_by_type.return_value = [
+            DaemonDescription(daemon_type='osd', daemon_id='0', hostname=hostname)]
+        _hosts.return_value = [hostname, 'other_host']
+        _mon_command.return_value = (0, '', '')
+        cephadm_module.inventory.add_host(HostSpec(hostname))
+
+        with pytest.raises(OrchestratorError, match='Failed to place host1 into maintenance'):
+            cephadm_module.enter_host_maintenance(hostname)
+        assert not cephadm_module.inventory._inventory[hostname]['status']
+        assert _mon_command.call_args_list == [
+            mock.call({'prefix': 'osd set-group', 'flags': 'noout',
+                       'who': ['host1'], 'format': 'json'}),
+            mock.call({'prefix': 'osd unset-group', 'flags': 'noout',
+                       'who': ['host1'], 'format': 'json'}),
+        ]
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")
+    @mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
     def test_maintenance_enter_disables_nvmeof_gateways(
             self, _hosts, _get_daemon_types, _get_daemons_by_type, _host_ok,
             _run_cephadm, _mon_command, cephadm_module: CephadmOrchestrator):
