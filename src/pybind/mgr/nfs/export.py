@@ -772,10 +772,38 @@ class ExportMgr:
             log.exception(f"Failed to list exports for {cluster_id}")
             raise ErrorResponse.wrap(e)
 
+    def _client_pool_info(self, cluster_id: str, export: Export) -> Optional[Dict[str, Any]]:
+        """The client pool an export draws its CephFS handles from, if any.
+
+        The FSAL block of such an export only names slot 0, so the rest of the
+        pool is invisible in the export itself. Report the ids the way
+        CEPH_USERS holds them, in slot order. The keys stay out of it, like
+        the FSAL cephx_key does.
+        """
+        fsal = export.fsal
+        if not isinstance(fsal, CephFSFSAL) or not fsal.fs_name:
+            return None
+        if not self._uses_cephfs_client_pool(cluster_id, fsal.cmount_path):
+            return None
+        ceph_users = self._read_ceph_users(cluster_id)
+        if not ceph_users:
+            return None
+        users = ceph_users.users_for_fs(fsal.fs_name)
+        if not users:
+            return None
+        return {
+            'fs_name': fsal.fs_name,
+            'users': [u.user_id for u in users],
+        }
+
     def _get_export_dict(self, cluster_id: str, pseudo_path: str) -> Optional[Dict[str, Any]]:
         export = self._fetch_export(cluster_id, pseudo_path)
         if export:
-            return export.to_dict()
+            export_dict = export.to_dict()
+            client_pool = self._client_pool_info(cluster_id, export)
+            if client_pool:
+                export_dict['client_pool'] = client_pool
+            return export_dict
         log.warning(f"No {pseudo_path} export to show for {cluster_id}")
         return None
 
