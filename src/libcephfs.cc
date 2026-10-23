@@ -14,31 +14,35 @@
  */
 
 #include <fcntl.h>
-#include <iostream>
 #include <string.h>
+
+#include <iostream>
 #include <string>
 
-#include "include/Context.h"
 #include "auth/Crypto.h"
 #include "client/Client.h"
 #include "client/Inode.h"
-#include "librados/RadosClient.h"
+#include "client/ZeroCopyClient.h"
+#include "common/Cond.h"
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "common/Cond.h"
 #include "common/config.h"
 #include "common/version.h"
-#include "mon/MonClient.h"
+#include "include/Context.h"
+#include "include/ceph_assert.h"
+#include "include/object.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
-#include "include/object.h"
+#include "librados/RadosClient.h"
 #include "log/Log.h"
-#include "messages/MMonMap.h"
-#include "msg/Messenger.h"
-#include "include/ceph_assert.h"
 #include "mds/MDSMap.h"
+#include "messages/MMonMap.h"
+#include "mon/MonClient.h"
+#include "msg/Messenger.h"
 
+// After RadosClient.h: libcephfs.h declares function ceph_statfs(), which
+// would shadow struct ceph_statfs used by RadosClient::get_fs_stats().
 #include "include/cephfs/libcephfs.h"
 
 #define DEFAULT_UMASK 002
@@ -2349,6 +2353,95 @@ extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmoun
 			io_info->fh, io_info->iov, io_info->iovcnt,
 			io_info->off, io_info->write, onfinish, &onfinish->bl,
 			io_info->fsync, io_info->syncdataonly));
+}
+
+struct ceph_bufferlist {
+  ceph::bufferlist bl;
+};
+
+extern "C" ceph_bufferlist* ceph_bufferlist_create(void)
+{
+  return new (std::nothrow) ceph_bufferlist();
+}
+
+extern "C" void ceph_bufferlist_put(ceph_bufferlist* bl) { delete bl; }
+
+extern "C" size_t ceph_bufferlist_length(const ceph_bufferlist* bl)
+{
+  if (!bl) {
+    return 0;
+  }
+  return bl->bl.length();
+}
+
+extern "C" int ceph_bufferlist_to_iovec(const ceph_bufferlist* bl,
+                                        struct iovec* iov, int max_iov)
+{
+  if (!bl) {
+    return -EINVAL;
+  }
+  return ceph::ZeroCopyClient::bufferlist_to_iovec(bl->bl, iov, max_iov);
+}
+
+extern "C" ceph_bufferlist* ceph_bufferlist_alloc(size_t len)
+{
+  auto* out = new (std::nothrow) ceph_bufferlist();
+  if (!out) {
+    return nullptr;
+  }
+  out->bl = ceph::ZeroCopyClient::alloc_buffers(len);
+  return out;
+}
+
+extern "C" ceph_bufferlist* ceph_bufferlist_wrap_iov(const struct iovec* iov,
+                                                     int iovcnt)
+{
+  auto* out = new (std::nothrow) ceph_bufferlist();
+  if (!out) {
+    return nullptr;
+  }
+  out->bl = ceph::ZeroCopyClient::wrap_static(iov, iovcnt);
+  return out;
+}
+
+extern "C" int ceph_ll_async_read(struct ceph_mount_info* cmount, struct Fh* fh,
+                                  uint64_t off, uint64_t len,
+                                  struct ceph_io_completion* c)
+{
+  if (!cmount || !fh || !c || !c->cb) {
+    return -EINVAL;
+  }
+  ceph::ZeroCopyClient zc(cmount->get_client());
+  return zc.async_read(fh, off, len, [c](ceph::IoResult&& r) {
+    ceph_bufferlist* data = nullptr;
+    if (r.result >= 0 && r.data.length() > 0) {
+      data = new (std::nothrow) ceph_bufferlist();
+      if (data) {
+        data->bl = std::move(r.data);
+      } else {
+        r.result = -ENOMEM;
+      }
+    }
+    c->cb(r.result, data, c->priv);
+  });
+}
+
+extern "C" int ceph_ll_async_write(struct ceph_mount_info* cmount,
+                                   struct Fh* fh, uint64_t off,
+                                   ceph_bufferlist* data, bool fsync,
+                                   struct ceph_io_completion* c)
+{
+  if (!cmount || !fh || !data || !c || !c->cb) {
+    return -EINVAL;
+  }
+  ceph::ZeroCopyClient zc(cmount->get_client());
+  // Consume handle at submit: move bl out, then delete the opaque wrapper.
+  ceph::bufferlist payload = std::move(data->bl);
+  delete data;
+  return zc.async_write(
+      fh, off, std::move(payload),
+      [c](ceph::IoResult&& r) { c->cb(r.result, nullptr, c->priv); }, fsync,
+      false);
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)
