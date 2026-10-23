@@ -273,9 +273,22 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
       this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
-      this.zone.sync_from = values['sync_from_zones']
-        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
-        : '';
+      if (values['sync_from_all']) {
+        this.zone.sync_from = '';
+        this.zone.sync_from_rm = this.syncFromZonesOptions.map((opt) => opt.name).join(',');
+      } else {
+        const selectedNamesCreate = new Set(
+          (values['sync_from_zones'] || []).map((zone: ComboBoxItem) => zone.name)
+        );
+        this.zone.sync_from =
+          values['sync_from_zones'] && values['sync_from_zones'].length > 0
+            ? values['sync_from_zones'].map((zone: ComboBoxItem) => zone.name).join(',')
+            : '';
+        this.zone.sync_from_rm = this.syncFromZonesOptions
+          .filter((opt) => !selectedNamesCreate.has(opt.name))
+          .map((opt) => opt.name)
+          .join(',');
+      }
       this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .create(
@@ -307,9 +320,22 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
       this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
-      this.zone.sync_from = values['sync_from_zones']
-        ? values['sync_from_zones'].map((zone: RgwZone) => zone.name).join(',')
-        : '';
+      if (values['sync_from_all']) {
+        this.zone.sync_from = '';
+        this.zone.sync_from_rm = this.syncFromZonesOptions.map((opt) => opt.name).join(',');
+      } else {
+        const selectedNamesEdit = new Set(
+          (values['sync_from_zones'] || []).map((zone: ComboBoxItem) => zone.name)
+        );
+        this.zone.sync_from =
+          values['sync_from_zones'] && values['sync_from_zones'].length > 0
+            ? values['sync_from_zones'].map((zone: ComboBoxItem) => zone.name).join(',')
+            : '';
+        this.zone.sync_from_rm = this.syncFromZonesOptions
+          .filter((opt) => !selectedNamesEdit.has(opt.name))
+          .map((opt) => opt.name)
+          .join(',');
+      }
       this.zone.sync_from_all = values['sync_from_all'];
       this.rgwZoneService
         .update(

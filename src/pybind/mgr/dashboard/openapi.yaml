@@ -23229,6 +23229,9 @@ paths:
                 sync_from_all:
                   default: ''
                   type: string
+                sync_from_rm:
+                  default: ''
+                  type: string
                 tier_type:
                   default: ''
                   type: string
@@ -23663,6 +23666,9 @@ paths:
                   default: ''
                   type: string
                 sync_from_all:
+                  default: ''
+                  type: string
+                sync_from_rm:
                   default: ''
                   type: string
                 tier_type:
