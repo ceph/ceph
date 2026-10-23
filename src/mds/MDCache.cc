@@ -14785,17 +14785,20 @@ void MDCache::upkeep_main(void)
 }
 
 struct C_ListSnapsAggregator : public MDSIOContext {
-  C_ListSnapsAggregator(MDSRank *mds, CInode *in1, CInode *in2, BlockDiff *block_diff,
+  C_ListSnapsAggregator(MDSRank *mds, CInode *in1, snapid_t snapid1,
+                        CInode *in2, snapid_t snapid2, BlockDiff *block_diff,
 			Context *on_finish)
     : MDSIOContext(mds),
       in1(in1),
+      snapid1(snapid1),
       in2(in2),
+      snapid2(snapid2),
       block_diff(block_diff),
       on_finish(on_finish) {
   }
 
   void finish(int r) override {
-    mds->mdcache->aggregate_snap_sets(snap_set_context, in1, in2,
+    mds->mdcache->aggregate_snap_sets(snap_set_context, in1, snapid1, in2, snapid2,
                                       block_diff, on_finish);
   }
 
@@ -14808,14 +14811,18 @@ struct C_ListSnapsAggregator : public MDSIOContext {
   }
 
   CInode *in1;
+  snapid_t snapid1;
   CInode *in2;
+  snapid_t snapid2;
   BlockDiff *block_diff;
   Context *on_finish;
   std::vector<std::unique_ptr<MDCache::SnapSetContext>> snap_set_context;
 };
 
-void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
-			     MDSContext *ctx) {
+void MDCache::file_blockdiff(CInode *in1, snapid_t snapid1,
+                            CInode *in2, snapid_t snapid2,
+                            BlockDiff *block_diff, uint64_t max_objects,
+                            MDSContext *ctx) {
   ceph_assert(in1->last <= in2->last);
 
   // I think this is not required since the MDS disallows setting
@@ -14867,7 +14874,8 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
     return;
   }
 
-  C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, in2, block_diff, ctx);
+  C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, snapid1, in2, snapid2,
+                                                               block_diff, ctx);
   // Defer the MDSIOContext finisher to mds->finisher so gather activate() does
   // not call MDSIOContext::complete() inline while mds_lock is held.
   // See https://tracker.ceph.com/issues/75676
@@ -14905,14 +14913,14 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
 }
 
 void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
-                                  CInode *in1, CInode *in2, BlockDiff *block_diff, Context *on_finish) {
+                                  CInode *in1, snapid_t snapid1,
+                                  CInode *in2, snapid_t snapid2,
+                                  BlockDiff *block_diff, Context *on_finish) {
   dout(20) << __func__ << dendl;
 
   // always signal to the client to request again since request
   // completion is signalled in file_blockdiff().
   int r = 1;
-  snapid_t snapid1 = in1->last;
-  snapid_t snapid2 = in2->last;
   uint64_t scans = snap_set_ctx.size();
 
   interval_set<uint64_t> extents;

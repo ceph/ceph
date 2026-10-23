@@ -12231,17 +12231,20 @@ void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
   dout(10) << __func__ << dendl;
 
   // no real need to rdlock_path_pin_ref() since the caller holds an
-  // open ref, but we need the snapped inode.
+  // open ref, but we need the snapped inode and the snapid each path
+  // resolves to.
   const filepath& refpath1 = mdr->get_filepath();
   CInode* in1 = rdlock_path_pin_ref(mdr, refpath1, false, true);
   if (!in1) {
     return;
   }
+  snapid_t snapid1 = mdr->snapid;
   const filepath& refpath2 = mdr->get_filepath2();
   CInode* in2 = rdlock_path_pin_ref(mdr, refpath2, false, true);
   if (!in2) {
     return;
   }
+  snapid_t snapid2 = mdr->snapid;
 
   if (!in1->is_file() || !in2->is_file()) {
     dout(10) << __func__ << ": not a regular file req=" << req << dendl;
@@ -12249,8 +12252,8 @@ void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
     return;
   }
 
-  dout(20) << __func__ << ": in1=" << *in1 << dendl;
-  dout(20) << __func__ << ": in2=" << *in2 << dendl;
+  dout(20) << __func__ << ": snapid1=" << snapid1 << " in1=" << *in1
+           << " snapid2=" << snapid2 << " in2=" << *in2 << dendl;
 
   auto scan_idx = (uint64_t)req->head.args.blockdiff.scan_idx;
   auto max_objects = (uint32_t)req->head.args.blockdiff.max_objects;
@@ -12266,7 +12269,8 @@ void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
     return;
   }
 
-  mdcache->file_blockdiff(in1, in2, &(ctx->block_diff), max_objects, ctx);
+  mdcache->file_blockdiff(in1, snapid1, in2, snapid2,
+                          &(ctx->block_diff), max_objects, ctx);
 }
 
 void Server::handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
