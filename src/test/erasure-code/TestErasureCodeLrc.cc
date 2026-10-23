@@ -450,6 +450,101 @@ TEST(ErasureCodeLrc, init_kml)
   EXPECT_EQ((unsigned int)(4 + 2 + (4 + 2) / 3), lrc.get_chunk_count());
 }
 
+TEST(ErasureCodeLrc, lrc_profile_missing_layer_plugin)
+{
+  // non-LRC profile is never considered missing a layer-plugin
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure"; p["k"] = "4"; p["m"] = "2";
+    EXPECT_FALSE(ceph::lrc_profile_missing_layer_plugin(p));
+  }
+  // LRC profile with no sub-plugin set is ambiguous
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_TRUE(ceph::lrc_profile_missing_layer_plugin(p));
+  }
+  // LRC profile with an explicit sub-plugin is fine
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_FALSE(ceph::lrc_profile_missing_layer_plugin(p));
+  }
+}
+
+TEST(ErasureCodeLrc, set_lrc_layer_plugin_default)
+{
+  // non-LRC profile. Should be untouched, no key added.
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "jerasure"; p["k"] = "4"; p["m"] = "2";
+    EXPECT_FALSE(ceph::set_lrc_layer_plugin_default(p));
+    EXPECT_EQ(0u, p.count(ceph::LRC_LAYER_PLUGIN_KEY));
+  }
+  // LRC with no sub-plugin set. Newly-created profiles default to isa.
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    EXPECT_TRUE(ceph::set_lrc_layer_plugin_default(p));
+    EXPECT_EQ("isa", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+  // already set, left alone
+  {
+    ErasureCodeProfile p;
+    p["plugin"] = "lrc";
+    p[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+    EXPECT_FALSE(ceph::set_lrc_layer_plugin_default(p));
+    EXPECT_EQ("jerasure", p[ceph::LRC_LAYER_PLUGIN_KEY]);
+  }
+}
+
+TEST(ErasureCodeLrc, layer_plugin_default_kml)
+{
+  // k/m/l form: layer-plugin key applies to every layer
+  for (string plugin : {string("jerasure"), string("isa")}) {
+    ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+    ErasureCodeProfile profile;
+    profile["k"] = "4"; profile["m"] = "2"; profile["l"] = "3";
+    profile[ceph::LRC_LAYER_PLUGIN_KEY] = plugin;
+    EXPECT_EQ(0, lrc.init(profile, &cerr));
+    ASSERT_FALSE(lrc.layers.empty());
+    for (auto &layer : lrc.layers)
+      EXPECT_EQ(plugin, layer.profile["plugin"]);
+  }
+  // default is ISA
+  {
+    ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+    ErasureCodeProfile profile;
+    profile["k"] = "4"; profile["m"] = "2"; profile["l"] = "3";
+    EXPECT_EQ(0, lrc.init(profile, &cerr));
+    ASSERT_FALSE(lrc.layers.empty());
+    for (auto &layer : lrc.layers)
+      EXPECT_EQ("isa", layer.profile["plugin"]);
+  }
+}
+
+TEST(ErasureCodeLrc, layer_plugin_default_explicit_layers)
+{
+  // Explicit-layers form: layer-plugin is default; a layer that explicitly
+  // chooses a plugin keeps it, the others inherit the default.
+  ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["mapping"] = "DD__DD__";
+  profile[ceph::LRC_LAYER_PLUGIN_KEY] = "jerasure";
+  profile["layers"] =
+    "[ "
+    " [ \"DDc_DDc_\", \"\" ],"
+    " [ \"DDDc____\", \"plugin=isa\" ],"
+    " [ \"____DDDc\", \"\" ],"
+    "]";
+  EXPECT_EQ(0, lrc.init(profile, &cerr));
+  ASSERT_EQ(3u, lrc.layers.size());
+  EXPECT_EQ("jerasure", lrc.layers[0].profile["plugin"]);
+  EXPECT_EQ("isa",      lrc.layers[1].profile["plugin"]);
+  EXPECT_EQ("jerasure", lrc.layers[2].profile["plugin"]);
+}
+
 TEST(ErasureCodeLrc, minimum_to_decode)
 {
   // trivial : no erasures, the minimum is want_to_read
