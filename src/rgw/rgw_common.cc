@@ -1474,6 +1474,27 @@ bool verify_requester_payer_permission(const perm_state_base *s)
   return false;
 }
 
+// ACLs can't grant s3:BypassGovernanceRetention. When no policy allows or
+// denies it, only the bucket owner may bypass governance-mode retention, and
+// account principals always need an Allow from a policy.
+static bool verify_bypass_governance_no_policy(const DoutPrefixProvider* dpp,
+                                               const perm_state_base* const ps,
+                                               const int perm)
+{
+  if (ps->identity->get_account()) {
+    return false;
+  }
+  // same perm_mask check as the ACL fallback this replaces; e.g. a read-only
+  // subuser of the bucket owner can't bypass
+  if ((perm & (int)ps->perm_mask) != perm) {
+    return false;
+  }
+  const bool allowed = ps->identity->is_owner_of(ps->bucket_info.owner);
+  ldpp_dout(dpp, 10) << __func__ << ": no policy decision, bypass governance "
+      << (allowed ? "allowed for bucket owner" : "denied") << dendl;
+  return allowed;
+}
+
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               const perm_state_base * const s,
                               const rgw::ARN& arn,
@@ -1515,6 +1536,9 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   }
 
   const auto perm = op_to_perm(op);
+  if (op == rgw::IAM::s3BypassGovernanceRetention) {
+    return verify_bypass_governance_no_policy(dpp, s, perm);
+  }
   return verify_bucket_permission_no_policy(dpp, s, user_acl, bucket_acl, perm, granted_by_acl);
 }
 
@@ -1690,6 +1714,9 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   }
 
   const auto perm = op_to_perm(op);
+  if (op == rgw::IAM::s3BypassGovernanceRetention) {
+    return verify_bypass_governance_no_policy(dpp, ps, perm);
+  }
   return verify_object_permission_no_policy(dpp, ps, user_acl, bucket_acl,
                                             object_acl, perm, granted_by_acl);
 }
