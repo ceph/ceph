@@ -18155,6 +18155,99 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  if (hint == "symlink") {
+    /* A symbolic link in a bucket, for the suite's tests of what a link
+     * is (n-plan, "One rule:  a link is an object only beneath the
+     * bucket").  A filesystem client makes links and S3 cannot, so the
+     * gateway makes one, as `unplaced-directory` makes a directory.
+     *
+     *   op=create bucket= key= target=   fails if the key's name exists
+     *   op=stat bucket= key=             kind=link|file|directory|other|none
+     *
+     * The key's directories must exist.  as=<user>:  made as that user,
+     * as a filesystem client of that identity would make it, so its
+     * requester may remove it under any access model.  Both report the
+     * bucket's real path as `bucket_path`, from which a test makes an
+     * absolute target. */
+    auto op = params.find("op");
+    auto bk = params.find("bucket");
+    auto ky = params.find("key");
+    if ((op == params.end()) || (bk == params.end()) ||
+	(ky == params.end()) || bk->second.empty() || ky->second.empty()) {
+      return -EINVAL;
+    }
+    const std::string& key = ky->second;
+    if ((key.front() == '/') || (key.back() == '/') ||
+	(("/" + key + "/").find("/../") != std::string::npos)) {
+      return -EINVAL;
+    }
+    std::optional<nsfs::Credentials> as;
+    if (auto a = params.find("as"); a != params.end()) {
+      nsfs::Credentials cred;
+      const int r = hint_credentials(dpp, this, a->second, cred);
+      if (r < 0) {
+	return r;
+      }
+      as = cred;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> loaded;
+    int ret = load_bucket(dpp, rgw_bucket{"", bk->second}, &loaded,
+			  null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+    auto* bdir = static_cast<NSFSBucket*>(loaded.get())->get_dir();
+    ret = bdir->open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    const auto slash = key.rfind('/');
+    const std::string parent = (slash == std::string::npos)
+      ? std::string(".") : key.substr(0, slash);
+    const std::string leaf = (slash == std::string::npos)
+      ? key : key.substr(slash + 1);
+    const int pfd = ::openat(bdir->get_fd(), parent.c_str(),
+			     O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (pfd < 0) {
+      return -errno;
+    }
+    auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
+
+    if (op->second == "create") {
+      auto tg = params.find("target");
+      if ((tg == params.end()) || tg->second.empty()) {
+	return -EINVAL;
+      }
+      auto make = [&]() -> int {
+	return (::symlinkat(tg->second.c_str(), pfd, leaf.c_str()) < 0)
+	  ? -errno : 0;
+      };
+      ret = as ? nsfs::run_as(dpp, *as, make, null_yield) : make();
+      if (ret < 0) {
+	return ret;
+      }
+    } else if (op->second != "stat") {
+      return -EINVAL;
+    }
+
+    const char* kind = "none";
+    struct statx stx;
+    if (nsfs::statx(pfd, leaf.c_str(), AT_SYMLINK_NOFOLLOW, STATX_MODE,
+		    &stx) == 0) {
+      kind = S_ISLNK(stx.stx_mode) ? "link"
+	: S_ISDIR(stx.stx_mode) ? "directory"
+	: S_ISREG(stx.stx_mode) ? "file" : "other";
+    } else if (errno != ENOENT) {
+      return -errno;
+    }
+    if (out) {
+      (*out)["kind"] = kind;
+      (*out)["bucket_path"] = fd_path(bdir->get_fd());
+    }
+    return 0;
+  }
+
   if (hint == "unplaced-directory") {
     /* A directory under the base path that nothing has placed, for the
      * placement endpoint's tests:  the gateway makes it, so a test needs
