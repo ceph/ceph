@@ -20,7 +20,7 @@
 #define MAX_ACTING_SIZE 11      /* Maximum number of OSDs in acting set */
 #define MAX_OPS 3               /* Maximum number of OSD ops to capture */
 #define MAX_OBJECT_NAME_LEN 128 /* Maximum object name length */
-#define MAX_CLS_NAME_LEN 8      /* Maximum class name length */
+#define MAX_CLS_NAME_LEN 16     /* Maximum class name length; in-tree max is 9 ("timeindex") */
 #define MAX_METHOD_NAME_LEN 32  /* Maximum method name length */
 
 /* Variable ID base for finish_op probe (send_op uses 0-based) */

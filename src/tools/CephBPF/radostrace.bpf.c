@@ -282,11 +282,15 @@ int uprobe_send_op(struct pt_regs *ctx) {
 	__u64 data = 0;
 	bpf_probe_read_user(&data, sizeof(data), (void *)raw + CEPH_BUFFER_DATA);
 	// read class name
-	cls_len &= (MAX_CLS_NAME_LEN - 1);
-	bpf_probe_read_user(val->cls_ops[i].cls_name, cls_len, (void *)data);
+	__u8 cls_copy = cls_len;
+	if (cls_copy > MAX_CLS_NAME_LEN - 1)
+		cls_copy = MAX_CLS_NAME_LEN - 1;
+	bpf_probe_read_user(val->cls_ops[i].cls_name, cls_copy, (void *)data);
 	// read method name
-	method_len &= (MAX_METHOD_NAME_LEN - 1);
-	bpf_probe_read_user(val->cls_ops[i].method_name, method_len, (void *)data + cls_len);
+	if (method_len > MAX_METHOD_NAME_LEN - 1)
+		method_len = MAX_METHOD_NAME_LEN - 1;
+	bpf_probe_read_user(val->cls_ops[i].method_name, method_len,
+			    (void *)data + cls_len);
       }
       m_start += CEPH_OSDOP_SIZE;
     } else {
