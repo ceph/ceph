@@ -5966,6 +5966,8 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
 int RGWHandler_Auth_S3::init(rgw::sal::Driver* driver, req_state *state,
                              rgw::io::BasicClient *cio)
 {
+  state->dialect = "admin";
+
   int ret = RGWHandler_REST_S3::init_from_header(driver, state, RGWFormat::JSON, true);
   if (ret < 0)
     return ret;
