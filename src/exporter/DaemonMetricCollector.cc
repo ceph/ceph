@@ -7,7 +7,6 @@
 #include <iostream>
 #include <map>
 #include <memory>
-#include <regex>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -137,7 +136,6 @@ void DaemonMetricCollector::parse_asok_metrics(
               std::string counter_name_init = {counter.key().begin(),
                                                counter.key().end()};
               std::string counter_name = perf_group + "_" + counter_name_init;
-              promethize(counter_name);
 
               auto extra_labels = get_extra_labels(daemon_name);
               if (extra_labels.empty()) {
@@ -147,13 +145,14 @@ void DaemonMetricCollector::parse_asok_metrics(
               }
               labels.insert(extra_labels.begin(), extra_labels.end());
 
-              // For now this is only required for rgw multi-site metrics
-              auto multisite_labels_and_name = add_fixed_name_metrics(counter_name);
+              auto multisite_labels_and_name =
+                  add_fixed_name_metrics(perf_group, counter_name_init);
               if (!multisite_labels_and_name.first.empty()) {
                 labels.insert(multisite_labels_and_name.first.begin(),
                               multisite_labels_and_name.first.end());
                 counter_name = multisite_labels_and_name.second;
               }
+              promethize(counter_name);
               auto perf_values = counters_values.at(counter_name_init);
               dump_asok_metric(counter_group, perf_values, counter_name, labels);
             } catch (const std::exception &e) {
@@ -453,23 +452,20 @@ labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
   return labels;
 }
 
-// Add fixed name metrics from existing ones that have details in their names
-// that should be in labels (not in name). For backward compatibility,
-// a new fixed name metric is created (instead of replacing)and details are put
-// in new labels. Intended for RGW sync perf. counters but extendable as required.
+// Extract structured details from perf group names into labels.
+// e.g. perf_group "data-sync-from-data-xyz" → source_zone="data-xyz"
 // See: https://tracker.ceph.com/issues/45311
 std::pair<labels_t, std::string>
-DaemonMetricCollector::add_fixed_name_metrics(std::string metric_name) {
-  std::string new_metric_name;
-  labels_t labels;
-  new_metric_name = metric_name;
-
-  std::regex re("data_sync_from_([^_]*)");
-  std::smatch match;
-  if (std::regex_search(metric_name, match, re)) {
-      new_metric_name = std::regex_replace(metric_name, re, "data_sync_from_zone");
-      labels["source_zone"] = quote(match.str(1));
-      return {labels, new_metric_name};
+DaemonMetricCollector::add_fixed_name_metrics(
+    const std::string &perf_group, const std::string &counter_name) {
+  static const std::string RGW_SYNC_PREFIX = "data-sync-from-";
+  if (perf_group.compare(0, RGW_SYNC_PREFIX.size(), RGW_SYNC_PREFIX) == 0) {
+    std::string source_zone = perf_group.substr(RGW_SYNC_PREFIX.size());
+    labels_t labels;
+    labels["source_zone"] = quote(source_zone);
+    std::string new_metric_name =
+        RGW_SYNC_PREFIX + "zone_" + counter_name;
+    return {labels, new_metric_name};
   }
 
   return {};
