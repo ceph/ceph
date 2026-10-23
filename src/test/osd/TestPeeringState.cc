@@ -2466,20 +2466,22 @@ TEST_F(PeeringStateTest, Issue79706_test3) {
 //
 // These exercise the vulnerability-window tracking in
 // prepare_stats_for_publish() that feeds rs_pg_vulnerability_duration
-// (avgcount/sum/avgtime). The window is bracketed by three pg_history_t
-// fields -- last_degraded (onset, latched once and never moved again),
-// last_clean (resolution), and vuln_window_reported (the "recorded up to"
-// marker) -- and is genuinely merged across peers on every peering info
-// exchange, so it is recorded exactly once, by whichever OSD is primary
-// when the window closes, regardless of how many primaries held it along
-// the way. pg_stat_t.last_degraded/last_clean mirror these fields on every
-// publish, purely for external reporting.
+// (avgcount/sum/avgtime). The window is tracked by two pg_history_t
+// fields -- last_degraded (onset, latched once and never moved again) and
+// vuln_window_reported (the "recorded up to" marker, set to the time of the
+// clean publish that closes the window) -- which are genuinely merged across
+// peers on every peering info exchange, so it is recorded exactly once, by
+// whichever OSD is primary when the window closes, regardless of how many
+// primaries held it along the way. pg_stat_t.last_degraded mirrors the
+// history onset on every publish, purely for external reporting;
+// pg_stat_t.last_clean is stamped on every clean publish, and pg_history_t
+// is left unchanged by a clean publish that does not close a window.
 // Design notes:
 //   - call_prepare_stats(osd) passes nullopt so the publish branch always
 //     runs, which is what drives the window logic even when stats are
 //     otherwise unchanged.
 //   - A 10 ms sleep between opening the window and reaching clean ensures
-//     (last_clean - last_degraded).to_msec() > 0 so the record commits.
+//     (close time - last_degraded).to_msec() > 0 so the record commits.
 //   - get_ps(osd)->get_info().stats.{last_degraded,last_clean} (the mirror)
 //     and get_ps(osd)->get_info().history.* (the source of truth) are read
 //     directly to check the latch/record/inheritance invariants.
@@ -3398,6 +3400,79 @@ TEST_F(PeeringStateTest, RebuildSpanCloseSharesWithReplicasOnAdvMap) {
     EXPECT_LE(h.last_rebuild_active_start, h.rebuild_span_reported)
         << "osd." << osd << " must not see the recorded span as open";
   }
+}
+
+// ============================================================================
+// Test 14: A clean publish that does not close a window must leave
+// pg_history_t unchanged and must not mark info dirty. Stats are published
+// on every client write, and pg_fast_info_t does not cover pg_history_t, so
+// any history change there makes prepare_info_keymap() write the full _info
+// instead of _fastinfo on every op. Only pg_stat_t.last_clean, which
+// _fastinfo covers, may advance. Checked both before any window and after a
+// recorded close.
+// ============================================================================
+TEST_F(PeeringStateTest, VulnerabilityWindowCleanPublishKeepsHistory) {
+  dout(0) << "== VulnerabilityWindowCleanPublishKeepsHistory ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  auto *primary = get_ps(acting_primary);
+  auto check_clean_publishes_keep_history = [&](const char *when) {
+    {
+      ObjectStore::Transaction t;
+      primary->write_if_dirty(t);
+    }
+    ASSERT_FALSE(primary->debug_has_dirty_state());
+    const pg_history_t history = primary->get_info().history;
+    const utime_t last_clean = primary->get_info().stats.last_clean;
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    call_prepare_stats(acting_primary);
+    call_prepare_stats(acting_primary);
+
+    EXPECT_GT(primary->get_info().stats.last_clean, last_clean)
+        << when << ": a clean publish must stamp pg_stat_t.last_clean";
+    EXPECT_EQ(primary->get_info().history, history)
+        << when << ": a clean publish must not change pg_history_t";
+    EXPECT_FALSE(primary->debug_has_dirty_state())
+        << when << ": a clean publish must not mark info dirty";
+  };
+
+  // Let the first publish settle anything initial peering left behind.
+  call_prepare_stats(acting_primary);
+  check_clean_publishes_keep_history("before any window");
+
+  // One full episode, so the second check runs after a recorded close.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  call_prepare_stats(acting_primary);  // window opens on the primary
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+
+  call_prepare_stats(acting_primary);  // window closes and is recorded
+  auto [sum_ns, count] = get_listener(acting_primary)->recoverystate_perf
+    ->get_tavg_ns(rs_pg_vulnerability_duration);
+  ASSERT_EQ(count, 1u);
+  const auto &h = primary->get_info().history;
+  EXPECT_EQ(h.vuln_window_reported, primary->get_info().stats.last_clean)
+      << "the close must record up to the clean publish that closed it";
+  EXPECT_EQ(h.last_clean, h.vuln_window_reported);
+
+  check_clean_publishes_keep_history("after a recorded close");
 }
 
 // ============================================================================
