@@ -2712,6 +2712,60 @@ Then run the following:
             self.set_health_warning("HOST_IN_MAINTENANCE", f"{len(in_maintenance)} {s} in maintenance mode", 1, [
                                     f"{h} is in maintenance" for h in in_maintenance])
 
+    def _get_noout_targets(self, hostname: str) -> List[str]:
+        """Return the targets to pass to 'osd set-group/unset-group noout'
+        for the OSDs that cephadm manages on the given host.
+
+        The CRUSH host bucket of an OSD does not have to be named after the
+        host as known to cephadm (e.g. the bucket was renamed, a custom
+        crush_location was used or the host was added under its FQDN), so
+        the bucket names are looked up in the CRUSH map rather than derived
+        from the hostname. A host bucket is used only if it holds nothing
+        but OSDs of this host, so that no other host's OSDs are flagged.
+        OSDs that are not covered by such a bucket are flagged
+        individually.
+
+        Examples for host 'node1.example.com' with OSDs 1 and 2:
+
+          host node1 [1, 2], host node2 [3, 4]  -> ['node1']
+          host rack1-srv07 [1, 2]               -> ['rack1-srv07']
+          host node1-hdd [1], node1-ssd [2]     -> ['node1-hdd', 'node1-ssd']
+          host node1 [1, 2, 3] (3 elsewhere)    -> ['osd.1', 'osd.2']
+          host node1 [1], OSD 2 not in CRUSH    -> ['node1', 'osd.2']
+          no OSD daemons with a numeric id      -> ['node1']
+        """
+        osd_ids: Set[int] = {
+            int(dd.daemon_id)
+            for dd in self.cache.get_daemons_by_type('osd', host=hostname)
+            if dd.daemon_id and dd.daemon_id.isdigit()
+        }
+        if not osd_ids:
+            # nothing to look up, keep the historical behaviour
+            return [hostname.split('.')[0]]
+
+        # Same structure as 'ceph osd tree -f json': buckets have negative
+        # ids and list their items in 'children', OSDs have ids >= 0.
+        # Without a usable tree all OSDs are flagged individually below.
+        tree = self.get('osd_map_tree')
+        nodes = tree.get('nodes', []) if isinstance(tree, dict) else []
+        buckets: List[str] = []
+        covered: Set[int] = set()
+        for node in nodes:
+            # racks, roots etc. span several hosts
+            if node.get('type') != 'host':
+                continue
+            # keep the OSDs only, nested buckets have negative ids
+            children = {c for c in node.get('children', []) if c >= 0}
+            # Use the bucket only if all of its OSDs are on this host, so
+            # that no other host's OSDs get flagged. Empty buckets are
+            # skipped, an empty set would match any host.
+            if children and children <= osd_ids:
+                buckets.append(node['name'])
+                covered |= children
+        # OSDs in a shared bucket or not in the CRUSH map at all are
+        # flagged one by one. Sorted to get a stable result.
+        return sorted(buckets) + [f'osd.{i}' for i in sorted(osd_ids - covered)]
+
     @handle_orch_error
     @host_exists()
     def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> str:
@@ -2757,8 +2811,7 @@ Then run the following:
             # not being marked as in maintenance.
             noout_targets: List[str] = []
             if "osd" in host_daemons:
-                crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
-                noout_targets = [crush_node]
+                noout_targets = self._get_noout_targets(hostname)
                 rc, out, err = self.mon_command({
                     'prefix': 'osd set-group',
                     'flags': 'noout',
@@ -2889,11 +2942,10 @@ Then run the following:
                         f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}", errno=errno.EPERM)
 
             if "osd" in self.cache.get_daemon_types(hostname):
-                crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
                 rc, _out, _err = self.mon_command({
                     'prefix': 'osd unset-group',
                     'flags': 'noout',
-                    'who': [crush_node],
+                    'who': self._get_noout_targets(hostname),
                     'format': 'json'
                 })
                 if rc:
