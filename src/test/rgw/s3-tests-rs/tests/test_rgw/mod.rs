@@ -19,6 +19,7 @@ mod key_limit;
 mod key_separators;
 mod nsfs_abandon;
 mod nsfs_place_bucket;
+mod nsfs_symlink;
 mod object_lock;
 mod quota;
 mod reserved_names;
