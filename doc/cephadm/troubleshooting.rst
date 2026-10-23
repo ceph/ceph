@@ -235,7 +235,7 @@ troubleshoot the SSH connection between ``cephadm`` and the Monitor:
       :prompts: [root@mon1 ~]#
       :modifiers: auto
 
-      [root@mon1 ~]# cephadm shell -- ceph cephadm generate-ssh-key
+      [root@mon1 ~]# cephadm shell -- ceph cephadm generate-key
 
    or:
 
@@ -244,7 +244,7 @@ troubleshoot the SSH connection between ``cephadm`` and the Monitor:
       :prompts: [root@mon1 ~]#
       :modifiers: auto
 
-      [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-ssh-key -i -
+      [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-priv-key -i -
 
 #. Ensure that the SSH config is correct:
 
