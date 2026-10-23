@@ -5,6 +5,7 @@ use s3_tests_rs::fixtures::{create_objects_in_new_bucket, get_new_bucket};
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
 use s3_tests_rs::assert_s3_err;
 use s3_tests_rs::admin::fs_access;
+use s3_tests_rs::access_model::{Access, Class};
 use serde_json::json;
 
 async fn get_body(response: aws_sdk_s3::operation::get_object::GetObjectOutput) -> String {
@@ -434,13 +435,15 @@ async fn test_bucket_policy_multipart() {
         .await
         .unwrap();
 
-    alt_client
+    /* staging is made as the uploader in main's bucket directory, so
+     * the same line as a create there */
+    Access::ask(Class::Data, &bucket_name, key, &get_config().alt_user_id,
+                "c").await.judge(alt_client
         .create_multipart_upload()
         .bucket(&bucket_name)
         .key(key)
         .send()
-        .await
-        .unwrap();
+        .await);
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
@@ -2155,15 +2158,19 @@ async fn test_bucket_policy_put_obj_acl() {
 
     let alt_client = get_alt_client();
 
-    // put without x-amz-acl → allowed
-    alt_client
+    // put without x-amz-acl → allowed by S3;  alt's create in main's
+    // bucket, so the access model decides what the gateway does where
+    // the filesystem denies it
+    Access::ask(Class::Data, &bucket, "private-key",
+                &get_config().alt_user_id, "c")
+        .await
+        .judge(alt_client
         .put_object()
         .bucket(&bucket)
         .key("private-key")
         .body(ByteStream::from_static(b"private-key"))
         .send()
-        .await
-        .unwrap();
+        .await);
 
     // put with x-amz-acl: public-read → denied
     let result = alt_client
@@ -2206,7 +2213,10 @@ async fn test_bucket_policy_put_obj_grant() {
 
     // put to bucket1 with grant-full-control → allowed
     let owner_id_clone = owner_id_str.clone();
-    alt_client
+    /* both creates are alt's in main's buckets:  where the configuration
+     * refuses one, the checks on that object below have no object */
+    let put1 = Access::ask(Class::Data, &bucket1, "key1", &cfg.alt_user_id,
+                           "c").await.judge(alt_client
         .put_object()
         .bucket(&bucket1)
         .key("key1")
@@ -2216,36 +2226,39 @@ async fn test_bucket_policy_put_obj_grant() {
             req.headers_mut().insert("x-amz-grant-full-control", owner_id_clone.clone());
         })
         .send()
-        .await
-        .unwrap();
+        .await);
 
     // put to bucket2 without grant header → allowed (no condition)
-    alt_client
+    let put2 = Access::ask(Class::Data, &bucket2, "key2", &cfg.alt_user_id,
+                           "c").await.judge(alt_client
         .put_object()
         .bucket(&bucket2)
         .key("key2")
         .body(ByteStream::from_static(b"key2"))
         .send()
-        .await
-        .unwrap();
+        .await);
 
     // main user can read ACL for key1 (was granted full control)
     /* key1 is alt's, so main's ACL read is another identity's metadata:
      * the access model says whether the gateway performs it once the
      * filesystem denies it */
-    if let Some(acl1) = s3_tests_rs::unless_posix_governs_metadata!(
-        s3_tests_rs::features::cross_account_metadata().await,
-        client.get_object_acl().bucket(&bucket1).key("key1").send().await) {
-        assert_eq!(acl1.grants()[0].grantee().unwrap().id().unwrap(), &cfg.main_user_id);
+    if put1.is_some() {
+        if let Some(acl1) = s3_tests_rs::unless_posix_governs_metadata!(
+            s3_tests_rs::features::cross_account_metadata().await,
+            client.get_object_acl().bucket(&bucket1).key("key1").send().await) {
+            assert_eq!(acl1.grants()[0].grantee().unwrap().id().unwrap(), &cfg.main_user_id);
+        }
     }
 
-    // main user cannot read ACL for key2 (ownership not transferred)
-    let result = client.get_object_acl().bucket(&bucket2).key("key2").send().await;
-    assert_s3_err!(result, 403, "AccessDenied");
+    if put2.is_some() {
+        // main user cannot read ACL for key2 (ownership not transferred)
+        let result = client.get_object_acl().bucket(&bucket2).key("key2").send().await;
+        assert_s3_err!(result, 403, "AccessDenied");
 
-    // alt user can read ACL for key2 (they own it)
-    let acl2 = alt_client.get_object_acl().bucket(&bucket2).key("key2").send().await.unwrap();
-    assert_eq!(acl2.grants()[0].grantee().unwrap().id().unwrap(), &cfg.alt_user_id);
+        // alt user can read ACL for key2 (they own it)
+        let acl2 = alt_client.get_object_acl().bucket(&bucket2).key("key2").send().await.unwrap();
+        assert_eq!(acl2.grants()[0].grantee().unwrap().id().unwrap(), &cfg.alt_user_id);
+    }
 }
 
 #[cfg_attr(feature = "fails_on_rgw", ignore = "fails on rgw")]
@@ -2349,8 +2362,10 @@ async fn test_bucket_policy_put_obj_request_obj_tag() {
         .await;
     assert_s3_err!(result, 403, "AccessDenied");
 
-    // put with matching x-amz-tagging header → allowed
-    alt_client
+    // put with matching x-amz-tagging header → allowed by S3;  alt's
+    // create in main's bucket, which the access model then decides
+    Access::ask(Class::Data, &bucket, "testobj", &get_config().alt_user_id,
+                "c").await.judge(alt_client
         .put_object()
         .bucket(&bucket)
         .key("testobj")
@@ -2360,8 +2375,7 @@ async fn test_bucket_policy_put_obj_request_obj_tag() {
             req.headers_mut().insert("x-amz-tagging", "security=public");
         })
         .send()
-        .await
-        .unwrap();
+        .await);
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]

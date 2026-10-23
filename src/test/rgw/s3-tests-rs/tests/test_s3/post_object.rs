@@ -1,5 +1,6 @@
 use aws_sdk_s3::types::BucketCannedAcl;
 use chrono::Utc;
+use s3_tests_rs::access_model::{Access, Class};
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::{get_new_bucket, get_new_bucket_name};
@@ -67,6 +68,15 @@ fn make_authenticated_post_fields(
     (fields, url)
 }
 
+/// Whether the configuration serves an anonymous create of `key` in
+/// another identity's bucket, which a `public-read-write` ACL grants:
+/// a write of the bucket directory, which is its creator's at `0770`.
+/// `Some(false)` is a refusal the response must carry, as NooBaa
+/// refuses it;  `None` is unknown, and asserts nothing.
+async fn anonymous_create_served(bucket: &str, key: &str) -> Option<bool> {
+    Access::ask(Class::Data, bucket, key, "", "c").await.served()
+}
+
 // --- Anonymous POST ---
 
 #[tokio::test]
@@ -88,7 +98,16 @@ async fn test_post_object_anonymous_request() {
         ("acl", "public-read".to_string()),
         ("Content-Type", "text/plain".to_string()),
     ];
+    let served = anonymous_create_served(&bucket, "foo.txt").await;
     let r = post_object_form(&url, fields, b"bar").await;
+    match served {
+        Some(true) => {}
+        Some(false) => {
+            assert_eq!(r.status, 403);
+            return;
+        }
+        None => return,
+    }
     assert_eq!(r.status, 204);
 
     /* The *owner* reading back what an anonymous POST wrote.  nsfs
@@ -212,7 +231,16 @@ async fn test_post_object_set_success_code() {
         ("success_action_status", "201".to_string()),
         ("Content-Type", "text/plain".to_string()),
     ];
+    let served = anonymous_create_served(&bucket, "foo.txt").await;
     let r = post_object_form(&url, fields, b"bar").await;
+    match served {
+        Some(true) => {}
+        Some(false) => {
+            assert_eq!(r.status, 403);
+            return;
+        }
+        None => return,
+    }
     assert_eq!(r.status, 201);
     assert!(r.body.contains("<Key>foo.txt</Key>"));
 }
@@ -237,7 +265,16 @@ async fn test_post_object_set_invalid_success_code() {
         ("success_action_status", "404".to_string()),
         ("Content-Type", "text/plain".to_string()),
     ];
+    let served = anonymous_create_served(&bucket, "foo.txt").await;
     let r = post_object_form(&url, fields, b"bar").await;
+    match served {
+        Some(true) => {}
+        Some(false) => {
+            assert_eq!(r.status, 403);
+            return;
+        }
+        None => return,
+    }
     assert_eq!(r.status, 204);
     assert!(r.body.is_empty());
 }
@@ -1081,7 +1118,16 @@ async fn test_post_object_tags_anonymous_request() {
         ("Content-Type", "text/plain".to_string()),
         ("tagging", xml_tagset.to_string()),
     ];
+    let served = anonymous_create_served(&bucket, "foo.txt").await;
     let r = post_object_form(&url, fields, b"bar").await;
+    match served {
+        Some(true) => {}
+        Some(false) => {
+            assert_eq!(r.status, 403);
+            return;
+        }
+        None => return,
+    }
     assert_eq!(r.status, 204);
 
     /* The *owner* reading back what an anonymous POST wrote.  nsfs

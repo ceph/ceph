@@ -513,32 +513,36 @@ async fn test_allow_object_actions_in_user_policy() {
         .await
         .unwrap();
 
-    s3_client_alt
+    /* alt's create in the IAM user's bucket, which alt's user policy
+     * grants:  where the configuration refuses it, its read and delete
+     * have no object, and the cleanup below still runs */
+    let put = Access::ask(Class::Data, &bucket, "foo", &cfg.alt_user_id,
+                          "c").await.judge(s3_client_alt
         .put_object()
         .bucket(&bucket)
         .key("foo")
         .body(ByteStream::from_static(b"bar"))
         .send()
-        .await
-        .unwrap();
+        .await);
+    if put.is_some() {
+        let resp = s3_client_alt
+            .get_object()
+            .bucket(&bucket)
+            .key("foo")
+            .send()
+            .await
+            .unwrap();
+        let body = resp.body.collect().await.unwrap().into_bytes();
+        assert_eq!(&body[..], b"bar");
 
-    let resp = s3_client_alt
-        .get_object()
-        .bucket(&bucket)
-        .key("foo")
-        .send()
-        .await
-        .unwrap();
-    let body = resp.body.collect().await.unwrap().into_bytes();
-    assert_eq!(&body[..], b"bar");
-
-    s3_client_alt
-        .delete_object()
-        .bucket(&bucket)
-        .key("foo")
-        .send()
-        .await
-        .unwrap();
+        s3_client_alt
+            .delete_object()
+            .bucket(&bucket)
+            .key("foo")
+            .send()
+            .await
+            .unwrap();
+    }
 
     s3_client_iam.delete_bucket().bucket(&bucket).send().await.unwrap();
 
@@ -834,61 +838,67 @@ async fn test_allow_multipart_actions_in_user_policy() {
         .await
         .unwrap();
 
-    let mp = s3_client_alt
+    /* alt's upload is staged in the IAM user's bucket directory, as
+     * the uploader:  where the configuration refuses that, nothing
+     * below it has an upload, and the cleanup still runs */
+    let mp = Access::ask(Class::Data, &bucket, key, &cfg.alt_user_id, "c")
+        .await
+        .judge(s3_client_alt
         .create_multipart_upload()
         .bucket(&bucket)
         .key(key)
         .send()
-        .await
-        .unwrap();
-    let upload_id = mp.upload_id().unwrap();
+        .await);
+    if let Some(mp) = mp {
+        let upload_id = mp.upload_id().unwrap();
 
-    let part = s3_client_alt
-        .upload_part()
-        .bucket(&bucket)
-        .key(key)
-        .upload_id(upload_id)
-        .part_number(1)
-        .body(ByteStream::from(vec![b'a'; 5 * 1024 * 1024]))
-        .send()
-        .await
-        .unwrap();
+        let part = s3_client_alt
+            .upload_part()
+            .bucket(&bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .part_number(1)
+            .body(ByteStream::from(vec![b'a'; 5 * 1024 * 1024]))
+            .send()
+            .await
+            .unwrap();
 
-    let completed = aws_sdk_s3::types::CompletedMultipartUpload::builder()
-        .parts(
-            aws_sdk_s3::types::CompletedPart::builder()
-                .e_tag(part.e_tag().unwrap_or_default())
-                .part_number(1)
-                .build(),
-        )
-        .build();
+        let completed = aws_sdk_s3::types::CompletedMultipartUpload::builder()
+            .parts(
+                aws_sdk_s3::types::CompletedPart::builder()
+                    .e_tag(part.e_tag().unwrap_or_default())
+                    .part_number(1)
+                    .build(),
+            )
+            .build();
 
-    s3_client_alt
-        .complete_multipart_upload()
-        .bucket(&bucket)
-        .key(key)
-        .upload_id(upload_id)
-        .multipart_upload(completed)
-        .send()
-        .await
-        .unwrap();
+        s3_client_alt
+            .complete_multipart_upload()
+            .bucket(&bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .multipart_upload(completed)
+            .send()
+            .await
+            .unwrap();
 
-    /* alt wrote the object, so the IAM user's delete is a
-     * cross-identity data operation:  denied where the filesystem
-     * denies it and the access model lets that stand (DECISIONS
-     * 2026-10-20), and performed under s3-native */
-    let delete = Access::ask(Class::Data, &bucket, key,
-                             &cfg.iam_user_id, "d").await;
-    let deleted = delete.judge(s3_client_iam
-        .delete_object()
-        .bucket(&bucket)
-        .key(key)
-        .send()
-        .await).is_some();
-    if !deleted {
-        /* its writer removes it, so the bucket can go */
-        let _ = s3_client_alt.delete_object().bucket(&bucket).key(key)
-            .send().await;
+        /* alt wrote the object, so the IAM user's delete is a
+         * cross-identity data operation:  denied where the filesystem
+         * denies it and the access model lets that stand (DECISIONS
+         * 2026-10-20), and performed under s3-native */
+        let delete = Access::ask(Class::Data, &bucket, key,
+                                 &cfg.iam_user_id, "d").await;
+        let deleted = delete.judge(s3_client_iam
+            .delete_object()
+            .bucket(&bucket)
+            .key(key)
+            .send()
+            .await).is_some();
+        if !deleted {
+            /* its writer removes it, so the bucket can go */
+            let _ = s3_client_alt.delete_object().bucket(&bucket).key(key)
+                .send().await;
+        }
     }
 
     iam_client

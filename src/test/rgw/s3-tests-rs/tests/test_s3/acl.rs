@@ -342,14 +342,7 @@ async fn test_bucket_acl_grant_userid_fullcontrol() {
 
     alt_client.head_bucket().bucket(&bucket_name).send().await.unwrap();
     alt_client.get_bucket_acl().bucket(&bucket_name).send().await.unwrap();
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key("foo-write")
-        .body(ByteStream::from_static(b"bar"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_create(&alt_client, &bucket_name, "foo-write", b"bar").await;
     alt_client
         .put_bucket_acl()
         .bucket(&bucket_name)
@@ -497,15 +490,20 @@ async fn test_object_acl_canned_bucketownerread() {
         .await
         .unwrap();
 
-    alt_client
+    /* alt's create in main's bucket, which the ACL grants:  where the
+     * configuration refuses it there is no object to read back */
+    let access = Access::ask(Class::Data, &bucket_name, "foo",
+                             &get_config().alt_user_id, "c").await;
+    if access.judge(alt_client
         .put_object()
         .bucket(&bucket_name)
         .key("foo")
         .body(ByteStream::from_static(b"bar"))
         .acl(ObjectCannedAcl::BucketOwnerRead)
         .send()
-        .await
-        .unwrap();
+        .await).is_none() {
+        return;
+    }
 
     let response = alt_client
         .get_object_acl()
@@ -549,15 +547,20 @@ async fn test_object_acl_canned_bucketownerfullcontrol() {
         .await
         .unwrap();
 
-    alt_client
+    /* alt's create in main's bucket, which the ACL grants:  where the
+     * configuration refuses it there is no object to read back */
+    let access = Access::ask(Class::Data, &bucket_name, "foo",
+                             &get_config().alt_user_id, "c").await;
+    if access.judge(alt_client
         .put_object()
         .bucket(&bucket_name)
         .key("foo")
         .body(ByteStream::from_static(b"bar"))
         .acl(ObjectCannedAcl::BucketOwnerFullControl)
         .send()
-        .await
-        .unwrap();
+        .await).is_none() {
+        return;
+    }
 
     let response = alt_client
         .get_object_acl()
@@ -987,16 +990,28 @@ async fn check_alt_read(alt_client: &aws_sdk_s3::Client, bucket: &str,
 /// alt's overwrite of `key`, which the bucket's `public-read-write`
 /// ACL grants it.
 ///
-/// The object is the main user's, so under a model where POSIX governs
-/// data the overwrite is denied -- a bucket directory is `1777`, so
-/// alt may add an entry but may not rename over one it does not own --
-/// and under `s3-native` the gateway performs the publish itself.
+/// The object is the main user's, in a bucket directory that is the
+/// main user's at `0770`, so under a model where POSIX governs data
+/// the overwrite is denied, as NooBaa denies it, and under `s3-native`
+/// the gateway performs the publish itself.
 async fn check_alt_overwrite(alt_client: &aws_sdk_s3::Client, bucket: &str,
                              key: &str, body: &'static [u8]) {
     let access = Access::ask(Class::Data, bucket, key,
                              &get_config().alt_user_id, "w").await;
     access.judge(alt_client.put_object().bucket(bucket).key(key)
         .body(ByteStream::from_static(body)).send().await);
+}
+
+/// alt's create of a new `key`, which an ACL grants it:  a write of
+/// the bucket directory, which is the main user's at `0770`, so the
+/// same line as an overwrite.  Asked before the create, of the key's
+/// directory.
+async fn check_alt_create(alt_client: &aws_sdk_s3::Client, bucket: &str,
+                          key: &str, body: &'static [u8]) -> bool {
+    let access = Access::ask(Class::Data, bucket, key,
+                             &get_config().alt_user_id, "c").await;
+    access.judge(alt_client.put_object().bucket(bucket).key(key)
+        .body(ByteStream::from_static(body)).send().await).is_some()
 }
 
 fn check_access_denied<E: std::fmt::Debug>(result: Result<impl std::fmt::Debug, aws_sdk_s3::error::SdkError<E>>) {
@@ -1328,14 +1343,7 @@ async fn test_access_bucket_publicreadwrite_object_private() {
 
     let objs = get_objects_list(&alt_client, &bucket_name).await;
     assert_eq!(objs, vec!["bar", "foo"]);
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&newkey)
-        .body(ByteStream::from_static(b"newcontent"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_create(&alt_client, &bucket_name, &newkey, b"newcontent").await;
 }
 
 #[tokio::test]
@@ -1356,14 +1364,7 @@ async fn test_access_bucket_publicreadwrite_object_publicread() {
 
     let objs = get_objects_list(&alt_client, &bucket_name).await;
     assert_eq!(objs, vec!["bar", "foo"]);
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&newkey)
-        .body(ByteStream::from_static(b"newcontent"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_create(&alt_client, &bucket_name, &newkey, b"newcontent").await;
 }
 
 #[tokio::test]
@@ -1384,14 +1385,7 @@ async fn test_access_bucket_publicreadwrite_object_publicreadwrite() {
 
     let objs = get_objects_list(&alt_client, &bucket_name).await;
     assert_eq!(objs, vec!["bar", "foo"]);
-    alt_client
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&newkey)
-        .body(ByteStream::from_static(b"newcontent"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_create(&alt_client, &bucket_name, &newkey, b"newcontent").await;
 }
 
 #[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
@@ -1891,9 +1885,18 @@ async fn get_object_acl_owner(client: &aws_sdk_s3::Client, bucket: &str, key: &s
     resp.owner().unwrap().id().unwrap().to_string()
 }
 
-async fn test_ownership_enforced(client: &aws_sdk_s3::Client, bucket: &str, bucket_owner_id: &str) {
+async fn test_ownership_enforced(client: &aws_sdk_s3::Client, writer_id: &str,
+                                 bucket: &str, bucket_owner_id: &str) {
     // put_object without ACL — owned by bucket owner
-    client.put_object().bucket(bucket).key("put-no-acl").send().await.unwrap();
+    /* `client` writes into another identity's bucket, which a policy
+     * opens to it:  where the configuration refuses the create there
+     * is no object whose ownership could be asked */
+    let access = Access::ask(Class::Data, bucket, "put-no-acl", writer_id,
+                             "c").await;
+    if access.judge(client.put_object().bucket(bucket).key("put-no-acl")
+                    .send().await).is_none() {
+        return;
+    }
     assert_eq!(get_object_acl_owner(client, bucket, "put-no-acl").await, bucket_owner_id);
 
     // put_object with ACL=bucket-owner-full-control — owned by bucket owner
@@ -1946,9 +1949,18 @@ async fn test_ownership_enforced(client: &aws_sdk_s3::Client, bucket: &str, buck
     assert_s3_err!(result, 400, "AccessControlListNotSupported");
 }
 
-async fn test_ownership_preferred(client: &aws_sdk_s3::Client, bucket: &str, bucket_owner_id: &str) {
+async fn test_ownership_preferred(client: &aws_sdk_s3::Client, writer_id: &str,
+                                  bucket: &str, bucket_owner_id: &str) {
     // put_object without ACL — NOT owned by bucket owner
-    client.put_object().bucket(bucket).key("put-no-acl").send().await.unwrap();
+    /* `client` writes into another identity's bucket, which a policy
+     * opens to it:  where the configuration refuses the create there
+     * is no object whose ownership could be asked */
+    let access = Access::ask(Class::Data, bucket, "put-no-acl", writer_id,
+                             "c").await;
+    if access.judge(client.put_object().bucket(bucket).key("put-no-acl")
+                    .send().await).is_none() {
+        return;
+    }
     assert_ne!(get_object_acl_owner(client, bucket, "put-no-acl").await, bucket_owner_id);
 
     // put_object with ACL=bucket-owner-full-control — owned by bucket owner
@@ -1974,9 +1986,18 @@ async fn test_ownership_preferred(client: &aws_sdk_s3::Client, bucket: &str, buc
     assert_ne!(get_object_acl_owner(client, bucket, "put-private").await, bucket_owner_id);
 }
 
-async fn test_ownership_object_writer(client: &aws_sdk_s3::Client, bucket: &str, bucket_owner_id: &str) {
+async fn test_ownership_object_writer(client: &aws_sdk_s3::Client, writer_id: &str,
+                                      bucket: &str, bucket_owner_id: &str) {
     // put_object without ACL — NOT owned by bucket owner
-    client.put_object().bucket(bucket).key("put-no-acl").send().await.unwrap();
+    /* `client` writes into another identity's bucket, which a policy
+     * opens to it:  where the configuration refuses the create there
+     * is no object whose ownership could be asked */
+    let access = Access::ask(Class::Data, bucket, "put-no-acl", writer_id,
+                             "c").await;
+    if access.judge(client.put_object().bucket(bucket).key("put-no-acl")
+                    .send().await).is_none() {
+        return;
+    }
     assert_ne!(get_object_acl_owner(client, bucket, "put-no-acl").await, bucket_owner_id);
 
     // put_object with ACL=bucket-owner-full-control — still NOT owned by bucket owner
@@ -2028,7 +2049,8 @@ async fn test_create_bucket_bucket_owner_enforced() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    test_ownership_enforced(&alt_client, &bucket, &cfg.main_user_id).await;
+    test_ownership_enforced(&alt_client, &cfg.alt_user_id, &bucket,
+                            &cfg.main_user_id).await;
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
@@ -2057,7 +2079,8 @@ async fn test_create_bucket_bucket_owner_preferred() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    test_ownership_preferred(&alt_client, &bucket, &cfg.main_user_id).await;
+    test_ownership_preferred(&alt_client, &cfg.alt_user_id, &bucket,
+                             &cfg.main_user_id).await;
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
@@ -2120,7 +2143,8 @@ async fn test_put_bucket_ownership_bucket_owner_enforced() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    test_ownership_enforced(&alt_client, &bucket, &cfg.main_user_id).await;
+    test_ownership_enforced(&alt_client, &cfg.alt_user_id, &bucket,
+                            &cfg.main_user_id).await;
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
@@ -2158,7 +2182,8 @@ async fn test_put_bucket_ownership_bucket_owner_preferred() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    test_ownership_preferred(&alt_client, &bucket, &cfg.main_user_id).await;
+    test_ownership_preferred(&alt_client, &cfg.alt_user_id, &bucket,
+                             &cfg.main_user_id).await;
 }
 
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
@@ -2196,7 +2221,8 @@ async fn test_put_bucket_ownership_object_writer() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    test_ownership_object_writer(&alt_client, &bucket, &cfg.main_user_id).await;
+    test_ownership_object_writer(&alt_client, &cfg.alt_user_id, &bucket,
+                                 &cfg.main_user_id).await;
 }
 
 fn add_acl_grant_headers(
@@ -2293,14 +2319,7 @@ async fn test_bucket_header_acl_grants() {
     check_grants(response.grants(), &cfg.alt_user_id, &cfg.alt_display_name);
 
     let alt_client = get_alt_client();
-    alt_client
-        .put_object()
-        .bucket(&bucket)
-        .key("foo")
-        .body(ByteStream::from_static(b"bar"))
-        .send()
-        .await
-        .unwrap();
+    check_alt_create(&alt_client, &bucket, "foo", b"bar").await;
 
     alt_client
         .put_bucket_acl()
@@ -2406,5 +2425,6 @@ async fn test_create_bucket_object_writer() {
         .unwrap();
 
     let alt_client = get_alt_client();
-    test_ownership_object_writer(&alt_client, &bucket, &cfg.main_user_id).await;
+    test_ownership_object_writer(&alt_client, &cfg.alt_user_id, &bucket,
+                                 &cfg.main_user_id).await;
 }

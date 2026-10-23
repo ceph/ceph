@@ -254,15 +254,20 @@ async fn test_data_follows_the_access_model() {
      * cannot read anything" -- a broken client, a broken fixture, a
      * gateway denying the whole bucket.  A test that only ever sees
      * denials cannot tell those apart from the thing it means to
-     * assert. */
+     * assert.
+     *
+     * In a bucket of bob's own:  alice's bucket directory is hers at
+     * 0770, so bob's create there is itself the cross-identity
+     * question, which NooBaa refuses too. */
+    let bobs_bucket = get_new_bucket(Some(bob)).await;
     let bobs_key = "bobs-own-object";
     bob.put_object()
-        .bucket(&bucket).key(bobs_key)
+        .bucket(&bobs_bucket).key(bobs_key)
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"bob wrote this"))
         .send().await
         .expect("bob could not write his own object;  the fixture is wrong, \
                  not the model");
-    bob.get_object().bucket(&bucket).key(bobs_key).send().await
+    bob.get_object().bucket(&bobs_bucket).key(bobs_key).send().await
         .expect("bob could not read his own object;  a denial above says \
                  nothing");
 

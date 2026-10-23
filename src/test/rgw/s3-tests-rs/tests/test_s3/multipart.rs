@@ -10,6 +10,7 @@ use s3_tests_rs::fixtures::{
     multipart_copy, multipart_upload,
 };
 use s3_tests_rs::assert_s3_err;
+use s3_tests_rs::access_model::{Access, Class};
 
 async fn get_body(response: aws_sdk_s3::operation::get_object::GetObjectOutput) -> Vec<u8> {
     response.body.collect().await.unwrap().into_bytes().to_vec()
@@ -1218,14 +1219,18 @@ async fn test_list_multipart_upload_owner() {
         .unwrap();
     let upload_id1 = upload1.upload_id().unwrap().to_string();
 
-    let upload2 = client2
+    /* alt's upload is staged in main's bucket directory, as the
+     * uploader:  where the configuration refuses that, the listing
+     * holds main's upload alone */
+    let upload_id2 = Access::ask(Class::Data, &bucket_name, key2,
+                                 &cfg.alt_user_id, "c").await
+        .judge(client2
         .create_multipart_upload()
         .bucket(&bucket_name)
         .key(key2)
         .send()
-        .await
-        .unwrap();
-    let upload_id2 = upload2.upload_id().unwrap().to_string();
+        .await)
+        .map(|u| u.upload_id().unwrap().to_string());
 
     let response = client1
         .list_multipart_uploads()
@@ -1234,26 +1239,28 @@ async fn test_list_multipart_upload_owner() {
         .await
         .unwrap();
     let uploads = response.uploads();
-    assert_eq!(uploads.len(), 2);
+    assert_eq!(uploads.len(), if upload_id2.is_some() { 2 } else { 1 });
 
     assert_eq!(uploads[0].key().unwrap(), key1);
     assert_eq!(uploads[0].upload_id().unwrap(), upload_id1);
     assert_eq!(uploads[0].initiator().unwrap().id().unwrap(), cfg.main_user_id);
     assert_eq!(uploads[0].owner().unwrap().id().unwrap(), cfg.main_user_id);
 
-    assert_eq!(uploads[1].key().unwrap(), key2);
-    assert_eq!(uploads[1].upload_id().unwrap(), upload_id2);
-    assert_eq!(uploads[1].initiator().unwrap().id().unwrap(), cfg.alt_user_id);
-    assert_eq!(uploads[1].owner().unwrap().id().unwrap(), cfg.alt_user_id);
+    if let Some(upload_id2) = &upload_id2 {
+        assert_eq!(uploads[1].key().unwrap(), key2);
+        assert_eq!(uploads[1].upload_id().unwrap(), upload_id2);
+        assert_eq!(uploads[1].initiator().unwrap().id().unwrap(), cfg.alt_user_id);
+        assert_eq!(uploads[1].owner().unwrap().id().unwrap(), cfg.alt_user_id);
 
-    client2
-        .abort_multipart_upload()
-        .bucket(&bucket_name)
-        .key(key2)
-        .upload_id(&upload_id2)
-        .send()
-        .await
-        .unwrap();
+        client2
+            .abort_multipart_upload()
+            .bucket(&bucket_name)
+            .key(key2)
+            .upload_id(upload_id2)
+            .send()
+            .await
+            .unwrap();
+    }
     client1
         .abort_multipart_upload()
         .bucket(&bucket_name)
