@@ -38,7 +38,14 @@ describe('PoolIoCardComponent', () => {
     readOpsChartData: [],
     writeThroughput: '2.5 KiB/s',
     writeOps: '25/s',
-    writeOpsChartData: []
+    writeOpsChartData: [],
+    isMigrating: false,
+    migrationObjectsMigrated: 0,
+    migrationBytesMigrated: 0,
+    migrationObjectsTotal: 0,
+    migrationBytesTotal: 0,
+    migrationProgress: 0,
+    migrationMigratingPgs: ''
   };
 
   const dummyChartData: ChartPoint[] = [{ timestamp: new Date(), values: { Ops: 10 } }];

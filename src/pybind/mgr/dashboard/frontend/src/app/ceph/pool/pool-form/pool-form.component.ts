@@ -8,6 +8,7 @@ import { startWith } from 'rxjs/operators';
 import { Observable, ReplaySubject, Subscription } from 'rxjs';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
@@ -34,7 +35,7 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
-import { Pool, PoolType } from '../pool';
+import { isReleaseAtLeast, Pool, PoolType } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
@@ -62,6 +63,8 @@ interface EcpDetailField {
   label: string;
   plugins?: string[];
 }
+
+const EXPERIMENTAL_CONFIG = 'enable_experimental_unrecoverable_data_corrupting_features';
 
 @Component({
   selector: 'cd-pool-form',
@@ -100,6 +103,38 @@ export class PoolFormComponent extends CdForm implements OnInit {
   info: PoolFormInfo;
   routeParamsSubscribe: any;
   editing = false;
+  migrating = false;
+  migrationPreconditions = {
+    experimentalFlag: false,
+    minCompatClient: false,
+    osdRelease: false,
+    poolNotMigrating: true,
+    pgNumStable: true
+  };
+  migrationNotifications = {
+    experimentalFlag: {
+      title: $localize`Experimental feature not enabled`,
+      message: $localize`Pool migration requires the poolmigration experimental flag to be enabled.`
+    },
+    minCompatClient: {
+      title: $localize`Minimum compatible client too low`,
+      message: $localize`Pool migration requires require_min_compat_client to be set to umbrella or later. This is irreversible and will reject connections from older clients.`
+    },
+    osdRelease: {
+      title: $localize`OSD release too old`,
+      message: $localize`All OSDs must be upgraded to the umbrella release or later before using pool migration. Use the Cluster > Upgrade page to perform a rolling upgrade.`
+    },
+    poolNotMigrating: {
+      title: $localize`Pool already migrating`,
+      message: $localize`This pool is already part of an ongoing migration. Wait for it to complete before starting another migration.`
+    },
+    pgNumStable: {
+      title: $localize`PG count is changing`,
+      message: $localize`Cannot start migration while the pool pg_num is being adjusted. Wait for the PG change to complete and retry.`
+    }
+  };
+  enablingFlag = false;
+  settingMinCompatClient = false;
   isReplicated = false;
   isErasure = false;
   blobUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -151,15 +186,27 @@ export class PoolFormComponent extends CdForm implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
     private monitorService: MonitorService,
+    private configurationService: ConfigurationService,
     private cdr: ChangeDetectorRef
   ) {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.migrating = this.router.url.startsWith(`/pool/${URLVerbs.MIGRATE}`);
+    if (this.migrating) {
+      this.action = this.actionLabels.MIGRATE;
+    } else if (this.editing) {
+      this.action = this.actionLabels.EDIT;
+    } else {
+      this.action = this.actionLabels.CREATE;
+    }
     this.resource = $localize`pool`;
-    this.submitAction = this.editing
-      ? this.actionLabels.SAVE_CHANGES
-      : `${this.action} ${_.upperFirst(this.resource)}`;
+    if (this.migrating) {
+      this.submitAction = `${this.action} ${_.upperFirst(this.resource)}`;
+    } else {
+      this.submitAction = this.editing
+        ? this.actionLabels.SAVE_CHANGES
+        : `${this.action} ${_.upperFirst(this.resource)}`;
+    }
     this.authenticate();
     this.createForm();
     const nav = this.router.currentNavigation();
@@ -171,8 +218,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.permissions = this.authStorageService.getPermissions();
     if (
       !this.permissions?.pool?.read ||
-      (!this.permissions?.pool?.update && this.editing) ||
-      (!this.permissions?.pool?.create && !this.editing)
+      (!this.permissions?.pool?.update && (this.editing || this.migrating)) ||
+      (!this.permissions?.pool?.create && !this.editing && !this.migrating)
     ) {
       throw new DashboardNotFoundError();
     }
@@ -264,14 +311,21 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.initInfo(info);
       if (this.editing) {
         this.initEditMode();
+      } else if (this.migrating) {
+        this.initMigrateMode();
       } else {
         this.setAvailableApps();
         this.loadingReady();
       }
       this.listenToChanges();
       this.setComplexValidators();
-      this.poolTypeChange(PoolType.REPLICATED);
+      if (!this.migrating) {
+        this.poolTypeChange(PoolType.REPLICATED);
+      }
     });
+    if (this.migrating) {
+      this.checkMigrationPreconditions();
+    }
     this.loadingReady();
   }
 
@@ -281,6 +335,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.form.silentSet('algorithm', info.bluestore_compression_algorithm);
     this.info = info;
     this.initEcp(info.erasure_code_profiles);
+    if (this.migrating) {
+      this.checkClusterPreconditions();
+    }
   }
 
   private initEcp(ecProfiles: ErasureCodeProfile[], selectedName?: string) {
@@ -352,6 +409,143 @@ export class PoolFormComponent extends CdForm implements OnInit {
         this.loadingReady();
       })
     );
+  }
+
+  private initMigrateMode() {
+    this.routeParamsSubscribe = this.route.params.subscribe((param: { name: string }) =>
+      this.poolService.get(param.name).subscribe((pool: Pool) => {
+        this.data.pool = pool;
+        this.initMigrateFormData(pool);
+        this.loadingReady();
+      })
+    );
+  }
+
+  private initMigrateFormData(pool: Pool) {
+    this.poolTypeChange(pool.type);
+    const rules = this.info.crush_rules_replicated.concat(this.info.crush_rules_erasure);
+    const dataMap: Record<string, any> = {
+      name: pool.pool_name,
+      poolType: pool.type,
+      crushRule: rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule)?.rule_name,
+      size: pool.size,
+      erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile)?.name,
+      pgAutoscaleMode: pool.pg_autoscale_mode,
+      pgNum: pool.pg_num,
+      ecOverwrites: pool.flags_names?.includes('ec_overwrites'),
+      mode: pool.options?.compression_mode,
+      algorithm: pool.options?.compression_algorithm
+    };
+    Object.keys(dataMap).forEach((controlName: string) => {
+      const value = dataMap[controlName];
+      if (!_.isUndefined(value) && value !== '' && value !== null) {
+        this.form.silentSet(controlName, value);
+      }
+    });
+
+    this.selectedEcp = this.ecProfiles.find(
+      (ecp: ErasureCodeProfile) => ecp.name === pool.erasure_code_profile
+    );
+    this.selectedCrushRule = rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule);
+    if (this.selectedEcp) this.ecpIsUsedBy(this.selectedEcp?.name);
+    if (this.selectedCrushRule) this.crushRuleIsUsedBy(this.selectedCrushRule?.rule_name);
+    this.data.pgs = this.form.getValue('pgNum');
+
+    this.data.applications.selected = pool.application_metadata || [];
+    this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata || []));
+
+    this.form.get('name').disable();
+
+    this.checkPoolMigrationState(pool);
+  }
+
+  private checkPoolMigrationState(pool: Pool) {
+    const pgStable =
+      pool.pg_num === pool.pg_num_target && pool.pg_placement_num === pool.pg_placement_num_target;
+    this.migrationPreconditions.pgNumStable = pgStable;
+
+    const isMigrating = !!(pool as any).migration_target || !!(pool as any).migration_src;
+    this.migrationPreconditions.poolNotMigrating = !isMigrating;
+  }
+
+  checkMigrationPreconditions() {
+    this.configurationService.get(EXPERIMENTAL_CONFIG).subscribe((data: any) => {
+      const globalVal = this.configurationService.getValue(data, 'global');
+      if (globalVal && typeof globalVal === 'string') {
+        this.migrationPreconditions.experimentalFlag =
+          globalVal === '*' ||
+          globalVal
+            .split(',')
+            .map((s: string) => s.trim())
+            .includes('poolmigration');
+      } else {
+        this.migrationPreconditions.experimentalFlag = false;
+      }
+    });
+  }
+
+  private checkClusterPreconditions() {
+    if (!this.info) return;
+    const requireMinCompatClient = this.info.require_min_compat_client || '';
+    this.migrationPreconditions.minCompatClient = isReleaseAtLeast(
+      requireMinCompatClient,
+      'umbrella'
+    );
+
+    const requireOsdRelease = this.info.require_osd_release || '';
+    this.migrationPreconditions.osdRelease = isReleaseAtLeast(requireOsdRelease, 'umbrella');
+  }
+
+  get migrationPreconditionsMet(): boolean {
+    return (
+      this.migrationPreconditions.experimentalFlag &&
+      this.migrationPreconditions.minCompatClient &&
+      this.migrationPreconditions.osdRelease &&
+      this.migrationPreconditions.poolNotMigrating &&
+      this.migrationPreconditions.pgNumStable
+    );
+  }
+
+  enablePoolMigrationFlag() {
+    this.enablingFlag = true;
+    this.configurationService.get(EXPERIMENTAL_CONFIG).subscribe((data: any) => {
+      const currentVal = this.configurationService.getValue(data, 'global') || '';
+      let newVal: string;
+      if (!currentVal || currentVal === '') {
+        newVal = 'poolmigration';
+      } else if (currentVal === '*') {
+        newVal = currentVal;
+      } else {
+        const features = currentVal.split(',').map((s: string) => s.trim());
+        if (!features.includes('poolmigration')) {
+          features.push('poolmigration');
+        }
+        newVal = features.join(',');
+      }
+      this.configurationService
+        .create({
+          name: EXPERIMENTAL_CONFIG,
+          value: [{ section: 'global', value: newVal }],
+          force_update: false
+        })
+        .subscribe(() => {
+          this.migrationPreconditions.experimentalFlag = true;
+          this.enablingFlag = false;
+        });
+    });
+  }
+
+  setMinCompatClient() {
+    this.settingMinCompatClient = true;
+    this.poolService.setMinCompatClient('umbrella').subscribe({
+      next: () => {
+        this.migrationPreconditions.minCompatClient = true;
+        this.settingMinCompatClient = false;
+      },
+      error: () => {
+        this.settingMinCompatClient = false;
+      }
+    });
   }
 
   private disableForEdit() {
@@ -675,6 +869,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
                 this.info.pool_names.indexOf(this.data.pool.pool_name)
           )
         ]);
+    } else if (this.migrating) {
+      // In migrate mode, the name is pre-filled and disabled — no unique-name check needed
     } else {
       CdValidators.validateIf(this.form.get('size'), () => this.isReplicated, [
         CdValidators.number(false),
@@ -958,6 +1154,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
       return;
     }
 
+    if (this.migrating) {
+      this.submitMigration();
+      return;
+    }
+
     const pool = { pool: this.form.getValue('name') };
 
     this.assignFormFields(pool, [
@@ -1140,6 +1341,82 @@ export class PoolFormComponent extends CdForm implements OnInit {
       }
     }
     pool[externalFieldName] = apiValue;
+  }
+
+  private submitMigration() {
+    const poolName = this.data.pool.pool_name;
+    const params: Record<string, any> = {};
+
+    const poolType = this.form.getValue('poolType');
+    if (poolType) {
+      params['pool_type'] = poolType;
+    }
+
+    const pgNum = this.form.getValue('pgNum');
+    if (pgNum) {
+      params['pg_num'] = pgNum;
+    }
+
+    if (this.isReplicated) {
+      const size = this.form.getValue('size');
+      if (size) {
+        params['size'] = size;
+      }
+    }
+
+    if (this.isErasure) {
+      const erasureProfile = this.form.getValue('erasureProfile');
+      if (erasureProfile) {
+        params['erasure_code_profile'] = erasureProfile;
+      }
+    }
+
+    const crushRule = this.form.getValue('crushRule');
+    if (crushRule && this.isReplicated) {
+      params['rule'] = crushRule;
+    }
+
+    const apps = this.data.applications.selected;
+    if (apps.length > 0) {
+      params['application_metadata'] = apps;
+    }
+
+    if (this.form.getValue('ecOverwrites')) {
+      params['flags'] = ['ec_overwrites'];
+    }
+
+    if (this.form.getValue('mode') && this.form.getValue('mode') !== 'none') {
+      params['compression_mode'] = this.form.getValue('mode');
+      params['compression_algorithm'] = this.form.getValue('algorithm');
+      const minBlobSize = this.form.getValue('minBlobSize');
+      if (minBlobSize) {
+        const minBlobUnit = this.form.getValue('minBlobSizeUnit');
+        params['compression_min_blob_size'] = this.formatter.toBytes(minBlobSize + minBlobUnit);
+      }
+      const maxBlobSize = this.form.getValue('maxBlobSize');
+      if (maxBlobSize) {
+        const maxBlobUnit = this.form.getValue('maxBlobSizeUnit');
+        params['compression_max_blob_size'] = this.formatter.toBytes(maxBlobSize + maxBlobUnit);
+      }
+      const ratio = this.form.getValue('ratio');
+      if (ratio) {
+        params['compression_required_ratio'] = ratio;
+      }
+    }
+
+    params['yes_i_really_mean_it'] = true;
+
+    this.taskWrapper
+      .wrapTaskAroundCall({
+        task: new FinishedTask('pool/migrate', { pool_name: poolName }),
+        call: this.poolService.migrate(poolName, params)
+      })
+      .subscribe({
+        error: () => {
+          this.form.setErrors({ cdSubmitButton: true });
+        },
+        complete: () => this.navigateAfterPoolForm()
+      });
   }
 
   private triggerApiTask(pool: Record<string, any>) {

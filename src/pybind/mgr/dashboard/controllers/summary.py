@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import json
+import time
 
 from .. import mgr
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..exceptions import ViewCacheNoDataException
 from ..security import Permission, Scope
 from ..services import progress
+from ..services.ceph_service import CephService
 from ..tools import TaskManager
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc
 
@@ -94,6 +96,22 @@ class Summary(BaseController):
         services = mgr.get('mgr_map')['services']
         return services['dashboard'] if 'dashboard' in services else ''
 
+    @staticmethod
+    def _get_pool_migration_tasks():
+        """Detect active pool migrations and return them as executing tasks."""
+        migrations, _ = CephService.get_pool_migration_info()
+        now = '{}Z'.format(time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()))
+        return [{
+            'name': "progress/Migrating pool '{}' (source: {})".format(
+                m['pool_name'], m['src_name']),
+            'metadata': {
+                'pool_name': m['pool_name'],
+                'pool_id': m['pool_id'],
+            },
+            'begin_time': now,
+            'progress': m['progress'],
+        } for m in migrations]
+
     @Endpoint()
     @EndpointDoc("Display Summary",
                  responses={200: SUMMARY_SCHEMA})
@@ -105,6 +123,9 @@ class Summary(BaseController):
         e, f = progress.get_progress_tasks()
         executing_tasks.extend(e)
         finished_tasks.extend(f)
+
+        if self._has_permissions(Permission.READ, Scope.POOL):
+            executing_tasks.extend(self._get_pool_migration_tasks())
 
         executing_tasks.sort(key=lambda t: t['begin_time'], reverse=True)
         finished_tasks.sort(key=lambda t: t['end_time'], reverse=True)

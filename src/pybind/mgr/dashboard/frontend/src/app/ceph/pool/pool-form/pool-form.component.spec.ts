@@ -113,7 +113,9 @@ describe('PoolFormComponent', () => {
       used_profiles: {
         ecp1: ['some.other.pool.uses.it']
       },
-      nodes: Mocks.generateSimpleCrushMap(3, 5)
+      nodes: Mocks.generateSimpleCrushMap(3, 5),
+      require_min_compat_client: '',
+      require_osd_release: ''
     };
   };
 
