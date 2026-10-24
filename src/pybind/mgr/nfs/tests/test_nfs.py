@@ -1610,6 +1610,7 @@ EXPORT {
             "virtual_ip": None,
             "backend": [],
             "placement": {},
+            "enable_nfsv3": False,
             "enable_rdma": False,
         }}
 
@@ -1638,11 +1639,41 @@ EXPORT {
             "virtual_ip": None,
             "backend": [],
             "placement": {},
+            "enable_nfsv3": False,
             "enable_rdma": True,
         }}
 
     def test_cluster_info_enable_rdma(self):
         self._do_mock_test(self._do_test_cluster_info_enable_rdma)
+
+    def _do_test_cluster_info_enable_nfsv3(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        nfs_services = [
+            ServiceDescription(
+                spec=NFSServiceSpec(service_id=self.cluster_id, enable_nfsv3=True)
+            )
+        ]
+
+        def mock_describe_service(cls, *args, **kwargs):
+            if kwargs['service_type'] == 'nfs':
+                return OrchResult(nfs_services)
+            return OrchResult([])
+
+        with mock.patch('nfs.module.Module.describe_service', mock_describe_service):
+            out = cluster.show_nfs_cluster_info(self.cluster_id)
+
+        assert out == {"foo": {
+            "deployment_type": "standalone",
+            "virtual_ip": None,
+            "backend": [],
+            "placement": {},
+            "enable_nfsv3": True,
+            "enable_rdma": False,
+        }}
+
+    def test_cluster_info_enable_nfsv3(self):
+        self._do_mock_test(self._do_test_cluster_info_enable_nfsv3)
 
     def _do_test_cluster_config(self):
         nfs_mod = Module('nfs', '', '')

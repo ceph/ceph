@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable, throwError } from 'rxjs';
-import { NFSCluster } from '~/app/ceph/nfs/models/nfs-cluster-config';
+import { NFSCluster } from '~/app/ceph/nfs/models/nfs.model';
 
 import { NfsFSAbstractionLayer, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
 import { ApiClient } from '~/app/shared/api/api-client';
@@ -58,7 +58,7 @@ export class NfsService extends ApiClient {
 
   list(clusterId?: string) {
     return this.http.get(`${this.apiPath}/export`, {
-      params: { cluster_id: clusterId }
+      params: clusterId ? { cluster_id: clusterId } : {}
     });
   }
 
