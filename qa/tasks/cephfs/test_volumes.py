@@ -5527,6 +5527,23 @@ class TestPausePurging(TestVolumesHelper):
 
         self.assertEqual(len(sv_files),  num_of_files)
 
+    def _wait_for_trashed_sv_with_files(self, sv, sv_path, tries=40, sleep=0.25):
+        '''
+        Wait until the trashed subvolume path is listable and has at least one
+        remaining entry. Listing can race with an in-flight purge (ENOENT).
+        '''
+        with safe_while(tries=tries, sleep=sleep) as proceed:
+            while proceed():
+                try:
+                    trashed_sv_path = self._get_trashed_sv_path(sv, sv_path)
+                    num_of_files = self._get_num_of_files_in_trashed_sv(
+                        trashed_sv_path)
+                    if num_of_files > 0:
+                        return trashed_sv_path, num_of_files
+                except CommandFailedError as cfe:
+                    if cfe.exitstatus != 2:
+                        raise
+
     def test_pausing_halts_ongoing_purge(self):
         '''
         Test that when MGR config option mgr/volumes/pause_purging is
@@ -5540,18 +5557,23 @@ class TestPausePurging(TestVolumesHelper):
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
 
         sv_path = self._get_sv_path(v, sv)
-        # adding more files for this test since in once few runs it fails due
-        # to race condition
-        self._do_subvolume_io(sv, number_of_files=200)
+        # Enough files that purge cannot finish before pause is applied on
+        # typical lab machines (see tracker #77807).
+        self._do_subvolume_io(sv, number_of_files=2000)
 
         self.run_ceph_cmd(f'fs subvolume rm {v} {sv}')
-        # XXX actual test here: test that purging halts
+        # Pause immediately after rm so an in-flight purge is cancelled before
+        # it can finish. Waiting to list trash first widens the race that
+        # caused #77807 (ENOENT because purge already completed).
         self.config_set('mgr', self.CONF_OPT, True)
-        trashed_sv_path = self._get_trashed_sv_path(sv, sv_path)
-        NUM_OF_FILES = self._get_num_of_files_in_trashed_sv(trashed_sv_path)
+
+        # Listing can still race briefly with the cancelled purge thread.
+        trashed_sv_path, num_of_files = self._wait_for_trashed_sv_with_files(
+            sv, sv_path)
+        self.assertGreater(num_of_files, 0)
+
         time.sleep(2)
-        self._assert_trashed_sv_has_num_of_files(trashed_sv_path,
-                                                 NUM_OF_FILES)
+        self._assert_trashed_sv_has_num_of_files(trashed_sv_path, num_of_files)
 
     def test_on_resuming_partly_purged_subvol_purges_fully(self):
         '''
