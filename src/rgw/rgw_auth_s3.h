@@ -281,8 +281,8 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
   const req_state* const s;
 
-  const std::string_view date;
-  const std::string_view credential_scope;
+  const std::string date;
+  const std::string credential_scope;
   const uint32_t flags;
   const signing_key_t signing_key;
 
@@ -351,8 +351,8 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 						    uint32_t flags);
   } chunk_meta;
 
-  uint16_t lf_bytes;
   size_t stream_pos;
+  size_t decoded_bytes = 0;
   boost::container::static_vector<char, ChunkMeta::META_MAX_SIZE> parsing_buf;
   boost::optional<std::string_view> x_amz_trailer;
   ceph::crypto::SHA256* sha256_hash;
@@ -419,7 +419,6 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
       /* The evolving state. */
       chunk_meta(ChunkMeta::create_first(
 		   seed_signature, flags, 0 /* first call in cycle */)),
-      lf_bytes(0),
       stream_pos(0),
       sha256_hash(calc_hash_sha256_open_stream()),
       prev_chunk_signature(std::move(seed_signature))
@@ -444,6 +443,14 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
   bool complete() override;
 
   /* Factories. */
+  static cmplptr_t create_from_signing_key(
+    const req_state* s,
+    std::string_view date,
+    std::string_view credential_scope,
+    std::string_view seed_signature,
+    uint32_t flags,
+    const sha256_digest_t& signing_key);
+
   static cmplptr_t create(const req_state* s,
                           std::string_view date,
                           std::string_view credential_scope,
@@ -743,6 +750,12 @@ get_v4_signature(const std::string_view& credential_scope,
                  const std::string_view& secret_key,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign,
                  const DoutPrefixProvider *dpp);
+
+// HMAC with the already-derived, binary 32-byte key. Never derives from a root.
+extern AWSEngine::VersionAbstractor::server_signature_t
+get_v4_signature_from_signing_key(
+  const sha256_digest_t& signing_key,
+  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,

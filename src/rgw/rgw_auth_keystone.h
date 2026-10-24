@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <chrono>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <boost/optional.hpp>
 
@@ -129,6 +131,62 @@ public:
   void add(const std::string& token_id, const token_envelope_t& token, const std::string& secret);
 }; /* class SecretCache */
 
+// Signing material is process-local, owned, and never mixed with SecretCache.
+class SigningKeyCache {
+public:
+  using mono_time = std::chrono::steady_clock::time_point;
+  struct Key {
+    std::string access, date, region, service, endpoint;
+    bool operator<(const Key& rhs) const {
+      return std::tie(access, date, region, service, endpoint) <
+             std::tie(rhs.access, rhs.date, rhs.region, rhs.service, rhs.endpoint);
+    }
+  };
+  struct Value {
+    rgw::keystone::TokenEnvelope identity;
+    sha256_digest_t signing_key;
+    std::string credential_id;
+    time_t wall_expires = 0;
+    mono_time mono_expires;
+  };
+
+  explicit SigningKeyCache(size_t capacity) : capacity(capacity) {}
+  boost::optional<Value> find(const Key&, time_t now, mono_time mono_now);
+  bool insert(const Key&, Value, time_t now, mono_time mono_now);
+  size_t size() const;
+
+private:
+  struct Entry {
+    Value value;
+    std::list<Key>::iterator lru;
+  };
+  const size_t capacity;
+  mutable std::mutex mutex;
+  std::map<Key, Entry> entries;
+  std::list<Key> lru;
+};
+
+// Production uses real clocks; tests can model independent wall/elapsed time.
+struct S3ProofClock {
+  std::function<time_t()> wall;
+  std::function<SigningKeyCache::mono_time()> mono;
+};
+
+struct S3ProofResult {
+  rgw::keystone::TokenEnvelope identity;
+  std::string credential_id;
+  boost::optional<sha256_digest_t> signing_key;
+  time_t cache_until = 0; // zero on validation-only replies
+};
+
+// Strict protocol boundaries, also exercised independently by unit tests.
+int decode_s3_proof_response(const std::string& body, bool key_response,
+                             const SigningKeyCache::Key& scope,
+                             S3ProofResult& result);
+int validate_s3_v4_proof(std::string_view proof, bool query,
+                         std::string_view expires, time_t now,
+                         SigningKeyCache::Key& scope);
+
 class EC2Engine : public rgw::auth::s3::AWSEngine {
   using acl_strategy_t = rgw::auth::RemoteApplier::acl_strategy_t;
   using auth_info_t = rgw::auth::RemoteApplier::AuthInfo;
@@ -139,6 +197,35 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
   rgw::keystone::Config& config;
   rgw::keystone::TokenCache& token_cache;
   rgw::auth::keystone::SecretCache& secret_cache;
+  const bool signing_key_mode;
+  const bool allow_legacy_signatures;
+  const unsigned local_cache_ttl;
+  const std::string proof_endpoint;
+  const S3ProofClock proof_clock;
+  time_t wall_now() const {
+    return proof_clock.wall ? proof_clock.wall() : ceph_clock_now().sec();
+  }
+  SigningKeyCache::mono_time mono_now() const {
+    return proof_clock.mono ? proof_clock.mono() : std::chrono::steady_clock::now();
+  }
+  mutable SigningKeyCache signing_keys;
+  mutable std::atomic<bool> capability_checked{false};
+  mutable std::atomic<uint64_t> legacy_validations{0};
+
+  struct proof_http_result {
+    std::string body;
+    long status = 0;
+    int error = 0;
+  };
+  proof_http_result proof_request(const DoutPrefixProvider*,
+                                  const std::string& method,
+                                  const std::string& endpoint,
+                                  const std::string& body,
+                                  optional_yield) const;
+  int check_capability(const DoutPrefixProvider*, optional_yield) const;
+  result_t authenticate(const DoutPrefixProvider*,
+                         const VersionAbstractor::auth_data_t&,
+                         const req_state*, optional_yield) const override;
 
   /* Helper methods. */
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
@@ -188,12 +275,19 @@ public:
              * Due to the architecture of AWS Auth S3 credentials cannot be
              * cached at all. */
             rgw::keystone::TokenCache& token_cache,
-	    rgw::auth::keystone::SecretCache& secret_cache)
+	    rgw::auth::keystone::SecretCache& secret_cache,
+            S3ProofClock proof_clock = {})
     : AWSEngine(cct, *ver_abstractor),
       apl_factory(apl_factory),
       config(config),
       token_cache(token_cache),
-      secret_cache(secret_cache) {
+      secret_cache(secret_cache),
+      signing_key_mode(cct->_conf->rgw_keystone_s3_auth_mode == "signing_key"),
+      allow_legacy_signatures(cct->_conf->rgw_keystone_s3_allow_legacy_signatures),
+      local_cache_ttl(cct->_conf->rgw_keystone_signing_key_cache_ttl),
+      proof_endpoint(config.get_endpoint_url()),
+      proof_clock(std::move(proof_clock)),
+      signing_keys(cct->_conf->rgw_keystone_signing_key_cache_size) {
   }
 
   using AWSEngine::authenticate;

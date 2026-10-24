@@ -1067,6 +1067,58 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_s3_auth_mode
+  type: str
+  level: advanced
+  desc: Keystone S3 proof exchange protocol
+  long_desc: Explicitly select legacy secret retrieval or scoped signing-key exchange.
+    Signing-key mode requires authenticated OPTIONS support and policy authorization
+    for the Keystone proof endpoints. It never falls back to secret retrieval.
+    Keystone browser form POST policy proofs are unsupported in signing_key mode.
+    Restart RGW after changing this option.
+  default: legacy
+  enum_values:
+  - legacy
+  - signing_key
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_s3_allow_legacy_signatures
+  type: bool
+  level: advanced
+  desc: Allow deprecated S3 SigV2 authentication through Keystone
+  long_desc: In signing_key mode each SigV2 request requires fresh identity-only
+    validation. This option does not disable independently configured local users.
+    Restart RGW after changing this option.
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_signing_key_cache_size
+  type: int
+  level: advanced
+  desc: Maximum scoped signing keys per Keystone S3 engine context
+  long_desc: Process-local only. Zero disables caching. Plain and boto2 contexts
+    each have this bound. Restart RGW after changing this option.
+  default: 1024
+  min: 0
+  max: 10000
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_signing_key_cache_ttl
+  type: int
+  level: advanced
+  desc: Local maximum scoped signing-key cache lifetime in seconds
+  long_desc: Retention is additionally bounded by Keystone cache_until and identity
+    expiry. Zero disables caching. Cache expiry is not cryptographic key expiry.
+    Restart RGW after changing this option.
+  default: 300
+  min: 0
+  max: 3600
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_verify_ssl
   type: bool
   level: advanced
