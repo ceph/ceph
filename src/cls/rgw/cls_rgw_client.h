@@ -8,6 +8,7 @@
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_ops.h"
+#include "cls_rgw_olh_types.h"
 #include "cls_rgw_const.h"
 #include "common/RefCountedObj.h"
 #include "common/strtol.h"
@@ -166,6 +167,9 @@ void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             bool check_existing);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
+                   std::vector<rgw_cls_bi_entry>& entries, bool& is_truncated, bool reshardlog = false);
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+                   const std::string& name, const std::string& marker, uint32_t max,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
@@ -178,6 +182,9 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const std::string& olh_tag, uint64_t olh_epoch, bool log_op, uint16_t bilog_flags, const rgw_zone_set& zones_trace,
                                    ceph::buffer::list* epoch_out_bl = nullptr);
 void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const std::string& olh_tag, rgw_cls_read_olh_log_ret& log_ret, int& op_ret);
+void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh,
+                        uint64_t ver_marker, const std::string& olh_tag,
+                        ::cls::rgw::olh::reply& log_ret, int& op_ret);
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const std::string& olh_tag);
 void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, const std::string& olh_tag);
 void cls_rgw_bucket_refresh_instance(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key);
@@ -195,6 +202,9 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const std::string& o
                                    uint16_t bilog_flags, const rgw_zone_set& zones_trace);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, std::string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const std::string& olh_tag, rgw_cls_read_olh_log_ret& log_ret);
+int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, const std::string& oid,
+                       const cls_rgw_obj_key& olh, uint64_t ver_marker,
+                       const std::string& olh_tag, ::cls::rgw::olh::reply& log_ret);
 int cls_rgw_clear_olh(librados::IoCtx& io_ctx, std::string& oid, const cls_rgw_obj_key& olh, const std::string& olh_tag);
 int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const std::string& oid, const std::string& user, const std::string& bucket,
                            uint64_t start_epoch, uint64_t end_epoch);
