@@ -495,7 +495,7 @@
             id="rgw_frontend_port"
             min="1"
             max="65535"
-            helperText="Port on which the service listens for client requests."
+            helperText="Port on which the service listens for HTTP or HTTPS client requests."
             i18n-helperText
             [invalid]="
               serviceForm.controls.rgw_frontend_port.invalid &&
@@ -521,6 +521,50 @@
             }
           </ng-template>
         </div>
+
+        @if (serviceForm.controls.ssl.value) {
+          <!-- rgw_frontend_secondary_port -->
+          <div class="form-item">
+            <cds-number
+              label="Secondary Port"
+              formControlName="rgw_frontend_secondary_port"
+              id="rgw_frontend_secondary_port"
+              min="1"
+              max="65535"
+              helperText="Port on which the service listens for HTTP client requests."
+              i18n-helperText
+              [invalid]="
+                serviceForm.controls.rgw_frontend_secondary_port.invalid &&
+                serviceForm.controls.rgw_frontend_secondary_port.dirty
+              "
+              [invalidText]="invalidRgwFrontendSecondaryPortError"
+            >
+            </cds-number>
+            <ng-template #invalidRgwFrontendSecondaryPortError>
+              @if (serviceForm.showError('rgw_frontend_secondary_port', frm, 'min')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value must be at least 1.</span
+                >
+              }
+              @if (serviceForm.showError('rgw_frontend_secondary_port', frm, 'max')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The value cannot exceed 65535.</span
+                >
+              }
+              @if (serviceForm.showError('rgw_frontend_secondary_port', frm, 'donotmatch')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >Port and Secondary Port cannot have the same value.</span
+                >
+              }
+            </ng-template>
+          </div>
+        }
 
         @if (!rgwModuleEnabled) {
           <cd-alert-panel

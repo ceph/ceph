@@ -440,6 +440,58 @@ export class CdValidators {
   }
 
   /**
+   * Validator factory that requires the two specified controls to have
+   * different values. This is the inverse of `match`.
+   * Errors will be added directly to the `path2` control instead of the parent group.
+   * @param {string} path1 A dot-delimited string that defines the path to the first control.
+   * @param {string} path2 A dot-delimited string that defines the path to the second control.
+   * @param {Function} [enabled] Optional predicate receiving the group. When it returns
+   *   false the check is skipped and a stale `donotmatch` error is cleared.
+   * @return {ValidatorFn} Returns an Angular ValidatorFn. The function itself evaluates to `null`
+   * for the target control group, while setting or clearing the `donotmatch` error map on `path2`.
+   */
+  static donotmatch(
+    path1: string,
+    path2: string,
+    enabled?: (group: AbstractControl) => boolean
+  ): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: any } | null => {
+      const ctrl1 = control.get(path1);
+      const ctrl2 = control.get(path2);
+      if (!ctrl1 || !ctrl2) {
+        return null;
+      }
+
+      const clearDoNotMatchError = () => {
+        if (ctrl2.hasError('donotmatch')) {
+          // Remove the 'donotmatch' error. If no more errors exist, then set
+          // the error value to 'null', otherwise the field is still marked
+          // as invalid.
+          const errors = ctrl2.errors;
+          _.unset(errors, 'donotmatch');
+          ctrl2.setErrors(_.isEmpty(_.keys(errors)) ? null : errors);
+        }
+      };
+
+      if (
+        (enabled && !enabled(control)) ||
+        isEmptyInputValue(ctrl1.value) ||
+        isEmptyInputValue(ctrl2.value)
+      ) {
+        clearDoNotMatchError();
+        return null;
+      }
+
+      if (Number(ctrl1.value) === Number(ctrl2.value)) {
+        ctrl2.setErrors({ ...ctrl2.errors, donotmatch: true });
+      } else {
+        clearDoNotMatchError();
+      }
+      return null;
+    };
+  }
+
+  /**
    * Asynchronous validator that requires the control's value to be unique.
    * The validation is only executed after the specified delay. Every
    * keystroke during this delay will restart the timer.
