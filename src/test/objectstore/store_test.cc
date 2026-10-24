@@ -8188,6 +8188,98 @@ TEST_P(DeferredReplayTest, DeferredReplayInReadOnly) {
   ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
 }
 
+TEST_P(DeferredReplayTest, DeferredReplayRemovesBlueFSOnlyRecord) {
+  // A deferred record whose extents all belong to BlueFS is dropped at
+  // replay. Its key must be removed too, or a later mount replays it once
+  // BlueFS has released the space (tracker #68060).
+  deferred_test_t t = GetParam();
+  SetVal(g_conf(), "bdev_block_size", stringify(t.bdev_block_size).c_str());
+  SetVal(g_conf(), "bluestore_min_alloc_size", stringify(t.min_alloc_size).c_str());
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+
+  BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_TRUE(bstore);
+  BlueFS* fs = bstore->get_bluefs();
+  std::string payload(t.bdev_block_size, 'a');
+  bluefs_extent_t ext;
+  {
+    BlueFS::FileWriter* h;
+    ASSERT_EQ(0, fs->open_for_write("db", "deferred_target", &h, false));
+    h->append(payload.c_str(), payload.size());
+    fs->fsync(h);
+    ASSERT_FALSE(h->file->fnode.extents.empty());
+    ext = h->file->fnode.extents[0];
+    fs->close_writer(h);
+  }
+  // single device: BlueFS allocates from the main device
+  ASSERT_EQ(BlueFS::BDEV_DB, (unsigned)ext.bdev);
+
+  // to be inline with BlueStore.cc
+  const string PREFIX_DEFERRED = "L";
+  // far above the deferred_seq values of this run
+  const uint64_t seq = 1ull << 62;
+  string key;
+  _key_encode_u64(seq, &key);
+  {
+    bluestore_deferred_transaction_t dt;
+    dt.seq = seq;
+    dt.ops.emplace_back();
+    auto& op = dt.ops.back();
+    op.op = bluestore_deferred_op_t::OP_WRITE;
+    op.extents.emplace_back(ext.offset, t.bdev_block_size);
+    op.data.append(std::string(t.bdev_block_size, 'x'));
+    bufferlist bl;
+    encode(dt, bl);
+    KeyValueDB* kv = bstore->get_kv();
+    KeyValueDB::Transaction txn = kv->get_transaction();
+    txn->set(PREFIX_DEFERRED, key, bl);
+    ASSERT_EQ(0, kv->submit_transaction_sync(txn));
+  }
+  auto cct = store->cct;
+  ASSERT_EQ(0, store->umount());
+
+  // read-only mount: the record is dropped, its key is kept
+  store = ObjectStore::create(cct,
+                              get_type(),
+                              get_data_dir(),
+                              "store_test_temp_journal");
+  ASSERT_EQ(0, store->mount_readonly());
+  bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_TRUE(bstore);
+  {
+    bufferlist v;
+    ASSERT_EQ(0, bstore->get_kv()->get(PREFIX_DEFERRED, key, &v));
+  }
+  ASSERT_EQ(0, store->umount_readonly());
+
+  store = ObjectStore::create(cct,
+                              get_type(),
+                              get_data_dir(),
+                              "store_test_temp_journal");
+  ASSERT_EQ(0, store->mount());
+  // nothing replayed: the record was entirely within BlueFS
+  ASSERT_EQ(0, store->get_perf_counters()->get(
+    l_bluestore_submitted_deferred_writes));
+  bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_TRUE(bstore);
+  {
+    bufferlist v;
+    ASSERT_EQ(-ENOENT, bstore->get_kv()->get(PREFIX_DEFERRED, key, &v));
+  }
+  // BlueFS data left untouched
+  fs = bstore->get_bluefs();
+  {
+    BlueFS::FileReader* h;
+    ASSERT_EQ(0, fs->open_for_read("db", "deferred_target", &h));
+    bufferlist bl;
+    ASSERT_EQ((int64_t)payload.size(),
+              fs->read(h, 0, payload.size(), &bl, nullptr));
+    delete h;
+    ASSERT_EQ(payload, bl.to_str());
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   BlueStore,
   DeferredReplayTest,

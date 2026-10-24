@@ -12315,6 +12315,10 @@ int BlueStore::_deferred_replay()
       }
     );
   }
+  // Records entirely within bluefs are stale: their keys must be removed,
+  // or a later mount replays them over reallocated space (tracker #68060).
+  // Fallback until PR #69961 replays before the DB is opened read-write.
+  KeyValueDB::Transaction outdated_t = db->get_transaction();
   CollectionRef ch = _get_collection(coll_t::meta());
   bool fake_ch = false;
   if (!ch) {
@@ -12347,6 +12351,7 @@ int BlueStore::_deferred_replay()
       txc->set_state(TransContext::STATE_KV_DONE);
       _txc_state_proc(txc);
     } else {
+      outdated_t->rmkey(PREFIX_DEFERRED, it->key());
       delete deferred_txn;
     }
   }
@@ -12356,6 +12361,12 @@ int BlueStore::_deferred_replay()
   _osr_drain_all();
   if (fake_ch) {
     new_coll_map.clear();
+  }
+  // after the drain: this write may let bluefs allocate space targeted by
+  // deferred IO still in flight
+  if (outdated_t->get_count() && !db_was_opened_read_only) {
+    int rr = db->submit_transaction_sync(outdated_t);
+    ceph_assert(rr == 0);
   }
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
