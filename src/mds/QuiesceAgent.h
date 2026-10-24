@@ -31,7 +31,6 @@ class QuiesceAgent {
 
     QuiesceAgent(const ControlInterface& quiesce_control)
         : quiesce_control(quiesce_control)
-        , stop_agent_thread(false)
         , agent_thread(this) {
       agent_thread.create("mds-q-agt");
     };
@@ -220,8 +219,8 @@ class QuiesceAgent {
 
     std::mutex agent_mutex;
     std::condition_variable agent_cond;
-    bool stop_agent_thread;
-    bool upkeep_needed;
+    bool stop_agent_thread = false;
+    bool upkeep_needed = false;
   
     template<class L>
     QuiesceDbVersion await_idle_locked(L &lock) {
