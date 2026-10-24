@@ -23,12 +23,51 @@ An example code is as follows:
 'Unknown'
 """
 import os
+import sys
 import json
 import pickle
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple, no_type_check
 
 import numpy as np
+
+try:
+    import sklearn
+    import sklearn.svm
+    import sklearn.ensemble
+    import sklearn.preprocessing
+    import sklearn.tree
+
+    # Compatibility aliases for models pickled with older scikit-learn versions
+    sys.modules['sklearn.svm.classes'] = sklearn.svm
+    sys.modules['sklearn.ensemble.forest'] = sklearn.ensemble
+    sys.modules['sklearn.ensemble.weight_boosting'] = sklearn.ensemble
+    sys.modules['sklearn.preprocessing.data'] = sklearn.preprocessing
+    sys.modules['sklearn.tree.tree'] = sklearn.tree
+except ImportError:
+    pass
+
+
+def _patch_estimator(clf: Any) -> Any:
+    if clf is None:
+        return clf
+    d = getattr(clf, '__dict__', None)
+    if d is not None:
+        if 'n_support_' in d and '_n_support' not in d:
+            d['_n_support'] = np.array(d['n_support_'], dtype=np.int32)
+        if 'dual_coef_' in d and '_dual_coef_' not in d:
+            d['_dual_coef_'] = d['dual_coef_']
+        if 'intercept_' in d and '_intercept_' not in d:
+            d['_intercept_'] = d['intercept_']
+        if '_probA' not in d:
+            d['_probA'] = d.get('probA_', np.empty(0, dtype=np.float64))
+        if '_probB' not in d:
+            d['_probB'] = d.get('probB_', np.empty(0, dtype=np.float64))
+        if 'break_ties' not in d:
+            d['break_ties'] = False
+        if '_gamma' not in d:
+            d['_gamma'] = d.get('gamma', 0.0)
+    return clf
 
 
 def get_diskfailurepredictor_path() -> str:
@@ -190,7 +229,7 @@ class RHDiskFailurePredictor(Predictor):
         # scale features
         scaler_path = os.path.join(self.model_dirpath, manufacturer + "_scaler.pkl")
         with open(scaler_path, 'rb') as f:
-            scaler = pickle.load(f)
+            scaler = _patch_estimator(pickle.load(f, encoding='latin1'))
         featurized = scaler.transform(featurized)
         return featurized
 
@@ -228,8 +267,8 @@ class RHDiskFailurePredictor(Predictor):
             RHDiskFailurePredictor.LOGGER.debug(
                 "Manufacturer could not be determiend. This may be because \
                 DiskPredictor has never encountered this manufacturer before, \
-                    or the model name is not according to the manufacturer's \
-                        naming conventions known to DiskPredictor"
+                or the model name is not according to the manufacturer's \
+                naming conventions known to DiskPredictor"
             )
             return RHDiskFailurePredictor.PREDICTION_CLASSES[-1]
 
@@ -243,7 +282,7 @@ class RHDiskFailurePredictor(Predictor):
             self.model_dirpath, manufacturer + "_predictor.pkl"
         )
         with open(model_path, 'rb') as f:
-            model = pickle.load(f)
+            model = _patch_estimator(pickle.load(f, encoding='latin1'))
 
         # use prediction for most recent day
         # TODO: ensure that most recent day is last element and most previous day
@@ -466,12 +505,10 @@ class PSDiskFailurePredictor(Predictor):
 
             try:
                 with open(modelpath, "rb") as f_model:
-                    clf = pickle.load(f_model)
-
-            except UnicodeDecodeError:
-                # Compatibility for python3
+                    clf = _patch_estimator(pickle.load(f_model, encoding="latin1"))
+            except Exception:
                 with open(modelpath, "rb") as f_model:
-                    clf = pickle.load(f_model, encoding="latin1")
+                    clf = _patch_estimator(pickle.load(f_model, encoding="latin1"))
 
             pred = clf.predict(ordered_data)
 
