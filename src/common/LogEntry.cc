@@ -14,6 +14,7 @@ using std::map;
 using std::make_pair;
 using std::pair;
 using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::decode;
@@ -30,9 +31,9 @@ void LogEntryKey::dump(Formatter *f) const
   f->dump_unsigned("seq", seq);
 }
 
-list<LogEntryKey> LogEntryKey::generate_test_instances()
+vector<LogEntryKey> LogEntryKey::generate_test_instances()
 {
-  list<LogEntryKey> o;
+  vector<LogEntryKey> o;
   o.emplace_back();
   o.push_back(LogEntryKey(entity_name_t::CLIENT(1234), utime_t(1,2), 34));
   return o;
@@ -272,9 +273,9 @@ void LogEntry::dump(Formatter *f) const
   f->dump_string("message", msg);
 }
 
-list<LogEntry> LogEntry::generate_test_instances()
+vector<LogEntry> LogEntry::generate_test_instances()
 {
-  list<LogEntry> o;
+  vector<LogEntry> o;
   o.emplace_back();
   return o;
 }
@@ -357,9 +358,9 @@ void LogSummary::dump(Formatter *f) const
   f->close_section();
 }
 
-list<LogSummary> LogSummary::generate_test_instances()
+vector<LogSummary> LogSummary::generate_test_instances()
 {
-  list<LogSummary> o;
+  vector<LogSummary> o;
   o.emplace_back();
   // more!
   return o;

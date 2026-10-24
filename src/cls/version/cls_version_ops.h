@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_VERSION_OPS_H
 #define CEPH_CLS_VERSION_OPS_H
 
+#include <vector>
 #include "cls_version_types.h"
 #include "common/ceph_json.h"
 #include "include/rados/cls_traits.hpp"
@@ -29,8 +30,8 @@ struct cls_version_set_op {
     f->dump_object("objv", objv);
   }
 
-  static std::list<cls_version_set_op> generate_test_instances() {
-    std::list<cls_version_set_op> o;
+  static std::vector<cls_version_set_op> generate_test_instances() {
+    std::vector<cls_version_set_op> o;
     o.emplace_back();
     o.emplace_back();
     o.back().objv.ver = 123;
@@ -65,8 +66,8 @@ struct cls_version_inc_op {
     encode_json("conds", conds, f);
   }
 
-  static std::list<cls_version_inc_op> generate_test_instances() {
-    std::list<cls_version_inc_op> o;
+  static std::vector<cls_version_inc_op> generate_test_instances() {
+    std::vector<cls_version_inc_op> o;
     o.emplace_back();
     o.emplace_back();
     o.back().objv.ver = 123;
@@ -105,8 +106,8 @@ struct cls_version_check_op {
     encode_json("conds", conds, f);
   }
 
-  static std::list<cls_version_check_op> generate_test_instances() {
-    std::list<cls_version_check_op> o;
+  static std::vector<cls_version_check_op> generate_test_instances() {
+    std::vector<cls_version_check_op> o;
     o.emplace_back();
     o.emplace_back();
     o.back().objv.ver = 123;
@@ -141,8 +142,8 @@ struct cls_version_read_ret {
     f->dump_object("objv", objv);
   }
 
-  static std::list<cls_version_read_ret> generate_test_instances() {
-    std::list<cls_version_read_ret> o;
+  static std::vector<cls_version_read_ret> generate_test_instances() {
+    std::vector<cls_version_read_ret> o;
     o.emplace_back();
     o.emplace_back();
     o.back().objv.ver = 123;

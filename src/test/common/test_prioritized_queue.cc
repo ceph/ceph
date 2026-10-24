@@ -180,14 +180,10 @@ TEST_F(PrioritizedQueueTest, remove_by_class) {
       num_to_remove++;
     }
   }
-  std::list<Item> removed;
-  pq.remove_by_class(class_to_remove, &removed);
+  auto removed = pq.remove_by_class(class_to_remove);
 
   // see if the removed items are expected ones.
-  for (std::list<Item>::iterator it = removed.begin();
-       it != removed.end();
-       ++it) {
-    const Item& item = *it;
+  for (const auto item : removed) {
     Klass k = ITEM_TO_CLASS(item);
     EXPECT_EQ(class_to_remove, k);
     items.erase(remove(items.begin(), items.end(), item), items.end());
@@ -203,4 +199,21 @@ TEST_F(PrioritizedQueueTest, remove_by_class) {
     items.erase(remove(items.begin(), items.end(), item), items.end());
   }
   EXPECT_TRUE(items.empty());
+}
+
+TEST_F(PrioritizedQueueTest, remove_by_class_preserves_order) {
+  PQ pq(50, 1);
+  constexpr Klass k = 7;
+
+  pq.enqueue(k, 1, 1, 10);
+  pq.enqueue(k, 1, 1, 11);
+  pq.enqueue(k, 3, 1, 30);
+  pq.enqueue(k, 3, 1, 31);
+  pq.enqueue_strict(k, 2, 20);
+  pq.enqueue_strict(k, 2, 21);
+  pq.enqueue_strict(k, 4, 40);
+
+  const std::vector<Item> expected {40, 20, 21, 30, 31, 10, 11};
+  EXPECT_EQ(expected, pq.remove_by_class(k));
+  EXPECT_TRUE(pq.empty());
 }

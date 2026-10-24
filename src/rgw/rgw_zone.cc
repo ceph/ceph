@@ -67,9 +67,9 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
   targets[t.name] = t;
 }
 
-list<RGWZone> RGWZone::generate_test_instances()
+vector<RGWZone> RGWZone::generate_test_instances()
 {
-  list<RGWZone> o;
+  vector<RGWZone> o;
   o.emplace_back();
   o.emplace_back();
   return o;
@@ -511,9 +511,9 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
    * rather not clutter the output */
 }
 
-list<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
+vector<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
 {
-  list<RGWZonePlacementInfo> o;
+  vector<RGWZonePlacementInfo> o;
   o.emplace_back();
   o.emplace_back();
   o.back().index_pool = rgw_pool("rgw.buckets.index");
@@ -586,9 +586,9 @@ void RGWZoneStorageClasses::dump(Formatter *f) const
   }
 }
 
-list<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
+vector<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
 {
-  list<RGWZoneStorageClasses> o;
+  vector<RGWZoneStorageClasses> o;
   o.emplace_back();
   return o;
 }
@@ -742,9 +742,9 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   }
 }
 
-list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
+vector<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
 {
-  list<RGWZoneStorageClass> o;
+  vector<RGWZoneStorageClass> o;
   o.emplace_back();
   o.emplace_back();
   o.back().data_pool = rgw_pool("pool1");
@@ -2309,9 +2309,9 @@ int RGWZoneGroupTierS3Glacier::clear_params(const JSONFormattable& config)
   return 0;
 }
 
-std::list<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
+std::vector<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
 {
-  std::list<rgw_meta_sync_info> o;
+  std::vector<rgw_meta_sync_info> o;
   rgw_meta_sync_info info;
   info.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
   info.period = "periodid";
@@ -2321,9 +2321,9 @@ std::list<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
   return o;
 }
 
-std::list<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
+std::vector<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
 {
-  std::list<rgw_meta_sync_marker> o;
+  std::vector<rgw_meta_sync_marker> o;
   rgw_meta_sync_marker marker;
   marker.state = rgw_meta_sync_marker::IncrementalSync;
   marker.marker = "01234";
@@ -2333,32 +2333,32 @@ std::list<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
   return o;
 }
 
-std::list<rgw_meta_sync_status> rgw_meta_sync_status::generate_test_instances()
+std::vector<rgw_meta_sync_status> rgw_meta_sync_status::generate_test_instances()
 {
-  std::list<rgw_meta_sync_status> o;
+  std::vector<rgw_meta_sync_status> o;
   o.emplace_back();
   return o;
 }
 
-std::list<RGWZoneParams> RGWZoneParams::generate_test_instances()
+std::vector<RGWZoneParams> RGWZoneParams::generate_test_instances()
 {
-  std::list<RGWZoneParams> o;
-  o.emplace_back();
-  o.emplace_back();
-  return o;
-}
-
-std::list<RGWPeriodLatestEpochInfo> RGWPeriodLatestEpochInfo::generate_test_instances()
-{
-  std::list<RGWPeriodLatestEpochInfo> o;
+  std::vector<RGWZoneParams> o;
   o.emplace_back();
   o.emplace_back();
   return o;
 }
 
-std::list<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
+std::vector<RGWPeriodLatestEpochInfo> RGWPeriodLatestEpochInfo::generate_test_instances()
 {
-  std::list<RGWZoneGroup> o;
+  std::vector<RGWPeriodLatestEpochInfo> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
+}
+
+std::vector<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
+{
+  std::vector<RGWZoneGroup> o;
   o.emplace_back();
   o.emplace_back();
   return o;
@@ -2380,8 +2380,8 @@ void RGWNameToId::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("obj_id", obj_id, obj);
 }
 
-std::list<RGWNameToId> RGWNameToId::generate_test_instances() {
-  std::list<RGWNameToId> o;
+std::vector<RGWNameToId> RGWNameToId::generate_test_instances() {
+  std::vector<RGWNameToId> o;
   RGWNameToId n;
   n.obj_id = "id";
   o.push_back(std::move(n));
