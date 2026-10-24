@@ -668,7 +668,11 @@ int PGBackend::objects_list_partial(
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (i->is_pgmeta() || i->hobj.is_temp()) {
+      // PG-local internal objects (the EC write journal's slots) belong to
+      // the PG, not to clients: scrub, backfill and pgls skip them. Only on
+      // a pool enrolled in the journal; listing elsewhere is unchanged.
+      if (i->is_pgmeta() || i->hobj.is_temp() ||
+          (ec_journal_enrolled() && i->hobj.is_internal_pg_local())) {
 	continue;
       }
       if (i->is_no_gen()) {
@@ -712,7 +716,8 @@ int PGBackend::objects_list_range(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    if (i->is_pgmeta() || i->hobj.is_temp()) {
+    if (i->is_pgmeta() || i->hobj.is_temp() ||
+        (ec_journal_enrolled() && i->hobj.is_internal_pg_local())) {
       continue;
     }
     if (i->is_no_gen()) {
