@@ -6913,12 +6913,14 @@ options:
   desc: Read policy for sending read requests to OSD
   fmt_desc : |
     Policy for determining which OSD in a PG acting set will receive read operations.
-    If set to ``default``, each PG's primary OSD will always be used
-    for read operations. If set to ``balance``, read operations will
-    be sent to a randomly selected OSD within the replica set. If set
-    to ``localize``, read operations will be sent to the closest OSD
-    as determined by the CRUSH map.
-  default: default
+    If set to the value ``default``, each PG's primary OSD will always
+    be used for read operations. If set to ``balance``, read operations
+    will be sent to a randomly selected OSD within the replica set. If
+    set to ``localize``, read operations will be sent to the closest OSD
+    as determined by the CRUSH map. The default setting for new clusters
+    is ``balance``. Clusters created from Umbrella or earlier will keep
+    the previous default ``default`` unless explicitly changed.
+  default: balance
   enum_values:
   - default
   - balance

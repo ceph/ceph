@@ -121,6 +121,10 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* RADOS: The default value for ``rados_replica_read_policy`` is changed to
+  ``balance`` for new clusters. Existing clusters retain the previous default,
+  which is the value ``default``.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,
