@@ -2575,6 +2575,10 @@ int Locker::get_allowed_caps(bool has_qtine_auth_caps, CInode *in, Capability *c
   return allowed;
 }
 
+// How long the O_APPEND writers let the readers on other MDSs in
+// between two turns, see issue_caps()
+static constexpr double APPEND_EXCL_REPLICA_READ_SECS = 0.02;
+
 int Locker::issue_caps(CInode *in, Capability *only_cap)
 {
   dout(20) << __func__ << ": " << *in;
@@ -2709,6 +2713,41 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
 
     if (only_cap)
       break;
+  }
+
+  // The head of the append queue has been issued Fx: its turn has
+  // started.  Let the next waiting writer take over; the filelock
+  // gather defers to the current one's in-flight write.
+  client_t next = in->append_excl_next();
+  if (next >= 0 && next == in->get_loner()) {
+    Capability *cap = in->get_client_cap(next);
+    if (cap && (cap->issued() & CEPH_CAP_FILE_EXCL)) {
+      dout(10) << __func__ << " client." << next << " got append excl on "
+	       << *in << dendl;
+      in->append_excl_dequeue(next);
+      in->append_excl_replica_until = utime_t();
+      if (in->append_excl_next() >= 0)
+	mds->queue_waiter(new C_Locker_Eval(this, in, CEPH_CAP_LOCKS));
+    }
+  } else if (next >= 0 && in->get_loner() < 0) {
+    // Between two append turns.  The readers on other MDSs are issued
+    // Fr by their MDS once the filelock lets them read, which we do
+    // not see: give them a moment for it.
+    if (in->append_excl_replica_reader() &&
+	in->append_excl_replica_until.is_zero() &&
+	in->filelock.is_stable() &&
+	(in->filelock.get_state() == LOCK_MIX ||
+	 in->filelock.get_state() == LOCK_SYNC)) {
+      dout(10) << __func__ << " letting other mds read " << *in << dendl;
+      in->append_excl_replica_until = ceph_clock_now();
+      in->append_excl_replica_until += APPEND_EXCL_REPLICA_READ_SECS;
+      mds->timer.add_event_after(APPEND_EXCL_REPLICA_READ_SECS,
+				 new C_Locker_Eval(this, in, CEPH_CAP_LOCKS));
+    }
+    // The readers that waited got Fr (see CInode::choose_ideal_loner()):
+    // the next writer's turn.
+    if (!in->append_excl_reader_waiting())
+      mds->queue_waiter(new C_Locker_Eval(this, in, CEPH_CAP_LOCKS));
   }
 
   return nissued;
@@ -3664,6 +3703,18 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
       adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
     }
 
+    // An O_APPEND writer asks for its turn as the filelock loner: Fx
+    // tells it that no other client can write, and comes with the
+    // up to date size (the other writers' WR caps are gathered first).
+    if ((m->flags & MClientCaps::FLAG_APPEND) && in->is_auth() &&
+	in->is_file() && in->last == CEPH_NOSNAP &&
+	(cap->wanted() & CEPH_CAP_FILE_EXCL) &&
+	!(cap->issued() & CEPH_CAP_FILE_EXCL)) {
+      dout(10) << " client." << client << " queued for append excl on "
+	       << *in << dendl;
+      in->append_excl_enqueue(client);
+    }
+
     if (in->is_auth() &&
 	_do_cap_update(in, cap, dirty, follows, m, ack, &need_flush)) {
       // updated
@@ -4014,12 +4065,14 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
       if (mtime > pi->rstat.rctime)
 	pi->rstat.rctime = mtime;
     }
+    bool size_grew = false;
     if (in->is_file() &&   // ONLY if regular file
 	size > pi->size) {
       dout(7) << "  size " << pi->size << " -> " << size
 	      << " for " << *in << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
+      size_grew = true;
     }
     if (in->is_file() &&
         (dirty & CEPH_CAP_FILE_WR) &&
@@ -4041,8 +4094,24 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
     }
-    if (m->fscrypt_file.size())
-      pi->fscrypt_file.assign(m->fscrypt_file.begin(), m->fscrypt_file.end());
+    if (m->fscrypt_file.size()) {
+      // Like the size, the fscrypt (logical) size only grows with a cap
+      // flush: a flush that is processed after a newer one, from another
+      // writer, must not take it back.  With both in the same fscrypt
+      // block the (physical) size does not change, so compare the
+      // logical sizes too.
+      bool grows = size_grew;
+      if (!grows) {
+	if (m->fscrypt_file.size() >= sizeof(ceph_le64) &&
+	    pi->fscrypt_file.size() >= sizeof(ceph_le64))
+	  grows = *(ceph_le64 *)m->fscrypt_file.data() >
+		  *(ceph_le64 *)pi->fscrypt_file.data();
+	else
+	  grows = true;
+      }
+      if (grows)
+	pi->fscrypt_file.assign(m->fscrypt_file.begin(), m->fscrypt_file.end());
+    }
   }
   // auth
   if (dirty & CEPH_CAP_AUTH_EXCL) {
@@ -4251,7 +4320,11 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 							      ack, client));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
-       _need_flush_mdlog(in, dirty)))
+       _need_flush_mdlog(in, dirty) ||
+       // a filelock state change is waiting for the wrlock held above
+       // until this update is journaled
+       ((change_max || (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) &&
+	!in->filelock.is_stable())))
     *need_flush = true;
 
   return true;
@@ -5735,6 +5808,14 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {
     dout(20) << " is excl" << dendl;
+    if (in->append_excl_next() >= 0 &&
+	in->append_excl_next() == in->get_loner()) {
+      // an O_APPEND writer has just been made the loner, keep EXCL
+      // until it has been issued Fx (see issue_caps())
+      dout(10) << "file_eval keeping excl for append loner client."
+	       << in->get_loner() << dendl;
+      return;
+    }
     int loner_issued, other_issued, xlocker_issued;
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, CEPH_CAP_SFILE);
     dout(7) << "file_eval loner_issued=" << gcap_string(loner_issued)
@@ -5918,7 +5999,9 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   ceph_assert(in->is_auth());
   ceph_assert(lock->is_stable());
 
-  ceph_assert((in->get_loner() >= 0 && in->get_mds_caps_wanted().empty()) ||
+  ceph_assert((in->get_loner() >= 0 &&
+	       (in->get_mds_caps_wanted().empty() ||
+		in->is_append_excl_loner())) ||
 	 (lock->get_state() == LOCK_XSYN));  // must do xsyn -> excl -> <anything else>
   
   switch (lock->get_state()) {
@@ -5981,7 +6064,9 @@ void Locker::file_xsyn(SimpleLock *lock, bool *need_issue)
   dout(7) << "file_xsyn on " << *lock << " on " << *lock->get_parent() << dendl;
   CInode *in = static_cast<CInode *>(lock->get_parent());
   ceph_assert(in->is_auth());
-  ceph_assert(in->get_loner() >= 0 && in->get_mds_caps_wanted().empty());
+  ceph_assert(in->get_loner() >= 0 &&
+	      (in->get_mds_caps_wanted().empty() ||
+	       in->is_append_excl_loner()));
 
   switch (lock->get_state()) {
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_XSYN); break;
