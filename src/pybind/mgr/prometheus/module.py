@@ -369,6 +369,11 @@ class HealthHistory:
                         check.count += 1
                         changes_made = True
 
+                    new_severity = current_checks[name].get('severity')
+                    if check.severity != new_severity:
+                        check.severity = new_severity
+                        changes_made = True
+
                     check.last_seen = now
                     check.active = True
                 else:
@@ -1173,30 +1178,6 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.log.info('Config changed, signaling serve loop to restart engine')
         self.config_change_event.set()
 
-    def _process_cert_health_detail(self, alert_id: str, health_data: dict) -> None:
-        """Process certificate health check details and set metrics."""
-        severity = health_data.get('severity', 'unknown')
-        detail_messages = health_data.get('detail', [])
-        if not detail_messages:
-            return
-
-        for detail_entry in detail_messages:
-            message = detail_entry.get('message', '')
-            if not message:
-                continue
-
-            try:
-                self.metrics['health_detail'].set(
-                    1,
-                    (
-                        alert_id,
-                        str(severity),
-                        str(message)
-                    )
-                )
-            except Exception as e:
-                self.log.error(f"Failed to process {alert_id} message '{message}': {e}")
-
     @profile_method()
     def get_health(self) -> None:
 
@@ -1246,22 +1227,25 @@ class Module(MgrModule, OrchestratorClientMixin):
                     # health check is not active, so give it a default of 0
                     self.metrics[path].set(0)
 
-        for alert_id in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
-            if alert_id in active_names:
-                self._process_cert_health_detail(alert_id, active_healthchecks[alert_id])
-
         self.health_history.check(health)
 
+        # Keep OSD_DOWN's message stable to avoid message-driven time-series churn.
+        # Severity changes can still change the label set.
+        _scalar_checks = frozenset({'OSD_DOWN'})
+
         for name, info in self.health_history.healthcheck.items():
-            # Skip CEPHADM_CERT_ERROR and CEPHADM_CERT_WARNING as they're handled specially above with message details
-            if name in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
-                continue
             v = 1 if info.active else 0
+            if info.active and name not in _scalar_checks:
+                msg = str(active_healthchecks[name]['summary'].get('message') or '')
+            else:
+                # Inactive checks have no current summary to expose.
+                # Keep scalar()-targeted checks' message labels stable.
+                msg = ''
             self.metrics['health_detail'].set(
                 v, (
                     name,
                     str(info.severity),
-                    '')
+                    str(msg))
             )
 
     @profile_method()
