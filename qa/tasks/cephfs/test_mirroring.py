@@ -3052,7 +3052,7 @@ class TestMirroring(CephFSTestCase):
 
         remote_snap_name = 'snap_b'
         remote_snap_path = f'{dir_name}/.snap/{remote_snap_name}'
-        failure_reason = f"snapshot '{remote_snap_name}' has invalid metadata"
+        failure_reason = f"remote fs snapshot '{remote_snap_name}' has invalid metadata"
         dir_name = f'/{dir_name}'
 
         # create a directory in the remote fs and check status 'failed'
