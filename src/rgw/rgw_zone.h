@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <vector>
 #include <ostream>
 #include "rgw_zone_types.h"
 #include "rgw_common.h"
@@ -217,7 +218,7 @@ struct RGWZoneParams {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneParams> generate_test_instances();
+  static std::vector<RGWZoneParams> generate_test_instances();
 
   bool get_placement(const std::string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_pools.find(placement_id);
@@ -270,7 +271,7 @@ struct RGWZoneGroup {
   std::string id;
   std::string name;
   std::string api_name;
-  std::list<std::string> endpoints;
+  std::vector<std::string> endpoints;
   bool is_master = false;
 
   rgw_zone_id master_zone;
@@ -279,24 +280,8 @@ struct RGWZoneGroup {
   std::map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
   rgw_placement_rule default_placement;
 
-  std::list<std::string> hostnames;
-  std::list<std::string> hostnames_s3website;
-  // TODO: Maybe convert hostnames to a map<std::string,std::list<std::string>> for
-  // endpoint_type->hostnames
-/*
-20:05 < _robbat21irssi> maybe I do something like: if (hostname_map.empty()) { populate all map keys from hostnames; };
-20:05 < _robbat21irssi> but that's a later compatability migration planning bit
-20:06 < yehudasa> more like if (!hostnames.empty()) {
-20:06 < yehudasa> for (std::list<std::string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
-20:06 < yehudasa> hostname_map["s3"].append(iter->second);
-20:07 < yehudasa> hostname_map["s3website"].append(iter->second);
-20:07 < yehudasa> s/append/push_back/g
-20:08 < _robbat21irssi> inner loop over APIs
-20:08 < yehudasa> yeah, probably
-20:08 < _robbat21irssi> s3, s3website, swift, swith_auth, swift_website
-*/
-  std::map<std::string, std::list<std::string> > api_hostname_map;
-  std::map<std::string, std::list<std::string> > api_endpoints_map;
+  std::vector<std::string> hostnames;
+  std::vector<std::string> hostnames_s3website;
 
   std::string realm_id;
 
@@ -308,7 +293,7 @@ struct RGWZoneGroup {
   RGWZoneGroup(const std::string &_id, const std::string &_name):id(_id), name(_name) {}
   explicit RGWZoneGroup(const std::string &_name):name(_name) {}
   RGWZoneGroup(const std::string &_name, bool _is_master, const std::string& _realm_id,
-               const std::list<std::string>& _endpoints)
+               const std::vector<std::string>& _endpoints)
     : name(_name), endpoints(_endpoints), is_master(_is_master), realm_id(_realm_id) {}
 
   const std::string& get_name() const { return name; }
@@ -389,7 +374,7 @@ struct RGWZoneGroup {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWZoneGroup> generate_test_instances();
+  static std::vector<RGWZoneGroup> generate_test_instances();
 
   bool supports(std::string_view feature) const {
     return enabled_features.contains(feature);
@@ -527,7 +512,7 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWRealm> generate_test_instances();
+  static std::vector<RGWRealm> generate_test_instances();
 
   const std::string& get_current_period() const {
     return current_period;
@@ -567,7 +552,7 @@ struct RGWPeriodLatestEpochInfo {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWPeriodLatestEpochInfo> generate_test_instances();
+  static std::vector<RGWPeriodLatestEpochInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 
@@ -721,7 +706,7 @@ public:
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWPeriod> generate_test_instances();
+  static std::vector<RGWPeriod> generate_test_instances();
 
   static std::string get_staging_id(const std::string& realm_id) {
     return realm_id + ":staging";
@@ -820,11 +805,11 @@ int add_zone_to_group(const DoutPrefixProvider* dpp,
                       RGWZoneGroup& zonegroup,
                       const RGWZoneParams& zone_params,
                       const bool *pis_master, const bool *pread_only,
-                      const std::list<std::string>& endpoints,
+                      const std::vector<std::string>& endpoints,
                       const std::string *ptier_type,
                       const bool *psync_from_all,
-                      const std::list<std::string>& sync_from,
-                      const std::list<std::string>& sync_from_rm,
+                      const std::vector<std::string>& sync_from,
+                      const std::vector<std::string>& sync_from_rm,
                       const std::string *predirect_zone,
                       std::optional<int> bucket_index_max_shards,
                       const rgw::zone_features::set& enable_features,

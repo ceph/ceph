@@ -95,13 +95,9 @@ std::ostream& PyFormatter::dump_stream(std::string_view name)
   // Give the caller an ostream, construct a PyString,
   // and remember the association between the two.  On flush,
   // we'll read from the ostream into the PyString
-  auto ps = std::make_shared<PendingStream>();
-  ps->cursor = cursor;
-  ps->name = name;
+  auto& pending_stream = pending_streams.emplace_back(cursor, std::string {name});
 
-  pending_streams.push_back(ps);
-
-  return ps->stream;
+  return pending_stream.stream;
 }
 
 void PyFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
@@ -135,12 +131,12 @@ void PyFormatter::dump_pyobject(std::string_view name, PyObject *p)
 
 void PyFormatter::finish_pending_streams()
 {
-  for (const auto &i : pending_streams) {
+  for (const auto& pending_stream : pending_streams) {
     PyObject *tmp_cur = cursor;
-    cursor = i->cursor;
+    cursor = pending_stream.cursor;
     dump_pyobject(
-        i->name.c_str(),
-        PyUnicode_FromString(i->stream.str().c_str()));
+        pending_stream.name.c_str(),
+        PyUnicode_FromString(pending_stream.stream.str().c_str()));
     cursor = tmp_cur;
   }
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "common/ceph_time.h"
 
@@ -41,7 +42,7 @@ struct rgw_meta_sync_info {
 
   void decode_json(JSONObj *obj);
   void dump(Formatter *f) const;
-  static std::list<rgw_meta_sync_info> generate_test_instances();
+  static std::vector<rgw_meta_sync_info> generate_test_instances();
 
   rgw_meta_sync_info() : state((int)StateInit), num_shards(0) {}
 };
@@ -90,7 +91,7 @@ struct rgw_meta_sync_marker {
 
   void decode_json(JSONObj *obj);
   void dump(Formatter *f) const;
-  static std::list<rgw_meta_sync_marker> generate_test_instances();
+  static std::vector<rgw_meta_sync_marker> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_meta_sync_marker)
 
@@ -116,6 +117,6 @@ struct rgw_meta_sync_status {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<rgw_meta_sync_status> generate_test_instances();
+  static std::vector<rgw_meta_sync_status> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_meta_sync_status)

@@ -13926,7 +13926,7 @@ void Client::_release_filelocks(Fh *fh)
   Inode *in = fh->inode.get();
   ldout(cct, 10) << __func__ << " " << fh << " ino " << in->ino << dendl;
 
-  list<pair<int, ceph_filelock> > to_release;
+  vector<pair<int, ceph_filelock>> to_release;
 
   if (fh->fcntl_locks) {
     auto &lock_state = fh->fcntl_locks;
@@ -13935,7 +13935,7 @@ void Client::_release_filelocks(Fh *fh)
       if (in->flags & I_ERROR_FILELOCK) {
 	lock_state->remove_lock(q->second);
       } else {
-	to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FCNTL, q->second));
+	to_release.emplace_back(CEPH_LOCK_FCNTL, q->second);
       }
     }
     lock_state.reset();
@@ -13947,7 +13947,7 @@ void Client::_release_filelocks(Fh *fh)
       if (in->flags & I_ERROR_FILELOCK) {
 	lock_state->remove_lock(q->second);
       } else {
-	to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FLOCK, q->second));
+	to_release.emplace_back(CEPH_LOCK_FLOCK, q->second);
       }
     }
     lock_state.reset();
@@ -13964,14 +13964,12 @@ void Client::_release_filelocks(Fh *fh)
   fl.l_whence = SEEK_SET;
   fl.l_type = F_UNLCK;
 
-  for (list<pair<int, ceph_filelock> >::iterator p = to_release.begin();
-       p != to_release.end();
-       ++p) {
-    fl.l_start = p->second.start;
-    fl.l_len = p->second.length;
-    fl.l_pid = p->second.pid;
-    _do_filelock(in, fh, p->first, CEPH_MDS_OP_SETFILELOCK, 0, &fl,
-		 p->second.owner, true);
+  for (const auto& [rule, lock] : to_release) {
+    fl.l_start = lock.start;
+    fl.l_len = lock.length;
+    fl.l_pid = lock.pid;
+    _do_filelock(in, fh, rule, CEPH_MDS_OP_SETFILELOCK, 0, &fl,
+		 lock.owner, true);
   }
 }
 

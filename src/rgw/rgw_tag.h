@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <vector>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -66,7 +67,7 @@ protected:
   }
 
   void dump(Formatter *f) const;
-  static std::list<RGWObjTags> generate_test_instances();
+  static std::vector<RGWObjTags> generate_test_instances();
   void add_tag(const std::string& key, const std::string& val="");
   void emplace_tag(std::string&& key, std::string&& val);
   int check_and_add_tag(const std::string& key, const std::string& val="");

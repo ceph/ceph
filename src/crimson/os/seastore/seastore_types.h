@@ -1927,20 +1927,6 @@ constexpr extent_ref_count_t EXTENT_DEFAULT_REF_COUNT = 1;
 
 using extent_ref_count_le_t = ceph_le32;
 
-struct laddr_list_t : std::list<std::pair<laddr_t, extent_len_t>> {
-  template <typename... T>
-  laddr_list_t(T&&... args)
-    : std::list<std::pair<laddr_t, extent_len_t>>(std::forward<T>(args)...) {}
-};
-struct paddr_list_t : std::list<std::pair<paddr_t, extent_len_t>> {
-  template <typename... T>
-  paddr_list_t(T&&... args)
-    : std::list<std::pair<paddr_t, extent_len_t>>(std::forward<T>(args)...) {}
-};
-
-std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs);
-std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs);
-
 /* identifies type of extent, used for interpretting deltas, managing
  * writeback.
  *
@@ -3641,9 +3627,7 @@ template <> struct fmt::formatter<crimson::os::seastore::backend_type_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_offset_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};

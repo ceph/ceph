@@ -17,7 +17,7 @@
 
 #include "services/svc_zone.h"
 
-#include "include/str_list.h"
+#include <ranges>
 
 #include <boost/asio/yield.hpp>
 
@@ -41,12 +41,9 @@ class ItemList {
   set<string> suffixes;
 
   void parse(const string& str) {
-    list<string> l;
+    for (const auto token : str | std::views::split(',')) {
+      auto entry = rgw_trim_whitespace(std::string_view {token});
 
-    get_str_list(str, ",", l);
-
-    for (auto& entry : l) {
-      entry = rgw_trim_whitespace(entry);
       if (entry.empty()) {
         continue;
       }
@@ -56,17 +53,19 @@ class ItemList {
         return;
       }
 
-      if (entry[0] == '*') {
-        suffixes.insert(entry.substr(1));
+      if (entry.starts_with('*')) {
+        entry.remove_prefix(1);
+        suffixes.emplace(entry);
         continue;
       }
 
-      if (entry.back() == '*') {
-        prefixes.insert(entry.substr(0, entry.size() - 1));
+      if (entry.ends_with('*')) {
+        entry.remove_suffix(1);
+        prefixes.emplace(entry);
         continue;
       }
 
-      entries.insert(entry);
+      entries.emplace(entry);
     }
   }
 
@@ -75,9 +74,10 @@ public:
   void init(const string& str, bool def_val) {
     if (str.empty()) {
       approve_all = def_val;
-    } else {
-      parse(str);
+      return;
     }
+
+    parse(str);
   }
 
   bool exists(const string& entry) {
@@ -957,4 +957,3 @@ int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephCon
   instance->reset(new RGWElasticSyncModuleInstance(dpp, cct, config));
   return 0;
 }
-

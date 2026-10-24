@@ -25,8 +25,8 @@
 #include "LogSegmentRef.h"
 
 #include <map>
-#include <list>
 #include <set>
+#include <deque>
 #include <string_view>
 
 class MDCache;
@@ -195,8 +195,7 @@ public:
 
   void decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 			   mds_rank_t oldauth, LogSegmentRef const& ls,
-			   std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
-			   std::list<ScatterLock*>& updated_scatterlocks);
+			   std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::const_iterator &blp,
 				std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
   void finish_import_inode_caps(CInode *in, mds_rank_t from, bool auth_cap,
@@ -209,7 +208,7 @@ public:
 			EImportStart *le, 
 			LogSegmentRef const& ls,
 			std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
-			std::list<ScatterLock*>& updated_scatterlocks, int &num_imported);
+			int &num_imported);
 
   void import_reverse(CDir *dir);
 
@@ -302,7 +301,7 @@ protected:
   uint64_t total_exporting_size = 0;
   unsigned num_locking_exports = 0; // exports in locking state (approx_size == 0)
 
-  std::list<std::pair<dirfrag_t,mds_rank_t> >  export_queue;
+  std::deque<std::pair<dirfrag_t,mds_rank_t> >  export_queue;
   uint64_t export_queue_gen = 1;
 
   std::map<dirfrag_t, import_state_t>  import_state;

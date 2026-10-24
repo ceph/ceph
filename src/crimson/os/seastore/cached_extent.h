@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <vector>
 #include <iostream>
 
 #include <boost/intrusive/list.hpp>
@@ -193,14 +194,14 @@ struct load_range_t {
 };
 struct load_ranges_t {
   extent_len_t length = 0;
-  std::list<load_range_t> ranges;
+  std::vector<load_range_t> ranges;
 
   void push_back(extent_len_t offset, ceph::bufferptr ptr) {
     assert(ranges.empty() ||
            (ranges.back().get_end() < offset));
     assert(ptr.length());
     length += ptr.length();
-    ranges.push_back({offset, std::move(ptr)});
+    ranges.emplace_back(offset, std::move(ptr));
   }
 };
 
@@ -1337,12 +1338,6 @@ struct ref_paddr_cmp {
   }
 };
 
-template <typename T, typename C>
-class addr_extent_list_base_t
-  : public std::list<std::pair<T, C>> {};
-
-using pextent_list_t = addr_extent_list_base_t<paddr_t, CachedExtentRef>;
-
 template <typename T, typename C, typename Cmp>
 class addr_extent_set_base_t
   : public std::set<C, Cmp> {};
@@ -1352,9 +1347,6 @@ using retired_extent_set_t = addr_extent_set_base_t<
   trans_retired_extent_link_t,
   ref_paddr_cmp
   >;
-
-template <typename T>
-using t_pextent_list_t = addr_extent_list_base_t<paddr_t, TCachedExtentRef<T>>;
 
 /**
  * ExtentIndex
@@ -1632,8 +1624,7 @@ using lextent_set_t = addr_extent_set_base_t<
   >;
 
 template <typename T>
-using lextent_list_t = addr_extent_list_base_t<
-  laddr_t, TCachedExtentRef<T>>;
+using lextents_t = std::vector<std::pair<laddr_t, TCachedExtentRef<T>>>;
 
 } // namespace crimson::os::seastore
 

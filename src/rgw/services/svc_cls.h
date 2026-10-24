@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "cls/otp/cls_otp_types.h"
 #include "cls/log/cls_log_types.h"
 
@@ -66,12 +68,12 @@ public:
 		   const ceph::real_time& mtime,
 		   optional_yield y);
     int get_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, const std::string& id, rados::cls::otp::otp_info_t *result, optional_yield y);
-    int list_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, std::list<rados::cls::otp::otp_info_t> *result, optional_yield y);
+    int list_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, std::vector<rados::cls::otp::otp_info_t> *result, optional_yield y);
     int otp_get_current_time(const DoutPrefixProvider *dpp, const rgw_user& user, ceph::real_time *result, optional_yield y);
-    int set_mfa(const DoutPrefixProvider *dpp, const std::string& oid, const std::list<rados::cls::otp::otp_info_t>& entries,
+    int set_mfa(const DoutPrefixProvider *dpp, const std::string& oid, const std::vector<rados::cls::otp::otp_info_t>& entries,
 		bool reset_obj, RGWObjVersionTracker *objv_tracker,
 		const real_time& mtime, optional_yield y);
-    int list_mfa(const DoutPrefixProvider *dpp, const std::string& oid, std::list<rados::cls::otp::otp_info_t> *result,
+    int list_mfa(const DoutPrefixProvider *dpp, const std::string& oid, std::vector<rados::cls::otp::otp_info_t> *result,
 		 RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime, optional_yield y);
   } mfa;
 

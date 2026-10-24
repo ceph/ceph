@@ -19,9 +19,10 @@
 
 #include "common/dout.h"
 
-#include <functional>
-#include <list>
 #include <memory>
+#include <vector>
+#include <iterator>
+#include <functional>
 
 #ifdef DEBUG_GATHER
 #include <set>
@@ -198,7 +199,7 @@ GenContextURef<T> make_gen_lambda_context(F &&f) {
 }
 
 /*
- * finish and destroy a list of Contexts
+ * finish and destroy a sequence of Contexts
  */
 template<class C>
 inline void finish_contexts(CephContext *cct, C& finished, int result = 0)
@@ -246,7 +247,7 @@ struct C_Lock : public Context {
  * ContextType must be an ancestor class of ContextInstanceType, or the same class.
  * ContextInstanceType must be default-constructable.
  */
-template <class ContextType, class ContextInstanceType, class Container = std::list<ContextType *>>
+template <class ContextType, class ContextInstanceType, class Container = std::vector<ContextType *>>
 class C_ContextsBase : public ContextInstanceType {
 public:
   CephContext *cct;
@@ -264,14 +265,14 @@ public:
   void add(ContextType* c) {
     contexts.push_back(c);
   }
-  void take(Container& ls) {
-    Container c;
-    c.swap(ls);
-    if constexpr (std::is_same_v<Container, std::list<ContextType *>>) {
-      contexts.splice(contexts.end(), c);
-    } else {
-      contexts.insert(contexts.end(), c.begin(), c.end());
+  void take(Container& values) {
+    if (std::empty(contexts)) {
+      contexts.swap(values);
+      return;
     }
+
+    contexts.insert(std::end(contexts), std::begin(values), std::end(values));
+    values.clear();
   }
   void complete(int r) override {
     // Neuter any ContextInstanceType custom complete(), because although
@@ -281,21 +282,29 @@ public:
   void finish(int r) override {
     finish_contexts(cct, contexts, r);
   }
-  bool empty() { return contexts.empty(); }
+  bool empty() { return std::empty(contexts); }
 
   template<class C>
-  static ContextType *list_to_context(C& cs) {
-    if (cs.size() == 0) {
-      return 0;
-    } else if (cs.size() == 1) {
-      ContextType *c = cs.front();
-      cs.clear();
-      return c;
-    } else {
-      C_ContextsBase<ContextType, ContextInstanceType> *c(new C_ContextsBase<ContextType, ContextInstanceType>(0));
-      c->take(cs);
+  static ContextType *to_context(C& contexts) {
+    if (std::empty(contexts)) {
+      return nullptr;
+    }
+
+    if (1 == std::size(contexts)) {
+      ContextType *c = contexts.front();
+      contexts.clear();
       return c;
     }
+
+    auto *c = new C_ContextsBase<ContextType, ContextInstanceType, C>(nullptr);
+    c->take(contexts);
+    return c;
+  }
+
+  template<class C>
+  [[deprecated("prefer to_context()")]]
+  static ContextType *list_to_context(C& contexts) {
+    return to_context(contexts);
   }
 };
 

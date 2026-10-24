@@ -17,8 +17,10 @@
 
 #include <cstdint>
 #include <list>
+#include <vector>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "common/Formatter.h"
 #include "include/buffer.h"
@@ -66,8 +68,8 @@ struct ceph_data_stats
     DECODE_FINISH(p);
   }
 
-  static std::list<ceph_data_stats> generate_test_instances() {
-    std::list<ceph_data_stats> ls;
+  static std::vector<ceph_data_stats> generate_test_instances() {
+    std::vector<ceph_data_stats> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().byte_total = 1024*1024;
@@ -95,17 +97,17 @@ int get_windows_version(POSVERSIONINFOEXW ver);
 
 /// dump service ids grouped by their host to the specified formatter
 /// @param f formatter for the output
-/// @param services a map from hostname to a list of service id hosted by this host
+/// @param services a map from hostname to the service ids hosted by this host
 /// @param type the service type of given @p services, for example @p osd or @p mon.
 void dump_services(ceph::Formatter* f,
-		   const std::map<std::string, std::list<int> >& services,
+		   const std::map<std::string, std::vector<int>>& services,
 		   const char* type);
 /// dump service names grouped by their host to the specified formatter
 /// @param f formatter for the output
-/// @param services a map from hostname to a list of service name hosted by this host
+/// @param services a map from hostname to the service names hosted by this host
 /// @param type the service type of given @p services, for example @p osd or @p mon.
 void dump_services(ceph::Formatter* f, const std::map<std::string,
-		   std::list<std::string> >& services, const char* type);
+		   std::vector<std::string>>& services, const char* type);
 
 std::string cleanbin(ceph::buffer::list &bl, bool &b64, bool show = false);
 std::string cleanbin(std::string &str);

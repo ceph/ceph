@@ -717,9 +717,9 @@ Session* SessionMapStore::get_or_add_session(const entity_inst_t& i) {
   return s;
 }
 
-std::list<SessionMapStore> SessionMapStore::generate_test_instances()
+std::vector<SessionMapStore> SessionMapStore::generate_test_instances()
 {
-  std::list<SessionMapStore> ls;
+  std::vector<SessionMapStore> ls;
   // pretty boring for now
   ls.push_back(SessionMapStore());
   return ls;

@@ -10,7 +10,6 @@
 #include "cls/queue/cls_queue_const.h"
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 
-using std::list;
 using std::string;
 
 using ceph::decode;
@@ -60,7 +59,7 @@ void cls_rgw_gc_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs
 }
 
 int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max, bool expired_only,
-                                  list<cls_rgw_gc_obj_info>& entries, bool& truncated, string& next_marker)
+                                  std::vector<cls_rgw_gc_obj_info>& entries, bool& truncated, string& next_marker)
 {
   bufferlist in, out;
   cls_rgw_gc_list_op op;
