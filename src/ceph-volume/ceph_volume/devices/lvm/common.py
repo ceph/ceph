@@ -84,6 +84,15 @@ common_args: Dict[str, Any] = {
         'action': arg_validators.DmcryptAction,
         'help': 'Enable device encryption via dm-crypt',
     },
+    '--hw-opal-only': {
+        'dest': 'hw_opal_only',
+        'action': 'store_true',
+        'help': ('Enable SED OPAL hardware-only encryption via cryptsetup '
+                 '--hw-opal-only (LUKS on the physical device, LVM on the mapper). '
+                 'Implies encrypted OSD setup. Mutually exclusive with --dmcrypt. '
+                 'Optional CEPH_VOLUME_OPAL_ADMIN_KEY overrides the OPAL admin '
+                 'password (defaults to the LUKS key / lockbox secret).'),
+    },
     '--dmcrypt-format-opts': {
         'default': None,
         'type': str,

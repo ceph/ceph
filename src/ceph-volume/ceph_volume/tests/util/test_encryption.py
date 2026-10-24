@@ -390,3 +390,129 @@ class TestCephLuks2:
     @patch.object(encryption.CephLuks2, 'get_json_area', Mock(return_value={"whatever": "fake-value"}))
     def test_is_tpm2_enrolled_false_not_enrolled_with_tpm2(self) -> None:
         assert not encryption.CephLuks2('/dev/foo').is_tpm2_enrolled
+
+
+class TestValidateHwOpalCliArgs:
+    def test_ok_hw_opal_only(self, factory):
+        encryption.validate_hw_opal_cli_args(factory(hw_opal_only=True, dmcrypt=False))
+
+    def test_ok_dmcrypt_only(self, factory):
+        encryption.validate_hw_opal_cli_args(factory(hw_opal_only=False, dmcrypt=True))
+
+    def test_mutually_exclusive(self, factory):
+        with pytest.raises(RuntimeError) as err:
+            encryption.validate_hw_opal_cli_args(
+                factory(hw_opal_only=True, dmcrypt=True)
+            )
+        assert 'mutually exclusive' in str(err.value)
+
+
+class TestGetOpalAdminKey:
+    def test_falls_back_to_luks_key(self, monkeypatch):
+        monkeypatch.delenv('CEPH_VOLUME_OPAL_ADMIN_KEY', raising=False)
+        assert encryption.get_opal_admin_key('luks-secret') == 'luks-secret'
+
+    def test_prefers_env(self, monkeypatch):
+        monkeypatch.setenv('CEPH_VOLUME_OPAL_ADMIN_KEY', 'admin-pin')
+        assert encryption.get_opal_admin_key('luks-secret') == 'admin-pin'
+
+
+class TestHwOpalMappingName:
+    @patch('ceph_volume.util.encryption.lsblk', Mock(return_value={'KNAME': 'nvme0n1'}))
+    def test_uses_kname(self):
+        assert encryption.hw_opal_mapping_name('/dev/nvme0n1') == 'ceph-hw-opal-nvme0n1'
+
+    @patch('ceph_volume.util.encryption.lsblk', Mock(return_value={}))
+    def test_falls_back_to_basename(self):
+        assert encryption.hw_opal_mapping_name('/dev/sda') == 'ceph-hw-opal-sda'
+
+
+class TestLuksFormatHwOpal:
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_command_and_stdin(self, m_call):
+        m_call.return_value = ([], [], 0)
+        encryption.luks_format_hw_opal('luks-key', 'admin-pin', '/dev/sda')
+        cmd = m_call.call_args[0][0]
+        assert cmd[0] == 'cryptsetup'
+        assert '--hw-opal-only' in cmd
+        assert '--force-password' in cmd
+        assert '--type' in cmd and 'luks2' in cmd
+        assert 'luksFormat' in cmd
+        assert '/dev/sda' in cmd
+        assert m_call.call_args[1]['stdin'] == 'admin-pin\n'
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_raises_on_failure(self, m_call):
+        m_call.return_value = ([], ['permission denied'], 1)
+        with pytest.raises(RuntimeError) as err:
+            encryption.luks_format_hw_opal('k', 'a', '/dev/sda')
+        assert '--hw-opal-only' in str(err.value)
+
+
+class TestLuksEraseHwOpal:
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_erase(self, m_call):
+        m_call.return_value = ([], [], 0)
+        encryption.luks_erase_hw_opal('/dev/sda', 'admin-pin')
+        cmd = m_call.call_args[0][0]
+        assert cmd == [
+            'cryptsetup', '--batch-mode', 'erase', '--key-file', '-', '/dev/sda'
+        ]
+        assert m_call.call_args[1]['stdin'] == 'admin-pin'
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_factory_reset(self, m_call):
+        m_call.return_value = ([], [], 0)
+        encryption.luks_erase_hw_opal('/dev/sda', 'psid', factory_reset=True)
+        cmd = m_call.call_args[0][0]
+        assert '--hw-opal-factory-reset' in cmd
+        assert 'erase' in cmd
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_raises_on_failure(self, m_call):
+        m_call.return_value = ([], ['bad pin'], 1)
+        with pytest.raises(RuntimeError):
+            encryption.luks_erase_hw_opal('/dev/sda', 'admin-pin')
+
+
+class TestPrepareHwOpalDevice:
+    @patch('ceph_volume.util.encryption.os.path.exists', return_value=True)
+    def test_returns_existing_mapper(self, m_exists):
+        path = encryption.prepare_hw_opal_device('key', '/dev/sda', 'ceph-hw-opal-sda')
+        assert path == '/dev/mapper/ceph-hw-opal-sda'
+
+    @patch('ceph_volume.util.encryption.os.path.exists')
+    @patch('ceph_volume.util.encryption.luks_open')
+    @patch('ceph_volume.util.encryption.luks_format_hw_opal')
+    @patch('ceph_volume.util.encryption.get_opal_admin_key', return_value='admin')
+    @patch('ceph_volume.util.encryption.device_has_luks2', return_value=False)
+    def test_formats_and_opens(
+        self, m_has_luks2, m_admin, m_format, m_open, m_exists
+    ):
+        m_exists.side_effect = [False, True]
+        path = encryption.prepare_hw_opal_device('key', '/dev/sda', 'ceph-hw-opal-sda')
+        m_format.assert_called_once_with('key', 'admin', '/dev/sda')
+        m_open.assert_called_once_with(
+            'key', '/dev/sda', 'ceph-hw-opal-sda',
+            key_size=encryption.HW_OPAL_KEY_SIZE,
+        )
+        assert path == '/dev/mapper/ceph-hw-opal-sda'
+
+    @patch('ceph_volume.util.encryption.os.path.exists')
+    @patch('ceph_volume.util.encryption.luks_open')
+    @patch('ceph_volume.util.encryption.device_has_luks2', return_value=True)
+    def test_skips_format_when_already_luks2(self, m_has_luks2, m_open, m_exists):
+        m_exists.side_effect = [False, True]
+        with patch('ceph_volume.util.encryption.luks_format_hw_opal') as m_format:
+            encryption.prepare_hw_opal_device('key', '/dev/sda', 'ceph-hw-opal-sda')
+            assert not m_format.called
+
+    @patch('ceph_volume.util.encryption.os.path.exists', return_value=False)
+    @patch('ceph_volume.util.encryption.luks_open')
+    @patch('ceph_volume.util.encryption.device_has_luks2', return_value=True)
+    def test_raises_when_mapper_missing_after_open(
+        self, m_has_luks2, m_open, m_exists
+    ):
+        with pytest.raises(RuntimeError) as err:
+            encryption.prepare_hw_opal_device('key', '/dev/sda', 'ceph-hw-opal-sda')
+        assert 'Unable to open OPAL LUKS mapping' in str(err.value)
