@@ -10873,6 +10873,41 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   cerr << "Completing" << std::endl;
 }
 
+// A deferred transaction record that cannot be decoded (e.g. corrupted on
+// disk) must be reported by fsck and be removable by repair; replaying it
+// must not abort fsck/repair.
+TEST_P(StoreTestSpecificAUSize, BluestoreRepairUndecodableDeferred) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  StartDeferred(0x10000);
+  BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_NE(nullptr, bstore);
+  {
+    KeyValueDB* kv = bstore->get_kv();
+    auto t = kv->get_transaction();
+    bufferlist bl;
+    bl.append("x");
+    t->set("L", "undecodable", bl);  // PREFIX_DEFERRED
+    ASSERT_EQ(0, kv->submit_transaction_sync(t));
+  }
+  ASSERT_EQ(0, store->umount());
+  EXPECT_EQ(1, store->fsck(false));
+  EXPECT_EQ(1, store->fsck(true));
+  // a shallow repair doesn't check deferred records and must not pass
+  EXPECT_NE(0, store->quick_fix());
+  EXPECT_EQ(0, store->repair(false));
+  EXPECT_EQ(0, store->fsck(false));
+  int r = store->mount();
+  if (r != 0) {
+    // nothing for TearDown to umount
+    StoreTest::RemoveTestObjectStore();
+    store = nullptr;
+  }
+  ASSERT_EQ(0, r);
+  bufferlist bl;
+  EXPECT_EQ(-ENOENT, bstore->get_kv()->get("L", "undecodable", &bl));
+}
+
 TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
