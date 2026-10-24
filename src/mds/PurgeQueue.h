@@ -187,6 +187,7 @@ private:
 
   // recover the journal write_pos (drop any partial written entry)
   void _recover();
+  void _create(Context *completion);
 
   /**
    * @return true if we were in a position to try and consume something:
@@ -198,6 +199,7 @@ private:
   void _execute_item_complete(uint64_t expire_to);
 
   void _go_readonly(int r);
+  void _report_error(int r);
 
   CephContext *cct;
   const mds_rank_t rank;
