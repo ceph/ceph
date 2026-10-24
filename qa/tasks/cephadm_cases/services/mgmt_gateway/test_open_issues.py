@@ -66,12 +66,16 @@ class TestMgmtGatewayOpenIssues(GatewayTestCase):
         gateway host."""
         prefix = self.job_ctx().vip['vnet'].prefixlen
         self.label_hosts(LABEL, self.host_names[:2])
-        self.deploy_gateway(placement={'label': LABEL}, virtual_ip=self.vip)
+        # Apply both before waiting: with a virtual_ip nginx only listens on
+        # <vip>:<port>, which it can bind only once the ingress daemons have
+        # set ip_nonlocal_bind on the host (or keepalived holds the VIP).
+        self.apply(GW, self.gateway_spec({'label': LABEL}, virtual_ip=self.vip))
         self.apply('ingress', {'service_type': 'ingress', 'service_id': 'mgmt-gw',
                                'placement': {'label': LABEL},
                                'spec': {'backend_service': GW,
                                         'virtual_ip': f'{self.vip}/{prefix}',
                                         'keepalive_only': True}})
+        self.wait_service(GW)
         self.wait_service(INGRESS)
         self.gw_vip = self.vip
         self.wait_mode('gateway')
