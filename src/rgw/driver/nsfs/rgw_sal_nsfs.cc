@@ -11379,6 +11379,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
 
 int NSFSObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
+                              const rgw_owner& authenticated_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -11436,12 +11437,12 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   NSFSObject *dobj = static_cast<NSFSObject*>(dest_object);
 
   /* Who copies:  the requester reads the source and owns the copy, as
-   * NooBaa's copy runs as its requester.  `remote_user` is the
-   * authenticated user (rgw_op.cc).  Denied where it cannot be
+   * NooBaa's copy runs as its requester.  Denied where it cannot be
    * applied, as the writers deny it. */
   nsfs::FSIdentity identity;
   {
-    const int pret = pin_personality_for(dpp, driver, remote_user, &identity);
+    const int pret = pin_personality_for(dpp, driver, authenticated_user,
+					 &identity);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -11684,11 +11685,9 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     }
   }
 
-  /* `remote_user` is the authenticated user here;  see the identity
-   * pinned above */
   ret = dobj->set_obj_attrs(dpp, &attrs,
 			    stale_meta.empty() ? nullptr : &stale_meta,
-			    y, rgw::sal::FLAG_LOG_OP, remote_user);
+			    y, rgw::sal::FLAG_LOG_OP, authenticated_user);
   if (ret < 0) {
     return ret;
   }

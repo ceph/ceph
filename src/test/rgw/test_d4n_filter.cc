@@ -452,6 +452,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
 
     int ret = obj->copy_object(acl_owner,
 	     std::get<rgw_user>(owner),
+	     rgw::sal::no_authenticated_user,
 	     &info,
 	     zone,
 	     destObj.get(),
@@ -565,6 +566,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
 
     int ret = obj->copy_object(acl_owner,
 	     std::get<rgw_user>(owner),
+	     rgw::sal::no_authenticated_user,
 	     &info,
 	     zone,
 	     destObj.get(),
@@ -654,6 +656,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
 
     int ret = obj->copy_object(acl_owner,
 	     std::get<rgw_user>(owner),
+	     rgw::sal::no_authenticated_user,
 	     &info,
 	     zone,
 	     destObj.get(),
@@ -947,6 +950,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjEnabled.get(),
@@ -1002,6 +1006,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 
       int ret = objSuspended->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjSuspended.get(),
@@ -1089,6 +1094,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjEnabled.get(),
@@ -1144,6 +1150,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjSuspended.get(),
@@ -1231,6 +1238,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjEnabled.get(),
@@ -1286,6 +1294,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjSuspended.get(),
@@ -1659,6 +1668,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
 
     int ret = obj->copy_object(acl_owner,
 	     std::get<rgw_user>(owner),
+	     rgw::sal::no_authenticated_user,
 	     &info,
 	     zone,
 	     destObj.get(),
@@ -1784,6 +1794,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
 
     int ret = obj->copy_object(acl_owner,
 	     std::get<rgw_user>(owner),
+	     rgw::sal::no_authenticated_user,
 	     &info,
 	     zone,
 	     destObj.get(),
@@ -1909,6 +1920,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 
     int ret = obj->copy_object(acl_owner,
 	     std::get<rgw_user>(owner),
+	     rgw::sal::no_authenticated_user,
 	     &info,
 	     zone,
 	     destObj.get(),
@@ -2432,6 +2444,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjEnabled.get(),
@@ -2526,6 +2539,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 
       int ret = objSuspended->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjSuspended.get(),
@@ -2658,6 +2672,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjEnabled.get(),
@@ -2752,6 +2767,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 
       int ret = objSuspended->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjSuspended.get(),
@@ -2884,6 +2900,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 
       int ret = objEnabled->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjEnabled.get(),
@@ -2978,6 +2995,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 
       int ret = objSuspended->copy_object(acl_owner,
 	       std::get<rgw_user>(owner),
+	       rgw::sal::no_authenticated_user,
 	       &info,
 	       zone,
 	       destObjSuspended.get(),

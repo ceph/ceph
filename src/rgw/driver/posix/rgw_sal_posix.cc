@@ -4349,6 +4349,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 
 int POSIXObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
+                              const rgw_owner& authenticated_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -4498,11 +4499,8 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = pot;
   }
-  /* copy_object() carries no authenticated user of its own:  the SAL
-   * gives it an ACLOwner and, for multisite, a remote user, neither of
-   * which is who asked */
   return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP,
-			     rgw::sal::no_authenticated_user);
+			     authenticated_user);
 }
 
 int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,

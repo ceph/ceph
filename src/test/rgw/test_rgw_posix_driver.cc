@@ -1620,6 +1620,7 @@ TEST_F(POSIXObjectTest, ObjectCopy)
 
   int ret = object->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),
@@ -1935,6 +1936,7 @@ TEST_F(POSIXMPObjectTest, MPUploadCopy)
 
   int ret = object->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),
@@ -2392,6 +2394,7 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
 
   int ret = srcobj->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),
@@ -2473,6 +2476,7 @@ TEST_F(POSIXVerObjectTest, CopyVersion)
 
   int ret = srcobj->copy_object(acl_owner,
 	   std::get<rgw_user>(owner),
+	   rgw::sal::no_authenticated_user,
 	   &info,
 	   zone,
 	   dstobj.get(),

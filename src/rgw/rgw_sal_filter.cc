@@ -1033,6 +1033,7 @@ int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 
 int FilterObject::copy_object(const ACLOwner& owner,
 			      const rgw_user& remote_user,
+			      const rgw_owner& authenticated_user,
 			      req_info* info,
 			      const rgw_zone_id& source_zone,
 			      rgw::sal::Object* dest_object,
@@ -1061,7 +1062,7 @@ int FilterObject::copy_object(const ACLOwner& owner,
 			      const DoutPrefixProvider* dpp,
 			      optional_yield y)
 {
-  return next->copy_object(owner, remote_user, info, source_zone,
+  return next->copy_object(owner, remote_user, authenticated_user, info, source_zone,
 			   nextObject(dest_object),
 			   nextBucket(dest_bucket),
 			   nextBucket(src_bucket),

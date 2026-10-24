@@ -6765,6 +6765,7 @@ void RGWCopyObj::execute(optional_yield y)
 
   op_ret = s->src_object->copy_object(s->owner,
 	   s->user->get_id(),
+	   authenticated_user(s),
 	   &s->info,
 	   source_zone,
 	   s->object.get(),

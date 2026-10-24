@@ -3864,7 +3864,8 @@ TEST_F(NSFSBucketTest, HierarchicalCopy)
   add_attr(attrs, RGW_ATTR_ACL, "");
   std::string etag, tag;
   int ret = src_obj->copy_object(
-      acl_owner, rgw_user(), nullptr, rgw_zone_id(),
+      acl_owner, rgw_user(), rgw::sal::no_authenticated_user,
+      nullptr, rgw_zone_id(),
       dst_obj.get(), bucket.get(), bucket.get(),
       rgw_placement_rule(), nullptr, nullptr,
       nullptr, nullptr, false,
@@ -6756,7 +6757,8 @@ public:
     Attrs attrs;
     std::string etag, tag;
     return src_obj->copy_object(
-	acl_owner, rgw_user(), nullptr, rgw_zone_id(),
+	acl_owner, rgw_user(), rgw::sal::no_authenticated_user,
+	nullptr, rgw_zone_id(),
 	dst_obj.get(), dst_b, src_b,
 	rgw_placement_rule(), nullptr, nullptr,
 	nullptr, nullptr, false,

@@ -836,6 +836,7 @@ std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
 
 int D4NFilterObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
+                              const rgw_owner& authenticated_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -885,7 +886,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   //for multipart objects or for read only cache, write to backend store
   if (is_multipart() || !write_to_cache) {
     write_to_cache = false;
-    auto ret = next->copy_object(owner, remote_user, info, source_zone,
+    auto ret = next->copy_object(owner, remote_user, authenticated_user, info, source_zone,
                            nextObject(dest_object),
                            nextBucket(dest_bucket),
                            nextBucket(src_bucket),

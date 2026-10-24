@@ -3788,6 +3788,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 
 int RadosObject::copy_object(const ACLOwner& owner,
 				const rgw_user& remote_user,
+				const rgw_owner& authenticated_user,
 				req_info* info,
 				const rgw_zone_id& source_zone,
 				rgw::sal::Object* dest_object,
