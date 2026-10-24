@@ -22,6 +22,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "common/strtol.h" // for strict_strtof()
 #include "messages/MMgrReport.h"
 
 #define dout_context g_ceph_context
@@ -62,7 +63,11 @@ void DeviceState::set_metadata(map<string,string>&& m)
   }
   p = metadata.find("wear_level");
   if (p != metadata.end()) {
-    wear_level = atof(p->second.c_str());
+    std::string err;
+    float wear = strict_strtof(p->second, &err);
+    if (err.empty()) {
+      wear_level = wear;
+    }
   }
 }
 
