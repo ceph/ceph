@@ -32,8 +32,10 @@ const fillAuth = () => {
 };
 
 Cypress.Commands.add('login', (username, password) => {
-  cy.session([username, password], () => {
-    requestAuth(username, password).then((resp) => {
+  const user = username || Cypress.env('LOGIN_USER');
+  const pwd = password || Cypress.env('LOGIN_PWD');
+  cy.session([user, pwd], () => {
+    requestAuth(user, pwd).then((resp) => {
       auth = resp.body;
       auth.permissions = JSON.stringify(new Permissions(auth.permissions));
       auth.pwdExpirationDate = String(auth.pwdExpirationDate);
