@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -ex
 
@@ -23,5 +23,12 @@ fi
 trap cleanup EXIT
 
 cd "${HERE}"
-"${VENV}/bin/${PY}" -m pip install pytest 'smbprotocol<1.17.0' grpcio grpcio-reflection
+deps=(
+    pytest
+    'git+https://github.com/phlogistonjohn/smbprotocol.git@teuthology ; python_version >= "3.10"'
+    'smbprotocol<1.17.0; python_version < "3.10"'
+    grpcio
+    grpcio-reflection
+)
+"${VENV}/bin/${PY}" -m pip install "${deps[@]}"
 "${VENV}/bin/${PY}" -m pytest --durations=0 -v "$@"

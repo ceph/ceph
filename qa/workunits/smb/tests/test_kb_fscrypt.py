@@ -3,6 +3,8 @@ import smbprotocol
 
 import smbutil
 
+NtStatus = smbprotocol.header.NtStatus
+
 
 @pytest.mark.kb_fscrypt
 def test_invalid_key_uid_share(smb_cfg):
@@ -35,7 +37,7 @@ def test_invalid_key_uid_share(smb_cfg):
     smbutil.apply_share_config(smb_cfg, new_share)
 
     try:
-        with pytest.raises(smbprotocol.exceptions.Unsuccessful):
+        with smbutil.raises_nt_error(NtStatus.STATUS_UNSUCCESSFUL):
             with smbutil.connection(smb_cfg, share_id) as sharep:
                 fname = sharep / filename
                 fname.write_text("value: NOPE\n")

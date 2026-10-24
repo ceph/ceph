@@ -327,7 +327,7 @@ Create Share
 
 .. prompt:: bash #
 
-   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly] [--case-insensitive=<case_insensitive>]
+   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly] [--case-insensitive=<case_insensitive>] [--acl-support={default,disabled}]
 
 Create a new SMB share, hosted by the named cluster, that maps to the given
 CephFS volume and path.
@@ -357,6 +357,11 @@ case_insensitive
     value may be one of ``warn`` (the default), ``ignore``, or ``require``.
     See the description for the `case_insensitive`_ field of the share spec
     for details.
+acl_support
+    Optional. Configures NTFS-style ACL behavior. The value may be one of
+    ``default`` or ``disabled``. If not given the cluster's default is used.
+    See the description for the `acl_support`_ field of the share spec for
+    details.
 
 
 Examples
@@ -394,7 +399,7 @@ Create RGW Share
 
 .. prompt:: bash #
 
-   ceph smb share create rgw <cluster_id> <share_id> <bucket> [--share-name=<share_name>] [--user-id=<user_id>] [--readonly]
+   ceph smb share create rgw <cluster_id> <share_id> <bucket> [--share-name=<share_name>] [--user-id=<user_id>] [--readonly] [--acl-support={default,disabled}]
 
 Create a new SMB share, hosted by the named cluster, that maps to a RADOS
 Gateway (RGW) bucket. This allows S3-compatible object storage to be accessed
@@ -416,6 +421,11 @@ user_id
     will attempt to determine the bucket owner automatically.
 readonly
     Creates a read-only share
+acl_support
+    Optional. Configures NTFS-style ACL behavior. The value may be one of
+    ``default`` or ``disabled``. If not given the cluster's default is used.
+    See the description for the `acl_support`_ field of the share spec for
+    details.
 
 Examples
 ~~~~~~~~
@@ -905,6 +915,21 @@ public_addrs
         a host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied, the network is automatically determined
         using the address value supplied and taken as the destination.
+share_defaults:
+    Optional. An object containing default values for configuring shares
+    within the cluster. A value set here applies to all shares within
+    this cluster unless that share explicitly sets the equivalent field
+    in the share resource.
+
+    Fields:
+
+    acl_support
+        Optional. Configures NTFS-style ACL behavior. The value may be one of
+        ``default`` or ``disabled``. If not given ``default`` is assumed. See
+        the description for the `acl_support`_ field of the share spec for
+        details.
+        This value may only be set once, on new clusters. See
+        :ref:`smb-auth-id-mapping-perms` for more information on this topic.
 remote_control
     Optional object. This object configures an SMB cluster to deploy an extra
     ``remote-control`` service. This service provides a gRPC server that
@@ -1177,6 +1202,17 @@ max_connections
     Optional integer. Specifies the maximum number of simultaneous client
     connections to a specific share. The default value is 0 and it indicates
     that there is no limit on the number of connections
+_`acl_support`
+    Optional. Configures NTFS-style ACL behavior. The value may be one of
+    ``default`` or ``disabled``. If left unset the cluster's value (from
+    share_defaults) is used.
+    The ``default`` ACL support mode provides full NTFS-style ACL emulation.
+    This is generally the behavior most SMB users want.
+    The ``disabled`` ACL support mode disables NTFS-style ACL emulation and
+    converts the native permissions of the underlying storage to be dynamically
+    translated to NT-Style ACLs automatically.
+    This value may only be set once, on new shares. See
+    :ref:`smb-auth-id-mapping-perms` for more information on this topic.
 cephfs
     Object. Configures CephFS-backed storage for the share. Either a ``cephfs``
     or ``rgw`` object must be specified, but not both.
@@ -2022,6 +2058,34 @@ Points useful when troubleshooting:
 
 For design details, see the developer documentation in
 ``doc/dev/libcephfs_proxy.rst``.
+
+
+.. _smb-auth-id-mapping-perms:
+
+SMB Authentication, ID Mapping, and Permissions
+================================================
+
+The Samba suite, which Ceph's SMB support is based on, provides the ability to
+map between the typical UID/GID and permission bits model of UNIX-like systems
+and the NTFS model of SIDs and ACLs. This permission model makes it possible to
+easily authenticate using Windows systems and protocols and rely upon NTFS ACLs
+for access control to files and directories.
+
+Generally, the extra permission metadata Samba needs is written alongside the
+files and directories as xattrs. Additionally, the mapped UID and GID values
+will be stored in the standard file and directory metadata. This metadata is
+valuable as it defines who can access what in each Share. This is also why
+certain settings can only be set once for Cluster and Share resources. If these
+values could be trivially changed there would be great risk to producing
+incorrect mappings that might also include invalid access.
+
+Fields that may not be changed after resource creation, due to risk of
+invaliding permissions metadata, are:
+
+* Cluster resource - auth_mode
+* Cluster resource - share_defaults.acl_support
+* Share resource - acl_support
+
 
 .. _smb-remote-control:
 
