@@ -1,11 +1,9 @@
 import boto3
-import botocore.session
 import botocore.config
 from botocore.exceptions import ClientError
 from botocore.exceptions import ParamValidationError
 from botocore.handlers import validate_bucket_name
 import isodate
-import email.utils
 import datetime
 import threading
 import re
@@ -18,7 +16,6 @@ import hmac
 import hashlib
 import xml.etree.ElementTree as ET
 import time
-import operator
 import pytest
 import os
 import string
@@ -26,7 +23,6 @@ import random
 import socket
 import dateutil.parser
 import ssl
-import pdb
 from collections import namedtuple
 from collections import defaultdict
 from io import BytesIO
@@ -41,8 +37,6 @@ from .policy import Policy, Statement, make_json_policy
 from .iam import iam_root, nuke_role
 
 from . import (
-    configfile,
-    setup_teardown,
     get_client,
     get_prefix,
     get_unauthenticated_client,
@@ -60,10 +54,7 @@ from . import (
     get_main_aws_secret_key,
     get_main_display_name,
     get_main_user_id,
-    get_main_email,
     get_main_api_name,
-    get_alt_aws_access_key,
-    get_alt_aws_secret_key,
     get_alt_display_name,
     get_alt_user_id,
     get_alt_email,
@@ -72,14 +63,12 @@ from . import (
     get_iam_root_s3client,
     get_tenant_client,
     get_v2_tenant_client,
-    get_tenant_iam_client,
     get_tenant_name,
     get_tenant_user_id,
     get_buckets_list,
     get_objects_list,
     get_main_kms_keyid,
     get_secondary_kms_keyid,
-    get_svc_client,
     get_cloud_storage_class,
     get_cloud_retain_head_object,
     get_cloud_retain_current_version,
@@ -197,7 +186,6 @@ def test_bucket_listv2_many():
 @pytest.mark.list_objects_v2
 def test_basic_key_count():
     client = get_client()
-    bucket_names = []
     bucket_name = get_new_bucket_name()
     client.create_bucket(Bucket=bucket_name)
     for j in range(5):
