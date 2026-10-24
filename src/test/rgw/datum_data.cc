@@ -3595,6 +3595,38 @@ struct record_with_schema_names final
     int value;
 };
 static_assert(!datum::binary_schema_type<record_with_schema_names>);
+static_assert(!datum::binary_schema_type<datum::binary_fields<>>);
+static_assert(datum::binary_schema_type<datum::binary_fields<&borrowed_record::name>>);
+static_assert(!datum::binary_schema_type<datum::binary_fields<&entry::key, &entry::key>>);
+static_assert(!datum::binary_schema_type<datum::binary_fields<&entry::key, &scalar_record::first>>);
+static_assert(std::same_as<datum::binary_schema_t<scalar_record>,
+                           datum::binary_fields<&scalar_record::first, &scalar_record::second>>);
+static_assert(std::same_as<datum::binary_schema_t<const scalar_record,
+                                                 &scalar_record::first>::record_type,
+                           const scalar_record>);
+static_assert(std::same_as<datum::binary_schema_t<const scalar_record>,
+                           datum::binary_schema_t<const scalar_record, &scalar_record::first,
+                                                  &scalar_record::second>>);
+
+class private_record final
+{
+    int hidden;
+
+public:
+    static constexpr auto selection() { return datum::binary_fields<&private_record::hidden> {}; }
+
+};
+static_assert(!datum::binary_schema_type<decltype(private_record::selection())>);
+
+struct derived_record final : scalar_record
+{
+    int local;
+};
+static_assert(!datum::binary_schema_type<datum::binary_fields<&derived_record::local>>);
+// A member pointer identifies its declaring class, including inherited spelling.
+static_assert(std::same_as<datum::binary_fields<&derived_record::first>::record_type,
+                           scalar_record>);
+
 struct projected_text
 {
     std::string text;
@@ -4308,8 +4340,14 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
  TEST_CASE("direct binary schemas choose declaration or explicit wire order", "[datum][schema]")
  {
      using wire = datum::binary_schema_t<datum_test::entry>;
-     using reordered = datum::binary_schema_t<datum_test::entry, &datum_test::entry::value,
-                                              &datum_test::entry::version, &datum_test::entry::key>;
+     using reordered = datum::binary_fields<&datum_test::entry::value, &datum_test::entry::version,
+                                            &datum_test::entry::key>;
+
+     static_assert(std::same_as<reordered::record_type, datum_test::entry>);
+     static_assert(std::same_as<reordered,
+                               datum::binary_schema_t<datum_test::entry, &datum_test::entry::value,
+                                                      &datum_test::entry::version,
+                                                      &datum_test::entry::key>>);
 
      static_assert(!datum::render::serializable<datum_test::entry>);
      const datum_test::entry source {"object/42", 7, "contents"};
@@ -4336,7 +4374,7 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
      CHECK(datum::render::to_bytes<scalar_wire>(scalar) == expected);
      CHECK(datum::render::to_bytes(scalar) != expected);
 
-     using clock_wire = datum::binary_schema_t<datum_test::clock_record>;
+     using clock_wire = datum::binary_fields<&datum_test::clock_record::value>;
 
      const datum_test::clock_record clock {{-123}};
      const auto clock_bytes = datum::render::to_bytes<clock_wire>(clock);
@@ -4347,8 +4385,7 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
  TEST_CASE("selected binary schemas omit local fields and preserve their defaults",
            "[datum][schema]")
  {
-     using wire = datum::binary_schema_t<datum_test::local_entry, &datum_test::local_entry::value,
-                                         &datum_test::local_entry::key>;
+     using wire = datum::binary_fields<&datum_test::local_entry::value, &datum_test::local_entry::key>;
 
      unsigned calls = 0;
      const datum_test::local_entry source {"key", 7, "payload", [&calls] { ++calls; }};
@@ -4375,7 +4412,8 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
 
  TEST_CASE("direct binary schemas share storage adapters and decode limits", "[datum][schema]")
  {
-     using wire = datum::binary_schema_t<datum_test::entry>;
+     using wire = datum::binary_fields<&datum_test::entry::key, &datum_test::entry::version,
+                                      &datum_test::entry::value>;
 
      const datum_test::entry source {"key", 7, std::string(104, 'x')};
      const auto expected = datum::render::to_bytes<wire>(source);
@@ -4409,7 +4447,8 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
  }
 
  static_assert([] {
-     using wire = datum::binary_schema_t<datum_test::entry>;
+     using wire = datum::binary_fields<&datum_test::entry::key, &datum_test::entry::version,
+                                      &datum_test::entry::value>;
 
      datum_test::entry source {"constexpr", 7, "payload"};
      std::array<std::uint8_t, 64> storage {};
@@ -4417,6 +4456,58 @@ TEST_CASE("generated views observe constructor-bearing public records", "[datum]
 
      return datum::render::decode_bounded<wire, 64>(bytes, 64) == source;
  }());
+
+ TEST_CASE("schema inference adds no construction or ownership requirements", "[datum][schema]")
+ {
+     struct existing_record final
+     {
+         int selected;
+         int local = 17;
+
+     public:
+         existing_record() = delete;
+         explicit existing_record(const int value) : selected(value)
+         {}
+         existing_record(const existing_record&) = delete;
+         existing_record(existing_record&&) = delete;
+
+     };
+     using wire = datum::binary_fields<&existing_record::selected>;
+
+     static_assert(datum::binary_schema_type<wire>);
+     static_assert(!datum::owning_value<existing_record>);
+     static_assert(!datum::render::candidate_value<existing_record>);
+     const existing_record source {42};
+     const auto bytes = datum::render::to_bytes<wire>(source);
+     existing_record target {0};
+
+     datum::render::from_bytes<wire>(bytes, target);
+     CHECK(target.selected == 42);
+     CHECK(target.local == 17);
+
+     // Native wire profiles may deliberately repeat a field; schema use may not.
+     using repeated = datum::binary_fields<&existing_record::selected, &existing_record::selected>;
+
+     static_assert(!datum::binary_schema_type<repeated>);
+     datum::render::binary_buffer observed;
+     zpp::bits::out output {observed};
+     datum::serialize_schema(output, source, repeated {}).or_throw();
+     auto expected = bytes;
+     ::ceph::util::append_range(expected, bytes);
+     CHECK(observed == expected);
+ }
+
+ TEST_CASE("empty records retain explicit binary schema identity", "[datum][schema]")
+ {
+     struct empty final
+     {};
+     using wire = datum::binary_schema_t<empty>;
+
+     static_assert(datum::binary_schema_type<wire>);
+     const auto bytes = datum::render::to_bytes<wire>(empty {});
+     CHECK(std::empty(bytes));
+     CHECK_NOTHROW(datum::render::from_bytes<wire>(bytes));
+ }
 
 #endif
 

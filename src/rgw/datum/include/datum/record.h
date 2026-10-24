@@ -353,6 +353,16 @@ template <auto ...Member>
 struct binary_fields : member_fields<Member...>
 {};
 
+// A nonempty selection carries its record identity. Profiles remain usable for
+// observation and native codecs; binary_schema_type checks schema eligibility.
+template <auto First, auto ...Member>
+struct binary_fields<First, Member...>
+    : member_fields<First, Member...>, serialization_detail::binary_schema_tag
+{
+    using record_type = typename member_lens<First>::source_type;
+    using fields = binary_fields;
+};
+
 template <typename RecordT, auto ...Member>
 consteval bool valid_binary_fields(binary_fields<Member...>)
 {
@@ -390,7 +400,15 @@ template <typename RecordT, auto ...Member>
 consteval auto describe_binary_schema()
 {
     if constexpr (0 != sizeof...(Member)) {
-        return std::type_identity<direct_binary_schema<RecordT, Member...>> {};
+        using fields = binary_fields<Member...>;
+
+        static_assert(fields::template selects<RecordT>(),
+                      "Binary schema must select distinct direct public members of its record");
+
+        // Preserve an explicitly qualified record without duplicating the usual descriptor.
+        return std::type_identity<std::conditional_t<
+            std::same_as<RecordT, typename fields::record_type>, fields,
+            direct_binary_schema<RecordT, Member...>>> {};
     }
 
     if constexpr (0 == sizeof...(Member)) {
@@ -406,7 +424,11 @@ consteval auto describe_binary_schema()
         }
 
         return []<std::size_t ...Index>(std::index_sequence<Index...>) {
-            return std::type_identity<direct_binary_schema<RecordT, &[:members[Index]:]...>> {};
+            if constexpr (0 == sizeof...(Index)) {
+                return std::type_identity<direct_binary_schema<RecordT>> {};
+            } else {
+                return describe_binary_schema<RecordT, &[:members[Index]:]...>();
+            }
         }(std::make_index_sequence<std::size(members)> {});
     }
 }
@@ -420,7 +442,9 @@ using binary_schema_t =
     typename decltype(serialization_detail::describe_binary_schema<RecordT, Member...>())::type;
 
 template <typename SchemaT>
-concept binary_schema_type = std::derived_from<SchemaT, serialization_detail::binary_schema_tag>;
+concept binary_schema_type =
+    std::derived_from<SchemaT, serialization_detail::binary_schema_tag> &&
+    SchemaT::fields::template selects<typename SchemaT::record_type>();
 
 } // ceph::salad::datum
 

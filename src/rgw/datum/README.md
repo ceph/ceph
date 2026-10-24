@@ -414,12 +414,22 @@ auto bytes = datum::render::to_bytes<wire>(entry);
 auto restored = datum::render::from_bytes<wire>(bytes);
 ```
 
-For a custom protocol, give the selected members in wire order. Omissions are
-intentional; repeated members and members from another record are rejected:
+For a custom protocol, give the selected members in wire order. A nonempty
+`binary_fields` selection infers its record from the first member pointer:
 
 ```cpp
-using reply_wire = datum::binary_schema_t<Entry, &Entry::value, &Entry::key>;
+using reply_wire = datum::binary_fields<&Entry::value, &Entry::key>;
 ```
+
+Schema use requires distinct direct public members of that record; omissions are
+intentional. The existing `binary_schema_t<Entry, &Entry::value, &Entry::key>` spelling
+validates the explicit record and names the same descriptor for an unqualified record.
+Explicit record qualifiers are preserved by a typed descriptor. An empty selection
+cannot infer a record; use `binary_schema_t<Record>` for declaration order, including
+an empty record. For a nonempty, unqualified record, this also names the same
+descriptor as a complete declaration-order selection.
+An inherited member pointer identifies its declaring class, so
+`&Derived::inherited` infers the base record rather than `Derived`.
 
 Fresh decoding uses ordinary value initialization, including default member
 initializers, for omitted fields. Decoding into an existing record preserves its
@@ -432,6 +442,11 @@ The existing `binary_schema<Record>` enrollment and complete-coverage
 `checked_binary_schema` remain available for record-based codec calls.
 `binary_fields` builds on the shared `member_fields` structural profile;
 `schema::fields` supplies its ordered observation and construction operations.
+Native wire profiles can still repeat fields or use nonaggregate and borrowed
+records. These uses do not establish schema eligibility, ownership, or permission
+to default-construct a decoded record. Only value-returning decoding requires
+default construction and movement; encoding and decoding into an existing record
+do not.
 Diagnostics keep independent confidentiality approval and redaction.
 
 Reflected enum names become an ordinary constant table before runtime lookup.
