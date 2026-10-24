@@ -46,6 +46,18 @@
             }
           </ng-template>
         </div>
+        <!-- Client Compatibility -->
+        <div class="form-item">
+          <cds-checkbox
+            id="client_compat"
+            formControlName="client_compat"
+            i18n
+            >macOS Compatibility
+          </cds-checkbox>
+          <cd-help-text i18n>
+            Enable macOS-specific SMB compatibility features (AAPL extensions, fruit VFS module).
+          </cd-help-text>
+        </div>
         <!-- Auth Mode -->
         <div class="form-item">
           <cds-select

@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { FormArray, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ComboBoxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
-import { AUTHMODE } from '../smb.model';
+import { AUTHMODE, CLIENT_COMPAT } from '../smb.model';
 import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
@@ -87,6 +87,30 @@ describe('SmbClusterFormComponent', () => {
     component.smbForm.get('domain_settings').setValue('test-realm');
     component.smbForm.get('cluster_id').setValue('cluster-id');
     component.submitAction();
+  });
+
+  it('should have client_compat control defaulting to false', () => {
+    const clientCompatControl = component.smbForm.get('client_compat');
+    expect(clientCompatControl).toBeTruthy();
+    expect(clientCompatControl.value).toBe(false);
+  });
+
+  it('should include client_compat macos in request when toggled on', () => {
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('cluster_id').setValue('cluster-id');
+    component.smbForm.get('client_compat').setValue(true);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.client_compat).toBe(CLIENT_COMPAT.MacOS);
+  });
+
+  it('should include client_compat default in request when toggled off', () => {
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
+    component.smbForm.get('domain_settings').setValue('test-realm');
+    component.smbForm.get('cluster_id').setValue('cluster-id');
+    component.smbForm.get('client_compat').setValue(false);
+    const request = (component as any).buildRequest();
+    expect(request.cluster_resource.client_compat).toBe(CLIENT_COMPAT.Default);
   });
 
   it('should delete domain', () => {
