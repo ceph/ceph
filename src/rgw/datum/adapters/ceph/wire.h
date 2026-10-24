@@ -62,7 +62,8 @@ struct scalar_record final
 };
 
 using frame_header = ::ceph::encoding_detail::struct_header;
-using header_fields = datum::binary_fields<&frame_header::v, &frame_header::compat, &frame_header::len>;
+using header_fields =
+    datum::binary_fields<&frame_header::v, &frame_header::compat, &frame_header::len>;
 
 inline constexpr auto growing_metadata = std::true_type {};
 
@@ -119,6 +120,9 @@ constexpr std::uint64_t encoded_size(datum::binary_fields<Member...> selected, c
     return archive.bytes;
 }
 
+static_assert(encoded_size(header_fields {}, frame_header {}) ==
+              ::ceph::encoding_detail::struct_header_len());
+
 class writer final
 {
     byte_buffer& output;
@@ -145,7 +149,8 @@ public:
     }
 
     template <typename RecordT, auto ...Member>
-    void fields(datum::binary_fields<Member...> selected, const RecordT& value, const std::uint64_t size)
+    void fields(datum::binary_fields<Member...> selected, const RecordT& value,
+                const std::uint64_t size)
     {
         ensure(size);
         auto storage CEPH_INDETERMINATE = output.get_contiguous_appender(size);
@@ -249,9 +254,10 @@ public:
 
     // Metadata-only frames need neither a streaming header nor a backpatch.
     template <typename RecordT, auto ...Member>
-    void frame(datum::binary_fields<Member...> selected, const std::uint8_t version, const RecordT& value)
+    void frame(datum::binary_fields<Member...> selected, const std::uint8_t version,
+               const RecordT& value)
     {
-        constexpr auto header_size = encoded_size(header_fields {}, frame_header {});
+        constexpr std::uint64_t header_size = ::ceph::encoding_detail::struct_header_len();
         const auto body_size = checked_count(encoded_size(selected, value));
         const auto size = header_size + body_size;
         ensure(size);
@@ -266,12 +272,13 @@ public:
     template <typename BodyT>
     void frame(const std::uint8_t version, const std::uint8_t compatible, BodyT&& body)
     {
-        ensure(6);
-        auto header = output.append_hole(6);
+        constexpr auto header_size = ::ceph::encoding_detail::struct_header_len();
+        ensure(header_size);
+        auto header = output.append_hole(header_size);
         const auto start = output.length();
         std::invoke(std::forward<BodyT>(body));
         const frame_header value {version, compatible, output.length() - start};
-        std::span bytes {header.c_str(), std::size_t {6}};
+        std::span bytes {header.c_str(), header_size};
         zpp::bits::out archive {bytes, zpp::bits::endian::little {}};
         throw_if_error(datum::serialize_schema(archive, value, header_fields {}));
     }
@@ -392,7 +399,8 @@ public:
         for (unsigned offset = 0; offset < size;) {
             const char *bytes = nullptr;
             const auto count = input.get_ptr_and_advance(size - offset, &bytes);
-            equal = equal && std::ranges::equal(std::span {bytes, count}, value.substr(offset, count));
+            equal = equal && std::ranges::equal(std::span {bytes, count},
+                                                value.substr(offset, count));
             offset += count;
         }
 
@@ -449,7 +457,7 @@ public:
     decltype(auto) frame(const std::uint8_t supported, BodyT&& body)
     {
         frame_header header CEPH_INDETERMINATE;
-        fields<6>(header_fields {}, header);
+        fields<::ceph::encoding_detail::struct_header_len()>(header_fields {}, header);
         if (header.compat > supported) {
             throw ::ceph::buffer::malformed_input {"Ceph frame needs a newer decoder"};
         }
@@ -498,7 +506,7 @@ public:
     bool canonical_frame(const std::uint8_t version, BodyT&& body)
     {
         frame_header header CEPH_INDETERMINATE;
-        fields<6>(header_fields {}, header);
+        fields<::ceph::encoding_detail::struct_header_len()>(header_fields {}, header);
         require(header.len);
         if (version != header.v || 1 != header.compat) {
             return false;
@@ -514,7 +522,8 @@ using reader = basic_reader<byte_buffer::const_iterator>;
 
 // Publish an owning request and its native cursor only after decoding succeeds.
 template <typename T, typename DecodeT>
-[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, DecodeT&& decode)
+[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input,
+                                                 DecodeT&& decode)
 {
     static_assert(std::is_nothrow_move_assignable_v<T>);
     auto cursor = input;
@@ -525,7 +534,8 @@ template <typename T, typename DecodeT>
 }
 
 template <std::uint8_t Supported, std::uint8_t FirstFramed = 0, typename T, typename DecodeT>
-[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, DecodeT&& decode)
+[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input,
+                                                 DecodeT&& decode)
 {
     decode_record(value, input, [&decode](auto& cursor, auto& candidate) {
         reader archive {cursor};
