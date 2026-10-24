@@ -65,10 +65,11 @@ void PGLog::IndexedLog::trim(
   if (complete_to != log.end())
     lgeneric_subdout(cct, osd, 20) << " complete_to " << complete_to->version << dendl;
 
+  const unsigned dups_tracked = pg_log_dups_tracked(cct);
   auto earliest_dup_version =
-    log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
+    log.rbegin()->version.version < dups_tracked
     ? 0u
-    : log.rbegin()->version.version - cct->_conf->osd_pg_log_dups_tracked + 1;
+    : log.rbegin()->version.version - dups_tracked + 1;
 
   lgeneric_subdout(cct, osd, 20) << "earliest_dup_version = " << earliest_dup_version << dendl;
   while (!log.empty()) {
@@ -139,7 +140,7 @@ void PGLog::IndexedLog::trim(
   // large amount of tombstones in BlueStore's RocksDB.
   // if trimming immediately is a must, then the ceph-objectstore-tool is
   // the way to go.
-  const size_t max_dups = cct->_conf->osd_pg_log_dups_tracked;
+  const size_t max_dups = pg_log_dups_tracked(cct);
   for (size_t max_dups_to_trim = cct->_conf->osd_pg_log_trim_max;
        max_dups_to_trim > 0 && dups.size() > max_dups;
        max_dups_to_trim--) {

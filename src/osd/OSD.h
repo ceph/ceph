@@ -657,6 +657,10 @@ public:
   }
 
   unsigned get_target_pg_log_entries() const;
+  /// osd_target_pg_log_entries_per_osd, scaled for a small osd_memory_target
+  /// while it is at its default; set by OSD::update_memory_target_limits()
+  /// and cached because the PG log reads it on every write.  0: use config.
+  std::atomic<uint64_t> pg_log_entries_per_osd{0};
 
   // delayed pg activation
   void queue_for_recovery(
@@ -1261,6 +1265,7 @@ public:
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
   void update_log_config();
+  void update_memory_target_limits();
   void check_config();
 
 protected:

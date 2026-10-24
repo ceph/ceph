@@ -31,6 +31,7 @@
 #include <boost/random/uniform_real.hpp>
 
 #include "common/dout.h"
+#include "common/memory_target_scale.h"
 #include "include/ceph_assert.h"
 #include "include/cpp-btree/btree_set.h"
 
@@ -4104,6 +4105,58 @@ free_bluefs:
   return r;
 }
 
+string BlueStore::_get_rocksdb_options()
+{
+  string options = cct->_conf->bluestore_rocksdb_options;
+  const string& options_annex = cct->_conf->bluestore_rocksdb_options_annex;
+  if (!options_annex.empty()) {
+    if (!options.empty() &&
+      *options.rbegin() != ',') {
+      options += ',';
+    }
+    options += options_annex;
+  }
+  return scale_rocksdb_wal(cct, options);
+}
+
+string BlueStore::scale_rocksdb_wal(CephContext *cct, const string& options)
+{
+  // The WAL bounds the memtables, which the cache autotuner cannot shrink,
+  // so scale it down with a small osd_memory_target.  Only by the square
+  // root of the target's ratio, though: a smaller WAL flushes memtables more
+  // often, which shows in the write tail latency (p99.9 +25% with the WAL at
+  // a quarter).  Only a WAL still at its default is scaled: one set through
+  // bluestore_rocksdb_options or the annex is used as is.  Read the values
+  // the way RocksDB will, so that size suffixes and every separator it
+  // accepts are handled; RocksDB keeps the last value of a repeated key, so
+  // the scaled one goes at the end.
+  rocksdb::Options rocks_opts;
+  if (RocksDBStore::ParseOptionsFromStringStatic(
+        cct, options, rocks_opts, nullptr) < 0) {
+    return options;  // opening the DB reports the bad string
+  }
+  const Option *o = cct->_conf.get_schema("bluestore_rocksdb_options");
+  const string *defaults = o ? std::get_if<string>(&o->value) : nullptr;
+  rocksdb::Options default_opts;
+  if (!defaults ||
+      RocksDBStore::ParseOptionsFromStringStatic(
+        cct, *defaults, default_opts, nullptr) < 0 ||
+      rocks_opts.max_total_wal_size != default_opts.max_total_wal_size) {
+    return options;
+  }
+  const uint64_t wal = rocks_opts.max_total_wal_size;
+  const uint64_t scaled = ceph::osd_memory_target_scaled(cct->_conf, wal, 0.5);
+  if (scaled >= wal) {
+    return options;
+  }
+  string path; // dummy var for dout
+  dout(1) << __func__ << " max_total_wal_size " << wal << " -> " << scaled
+          << " for osd_memory_target "
+          << cct->_conf.get_val<Option::size_t>("osd_memory_target") << dendl;
+  return options + (options.empty() ? "" : ",") +
+    "max_total_wal_size=" + stringify(scaled);
+}
+
 int BlueStore::_open_bluefs(bool create, bool read_only)
 {
   int r = _minimal_open_bluefs(create);
@@ -4115,15 +4168,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
       cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced" ||
       cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
 
-    string options = cct->_conf->bluestore_rocksdb_options;
-    string options_annex = cct->_conf->bluestore_rocksdb_options_annex;
-    if (!options_annex.empty()) {
-      if (!options.empty() &&
-        *options.rbegin() != ',') {
-        options += ',';
-      }
-      options += options_annex;
-    }
+    string options = _get_rocksdb_options();
 
     rocksdb::Options rocks_opts;
     r = RocksDBStore::ParseOptionsFromStringStatic(
@@ -4526,7 +4571,6 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   int r;
   ceph_assert(!(create && read_only));
   string options;
-  string options_annex;
   stringstream err;
   string kv_dir_fn;
   string kv_backend;
@@ -4542,15 +4586,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   db_was_opened_read_only = read_only;
   dout(10) << __func__ << "::db_was_opened_read_only was set to " << read_only << dendl;
   if (kv_backend == "rocksdb") {
-    options = cct->_conf->bluestore_rocksdb_options;
-    options_annex = cct->_conf->bluestore_rocksdb_options_annex;
-    if (!options_annex.empty()) {
-      if (!options.empty() &&
-        *options.rbegin() != ',') {
-        options += ',';
-      }
-      options += options_annex;
-    }
+    options = _get_rocksdb_options();
 
     if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
       sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");

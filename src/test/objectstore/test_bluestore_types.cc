@@ -4619,6 +4619,37 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
   }
 }
 
+TEST(BlueStore, scale_rocksdb_wal)
+{
+  auto& conf = g_ceph_context->_conf;
+  const std::string defaults = conf->bluestore_rocksdb_options;
+  // RocksDB keeps the last value of a repeated key, so the scaled value is
+  // what gets appended
+  auto scaled = [](const std::string& options) {
+    return BlueStore::scale_rocksdb_wal(g_ceph_context, options);
+  };
+
+  conf.set_val_or_die("osd_memory_target", "1073741824");  // 1 GiB
+  // the default 1 GiB WAL is halved
+  EXPECT_EQ(defaults + ",max_total_wal_size=536870912", scaled(defaults));
+  // a WAL set explicitly, here with a size suffix as an annex would add it,
+  // is used as is
+  EXPECT_EQ(defaults + ",max_total_wal_size=2G",
+            scaled(defaults + ",max_total_wal_size=2G"));
+  // other options changed, the WAL at its default value (spaces around the
+  // separator): still scaled
+  EXPECT_EQ("compression=kNoCompression, max_total_wal_size=1G,max_total_wal_size=536870912",
+            scaled("compression=kNoCompression, max_total_wal_size=1G"));
+  // a string RocksDB cannot parse is left for the DB open to report
+  EXPECT_EQ("compression=kNoCompression max_total_wal_size=1G",
+            scaled("compression=kNoCompression max_total_wal_size=1G"));
+  // no WAL limit set (RocksDB's automatic one): nothing to scale
+  EXPECT_EQ("compression=kNoCompression", scaled("compression=kNoCompression"));
+
+  conf.set_val_or_die("osd_memory_target", "4294967296");  // the default
+  EXPECT_EQ(defaults, scaled(defaults));
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct =

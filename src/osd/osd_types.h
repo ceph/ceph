@@ -4500,6 +4500,13 @@ WRITE_CLASS_ENCODER(pg_log_dup_t)
 
 std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
 
+/// osd_pg_log_dups_tracked, or the value the OSD scaled it to for a small
+/// osd_memory_target (see set_pg_log_dups_tracked())
+unsigned pg_log_dups_tracked(CephContext *cct);
+/// Set by the OSD whenever it rescales osd_pg_log_dups_tracked; cached here
+/// because the PG log reads it on every write.  0 means use the config value.
+void set_pg_log_dups_tracked(unsigned v);
+
 /**
  * pg_log_t - incremental log of recent pg changes.
  *

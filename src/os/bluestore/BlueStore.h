@@ -1389,6 +1389,7 @@ private:
 
   int _minimal_open_bluefs(bool create);
   void _minimal_close_bluefs();
+  std::string _get_rocksdb_options();
   int _open_bluefs(bool create, bool read_only);
   void _close_bluefs();
 
@@ -1682,6 +1683,11 @@ public:
 
   static int get_block_device_fsid(CephContext* cct, const std::string& path,
 				   uuid_d *fsid);
+
+  /// options with max_total_wal_size scaled down for a small
+  /// osd_memory_target, if the WAL size is still the default
+  static std::string scale_rocksdb_wal(CephContext *cct,
+                                       const std::string& options);
 
   bool test_mount_in_use() override;
 
