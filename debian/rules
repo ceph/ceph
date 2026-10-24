@@ -29,6 +29,12 @@ endif
 ifneq ($(filter pkg.ceph.system-rdkafka,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_SYSTEM_RDKAFKA=ON
 endif
+ifneq ($(filter pkg.ceph.fdb,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_RADOSGW_FDB=ON
+  fdb_dep = foundationdb-clients (>= 7.3)
+else
+  extraopts += -DWITH_RADOSGW_FDB=OFF
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON
@@ -154,6 +160,11 @@ override_dh_strip:
 
 override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor --exclude=ceph_crypto
+
+# The FoundationDB client DEB does not supply shared-library dependency metadata.
+override_dh_gencontrol:
+	dh_gencontrol -pceph-common -plibrgw2 -pradosgw -- -V'fdb:Depends=$(fdb_dep)'
+	dh_gencontrol --remaining-packages
 
 override_dh_python3:
 	@for binding in $(py3_bindings); do \

@@ -592,6 +592,55 @@ TEST_CASE("query difference emits only necessary intervals", "[fdb][query]")
                        });
 }
 
+TEST_CASE("query execution options survive compilation and combine symmetrically",
+          "[fdb][query][api]")
+{
+ const lq::query_options options {.result_limit = 7, .target_bytes = 4096,
+                                  .reverse_order = true,
+                                  .streaming_mode = FDB_STREAMING_MODE_SMALL};
+ const auto configured = lq::with_options(lq::interval("a", "z"), options);
+ const auto cut = lq::interval("m", "p");
+ const auto expression = lq::difference(configured, cut);
+ const auto dynamic = lq::compile_intervals(expression);
+ const auto fixed = lq::compile_intervals<2>(expression);
+ REQUIRE(dynamic.size() == 2);
+ CHECK_THAT(fixed, Catch::Matchers::RangeEquals(dynamic));
+ for (const auto& part : fixed) {
+  CHECK(part.options == options);
+  CHECK(lq::compile_intervals(part).front() == part);
+ }
+ CHECK_THROWS_AS(lq::compile_intervals<1>(expression), lfdb::libfdb_exception);
+ CHECK(lq::compile_intervals<0>(lq::empty()).empty());
+ CHECK(lq::is_universal(lq::with_options(lq::universal(), options)));
+ CHECK_FALSE(lq::is_universal(configured));
+ static_assert(not std::default_initializable<lq::interval>);
+
+ auto check_combination = [&](auto combine) {
+  const auto forward = lq::compile_intervals(combine(configured, cut));
+  const auto reverse = lq::compile_intervals(combine(cut, configured));
+  CHECK(forward == reverse);
+  REQUIRE_FALSE(forward.empty());
+  CHECK(forward.front().options == options);
+  CHECK(lq::compile_intervals(combine(configured, configured)).front().options == options);
+  const auto composite = lq::difference(cut, lq::at("n"));
+  CHECK(lq::compile_intervals(combine(configured, composite)) ==
+        lq::compile_intervals(combine(composite, configured)));
+  const auto conflicting = lq::with_options(cut, lq::query_options {.result_limit = 3});
+  CHECK_THROWS_AS(combine(configured, conflicting), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(combine(conflicting, configured), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(combine(expression, conflicting), lfdb::libfdb_exception);
+ };
+ check_combination([](const auto& lhs, const auto& rhs) { return lq::intersection(lhs, rhs); });
+ check_combination([](const auto& lhs, const auto& rhs) { return lq::set_union(lhs, rhs); });
+
+ static_assert([] {
+  const auto selection = lq::with_options(lq::interval("a", "b"),
+                                         lq::query_options {.result_limit = 4});
+  const auto compiled = lq::compile_intervals<1>(selection);
+  return compiled.size() == 1 and compiled[0].options.result_limit == 4;
+ }());
+}
+
 TEST_CASE("query complement subtracts from universal", "[fdb][query]")
 {
  const auto without_prefix = lq::complement(lq::prefix("m"));
