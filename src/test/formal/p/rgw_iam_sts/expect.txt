@@ -1,0 +1,123 @@
+tcDelRoleVsPutMain        violated which has policies
+tcDelRoleVsPutAns         violated which its operation does not list
+tcDelRoleVsPutById        holds
+tcDelRoleVsPutNeedsRole   holds
+tcDelRoleVsAttachMain     violated which has policies
+tcDelRoleVsAttachById     holds
+tcDelRoleRecreateMain     violated which has policies
+tcDelRoleRecreateById     holds
+tcRoleUpdates             holds
+tcRoleRetriesOut          violated which its operation does not list
+tcRolesLimitMain          violated over its limit
+tcRolesLimitAtomic        holds
+tcSameRole                holds
+tcRoleCrash               violated
+tcDelUserVsKeyMain        violated remains
+tcDelUserVsKeyIndex       violated is not reachable by its name
+tcDelUserVsKeyGuarded     holds
+tcDelUserVsPolicyMain     violated remains
+tcDelUserVsPolicyGuarded  holds
+tcUsersLimitMain          violated over its limit
+tcUsersLimitAtomic        holds
+tcSameUserMain            violated share the name
+tcSameUserIndex           violated
+tcSameUserAtomic          holds
+tcRenameSameMain          violated share the name
+tcRenameSameAtomic        holds
+tcKeys                    holds
+tcUserUpdates             holds
+tcUserCrash               violated
+tcDeactivateMain          violated does not hold active
+tcDeactivateIndex         violated which is not an active key
+tcDeactivateChecked       holds
+tcDeactivatePassOld       holds
+tcDelUserInGroup          violated which is in group
+tcDelGroupVsAddMain       violated which has member
+tcDelGroupVsAddIndex      violated which is gone
+tcDelGroupVsAddGuarded    holds
+tcSameGroupMain           violated share the name
+tcSameGroupAtomic         holds
+tcGroupsLimitMain         violated over its limit
+tcGroupsLimitAtomic       holds
+tcRenameMemberMain        violated which does not list it
+tcRenameMemberMoves       holds
+tcStaleMemberMain         violated which has member
+tcStaleMemberGuarded      holds
+tcMemberships             holds
+tcAssumeVsRecreateMain    violated did not allow the caller
+tcAssumeVsRecreateOneRead holds
+tcAssumeVsTrust           holds
+tcAssumeIdentityOnlyMain  violated did not allow the caller
+tcAssumeIdentityOnlyAws   holds
+tcAssumeNoRoleMain        violated which its operation does not list
+tcAssumeNoRoleDenied      holds
+tcSessionAfterDelete      holds
+tcGstFromRoleMain         violated which is deleted
+tcGstFromRoleAns          violated accepted temporary credentials
+tcGstFromRoleLongTerm     holds
+tcFixDelRoleVsPut         holds
+tcFixDelRoleVsAttach      holds
+tcFixDelRoleRecreate      holds
+tcFixRoleUpdates          holds
+tcFixRolesLimit           holds
+tcFixSameRole             holds
+tcFixDelUserVsKey         holds
+tcFixDelUserVsPolicy      holds
+tcFixUsersLimit           holds
+tcFixSameUser             holds
+tcFixRenameSame           holds
+tcFixKeys                 holds
+tcFixDeactivateVsPolicy   holds
+tcFixUserUpdates          holds
+tcFixDelGroupVsAdd        holds
+tcFixSameGroup            holds
+tcFixGroupsLimit          holds
+tcFixStaleMember          holds
+tcFixMemberships          holds
+tcFixAssumeVsRecreate     holds
+tcFixAssumeVsTrust        holds
+tcFixAssumeIdentityOnly   holds
+tcFixSessionAfterDelete   holds
+tcFixGstFromRole          holds
+tcFixRenameMember         holds
+tcFixAssumeNoRole         holds
+tcFixDelUserInGroup       holds
+tcNoGroupsInGroup         holds
+tcDelUserVsAddMain        violated remains
+tcDelUserVsAddNoGroups    violated remains
+tcDelUserVsAddGuarded     holds
+tcFixDelUserVsAdd         holds
+tcFixNoGroupsInGroup      holds
+tcRoleHotOneRetry         violated which its operation does not list
+tcRoleHotTwoRetries       holds
+tcRoleHotUnlimited        holds
+tcRoleFailsAfterRetries   holds
+tcFixRoleHot              holds
+tcExistingDelRoleVsPut    holds
+tcExistingDelRoleVsAttach holds
+tcExistingDelRoleRecreate holds
+tcExistingRoleUpdates     holds
+tcExistingRolesLimit      holds
+tcExistingSameRole        holds
+tcExistingDelUserVsKey    holds
+tcExistingDelUserVsPolicy holds
+tcExistingUsersLimit      holds
+tcExistingSameUser        holds
+tcExistingRenameSame      holds
+tcExistingKeys            holds
+tcExistingDeactivateVsPolicy holds
+tcExistingUserUpdates     holds
+tcExistingDelGroupVsAdd   holds
+tcExistingSameGroup       holds
+tcExistingGroupsLimit     holds
+tcExistingStaleMember     holds
+tcExistingMemberships     holds
+tcExistingAssumeVsRecreate holds
+tcExistingAssumeVsTrust   holds
+tcExistingAssumeIdentityOnly holds
+tcExistingSessionAfterDelete holds
+tcExistingGstFromRole     holds
+tcExistingRenameMember    holds
+tcExistingAssumeNoRole    holds
+tcExistingDelUserInGroup  holds
+tcExistingDelUserVsAdd    holds
