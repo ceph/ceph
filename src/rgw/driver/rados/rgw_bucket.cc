@@ -1749,6 +1749,101 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   return 0;
 }
 
+static bool format_bucket_limit_entry(const DoutPrefixProvider *dpp,
+                                      optional_yield y,
+                                      rgw::sal::Bucket& bucket,
+                                      Formatter *formatter,
+                                      size_t safe_max_objs_per_shard,
+                                      uint16_t shard_warn_pct,
+                                      bool warnings_only)
+{
+  const auto& index = bucket.get_info().get_current_index();
+  if (is_layout_indexless(index)) {
+    return false;
+  }
+
+  string bucket_ver, master_ver;
+  std::map<RGWObjCategory, RGWStorageStats> stats;
+  int ret = bucket.read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver,
+                              &master_ver, stats, nullptr);
+  if (ret < 0) {
+    return false;
+  }
+
+  uint64_t num_objects = 0;
+  for (const auto& s : stats) {
+    num_objects += s.second.num_objects;
+  }
+
+  const uint32_t num_shards = rgw::num_shards(index.layout.normal);
+  const uint64_t objs_per_shard =
+    (num_shards) ? num_objects / num_shards : num_objects;
+
+  bool warn;
+  stringstream ss;
+  const uint64_t fill_pct = safe_max_objs_per_shard
+    ? objs_per_shard * 100 / safe_max_objs_per_shard
+    : 0;
+  if (fill_pct > 100) {
+    ss << "OVER " << fill_pct << "%";
+    warn = true;
+  } else if (fill_pct >= shard_warn_pct) {
+    ss << "WARN " << fill_pct << "%";
+    warn = true;
+  } else {
+    ss << "OK";
+    warn = false;
+  }
+
+  if (!warn && warnings_only) {
+    return false;
+  }
+
+  formatter->open_object_section("bucket");
+  formatter->dump_string("bucket", bucket.get_name());
+  formatter->dump_string("tenant", bucket.get_tenant());
+  formatter->dump_int("num_objects", num_objects);
+  formatter->dump_int("num_shards", num_shards);
+  formatter->dump_int("objects_per_shard", objs_per_shard);
+  formatter->dump_string("fill_status", ss.str());
+  formatter->close_section();
+  return true;
+}
+
+int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
+				  rgw::sal::Bucket& bucket,
+				  RGWFormatterFlusher& flusher, optional_yield y,
+                                  const DoutPrefixProvider *dpp,
+				  bool warnings_only)
+{
+  const size_t safe_max_objs_per_shard =
+    driver->ctx()->_conf->rgw_safe_max_objects_per_shard;
+
+  uint16_t shard_warn_pct =
+    driver->ctx()->_conf->rgw_shard_warning_threshold;
+  if (shard_warn_pct > 100) {
+    shard_warn_pct = 90;
+  }
+
+  Formatter *formatter = flusher.get_formatter();
+  flusher.start(0);
+
+  formatter->open_array_section("users");
+  formatter->open_object_section("user");
+  formatter->dump_string("user_id", to_string(bucket.get_info().owner));
+  formatter->open_array_section("buckets");
+
+  format_bucket_limit_entry(dpp, y, bucket, formatter, safe_max_objs_per_shard,
+                            shard_warn_pct, warnings_only);
+
+  formatter->close_section();
+  formatter->close_section();
+  formatter->close_section();
+  formatter->flush(cout);
+
+  return 0;
+}
+
 int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 				  RGWBucketAdminOpState& op_state,
 				  const std::list<std::string>& user_ids,
@@ -1788,59 +1883,14 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
         return ret;
 
       for (const auto& ent : listing.buckets) {
-	uint64_t num_objects = 0;
-
 	std::unique_ptr<rgw::sal::Bucket> bucket;
 	ret = driver->load_bucket(dpp, ent.bucket, &bucket, y);
 	if (ret < 0)
 	  continue;
 
-	const auto& index = bucket->get_info().get_current_index();
-	if (is_layout_indexless(index)) {
-	  continue; // indexless buckets don't have stats
-	}
-
-	/* need stats for num_entries */
-	string bucket_ver, master_ver;
-	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
-
-	if (ret < 0)
-	  continue;
-
-	for (const auto& s : stats) {
-	  num_objects += s.second.num_objects;
-	}
-
-	const uint32_t num_shards = rgw::num_shards(index.layout.normal);
-	uint64_t objs_per_shard =
-	  (num_shards) ? num_objects/num_shards : num_objects;
-	{
-	  bool warn;
-	  stringstream ss;
-	  uint64_t fill_pct = objs_per_shard * 100 / safe_max_objs_per_shard;
-	  if (fill_pct > 100) {
-	    ss << "OVER " << fill_pct << "%";
-	    warn = true;
-	  } else if (fill_pct >= shard_warn_pct) {
-	    ss << "WARN " << fill_pct << "%";
-	    warn = true;
-	  } else {
-	    ss << "OK";
-	    warn = false;
-	  }
-
-	  if (warn || !warnings_only) {
-	    formatter->open_object_section("bucket");
-	    formatter->dump_string("bucket", bucket->get_name());
-	    formatter->dump_string("tenant", bucket->get_tenant());
-	    formatter->dump_int("num_objects", num_objects);
-	    formatter->dump_int("num_shards", num_shards);
-	    formatter->dump_int("objects_per_shard", objs_per_shard);
-	    formatter->dump_string("fill_status", ss.str());
-	    formatter->close_section();
-	  }
-	}
+	format_bucket_limit_entry(dpp, y, *bucket, formatter,
+                                  safe_max_objs_per_shard, shard_warn_pct,
+                                  warnings_only);
       }
       formatter->flush(cout);
     } while (!listing.next_marker.empty()); /* foreach: bucket */
