@@ -96,8 +96,9 @@ The general implementation is ``cls_rgw_datum.cc``, with its existing
 per-family namespace sections in one translation unit.
 
 The C++23 adapter declarations provide selected compiled record and container
-bindings. Their template declarations do not make arbitrary instantiations
-available: BI list results provide native-entry list and vector bindings, while
+bindings. Their constraints list the available container types; unsupported
+instantiations are rejected during compilation. BI list results provide
+native-entry list and vector bindings, while
 the lower-level wire profiles also accept independently selected record fields.
 
 Independent client results

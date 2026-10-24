@@ -1,4 +1,5 @@
 // RGW CLS: Independent sequence/associative usage bindings and native codecs.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_usage_datum.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
@@ -12,6 +13,9 @@ namespace {
 
 namespace binding = ::cls::rgw::usage_datum;
 using bytes = ::ceph::buffer::list;
+
+using ::rgw_cls_test::canonical;
+using ::rgw_cls_test::fragmented;
 using flat_entries = ::boost::container::flat_map<::rgw_user_bucket, ::rgw_usage_log_entry>;
 
 
@@ -21,16 +25,6 @@ static_assert(usage_reply_binding<binding::native_entries>);
 static_assert(usage_reply_binding<flat_entries>);
 static_assert(!usage_reply_binding<std::multimap<::rgw_user_bucket, ::rgw_usage_log_entry>>);
 
-bytes canonical(const auto& value)
-{
-    using ::ceph::encode;
-
-    bytes output;
-    encode(value, output);
-
-    return output;
-}
-
 bytes frame(const std::uint8_t version, const auto& body, const std::uint8_t compatible = 0)
 {
     bytes output;
@@ -38,16 +32,6 @@ bytes frame(const std::uint8_t version, const auto& body, const std::uint8_t com
     body(output);
     if (version > 4) { ::ceph::encode(std::uint64_t {37}, output); }
     ENCODE_FINISH(output);
-
-    return output;
-}
-
-bytes fragmented(const bytes& input)
-{
-    bytes output;
-    for (const char byte : input.to_str()) {
-        output.append(::ceph::buffer::ptr {::ceph::buffer::copy(&byte, 1)});
-    }
 
     return output;
 }

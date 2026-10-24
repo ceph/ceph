@@ -69,7 +69,10 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input);
 void encode(const reply& value, ::ceph::buffer::list& output);
 
 // Unique-key associative bindings retain first-wins semantics for both map layouts.
-template <::ceph::concepts::has_try_emplace_key EntriesT>
+template <typename EntriesT>
+requires ::ceph::concepts::same_as_any<
+    EntriesT, native_entries,
+    ::boost::container::flat_map<::rgw_user_bucket, ::rgw_usage_log_entry>>
 read_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::usage_datum

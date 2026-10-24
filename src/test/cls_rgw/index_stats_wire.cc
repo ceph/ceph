@@ -1,4 +1,5 @@
 // RGW CLS: Independent statistics records checked against native C++23 codecs.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_bucket_datum.h"
 
@@ -18,23 +19,8 @@ namespace {
 namespace binding = ::cls::rgw::bucket_datum;
 using bytes = ::ceph::buffer::list;
 
-bytes canonical(const auto& value)
-{
-    bytes output;
-    ::encode(value, output);
-
-    return output;
-}
-
-bytes fragmented(const bytes& input)
-{
-    bytes output;
-    for (const char value : input.to_str()) {
-        output.append(::ceph::buffer::copy(&value, 1));
-    }
-
-    return output;
-}
+using ::rgw_cls_test::canonical;
+using ::rgw_cls_test::fragmented;
 
 bytes envelope(const std::uint8_t version, const std::uint8_t first_framed, auto body)
 {

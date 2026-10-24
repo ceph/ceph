@@ -1,4 +1,5 @@
 // RGW CLS: Independent object records checked against the C++23 native codec.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_object_datum.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
@@ -13,15 +14,8 @@ namespace {
 namespace binding = ::cls::rgw::object_datum;
 using bytes = ::ceph::buffer::list;
 
-bytes canonical(const auto& value)
-{
-    using ::ceph::encode;
-
-    bytes output;
-    encode(value, output);
-
-    return output;
-}
+using ::rgw_cls_test::canonical;
+using ::rgw_cls_test::fragmented;
 
 auto native(const binding::remove_request& value)
 {
@@ -62,16 +56,6 @@ bytes frame(const std::uint8_t version, const std::uint8_t compatible, const aut
     body(output);
     if (version > 2) { ::ceph::encode(std::uint64_t {37}, output); }
     ENCODE_FINISH(output);
-
-    return output;
-}
-
-bytes fragmented(const bytes& input)
-{
-    bytes output;
-    for (const char byte : input.to_str()) {
-        output.append(::ceph::buffer::ptr {::ceph::buffer::copy(&byte, 1)});
-    }
 
     return output;
 }

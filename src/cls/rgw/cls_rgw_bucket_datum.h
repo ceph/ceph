@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <utility>
 
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -83,7 +84,8 @@ void encode(const reply& value, ::ceph::buffer::list& output);
 
 // Flat-map and std::map instantiations share subscript/last-wins semantics.
 template <typename EntriesT>
-requires ::ceph::concepts::has_subscript_operator<EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    flat_entries, std::map<std::string, ::rgw_bucket_dir_entry>>
 list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::bucket_datum

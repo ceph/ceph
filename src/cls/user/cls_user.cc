@@ -34,20 +34,6 @@ static int write_entry(cls_method_context_t hctx, const string& key, const cls_u
   return 0;
 }
 
-static int remove_entry(cls_method_context_t hctx, const string& key)
-{
-  int ret = cls_cxx_map_remove_key(hctx, key);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-static void get_key_by_bucket_name(const string& bucket_name, string *key)
-{
-  *key = bucket_name;
-}
-
 static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bucket_name,
                                      cls_user_bucket_entry& entry)
 {
@@ -55,20 +41,17 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
     return -EINVAL;
   }
 
-  string key;
-  get_key_by_bucket_name(bucket_name, &key);
-
   bufferlist bl;
-  int rc = cls_cxx_map_get_val(hctx, key, &bl);
+  int rc = cls_cxx_map_get_val(hctx, bucket_name, &bl);
   if (rc < 0) {
-    CLS_LOG(10, "could not read entry %s", key.c_str());
+    CLS_LOG(10, "could not read entry %s", bucket_name.c_str());
     return rc;
   }
   try {
     auto iter = bl.cbegin();
     decode(entry, iter);
   } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: failed to decode entry %s", key.c_str());
+    CLS_LOG(0, "ERROR: failed to decode entry %s", bucket_name.c_str());
     return -EIO;
   }
 
@@ -142,9 +125,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
   for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& update_entry = *iter;
 
-    string key;
-
-    get_key_by_bucket_name(update_entry.bucket.name, &key);
+    const auto& key = update_entry.bucket.name;
 
     cls_user_bucket_entry entry;
     ret = get_existing_bucket_entry(hctx, key, entry);
@@ -256,9 +237,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return ret;
   }
 
-  string key;
-
-  get_key_by_bucket_name(op.bucket.name, &key);
+  const auto& key = op.bucket.name;
 
   cls_user_bucket_entry entry;
   ret = get_existing_bucket_entry(hctx, key, entry);
@@ -272,7 +251,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
 
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
-  ret = remove_entry(hctx, key);
+  ret = cls_cxx_map_remove_key(hctx, key);
   if (ret < 0)
     return ret;
 

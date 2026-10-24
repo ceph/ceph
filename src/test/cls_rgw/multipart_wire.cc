@@ -1,4 +1,5 @@
 // RGW CLS: Native multipart compatibility without normalizing decoded manifests.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_multipart_datum.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
@@ -13,15 +14,8 @@ namespace {
 namespace binding = ::cls::rgw::multipart_datum;
 using bytes = ::ceph::buffer::list;
 
-bytes canonical(const auto& value)
-{
-    using ::ceph::encode;
-
-    bytes output;
-    encode(value, output);
-
-    return output;
-}
+using ::rgw_cls_test::canonical;
+using ::rgw_cls_test::fragmented;
 
 void fill(::RGWUploadPartInfo& value)
 {
@@ -88,16 +82,6 @@ bytes request(const bytes& info, const std::uint8_t version = 1)
         ::ceph::encode(std::string {"p\0t", 3}, output);
         output.append(info);
     });
-}
-
-bytes fragmented(const bytes& input)
-{
-    bytes output;
-    for (const char byte : input.to_str()) {
-        output.append(::ceph::buffer::ptr {::ceph::buffer::copy(&byte, 1)});
-    }
-
-    return output;
 }
 
 } // anonymous namespace

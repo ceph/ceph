@@ -1,4 +1,5 @@
 // RGW CLS: Native C++23 oracles for bucket listing versions and map semantics.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_bucket_datum.h"
 
@@ -16,23 +17,8 @@ namespace {
 namespace binding = ::cls::rgw::bucket_datum;
 using bytes = ::ceph::buffer::list;
 
-bytes canonical(const auto& value)
-{
-    bytes output;
-    ::encode(value, output);
-
-    return output;
-}
-
-bytes fragmented(const bytes& input)
-{
-    bytes output;
-    for (const char byte : input.to_str()) {
-        output.append(::ceph::buffer::copy(&byte, 1));
-    }
-
-    return output;
-}
+using ::rgw_cls_test::canonical;
+using ::rgw_cls_test::fragmented;
 
 bytes envelope(const std::uint8_t version, const std::uint8_t first_framed,
                const std::uint8_t compatible, auto body)

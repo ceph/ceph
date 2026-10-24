@@ -137,6 +137,8 @@ void encode(const reply_format format, const reply& value, ::ceph::buffer::list&
 }
 
 template <typename EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::rgw_cls_bi_entry>, std::list<::rgw_cls_bi_entry>>
 std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
@@ -212,6 +214,8 @@ void encode(const reply& value, ::ceph::buffer::list& output)
 }
 
 template <typename EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::rgw_bi_log_entry>, std::list<::rgw_bi_log_entry>>
 std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
@@ -301,7 +305,8 @@ void encode(const reply& value, ::ceph::buffer::list& output)
 }
 
 template <typename EntriesT>
-requires ::ceph::concepts::has_subscript_operator<EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    flat_entries, std::map<std::string, ::rgw_bucket_dir_entry>>
 list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
 {
     using key = ::cls_rgw_obj_key;
@@ -323,16 +328,12 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
                 // can leave previously decoded fields unchanged, just as native.
                 directory_fields.native(entries[std::move(name)]);
             }
-
-            return 0;
         });
         candidate.is_truncated = 0 != fields.template scalar<std::uint8_t>();
         candidate.cls_filtered = version >= 3;
         if (version >= 4) {
             ::cls::rgw::wire::decode_key(datum::binary_fields<&key::name, &key::instance> {}, fields, candidate.marker);
         }
-
-        return 0;
     });
 
     return candidate;
@@ -431,8 +432,6 @@ check_reply decode_check_reply(const ::ceph::buffer::list& input)
     archive.frame(1, [&](auto& fields, std::uint8_t) {
         fields.native(candidate.existing_header);
         fields.native(candidate.calculated_header);
-
-        return 0;
     });
 
     return candidate;
@@ -895,8 +894,6 @@ void decode(add_request& value, ::ceph::buffer::list::const_iterator& input)
     decode_record<2>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
         fields.frame(1, [&](auto& sequence, std::uint8_t) {
             candidate.info.entries = sequence.template native<54, decltype(candidate.info.entries)>();
-
-            return 0;
         });
         if (version >= 2) {
             fields.skip_text(); // The native handler never observes this user field.
@@ -942,7 +939,10 @@ void encode(const reply& value, ::ceph::buffer::list& output)
     output.claim_append(candidate);
 }
 
-template <::ceph::concepts::has_try_emplace_key EntriesT>
+template <typename EntriesT>
+requires ::ceph::concepts::same_as_any<
+    EntriesT, native_entries,
+    ::boost::container::flat_map<::rgw_user_bucket, ::rgw_usage_log_entry>>
 read_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
@@ -961,8 +961,6 @@ read_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
         }
         candidate.truncated = 0 != fields.template scalar<std::uint8_t>();
         fields.text(candidate.next_iter);
-
-        return 0;
     });
 
     return candidate;
@@ -1149,7 +1147,8 @@ void encode(const reply& value, ::ceph::buffer::list& output)
 }
 
 template <typename EntriesT>
-requires ::ceph::concepts::has_emplace_back<EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::cls_rgw_reshard_entry>, std::list<::cls_rgw_reshard_entry>>
 std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
@@ -1320,8 +1319,6 @@ void decode(update_request& value, ::ceph::buffer::list::const_iterator& input)
     archive.frame(1, [&](auto& fields, std::uint8_t) {
         fields.text(value.part_key);
         fields.native(value.info);
-
-        return 0;
     });
     input = cursor;
 }

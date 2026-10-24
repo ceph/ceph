@@ -1,4 +1,5 @@
 // RGW CLS: Actual object handlers with a controlled attribute/object boundary.
+#include "test/cls_rgw/wire_test.h"
 #include "module_loader.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
@@ -18,17 +19,9 @@ namespace {
 
 using bytes = ::ceph::buffer::list;
 
+using ::rgw_cls_test::canonical;
+
 constexpr std::uint64_t pg_version = 0xFEDCBA9876543210ull;
-
-bytes canonical(const auto& value)
-{
-    using ::ceph::encode;
-
-    bytes output;
-    encode(value, output);
-
-    return output;
-}
 
 bytes text(const std::string_view value)
 {

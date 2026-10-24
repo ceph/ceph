@@ -1,4 +1,6 @@
 // RGW CLS: Native compatibility and independent Datum/zpp representations.
+#include "cls/rgw/cls_rgw_datum_wire.h"
+#include "test/cls_rgw/wire_test.h"
 #include "bi_native_oracle.h"
 #include "cls/rgw/cls_rgw_bi_datum.h"
 #include "cls/rgw/cls_rgw_bi_wire.h"
@@ -66,6 +68,8 @@ namespace native = ::cls::rgw::bi_datum;
 namespace datum = ::ceph::salad::datum;
 using byte_buffer = ::ceph::buffer::list;
 
+using ::rgw_cls_test::fragmented;
+
 byte_buffer payload()
 {
     byte_buffer bytes;
@@ -74,19 +78,6 @@ byte_buffer payload()
     bytes.append(::ceph::buffer::ptr {std::move(second)});
 
     return bytes;
-}
-
-byte_buffer fragmented(const byte_buffer& bytes)
-{
-    byte_buffer result;
-    auto input = bytes.cbegin();
-    while (input.get_remaining()) {
-        char value;
-        input.copy(1, &value);
-        result.append(::ceph::buffer::ptr {::ceph::buffer::copy(&value, 1)});
-    }
-
-    return result;
 }
 
 auto fixtures()
@@ -240,8 +231,100 @@ TEST_CASE("RGW frame callbacks preserve metadata, reference returns, and extensi
         CHECK(&result == &value);
     }
 
+    SECTION("The version-only callback needs no result") {
+        archive.frame(2, [&](auto& fields, const std::uint8_t version) {
+            CHECK(7 == version);
+            value = fields.template scalar<std::uint32_t>();
+        });
+    }
+
+    SECTION("The compatibility-aware callback needs no result") {
+        archive.frame(2, [&](auto& fields, const std::uint8_t version, const std::uint8_t compatible) {
+            CHECK(7 == version);
+            CHECK(2 == compatible);
+            value = fields.template scalar<std::uint32_t>();
+        });
+    }
+
+    SECTION("A throwing callback leaves the unread extension in place") {
+        CHECK_THROWS_AS(archive.frame(2, [](auto& fields, std::uint8_t) {
+            fields.template scalar<std::uint32_t>();
+            throw std::runtime_error {"late decoding failure"};
+        }), std::runtime_error);
+        CHECK(2 == cursor.get_remaining());
+        return;
+    }
+
     CHECK(0x01020304 == value);
     CHECK(cursor.end());
+}
+
+TEST_CASE("RGW fixed fields and frame bounds need only remaining, fragments, and skip", "[rgw][cls][datum]")
+{
+    struct minimal_cursor final
+    {
+        std::span<const char> bytes;
+        bool empty_fragment = true;
+
+        unsigned get_remaining() const { return bytes.size(); }
+
+        std::size_t get_ptr_and_advance(const std::size_t wanted, const char **output)
+        {
+            const auto size = std::min({wanted, bytes.size(),
+                                       std::size_t {empty_fragment ? 0u : 1u}});
+            empty_fragment = !empty_fragment;
+            *output = bytes.data();
+            bytes = bytes.subspan(size);
+
+            return size;
+        }
+
+        minimal_cursor& operator+=(const unsigned size)
+        {
+            bytes = bytes.subspan(size);
+
+            return *this;
+        }
+
+    };
+
+    byte_buffer encoded;
+    ::cls::rgw::wire::writer output {encoded};
+    output.frame(1, [&] {
+        output.scalar(std::uint64_t {0x0102030405060708});
+        output.scalar(std::uint16_t {0xFFFF});
+    });
+    auto stored = encoded.to_str() + "suffix";
+
+    SECTION("Split scalars and skipped extensions preserve the following message") {
+        minimal_cursor cursor {std::span<const char> {stored}};
+        ::cls::rgw::wire::basic_reader archive {cursor};
+        const auto value = archive.frame(1, [](auto& fields, std::uint8_t) {
+            return fields.template scalar<std::uint64_t>();
+        });
+        CHECK(0x0102030405060708 == value);
+        CHECK(std::string_view {cursor.bytes.data(), cursor.bytes.size()} == "suffix");
+    }
+
+    SECTION("Every proper frame truncation is rejected") {
+        for (unsigned size = 0; size < encoded.length(); ++size) {
+            minimal_cursor cursor {std::span<const char> {stored.data(), size}};
+            ::cls::rgw::wire::basic_reader archive {cursor};
+            CHECK_THROWS_AS(archive.frame(1, [](auto& fields, std::uint8_t) {
+                fields.template scalar<std::uint64_t>();
+            }), ::ceph::buffer::error);
+        }
+    }
+
+    SECTION("A field cannot consume bytes beyond its declared frame") {
+        stored[2] = 4; // The little-endian body length now admits only half the scalar.
+        minimal_cursor cursor {std::span<const char> {stored}};
+        ::cls::rgw::wire::basic_reader archive {cursor};
+        CHECK_THROWS_AS(archive.frame(1, [](auto& fields, std::uint8_t) {
+            fields.template scalar<std::uint64_t>();
+        }), ::ceph::buffer::malformed_input);
+        CHECK(stored.size() - 6 == cursor.get_remaining());
+    }
 }
 
 TEST_CASE("RGW owning byte reads replace destinations and preserve payload owners", "[rgw][cls][datum]")
@@ -641,6 +724,58 @@ TEST_CASE("RGW request publication accepts assign-only records and move-only dec
         CHECK(43 == value.number);
         CHECK(cursor.end());
     }
+}
+
+TEST_CASE("RGW publication borrows immobile mutable decoders", "[rgw][cls][datum]")
+{
+    namespace shared = ::cls::rgw::wire;
+
+    struct record final { std::uint32_t number = 99; };
+    struct decoder final
+    {
+        unsigned calls = 0;
+
+        decoder() = default;
+        decoder(const decoder&) = delete;
+        decoder(decoder&&) = delete;
+
+        void operator()(shared::reader& fields, record& value, std::uint8_t)
+        {
+            ++calls;
+            value.number = fields.scalar<std::uint32_t>();
+        }
+
+        void operator()(byte_buffer::const_iterator& cursor, record& value)
+        {
+            shared::reader fields {cursor};
+            (*this)(fields, value, 0);
+        }
+
+    };
+
+    byte_buffer input;
+    shared::writer output {input};
+    record value;
+    decoder decode;
+
+    SECTION("The unframed decoder is borrowed") {
+        output.scalar(std::uint32_t {42});
+        auto cursor = input.cbegin();
+        shared::decode_record(value, cursor, decode);
+        CHECK(cursor.end());
+    }
+
+    SECTION("The framed decoder is borrowed") {
+        input.append("prefix", 6);
+        output.frame(1, [&] { output.scalar(std::uint32_t {42}); });
+        input.append("suffix", 6);
+        auto cursor = input.cbegin(6);
+        shared::decode_record<1>(value, cursor, decode);
+        CHECK(6 == cursor.get_remaining());
+    }
+
+    CHECK(42 == value.number);
+    CHECK(1 == decode.calls);
 }
 
 TEST_CASE("BI native entry decode preserves its destination on truncation", "[rgw][cls][datum]")

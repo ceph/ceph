@@ -1,4 +1,5 @@
 // RGW-specific queue client; shared queue capacity protocol stays native.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 #include "cls/rgw_gc/cls_rgw_gc_ops.h"
 #include "cls/rgw/cls_rgw_ops.h"
@@ -11,18 +12,11 @@ namespace {
 
 using bytes = ::ceph::buffer::list;
 
+using ::rgw_cls_test::canonical;
+
 bytes request, reply;
 std::string method, class_name;
 int status = 0;
-
-bytes canonical(const auto& value)
-{
-    using ::ceph::encode;
-
-    bytes output;
-    encode(value, output);
-    return output;
-}
 
 } // anonymous namespace
 

@@ -1258,7 +1258,7 @@ TEST_CASE("Bucket directory module preserves bounded empty-page advance and retr
     CHECK(result.is_truncated);
     CHECK(result.marker.name == "a7");
     CHECK(state.effects.size() == 9);
-    CHECK(std::ranges::count(effect_names(state), "get-values") == 8);
+    CHECK(std::ranges::count(effect_names(state), std::string {"get-values"}) == 8);
     request.start_obj = result.marker;
     REQUIRE(invoke_write(state, request, "bucket_list") == 0);
     CHECK(directory_reply(state).dir.m.empty());
@@ -1483,7 +1483,7 @@ TEST_CASE("Index check and rebuild page through more than one thousand entries",
     REQUIRE(invoke(state, {}, "bucket_check_index") == 0);
     CHECK(check_reply(state).calculated_header.stats.at(::RGWObjCategory::Main) ==
           stat_value(1003, 1003 * 4096, 1003, 1003));
-    CHECK(std::ranges::count(effect_names(state), "get-values") >= 3);
+    CHECK(std::ranges::count(effect_names(state), std::string {"get-values"}) >= 3);
     REQUIRE(invoke(state, {}, "bucket_rebuild_index") == 0);
     CHECK(header(state).stats.at(::RGWObjCategory::Main).num_entries == 1003);
 }

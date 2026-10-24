@@ -1,4 +1,5 @@
 // Actual RGW-specific wrapper with controlled shared-queue calls and xattrs.
+#include "test/cls_rgw/wire_test.h"
 #include <catch2/catch_test_macros.hpp>
 #include RGW_GC_TEST_IMPLEMENTATION
 
@@ -13,14 +14,7 @@ namespace {
 
 using bytes = ::ceph::buffer::list;
 
-bytes canonical(const auto& value)
-{
-    using ::ceph::encode;
-
-    bytes result;
-    encode(value, result);
-    return result;
-}
+using ::rgw_cls_test::canonical;
 
 struct storage final
 {

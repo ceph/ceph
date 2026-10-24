@@ -4,10 +4,12 @@
  #define CEPH_CLS_RGW_BILOG_DATUM_H
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "common/container_concepts.h"
 
 #include <cstdint>
 #include <utility>
 
+#include <list>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -43,6 +45,8 @@ void encode(const reply& value, ::ceph::buffer::list& output);
 
 // Native log-entry codecs remain leaf bindings; the outer record is independent.
 template <typename EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::rgw_bi_log_entry>, std::list<::rgw_bi_log_entry>>
 std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::bilog_datum

@@ -2,7 +2,7 @@
 #ifndef CEPH_CLS_RGW_OLH_DATUM_H
  #define CEPH_CLS_RGW_OLH_DATUM_H
 
-#include "cls_rgw_ops.h"
+#include "cls_rgw_types.h"
 #include "cls_rgw_olh_types.h"
 #include "include/buffer.h"
 
@@ -11,6 +11,8 @@
 #include <optional>
 #include <ranges>
 #include <string_view>
+
+struct rgw_cls_read_olh_log_ret;
 
 namespace cls::rgw::olh_datum {
 

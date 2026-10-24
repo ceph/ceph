@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <errno.h>
+#include <utility>
 
 #include "cls/user/cls_user_client.h"
 #include "cls/user/cls_user_datum.h"
@@ -36,35 +37,33 @@ void cls_user_remove_bucket(librados::ObjectWriteOperation& op, const cls_user_b
   op.exec(method::remove_bucket, in);
 }
 
-class ClsUserListCtx : public ObjectOperationCompletion {
-  list<cls_user_bucket_entry> *entries;
-  string *marker;
-  bool *truncated;
-  int *pret;
+namespace {
+
+template <typename PublishT>
+class reply_completion final : public ObjectOperationCompletion {
+  int *status;
+  [[no_unique_address]] PublishT publish;
+
 public:
-  ClsUserListCtx(list<cls_user_bucket_entry> *_entries, string *_marker, bool *_truncated, int *_pret) :
-                                      entries(_entries), marker(_marker), truncated(_truncated), pret(_pret) {}
-  void handle_completion(int r, bufferlist& outbl) override {
-    if (r >= 0) {
-      cls_user_list_buckets_ret ret;
+  reply_completion(int *status, PublishT publish)
+    : status(status), publish(std::move(publish))
+  {}
+
+  void handle_completion(int result, bufferlist& bytes) override {
+    if (result >= 0) {
       try {
-        auto iter = outbl.cbegin();
-        decode(ret, iter);
-        if (entries)
-	  *entries = std::move(ret.entries);
-        if (truncated)
-          *truncated = ret.truncated;
-        if (marker)
-          *marker = std::move(ret.marker);
-      } catch (ceph::buffer::error& err) {
-        r = -EIO;
+        publish(bytes);
+      } catch (const ceph::buffer::error&) {
+        result = -EIO;
       }
     }
-    if (pret) {
-      *pret = r;
+    if (status) {
+      *status = result;
     }
   }
 };
+
+} // anonymous namespace
 
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
                           const string& in_marker,
@@ -77,7 +76,19 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
 {
   auto inbl = ::cls::rgw::user_datum::encode_bucket_list(in_marker, end_marker, max_entries);
 
-  op.exec(method::list_buckets, inbl, new ClsUserListCtx(&entries, out_marker, truncated, pret));
+  op.exec(method::list_buckets, inbl, new reply_completion {pret,
+    [&entries, out_marker, truncated](bufferlist& bytes) {
+      cls_user_list_buckets_ret reply;
+      auto cursor = bytes.cbegin();
+      decode(reply, cursor);
+      entries = std::move(reply.entries);
+      if (truncated) {
+        *truncated = reply.truncated;
+      }
+      if (out_marker) {
+        *out_marker = std::move(reply.marker);
+      }
+    }});
 }
 
 class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
@@ -149,40 +160,19 @@ void cls_user_account_resource_add(librados::ObjectWriteOperation& op,
   op.exec(method::account_resource_add, inbl);
 }
 
-class ResourceGetCB : public librados::ObjectOperationCompletion {
-  cls_user_account_resource* entry;
-  int* pret;
-public:
-  ResourceGetCB(cls_user_account_resource* entry, int* pret)
-    : entry(entry), pret(pret)
-  {}
-  void handle_completion(int r, bufferlist& outbl) override {
-    if (r >= 0) {
-      cls_user_account_resource_get_ret ret;
-      try {
-        auto iter = outbl.cbegin();
-        decode(ret, iter);
-        if (entry) {
-          *entry = std::move(ret.entry);
-        }
-      } catch (const ceph::buffer::error& err) {
-        r = -EIO;
-      }
-    }
-    if (pret) {
-      *pret = r;
-    }
-  }
-};
-
 void cls_user_account_resource_get(librados::ObjectReadOperation& op,
                                    std::string_view name,
                                    cls_user_account_resource& entry,
                                    int* pret)
 {
   auto inbl = ::cls::rgw::user_datum::encode_name(name);
-  op.exec(method::account_resource_get, inbl,
-          new ResourceGetCB(&entry, pret));
+  op.exec(method::account_resource_get, inbl, new reply_completion {pret,
+    [&entry](bufferlist& bytes) {
+      cls_user_account_resource_get_ret reply;
+      auto cursor = bytes.cbegin();
+      decode(reply, cursor);
+      entry = std::move(reply.entry);
+    }});
 }
 
 void cls_user_account_resource_rm(librados::ObjectWriteOperation& op,
@@ -191,42 +181,6 @@ void cls_user_account_resource_rm(librados::ObjectWriteOperation& op,
   auto inbl = ::cls::rgw::user_datum::encode_name(name);
   op.exec(method::account_resource_rm, inbl);
 }
-
-class ResourceListCB : public librados::ObjectOperationCompletion {
-  std::vector<cls_user_account_resource>* entries;
-  bool* truncated;
-  std::string* next_marker;
-  int* pret;
-public:
-  ResourceListCB(std::vector<cls_user_account_resource>* entries,
-                 bool* truncated, std::string* next_marker, int* pret)
-    : entries(entries), truncated(truncated),
-      next_marker(next_marker), pret(pret)
-  {}
-  void handle_completion(int r, bufferlist& outbl) override {
-    if (r >= 0) {
-      cls_user_account_resource_list_ret ret;
-      try {
-        auto iter = outbl.cbegin();
-        decode(ret, iter);
-        if (entries) {
-          *entries = std::move(ret.entries);
-        }
-        if (next_marker) {
-          *next_marker = std::move(ret.marker);
-        }
-        if (truncated) {
-          *truncated = ret.truncated;
-        }
-      } catch (const ceph::buffer::error& err) {
-        r = -EIO;
-      }
-    }
-    if (pret) {
-      *pret = r;
-    }
-  }
-};
 
 void cls_user_account_resource_list(librados::ObjectReadOperation& op,
                                     std::string_view marker,
@@ -237,6 +191,17 @@ void cls_user_account_resource_list(librados::ObjectReadOperation& op,
                                     int* pret)
 {
   auto inbl = ::cls::rgw::user_datum::encode_resource_list(marker, path_prefix, max_entries);
-  op.exec(method::account_resource_list, inbl,
-          new ResourceListCB(&entries, truncated, next_marker, pret));
+  op.exec(method::account_resource_list, inbl, new reply_completion {pret,
+    [&entries, truncated, next_marker](bufferlist& bytes) {
+      cls_user_account_resource_list_ret reply;
+      auto cursor = bytes.cbegin();
+      decode(reply, cursor);
+      entries = std::move(reply.entries);
+      if (next_marker) {
+        *next_marker = std::move(reply.marker);
+      }
+      if (truncated) {
+        *truncated = reply.truncated;
+      }
+    }});
 }

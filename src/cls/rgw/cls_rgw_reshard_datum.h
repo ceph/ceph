@@ -81,7 +81,8 @@ void encode(const reply& value, ::ceph::buffer::list& output);
 ::cls_rgw_bucket_instance_entry decode_instance(const ::ceph::buffer::list& input);
 
 template <typename EntriesT>
-requires ::ceph::concepts::has_emplace_back<EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::cls_rgw_reshard_entry>, std::list<::cls_rgw_reshard_entry>>
 std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::reshard_datum

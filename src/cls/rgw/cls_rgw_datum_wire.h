@@ -5,7 +5,7 @@
 
 #include "common/container_concepts.h"
 #include "datum/codec/zpp.h"
-#include "include/buffer.h"
+#include "include/encoding.h"
 #include "include/compat.h"
 
 #include <concepts>
@@ -296,29 +296,21 @@ class basic_reader final
 {
     CursorT& input;
 
-    unsigned limit;
-
-    unsigned get_offset() const noexcept
-    {
-        if constexpr (requires { input.get_offset(); }) {
-            return input.get_offset();
-        } else {
-            return input.get_off();
-        }
-    }
+    // Bytes after this frame stay with the input.
+    unsigned trailing_bytes = 0;
 
 public:
     explicit basic_reader(CursorT& input)
-        : input(input), limit(get_offset() + input.get_remaining())
+        : input(input)
     {}
 
 private:
-    basic_reader(CursorT& input, const unsigned limit)
-        : input(input), limit(limit)
+    basic_reader(CursorT& input, const unsigned trailing_bytes)
+        : input(input), trailing_bytes(trailing_bytes)
     {}
 
 public:
-    unsigned remaining() const noexcept { return limit - get_offset(); }
+    unsigned remaining() const noexcept { return input.get_remaining() - trailing_bytes; }
 
     void require(const std::size_t size) const
     {
@@ -346,10 +338,18 @@ public:
         require(Size);
         std::array<char, Size> storage CEPH_INDETERMINATE;
         const char *bytes = nullptr;
-        const auto first = input.get_ptr_and_advance(Size, &bytes);
+        std::size_t first;
+        do {
+            first = input.get_ptr_and_advance(Size, &bytes);
+        } while (0 == first && 0 < Size);
         if (first < Size) {
             std::copy_n(bytes, first, storage.data());
-            input.copy(Size - first, storage.data() + first);
+            for (auto copied = first; copied < Size;) {
+                const char *fragment = nullptr;
+                const auto count = input.get_ptr_and_advance(Size - copied, &fragment);
+                std::copy_n(fragment, count, storage.data() + copied);
+                copied += count;
+            }
             bytes = storage.data();
         }
         std::span view {bytes, Size};
@@ -455,7 +455,7 @@ public:
 
         auto cursor = input;
         decode(value, cursor);
-        require(cursor.get_off() - get_offset());
+        require(input.get_remaining() - cursor.get_remaining());
         input = cursor;
     }
 
@@ -476,18 +476,21 @@ public:
             throw ::ceph::buffer::malformed_input {"RGW CLS frame needs a newer decoder"};
         }
         require(header.length);
-        const auto finish = get_offset() + header.length;
-        basic_reader fields {input, finish};
-        if constexpr (std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>) {
-            decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version, header.compatible);
-            input += finish - get_offset();
-
-            return result;
-        }
-
-        if constexpr (!std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>) {
-            decltype(auto) result = std::invoke(std::forward<BodyT>(body), fields, header.version);
-            input += finish - get_offset();
+        const auto trailing = input.get_remaining() - header.length;
+        basic_reader fields {input, trailing};
+        auto decode_body = [&body, &fields, &header]() -> decltype(auto) {
+            if constexpr (std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>) {
+                return std::invoke(std::forward<BodyT>(body), fields, header.version, header.compatible);
+            } else {
+                return std::invoke(std::forward<BodyT>(body), fields, header.version);
+            }
+        };
+        if constexpr (std::is_void_v<decltype(decode_body())>) {
+            decode_body();
+            input += input.get_remaining() - trailing;
+        } else {
+            decltype(auto) result = decode_body();
+            input += input.get_remaining() - trailing;
 
             return result;
         }
@@ -522,7 +525,7 @@ public:
         if (version != header.version || 1 != header.compatible) {
             return false;
         }
-        basic_reader fields {input, get_offset() + header.length};
+        basic_reader fields {input, input.get_remaining() - header.length};
 
         return std::invoke(std::forward<BodyT>(body), fields) && 0 == fields.remaining();
     }
@@ -533,25 +536,23 @@ using reader = basic_reader<byte_buffer::const_iterator>;
 
 // Publish an owning request and its native cursor only after decoding succeeds.
 template <typename T, typename DecodeT>
-[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, const DecodeT decode)
+[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, DecodeT&& decode)
 {
     static_assert(std::is_nothrow_move_assignable_v<T>);
     auto cursor = input;
     T candidate;
-    std::invoke(decode, cursor, candidate);
+    std::invoke(std::forward<DecodeT>(decode), cursor, candidate);
     value = std::move(candidate);
     input = cursor;
 }
 
 template <std::uint8_t Supported, std::uint8_t FirstFramed = 0, typename T, typename DecodeT>
-[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, const DecodeT decode)
+[[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input, DecodeT&& decode)
 {
     decode_record(value, input, [&decode](auto& cursor, auto& candidate) {
         reader archive {cursor};
         auto body = [&decode, &candidate](reader& fields, const std::uint8_t version) {
-            std::invoke(decode, fields, candidate, version);
-
-            return 0;
+            std::invoke(std::forward<DecodeT>(decode), fields, candidate, version);
         };
         if constexpr (0 == FirstFramed) {
             archive.frame(Supported, body);

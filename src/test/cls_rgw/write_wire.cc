@@ -1,4 +1,5 @@
 // RGW CLS: C++23 native codecs independently check private module bindings.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_write_datum.h"
 
@@ -18,6 +19,9 @@ namespace {
 
 namespace binding = ::cls::rgw::write_datum;
 using bytes = ::ceph::buffer::list;
+
+using ::rgw_cls_test::canonical;
+using ::rgw_cls_test::fragmented;
 
 bytes envelope(const std::uint8_t version, const bool old, auto body)
 {
@@ -223,27 +227,6 @@ auto native(const binding::refresh_request& value)
     result.key = value.key;
 
     return result;
-}
-
-bytes canonical(const auto& value)
-{
-    bytes output;
-    ::encode(value, output);
-
-    return output;
-}
-
-bytes fragmented(const bytes& input)
-{
-    bytes output;
-    auto cursor = input.cbegin();
-    while (!cursor.end()) {
-        char byte;
-        cursor.copy(1, &byte);
-        output.append(::ceph::buffer::copy(&byte, 1));
-    }
-
-    return output;
 }
 
 template <typename ModuleT, typename NativeT>

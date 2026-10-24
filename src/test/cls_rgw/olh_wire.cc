@@ -1,7 +1,9 @@
 // RGW CLS: OLH native-wire compatibility with independent records/containers.
+#include "test/cls_rgw/wire_test.h"
 #include "olh_native_oracle.h"
 #include "cls/rgw/cls_rgw_olh_datum.h"
 #include "cls/rgw/cls_rgw_olh_wire.h"
+#include "cls/rgw/cls_rgw_ops.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -25,6 +27,12 @@ namespace datum = ::ceph::salad::datum;
 namespace olh = ::cls::rgw::olh;
 using byte_buffer = ::ceph::buffer::list;
 
+using ::rgw_cls_test::fragmented;
+
+constexpr auto event_fields = datum::binary_fields<&olh::event::epoch, &olh::event::operation,
+    &olh::event::tag, &olh::event::object, &olh::event::delete_marker> {};
+constexpr auto key_fields = datum::binary_fields<&olh::object_key::name, &olh::object_key::instance> {};
+
 auto fixture()
 {
     return olh::reply {{{7, {{{std::string {"n\0m", 3}, "version"}, "tag", 99,
@@ -33,25 +41,9 @@ auto fixture()
                        {42, {}}, {std::numeric_limits<std::uint64_t>::max(), {}}}, true};
 }
 
-byte_buffer fragmented(const byte_buffer& bytes, const unsigned stride = 1)
-{
-    byte_buffer result;
-    const auto storage = bytes.to_str();
-    for (std::size_t offset = 0; offset < storage.size(); offset += stride) {
-        const auto size = std::min<std::size_t>(stride, storage.size() - offset);
-        result.append(::ceph::buffer::copy(storage.data() + offset, size));
-    }
-
-    return result;
-}
-
 auto encode(const olh::reply& value, const bool stales = true)
 {
-    return wire::encode_reply(
-        datum::binary_fields<&olh::event::epoch, &olh::event::operation, &olh::event::tag,
-                             &olh::event::object, &olh::event::delete_marker> {},
-        datum::binary_fields<&olh::object_key::name, &olh::object_key::instance> {},
-        value.epochs, value.truncated,
+    return wire::encode_reply(event_fields, key_fields, value.epochs, value.truncated,
         [stales](const olh::event& entry) { return stales || olh::action::stale != entry.operation; }, stales);
 }
 
@@ -76,6 +68,36 @@ void check(const olh::reply& actual, const olh::reply& expected)
 }
 
 } // anonymous namespace
+
+TEST_CASE("OLH filtering borrows an immobile mutable predicate", "[rgw][cls][datum][olh]")
+{
+    struct predicate final
+    {
+        unsigned calls = 0;
+
+        predicate() = default;
+        predicate(const predicate&) = delete;
+        predicate(predicate&&) = delete;
+
+        bool operator()(const olh::event& entry)
+        {
+            ++calls;
+
+            return olh::action::stale != entry.operation;
+        }
+
+    };
+
+    auto expected = fixture();
+    auto stale = expected.epochs.front().second.front();
+    stale.operation = olh::action::stale;
+    expected.epochs.front().second.push_back(stale);
+    predicate include;
+    const auto bytes = wire::encode_reply(event_fields, key_fields, expected.epochs,
+                                         expected.truncated, include, false);
+    CHECK(bytes.contents_equal(encode(expected, false)));
+    CHECK(0 < include.calls);
+}
 
 TEST_CASE("OLH requests preserve native bytes, versions and nested extensions", "[rgw][cls][datum][olh]")
 {

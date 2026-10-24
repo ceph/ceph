@@ -104,7 +104,8 @@ void encode(const reply& value, ::ceph::buffer::list& output)
 }
 
 template <typename EntriesT>
-requires ::ceph::concepts::has_emplace_back<EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::cls_rgw_gc_obj_info>, std::list<::cls_rgw_gc_obj_info>>
 list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
 {
     auto cursor = input.cbegin();
@@ -116,8 +117,6 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
             fields.text(candidate.next_marker);
         }
         candidate.truncated = 0 != fields.template scalar<std::uint8_t>();
-
-        return 0;
     });
 
     return candidate;

@@ -5,6 +5,7 @@
  #define CEPH_CLS_RGW_BI_DATUM_H
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "common/container_concepts.h"
 
 #include <cstdint>
 #include <utility>
@@ -90,6 +91,8 @@ void decode(entry& value, ::ceph::buffer::list::const_iterator& input);
 // Explicit vector/list instantiations return owned candidates. The client
 // publishes caller outputs only after transport and decoding have succeeded.
 template <typename EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::rgw_cls_bi_entry>, std::list<::rgw_cls_bi_entry>>
 std::pair<EntriesT, bool> decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::bi_datum

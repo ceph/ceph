@@ -1,4 +1,5 @@
 // RGW CLS: Actual index-read builders and deferred completion contracts.
+#include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/rgw/cls_rgw_const.h"
 
@@ -19,18 +20,12 @@ namespace {
 
 using bytes = ::ceph::buffer::list;
 
+using ::rgw_cls_test::canonical;
+
 std::unique_ptr<::librados::ObjectOperationCompletion> pending;
 bytes request_bytes;
 std::string request_method;
 bool fail_allocation = false;
-
-bytes canonical(const auto& value)
-{
-    bytes output;
-    ::encode(value, output);
-
-    return output;
-}
 
 auto response()
 {

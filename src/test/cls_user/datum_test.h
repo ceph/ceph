@@ -2,21 +2,14 @@
 #ifndef CEPH_TEST_CLS_USER_DATUM_TEST_H
  #define CEPH_TEST_CLS_USER_DATUM_TEST_H
 
+#include "test/cls_rgw/wire_test.h"
 #include "cls/user/cls_user_ops.h"
 
 namespace user_cls_test {
 
 using bytes = ::ceph::buffer::list;
 
-inline bytes canonical(const auto& value)
-{
-    using ::ceph::encode;
-
-    bytes output;
-    encode(value, output);
-
-    return output;
-}
+using ::rgw_cls_test::canonical;
 
 inline auto bucket_entry(const std::string& name = "bucket")
 {

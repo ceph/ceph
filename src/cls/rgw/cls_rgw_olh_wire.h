@@ -122,7 +122,7 @@ byte_buffer encode_reply(datum::binary_fields<EventMember...> event_fields,
 {
     const auto included_count = [&](const auto& entries) {
         return detail::checked_count(include_all ? std::ranges::size(entries)
-                                                 : std::ranges::count_if(entries, include));
+                                                 : std::ranges::count_if(entries, std::ref(include)));
     };
     const auto group_count = detail::checked_count(include_all ? std::ranges::distance(groups)
         : std::ranges::count_if(groups, [&](const auto& group) { return 0 != included_count(group.second); }));

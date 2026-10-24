@@ -1,6 +1,7 @@
 // RGW CLS: Bind OLH wire fields to native maps or independent vector records.
 #include "cls_rgw_olh_datum.h"
 #include "cls_rgw_olh_wire.h"
+#include "cls_rgw_ops.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -19,6 +20,7 @@ using native_key = ::cls_rgw_obj_key;
 using client_entry = ::cls::rgw::olh::event;
 using client_key = ::cls::rgw::olh::object_key;
 
+// Build ordered member lenses, providing compile-time mapping of Ceph data members into Datum's binary codec:
 constexpr auto native_event_fields = datum::binary_fields<&native_entry::epoch, &native_entry::op,
     &native_entry::op_tag, &native_entry::key, &native_entry::delete_marker> {};
 constexpr auto native_key_fields = datum::binary_fields<&native_key::name, &native_key::instance> {};
@@ -102,17 +104,6 @@ public:
         position += size;
 
         return *this;
-    }
-
-    void copy(unsigned size, char *output)
-    {
-        while (size) {
-            const char *bytes;
-            const auto count = get_ptr_and_advance(size, &bytes);
-            std::copy_n(bytes, count, output);
-            output += count;
-            size -= count;
-        }
     }
 
 };
@@ -218,21 +209,17 @@ std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    auto cursor = input;
-    auto candidate = ::cls::rgw::olh_wire::decode_request<::ceph::buffer::ptr>(cursor,
-        [](std::string&& name, std::string&& instance, const std::uint64_t marker,
-           ::ceph::buffer::ptr&& tag, const bool stales) {
-            request result;
-            result.olh.name = std::move(name);
-            result.olh.instance = std::move(instance);
-            result.tag_bytes = std::move(tag);
-            result.ver_marker = marker;
-            result.get_stales = stales;
-
-            return result;
-        });
-    value = std::move(candidate);
-    input = cursor;
+    ::cls::rgw::wire::decode_record(value, input, [](auto& cursor, auto& candidate) {
+        ::cls::rgw::olh_wire::decode_request<::ceph::buffer::ptr>(cursor,
+            [&candidate](std::string&& name, std::string&& instance, const std::uint64_t marker,
+                         ::ceph::buffer::ptr&& tag, const bool stales) {
+                candidate.olh.name = std::move(name);
+                candidate.olh.instance = std::move(instance);
+                candidate.tag_bytes = std::move(tag);
+                candidate.ver_marker = marker;
+                candidate.get_stales = stales;
+            });
+    });
 }
 
 void encode_reply(const log_page groups, const bool stales, const bool truncated, ::ceph::buffer::list& output)

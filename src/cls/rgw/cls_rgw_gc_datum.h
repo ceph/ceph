@@ -60,7 +60,8 @@ void decode(remove_request& value, ::ceph::buffer::list::const_iterator& input);
 void encode(const reply& value, ::ceph::buffer::list& output);
 
 template <typename EntriesT>
-requires ::ceph::concepts::has_emplace_back<EntriesT>
+requires ::ceph::concepts::same_as_any<EntriesT,
+                                    std::vector<::cls_rgw_gc_obj_info>, std::list<::cls_rgw_gc_obj_info>>
 list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input);
 
 } // cls::rgw::gc_datum
