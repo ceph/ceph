@@ -36,7 +36,6 @@ import { ServiceResourcePageComponent } from './ceph/cluster/services/service-re
 import { ServiceResourceSidebarComponent } from './ceph/cluster/services/service-resource-sidebar/service-resource-sidebar.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
-import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginPasswordFormComponent } from './core/auth/login-password-form/login-password-form.component';
 import { LoginComponent } from './core/auth/login/login.component';
@@ -65,7 +64,7 @@ import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form
 import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progress/upgrade-progress.component';
 import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluster.component';
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
-import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
+import { nfsParentRoute } from './ceph/nfs/nfs.routes';
 import { smbParentRoute } from './ceph/smb/smb.routes';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
@@ -604,38 +603,7 @@ const routes: Routes = [
               }
             ]
           },
-          {
-            path: 'nfs',
-            canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
-            data: {
-              moduleStatusGuardConfig: {
-                uiApiPath: 'nfs-ganesha',
-                redirectTo: 'error',
-                section: 'nfs-ganesha',
-                section_info: 'NFS GANESHA',
-                header: 'NFS-Ganesha is not configured'
-              },
-              breadcrumbs: 'File/NFS'
-            },
-            children: [
-              { path: '', component: NfsClusterComponent },
-              {
-                path: `${URLVerbs.CREATE}/:fs_name/:subvolume_group`,
-                component: NfsFormComponent,
-                data: { breadcrumbs: ActionLabels.CREATE }
-              },
-              {
-                path: `${URLVerbs.CREATE}`,
-                component: NfsFormComponent,
-                data: { breadcrumbs: ActionLabels.CREATE }
-              },
-              {
-                path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
-                component: NfsFormComponent,
-                data: { breadcrumbs: ActionLabels.EDIT }
-              }
-            ]
-          },
+          nfsParentRoute(false, 'File/NFS'),
           smbParentRoute(false, 'File/SMB')
         ]
       },

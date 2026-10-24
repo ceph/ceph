@@ -17,6 +17,7 @@ import {
   IconModule,
   IconService,
   InputModule,
+  LinkModule,
   RadioModule,
   SelectModule,
   TabsModule,
@@ -26,7 +27,8 @@ import {
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
-import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-details.component';
+import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page/nfs-cluster-resource-page.component';
+import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
 
 @NgModule({
   imports: [
@@ -41,6 +43,7 @@ import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-de
     TagModule,
     SelectModule,
     InputModule,
+    LinkModule,
     RadioModule,
     CheckboxModule,
     ButtonModule,
@@ -48,14 +51,22 @@ import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-de
     TabsModule,
     ClusterModule
   ],
-  exports: [NfsListComponent, NfsFormComponent, NfsDetailsComponent, NfsClusterComponent],
+  exports: [
+    NfsListComponent,
+    NfsFormComponent,
+    NfsDetailsComponent,
+    NfsClusterComponent,
+    NfsClusterResourcePageComponent,
+    NfsClusterResourceSidebarComponent
+  ],
   declarations: [
     NfsListComponent,
     NfsDetailsComponent,
     NfsFormComponent,
     NfsFormClientComponent,
     NfsClusterComponent,
-    NfsClusterDetailsComponent
+    NfsClusterResourcePageComponent,
+    NfsClusterResourceSidebarComponent
   ]
 })
 export class NfsModule {

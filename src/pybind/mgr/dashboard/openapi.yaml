@@ -12705,7 +12705,7 @@ paths:
       parameters:
       - default: false
         description: If true, return detailed cluster info including backends, placement,
-          and enable_rdma
+          enable_nfsv3, and enable_rdma
         in: query
         name: info
         schema:
@@ -12742,6 +12742,9 @@ paths:
                       description: Deployment type (standalone, active-active, or
                         active-passive)
                       type: string
+                    enable_nfsv3:
+                      description: Whether NFSv3 is enabled for the cluster
+                      type: boolean
                     enable_rdma:
                       description: Whether RDMA transport is enabled for the cluster
                       type: boolean
@@ -12781,9 +12784,10 @@ paths:
                 - deployment_type
                 - backend
                 - placement
+                - enable_nfsv3
                 - enable_rdma
                 type: array
-            application/vnd.ceph.api.v0.1+json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -12810,6 +12814,9 @@ paths:
                       description: Deployment type (standalone, active-active, or
                         active-passive)
                       type: string
+                    enable_nfsv3:
+                      description: Whether NFSv3 is enabled for the cluster
+                      type: boolean
                     enable_rdma:
                       description: Whether RDMA transport is enabled for the cluster
                       type: boolean

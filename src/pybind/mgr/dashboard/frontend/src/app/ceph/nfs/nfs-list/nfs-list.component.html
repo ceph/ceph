@@ -7,6 +7,10 @@
   forceIdentifier="true"
   selectionType="single"
   [hasDetails]="false"
+  [headerTitle]="sharesHeaderTitle"
+  [headerDescription]="sharesHeaderDescription"
+  [emptyStateTitle]="sharesEmptyTitle"
+  [emptyStateMessage]="sharesEmptyMessage"
   (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
 >
@@ -28,35 +32,12 @@
 </cd-table>
 
 <ng-template
-  #nfsFsal
-  let-value="data.value"
->
-  @if (value.name === 'CEPH') {
-    <ng-container i18n>CephFS</ng-container>
-  }
-  @if (value.name === 'RGW') {
-    <ng-container i18n>Object Gateway</ng-container>
-  }
-</ng-template>
-
-<ng-template
   #protocolTpl
   let-protocols="data.value"
 >
   @for (protocol of protocols; track protocol) {
     <span>
       <cds-tag size="md">NFSv{{ protocol }}</cds-tag>
-    </span>
-  }
-</ng-template>
-
-<ng-template
-  #transportTpl
-  let-transports="data.value"
->
-  @for (transport of transports; track transport) {
-    <span>
-      <cds-tag size="md">{{ transport }}</cds-tag>
     </span>
   }
 </ng-template>
@@ -76,4 +57,11 @@
   @if (value !== '') {
     <span>{{ value }}</span>
   }
+</ng-template>
+
+<ng-template
+  #clientsTpl
+  let-clients="data.value"
+>
+  {{ clients?.length || 0 }}
 </ng-template>

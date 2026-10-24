@@ -67,6 +67,7 @@ CLUSTER_SCHEMA = {
         'count': (int, 'Number of daemons', True),
         'label': (str, 'Host label', True)
     }, 'Orchestrator placement specification'),
+    'enable_nfsv3': (bool, 'Whether NFSv3 is enabled for the cluster'),
     'enable_rdma': (bool, 'Whether RDMA transport is enabled for the cluster'),
     'ingress_mode': (str, 'Ingress mode', True),
     'port': (int, 'Ingress port', True),
@@ -109,11 +110,11 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
 @APIDoc("NFS-Ganesha Cluster Management API", "NFS-Ganesha")
 class NFSGaneshaCluster(RESTController):
     @ReadPermission
-    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
+    @RESTController.MethodMap()
     @EndpointDoc("List NFS-Ganesha clusters",
                  parameters={
                      'info': (bool, 'If true, return detailed cluster info including '
-                              'backends, placement, and enable_rdma')
+                              'backends, placement, enable_nfsv3, and enable_rdma')
                  },
                  responses={200: [CLUSTER_SCHEMA]})
     def list(self, info: Optional[bool] = False):
@@ -122,6 +123,19 @@ class NFSGaneshaCluster(RESTController):
                 {"name": key, **value} for key, value in mgr.remote('nfs', 'cluster_info').items()
             ]
         return mgr.remote('nfs', 'cluster_ls')
+
+    @ReadPermission
+    @RESTController.MethodMap()
+    @EndpointDoc("Get a single NFS-Ganesha cluster",
+                 parameters={
+                     'cluster_id': (str, 'Cluster identifier')
+                 },
+                 responses={200: CLUSTER_SCHEMA})
+    def get(self, cluster_id: str) -> Optional[Dict[str, Any]]:
+        info = mgr.remote('nfs', 'cluster_info', cluster_id)
+        if not info:
+            return None
+        return {"name": cluster_id, **info[cluster_id]}
 
 
 @APIRouter('/nfs-ganesha/export', Scope.NFS_GANESHA)
