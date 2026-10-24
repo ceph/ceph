@@ -387,6 +387,32 @@ def test_deploy_a_monitoring_container(cephadm_fs, funkypatch):
         assert (si.st_uid, si.st_gid) == (8765, 8765)
 
 
+def test_deploy_node_exporter_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
+    _firewalld = mocks['Firewalld']
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'node-exporter.ne'
+        ctx.image = 'quay.io/prometheus/node-exporter:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {}
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/node-exporter.ne')
+    assert basedir.is_dir()
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert 'podman' in runfile_lines[-1]
+    assert '-v /proc:/host/proc:ro' in runfile_lines[-1]
+    assert '-v /sys:/host/sys:ro' in runfile_lines[-1]
+    # host umounts must propagate into the container's copy of /
+    assert '-v /:/rootfs:ro,rslave' in runfile_lines[-1]
+    assert '--path.rootfs=/rootfs' in runfile_lines[-1]
+    _firewalld().open_ports.assert_not_called()
+
+
 def test_deploy_a_tracing_container(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
@@ -494,6 +520,8 @@ def test_deploy_ceph_osd_container(cephadm_fs, funkypatch):
     assert f'-v /var/lib/ceph/{fsid}/osd.quux:/var/lib/ceph/osd/ceph-quux:z' in runfile_lines[-1]
     assert f'-v /var/log/ceph/{fsid}:/var/log/ceph:z' in runfile_lines[-1]
     assert '-v /dev:/dev' in runfile_lines[-1]
+    # host umounts must propagate into the container's copy of /
+    assert '-v /:/rootfs:rslave' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'

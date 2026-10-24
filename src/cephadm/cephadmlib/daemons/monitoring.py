@@ -379,7 +379,7 @@ class Monitoring(ContainerDaemonForm):
             ] = '/etc/node-exporter:Z'
             mounts['/proc'] = '/host/proc:ro'
             mounts['/sys'] = '/host/sys:ro'
-            mounts['/'] = '/rootfs:ro'
+            mounts['/'] = '/rootfs:ro,rslave'
         elif daemon_type == 'grafana':
             mounts[
                 os.path.join(data_dir, 'etc/grafana/grafana.ini')
