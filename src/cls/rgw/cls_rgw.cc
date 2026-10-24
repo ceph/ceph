@@ -2390,7 +2390,7 @@ try {
     return -ECANCELED;
   }
 
-  constexpr unsigned max_epochs = 1000;
+  constexpr auto max_epochs = ::cls::rgw::olh_datum::max_page_epochs;
   const auto& log = olh_data_entry.pending_log;
   const auto page = [&] {
     if (log.empty() || (log.size() <= max_epochs && op.ver_marker < log.begin()->first)) {

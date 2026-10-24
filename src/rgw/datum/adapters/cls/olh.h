@@ -37,6 +37,8 @@ public:
 
 };
 
+inline constexpr std::uint32_t max_page_epochs = 1000;
+
 using stored_log = decltype(::rgw_bucket_olh_entry::pending_log);
 using log_page = std::ranges::subrange<stored_log::const_iterator, stored_log::const_iterator,
                                       std::ranges::subrange_kind::sized>;

@@ -2,6 +2,7 @@
 // This runs the real module; the host fixture supplies storage, not an OSD.
 #include "cls/rgw/cls_rgw_ops.h"
 #include "module_loader.h"
+#include "test/cls_rgw/wire_test.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -10,6 +11,7 @@
 #include <cstdlib>
 
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -267,6 +269,44 @@ TEST_CASE("OLH page boundaries preserve exact native replies across log shapes",
                     CHECK(bytes.contents_equal(wanted));
                     CHECK(context.reads == std::vector<std::string> {"\x80" "1001_object"});
                 }
+            }
+        }
+    }
+}
+
+TEST_CASE("OLH sparse epochs preserve exclusive markers through the largest key", "[rgw][cls][olh]")
+{
+    constexpr auto last_epoch = std::numeric_limits<std::uint64_t>::max();
+    auto value = log_fixture(1, false);
+    const auto events = value.pending_log.begin()->second;
+    value.pending_log.clear();
+    for (const auto epoch : std::array<std::uint64_t, 4> {0, 1, last_epoch - 1, last_epoch}) {
+        value.pending_log.emplace(epoch, events);
+    }
+
+    for (const bool dense_fragments : {false, true}) {
+        auto context = fixture(value);
+        if (dense_fragments) {
+            auto& stored = context.values.begin()->second;
+            stored = ::rgw_cls_test::fragmented(stored);
+        }
+        for (const auto marker :
+             std::array<std::uint64_t, 5> {0, 1, 2, last_epoch - 1, last_epoch}) {
+            ::rgw_cls_read_olh_log_ret expected;
+            for (const auto& [epoch, rows] : value.pending_log) {
+                if (epoch > marker) {
+                    expected.log.emplace(epoch, rows);
+                }
+            }
+            byte_buffer wanted;
+            ::encode(expected, wanted);
+            for (const bool stales : {false, true}) {
+                auto op = request();
+                op.ver_marker = marker;
+                op.get_stales = stales;
+                const auto [status, bytes] = query(context, op);
+                REQUIRE(status == 0);
+                CHECK(bytes.contents_equal(wanted));
             }
         }
     }

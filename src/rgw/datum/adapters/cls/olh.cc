@@ -164,7 +164,7 @@ std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
                 }
             }
             if (marker < epoch) {
-                if (1000 == selected) {
+                if (max_page_epochs == selected) {
                     truncated = true;
                     continue;
                 }
