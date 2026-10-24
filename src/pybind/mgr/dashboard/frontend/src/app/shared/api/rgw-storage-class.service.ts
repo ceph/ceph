@@ -12,10 +12,18 @@ export class RgwStorageClassService {
 
   constructor(private http: HttpClient) {}
 
-  removeStorageClass(placement_target: string, storage_class: string, zone_name: string = '') {
+  removeStorageClass(
+    placement_target: string,
+    storage_class: string,
+    zone_name: string = '',
+    zonegroup_name: string = ''
+  ) {
     let params: any = {};
     if (zone_name) {
       params.zone_name = zone_name;
+    }
+    if (zonegroup_name) {
+      params.zonegroup_name = zonegroup_name;
     }
     return this.http.delete(`${this.url}/${placement_target}/${storage_class}`, {
       params,
@@ -31,8 +39,11 @@ export class RgwStorageClassService {
     return this.http.put(`${this.url}`, requestModel);
   }
 
-  getPlacement_target(placement_id: string) {
-    return this.http.get(`${this.baseUrl}/get_placement_target_by_placement_id/${placement_id}`);
+  getPlacement_target(placement_id: string, zonegroup_name: string = '') {
+    const params: any = zonegroup_name ? { zonegroup_name } : {};
+    return this.http.get(`${this.baseUrl}/get_placement_target_by_placement_id/${placement_id}`, {
+      params
+    });
   }
 
   createStorageClassZone(zoneRequest: ZoneRequest) {
