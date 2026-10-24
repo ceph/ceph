@@ -2830,7 +2830,7 @@ std::pair<uint32_t, uint32_t> bluestore::ExtentMap::fault_range_ex(
     return {0, BlueStore::OBJECT_MAX_SIZE};
   }
   auto start = seek_shard(offset);
-  auto last = seek_shard(offset + length);
+  auto last = seek_shard(range_end(offset, length));
   maybe_load_shard(db, start, last);
   uint32_t left_bound = shards[start].shard_info->offset;
   uint32_t right_bound =  (size_t)last + 1 < shards.size() ?
@@ -2853,7 +2853,7 @@ void bluestore::ExtentMap::fault_range(
     return;
   }
   auto start = seek_shard(offset);
-  auto last = seek_shard(offset + length);
+  auto last = seek_shard(range_end(offset, length));
   maybe_load_shard(db, start, last);
 }
 
