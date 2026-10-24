@@ -347,6 +347,7 @@ endif()
 add_library(rgw_common STATIC
   ${librgw_common_srcs}
   ${librgw_driver_srcs})
+add_dependencies(rgw_common compressor_plugins crypto_plugins)
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
