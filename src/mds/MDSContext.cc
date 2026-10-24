@@ -101,6 +101,11 @@ void MDSIOContextBase::complete(int r) {
   // lock here when MDSContext::complete would otherwise assume the lock is
   // already acquired.
   std::lock_guard l(mds->mds_lock);
+  complete_locked(r);
+}
+
+void MDSIOContextBase::complete_locked(int r) {
+  MDSRank *mds = get_mds();
 
   /* Journal and object IO completions are the one large consumer of mds_lock
    * that message dispatch does not account for; without this the phase totals
@@ -132,6 +137,11 @@ void MDSLogContextBase::complete(int r) {
   MDSIOContextBase::complete(r);
   // safe_pos must be updated after MDSIOContext::complete() call
   mdlog->set_safe_pos(safe_pos);
+}
+
+void MDSLogContextBase::complete_safe_locked() {
+  // frees this
+  complete_locked(0);
 }
 
 void MDSIOContextWrapper::finish(int r)
