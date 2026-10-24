@@ -31,8 +31,31 @@ new OSD.
 The ``--wide`` option adds the ``TRANSPORT``, ``RPM``, ``HEALTH``, ``IDENT``,
 and ``FAULT`` columns. `libstoragemgmt`_ provides the values in these columns.
 By default, this integration is disabled because `libstoragemgmt`_ may not be
-100% compatible with your hardware.  To direct Ceph to fill these columns,
-enable ``cephadm``'s "enhanced device scan" option as follows:
+100% compatible with your hardware.
+
+.. warning::
+    Although the ``libstoragemgmt`` library issues standard SCSI (SES) inquiry calls,
+    there is no guarantee that your hardware and firmware properly implement these standards.
+    This can lead to erratic behavior and even bus resets on some older
+    hardware. It is therefore recommended that, before enabling this feature,
+    you first test your hardware's compatibility with ``libstoragemgmt`` to avoid
+    unplanned interruptions to services.
+
+    There are a number of ways to test compatibility, but the simplest is
+    to use the cephadm shell to call ``libstoragemgmt`` directly: ``cephadm shell
+    lsmcli ldl``. If your hardware is supported you should see something like
+    this:
+
+    .. code-block:: console
+
+      Path     | SCSI VPD 0x83    | Link Type | Serial Number      | Health Status
+      ----------------------------------------------------------------------------
+      /dev/sda | 50000396082ba631 | SAS       | 15P0A0R0FRD6       | Good
+      /dev/sdb | 50000396082bbbf9 | SAS       | 15P0A0YFFRD6       | Good
+
+To direct Ceph to fill the ``TRANSPORT``, ``RPM``, ``HEALTH``, ``IDENT``, and
+``FAULT`` columns, enable ``cephadm``'s "enhanced device scan" option as
+follows:
 
 .. prompt:: bash #
 
@@ -50,27 +73,6 @@ columns of the ``--wide`` output are empty, and ``IDENT`` and ``FAULT`` show
   HOST            PATH      TYPE  TRANSPORT  RPM  DEVICE ID                                     SIZE  HEALTH  IDENT  FAULT  AVAILABLE  REFRESHED  REJECT REASONS
   davidsthubbins  /dev/sdc  hdd                   SEAGATE_ST20000NM002D_ZVTBJNGC17010W339UW25  18.1T          N/A    N/A    No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
   nigeltufnel     /dev/sdd  hdd                   SEAGATE_ST20000NM002D_ZVTBJNGC17010C3442787  18.1T          N/A    N/A    No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
-
-.. warning::
-    Although the ``libstoragemgmt`` library issues standard SCSI (SES) inquiry calls,
-    there is no guarantee that your hardware and firmware properly implement these standards.
-    This can lead to erratic behavior and even bus resets on some older
-    hardware. It is therefore recommended that, before enabling this feature,
-    you first test your hardware's compatibility with ``libstoragemgmt`` to avoid
-    unplanned interruptions to services.
-
-    There are a number of ways to test compatibility, but the simplest is
-    to use the cephadm shell to call ``libstoragemgmt`` directly: ``cephadm shell
-    lsmcli ldl``. If your hardware is supported you should see something like
-    this: 
-
-    .. code-block:: console
-
-      Path     | SCSI VPD 0x83    | Link Type | Serial Number      | Health Status
-      ----------------------------------------------------------------------------
-      /dev/sda | 50000396082ba631 | SAS       | 15P0A0R0FRD6       | Good
-      /dev/sdb | 50000396082bbbf9 | SAS       | 15P0A0YFFRD6       | Good
-
 
 After enabling ``libstoragemgmt`` support, the ``--wide`` output looks
 something like this:
@@ -241,7 +243,7 @@ For example:
 
   ceph orch apply osd --all-available-devices --dry-run
 
-.. code-block:: console
+.. code-block:: none
 
   WARNING! Dry-Runs are snapshots of a certain point in time and are bound
   to the current inventory setup. If any of these conditions change, the
@@ -492,7 +494,7 @@ Alternatively, you can use an OSDSpec file:
 
 Expected output:
 
-.. code-block:: console
+.. code-block:: none
 
   WARNING! Dry-Runs are snapshots of a certain point in time and are bound
   to the current inventory setup. If any of these conditions change, the
@@ -648,7 +650,7 @@ Create a file called (for example) ``osd_spec.yml``:
       data_devices:                  # the type of devices you are applying specs to
         all: true                    # a filter, check below for a full list
 
-This means :
+This means:
 
 #. Turn any available device (``ceph-volume`` decides which are *available*) into an
    OSD on all hosts that match the glob pattern '*'. The glob pattern matches
@@ -667,8 +669,8 @@ This means :
    Strategies more complex than the one specified by the ``all`` filter are
    possible. See :ref:`osd_filters` for details.
 
-   A ``--dry-run`` flag can be passed to the ``apply osd`` command to display a
-   synopsis of the proposed layout.
+   A ``--dry-run`` flag can be passed to the ``ceph orch apply`` command to
+   display a synopsis of the proposed layout.
 
 Example
 
@@ -694,7 +696,7 @@ inventory. Retrieve these attributes with this command:
 
 .. prompt:: bash #
 
-    ceph-volume inventory </path/to/drive>
+    cephadm shell ceph-volume inventory <device-path>
 
 Vendor or Model
 ^^^^^^^^^^^^^^^
@@ -733,11 +735,13 @@ Size specifications can be of the following forms:
 
 We explore examples below.
 
-To match only drives of an exact capacity:
+To match only drives of an exact capacity, give the size that ``ceph-volume``
+reports for them, as described in `Retrieve Exact Size of Block Devices`_. For
+a drive reported as ``3.64 TB``:
 
 .. code-block:: yaml
 
-    size: '10T'
+    size: '3.64T'
 
 Note that drive capacity is often not an exact multiple of units, so it is
 often best practice to match drives within a range of sizes as shown below.
@@ -745,7 +749,12 @@ This handles future drives of the same class that may be of a different
 model and thus slightly different in size.  Or say you have 10 TB drives
 today but may add 16 TB drives next year. Write the range in the sizes that
 ``ceph-volume`` reports: it reports a drive sold as 10 TB as about ``9.10 TB``
-and a drive sold as 16 TB as about ``14.55 TB``. To match both:
+and a drive sold as 16 TB as about ``14.55 TB``. The numbers in the
+``LOW:HIGH``, ``:HIGH``, and ``LOW:`` forms must be whole numbers; only the
+``EXACT`` form takes a decimal. ``ceph orch apply`` accepts a range such as
+``9.1T:15T``, but cephadm then creates no OSDs from the spec, and
+``ceph health detail`` reports ``CEPHADM_APPLY_SPEC_FAIL`` with the message
+``No filters applied``. To match both:
 
 .. code-block:: yaml
 
@@ -800,7 +809,7 @@ Spec file syntax:
 
 ``1`` to match all drives that the kernel indicates are rotational
 
-``0`` to match all drives that are non-rotational (SATA, SATA, NVMe SSDs, SAN LUNs, etc)
+``0`` to match all drives that are non-rotational (SAS, SATA, and NVMe SSDs, SAN LUNs, etc.)
 
 
 All
@@ -991,7 +1000,7 @@ types of media, usually for use by separate pools:
 * 10 HDD OSDs use 2 SATA/SAS SSDs for WAL+DB offload
 * 10 SATA/SAS SSD OSDs share 2 NVMe SSDs for WAL+DB offload
 
-This can be specificed with two service specs in the same file:
+This can be specified with two service specs in the same file:
 
 .. code-block:: yaml
 
@@ -1023,8 +1032,8 @@ This can be specificed with two service specs in the same file:
 This would create the desired layout by using all HDDs as data devices with two
 SATA/SAS SSDs assigned as dedicated DB/WAL devices, each backing five HDD OSDs.
 The remaining ten SAS/SATA SSDs will be
-used as OSD data devices, with ``VendorC`` NVMEs SSDs assigned as
-dedicated DB/WAL devices, each serving five SAS/SATA OSDs.  We call these _hybrid OSDs.
+used as OSD data devices, with ``VendorC`` NVMe SSDs assigned as
+dedicated DB/WAL devices, each serving five SAS/SATA OSDs.  We call these *hybrid* OSDs.
 
 Multiple Hosts with the same Disk Layout
 ----------------------------------------
@@ -1047,7 +1056,7 @@ Nodes 1-5:
 
     10 HDDs
     Vendor: VendorA
-    Model: SSD-123-foo
+    Model: HDD-123-foo
     Size: 4TB
     2 SSDs
     Vendor: VendorB
@@ -1112,7 +1121,7 @@ It is however possible to deploy the WAL on a separate device if desired.
 
     10 HDDs
     Vendor: VendorA
-    Model: SSD-123-foo
+    Model: HDD-123-foo
     Size: 4TB
 
     2 SAS/SATA SSDs
@@ -1136,7 +1145,7 @@ The OSD spec for this case would look like the following, using the ``model`` fi
       host_pattern: '*'
     spec:
       data_devices:
-        model: SSD-123-foo
+        model: HDD-123-foo
       db_devices:
         model: MC-55-44-ZX
       wal_devices:
@@ -1379,7 +1388,7 @@ This example applies to two hosts: ``ceph01`` and ``ceph04``.
   
 
 
-*This procedure was developed by Eugen Block in Feburary of 2025, and a blog
+*This procedure was developed by Eugen Block in February 2025, and a blog
 post pertinent to its development can be seen here:*
 `Eugen Block's "Cephadm: Activate existing OSDs" blog post <https://heiterbiswolkig.blogs.nde.ag/2025/02/06/cephadm-activate-existing-osds/>`_.
 
