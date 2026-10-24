@@ -598,7 +598,7 @@ class Module(MgrModule):
                     parsed_output = dict(zip(categories, values))
             else:
                 self.log.error('No heap stats available on {}.{}: {}'.format(daemon_type, daemon_id, outs))
-        
+
         return parsed_output
 
     def get_mempool(self, mode: str = 'separated') -> Dict[str, dict]:
@@ -1391,7 +1391,6 @@ class Module(MgrModule):
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
-
         return report
 
     def get_rook_data(self, report: Dict[str, object]) -> None:
