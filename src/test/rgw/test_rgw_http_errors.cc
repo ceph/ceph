@@ -3,6 +3,10 @@
 
 #include "rgw_common.h"
 #include "rgw_http_errors.h"
+#include "rgw_log.h"
+
+#include "include/encoding.h"
+#include "include/buffer.h"
 
 #include <gtest/gtest.h>
 
@@ -75,4 +79,30 @@ TEST(RGWHttpErrors, SetReqStateErrConnResetDistinctFromInternalError)
   EXPECT_NE(conn.err_code, io.err_code);
   EXPECT_EQ("ConnectionReset", conn.err_code);
   EXPECT_EQ("InternalError", io.err_code);
+}
+
+TEST(RGWHttpErrors, HttpErrorMapKeyTransportErrno)
+{
+  EXPECT_EQ(ERR_RGW_BROKEN_PIPE, rgw_http_error_map_key(EPIPE));
+  EXPECT_EQ(ERR_RGW_CONNECTION_ABORTED, rgw_http_error_map_key(ECONNABORTED));
+  EXPECT_EQ(ERR_RGW_REQUEST_ABORTED, rgw_http_error_map_key(ECANCELED));
+  EXPECT_EQ(ERR_INTERNAL_ERROR, rgw_http_error_map_key(EIO));
+  EXPECT_EQ(ERR_QUOTA_EXCEEDED, rgw_http_error_map_key(ERR_QUOTA_EXCEEDED));
+}
+
+TEST(RGWHttpErrors, OpsLogEntryEncodesErrorRet)
+{
+  rgw_log_entry entry;
+  entry.error_code = "ConnectionReset";
+  entry.error_ret = -ECONNRESET;
+
+  bufferlist bl;
+  encode(entry, bl);
+
+  rgw_log_entry decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+
+  EXPECT_EQ(entry.error_code, decoded.error_code);
+  EXPECT_EQ(entry.error_ret, decoded.error_ret);
 }
