@@ -121,6 +121,10 @@ private:
     return trimmer.get_alloc_tail();
   }
 
+  journal_seq_t get_log_tail() const final {
+    return trimmer.get_log_tail();
+  }
+
   replay_ret scan_valid_record_delta(
     scan_delta_handler_t &&delta_handler,
     journal_seq_t tail) final;

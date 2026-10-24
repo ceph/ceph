@@ -163,13 +163,18 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     return JOURNAL_SEQ_NULL;
   }
 
+  journal_seq_t get_log_tail() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
   void set_journal_head(journal_seq_t head) final {}
 
   void set_journal_head_sequence(segment_seq_t) final {}
 
   void update_journal_tails(
     journal_seq_t dirty_tail,
-    journal_seq_t alloc_tail) final {}
+    journal_seq_t alloc_tail,
+    journal_seq_t log_tail) final {}
 
   bool try_reserve_inline_usage(std::size_t) final { return true; }
 
@@ -248,6 +253,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	     const auto &e,
 	     auto &dirty_seq,
 	     auto &alloc_seq,
+	     auto &log_seq,
 	     auto last_modified) {
       [[maybe_unused]] bool found = false;
       for (auto &i : entries) {
@@ -321,6 +327,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	  cbj->get_device_id());
     journal_seq_t seq = {0, paddr};
     cbj->update_journal_tail(
+      seq,
       seq,
       seq
     ).get();
@@ -591,6 +598,7 @@ TEST_F(cbjournal_test_t, multiple_submit_at_end)
 	     const auto &e,
 	     auto &dirty_seq,
 	     auto &alloc_seq,
+	     auto &log_seq,
 	     auto last_modified) {
       return Journal::replay_ertr::make_ready_future<
 	std::pair<bool, CachedExtentRef>>(true, nullptr);

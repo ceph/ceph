@@ -1001,6 +1001,27 @@ public:
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
+  
+  std::optional<std::pair<lognode_deltas_t, size_t>> get_pending_lognode_delta_by_oid(
+    ghobject_t oid, transaction_id_t trans_id, bool force = false) {
+    return cache->get_pending_lognode_delta_by_oid(oid, trans_id, force);
+  }
+
+  using ExtentCallbackInterface::get_next_dirty_log_node_by_oid_ret;
+  get_next_dirty_log_node_by_oid_ret get_next_dirty_log_node_by_oid(
+    journal_seq_t seq) final;
+
+  bool has_pending_lognode_deltas() final {
+    return cache->has_pending_lognode_deltas();
+  }
+
+  std::optional<size_t> pending_lognode_delta_size(ghobject_t oid) {
+    return cache->pending_lognode_delta_size(oid); 
+  }
+
+  void delete_lognode_delta(ghobject_t oid) {
+    return cache->delete_lognode_delta(oid); 
+  }
 
   using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
