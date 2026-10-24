@@ -45,6 +45,16 @@ int remove(const DoutPrefixProvider* dpp,
            const rgw_raw_obj& obj,
            std::string_view name);
 
+/// Remove name only while the stored entry is still the one this group wrote.
+/// Returns 0 when another group owns the entry.
+int remove_if_owner(const DoutPrefixProvider* dpp,
+                    optional_yield y,
+                    librados::Rados& rados,
+                    const rgw_raw_obj& obj,
+                    std::string_view name,
+                    std::string_view path,
+                    std::string_view group_id);
+
 /// Return a paginated listing of group ids.
 int list(const DoutPrefixProvider* dpp,
          optional_yield y,

@@ -64,7 +64,8 @@ public:
                               bool exclusive,
                               std::map<std::string, bufferlist> *attrs,
                               optional_yield y,
-                              const DoutPrefixProvider *dpp) = 0;
+                              const DoutPrefixProvider *dpp,
+                              bool from_remote_zone = false) = 0;
 
   virtual int remove_user_info(const RGWUserInfo& info,
                                RGWObjVersionTracker *objv_tracker,
