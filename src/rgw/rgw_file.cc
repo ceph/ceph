@@ -1107,6 +1107,13 @@ namespace rgw {
       return -EINVAL;
     }
 
+    /* a write in progress replaces all xattrs on completion */
+    lock_guard guard(rgw_fh->mtx);
+    RGWFileHandle::file* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->write_req) {
+      return -EBUSY;
+    }
+
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name2()};
 
@@ -1146,6 +1153,13 @@ namespace rgw {
     if ((rgw_fh->is_bucket()) ||
 	(rgw_fh->is_root()))  {
       return -EINVAL;
+    }
+
+    /* a write in progress replaces all xattrs on completion */
+    lock_guard guard(rgw_fh->mtx);
+    RGWFileHandle::file* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->write_req) {
+      return -EBUSY;
     }
 
     int rc, rc2;
@@ -1664,6 +1678,28 @@ namespace rgw {
 	new RGWWriteRequest(g_rgwlib->get_driver(), penv,
 			    g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			    this, bucket_name(), object_name);
+      /* snapshot client xattrs from the current object, because the
+       * write_full in _do_write_meta replaces all xattrs on completion.
+       * mtx is held and write_req is now set, so setxattrs/rmxattrs return
+       * -EBUSY.  No instance is set yet, so this reads the current version
+       * in versioned buckets too. */
+      {
+        RGWGetAttrsRequest greq(
+          fs->get_context(),
+          g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+          bucket_name(), object_name);
+        int grc = g_rgwlib->get_fe()->execute_req(&greq);
+        if ((grc == 0) && (greq.get_ret() == 0)) {
+          for (const auto& [k, v] : greq.get_attrs()) {
+            if (v &&
+                (k.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1,
+                           RGW_ATTR_META_PREFIX) == 0)) {
+              f->write_req->xattr_snapshot.emplace(k, *v);
+            }
+          }
+        }
+        /* -ENOENT (new file) is expected: nothing to carry forward */
+      }
       rc = g_rgwlib->get_fe()->start_req(f->write_req);
       if (rc < 0) {
 	lsubdout(fs->get_context(), rgw, 5)
@@ -2019,6 +2055,11 @@ namespace rgw {
       buffer::list& attrbl = attrs[iter->first];
       const string& val = iter->second;
       attrbl.append(val.c_str(), val.size() + 1);
+    }
+
+    /* re-apply client xattrs, since write_full drops existing ones */
+    for (const auto& [k, v] : xattr_snapshot) {
+      attrs.emplace(k, v);
     }
 
     op_ret = rgw_get_request_metadata(this, state->cct, state->info, attrs);
