@@ -35,14 +35,19 @@ public:
   {
     ceph_pthread_getname(m_thread_name.data(), m_thread_name.size());
   }
+
+protected:
+  /* protected because these operators should never be called on a
+   * base class reference */
   Entry(const Entry &) = default;
   Entry& operator=(const Entry &) = default;
   Entry(Entry &&e) = default;
   Entry& operator=(Entry &&e) = default;
+
+public:
   virtual ~Entry() = default;
 
   virtual std::string_view strv() const = 0;
-  virtual std::size_t size() const = 0;
 
   time m_stamp;
   pthread_t m_thread;
@@ -58,7 +63,7 @@ public:
 /* This should never be moved to the heap! Only allocate this on the stack. See
  * CachedStackStringStream for rationale.
  */
-class MutableEntry : public Entry {
+class MutableEntry final : public Entry {
 public:
   MutableEntry() = delete;
   MutableEntry(short pr, short sub) : Entry(pr, sub) {}
@@ -66,7 +71,6 @@ public:
   MutableEntry& operator=(const MutableEntry&) = delete;
   MutableEntry(MutableEntry&&) = delete;
   MutableEntry& operator=(MutableEntry&&) = delete;
-  ~MutableEntry() override = default;
 
   std::ostream& get_ostream() {
     return *cos;
@@ -75,15 +79,12 @@ public:
   std::string_view strv() const override {
     return cos->strv();
   }
-  std::size_t size() const override {
-    return cos->strv().size();
-  }
 
 private:
   CachedStackStringStream cos;
 };
 
-class ConcreteEntry : public Entry {
+class ConcreteEntry final : public Entry {
 public:
   ConcreteEntry() = delete;
   ConcreteEntry(const Entry& e) : Entry(e) {
@@ -98,31 +99,26 @@ public:
     str.assign(strv.begin(), strv.end());
     return *this;
   }
-  ConcreteEntry(ConcreteEntry&& e) noexcept : Entry(e), str(std::move(e.str)) {}
+  ConcreteEntry(ConcreteEntry&& e) noexcept : Entry(std::move(e)), str(std::move(e.str)) {}
   ConcreteEntry& operator=(ConcreteEntry&& e) {
-    Entry::operator=(e);
+    Entry::operator=(std::move(e));
     str = std::move(e.str);
     return *this;
   }
-  ~ConcreteEntry() override = default;
 
   std::string_view strv() const override {
     return std::string_view(str.data(), str.size());
-  }
-  std::size_t size() const override {
-    return str.size();
   }
 
 private:
   boost::container::small_vector<char, 1024> str;
 };
 
-class StringEntry : public Entry {
+class StringEntry final : public Entry {
 public:
   StringEntry() = delete;
   StringEntry(short pr, short sub, std::string_view prefix)
       : Entry(pr, sub), str(prefix.begin(), prefix.end()) {}
-  ~StringEntry() override = default;
 
   StringEntry(const StringEntry&) = default;
   StringEntry& operator=(const StringEntry&) = default;
@@ -131,9 +127,6 @@ public:
 
   std::string_view strv() const override {
     return std::string_view(str.data(), str.size());
-  }
-  std::size_t size() const override {
-    return str.size();
   }
 
   auto get_inserter() {
