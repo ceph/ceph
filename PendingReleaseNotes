@@ -1,5 +1,19 @@
 >=22.0.0
 
+* RGW: New labeled perf counters ``rgw_op_hist`` (request latency histogram)
+  and ``rgw_op_err`` (failed requests), labeled by ``api``, ``op`` and HTTP
+  ``status`` class. ``rgw_op_err`` adds ``ret``, the internal return value.
+* RGW: Admin API requests now have the dialect ``admin`` instead of an empty
+  string. This is visible to Lua scripts in ``Request.Dialect`` and in the
+  ``<dialect>:<op>`` log prefix.
+* Common: The Admin Socket commands ``counter dump`` and ``counter
+  schema`` take an optional ``histograms`` argument, with a list of
+  logger names or ``ALL``. Histograms are dumped only for the listed
+  loggers.
+* ceph-exporter: New option ``exporter_histograms`` (``--histograms``)
+  that lists the loggers whose 1D histograms are exported as
+  Prometheus histograms.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to
