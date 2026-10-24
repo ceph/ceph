@@ -67,9 +67,78 @@ class FSPolicy:
         self.timer_task = RTimer(CEPHFS_IMAGE_POLICY_UPDATE_THROTTLE_INTERVAL,
                                  self.process_updates)
         self.timer_task.start()
+        # One-shot deferred rebalance. None means no retry is pending.
+        # Cancelling this timer does NOT abort in-flight directory SHUFFLING
+        # state machines — it only drops a future retry of policy.rebalance().
+        self.rebalance_timer = None
 
     def schedule_action(self, dir_paths):
         self.dir_paths.extend(dir_paths)
+
+    def _cancel_rebalance_timer(self):
+        """Drop a pending deferred rebalance retry only.
+
+        Active directory SHUFFLING transitions continue unaffected.
+        """
+        if self.rebalance_timer is not None:
+            self.rebalance_timer.cancel()
+            self.rebalance_timer = None
+
+    def _arm_rebalance_timer(self, delay):
+        """Start (or replace) a one-shot timer to retry rebalance after delay."""
+        self._cancel_rebalance_timer()
+        if self.stopping.is_set():
+            return
+        # Clamp so we never schedule a non-positive wait.
+        delay = max(float(delay), float(CEPHFS_IMAGE_POLICY_UPDATE_THROTTLE_INTERVAL))
+        log.info(f'scheduling deferred rebalance in {delay:.1f}s')
+        t = threading.Timer(delay, self._deferred_rebalance)
+        t.daemon = True
+        self.rebalance_timer = t
+        t.start()
+
+    def _deferred_rebalance(self):
+        # Always bounce onto the finisher so policy work stays serialized
+        # with other FSPolicy callbacks (never run under the Timer thread).
+        self.finisher.queue(self.handle_rebalance, [])
+
+    def _maybe_schedule_rebalance(self, just_shuffled=False):
+        """Arm deferred rebalance if the map is still uneven.
+
+        Re-arm rules (avoid infinite / tight loops):
+        - Balanced (max-min <= 1): do nothing.
+        - Still throttled: wait throttle_remaining() so we align with mapped_time.
+        - Just scheduled SHUFFLING dirs: counts stay uneven until UNMAP; recheck
+          shortly so we can stop once transitions finish.
+        - Idle, unthrottled, shuffle picked nothing: do NOT spin every 1s —
+          wait for the next instance add/remove.
+        """
+        if self.stopping.is_set() or not self.policy.needs_rebalance():
+            return
+        remaining = self.policy.throttle_remaining()
+        if remaining > 0:
+            self._arm_rebalance_timer(remaining)
+        elif just_shuffled:
+            # In-flight shuffle; poll soon, then stop once needs_rebalance is false.
+            self._arm_rebalance_timer(CEPHFS_IMAGE_POLICY_UPDATE_THROTTLE_INTERVAL)
+        else:
+            log.warning('directory map still uneven but no shuffle candidates '
+                        'and throttle elapsed; waiting for instance change')
+
+    def handle_rebalance(self):
+        """Deferred retry of directory shuffle after throttle allows."""
+        with self.lock:
+            if self.stopping.is_set():
+                return
+            self.rebalance_timer = None
+            if not self.policy.needs_rebalance():
+                log.debug('deferred rebalance: already balanced')
+                return
+            schedules = self.policy.rebalance()
+            if schedules:
+                log.info(f'deferred rebalance remapping: {schedules}')
+                self.schedule_action(schedules)
+            self._maybe_schedule_rebalance(just_shuffled=bool(schedules))
 
     def get_live_instance_ids(self):
         watcher = self.instance_watcher
@@ -92,6 +161,8 @@ class FSPolicy:
         with self.lock:
             log.debug('FSPolicy.shutdown')
             self.stopping.set()
+            log.debug('canceling deferred rebalance timer')
+            self._cancel_rebalance_timer()
             log.debug('canceling update timer task')
             self.timer_task.cancel()
             log.debug('update timer task canceled')
@@ -120,12 +191,25 @@ class FSPolicy:
                 if self.stopping.is_set():
                     log.debug(f'handle_update_instances: policy shutting down')
                     return
+                # Instance set changed: drop any stale deferred retry. This does
+                # not cancel in-flight SHUFFLING; remove_instances/add_instances
+                # below continue to own those transitions.
+                self._cancel_rebalance_timer()
+
                 schedules = []
                 if instances_removed:
+                    # Forced failover shuffle for dirs on the dead instance.
                     schedules.extend(self.policy.remove_instances(instances_removed))
                 if instances_added:
+                    # Least-load shuffle; may be empty if dirs are still throttled
+                    # after a recent failover remap.
                     schedules.extend(self.policy.add_instances(instances_added))
                 self.schedule_action(schedules)
+
+                # If still uneven (typical: daemon rejoins within the throttle
+                # window after failover), arm a one-shot retry aligned to
+                # mapped_time rather than leaving a permanent imbalance.
+                self._maybe_schedule_rebalance(just_shuffled=bool(schedules))
             finally:
                 self.op_tracker.finish_async_op()
 
