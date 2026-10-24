@@ -96,6 +96,26 @@
           ></cd-nvmeof-gateway-node>
         </div>
       </div>
+
+      <!-- Network Masks -->
+      <div
+        cdsRow
+        class="form-item"
+      >
+        <div cdsCol>
+          <cd-text-label-list
+            formControlName="listener_network_masks"
+            label="Network masks"
+            i18n-label
+            helperText="Subnet masks to auto-discover gateway listeners for this gateway group."
+            i18n-helperText
+            placeholder="e.g. 10.0.0.0/24"
+            i18n-placeholder
+          >
+          </cd-text-label-list>
+        </div>
+      </div>
+
       <!-- Encryption — same cdsRow/cdsCol layout as the nodes table for horizontal alignment -->
       <div
         cdsRow

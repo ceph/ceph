@@ -82,68 +82,100 @@
           </cds-text-label>
         </div>
       }
-      <div
-        cdsRow
-        class="form-item"
-      >
-        <fieldset class="cds--fieldset">
-          <legend
-            class="cds--label"
-            i18n
-          >
-            Listeners
-          </legend>
-          <p
-            class="cds--form__helper-text"
-            i18n
-          >
-            Determine where and how hosts can connect to the subsystem over the network.
-          </p>
-          <cds-radio-group
-            formControlName="listenerMode"
-            orientation="horizontal"
-          >
-            <cds-radio [value]="LISTENER_MODE.AUTO_FETCH">
-              <span i18n>Auto-fetch</span>
-            </cds-radio>
-            <cds-radio [value]="LISTENER_MODE.MANUAL">
-              <span i18n>Add manually</span>
-            </cds-radio>
-          </cds-radio-group>
-        </fieldset>
-      </div>
-      @if (listenerMode === LISTENER_MODE.AUTO_FETCH) {
+      @if (!listenersOnly) {
         <div
           cdsRow
           class="form-item"
         >
-          <cds-text-label
-            i18n
-            [invalid]="subnetMaskRef.isInvalid"
-            [invalidText]="requiredFieldInvalidText"
-            helperText="Listeners from this subnet-masks will be use."
-            i18n-helperText
-          >
-            Subnet-mask
-            <input
-              cdsText
-              cdValidate
-              #subnetMaskRef="cdValidate"
-              type="text"
-              placeholder="e.g. 255.0.0.0"
-              i18n-placeholder
-              id="subnetMask"
-              name="subnetMask"
-              formControlName="subnetMask"
-              [invalid]="subnetMaskRef.isInvalid"
-            />
-          </cds-text-label>
-          <ng-template #requiredFieldInvalidText>
-            <span i18n>This field is required.</span>
-          </ng-template>
+          <fieldset class="cds--fieldset">
+            <legend
+              class="cds--label"
+              i18n
+            >
+              Listeners
+            </legend>
+            <p
+              class="cds--form__helper-text"
+              i18n
+            >
+              Determine where and how hosts can connect to the subsystem over the network.
+            </p>
+            <cds-radio-group
+              formControlName="listenerMode"
+              orientation="horizontal"
+            >
+              <cds-radio [value]="LISTENER_MODE.AUTO_FETCH">
+                <span i18n>Auto-fetch</span>
+              </cds-radio>
+              <cds-radio [value]="LISTENER_MODE.MANUAL">
+                <span i18n>Add manually</span>
+              </cds-radio>
+            </cds-radio-group>
+          </fieldset>
         </div>
       }
-      @if (listenerMode === LISTENER_MODE.MANUAL) {
+      @if (!listenersOnly && listenerMode === LISTENER_MODE.AUTO_FETCH) {
+        @if (hasGroupNetworkMask) {
+          <div
+            cdsRow
+            class="form-item"
+          >
+            <div cdsCol>
+              <cds-checkbox
+                id="useGroupNetworkMask"
+                formControlName="useGroupNetworkMask"
+              >
+                <span
+                  class="cds--type-body-01"
+                  i18n
+                >
+                  Use network mask configured at gateway group level ({{
+                    gwGroupNetworkMasks.join(', ')
+                  }})
+                </span>
+              </cds-checkbox>
+              <cd-help-text>
+                <span i18n>
+                  Listeners will automatically be fetched using the gateway group's network mask.
+                  Uncheck to specify a custom network mask.
+                </span>
+              </cd-help-text>
+            </div>
+          </div>
+        }
+        @if (!hasGroupNetworkMask || !formGroup.get('useGroupNetworkMask')?.value) {
+          <div
+            cdsRow
+            class="form-item"
+          >
+            <cds-text-label
+              i18n
+              [invalid]="subnetMaskRef.isInvalid"
+              [invalidText]="requiredFieldInvalidText"
+              helperText="Listeners from this subnet-masks will be use."
+              i18n-helperText
+            >
+              Subnet-mask
+              <input
+                cdsText
+                cdValidate
+                #subnetMaskRef="cdValidate"
+                type="text"
+                placeholder="e.g. 255.0.0.0"
+                i18n-placeholder
+                id="subnetMask"
+                name="subnetMask"
+                formControlName="subnetMask"
+                [invalid]="subnetMaskRef.isInvalid"
+              />
+            </cds-text-label>
+            <ng-template #requiredFieldInvalidText>
+              <span i18n>This field is required.</span>
+            </ng-template>
+          </div>
+        }
+      }
+      @if (listenersOnly || listenerMode === LISTENER_MODE.MANUAL) {
         <div
           cdsRow
           class="form-item"

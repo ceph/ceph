@@ -1917,6 +1917,18 @@
       <!-- mTLS -->
       @if (serviceForm.controls.service_type.value === 'nvmeof') {
         <div class="form-item">
+          <cd-text-label-list
+            formControlName="listener_network_masks"
+            label="Network masks"
+            i18n-label
+            helperText="Subnet masks to auto-discover gateway listeners for this gateway group."
+            i18n-helperText
+            placeholder="e.g. 10.0.0.0/24"
+            i18n-placeholder
+          >
+          </cd-text-label-list>
+        </div>
+        <div class="form-item">
           <fieldset class="cds--fieldset">
             <label
               class="cds--label"
