@@ -8,9 +8,9 @@
 
 	<table><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>High-level Operations</h3>
 
-High-level cluster operations consist primarily of starting, stopping, and
-restarting a cluster with the ``ceph`` service;  checking the cluster's health;
-and, monitoring an operating cluster.
+High-level cluster operations consist primarily of starting and stopping the
+Ceph daemons on a host with ``systemctl``, checking the cluster's health, and
+monitoring an operating cluster.
 
 .. toctree::
 	:maxdepth: 1
@@ -79,9 +79,9 @@ with new hardware.
 
 	</td><td><h3>Troubleshooting</h3>
 
-Ceph is still on the leading edge, so you may encounter situations that require
-you to evaluate your Ceph configuration and modify your logging and debugging
-settings to identify and remedy issues you are encountering with your cluster.
+You may encounter situations that require you to evaluate your Ceph
+configuration and modify your logging and debugging settings to identify and
+remedy issues you are encountering with your cluster.
 
 .. toctree::
 	:maxdepth: 1
