@@ -791,6 +791,18 @@ private:
                      bool is_remote=false);
 
   void initialize_checkpoints(const std::string &dir_root);
+  // An already-COMPLETE checkpoint eligible for pruning. metadata_keys is the
+  // checkpoint key set read during initialize_checkpoints(), so prune does not
+  // re-fetch snapshot metadata.
+  struct CompleteCheckpoint {
+    uint64_t snap_id;
+    std::string snap_name;
+    std::set<std::string> metadata_keys;
+  };
+  void prune_old_synced_checkpoints(
+      const std::string &dir_root,
+      const std::vector<CompleteCheckpoint> &already_complete,
+      size_t newly_complete);
   void checkpoint_sync_complete(const std::string &dir_root, uint64_t synced_snap_id,
                                 const std::string &snap_name);
   void checkpoint_sync_failed(const std::string &dir_root, uint64_t snap_id,
