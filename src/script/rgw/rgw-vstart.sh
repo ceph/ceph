@@ -56,7 +56,7 @@
 #   --bucket-profile P  shared | strong:  the profile new nsfs buckets are
 #                       marked with.  The driver defaults to shared;  FSIO
 #                       (librgw, the librgw_file tests) needs strong.
-#   --access-model M    posix-strict | s3-metadata | s3-native:  what nsfs
+#   --access-model M    posix-strict | s3-native:  what nsfs
 #                       does when S3 authorises an operation the filesystem
 #                       denies the requester (rgw_nsfs_access_model).  The
 #                       driver defaults to posix-strict.
@@ -337,9 +337,9 @@ fi
 
 if [[ -n "$ACCESS_MODEL" ]]; then
 	case "$ACCESS_MODEL" in
-		posix-strict|s3-metadata|s3-native) ;;
-		*) echo "error: --access-model must be posix-strict," \
-			"s3-metadata or s3-native" >&2
+		posix-strict|s3-native) ;;
+		*) echo "error: --access-model must be posix-strict" \
+			"or s3-native" >&2
 		   exit 1 ;;
 	esac
 	VSTART_OPTS+=(-o "rgw_nsfs_access_model=$ACCESS_MODEL")

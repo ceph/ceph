@@ -4967,19 +4967,14 @@ options:
     client sees permissions that describe who can reach the data. It
     matches NooBaa, which performs every operation as the requesting
     account and whose IAM users and roles all share their account's uid,
-    so S3 and POSIX cannot disagree within an account. s3-metadata adds
-    that an object's tags and ACL - the gateway's own records about the
-    object, not its bytes - are read and written by the gateway with a
-    raised capability once S3 has authorised the request, so a grant to
-    another account reaches them. s3-native makes S3 the authority for
-    object data as well, which is what every other RGW backend does and
+    so S3 and POSIX cannot disagree within an account. s3-native makes S3
+    the authority, which is what every other RGW backend does and
     what the posix driver does; the filesystem becomes storage, and its
     permissions no longer describe who can reach the bytes, so a
     deployment serving the same tree over NFS or SMB should not use it.
   default: posix-strict
   enum_values:
   - posix-strict
-  - s3-metadata
   - s3-native
   services:
   - rgw

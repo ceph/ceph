@@ -41,11 +41,12 @@ enum class AccessClass {
  * bucket could want cross-account policy, and an extended bucket
  * could want strict parity.
  *
- * Three values, by which access path is native:  `posix-strict` (the
+ * Two values, by which access path is native:  `posix-strict` (the
  * filesystem;  a side-loading NFS or SMB client is co-equal, so POSIX
- * permissions must stay truthful), `s3-metadata` (S3 for the
- * gateway's records *about* objects), `s3-native` (S3;  the
- * filesystem is storage).
+ * permissions must stay truthful) and `s3-native` (S3;  the filesystem
+ * is storage).  The classes are finer than the two values need, so a
+ * model that draws the line between them can be added without
+ * reclassifying a call site.
  *
  * It answers one question:  whether the gateway performs an operation
  * itself.  A further position exists in the tree and is a different
@@ -79,24 +80,6 @@ class PosixStrictAccess final : public AccessStrategy {
 public:
   bool permits(AccessClass) const override { return false; }
   const char* name() const override { return "posix-strict"; }
-};
-
-/* S3 decides for an object's metadata, and not for its bytes.
- *
- * The middle value.  It is enforced here rather than at the call
- * sites, so a reader of this class knows the whole of it.
- *
- * The data answer is this value's, not the axis's.  `s3-native`
- * below answers data differently and is a supported model;  an
- * earlier version of this comment called the data line "the line the
- * axis is drawn on", which overstated a description of what was
- * built as a principle. */
-class S3MetadataAccess final : public AccessStrategy {
-public:
-  bool permits(AccessClass what) const override {
-    return what != AccessClass::data;
-  }
-  const char* name() const override { return "s3-metadata"; }
 };
 
 /* S3 is the native access model:  S3 decides, for data as well as

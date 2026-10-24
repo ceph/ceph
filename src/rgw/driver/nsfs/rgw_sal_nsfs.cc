@@ -4915,8 +4915,6 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
     cct->_conf.get_val<std::string>("rgw_nsfs_access_model");
   if (model == "s3-native") {
     access_strategy = std::make_unique<nsfs::S3NativeAccess>();
-  } else if (model == "s3-metadata") {
-    access_strategy = std::make_unique<nsfs::S3MetadataAccess>();
   } else {
     access_strategy = std::make_unique<nsfs::PosixStrictAccess>();
   }
@@ -13661,8 +13659,7 @@ int NSFSObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 {
   if (!ent)
     return -ENOENT;
-  /* Data asks the access model too.  `posix-strict` and
-   * `s3-metadata` deny it;  `s3-native` performs the read as the
+  /* Data asks the access model too.  `posix-strict` denies it;  `s3-native` performs the read as the
    * gateway, which is what that model is for.  An earlier version of
    * this comment said every configured model denies it, which was true
    * when it was written and is why only this path was wired up --
@@ -18740,7 +18737,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    *   object_attrs=<...>  and for an object's tags and ACL
    *
    * `set=` points it at another model for the rest of the process:
-   * `posix-strict`, `s3-metadata`, `s3-native`, or `default`
+   * `posix-strict`, `s3-native`, or `default`
    * (whatever was configured).  Switching is how the invariant test
    * gets its second polarity -- `posix-strict` denies the bytes and
    * `s3-native` serves them -- rather than by editing the source and
@@ -18751,15 +18748,12 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
    * restores it in the same call sequence. */
   if (hint == "access-model") {
     static const nsfs::PosixStrictAccess strict;
-    static const nsfs::S3MetadataAccess metadata;
     static const nsfs::S3NativeAccess native;
 
     if (auto it = params.find("set"); it != params.end()) {
       const nsfs::AccessStrategy* want = nullptr;
       if (it->second == "posix-strict") {
 	want = &strict;
-      } else if (it->second == "s3-metadata") {
-	want = &metadata;
       } else if (it->second == "s3-native") {
 	want = &native;
       } else if (it->second == "default") {
