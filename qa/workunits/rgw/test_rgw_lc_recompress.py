@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-import io
 import logging as log
-import json
 import sys
 import time
-import boto3.s3.transfer
-from common import exec_cmd, create_user, boto_connect
+from common import exec_cmd, create_user, boto_connect, object_stat, \
+    get_compression_type, get_storage_class, get_crypt_mode, \
+    get_crypt_attr_raw, make_compressible_body, upload_object, \
+    MULTIPART_THRESHOLD
 
 """
 Tests that RGW lifecycle transitions correctly recompress objects
@@ -42,76 +42,6 @@ KMS_KEY_ID = 'testkey-1'
 
 LC_POLL_INTERVAL = 10
 LC_TIMEOUT = 120
-
-
-def make_compressible_body(size_bytes):
-    """Generate compressible data of the requested size."""
-    pattern = b'The quick brown fox jumps over the lazy dog. '
-    repeats = (size_bytes // len(pattern)) + 1
-    return (pattern * repeats)[:size_bytes]
-
-
-def object_stat(bucket_name, object_key):
-    """Run radosgw-admin object stat and return parsed JSON."""
-    out = exec_cmd(
-        f'radosgw-admin object stat --bucket={bucket_name} --object={object_key}'
-    )
-    # some attrs (e.g. crypt.keysel) contain raw binary that isn't valid UTF-8
-    if isinstance(out, bytes):
-        out = out.decode('utf-8', errors='replace')
-    return json.loads(out)
-
-
-def get_compression_type(stat):
-    """
-    Extract the compression_type from object stat output.
-    Returns None if the object is not compressed.
-    """
-    compression = stat.get('compression')
-    if compression is None:
-        return None
-    ct = compression.get('compression_type', 'none')
-    if ct.lower() == 'none':
-        return None
-    return ct.lower()
-
-
-def get_storage_class(stat):
-    """
-    Extract the storage class from object stat output.
-    The storage class attr lives in attrs['user.rgw.storage_class'].
-    If absent, the object is in the STANDARD storage class.
-    """
-    attrs = stat.get('attrs', {})
-    sc = attrs.get('user.rgw.storage_class', '')
-    # The value may be a raw string possibly with trailing null bytes
-    sc = sc.strip().strip('\x00')
-    if not sc:
-        return 'STANDARD'
-    return sc
-
-
-def get_crypt_mode(stat):
-    """
-    Extract the encryption mode from object stat output.
-    Returns None if the object is not encrypted.
-    """
-    attrs = stat.get('attrs', {})
-    mode = attrs.get('user.rgw.crypt.mode', '')
-    mode = mode.strip().strip('\x00')
-    return mode if mode else None
-
-
-def get_crypt_salt(stat):
-    """
-    Extract the raw crypt salt attr for rotation comparisons.
-    Returns None if absent. The value may contain non-printable bytes
-    (decoded with errors='replace') but two distinct 32-byte random
-    salts are overwhelmingly unlikely to collide under that encoding.
-    """
-    attrs = stat.get('attrs', {})
-    salt = attrs.get('user.rgw.crypt.salt', '')
-    return salt if salt else None
 
 
 def is_aead_crypt_mode(mode):
@@ -222,39 +152,27 @@ def run_test(size_kb, encrypt):
 
     # Upload object — use multipart for sizes above 8MB to exercise
     # the multipart compressed+encrypted transition path
-    MULTIPART_THRESHOLD = 8 * 1024 * 1024
-
     extra_args = {}
     if encrypt:
         extra_args['ServerSideEncryption'] = 'aws:kms'
         extra_args['SSEKMSKeyId'] = KMS_KEY_ID
 
-    if size_bytes > MULTIPART_THRESHOLD:
-        log.info(f'Uploading {len(object_body)} byte object as {object_key} (multipart)')
-        transfer_config = boto3.s3.transfer.TransferConfig(
-            multipart_threshold=MULTIPART_THRESHOLD,
-            multipart_chunksize=MULTIPART_THRESHOLD,
-        )
-        client.upload_fileobj(
-            io.BytesIO(object_body), BUCKET_NAME, object_key,
-            ExtraArgs=extra_args,
-            Config=transfer_config,
-        )
-    else:
-        log.info(f'Uploading {len(object_body)} byte object as {object_key}')
-        bucket.put_object(Key=object_key, Body=object_body, **extra_args)
+    multipart = ' (multipart)' if size_bytes > MULTIPART_THRESHOLD else ''
+    log.info(f'Uploading {len(object_body)} byte object as {object_key}{multipart}')
+    upload_object(client, BUCKET_NAME, object_key, object_body, extra_args)
 
     stat = object_stat(BUCKET_NAME, object_key)
     verify_transition(stat, 'STANDARD', None, encrypt)
     log.info('Initial upload verified: STANDARD, no compression')
     # Salt rotation only applies to AEAD modes (CBC has no salt attr).
-    prev_salt = get_crypt_salt(stat) if encrypt else None
+    prev_salt = None
+    if encrypt and is_aead_crypt_mode(get_crypt_mode(stat)):
+        prev_salt = get_crypt_attr_raw(BUCKET_NAME, object_key, 'salt')
 
     def assert_salt_rotated(new_stat, prev):
         if not encrypt or not is_aead_crypt_mode(get_crypt_mode(new_stat)):
             return None
-        new_salt = get_crypt_salt(new_stat)
-        assert new_salt is not None, 'AEAD object missing crypt.salt'
+        new_salt = get_crypt_attr_raw(BUCKET_NAME, object_key, 'salt')
         assert new_salt != prev, \
             'crypt.salt did not rotate across re-encryption'
         return new_salt
@@ -305,8 +223,7 @@ def run_test(size_kb, encrypt):
         assert copy_orig == len(object_body), \
             f'Same-codec copy orig_size {copy_orig} != plaintext {len(object_body)}'
         if is_aead_crypt_mode(get_crypt_mode(copy_stat)):
-            copy_salt = get_crypt_salt(copy_stat)
-            assert copy_salt is not None, 'AEAD copy missing crypt.salt'
+            copy_salt = get_crypt_attr_raw(BUCKET_NAME, copy_key, 'salt')
             assert copy_salt != prev_salt, \
                 'Copy salt did not rotate vs source'
         body = bucket.Object(copy_key).get()['Body'].read()
