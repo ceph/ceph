@@ -62,6 +62,14 @@ IDP_PASSWORD = 'cephadm-qa-password'
 
 Check = Tuple[str, bool]
 
+# (service behind the route, route) as a logged-in user reaches them
+SSO_ROUTES = (
+    ('dashboard', '/'),
+    ('grafana', '/grafana/api/health'),
+    ('prometheus', '/prometheus/api/v1/status/buildinfo'),
+    ('alertmanager', '/alertmanager/api/v2/status'),
+)
+
 
 class GatewayTestCase(ServicesTestCase):
     """Monitoring stack + helpers for gateway, oauth2-proxy and the IdP."""
@@ -91,11 +99,17 @@ class GatewayTestCase(ServicesTestCase):
     # monitoring stack
     # ------------------------------------------------------------------
     @classmethod
+    def monitoring_hosts(cls) -> List[str]:
+        """Where prometheus, alertmanager and grafana run (one instance per host)."""
+        return [cls.mon_host]
+
+    @classmethod
     def deploy_monitoring(cls) -> None:
         cls.apply('node-exporter', {'service_type': 'node-exporter',
                                     'placement': {'host_pattern': '*'}})
         for svc in ('prometheus', 'alertmanager', 'grafana'):
-            cls.apply(svc, {'service_type': svc, 'placement': {'hosts': [cls.mon_host]}})
+            cls.apply(svc, {'service_type': svc,
+                            'placement': {'hosts': cls.monitoring_hosts()}})
         for svc in ('node-exporter', 'prometheus', 'alertmanager', 'grafana'):
             cls.wait_service(svc)
 
@@ -311,6 +325,50 @@ class GatewayTestCase(ServicesTestCase):
         self.assertEqual(res['status'], 200, f'login did not land on a page: {res}')
 
     # ------------------------------------------------------------------
+    # failure injection
+    # ------------------------------------------------------------------
+    def daemon_state(self, daemon_name: str) -> str:
+        for d in self.ceph_json('orch', 'ps') or []:
+            if d.get('daemon_name') == daemon_name:
+                return str(d.get('status_desc'))
+        return 'absent'
+
+    def stop_daemon(self, daemon_name: str) -> None:
+        self.orch('daemon', 'stop', daemon_name)
+        self.poll(f'{daemon_name} stopped',
+                  lambda: self.daemon_state(daemon_name) != 'running',
+                  timeout=300, kick=True)
+
+    def start_daemon(self, daemon_name: str) -> None:
+        self.orch('daemon', 'start', daemon_name)
+        self.poll(f'{daemon_name} running',
+                  lambda: self.daemon_state(daemon_name) == 'running',
+                  timeout=600, kick=True)
+
+    @classmethod
+    def fail_closed(cls, res: Dict[str, Any]) -> bool:
+        """The request did not reach a backend: an error, no answer, or a
+        redirect to login."""
+        if 200 <= res['status'] < 300:
+            return False
+        if 300 <= res['status'] < 400:
+            return cls._sent_to_login(res)
+        return True
+
+    def session_checks(self, origin: str, jar: str,
+                       down: Sequence[str] = ()) -> List[Check]:
+        """A logged-in user's view: every route is served, except the
+        routes of the services in 'down', which must report the outage."""
+        r = self.http_many([{'url': f'{origin}{path}', 'jar': jar} for _, path in SSO_ROUTES])
+        out: List[Check] = []
+        for (svc, path), res in zip(SSO_ROUTES, r):
+            if svc in down:
+                out.append((f'{path} reports {svc} is down', res['status'] in (502, 503, 504)))
+            else:
+                out.append((f'{path} served with the session', res['status'] == 200))
+        return out
+
+    # ------------------------------------------------------------------
     # mode checks
     # ------------------------------------------------------------------
     @staticmethod
@@ -433,8 +491,7 @@ class GatewayTestCase(ServicesTestCase):
         puser, ppass = self.prometheus_creds()
         bearer = self.token()
         ca = {'cacert': ROOT_CA_FILE}
-        routes = ['/', '/grafana/api/health', '/prometheus/api/v1/status/buildinfo',
-                  '/alertmanager/api/v2/status']
+        routes = [path for _, path in SSO_ROUTES]
         direct, direct_names = self._backends_need_client_cert()
         reqs = list(direct)
         reqs += [dict(url=self.gw(p), **ca) for p in routes]

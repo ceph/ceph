@@ -7,10 +7,11 @@ helpers live in common.py.
 """
 
 import urllib.parse
+from typing import List
 
 from tasks.cephadm_cases.services.base import WORKDIR
 from tasks.cephadm_cases.services.mgmt_gateway.common import (
-    GatewayTestCase, GW, OAUTH2, IDP_CLIENT_ID, IDP_EMAIL, IDP_USER,
+    Check, GatewayTestCase, GW, OAUTH2, IDP_CLIENT_ID, IDP_EMAIL, IDP_USER, SSO_ROUTES,
 )
 
 JAR = f'{WORKDIR}/oauth2.cookies'
@@ -112,4 +113,48 @@ class TestOAuth2Proxy(GatewayTestCase):
         self.assertIn('oauth2-proxy', res.err, res)
         # and back
         self.deploy_oauth2()
+        self.wait_mode('oauth2')
+
+    # ------------------------------------------------------------------
+    # one component down (no redundancy in this facet)
+    # ------------------------------------------------------------------
+    def test_oauth2_proxy_down_fails_closed(self) -> None:
+        """oauth2-proxy down: no route lets anything through, whether the
+        request has no credentials, a valid bearer token or prometheus
+        basic auth. Once it is back, every route works through the IdP."""
+        self.wait_mode('oauth2')
+        bearer = self.token()
+        puser, ppass = self.prometheus_creds()
+
+        def closed() -> List[Check]:
+            ways = [('without credentials', {}),
+                    ('with a bearer token', {'bearer': bearer}),
+                    ('with basic auth', {'user': puser, 'password': ppass})]
+            reqs = [dict(url=self.gw(path), **extra) for _, path in SSO_ROUTES for _, extra in ways]
+            r = iter(self.http_many(reqs))
+            return [(f'{path} {how} refused', self.fail_closed(next(r)))
+                    for _, path in SSO_ROUTES for how, _ in ways]
+        victim = self.daemons(OAUTH2)[0]['daemon_name']
+        self.stop_daemon(victim)
+        try:
+            self.wait_checks('oauth2-proxy down: every route refused', closed, timeout=300)
+            self.hold_checks('oauth2-proxy down: every route refused', closed, seconds=60)
+        finally:
+            self.start_daemon(victim)
+        self.wait_mode('oauth2')
+
+    def test_backend_down_with_sso(self) -> None:
+        """Prometheus down while a user is logged in: its route reports the
+        outage, the others are still served with the session."""
+        self.wait_mode('oauth2')
+        res = self.login('/', JAR)
+        self.assert_logged_in(res)
+        victim = self.daemons('prometheus')[0]['daemon_name']
+        self.stop_daemon(victim)
+        try:
+            self.wait_checks('prometheus down: logged-in user still reaches the rest',
+                             lambda: self.session_checks(res['origin'], JAR, down=['prometheus']),
+                             timeout=300)
+        finally:
+            self.start_daemon(victim)
         self.wait_mode('oauth2')

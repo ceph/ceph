@@ -1,16 +1,23 @@
 """
 mgmt-gateway integration tests: high availability.
 
-Two gateways (hosts labelled 'mgmt') share a virtual IP held by a
-keepalive-only ingress, and two oauth2-proxy instances sit behind them.
-The suite yaml runs the vip task first; the VIP comes from ctx.vip.
+The topology of cephadm's HA setup: two gateways (hosts labelled 'mgmt')
+share a virtual IP held by a keepalive-only ingress, with two instances of
+every service behind them: oauth2-proxy, prometheus, alertmanager, grafana,
+and the dashboard in two mgrs. The suite yaml runs the vip task first; the
+VIP comes from ctx.vip.
+
+Each test_*_down test takes one instance of one layer away while a user is
+logged in, checks the user does not notice, then brings it back. (The
+active gateway going down is in test_open_issues.py until keepalived's
+health check works with a virtual_ip.)
 
 Run by the orch/cephadm/services/mgmt-gateway suite (ha facet); shared
 helpers live in common.py.
 """
 
 import urllib.parse
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from tasks.cephadm_cases.services.base import ROOT_CA_FILE, WORKDIR
 from tasks.cephadm_cases.services.mgmt_gateway.common import (
@@ -25,6 +32,11 @@ JAR = f'{WORKDIR}/ha.cookies'
 class TestMgmtGatewayHA(GatewayTestCase):
 
     vip: str = ''
+
+    @classmethod
+    def monitoring_hosts(cls) -> List[str]:
+        # redundant backends: one instance of each on both gateway hosts
+        return cls.host_names[:2]
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -102,3 +114,52 @@ class TestMgmtGatewayHA(GatewayTestCase):
         url = f"{res['origin']}/prometheus/api/v1/status/buildinfo"
         r = self.http_many([{'url': url, 'jar': JAR, 'cacert': ROOT_CA_FILE}] * 10)
         self.assertEqual([x['status'] for x in r], [200] * 10, r)
+
+    # ------------------------------------------------------------------
+    # one instance of a layer down
+    # ------------------------------------------------------------------
+    def one_of_two(self, service: str) -> Dict[str, Any]:
+        daemons = self.daemons(service)
+        self.assertEqual(len(daemons), 2, f'{service} must be redundant: {daemons}')
+        return daemons[0]
+
+    def assert_instance_down_unnoticed(self, service: str) -> None:
+        """Stop one instance of a service while a user is logged in: every
+        route keeps working through the VIP, with the session and with a
+        bearer token, and scraping goes on. Then start it again."""
+        self.wait_mode('oauth2')
+        res = self.login('/', JAR)
+        self.assert_logged_in(res)
+        origin = res['origin']
+        victim = self.one_of_two(service)['daemon_name']
+        self.stop_daemon(victim)
+        try:
+            self.wait_checks(f'{victim} down: logged-in user unaffected',
+                             lambda: self.session_checks(origin, JAR), timeout=300)
+            self.wait_mode('oauth2', timeout=600)
+        finally:
+            self.start_daemon(victim)
+        self.wait_mode('oauth2')
+
+    def test_oauth2_proxy_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed(OAUTH2)
+
+    def test_prometheus_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed('prometheus')
+
+    def test_alertmanager_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed('alertmanager')
+
+    def test_grafana_instance_down(self) -> None:
+        self.assert_instance_down_unnoticed('grafana')
+
+    def test_active_mgr_down(self) -> None:
+        """The active mgr (dashboard) fails over: the dashboard comes back
+        through the VIP on the new active mgr, with the same session."""
+        self.wait_mode('oauth2')
+        res = self.login('/', JAR)
+        self.assert_logged_in(res)
+        self.fail_mgr_and_wait()
+        self.wait_checks('logged-in user after mgr failover',
+                         lambda: self.session_checks(res['origin'], JAR), timeout=600)
+        self.wait_mode('oauth2')
