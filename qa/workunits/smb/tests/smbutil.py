@@ -9,6 +9,7 @@ import cephutil
 
 import smbclient
 from smbprotocol.header import NtStatus
+from smbprotocol.exceptions import SMBResponseException
 
 
 class SMBTestHost:
@@ -176,6 +177,31 @@ class PathWrapper:
         """Unlink (remove) a file."""
         smbclient.remove(str(self.share_path))
 
+    def stat(self):
+        return smbclient.stat(str(self.share_path))
+
+    def get_security_descriptor(self):
+        import smbclient.security
+
+        return smbclient.security.get_security_descriptor(
+            str(self.share_path)
+        )
+
+    def set_security_descriptor(self, sec_desc):
+        import smbclient.security
+
+        return smbclient.security.set_security_descriptor(
+            str(self.share_path),
+            sec_desc,
+        )
+
+    def rmtree(self, *, ignore_errors=False):
+        import smbclient.shutil
+
+        return smbclient.shutil.rmtree(
+            str(self.share_path), ignore_errors=ignore_errors
+        )
+
 
 def _get_resources(smb_cfg, rtype):
     jres = cephutil.cephadm_shell_cmd(
@@ -301,3 +327,37 @@ def apply_resources_unchecked(
         immediate=immediate,
         load_json=cephutil.LoadJSON.BOTH,
     )
+
+
+@contextlib.contextmanager
+def raises_nt_error(nt_status, base_exc=None):
+    """Checks that an exception was raised and that the nt status error matches
+    a given nt_status error code (or codes).  nt_status may be an int or a
+    tuple of ints.  base_exc is the base class of the exception to catch -
+    defaults to the common base classes used by smbprotocol and smbclient
+    (part of smbprotocol).
+    """
+    info = {}
+    base_exc = (
+        (OSError, SMBResponseException) if base_exc is None else base_exc
+    )
+    try:
+        yield info
+    except base_exc as err:
+        info['exception'] = err
+        # smbprotocol is not partcularly consistent where the nt status
+        # error is stored on the exception objects across the different
+        # layers. Check the clearly named one first and then the other.
+        info['ntstatus'] = getattr(err, 'ntstatus', None) or getattr(
+            err, 'status', None
+        )
+    if not info:
+        raise AssertionError('DID NOT RAISE')
+    if not isinstance(nt_status, tuple):
+        _statuses = (nt_status,)
+    else:
+        _statuses = nt_status
+    if info['ntstatus'] not in _statuses:
+        raise AssertionError(
+            f'NTSTATUS mismatch: {info["ntstatus"]} not in {_statuses}'
+        )

@@ -57,7 +57,8 @@ def thandler():
     )
 
 
-def test_internal_apply_cluster_and_rgw_share(thandler):
+@pytest.mark.parametrize('persistent_handles', [None, False, True])
+def test_internal_apply_cluster_and_rgw_share(thandler, persistent_handles):
     """Test creating a cluster with an RGW share."""
     cluster = _cluster(
         cluster_id='rgwtest',
@@ -67,6 +68,15 @@ def test_internal_apply_cluster_and_rgw_share(thandler):
                 source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
+        share_defaults=(
+            smb.resources.ShareDefaults(
+                availability=smb.resources.ShareAvailability(
+                    persistent_handles=persistent_handles
+                )
+            )
+            if persistent_handles is not None
+            else None
+        ),
     )
     share = smb.resources.Share(
         cluster_id='rgwtest',
@@ -95,6 +105,14 @@ def test_internal_apply_cluster_and_rgw_share(thandler):
 
     # Verify share uses credential_ref pointing to the auto-created credential
     share_data = thandler.internal_store.data[('shares', 'rgwtest.rgwshare1')]
+    assert 'availability' not in share_data
+    cfg = thandler.public_store['rgwtest', 'config.smb'].get()
+    assert (
+        'continuous availability' not in cfg['shares'][share.name]['options']
+    )
+    assert cfg['globals']['rgwtest']['options'].get(
+        'persistent handles', 'no'
+    ) == ('yes' if persistent_handles else 'no')
     cred_ref = share_data['rgw']['credential_ref']
     assert ('rgw_creds', cred_ref) in thandler.internal_store.data
     assert (

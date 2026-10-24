@@ -120,6 +120,11 @@ class SMBClustering(_StrEnum):
     NEVER = 'never'
 
 
+class PersistentHandlesDurability(_StrEnum):
+    FULL_OUTAGE = 'full_outage'
+    PARTIAL_OUTAGE = 'partial_outage'
+
+
 class ShowResults(_StrEnum):
     FULL = 'full'
     COLLAPSED = 'collapsed'
@@ -203,3 +208,10 @@ class CaseInsensitiveCheckPolicy(_StrEnum):
     REQUIRE = 'require'
     # REJECT - possible future addition
     # inverse of require (reject case INsentiive volumes, require case sens)
+
+
+class ACLSupportPolicy(_StrEnum):
+    """Specify how a share should manage ACLs."""
+
+    DEFAULT = 'default'
+    DISABLED = 'disabled'

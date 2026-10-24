@@ -24,6 +24,7 @@ from .enums import (
     ConfigNS,
     Intent,
     JoinSourceType,
+    PersistentHandlesDurability,
     SMBClustering,
     SourceReferenceType,
     State,
@@ -144,6 +145,63 @@ class Staging:
         return RGWCredentialEntry.from_store(
             self.destination_store, rgw_credential_id
         ).get_rgw_credential()
+
+    def check_availability_transitions(self) -> None:
+        """Validate transitions against the full batch after resource checks."""
+        affected: Dict[str, SMBResource] = {}
+        for resource in self.incoming.values():
+            if isinstance(resource, (resources.Cluster, resources.Share)):
+                affected.setdefault(resource.cluster_id, resource)
+        for cluster_id, source in affected.items():
+            cluster = self.get_cluster(cluster_id)
+            previous = (
+                None
+                if self.is_new(cluster)
+                else ClusterEntry.from_store(
+                    self.destination_store, cluster_id
+                ).get_cluster()
+            )
+            shares = {
+                entry.full_key: ShareEntry(
+                    entry.full_key[1], entry
+                ).get_share()
+                for entry in config_store.find_in_store(
+                    self.destination_store,
+                    str(ShareEntry.namespace),
+                    {'cluster_id': cluster_id},
+                )
+            }
+            previous_enabled = (
+                previous is not None
+                and resources.requires_persistent_handles(
+                    previous, shares.values()
+                )
+            )
+            for key in self.deleted:
+                shares.pop(key, None)
+            for key, resource in self.incoming.items():
+                if (
+                    isinstance(resource, resources.Share)
+                    and resource.cluster_id == cluster_id
+                ):
+                    shares[key] = resource
+            enabled = resources.requires_persistent_handles(
+                cluster, shares.values()
+            )
+            if previous is not None and not previous_enabled and enabled:
+                raise ErrorResult(
+                    source,
+                    'persistent handles cannot be enabled on an existing '
+                    'cluster when global support is disabled',
+                    status={
+                        'cluster_id': cluster_id,
+                        'hint': {
+                            'note': 'Enable persistent handles when creating '
+                            'the cluster, either in share_defaults.availability or on a '
+                            'CephFS share in the same batch',
+                        },
+                    },
+                )
 
     def save(self) -> ResultGroup:
         results = ResultGroup()
@@ -420,6 +478,26 @@ def _check_cluster_modifications(
     prev = ClusterEntry.from_store(
         staging.destination_store, cluster.cluster_id
     ).get_cluster()
+    # Database persistence is fixed at startup; reload cannot migrate it.
+    # Omission means full_outage, even while handles are disabled.
+    durability = (
+        cluster.persistent_handles_durability
+        or PersistentHandlesDurability.FULL_OUTAGE
+    )
+    prev_durability = (
+        prev.persistent_handles_durability
+        or PersistentHandlesDurability.FULL_OUTAGE
+    )
+    if durability != prev_durability:
+        raise ErrorResult(
+            cluster,
+            'persistent_handles_durability value may not be changed',
+            status={
+                'existing_values': [
+                    {'persistent_handles_durability': prev_durability}
+                ]
+            },
+        )
     if cluster.auth_mode != prev.auth_mode:
         raise ErrorResult(
             cluster,
@@ -456,6 +534,24 @@ def _check_cluster_modifications(
             'value': opt_terms[prev_clustering],
         }
         raise ErrorResult(cluster, msg, status={'hint': hint})
+    acl_support = prev_acl_support = None
+    if cluster.share_defaults and cluster.share_defaults.acl_support:
+        acl_support = cluster.share_defaults.acl_support
+    if prev.share_defaults and prev.share_defaults.acl_support:
+        prev_acl_support = prev.share_defaults.acl_support
+    if acl_support != prev_acl_support:
+        # Toggling acl support can really mess up perms on your system. Block
+        # changing this setting. If you know what you are doing you can point
+        # two shares at the same place instead.
+        existing_values = [{'acl_support': prev_acl_support}]
+        raise ErrorResult(
+            cluster,
+            (
+                'the cluster\'s share_defaults'
+                ' acl_support value may not be changed'
+            ),
+            status={'existing_values': existing_values},
+        )
 
 
 def _check_cluster_keybridge(cluster: resources.Cluster) -> None:
@@ -497,6 +593,8 @@ def _check_share_resource(
             status={"cluster_id": share.cluster_id},
         )
 
+    if not staging.is_new(share):
+        _check_share_modifications(share, staging)
     # Handle RGW shares
     if share.rgw is not None:
         _check_share_rgw(share, staging)
@@ -506,6 +604,76 @@ def _check_share_resource(
         _check_share_cephfs(share, staging, toolbox)
         return
     raise ValueError(f"invalid share: missing rgw and cephfs config: {share}")
+
+
+def warn_availability(
+    resource: SMBResource,
+    staging: Staging,
+    recorder: WarningRecorder,
+) -> None:
+    """Warn about enabled handles after the batch is applied."""
+    if isinstance(resource, resources.Cluster):
+        defaults = resource.share_defaults
+        if (
+            defaults
+            and defaults.availability
+            and defaults.availability.persistent_handles
+        ):
+            recorder.record_warning(
+                f'Persistent handles are enabled by default for cluster '
+                f'"{resource.cluster_id}" via share_defaults.availability. '
+                'Existing and newly created CephFS shares '
+                'inherit this setting unless explicitly disabled with '
+                'availability.persistent_handles: false. Global support remains '
+                'enabled even with no shares or when all shares opt out. '
+                'Persistent-handle state '
+                'management can significantly impact performance.'
+            )
+    elif (
+        isinstance(resource, resources.Share) and resource.cephfs is not None
+    ):
+        _warn_share_availability(
+            resource, staging.get_cluster(resource.cluster_id), recorder
+        )
+
+
+def _warn_share_availability(
+    share: resources.Share,
+    cluster: resources.Cluster,
+    recorder: WarningRecorder,
+) -> None:
+    defaults = cluster.share_defaults
+    cluster_enabled = bool(
+        defaults
+        and defaults.availability
+        and defaults.availability.persistent_handles
+    )
+    share_value = (
+        share.availability.persistent_handles if share.availability else None
+    )
+    if share_value is False or (share_value is None and not cluster_enabled):
+        return
+    if share_value is True:
+        message = (
+            f'Persistent handles are explicitly enabled for CephFS share '
+            f'"{share.cluster_id}.{share.share_id}". '
+        )
+        if not cluster_enabled:
+            message += (
+                'Although the cluster default is disabled, this share requires '
+                'global persistent-handle support for the cluster. '
+            )
+    else:
+        message = (
+            f'CephFS share "{share.cluster_id}.{share.share_id}" inherits '
+            f'persistent handles from cluster "{cluster.cluster_id}" '
+            'share_defaults.availability. '
+        )
+    recorder.record_warning(
+        message
+        + 'Persistent-handle state management can significantly impact '
+        'performance.'
+    )
 
 
 def _check_share_rgw(share: resources.Share, staging: Staging) -> None:
@@ -796,6 +964,32 @@ def _check_case_sensitivity_settings(
         share,
         msg=f'CephFS subvolume {desc}; case insensitive mode is required',
     )
+
+
+def _check_share_modifications(
+    share: resources.Share, staging: Staging
+) -> None:
+    """share has some fields we do not permit changing after it has
+    been created.
+    """
+    prev = ShareEntry.from_store(
+        staging.destination_store, share.cluster_id, share.share_id
+    ).get_share()
+    acl_support = prev_acl_support = None
+    if share.acl_support:
+        acl_support = share.acl_support
+    if prev.acl_support:
+        prev_acl_support = prev.acl_support
+    if acl_support != prev_acl_support:
+        # Toggling acl support can really mess up perms on your system. Block
+        # changing this setting. If you know what you are doing you can point
+        # two shares at the same place instead.
+        existing_values = [{'acl_support': prev_acl_support}]
+        raise ErrorResult(
+            share,
+            'the share\'s acl_support value may not be changed',
+            status={'existing_values': existing_values},
+        )
 
 
 @cross_check_resource.register

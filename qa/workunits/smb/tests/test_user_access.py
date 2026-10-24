@@ -6,6 +6,8 @@ import smbprotocol
 
 import smbutil
 
+NtStatus = smbprotocol.header.NtStatus
+
 
 @pytest.mark.users_groups_access
 def test_update_users_groups(smb_cfg):
@@ -29,7 +31,7 @@ def test_update_users_groups(smb_cfg):
     for uinfo in new_u:
         username = uinfo['name']
         password = uinfo['password']
-        with pytest.raises(smbprotocol.exceptions.LogonFailure):
+        with smbutil.raises_nt_error(NtStatus.STATUS_LOGON_FAILURE):
             with smbutil.connection(
                 smb_cfg, share_name1, username=username, password=password
             ) as sharep:

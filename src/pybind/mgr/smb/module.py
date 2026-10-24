@@ -28,12 +28,14 @@ from . import (
 )
 from .cli import SMBCLICommand
 from .enums import (
+    ACLSupportPolicy,
     AuthMode,
     CaseInsensitiveCheckPolicy,
     ClientSupportMode,
     InputPasswordFilter,
     JoinSourceType,
     PasswordFilter,
+    PersistentHandlesDurability,
     ShowResults,
     SMBClustering,
     UserGroupSourceType,
@@ -239,6 +241,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         client_compat: Optional[ClientSupportMode] = None,
         password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
         password_filter_out: Optional[PasswordFilter] = None,
+        persistent_handles: Optional[bool] = None,
+        persistent_handles_durability: Optional[
+            PersistentHandlesDurability
+        ] = None,
     ) -> results.Result:
         """Create an smb cluster"""
         domain_settings = None
@@ -348,6 +354,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             clustering=clustering,
             public_addrs=c_public_addrs,
             client_compat=client_compat,
+            persistent_handles_durability=persistent_handles_durability,
+            share_defaults=(
+                resources.ShareDefaults(
+                    availability=resources.ShareAvailability(
+                        persistent_handles=persistent_handles,
+                    ),
+                )
+                if persistent_handles is not None
+                else None
+            ),
         )
         to_apply.append(cluster)
         return self._apply_res(
@@ -436,6 +452,50 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             rm_res,
             password_filter_out=password_filter,
         )
+
+    @SMBCLICommand('cluster update availability', perm='rw')
+    def cluster_update_availability(
+        self,
+        cluster_id: str,
+        persistent_handles: Optional[bool] = None,
+        persistent_handles_durability: Optional[
+            PersistentHandlesDurability
+        ] = None,
+    ) -> results.Result:
+        """Update share availability defaults and cluster durability policy"""
+        clusters = [
+            c
+            for c in self._handler.matching_resources(
+                [f'ceph.smb.cluster.{cluster_id}']
+            )
+            if isinstance(c, resources.Cluster)
+        ]
+        if not clusters:
+            raise ValueError(f'Cluster {cluster_id} not found')
+        if len(clusters) != 1:
+            raise ValueError(f'Multiple clusters found matching {cluster_id}')
+        cluster = clusters[0]
+        share_defaults = cluster.share_defaults
+        if persistent_handles is not None:
+            default_availability = (
+                share_defaults.availability if share_defaults else None
+            )
+            share_defaults = replace(
+                share_defaults or resources.ShareDefaults(),
+                availability=replace(
+                    default_availability or resources.ShareAvailability(),
+                    persistent_handles=persistent_handles,
+                ),
+            )
+        durability = cluster.persistent_handles_durability
+        if persistent_handles_durability is not None:
+            durability = persistent_handles_durability
+        updated_cluster = replace(
+            cluster,
+            persistent_handles_durability=durability,
+            share_defaults=share_defaults,
+        )
+        return self._apply_res([updated_cluster]).squash(updated_cluster)
 
     @SMBCLICommand('cluster update client-compat', perm='rw')
     def cluster_update_client_compat(
@@ -599,6 +659,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share_name: str = '',
         user_id: str = '',
         readonly: bool = False,
+        acl_support: Optional[ACLSupportPolicy] = None,
     ) -> results.Result:
         """Create an SMB share backed by RGW"""
         try:
@@ -619,6 +680,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     user_id=fetched_user_id,
                 ),
             )
+            if acl_support is not None:
+                share.acl_support = acl_support
 
             # Apply share resource (staging may create credential too)
             return self._apply_res([share], create_only=True).squash(share)
@@ -645,6 +708,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         subvolume: str = '',
         readonly: bool = False,
         case_insensitive: Optional[CaseInsensitiveCheckPolicy] = None,
+        acl_support: Optional[ACLSupportPolicy] = None,
     ) -> results.Result:
         """Create an smb share"""
         share = resources.Share(
@@ -659,6 +723,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 case_insensitive=case_insensitive,
             ),
         )
+        if acl_support is not None:
+            share.acl_support = acl_support
         return self._apply_res([share], create_only=True).one()
 
     @SMBCLICommand('share rm', perm='rw')
@@ -695,6 +761,37 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             if isinstance(s, resources.Share)
         ]
         return self._apply_res(rm_shares)
+
+    @SMBCLICommand('share update availability', perm='rw')
+    def share_update_availability(
+        self,
+        cluster_id: str,
+        share_id: str,
+        persistent_handles: Optional[bool] = None,
+    ) -> results.Result:
+        """Update a share's persistent-handle override"""
+        shares = [
+            share
+            for share in self._handler.matching_resources(
+                [f'ceph.smb.share.{cluster_id}.{share_id}']
+            )
+            if isinstance(share, resources.Share)
+        ]
+        if not shares:
+            raise ValueError(f'Share {cluster_id}/{share_id} not found')
+        if len(shares) != 1:
+            raise ValueError(
+                f'Multiple shares found matching {cluster_id}/{share_id}'
+            )
+        share = shares[0]
+        availability = share.availability
+        if persistent_handles is not None:
+            availability = replace(
+                availability or resources.ShareAvailability(),
+                persistent_handles=persistent_handles,
+            )
+        updated_share = replace(share, availability=availability)
+        return self._apply_res([updated_share]).squash(updated_share)
 
     @SMBCLICommand('share update cephfs qos', perm='rw')
     def share_update_qos(

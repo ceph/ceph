@@ -74,6 +74,33 @@ def test_share_find():
     assert found[0].get()['share_id'] == 'share2'
 
 
+def test_share_find_by_cluster_uses_index():
+    backend = _FakeDBAccessor()
+    store = smb.sqlite_store.mgr_sqlite3_db(backend)
+    for cluster_id, share_id in [
+        ('foo', 's1'),
+        ('foo', 's2'),
+        ('other', 's1'),
+    ]:
+        store['shares', f'{cluster_id}.{share_id}'].set(
+            {
+                'cluster_id': cluster_id,
+                'share_id': share_id,
+                'name': share_id,
+            }
+        )
+    found = smb.config_store.find_in_store(
+        store, 'shares', {'cluster_id': 'foo'}
+    )
+    assert {entry.get()['share_id'] for entry in found} == {'s1', 's2'}
+    plan = backend.db.execute(
+        "EXPLAIN QUERY PLAN SELECT key, obj FROM shares "
+        "WHERE json_extract(obj, '$.cluster_id') = ?",
+        ('foo',),
+    ).fetchall()
+    assert any('USING INDEX idx_shares_cn' in row[3] for row in plan)
+
+
 def test_mirror_write_and_get():
     store, mirror_target = _mirroring_store()
     key = ('join_auths', 'auth1')

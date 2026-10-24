@@ -29,6 +29,7 @@ from ceph.fs.earmarking import EarmarkTopScope
 
 from . import config_store, external, resources, rgw
 from .enums import (
+    ACLSupportPolicy,
     AuthMode,
     CephFSStorageProvider,
     HostAccess,
@@ -74,6 +75,7 @@ from .staging import (
     rgw_credential_refs,
     tls_refs,
     ug_refs,
+    warn_availability,
 )
 from .utils import checked, ynbool
 
@@ -85,6 +87,7 @@ _CLUSTERED = 'clustered'
 _CEPHFS_PROXY = 'cephfs-proxy'
 _REMOTE_CONTROL = 'remote-control'
 _KEYBRIDGE = 'keybridge'
+_ACL_XATTR = 'acl_xattr'
 log = logging.getLogger(__name__)
 
 
@@ -393,8 +396,10 @@ class ClusterConfigHandler:
                             resource, staging, create_only=create_only
                         )
                     )
+                if results.success:
+                    staging.check_availability_transitions()
         except ErrorResult as err:
-            results.append(err)
+            results.replace(err)
         except Exception as err:
             log.exception("error updating resource")
             msg = str(err)
@@ -416,6 +421,10 @@ class ClusterConfigHandler:
             _reconcile_store(staging.destination_store)
             with _store_transaction(staging.destination_store):
                 self._sync_modified(results)
+                for resource_result in results.resources():
+                    warn_availability(
+                        resource_result.src, staging, resource_result
+                    )
         return results
 
     def cluster_ids(self) -> List[str]:
@@ -552,7 +561,6 @@ class ClusterConfigHandler:
         """Trigger synchronization for all the clusters listed in
         `modified_cluster_ids` or all clusters if None.
         """
-        share_ids = self.share_ids()
         present_cluster_ids = set()
         removed_cluster_ids = set()
         change_groups = []
@@ -573,9 +581,12 @@ class ClusterConfigHandler:
                 continue
             present_cluster_ids.add(cluster_id)
             cluster_shares = [
-                self._share_entry(cid, shid).get_share()
-                for cid, shid in share_ids
-                if cid == cluster_id
+                ShareEntry(entry.full_key[1], entry).get_share()
+                for entry in config_store.find_in_store(
+                    self.internal_store,
+                    str(ShareEntry.namespace),
+                    {'cluster_id': cluster_id},
+                )
             ]
             change_group = ClusterChangeGroup(
                 cluster,
@@ -875,6 +886,33 @@ class _ShareConf:
     ceph_cluster: str
     rgw_entity: str = ''
 
+    @property
+    def persistent_handles(self) -> bool:
+        """Resolve the override without persisting inherited values."""
+        if self.resource.cephfs is None:
+            return False
+        availability = self.resource.availability
+        if (
+            availability is not None
+            and availability.persistent_handles is not None
+        ):
+            return availability.persistent_handles
+        defaults = self.cluster.share_defaults
+        return bool(
+            defaults
+            and defaults.availability
+            and defaults.availability.persistent_handles
+        )
+
+    @property
+    def acl_support(self) -> ACLSupportPolicy:
+        if self.resource.acl_support is not None:
+            return self.resource.acl_support
+        if sd := self.cluster.share_defaults:
+            if sd.acl_support is not None:
+                return sd.acl_support
+        return ACLSupportPolicy.DEFAULT
+
 
 @dataclasses.dataclass(frozen=True)
 class _ClusterConf:
@@ -994,12 +1032,16 @@ def _generate_rgw_share(
     else:
         user_id = cred.user_id or ""
 
+    modules = []
+    if conf.acl_support is ACLSupportPolicy.DEFAULT:
+        modules.append(_ACL_XATTR)
+    modules.append('ceph_rgw')
+
     cfg = {
         # smb.conf options
         'options': {
             'path': '/',
-            'vfs objects': 'acl_xattr ceph_rgw',
-            'acl_xattr:security_acl_name': 'user.NTACL',
+            'vfs objects': ' '.join(modules),
             'ceph_rgw:bucket': rgw.bucket,
             'ceph_rgw:user_id': user_id,
             # Credential values are left empty here; they are injected at
@@ -1015,6 +1057,8 @@ def _generate_rgw_share(
         }
     }
 
+    if _ACL_XATTR in modules:
+        cfg['options']['acl_xattr:security_acl_name'] = 'user.NTACL'
     if share.comment is not None:
         cfg['options']['comment'] = share.comment
     if share.max_connections is not None:
@@ -1073,9 +1117,9 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
     # Add macOS support modules if enabled
     if conf.cluster.is_macos_compatibility_enabled:
         modules.extend(["fruit", "streams_xattr"])
-
-    # Add standard modules
-    modules.extend(["acl_xattr", "ceph_snapshots"])
+    if conf.acl_support is ACLSupportPolicy.DEFAULT:
+        modules.append(_ACL_XATTR)
+    modules.append("ceph_snapshots")
 
     if qos := cephfs.qos:
         vfs_rl = "aio_ratelimit"
@@ -1088,7 +1132,6 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         'options': {
             'path': path,
             "vfs objects": " ".join(modules),
-            'acl_xattr:security_acl_name': 'user.NTACL',
             f'{ceph_vfs}:config_file': ceph_config_file,
             f'{ceph_vfs}:filesystem': cephfs.volume,
             f'{ceph_vfs}:user_id': cephx_entity,
@@ -1101,6 +1144,8 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         }
     }
 
+    if _ACL_XATTR in modules:
+        cfg['options']['acl_xattr:security_acl_name'] = 'user.NTACL'
     if qos:
         opts = cfg["options"]
         for field in (
@@ -1129,6 +1174,12 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         opts[f'{ceph_vfs}:keybridge name'] = str(cephfs.fscrypt_key.name)
         opts[f'{ceph_vfs}:keybridge kind'] = 'B64'
         opts[f'{ceph_vfs}:fscrypt'] = 'keybridge'
+    if conf.persistent_handles:
+        cfg['options']['continuous availability'] = 'yes'
+    elif (
+        share.availability and share.availability.persistent_handles is False
+    ):
+        cfg['options']['continuous availability'] = 'no'
     # extend share with user+group login access lists
     _generate_share_login_control(share, cfg)
     _generate_share_hosts_access(share, cfg)
@@ -1203,6 +1254,16 @@ def _generate_share_hosts_access(
 def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
     cluster_global_opts = {}
     cluster = conf.resource
+    persistent_handles = resources.requires_persistent_handles(
+        cluster, (share.resource for share in conf.shares)
+    )
+    if persistent_handles:
+        cluster_global_opts['persistent handles'] = 'yes'
+        # A stored durability policy is inert without persistent handles.
+        if cluster.persistent_handles_durability is not None:
+            cluster_global_opts['persistent handles durability'] = str(
+                cluster.persistent_handles_durability
+            )
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
         assert cluster.domain_settings is not None
         cluster_global_opts['security'] = 'ads'
