@@ -484,8 +484,14 @@ def test_bucket_logging_info_log(s3_client, logging_type):
         source_names = parse_logging_sources(output)
         assert source_bucket in source_names, f"Source bucket {source_bucket} not in logging_sources: {source_names}"
 
-    finally:
         cleanup_bucket(s3_client, source_bucket)
+        output, ret = admin(['bucket', 'logging', 'info', '--bucket', log_bucket])
+
+        assert ret == 0, f"bucket logging info failed with return code {ret}"
+        assert output.strip(), "bucket logging info returned empty output for log bucket"
+        source_names = parse_logging_sources(output)
+        assert source_bucket not in source_names, f"Source bucket {source_bucket} not removed from logging_sources: {source_names}"
+    finally:
         cleanup_bucket(s3_client, log_bucket)
 
 

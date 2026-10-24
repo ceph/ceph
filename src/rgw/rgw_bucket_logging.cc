@@ -465,7 +465,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket) {
+    bool log_source_bucket,
+    bool bucket_deleted) {
   record_input input;
   input.bucket = s->bucket.get();
   input.time = s->time;
@@ -513,7 +514,7 @@ int log_record(rgw::sal::Driver* driver,
   input.src_object = s->src_object.get();
   input.src_bucket_name = s->src_bucket_name;
   return log_record(driver, obj, input, op_name, etag, size, conf,
-                    dpp, y, async_completion, log_source_bucket);
+                    dpp, y, async_completion, log_source_bucket, bucket_deleted);
 }
 
 int log_record(rgw::sal::Driver* driver,
@@ -526,7 +527,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket) {
+    bool log_source_bucket,
+    bool bucket_deleted) {
   auto set_journal_err = [&conf, &input](const std::string& err_message) {
     if (conf.logging_type == LoggingType::Journal && input.journal_err_out) {
       *input.journal_err_out = err_message;
@@ -567,12 +569,13 @@ int log_record(rgw::sal::Driver* driver,
     return ret;
   }
 
-  // make sure that the logging source attribute is up-to-date
-  if (ret = update_bucket_logging_sources(dpp, target_bucket, input.bucket->get_key(), true, y); ret < 0) {
-    ldpp_dout(dpp, 5) << "WARNING: could not update bucket logging source '" <<
-      input.bucket->get_key() << "' in logging bucket '" << target_bucket_id << "' attribute, during record logging. ret = " << ret << dendl;
+  if (!bucket_deleted) {
+    // make sure that the logging source attribute is up-to-date if the src bucket is not being deleted
+    if (ret = update_bucket_logging_sources(dpp, target_bucket, input.bucket->get_key(), true, y); ret < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: could not update bucket logging source '" <<
+        input.bucket->get_key() << "' in logging bucket '" << target_bucket_id << "' attribute, during record logging. ret = " << ret << dendl;
+    }
   }
-
   const auto region = driver->get_zone()->get_zonegroup().get_api_name();
   std::string obj_name;
   RGWObjVersionTracker objv_tracker;
@@ -740,8 +743,17 @@ int log_record(rgw::sal::Driver* driver,
     }
   }
 
-  ldpp_dout(dpp, 20) << "INFO: wrote logging record: '" << record
-    << "' to '" << obj_name << "'" << dendl;
+  ldpp_dout(dpp, 20) << "INFO: wrote logging record: '" << record << "' to '" << obj_name << "'" << dendl;
+
+  if (bucket_deleted) {
+    // Commit the last log record in case the src bucket is being deleted or it will never be accessible
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region,
+                                      input.bucket, y, true, &objv_tracker, false, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
+      ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
+        input.src_bucket_name << ", ret = " << ret << dendl;
+      return ret;
+    }
+  }
   return 0;
 }
 
@@ -760,7 +772,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket) {
+    bool log_source_bucket,
+    bool bucket_deleted) {
   if (!s->bucket) {
     ldpp_dout(dpp, 1) << "ERROR: only bucket operations are logged in bucket logging" << dendl;
     return -EINVAL;
@@ -788,7 +801,7 @@ int log_record(rgw::sal::Driver* driver,
     }
     ldpp_dout(dpp, 20) << "INFO: found matching logging configuration of bucket '" << s->bucket->get_key() <<
       "' configuration: " << configuration.to_json_str() << dendl;
-    if (const int ret = log_record(driver, obj, s, op_name, etag, size, configuration, dpp, y, async_completion, log_source_bucket); ret < 0) {
+    if (const int ret = log_record(driver, obj, s, op_name, etag, size, configuration, dpp, y, async_completion, log_source_bucket, bucket_deleted); ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_key() <<
         "'. ret=" << ret << dendl;
       return ret;
@@ -811,7 +824,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket) {
+    bool log_source_bucket,
+    bool bucket_deleted) {
   if (!input.bucket) {
     ldpp_dout(dpp, 1) << "ERROR: only bucket operations are logged in bucket logging" << dendl;
     return -EINVAL;
@@ -839,7 +853,7 @@ int log_record(rgw::sal::Driver* driver,
     }
     ldpp_dout(dpp, 20) << "INFO: found matching logging configuration of bucket '" << input.bucket->get_key() <<
       "' configuration: " << configuration.to_json_str() << dendl;
-    if (const int ret = log_record(driver, obj, input, op_name, etag, size, configuration, dpp, y, async_completion, log_source_bucket); ret < 0) {
+    if (const int ret = log_record(driver, obj, input, op_name, etag, size, configuration, dpp, y, async_completion, log_source_bucket, bucket_deleted); ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to perform logging for bucket '" << input.bucket->get_key() <<
         "'. ret=" << ret << dendl;
       return ret;
