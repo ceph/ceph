@@ -21,6 +21,8 @@ tasks:
     mon.a:
 - print: "**** done install.upgrade on ceph cluster node"
 - ceph:
+    # the client node stays on squid, which cannot parse aes256k keys
+    client_key_type: aes
     log-ignorelist:
       - overall HEALTH_
       - \(FS_
