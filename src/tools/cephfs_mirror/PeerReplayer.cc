@@ -1719,7 +1719,9 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
     dout(20) << ": start offset=" << offset << ", end offset=" << end_offset
              << dendl;
     while (offset < end_offset) {
-      if (should_backoff(dir_root, &r)) {
+      int backoff_r;
+      if (should_backoff(dir_root, &backoff_r)) {
+        r = backoff_r;
         dout(0) << ": backing off r=" << r << dendl;
         break;
       }
@@ -1782,6 +1784,10 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
       inc_actual_sync_bytes(dir_root, r);
 
       offset += r;
+    }
+
+    if (r < 0) {
+      break;
     }
 
     --num_blocks;
