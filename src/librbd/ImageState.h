@@ -22,6 +22,8 @@ class ImageCtx;
 class ImageUpdateWatchers;
 class UpdateWatchCtx;
 
+namespace asio { class ContextWQ; }
+
 template <typename ImageCtxT = ImageCtx>
 class ImageState {
 public:
@@ -58,6 +60,10 @@ public:
   void notify_quiesce(Context *on_finish);
   void notify_unquiesce(Context *on_finish);
   void quiesce_complete(uint64_t handle, int r);
+
+  // Point quiesce notifications at a replacement ContextWQ. Call before the
+  // previous queue is released; QuiesceWatchers caches the raw pointer.
+  void rebind_quiesce_work_queue(asio::ContextWQ *work_queue);
 
 private:
   enum State {
