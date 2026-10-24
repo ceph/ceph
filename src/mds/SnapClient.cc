@@ -235,6 +235,22 @@ void SnapClient::get_snaps(set<snapid_t>& result) const
   }
 }
 
+snapid_t SnapClient::get_last_pending_seq() const
+{
+  snapid_t seq = get_last_seq();
+  for (const auto& [tid, info] : cached_pending_update) {
+    if (info.snapid > seq) {
+      seq = info.snapid;
+    }
+  }
+  for (const auto& [tid, p] : cached_pending_destroy) {
+    if (p.second > seq) {
+      seq = p.second;
+    }
+  }
+  return seq;
+}
+
 set<snapid_t> SnapClient::filter(const set<snapid_t>& snaps) const
 {
   ceph_assert(cached_version > 0);
