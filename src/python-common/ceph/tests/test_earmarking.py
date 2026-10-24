@@ -6,7 +6,8 @@ from ceph.fs.earmarking import (
     CephFSVolumeEarmarking,
     EarmarkException,
     EarmarkParseError,
-    EarmarkTopScope
+    EarmarkTopScope,
+    parse_earmark,
 )
 
 XATTR_SUBVOLUME_EARMARK_NAME = 'user.ceph.subvolume.earmark'
@@ -24,21 +25,21 @@ class TestCephFSVolumeEarmarking:
 
     def test_parse_earmark_valid(self):
         earmark_value = "nfs.subsection1.subsection2"
-        result = CephFSVolumeEarmarking.parse_earmark(earmark_value)
+        result = parse_earmark(earmark_value)
         assert result.top == EarmarkTopScope.NFS
         assert result.subsections == ["subsection1", "subsection2"]
 
     def test_parse_earmark_empty_string(self):
-        result = CephFSVolumeEarmarking.parse_earmark("")
+        result = parse_earmark("")
         assert result is None
 
     def test_parse_earmark_invalid_scope(self):
         with pytest.raises(EarmarkParseError):
-            CephFSVolumeEarmarking.parse_earmark("invalid.scope")
+            parse_earmark("invalid.scope")
 
     def test_parse_earmark_empty_sections(self):
         with pytest.raises(EarmarkParseError):
-            CephFSVolumeEarmarking.parse_earmark("nfs..section")
+            parse_earmark("nfs..section")
 
     def test_validate_earmark_valid_empty(self, earmarking):
         assert earmarking._validate_earmark("")
