@@ -685,9 +685,9 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
   return 0;
 }
 
-list<rgw_log_entry> rgw_log_entry::generate_test_instances()
+vector<rgw_log_entry> rgw_log_entry::generate_test_instances()
 {
-  list<rgw_log_entry> o;
+  vector<rgw_log_entry> o;
   rgw_log_entry e;
   e.object_owner = parse_owner("object_owner");
   e.bucket_owner = parse_owner("bucket_owner");

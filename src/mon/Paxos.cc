@@ -1424,7 +1424,11 @@ void Paxos::restart()
 
 void Paxos::reset_pending_committing_finishers()
 {
-  committing_finishers.splice(committing_finishers.end(), pending_finishers);
+  committing_finishers.insert(std::end(committing_finishers),
+                              std::begin(pending_finishers),
+                              std::end(pending_finishers));
+  pending_finishers.clear();
+
   finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
 }
 
@@ -1596,4 +1600,3 @@ bool Paxos::is_consistent()
 {
   return (first_committed <= last_committed);
 }
-

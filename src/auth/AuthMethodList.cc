@@ -19,30 +19,35 @@
 #include "include/str_list.h"
 
 #include <algorithm> // for std::find()
+#include <iterator>
 
 const static int dout_subsys = ceph_subsys_auth;
 
 
 AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
 {
-  std::list<std::string> sup_list;
-  get_str_list(str, sup_list);
+  const auto sup_list = get_str_vec(str);
+
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
-  for (auto iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
-    ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
-    if (iter->compare("cephx") == 0) {
+
+  auth_supported.reserve(std::size(sup_list));
+
+  for (const auto& method : sup_list) {
+    ldout(cct, 5) << "adding auth protocol: " << method << dendl;
+    if (method == "cephx") {
       auth_supported.push_back(CEPH_AUTH_CEPHX);
-    } else if (iter->compare("none") == 0) {
+    } else if (method == "none") {
       auth_supported.push_back(CEPH_AUTH_NONE);
-    } else if (iter->compare("gss") == 0) {
+    } else if (method == "gss") {
       auth_supported.push_back(CEPH_AUTH_GSS);
     } else {
       auth_supported.push_back(CEPH_AUTH_UNKNOWN);
-      lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
+      lderr(cct) << "WARNING: unknown auth protocol defined: " << method << dendl;
     }
   }
+
   if (auth_supported.empty()) {
     lderr(cct) << "WARNING: no auth protocol defined, use 'cephx' by default" << dendl;
     auth_supported.push_back(CEPH_AUTH_CEPHX);
@@ -64,10 +69,5 @@ int AuthMethodList::pick(const std::set<__u32>& supported)
 
 void AuthMethodList::remove_supported_auth(int auth_type)
 {
-  for (auto p = auth_supported.begin(); p != auth_supported.end(); ) {
-    if (*p == (__u32)auth_type)
-      auth_supported.erase(p++);
-    else 
-      ++p;
-  }
+  std::erase(auth_supported, static_cast<__u32>(auth_type));
 }

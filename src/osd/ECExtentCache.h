@@ -75,6 +75,11 @@
 
 #pragma once
 
+#include <span>
+#include <deque>
+#include <vector>
+#include <iterator>
+
 #include "ECUtil.h"
 #include "include/Context.h"
 
@@ -162,8 +167,8 @@ class ECExtentCache {
     GenContextURef<OpRef&> cache_ready_cb;
     std::list<LineRef> lines;
 
-    // List of callbacks to be executed on write completion (not commit)
-    std::list<std::function<void(void)>> on_write;
+    // Callbacks to be executed on write completion (not commit)
+    std::deque<std::function<void(void)>> on_write;
 
     const extent_set get_pin_eset(uint64_t alignment) const;
 
@@ -199,8 +204,10 @@ class ECExtentCache {
 
     void write_done(ECUtil::shard_extent_map_t const &update) const {
       object.write_done(update, projected_size);
-      for (auto &cb: on_write) {
-        cb();
+
+      // A callback may append another callback to this operation:
+      for (std::size_t i = 0; i < std::size(on_write); ++i) {
+        on_write[i]();
       }
     }
   };
@@ -217,8 +224,8 @@ private:
     ECExtentCache &pg;
     ECUtil::shard_extent_set_t requesting;
     ECUtil::shard_extent_set_t do_not_read;
-    std::list<OpRef> reading_ops;
-    std::list<OpRef> requesting_ops;
+    std::vector<OpRef> reading_ops;
+    std::vector<OpRef> requesting_ops;
     // Map of the byte-offset of the start of the line to the line.
     std::map<uint64_t, std::weak_ptr<Line>> lines;
     int active_ios = 0;
@@ -228,7 +235,7 @@ private:
     bool reading = false;
     bool cache_invalidate_expected = false;
 
-    void request(OpRef &op);
+    void request(const OpRef &op);
     void send_reads();
     void unpin(Op &op) const;
     void delete_maybe() const;
@@ -302,7 +309,7 @@ private:
   BackendReadListener &backend_read;
   LRU &lru;
   const ECUtil::stripe_info_t &sinfo;
-  std::list<OpRef> waiting_ops;
+  std::deque<OpRef> waiting_ops;
   void cache_maybe_ready();
   uint32_t active_ios = 0;
   CephContext *cct;
@@ -357,7 +364,7 @@ private:
                    projected_size, invalidates_cache);
   }
 
-  void execute(std::list<OpRef> &op_list);
+  void execute(std::span<const OpRef> operations);
   [[nodiscard]] bool idle() const;
 
   void add_on_write(std::function<void(void)> &&cb) const {

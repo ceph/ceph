@@ -8,9 +8,9 @@ void cls_timeindex_entry::dump(Formatter *f) const
   f->dump_string("value", value.to_str());
 }
 
-std::list<cls_timeindex_entry> cls_timeindex_entry::generate_test_instances()
+std::vector<cls_timeindex_entry> cls_timeindex_entry::generate_test_instances()
 {
-  std::list<cls_timeindex_entry> o;
+  std::vector<cls_timeindex_entry> o;
   cls_timeindex_entry i;
   i.key_ts = utime_t(0,0);
   i.key_ext = "foo";

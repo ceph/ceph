@@ -2,11 +2,12 @@
 #include "include/interval_set.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
-#include <list>
 #include <map>
 #include <set>
+#include <deque>
 #include <stack>
 #include <random>
+#include <vector>
 
 #ifndef OBJECT_H
 #define OBJECT_H
@@ -539,7 +540,7 @@ public:
   std::map<uint64_t, ChunkDesc> chunk_info;
   bool flushed;
 private:
-  std::list<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc> > layers;
+  std::deque<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>> layers;
 };
 
 #endif

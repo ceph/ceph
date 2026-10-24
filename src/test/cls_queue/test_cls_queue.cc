@@ -12,12 +12,13 @@
 #include "test/librados/test_pool_types.h"
 #include "global/global_context.h"
 
+#include <deque>
+#include <atomic>
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 #include <algorithm>
-#include <thread>
-#include <chrono>
-#include <atomic>
 
 using namespace std;
 using namespace ceph::test;
@@ -590,7 +591,7 @@ TEST_P(TestClsQueue, WrapAround)
   cls_queue_init(op, queue_name, queue_size);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
-  std::list<bufferlist> total_bl;
+  std::deque<bufferlist> total_bl;
 
   // fill up the queue
   for (auto i = 0U; i < number_of_entries; ++i) {
@@ -644,4 +645,3 @@ INSTANTIATE_TEST_SUITE_P(, TestClsQueue,
   return pool_type_name(info.param);
   }
 );
-
