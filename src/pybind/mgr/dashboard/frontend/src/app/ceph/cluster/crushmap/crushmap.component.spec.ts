@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import { of } from 'rxjs';
 
@@ -80,4 +81,65 @@ describe('CrushmapComponent', () => {
 
     component.ngOnDestroy();
   }));
+
+  describe('expanded state across background refresh', () => {
+    const crushmapInfo = () => ({
+      nodes: [
+        { children: [-2], type: 'root', name: 'default', id: -1 },
+        { children: [0, 1], type: 'host', name: 'my-host', id: -2 },
+        { status: 'up', type: 'osd', name: 'osd.0', id: 0 },
+        { status: 'up', type: 'osd', name: 'osd.1', id: 1 }
+      ],
+      roots: [-1]
+    });
+    const hostNode = () => component.nodes[0].children[0];
+
+    beforeEach(() => {
+      // Return fresh objects on every poll, like the real API does.
+      crushRuleServiceInfoSpy.and.callFake(() => of(crushmapInfo()));
+    });
+
+    it('should expand all nodes by default', fakeAsync(() => {
+      fixture.detectChanges();
+      tick(5000);
+      expect(component.nodes[0].expanded).toBe(true);
+      expect(hostNode().expanded).toBe(true);
+      component.ngOnDestroy();
+    }));
+
+    it('should keep a collapsed node collapsed after refresh', fakeAsync(() => {
+      fixture.detectChanges();
+      tick(5000);
+      component.onNodeToggle({ node: { id: '-2' } });
+      const pollsBefore = crushRuleServiceInfoSpy.calls.count();
+      tick(5000);
+      // make sure the tree really was rebuilt from a new poll
+      expect(crushRuleServiceInfoSpy.calls.count()).toBeGreaterThan(pollsBefore);
+      expect(hostNode().expanded).toBe(false);
+      expect(component.nodes[0].expanded).toBe(true);
+      component.ngOnDestroy();
+    }));
+
+    it('should keep a re-expanded node expanded after refresh', fakeAsync(() => {
+      fixture.detectChanges();
+      tick(5000);
+      component.onNodeToggle({ node: { id: '-2' } });
+      component.onNodeToggle({ node: { id: '-2' } });
+      tick(5000);
+      expect(hostNode().expanded).toBe(true);
+      component.ngOnDestroy();
+    }));
+
+    it('should handle nodetoggle events emitted by tree nodes', fakeAsync(() => {
+      fixture.detectChanges();
+      tick(5000);
+      fixture.detectChanges();
+      const rootTreeNode = debugElement.query(By.css('cds-tree-node'));
+      expect(rootTreeNode).not.toBeNull();
+      rootTreeNode.triggerEventHandler('nodetoggle', { node: { id: '-1' } });
+      tick(5000);
+      expect(component.nodes[0].expanded).toBe(false);
+      component.ngOnDestroy();
+    }));
+  });
 });
