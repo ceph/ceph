@@ -643,6 +643,20 @@ def test_alertmanager_spec_1():
     assert spec.get_port_start() == [9093, 9094]
 
 
+@pytest.mark.parametrize("spec_args,expected", [
+    ({}, [443]),                              # ssl defaults to True
+    ({'ssl': True}, [443]),
+    ({'ssl': False}, [80]),
+    ({'ssl': True, 'port': 9876}, [9876]),
+    ({'ssl': False, 'port': 8080}, [8080]),
+])
+def test_mgmt_gateway_default_port(spec_args, expected):
+    # the port cephadm records, checks and opens must be the one nginx
+    # listens on: 80 without TLS, 443 with it, unless a port is given
+    spec = MgmtGatewaySpec(**spec_args)
+    assert spec.get_port_start() == expected
+
+
 def test_alertmanager_spec_2():
     spec = AlertManagerSpec(user_data={'default_webhook_urls': ['foo']})
     assert isinstance(spec.user_data, dict)

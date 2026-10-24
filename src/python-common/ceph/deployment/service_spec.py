@@ -2847,7 +2847,9 @@ class MgmtGatewaySpec(ServiceSpec):
         if self.port is not None:
             ports.append(cast(int, self.port))
         else:
-            ports.append(443)  # default HTTPS port
+            # same default as the nginx template (external_server.conf.j2),
+            # which listens on 80 when ssl is off and 443 otherwise
+            ports.append(443 if self.ssl else 80)
         return ports
 
     def validate(self) -> None:
