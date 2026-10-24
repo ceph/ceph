@@ -29,6 +29,49 @@ if TYPE_CHECKING:
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
 
 
+def _agent_stats_request_start(mgr: "CephadmOrchestrator", endpoint: str) -> None:
+    """Start lightweight diagnostics for requests sharing the agent HTTP pool."""
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if stats:
+        if endpoint == 'data':
+            stats.begin_agent_request()
+        elif endpoint == 'node-proxy':
+            stats.record_node_proxy_request()
+
+    # Sample at request start in addition to the periodic HTTP-server sample so
+    # short bursts are less likely to be missed. Diagnostics must not affect the
+    # request if the server is not fully initialized.
+    pool_sample = None
+    http_server = getattr(mgr, 'http_server', None)
+    if http_server:
+        try:
+            pool_sample = http_server._sample_agent_pool()
+        except Exception:
+            pass
+    if stats and endpoint == 'data' and pool_sample is not None:
+        stats.record_request_pool_start(*pool_sample)
+
+
+def _agent_stats_request_end(mgr: "CephadmOrchestrator", endpoint: str) -> None:
+    """Finish request diagnostics. Only /data has a request latency context."""
+    if endpoint != 'data':
+        return
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if stats:
+        stats.finish_agent_request()
+
+
+# These tools are enabled only on the /data and /node-proxy mounts below.
+# on_start_resource runs before json_in parses the request body, so /data timing
+# includes JSON parsing as well as handler execution.
+cherrypy.tools.cephadm_agent_stats_start = cherrypy.Tool(
+    'on_start_resource', _agent_stats_request_start
+)
+cherrypy.tools.cephadm_agent_stats_end = cherrypy.Tool(
+    'on_end_request', _agent_stats_request_end
+)
+
+
 class AgentEndpoint:
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
@@ -47,9 +90,22 @@ class AgentEndpoint:
         return config
 
     def configure_routes(self, config: Dict) -> List[tuple]:
+        def with_stats(endpoint: str) -> Dict:
+            mount_config = {path: dict(values) for path, values in config.items()}
+            root_config = mount_config.setdefault('/', {})
+            root_config.update({
+                'tools.cephadm_agent_stats_start.on': True,
+                'tools.cephadm_agent_stats_start.mgr': self.mgr,
+                'tools.cephadm_agent_stats_start.endpoint': endpoint,
+                'tools.cephadm_agent_stats_end.on': True,
+                'tools.cephadm_agent_stats_end.mgr': self.mgr,
+                'tools.cephadm_agent_stats_end.endpoint': endpoint,
+            })
+            return mount_config
+
         return [
-            (self.host_data, '/data', config),
-            (self.node_proxy_endpoint, '/node-proxy', config),
+            (self.host_data, '/data', with_stats('data')),
+            (self.node_proxy_endpoint, '/node-proxy', with_stats('node-proxy')),
         ]
 
     def configure_tls(self) -> Dict[str, str]:
@@ -676,15 +732,27 @@ class HostData:
     def index(self) -> Dict[str, Any]:
         data: Dict[str, Any] = cherrypy.request.json
         results: Dict[str, Any] = {}
+        stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        if stats:
+            stats.record_report_shape(data)
         try:
             self.check_request_fields(data)
         except Exception as e:
+            if stats:
+                stats.record_bad_metadata()
             results['result'] = f'Bad metadata: {e}'
             self.mgr.log.warning(f'Received bad metadata from an agent: {e}')
         else:
+            host = data['host']
+            counter = self.mgr.agent_cache.agent_counter.get(host)
+            if stats:
+                stats.record_report_state(
+                    first_contact=counter is None,
+                    stale_ack=counter is not None and int(data['ack']) != counter,
+                )
             # if we got here, we've already verified the keyring of the agent. If
             # host agent is reporting on is marked offline, it shouldn't be any more
-            self.mgr.offline_hosts_remove(data['host'])
+            self.mgr.offline_hosts_remove(host)
             results['result'] = self.handle_metadata(data)
         return results
 
@@ -782,6 +850,9 @@ class HostData:
             return 'Successfully processed metadata.'
 
         except Exception as e:
+            stats = getattr(self.mgr, 'agent_metadata_stats', None)
+            if stats:
+                stats.record_handler_error()
             err_str = f'Failed to update metadata with metadata from agent on host {host}: {e}'
             self.mgr.log.warning(err_str)
             return err_str
@@ -888,6 +959,9 @@ class CephadmAgentHelpers:
         self.agent = mgr.http_server.agent
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
+        stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        if stats and hosts:
+            stats.record_ack_fanout(len(hosts))
         for host in hosts:
             if increment:
                 self.mgr.cache.metadata_up_to_date[host] = False
