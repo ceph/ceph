@@ -26,7 +26,8 @@ public:
     virtual ~Listener() {
     }
 
-    virtual void acquire_directory(std::string_view dir_path) = 0;
+    virtual void acquire_directory(std::string_view dir_path,
+                                   PriorityMode priority) = 0;
     virtual void release_directory(std::string_view dir_path, bool purging) = 0;
   };
 
