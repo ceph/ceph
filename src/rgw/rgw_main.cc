@@ -108,20 +108,24 @@ int main(int argc, char *argv[])
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
 
-#if defined(__linux__)
-  // defined in keyring.cc under the same guard
-  LinuxKeyringSecret::initialize_process_keyring();
-#else
-  ldpp_dout(&dp, 0) << "the Linux kernel keyring is not available on this "
-		    << "platform, so the SSE-KMS key cache is disabled" << dendl;
-#endif
-
   main.init_frontends1(rgw::InstanceType::Daemon, rgw::ProtocolType::HTTP_S3);
   main.init_numa();
 
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
+
+#if defined(__linux__)
+  // defined in keyring.cc under the same guard
+  if (const auto ec = LinuxKeyringSecret::initialize_process_keyring(); ec) {
+    ldpp_dout(&dp, 0) << "failed to install the process keyring: "
+                      << ec.message() << dendl;
+  }
+#else
+  ldpp_dout(&dp, 0) << "the Linux kernel keyring is not available on this "
+		    << "platform, so the SSE-KMS key cache is disabled" << dendl;
+#endif
+
   ceph::mutex mutex = ceph::make_mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();
