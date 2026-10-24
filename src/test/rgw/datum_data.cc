@@ -1139,7 +1139,7 @@ static_assert([] {
     const std::array intervals {Q::closed_open(address {0}, address {4}),
                                 Q::closed_open(address {10}, address {18})};
     const iv::canonical_view coverage {intervals};
-    const auto selected = iv::take_covered(coverage, byte_quantity {7}, address_metric {});
+    const auto selected = iv::take(coverage, byte_quantity {7}, address_metric {});
 
     return iv::measure(selected, address_metric {}).value == 7 &&
            std::ranges::next(std::begin(selected))->upper().key().value == 13;
@@ -1154,16 +1154,16 @@ TEST_CASE("metrics count covered units rather than coordinate width")
     const iv::canonical_view coverage {intervals};
     const iv::unsigned_metric<unsigned> metric;
     CHECK(iv::measure(coverage, metric) == 12);
-    const auto selected = iv::take_covered(coverage, 7, metric);
+    const auto selected = iv::take(coverage, 7, metric);
     CHECK(iv::measure(selected, metric) == 7);
     CHECK(std::ranges::next(std::begin(selected))->upper().key() == 13);
-    CHECK(std::empty(iv::take_covered(coverage, 0, metric)));
-    CHECK(iv::measure(iv::take_covered(coverage, 100, metric), metric) == 12);
+    CHECK(std::empty(iv::take(coverage, 0, metric)));
+    CHECK(iv::measure(iv::take(coverage, 100, metric), metric) == 12);
     CHECK_THROWS_AS(metric.advance(std::numeric_limits<unsigned>::max(), 1), std::overflow_error);
     const iv::canonical_set unsupported {Q::closed(0, 4)};
     CHECK_THROWS_AS(iv::measure(unsupported, metric), std::domain_error);
     const iv::canonical_set infinite {Q {}};
-    CHECK_THROWS_AS(iv::take_covered(infinite, 3, metric), std::domain_error);
+    CHECK_THROWS_AS(iv::take(infinite, 3, metric), std::domain_error);
 
     // A value geometry can borrow source endpoints; no default/assignment on points.
     struct row
@@ -1224,7 +1224,7 @@ TEST_CASE("coverage consumers request only the arithmetic they use")
     const std::array intervals {Q::closed_open(0, 4), Q::closed_open(10, 18)};
     const iv::canonical_view coverage {intervals};
     CHECK(12 == iv::measure(coverage, measurement {}).value);
-    const auto selected = iv::take_covered(coverage, 7, quota {});
+    const auto selected = iv::take(coverage, 7, quota {});
     CHECK(7 == iv::measure(selected, measurement {}).value);
     CHECK(13 == std::ranges::next(std::begin(selected))->upper().key());
 }

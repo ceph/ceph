@@ -107,8 +107,8 @@ requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>> &&
                  -> std::same_as<typename expression_domain_t<CoverageT>::value_type>;
              { metric.subtract(quantity, quantity) } -> std::same_as<typename MetricT::quantity_type>;
          }
-constexpr auto take_covered(const CoverageT& coverage, typename MetricT::quantity_type remaining,
-                            const MetricT& metric)
+constexpr auto take(const CoverageT& coverage, typename MetricT::quantity_type remaining,
+                    const MetricT& metric)
 {
     using domain_type = expression_domain_t<CoverageT>;
 

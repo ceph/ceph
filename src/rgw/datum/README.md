@@ -247,7 +247,7 @@ and distance. Measurement also needs checked addition; quota selection needs qua
 checked subtraction, and point advancement. Strong point and quantity types can differ; neither
 point assignment nor built-in arithmetic is required. `unsigned_metric<T>` provides checked
 unsigned arithmetic.
-`measure(coverage, metric)` and `take_covered(coverage, quota, metric)` support
+`measure(coverage, metric)` and `take(coverage, quota, metric)` support
 finite half-open canonical coverage. Holes consume no quota. Other inclusion
 conventions and infinities throw explicitly; discrete stepping and storage
 alignment remain external. Taking a quota returns an owning canonical view
