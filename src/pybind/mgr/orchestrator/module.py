@@ -1602,7 +1602,8 @@ Usage:
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
         try:
-            host_name, raw = svc_arg.split(":")
+            # PCI by-path names contain extra ':' (pci-0000:cd:00.0-nvme-1).
+            host_name, raw = svc_arg.split(":", 1)
             list_drive_group_spec_bool_arg: List[str] = []
             drive_group_spec = {
                 'data_devices': []
