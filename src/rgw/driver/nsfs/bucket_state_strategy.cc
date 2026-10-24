@@ -158,7 +158,7 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
    * locked bucket. */
   if (has_rule && (mode != "GOVERNANCE") && (mode != "COMPLIANCE")) {
     ldpp_dout(dpp, 0) << "ERROR: default_retention names mode \"" << mode
-      << "\", which is neither of theirs" << dendl;
+      << "\", which is neither of NooBaa's" << dendl;
     return -EBADMSG;
   }
 
@@ -720,10 +720,10 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
       { "allowed_headers", "AllowedHeader" },
       { "expose_headers",  "ExposeHeader" },
     };
-    for (const auto& [theirs, ours] : lists) {
-      if (JSONObj* a = r->find_obj(theirs); a) {
+    for (const auto& [json_key, xml_name] : lists) {
+      if (JSONObj* a = r->find_obj(json_key); a) {
 	for (auto vi = a->find_first(); !vi.end(); ++vi) {
-	  encode_xml(ours, (*vi)->get_data(), &f);
+	  encode_xml(xml_name, (*vi)->get_data(), &f);
 	}
       }
     }
@@ -979,7 +979,7 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     info.flags |= BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED;
   } else if (!versioning.empty() && (versioning != "DISABLED")) {
     ldpp_dout(dpp, 0) << "ERROR: " << path << " has versioning \""
-      << versioning << "\", which is none of theirs" << dendl;
+      << versioning << "\", which is none of NooBaa's" << dendl;
     return -EBADMSG;
   }
 

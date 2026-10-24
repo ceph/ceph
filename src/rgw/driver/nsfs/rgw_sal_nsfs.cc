@@ -5694,9 +5694,9 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
     if (!nb_bucket_state_strategy || adoption_complete()) {
       return nullptr;
     }
-    auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
 	nb_bucket_state_strategy.get());
-    if (theirs->recorded_path(dpp, name, path) < 0) {
+    if (nb_state->recorded_path(dpp, name, path) < 0) {
       return nullptr;
     }
     if (path.empty()) {
@@ -5756,10 +5756,10 @@ int NSFSDriver::new_bucket_path(const DoutPrefixProvider* dpp,
   /* NooBaa has no tenants, so only an untenanted name can be one of
    * its buckets. */
   if (b.tenant.empty() && nb_bucket_state_strategy && !adoption_complete()) {
-    auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
       nb_bucket_state_strategy.get());
     std::string recorded;
-    if (theirs->recorded_path(dpp, b.name, recorded) != -ENOENT) {
+    if (nb_state->recorded_path(dpp, b.name, recorded) != -ENOENT) {
       ldpp_dout(dpp, 1) << "nsfs: not creating bucket " << b.name
 	<< ":  a NooBaa bucket record holds the name" << dendl;
       return -EEXIST;
@@ -5952,10 +5952,10 @@ int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
   if (!nb_bucket_state_strategy || adoption_complete()) {
     return 0;
   }
-  auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+  auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
     nb_bucket_state_strategy.get());
   std::vector<std::string> records;
-  int ret = theirs->list_records(dpp, records);
+  int ret = nb_state->list_records(dpp, records);
   if (ret < 0) {
     return ret;
   }
@@ -5965,17 +5965,17 @@ int NSFSDriver::check_clear_of_noobaa_paths(const DoutPrefixProvider* dpp,
       (b.starts_with(a) && (b[a.size()] == '/'));
   };
   for (const auto& rec : records) {
-    std::string theirs_at;
-    if (theirs->recorded_path(dpp, rec, theirs_at) < 0) {
+    std::string recorded;
+    if (nb_state->recorded_path(dpp, rec, recorded) < 0) {
       continue;
     }
     /* NooBaa writes its paths with a trailing slash as often as not */
-    while ((theirs_at.size() > 1) && (theirs_at.back() == '/')) {
-      theirs_at.pop_back();
+    while ((recorded.size() > 1) && (recorded.back() == '/')) {
+      recorded.pop_back();
     }
-    if (nested(path, theirs_at)) {
+    if (nested(path, recorded)) {
       ldpp_dout(dpp, 1) << "nsfs: bucket " << name << ":  " << path
-	<< " is NooBaa bucket " << rec << "'s directory " << theirs_at
+	<< " is NooBaa bucket " << rec << "'s directory " << recorded
 	<< ", or nested with it" << dendl;
       return -EEXIST;
     }
@@ -6052,10 +6052,10 @@ int NSFSDriver::place_bucket(const DoutPrefixProvider* dpp, optional_yield y,
    * is complete -- the same rejection creation makes.  Nesting with
    * another bucket's directory is the row insert's. */
   if (nb_bucket_state_strategy && !adoption_complete()) {
-    auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+    auto* nb_state = static_cast<nsfs::NooBaaBucketStateStrategy*>(
       nb_bucket_state_strategy.get());
     std::string recorded;
-    if (theirs->recorded_path(dpp, name, recorded) != -ENOENT) {
+    if (nb_state->recorded_path(dpp, name, recorded) != -ENOENT) {
       ldpp_dout(dpp, 1) << "nsfs: not placing bucket " << name
 	<< ":  a NooBaa bucket record holds the name" << dendl;
       return -EEXIST;
@@ -7235,13 +7235,13 @@ int NSFSDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
       }
     }
     if (nb_bucket_state_strategy && !adoption_complete()) {
-      std::vector<std::string> theirs;
+      std::vector<std::string> records;
       ret = static_cast<nsfs::NooBaaBucketStateStrategy*>(
-	nb_bucket_state_strategy.get())->list_records(dpp, theirs);
+	nb_bucket_state_strategy.get())->list_records(dpp, records);
       if (ret < 0) {
 	return ret;
       }
-      for (const auto& n : theirs) {
+      for (const auto& n : records) {
 	if (!untenanted.contains(n)) {
 	  all.insert(n);
 	}
@@ -7879,9 +7879,9 @@ int NSFSBucket::unadopt(const DoutPrefixProvider* dpp)
     return ret;
   }
 
-  static constexpr std::string_view ours{"user.nsfs."};
+  static constexpr std::string_view nsfs_prefix{"user.nsfs."};
   for (const auto& [name, _] : present) {
-    if (! std::string_view(name).starts_with(ours)) {
+    if (! std::string_view(name).starts_with(nsfs_prefix)) {
       continue;
     }
     ret = write_bucket_state(dpp, [&]() -> int {
@@ -8470,15 +8470,15 @@ static constexpr uint64_t CONVERT_CHOWN_CAPS =
 static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			 int fd, const std::string& display,
 			 nsfs::FSStrategy* fs,
-			 const nsfs::XattrStrategy* ours,
-			 const nsfs::XattrStrategy* theirs,
+			 const nsfs::XattrStrategy* xs,
+			 const nsfs::XattrStrategy* xattr_fallback,
 			 const ACLOwner& bucket_owner,
 			 nsfs::convert_cb_t* cb,
 			 const nsfs::ConvertEvent& base_ev,
 			 const std::vector<std::string>* leave_alone = nullptr)
 {
   Attrs attrs;
-  int ret = get_x_attrs(y, dpp, fd, attrs, display, ours, theirs);
+  int ret = get_x_attrs(y, dpp, fd, attrs, display, xs, xattr_fallback);
   if (ret < 0) {
     return ret;
   }
@@ -8491,12 +8491,12 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 	 != leave_alone->end())) {
       continue;
     }
-    const std::string mine = ours->disk_name(key);
-    const std::string foreign = theirs->disk_name(key);
-    if (!mine.empty()) {
-      to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
+    const std::string disk_name = xs->disk_name(key);
+    const std::string foreign = xattr_fallback->disk_name(key);
+    if (!disk_name.empty()) {
+      to_write.try_emplace(disk_name, attr_on_disk(xs, key, bl));
     }
-    if (!foreign.empty() && (foreign != mine)) {
+    if (!foreign.empty() && (foreign != disk_name)) {
       to_remove.push_back(foreign);
     }
   }
@@ -8535,9 +8535,9 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
     policy.create_default(bucket_owner.id, bucket_owner.display_name);
     bufferlist aclbl;
     policy.encode(aclbl);
-    const std::string mine = ours->disk_name(RGW_ATTR_ACL);
-    if (!mine.empty()) {
-      to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
+    const std::string disk_name = xs->disk_name(RGW_ATTR_ACL);
+    if (!disk_name.empty()) {
+      to_write.insert_or_assign(disk_name, attr_on_disk(xs, RGW_ATTR_ACL,
 						   aclbl));
     }
   }
@@ -8644,8 +8644,8 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
 			    nsfs::Directory* d, CephContext* cct,
 			    const std::string& prefix,
 			    nsfs::FSStrategy* fs,
-			    const nsfs::XattrStrategy* ours,
-			    const nsfs::XattrStrategy* theirs,
+			    const nsfs::XattrStrategy* xs,
+			    const nsfs::XattrStrategy* xattr_fallback,
 			    const ACLOwner& bucket_owner,
 			    nsfs::convert_cb_t* cb,
 			    nsfs::ConvertProgress& progress)
@@ -8711,8 +8711,8 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
     ev.index = progress.objects + progress.directory_objects
       + progress.versions;
 
-    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, bucket_owner,
-			cb, ev);
+    ret = convert_attrs(dpp, y, fd, ev.key, fs, xs, xattr_fallback,
+			bucket_owner, cb, ev);
     if (ret != 0) {
       return ret;
     }
@@ -8747,16 +8747,16 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
 				    optional_yield y, int dir_fd,
 				    const std::string& key,
 				    nsfs::FSStrategy* fs,
-				    const nsfs::XattrStrategy* ours,
-				    const nsfs::XattrStrategy* theirs,
+				    const nsfs::XattrStrategy* xs,
+				    const nsfs::XattrStrategy* xattr_fallback,
 				    const ACLOwner& bucket_owner,
-				    const nsfs::PathStrategy* their_paths,
+				    const nsfs::PathStrategy* path_fallback,
 				    nsfs::convert_cb_t* cb,
 				    nsfs::ConvertProgress& progress,
 				    bool no_chown)
 {
   int ret;
-  const std::string sname = their_paths->folder_object_name();
+  const std::string sname = path_fallback->folder_object_name();
 
   /* An empty object has no sentinel, and the one created below is a new
    * inode with this moment's mtime.  The reader reports such an object
@@ -8844,7 +8844,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   /* Not `user.nsfs.`:  on the bucket root those are the bucket's own
    * state, which is not the object's to carry, and nothing else in
    * NooBaa's format has them. */
-  ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, ours, theirs, {},
+  ret = get_x_attrs(y, dpp, dir_fd, dattrs, ev.key, xs, xattr_fallback, {},
 		    "user.nsfs.");
   if (ret < 0) {
     return ret;
@@ -8861,9 +8861,9 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
 
   nsfs::xattr_map_t to_write;
   for (const auto& [key, bl] : dattrs) {
-    const std::string mine = ours->disk_name(key);
-    if (!mine.empty()) {
-      to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
+    const std::string disk_name = xs->disk_name(key);
+    if (!disk_name.empty()) {
+      to_write.try_emplace(disk_name, attr_on_disk(xs, key, bl));
     }
   }
   /* The ETag the reader reported for an empty object, from the
@@ -8872,9 +8872,9 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   if (empty) {
     bufferlist ebl;
     ebl.append(synthesize_etag(reported));
-    const std::string mine = ours->disk_name(RGW_ATTR_ETAG);
-    if (!mine.empty()) {
-      to_write.try_emplace(mine, attr_on_disk(ours, RGW_ATTR_ETAG, ebl));
+    const std::string disk_name = xs->disk_name(RGW_ATTR_ETAG);
+    if (!disk_name.empty()) {
+      to_write.try_emplace(disk_name, attr_on_disk(xs, RGW_ATTR_ETAG, ebl));
     }
   }
   /* Record the owner, for the reason convert_attrs() gives:  the
@@ -8885,9 +8885,9 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     policy.create_default(bucket_owner.id, bucket_owner.display_name);
     bufferlist aclbl;
     policy.encode(aclbl);
-    const std::string mine = ours->disk_name(RGW_ATTR_ACL);
-    if (!mine.empty()) {
-      to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
+    const std::string disk_name = xs->disk_name(RGW_ATTR_ACL);
+    if (!disk_name.empty()) {
+      to_write.insert_or_assign(disk_name, attr_on_disk(xs, RGW_ATTR_ACL,
 						   aclbl));
     }
   }
@@ -8921,7 +8921,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
    * syscall. */
   std::vector<std::string> gone;
   for (const auto& [key, bl] : dattrs) {
-    const std::string foreign = theirs->disk_name(key);
+    const std::string foreign = xattr_fallback->disk_name(key);
     if (!foreign.empty()) {
       gone.push_back(foreign);
     }
@@ -8933,7 +8933,7 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
       return ret;
     }
   }
-  ret = their_paths->clear_directory_object(dpp, dir_fd);
+  ret = path_fallback->clear_directory_object(dpp, dir_fd);
   if (ret < 0) {
     return ret;
   }
@@ -9035,10 +9035,10 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 			     nsfs::Directory* d, CephContext* cct,
 			     const std::string& prefix,
 			     nsfs::FSStrategy* fs,
-			     const nsfs::XattrStrategy* ours,
-			     const nsfs::XattrStrategy* theirs,
+			     const nsfs::XattrStrategy* xs,
+			     const nsfs::XattrStrategy* xattr_fallback,
 			     const ACLOwner& bucket_owner,
-			     const nsfs::PathStrategy* their_paths,
+			     const nsfs::PathStrategy* path_fallback,
 			     const nsfs::ReservedNames& rn,
 			     nsfs::convert_cb_t* cb,
 			     nsfs::ConvertProgress& progress,
@@ -9100,8 +9100,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     ev.key = prefix + name;
     ev.index = progress.objects + progress.directory_objects;
 
-    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, bucket_owner,
-			cb, ev);
+    ret = convert_attrs(dpp, y, fd, ev.key, fs, xs, xattr_fallback,
+			bucket_owner, cb, ev);
     if (ret != 0) {
       return ret;
     }
@@ -9110,7 +9110,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* Before descending, so the whole of this directory -- its objects
    * and their history -- is done in one step. */
-  ret = convert_versions(dpp, y, d, cct, prefix, fs, ours, theirs,
+  ret = convert_versions(dpp, y, d, cct, prefix, fs, xs, xattr_fallback,
 			 bucket_owner, cb,
 			 progress);
   if (ret != 0) {
@@ -9125,18 +9125,18 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     nsfs::PathStrategy::DirectoryObject dobj{};
-    if (their_paths->directory_object(dpp, sub.get_fd(), dobj)) {
+    if (path_fallback->directory_object(dpp, sub.get_fd(), dobj)) {
       ret = convert_directory_object(dpp, y, sub.get_fd(), prefix + name + "/",
-				     fs, ours, theirs, bucket_owner, their_paths,
-				     cb, progress, no_chown);
+				     fs, xs, xattr_fallback, bucket_owner,
+				     path_fallback, cb, progress, no_chown);
       if (ret != 0) {
 	return ret;
       }
     }
 
     ret = convert_directory(dpp, y, &sub, cct, prefix + name + "/", fs,
-			    ours, theirs, bucket_owner, their_paths, rn, cb,
-			    progress, no_chown);
+			    xs, xattr_fallback, bucket_owner, path_fallback, rn,
+			    cb, progress, no_chown);
     if (ret != 0) {
       return ret;
     }
@@ -9195,9 +9195,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 				nsfs::convert_cb_t* cb,
 				nsfs::ConvertProgress& progress)
 {
-  auto* theirs = mpu_fallback();
-  auto* ours = mpu_strategy();
-  if (!theirs || !ours) {
+  auto* nb_mpu = mpu_fallback();
+  auto* mpu = mpu_strategy();
+  if (!nb_mpu || !mpu) {
     return 0;
   }
 
@@ -9206,12 +9206,12 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  auto their_root = theirs->staging_root(dpp, dir->get_fd());
-  if (!their_root) {
+  auto fallback_root = nb_mpu->staging_root(dpp, dir->get_fd());
+  if (!fallback_root) {
     return 0;   /* they never took an upload here */
   }
 
-  nsfs::Directory root(*their_root, dir.get(), driver->ctx());
+  nsfs::Directory root(*fallback_root, dir.get(), driver->ctx());
   ret = root.open(dpp);
   if (ret < 0) {
     return ret;
@@ -9233,8 +9233,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
   for (const auto& dname : dnames) {
     nsfs::MPUStrategy::StagedUpload su;
-    if (!theirs->staged_upload(dpp, root.get_fd(), dname, su)) {
-      continue;   /* not an upload of theirs */
+    if (!nb_mpu->staged_upload(dpp, root.get_fd(), dname, su)) {
+      continue;   /* not an upload of NooBaa's */
     }
 
     nsfs::ConvertEvent ev{};
@@ -9251,8 +9251,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
     }
 
-    nsfs::Directory theirdir(dname, &root, driver->ctx());
-    ret = theirdir.open(dpp);
+    nsfs::Directory fallback_dir(dname, &root, driver->ctx());
+    ret = fallback_dir.open(dpp);
     if (ret < 0) {
       continue;
     }
@@ -9260,14 +9260,14 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     /* the nsfs one, beside it.  NooBaa's staging is two levels down
      * and nsfs's is the bucket directory, so this is not a rename. */
     const std::string meta = su.key + "." + su.upload_id;
-    nsfs::Directory ourdir(ours->staging_dir_name(meta), dir.get(),
+    nsfs::Directory staging_dir(mpu->staging_dir_name(meta), dir.get(),
 			   driver->ctx());
     bool existed = false;
-    ret = ourdir.create(dpp, y, &existed);
+    ret = staging_dir.create(dpp, y, &existed);
     if (ret < 0) {
       return ret;
     }
-    ret = ourdir.open(dpp);
+    ret = staging_dir.open(dpp);
     if (ret < 0) {
       return ret;
     }
@@ -9279,7 +9279,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
      * the directory's ownership moves, while the gateway owns it. */
     {
       const std::string v = std::to_string(profile->extensions);
-      if (::fsetxattr(ourdir.get_fd(), nsfs::EXTENSIONS_XATTR, v.data(),
+      if (::fsetxattr(staging_dir.get_fd(), nsfs::EXTENSIONS_XATTR, v.data(),
 		      v.size(), 0) < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: marking the staging for " << meta
@@ -9293,8 +9293,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
     /* the upload's own record, in the nsfs format */
     {
-      const std::string mname = ours->meta_name();
-      int mfd = ::openat(ourdir.get_fd(), mname.c_str(),
+      const std::string mname = mpu->meta_name();
+      int mfd = ::openat(staging_dir.get_fd(), mname.c_str(),
 			 O_RDWR | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
       if (mfd < 0) {
 	ret = -errno;
@@ -9310,7 +9310,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
       /* re-expresses NooBaa's staging directory, so it takes its ids */
       struct statx tdstx{};
-      ret = statx_ids(theirdir.get_fd(), tdstx);
+      ret = statx_ids(fallback_dir.get_fd(), tdstx);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: cannot stat the staging of " << meta
 	  << " to give " << mname << " its owner: " << cpp_strerror(-ret)
@@ -9322,7 +9322,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 			   mname);
       });
       if (ret < 0) {
-	if (::unlinkat(ourdir.get_fd(), mname.c_str(), 0) < 0) {
+	if (::unlinkat(staging_dir.get_fd(), mname.c_str(), 0) < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << mname
 	    << " after its creation failed: " << cpp_strerror(errno)
 	    << dendl;
@@ -9355,7 +9355,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 			  << ": " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
-      ret = ours->write_staged_upload(dpp, ourdir.get_fd(), su);
+      ret = mpu->write_staged_upload(dpp, staging_dir.get_fd(), su);
       if (ret < 0) {
 	return ret;
       }
@@ -9363,8 +9363,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
     /* the parts */
     std::vector<std::string> pnames;
-    ret = theirdir.for_each(dpp, [&](const char* name) {
-      if (theirs->part_number(name)) {
+    ret = fallback_dir.for_each(dpp, [&](const char* name) {
+      if (nb_mpu->part_number(name)) {
 	pnames.emplace_back(name);
       }
       return 0;
@@ -9374,13 +9374,13 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     }
 
     for (const auto& pname : pnames) {
-      auto num = theirs->part_number(pname);
+      auto num = nb_mpu->part_number(pname);
       if (!num) {
 	continue;
       }
 
       Attrs pattrs;
-      int pfd = ::openat(theirdir.get_fd(), pname.c_str(), O_RDONLY | O_NOFOLLOW);
+      int pfd = ::openat(fallback_dir.get_fd(), pname.c_str(), O_RDONLY | O_NOFOLLOW);
       if (pfd >= 0) {
 	get_x_attrs(y, dpp, pfd, pattrs, pname, xattr_strategy(),
 		    xattr_fallback());
@@ -9407,7 +9407,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	rec.etag = cached.etag;
 	rec.mtime = cached.mtime;
 	rec.cksum = cached.cksum;
-      } else if (!theirs->part_record(dpp, theirdir.get_fd(), pname, pattrs,
+      } else if (!nb_mpu->part_record(dpp, fallback_dir.get_fd(), pname, pattrs,
 				      rec)) {
 	ldpp_dout(dpp, 4) << "no record for " << pname << " of " << meta
 			  << ";  skipping it" << dendl;
@@ -9433,7 +9433,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
        * says the part shares one, the part's own file otherwise */
       std::string sname = pname;
       if (rec.shared) {
-	auto sn = theirs->shared_name(rec.stored);
+	auto sn = nb_mpu->shared_name(rec.stored);
 	if (!sn) {
 	  ldpp_dout(dpp, 0) << "ERROR: " << pname << " of " << meta
 			    << " says it shares a file the layout does not "
@@ -9442,7 +9442,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	}
 	sname = *sn;
       }
-      int sfd = ::openat(theirdir.get_fd(), sname.c_str(), O_RDONLY | O_NOFOLLOW);
+      int sfd = ::openat(fallback_dir.get_fd(), sname.c_str(), O_RDONLY | O_NOFOLLOW);
       if (sfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: opening " << sname << " for " << pname
@@ -9452,12 +9452,12 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
       auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
 
-      const std::string ourname = ours->part_name(*num);
-      int dfd = ::openat(ourdir.get_fd(), ourname.c_str(),
+      const std::string part_name = mpu->part_name(*num);
+      int dfd = ::openat(staging_dir.get_fd(), part_name.c_str(),
 			 O_RDWR | O_NOFOLLOW | O_CREAT | O_TRUNC, nsfs::file_create_mode());
       if (dfd < 0) {
 	ret = -errno;
-	ldpp_dout(dpp, 0) << "ERROR: creating " << ourname << " for " << meta
+	ldpp_dout(dpp, 0) << "ERROR: creating " << part_name << " for " << meta
 			  << ": " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
@@ -9472,16 +9472,16 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       ret = statx_ids(sfd, pstx);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: cannot stat " << sname << " to give "
-	  << ourname << " its owner: " << cpp_strerror(-ret) << dendl;
+	  << part_name << " its owner: " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
       ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
 	return inherit_ids(dpp, dfd, pstx, driver->no_chown_injected(),
-			   ourname);
+			   part_name);
       });
       if (ret < 0) {
-	if (::unlinkat(ourdir.get_fd(), ourname.c_str(), 0) < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << ourname
+	if (::unlinkat(staging_dir.get_fd(), part_name.c_str(), 0) < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << part_name
 	    << " after its creation failed: " << cpp_strerror(errno)
 	    << dendl;
 	}
@@ -9544,7 +9544,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       if ((outrec.shared != rec.shared) || (outrec.offset != rec.offset)) {
 	placement_changed = true;
       }
-      ret = ours->write_part_record(dpp, ourdir.get_fd(), ourname, outrec);
+      ret = mpu->write_part_record(dpp, staging_dir.get_fd(), part_name, outrec);
       if (ret < 0) {
 	return ret;
       }
@@ -9574,13 +9574,13 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
      * removing it first would lose the parts if anything below
      * failed. */
     struct statx tdstx{};
-    ret = statx_ids(theirdir.get_fd(), tdstx);
+    ret = statx_ids(fallback_dir.get_fd(), tdstx);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: cannot stat the staging of " << meta
 	<< " to give it its owner: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    theirdir.close();
+    fallback_dir.close();
     ret = delete_directory(root.get_fd(), dname.c_str(), true, dpp,
 			   driver->get_reserved_names());
     if (ret < 0) {
@@ -9595,7 +9595,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
      * stopped before it resumes into a directory the gateway still
      * owns. */
     ret = nsfs::with_capabilities(dpp, CONVERT_CHOWN_CAPS, [&]() -> int {
-      return inherit_ids(dpp, ourdir.get_fd(), tdstx,
+      return inherit_ids(dpp, staging_dir.get_fd(), tdstx,
 			 driver->no_chown_injected(), meta);
     });
     if (ret < 0) {
@@ -9731,15 +9731,15 @@ bool NSFSBucket::upload_awaits_conversion(const DoutPrefixProvider* dpp,
   if ((resolve_profile(dpp) < 0) || !converting) {
     return false;
   }
-  auto* theirs = mpu_fallback();
-  if (!theirs || (dir->open(dpp) < 0)) {
+  auto* nb_mpu = mpu_fallback();
+  if (!nb_mpu || (dir->open(dpp) < 0)) {
     return false;
   }
-  auto root = theirs->staging_root(dpp, dir->get_fd());
+  auto root = nb_mpu->staging_root(dpp, dir->get_fd());
   if (!root) {
     return false;
   }
-  std::string path = theirs->staging_dir_name(meta);
+  std::string path = nb_mpu->staging_dir_name(meta);
   if (*root != ".") {
     path = *root + "/" + path;
   }
@@ -9855,9 +9855,9 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   nsfs::ConvertProgress local;
   nsfs::ConvertProgress& prog = progress ? *progress : local;
 
-  auto* theirs = xattr_fallback();
-  auto* their_paths = path_fallback();
-  if (!theirs || !their_paths) {
+  auto* nb_xattrs = xattr_fallback();
+  auto* nb_paths = path_fallback();
+  if (!nb_xattrs || !nb_paths) {
     /* Not converting, so there is nothing in another format to find.
      * Reached when a caller resumes a bucket whose marker is already
      * gone, which is a no-op and not an error. */
@@ -9892,11 +9892,11 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   }
   {
     nsfs::PathStrategy::DirectoryObject dobj{};
-    if (their_paths->directory_object(dpp, dir->get_fd(), dobj)) {
+    if (nb_paths->directory_object(dpp, dir->get_fd(), dobj)) {
       ret = convert_directory_object(dpp, y, dir->get_fd(), "/",
 				     driver->get_fs_strategy(), xattr_strategy(),
-				     theirs, default_object_owner(dpp, y),
-				     their_paths, cb, prog,
+				     nb_xattrs, default_object_owner(dpp, y),
+				     nb_paths, cb, prog,
 				     driver->no_chown_injected());
       if (ret != 0) {
 	return ret;
@@ -9906,8 +9906,8 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 
   ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
 			  std::string(), driver->get_fs_strategy(),
-			  xattr_strategy(), theirs,
-			  default_object_owner(dpp, y), their_paths,
+			  xattr_strategy(), nb_xattrs,
+			  default_object_owner(dpp, y), nb_paths,
 			  driver->get_reserved_names(), cb, prog,
 			  driver->no_chown_injected());
   if (ret == 0) {
@@ -10066,8 +10066,8 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
      * the fallback is consulted is decided here and not inside either
      * strategy, so that authoritative-with-nsfs-as-cache and
      * recovery-only remain reachable without redesign. */
-    auto* theirs = bucket_state_fallback();
-    ret = theirs ? theirs->load(dpp, dir->get_fd(), get_name(), attrs, info)
+    auto* nb_state = bucket_state_fallback();
+    ret = nb_state ? nb_state->load(dpp, dir->get_fd(), get_name(), attrs, info)
 		 : -ENOENT;
   }
   if (ret == -ENOENT) {

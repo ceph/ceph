@@ -245,8 +245,8 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 			const IdentityMapping& mapping,
 			BucketImportResult& result)
 {
-  auto* theirs = driver->get_noobaa_bucket_state_strategy();
-  if (!theirs) {
+  auto* nb_state = driver->get_noobaa_bucket_state_strategy();
+  if (!nb_state) {
     /* no configured store, so there is nothing to read records from */
     return -ENOENT;
   }
@@ -264,7 +264,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     /* NooBaa's record, through the reader that already translates most of
      * it.  `-1` for the dir_fd:  this reader finds
      * `<config_root>/buckets/<name>.json` from the name alone. */
-    int ret = theirs->load(dpp, -1, rec.name, attrs, info);
+    int ret = nb_state->load(dpp, -1, rec.name, attrs, info);
     if (ret < 0) {
       result.failures.push_back(rec.name + ": " + cpp_strerror(-ret));
       continue;
@@ -363,19 +363,19 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     /* `path`, which places the bucket (P6).  NooBaa's schema requires
      * it, and a bucket with none has nowhere to be, so it is rejected
      * before anything is written. */
-    std::string their_path;
+    std::string recorded;
     try {
-      JSONDecoder::decode_json("path", their_path, &p);
+      JSONDecoder::decode_json("path", recorded, &p);
     } catch (const JSONDecoder::err&) {
-      their_path.clear();
+      recorded.clear();
     }
-    if (their_path.empty()) {
+    if (recorded.empty()) {
       result.failures.push_back(rec.name + ": their record names no path");
       continue;
     }
-    if (!nsfs::placement_path_is_acceptable(their_path)) {
+    if (!nsfs::placement_path_is_acceptable(recorded)) {
       result.failures.push_back(
-	  rec.name + ": their record's path " + their_path +
+	  rec.name + ": their record's path " + recorded +
 	  " is not an absolute canonical path");
       continue;
     }
@@ -387,10 +387,10 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       nsfs::BucketPlacement row;
       if ((driver->get_identity_db()->get_bucket_placement(
 	     dpp, rec.name, "", row) == 0) &&
-	  (row.path != their_path)) {
+	  (row.path != recorded)) {
 	result.failures.push_back(
 	    rec.name + ": nsfs already has a bucket of this name, at " +
-	    row.path + ";  their record says " + their_path);
+	    row.path + ";  their record says " + recorded);
 	continue;
       }
     }
@@ -463,12 +463,12 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
     {
       nsfs::BucketPlacement row;
       row.bucket_name = rec.name;
-      row.path = their_path;
+      row.path = recorded;
       row.owner = to_string(bucket->get_owner());
       ret = driver->get_identity_db()->insert_bucket_placement(dpp, row);
       if (ret == -EADDRINUSE) {
 	result.failures.push_back(
-	    rec.name + ": its path " + their_path + " is another bucket's "
+	    rec.name + ": its path " + recorded + " is another bucket's "
 	    "directory, or nested with one");
 	continue;
       }
