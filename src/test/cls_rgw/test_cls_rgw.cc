@@ -1658,6 +1658,86 @@ TEST_P(TestClsRgw, reshardlog_num)
   reshardlog_entries(ioctx, bucket_oid, 2u);
 }
 
+TEST_P(TestClsRgw, olh_noncurrent_null_relink_clears_current) {
+  const string oid = "olh-noncurrent-null-relink";
+  const string olh_tag = "olh-test-tag";
+  const cls_rgw_obj_key null_key("obj");
+  const cls_rgw_obj_key head_key("obj", "new-head");
+  bufferlist tag;
+  tag.append(olh_tag);
+  rgw_bucket_dir_entry_meta meta;
+  meta.mtime = ceph::real_time(ceph::timespan(200));
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  // Tracker #81812: initialize current NULL DATA at epoch 200.
+  ASSERT_NO_FATAL_FAILURE(
+      index_prepare(ioctx, oid, CLS_RGW_OP_ADD, olh_tag, null_key, ""));
+  ASSERT_NO_FATAL_FAILURE(index_complete(ioctx, oid, CLS_RGW_OP_ADD, olh_tag,
+                                         200, null_key, meta, 0, false));
+  ASSERT_EQ(0, cls_rgw_bucket_link_olh(
+                   ioctx, oid, null_key, tag, false, "initial-null", &meta, 200,
+                   ceph::real_time{}, true, false, rgw_zone_set{}));
+  rgw_cls_list_ret listing;
+  ASSERT_NO_FATAL_FAILURE(list_entries(ioctx, oid, 10, listing));
+  ASSERT_EQ(1u, listing.dir.m.size());
+  ASSERT_EQ(null_key, listing.dir.m.begin()->second.key);
+  ASSERT_TRUE(listing.dir.m.begin()->second.is_current());
+
+  // Unlink at 300, but leave DATA pending REMOVE_INSTANCE.
+  ASSERT_EQ(0, cls_rgw_bucket_unlink_instance(ioctx, oid, null_key,
+                                              "unlink-null", olh_tag, 300,
+                                              false, 0, rgw_zone_set{}));
+  ASSERT_NO_FATAL_FAILURE(list_entries(ioctx, oid, 10, listing));
+  ASSERT_TRUE(listing.dir.m.empty());
+  // Read NULL DATA directly; an empty Instance selector reads its placeholder.
+  const string null_idx = string("\x80"
+                                 "1000_",
+                                 6) +
+                          null_key.name + string("\0i", 2);
+  rgw_cls_bi_entry raw;
+  ASSERT_EQ(0, cls_rgw_bi_get(ioctx, oid, BIIndexType::Plain,
+                              cls_rgw_obj_key(null_idx), &raw));
+  rgw_bucket_dir_entry instance;
+  auto p = raw.data.cbegin();
+  decode(instance, p);
+  ASSERT_TRUE(instance.exists);
+  ASSERT_TRUE(instance.is_current());
+  ASSERT_EQ(200u, instance.versioned_epoch);
+
+  // Link numbered head 400, then relink retained NULL/200 without another PUT.
+  ASSERT_NO_FATAL_FAILURE(
+      index_prepare(ioctx, oid, CLS_RGW_OP_ADD, olh_tag, head_key, ""));
+  ASSERT_NO_FATAL_FAILURE(index_complete(ioctx, oid, CLS_RGW_OP_ADD, olh_tag,
+                                         400, head_key, meta, 0, false));
+  ASSERT_EQ(0, cls_rgw_bucket_link_olh(
+                   ioctx, oid, null_key, tag, false, "relink-null", &meta, 200,
+                   ceph::real_time{}, true, false, rgw_zone_set{}));
+
+  // The OLH and both index copies must agree: only new-head is current.
+  ASSERT_EQ(0, cls_rgw_bi_get(ioctx, oid, BIIndexType::Plain,
+                              cls_rgw_obj_key(null_idx), &raw));
+  p = raw.data.cbegin();
+  decode(instance, p);
+  EXPECT_EQ(null_key, instance.key);
+  EXPECT_EQ(200u, instance.versioned_epoch);
+  EXPECT_FALSE(instance.is_current());
+  ASSERT_EQ(0, cls_rgw_bi_get(ioctx, oid, BIIndexType::OLH, null_key, &raw));
+  rgw_bucket_olh_entry olh;
+  p = raw.data.cbegin();
+  decode(olh, p);
+  EXPECT_EQ(head_key, olh.key);
+  EXPECT_EQ(400u, olh.epoch);
+  EXPECT_TRUE(olh.exists);
+  ASSERT_NO_FATAL_FAILURE(list_entries(ioctx, oid, 10, listing));
+  ASSERT_EQ(2u, listing.dir.m.size());
+  EXPECT_EQ(head_key, listing.dir.m.begin()->second.key);
+  EXPECT_TRUE(listing.dir.m.begin()->second.is_current());
+  EXPECT_EQ(null_key, listing.dir.m.rbegin()->second.key);
+  EXPECT_FALSE(listing.dir.m.rbegin()->second.is_current());
+}
+
 TEST_P(TestClsRgw, bi_put_entries)
 {
   const string src_bucket = str_int("bi_put_entries", 0);
