@@ -24,6 +24,8 @@ or ::
 
   /etc/init.d radosgw start --verbose
 
+.. _rgw_troubleshooting_http_errors:
+
 HTTP Request Errors
 ===================
 
@@ -34,6 +36,10 @@ a 500 error, that usually indicates a problem communicating with the
 configured, and that the web server is looking for it in the proper
 location.
 
+When ops logging is enabled, compare the RGW ops log ``error_code`` and
+``error_ret`` fields with the ``radosgw`` daemon line ``op status=`` for the
+same ``trans_id``. See :doc:`ops-log` for field meanings and RGW-specific error
+codes (e.g. ``ConnectionReset`` vs ``UnknownError`` behind a proxy 502).
 
 Crashed ``radosgw`` process
 ===========================

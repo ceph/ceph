@@ -62,6 +62,7 @@ Administration
    User Accounts <account>
    Multi-tenancy <multitenancy>
    Metrics <metrics>
+   Ops Log <ops-log>
    Lua Scripting <lua-scripting>
    Troubleshooting <troubleshooting>
    Orphan List and Associated Tooling <orphans>
