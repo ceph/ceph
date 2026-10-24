@@ -1321,6 +1321,47 @@ TEST_P(AllocTest, test_get_free_extents_needle_at_end)
   alloc->shutdown();
 }
 
+TEST_P(AllocTest, test_fragmentation_score_single_block_after_allocation)
+{
+  const uint64_t unit = 4096;
+  const uint64_t capacity = 4 * 1024 * 1024;
+  init_alloc(capacity, unit);
+  alloc->init_add_free(0, capacity);
+  PExtentVector taken;
+  ASSERT_EQ(static_cast<int64_t>(capacity - unit),
+            alloc->allocate(capacity - unit, unit, 0, -1, &taken));
+  ASSERT_EQ(unit, alloc->get_free());
+  EXPECT_EQ(0.0, alloc->get_fragmentation_score());
+}
+
+TEST_P(AllocTest, test_fragmentation_cache_only_release)
+{
+  if (GetParam() != std::string("hybrid_btree2")) {
+    GTEST_SKIP() << "requires Btree2 extent cache";
+  }
+  const uint64_t unit = 4096;
+  const uint64_t capacity = 4 * 1024 * 1024;
+  init_alloc(capacity, unit);
+  alloc->init_add_free(0, capacity);
+  PExtentVector taken;
+  ASSERT_EQ(static_cast<int64_t>(capacity),
+            alloc->allocate(capacity, unit, 0, -1, &taken));
+  ASSERT_EQ(0u, alloc->get_free());
+  interval_set<uint64_t> released;
+  released.insert(0, unit);
+  released.insert(2 * unit, unit);
+  alloc->release(released);
+  ASSERT_EQ(2 * unit, alloc->get_free());
+  EXPECT_GE(alloc->get_fragmentation(), 0.0);
+  EXPECT_LE(alloc->get_fragmentation(), 1.0);
+  for (int i = 0; i < 2; ++i) {
+    PExtentVector out;
+    ASSERT_EQ(static_cast<int64_t>(unit),
+              alloc->allocate(unit, unit, 0, -1, &out));
+  }
+  EXPECT_EQ(0u, alloc->get_free());
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
