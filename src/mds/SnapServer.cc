@@ -51,6 +51,9 @@ void SnapServer::reset_state()
   pending_destroy.clear();
   pending_noop.clear();
 
+  tracked_data_pools.clear();
+  pending_purge_pools.clear();
+
   // find any removed snapshot in data pools
   if (mds) {  // only if I'm running in a live MDS
     snapid_t first_free = 0;
@@ -78,7 +81,7 @@ void SnapServer::reset_state()
 }
 
 void SnapServer::encode_server_state(bufferlist& bl) const {
-  ENCODE_START(5, 3, bl);
+  ENCODE_START(6, 3, bl);
   encode(last_snap, bl);
   encode(snaps, bl);
   encode(need_to_purge, bl);
@@ -88,11 +91,13 @@ void SnapServer::encode_server_state(bufferlist& bl) const {
   encode(last_created, bl);
   encode(last_destroyed, bl);
   encode(snaprealm_v2_since, bl);
+  encode(tracked_data_pools, bl);
+  encode(pending_purge_pools, bl);
   ENCODE_FINISH(bl);
 }
 
 void SnapServer::decode_server_state(bufferlist::const_iterator& bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
   decode(last_snap, bl);
   decode(snaps, bl);
   decode(need_to_purge, bl);
@@ -118,6 +123,13 @@ void SnapServer::decode_server_state(bufferlist::const_iterator& bl) {
     decode(snaprealm_v2_since, bl);
   else
     snaprealm_v2_since = CEPH_NOSNAP;
+  if (struct_v >= 6) {
+    decode(tracked_data_pools, bl);
+    decode(pending_purge_pools, bl);
+  } else {
+    tracked_data_pools.clear();
+    pending_purge_pools.clear();
+  }
 
   DECODE_FINISH(bl);
 }
@@ -242,6 +254,21 @@ void SnapServer::_commit(version_t tid, cref_t<MMDSTableRequest> req)
     for (const auto p : mds->mdsmap->get_data_pools()) {
       need_to_purge[p].insert(sn);
       need_to_purge[p].insert(seq);
+    }
+
+    for (auto it = pending_purge_pools.begin(); it != pending_purge_pools.end(); ) {
+      need_to_purge[it->first].insert(sn);
+      need_to_purge[it->first].insert(seq);
+      /*
+       * If the snaps map emit a id exceeding the stamped last_snap then it
+       * asserts the snap was created after the pool left and holds no
+       * referenced snaps that needs to be tracked so drop it from the map.
+       */
+      if (snaps.empty() || snaps.begin()->first > it->second) {
+        it = pending_purge_pools.erase(it);
+      } else {
+        ++it;
+      }
     }
 
     pending_destroy.erase(tid);
@@ -506,6 +533,15 @@ void SnapServer::dump(Formatter *f) const
   }
   f->close_section();
 
+  f->open_array_section("pending_purge_pools");
+  for (auto i = pending_purge_pools.begin(); i != pending_purge_pools.end(); ++i) {
+    f->open_object_section("purge_pool");
+    f->dump_unsigned("pool", i->first);
+    f->dump_unsigned("referenced_snapid", i->second);
+    f->close_section();
+  }
+  f->close_section();
+
   f->close_section();
 }
 
@@ -527,6 +563,8 @@ std::list<SnapServer> SnapServer::generate_test_instances()
   populated.pending_destroy[345].first = 567;
   populated.pending_destroy[345].second = 768;
   populated.pending_noop.insert(890);
+  populated.tracked_data_pools.assign({1, 2, 3});
+  populated.pending_purge_pools.insert({4, 100});
 
   ls.push_back(std::move(populated));
 
@@ -564,4 +602,15 @@ bool SnapServer::force_update(snapid_t last, snapid_t v2_since,
     MDSTableServer::reset_state();
   }
   return modified;
+}
+
+void SnapServer::handle_pool_changes()
+{
+  const auto& current = mds->mdsmap->get_data_pools();
+  for (auto p : tracked_data_pools) {
+    if (std::find(current.begin(), current.end(), p) == current.end()) {
+      pending_purge_pools.insert_or_assign(p, last_snap);
+    }
+  }
+  tracked_data_pools = current;
 }
