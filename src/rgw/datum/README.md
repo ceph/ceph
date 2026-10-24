@@ -295,11 +295,12 @@ snapshot lifetime or wire enrollment. Opaque types need audited consumer profile
 stop counts the entry; a rejected stop does not. Neither increments again.
 `offered`, `consumed` and `accepted` are distinct: `skip` consumes without
 accepting, and `reject_and_stop` leaves the offered row unconsumed.
-`traversal::scan_range()` captures an owned position before the consumer can move
-a row. Its profile chooses an ordered boundary or opaque state; ordered resumes
-are exclusive after consumption and inclusive on rejection. Capture runs for each
-row, so use a cheap index/token when an owned key is unnecessary. A returned token
-does not establish a snapshot, durable acknowledgement or partial-page replay.
+`traversal::scan_range()` calls the profile's `position(row)` to save an owned position
+before the consumer can move a row. On stop, `next(position, consumed)` chooses the
+next pass's starting position. The profile chooses an ordered boundary or opaque state;
+ordered resumes are exclusive after consumption and inclusive on rejection.
+`position()` runs for each row, so use a cheap index/token when an owned key is unnecessary.
+A returned token does not establish a snapshot, durable acknowledgement, or partial-page replay.
 Exceptions propagate without inventing a result for partial external effects.
 
 ```cpp

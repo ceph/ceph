@@ -469,9 +469,9 @@ TEST_CASE("scan distinguishes skipped consumed and rejected rows")
 
     struct opaque_positions
     {
-        std::size_t capture(int row) const { return row; }
+        std::size_t position(int row) const { return row; }
 
-        std::size_t resume(std::size_t position, bool consumed) const
+        std::size_t next(std::size_t position, bool consumed) const
         {
             return position + consumed;
         }
