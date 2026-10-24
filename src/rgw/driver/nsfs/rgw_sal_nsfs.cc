@@ -4478,8 +4478,18 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
             continue;
           }
 
-          rgw_bucket_dir_entry bde{};
+          /* a directory object's versions are its sentinel's, and list
+           * under the directory's key, as its current entry does above;
+           * the root's are the root object's, which is never listed */
           std::string full_key = path_prefix + obj_name;
+          if (path_strategy->names_directory_object(obj_name)) {
+            if (path_prefix.empty()) {
+              continue;
+            }
+            full_key = path_prefix;
+          }
+
+          rgw_bucket_dir_entry bde{};
           /* obj_name came off a file name, so it has to go back through
            * the path strategy to become a key -- every other path fills
            * bde.key from get_index_key(), and a cache entry keyed the
