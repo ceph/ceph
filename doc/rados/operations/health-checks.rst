@@ -1860,9 +1860,76 @@ For more information, see :ref:`specifying_pool_target_size`.
 TOO_FEW_OSDS
 ____________
 
-The number of OSDs in the cluster is below the configurable threshold of
-:confval:`osd_pool_default_size`. This means that some or all data may not be able to
+The number of OSDs in the cluster is below the size of a new pool,
+:confval:`osd_pool_default_num_zones` times :confval:`osd_pool_default_replica`.
+This means that some or all data may not be able to
 satisfy the data protection policy specified in CRUSH rules and pool settings.
+
+.. _pool-default-config-override:
+
+POOL_DEFAULT_CONFIG_OVERRIDE
+____________________________
+
+A pool creation default has a value in the ``global`` section of the
+central config store, as ``ceph osd pool default set`` writes it, but one or
+more Monitors use another value. ``ceph osd pool create`` runs on the Monitors,
+so it does not use the global value. A setting that is more specific than the
+``global`` section overrides it: one in a ``mon`` or ``mon.<id>`` section of
+the central config store, a masked one such as ``global/host:<host>``, or one
+in a Monitor's local configuration file, environment, command line or runtime
+settings.
+
+``ceph health detail`` names each option and where it is set, for example:
+
+.. code-block:: none
+
+   [WRN] POOL_DEFAULT_CONFIG_OVERRIDE: mon a has pool creation defaults that override their global values
+       osd_pool_default_replica is set in section mon of the configuration database
+
+To resolve the warning, remove the override and then set the default with
+``ceph osd pool default set``, which checks the value and writes it to the
+``global`` section:
+
+#. Find where the override is set. ``ceph health detail`` names the option and
+   the section or Monitor. ``ceph osd pool default get`` shows the value that
+   the Monitor serving the command uses and where it comes from.
+
+#. Remove the override where it is set:
+
+   * In a section of the central config store (``mon``, ``mon.<id>`` or a
+     masked section such as ``global/host:<host>``), remove it from that
+     section:
+
+     .. prompt:: bash $
+
+        ceph config rm mon osd_pool_default_replica
+
+   * In a Monitor's local configuration file, remove the option from the
+     ``ceph.conf`` on that Monitor's host and restart the Monitor.
+   * On a Monitor's command line or in its environment (for example
+     ``CEPH_ARGS``), remove it there and restart the Monitor.
+   * As a runtime setting made with ``ceph tell mon.<id> config set``, unset
+     it:
+
+     .. prompt:: bash $
+
+        ceph tell mon.<id> config unset osd_pool_default_replica
+
+#. Set the default that you want with ``ceph osd pool default set``, for
+   example:
+
+   .. prompt:: bash $
+
+      ceph osd pool default set --replica 3
+
+#. Check that every default now comes from the ``global`` section, or is the
+   built-in default:
+
+   .. prompt:: bash $
+
+      ceph osd pool default get
+
+The warning clears once every Monitor uses the global values.
 
 SMALLER_PGP_NUM
 _______________

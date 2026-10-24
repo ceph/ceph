@@ -223,8 +223,19 @@ namespace ceph {
      * @return a rule on success or a negative errno on error.
      */
     virtual int create_rule(const std::string &name,
-			    CrushWrapper &crush,
-			    std::ostream *ss) const = 0;
+                            CrushWrapper &crush,
+                            std::ostream *ss) const {
+      return create_rule(name, 1, "", "", "", "", crush, ss);
+    }
+
+    virtual int create_rule(const std::string &name,
+                            int num_zones,
+                            const std::string &root,
+                            const std::string &zone_failure_domain,
+                            const std::string &osd_failure_domain,
+                            const std::string &device_class,
+                            CrushWrapper &crush,
+                            std::ostream *ss) const = 0;
 
     /**
      * Return the number of chunks created by a call to the **encode**
