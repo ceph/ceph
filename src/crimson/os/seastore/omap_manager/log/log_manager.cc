@@ -151,7 +151,7 @@ LogManager::omap_set_keys(
       }
     }
     LogNodeRef cur = ext;
-    if (has_ow_key) {
+    if (has_ow_key && kvs_for_ow.size() == kvs.size()) {
       if (!cur->can_ow()) {
 	co_await remove_kv(t, log_root.addr, get_ow_key(), nullptr);
 	CachedExtentRef node = co_await resync_log_node(cur);
