@@ -4798,7 +4798,15 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   return ret;
 }
 
-// special handling for compression type = "random" with multipart uploads
+// special handling for compression type = "random" with multipart uploads.
+// multipart_upload_info stores the literal "random", so every part maps it
+// to the same plugin through a hash of the upload id. This also keeps parts
+// consistent across a mixed-version upgrade (older RGWs ignore the stored
+// type) and for uploads initiated before the type was stored.
+// TODO: once upgrades from releases without the stored compression type are
+// no longer supported (~2 releases), resolve "random" to a concrete
+// algorithm in RGWInitMultipart::execute(), store that name instead of
+// "random", and remove this special case.
 static CompressorRef get_compressor_plugin(const req_state *s,
                                            const std::string& compression_type)
 {
@@ -4968,6 +4976,7 @@ void RGWPutObj::execute(optional_yield y)
 
     multipart_cksum_type = upload->cksum_type;
     multipart_cksum_flags = upload->cksum_flags;
+    multipart_compression_type = upload->compression_type;
 
     /* upload will go out of scope, so copy the dest placement for later use */
     s->dest_placement = *pdest_placement;
@@ -5050,7 +5059,35 @@ void RGWPutObj::execute(optional_yield y)
   // no filters by default
   rgw::sal::DataProcessor *filter = processor.get();
 
-  const auto& compression_type = driver->get_compression_type(*pdest_placement);
+  // multipart parts use the compression type frozen at upload init, if any,
+  // so a placement config change mid-upload doesn't change it for later parts
+  std::string compression_type = multipart_compression_type ?
+      *multipart_compression_type :
+      driver->get_compression_type(*pdest_placement);
+  if (multipart) {
+    ldpp_dout(this, 20) << "compression type for part=" << compression_type
+        << (multipart_compression_type ? " (from upload)" : " (from placement)")
+        << dendl;
+  } else if (!append && compression_type != "none") {
+    // objects below the placement's minimum size are stored uncompressed.
+    // multipart parts keep one type per upload and appends are never
+    // compressed, so both are excluded; the min size doesn't apply to an
+    // upload of unknown size
+    std::optional<uint64_t> size;
+    if (!copy_source.empty()) {
+      // the request body is empty; the data comes from the copy source range.
+      // unsigned arithmetic, so a hostile range can't overflow
+      size = lst >= fst ? static_cast<uint64_t>(lst) - static_cast<uint64_t>(fst) + 1 : 0;
+    } else if (!chunked_upload) {
+      size = s->content_length;
+    }
+    const uint64_t min_size = driver->get_compression_min_size(*pdest_placement);
+    if (rgw_compression_below_min_size(min_size, size)) {
+      ldpp_dout(this, 20) << "not compressing object of size " << *size
+          << " below compression min size " << min_size << dendl;
+      compression_type = "none";
+    }
+  }
   CompressorRef plugin;
   std::optional<RGWPutObj_Compress> compressor;
   std::optional<RGWPutObj_Torrent> torrent;
@@ -6726,6 +6763,17 @@ void RGWCopyObj::execute(optional_yield y)
           rgw::zone_features::compress_encrypted)) {
     dest_compression = "none";
   }
+  // objects smaller than the destination's minimum size are stored
+  // uncompressed. compare the logical size, not the stored size
+  {
+    const uint64_t min_size = driver->get_compression_min_size(s->dest_placement);
+    const uint64_t size = s->src_object->get_accounted_size();
+    if (dest_compression != "none" && rgw_compression_below_min_size(min_size, size)) {
+      ldpp_dout(this, 20) << "not compressing copy of size " << size
+          << " below compression min size " << min_size << dendl;
+      dest_compression = "none";
+    }
+  }
 
   RGWCopyObjDPF copy_obj_dpf(s, obj_size, s->src_object->get_attrs(),
                               dest_compression, crypt_http_responses);
@@ -7532,6 +7580,9 @@ void RGWInitMultipart::execute(optional_yield y)
    * FLAG_COMPOSITE is set, the algorithm can be used with a composite/
    * digest checksum (e.g., it's not CRC64NVME) */
   upload->cksum_flags = cksum_flags;
+  /* freeze the compression type for this upload's parts, if the driver
+   * persists it */
+  upload->compression_type = driver->get_compression_type(s->dest_placement);
 
   op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
   if (op_ret == 0) {

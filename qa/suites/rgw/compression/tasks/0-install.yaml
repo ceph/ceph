@@ -1,0 +1,4 @@
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]

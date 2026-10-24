@@ -40,6 +40,12 @@ int rgw_compression_info_from_attrset(const map<string, bufferlist>& attrs,
   return rgw_compression_info_from_attr(value->second, need_decompress, cs_info);
 }
 
+bool rgw_compression_below_min_size(uint64_t min_size,
+                                    std::optional<uint64_t> size)
+{
+  return size && *size < min_size;
+}
+
 //------------RGWPutObj_Compress---------------
 
 int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
