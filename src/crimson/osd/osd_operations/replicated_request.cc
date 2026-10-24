@@ -103,9 +103,11 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
   co_await this->template enter_stage<interruptor>(
     repop_pipeline(*pg).send_reply);
 
+  // The request connection is already pinned to the primary reactor that
+  // sent it. Reply on that connection so the reply is delivered there.
+  // A second connection reorders MOSDRepOp delivery and aborts the replica.
   co_await interruptor::make_interruptible(
-    pg->shard_services.send_to_osd(
-      req->from.osd, std::move(reply), pg->get_osdmap_epoch())
+    get_connection().send_with_throttling(std::move(reply))
   );
   // throttle destructs here -> release_throttle()
 }

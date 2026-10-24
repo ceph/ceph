@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <map>
 #include <memory>
 
 #include <boost/intrusive_ptr.hpp>
@@ -408,6 +409,9 @@ class ShardServices : public OSDMapService,
 
   PerShardState local_state;
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
+  // peer osd -> this reactor's own cluster session to it.
+  // The socket and IOHandler live on this reactor.
+  std::map<int, crimson::net::ConnectionRef> osd_peer_conns;
   PGShardMapping& pg_to_shard_mapping;
   uint32_t store_shard_nums = 0;
 
@@ -536,7 +540,11 @@ public:
     register_metrics();
   }
 
-  FORWARD_TO_OSD_SINGLETON(send_to_osd)
+  // Send on this reactor's own session to the same reactor on the peer.
+  // Placement is pgid.ps() % shard count, so this reactor is the peer's
+  // reactor for every PG that lives here. The first send waits until the
+  // session is READY; later sends stay on it.
+  seastar::future<> send_to_osd(int peer, MessageURef m, epoch_t from_epoch);
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
     auto store = local_state.b_store;
