@@ -349,6 +349,8 @@ private:
   // monitor session
   utime_t last_keepalive;
   utime_t last_send_log;
+  // first tick that saw active_con's connection not ready, or zero
+  utime_t active_con_not_ready_since;
 
   void tick();
   void schedule_tick();
