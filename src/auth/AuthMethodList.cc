@@ -19,6 +19,7 @@
 #include "include/str_list.h"
 
 #include <algorithm> // for std::find()
+#include <cerrno>
 
 const static int dout_subsys = ceph_subsys_auth;
 
@@ -32,21 +33,47 @@ AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
   }
   for (auto iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
-    if (iter->compare("cephx") == 0) {
-      auth_supported.push_back(CEPH_AUTH_CEPHX);
-    } else if (iter->compare("none") == 0) {
-      auth_supported.push_back(CEPH_AUTH_NONE);
-    } else if (iter->compare("gss") == 0) {
-      auth_supported.push_back(CEPH_AUTH_GSS);
-    } else {
-      auth_supported.push_back(CEPH_AUTH_UNKNOWN);
+    auto method = parse_method(*iter);
+    if (method == CEPH_AUTH_UNKNOWN) {
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
+    auth_supported.push_back(method);
   }
   if (auth_supported.empty()) {
     lderr(cct) << "WARNING: no auth protocol defined, use 'cephx' by default" << dendl;
     auth_supported.push_back(CEPH_AUTH_CEPHX);
   }
+}
+
+__u32 AuthMethodList::parse_method(std::string_view name)
+{
+  if (name == "cephx") {
+    return CEPH_AUTH_CEPHX;
+  } else if (name == "none") {
+    return CEPH_AUTH_NONE;
+  } else if (name == "gss") {
+    return CEPH_AUTH_GSS;
+  } else {
+    return CEPH_AUTH_UNKNOWN;
+  }
+}
+
+int AuthMethodList::validate_method_list(std::string *value, std::string *error)
+{
+  std::list<std::string> methods;
+  get_str_list(*value, methods);
+  if (methods.empty()) {
+    *error = "at least one auth method is required: cephx, none or gss";
+    return -EINVAL;
+  }
+  for (const auto& method : methods) {
+    if (parse_method(method) == CEPH_AUTH_UNKNOWN) {
+      *error = "unknown auth method '" + method +
+               "', expected cephx, none or gss";
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 bool AuthMethodList::is_supported_auth(int auth_type)
