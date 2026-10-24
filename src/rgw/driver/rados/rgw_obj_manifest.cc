@@ -24,6 +24,9 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
   }
 
   if (ofs >= max_head_size) {
+    if (0 == rule.stripe_max_size) {
+      return -EINVAL;
+    }
     manifest->set_head_size(max_head_size);
     cur_stripe = (ofs - max_head_size) / rule.stripe_max_size;
     cur_stripe_size = rule.stripe_max_size;
@@ -251,6 +254,10 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   if (!found) {
     derr << "ERROR: manifest->get_rule() could not find rule" << dendl;
     return -EIO;
+  }
+
+  if (0 == rule.stripe_max_size) {
+    return -EINVAL;
   }
 
   uint64_t head_size = manifest->get_head_size();

@@ -16,6 +16,7 @@
 #include <boost/utility/in_place_factory.hpp>
 
 #include "common/ceph_json.h"
+#include "common/dout_fmt.h"
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -3919,22 +3920,31 @@ public:
         manifest_bl = std::move(iter->second);
         src_attrs.erase(iter);
 
+        try {
+          RGWObjManifest manifest;
+          auto p = manifest_bl.cbegin();
+          decode(manifest, p);
+        } catch (const buffer::error&) {
+          ldpp_dout_fmt(dpp, 0, "ERROR: couldn't decode source manifest");
+          return -EIO;
+        }
+
         // if the source object was encrypted, preserve the part lengths from
         // the original object's manifest in RGW_ATTR_CRYPT_PARTS. if the object
         // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
         if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
             !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
           std::vector<uint64_t> parts_len;
-          int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
-                                                              parts_len);
-          if (r < 0) {
-            ldpp_dout(dpp, 4) << "failed to read part lengths from the manifest" << dendl;
-          } else {
-            // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
-            bufferlist parts_bl;
-            encode(parts_len, parts_bl);
-            src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
+          if (const int r = RGWGetObj_BlockDecrypt::read_manifest_parts(
+                  dpp, manifest_bl, parts_len);
+              r < 0) {
+            ldpp_dout_fmt(dpp, 4, "failed to read part lengths from the manifest");
+            return r;
           }
+          // store the encoded part lengths in RGW_ATTR_CRYPT_PARTS
+          buffer::list parts_bl;
+          encode(parts_len, parts_bl);
+          src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
         }
       }
 
@@ -7559,7 +7569,9 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
       if (!compressed)
         s->accounted_size = s->size;
     } catch (buffer::error& err) {
-      ldpp_dout(dpp, 0) << "ERROR: couldn't decode manifest" << dendl;
+      ldpp_dout_fmt(dpp, 0, "ERROR: couldn't decode manifest");
+      sm->manifest.reset();
+      s->has_attrs = false;
       return -EIO;
     }
     ldpp_dout(dpp, 10) << "manifest: total_size = " << sm->manifest->get_obj_size() << dendl;
@@ -8281,9 +8293,9 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
   }
   RGWObjStateManifest* sm = nullptr;
   constexpr bool follow_olh = false; // parts aren't versioned
-  int r = store->get_obj_state(dpp, rctx, bucket_info, *head_obj,
-                               &sm, follow_olh, y);
-  if (r < 0) {
+  if (const int r = store->get_obj_state(dpp, rctx, bucket_info, *head_obj,
+                                         &sm, follow_olh, y);
+      r < 0) {
     return r;
   }
   *pstate = &sm->state;
@@ -8307,16 +8319,23 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
   }
 
   RGWObjManifest::generator gen;
-  gen.create_begin(store->ctx(), &part_manifest,
-                   manifest->get_head_placement_rule(),
-                   &manifest->get_tail_placement().placement_rule,
-                   head_obj->bucket, *head_obj);
+  if (const int r = gen.create_begin(store->ctx(), &part_manifest,
+                                     manifest->get_head_placement_rule(),
+                                     &manifest->get_tail_placement().placement_rule,
+                                     head_obj->bucket, *head_obj);
+      r < 0) {
+    sm->manifest.reset();
+    return r;
+  }
 
   // copy each of the part's stripes into the new manifest. the final call to
   // create_next() uses the starting offset of the next part
   do {
     ++iter;
-    gen.create_next(iter.get_ofs() - part_offset);
+    if (const int r = gen.create_next(iter.get_ofs() - part_offset); r < 0) {
+      sm->manifest.reset();
+      return r;
+    }
   } while (iter != end && iter.get_cur_part_id() == part_num);
 
   // update the object size
