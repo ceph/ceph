@@ -64,6 +64,10 @@ namespace {
   string readf_out_name("rgwlib_readf.out");
   std::string writef_name{"bigbird"};
 
+  /* From the driver's fs-features:  a key and its directory form
+   * cannot both exist, so the second PUT of such a pair conflicts. */
+  bool key_paths_exclusive = false;
+
   int n_dirs1_dirs = 3;
   int n_dirs1_objs = 2;
 
@@ -235,6 +239,13 @@ TEST(LibRGW, MOUNT) {
    * references come back do not wait minutes for it. */
   g_conf().set_val("rgw_nfs_stateless_finalize_secs", "1");
   g_conf().apply_changes(nullptr);
+
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "nfsns test: ");
+  std::map<std::string, std::string> features;
+  if (g_rgwlib->get_driver()->driver_hint(&dp, "fs-features", {},
+                                          &features) == 0) {
+    key_paths_exclusive = (features["key_paths_exclusive"] == "true");
+  }
 }
 
 TEST(LibRGW, SETUP_HIER1)
@@ -260,24 +271,26 @@ TEST(LibRGW, SETUP_HIER1)
 
     if (do_create) {
       /* create objects directly */
-      std::vector<std::string> obj_names =
-	{"foo/bar/baz/quux",
-	 "foo/f1",
-	 "foo/f2",
-	 "foo/bar/f1",
-	 "foo/bar/d1/",
-	 "foo/bar/baz/hungry",
-	 "foo/bar/baz/hungry/",
-	 "foo/bar/baz/momma",
-	 "foo/bar/baz/bear/",
-	 "foo/bar/baz/sasquatch",
-	 "foo/bar/baz/sasquatch/",
-	 "foo/bar/baz/frobozz"};
+      /* The bool is true for the directory form of a key created
+       * earlier in the list. */
+      std::vector<std::pair<std::string, bool>> obj_names =
+	{{"foo/bar/baz/quux", false},
+	 {"foo/f1", false},
+	 {"foo/f2", false},
+	 {"foo/bar/f1", false},
+	 {"foo/bar/d1/", false},
+	 {"foo/bar/baz/hungry", false},
+	 {"foo/bar/baz/hungry/", true},
+	 {"foo/bar/baz/momma", false},
+	 {"foo/bar/baz/bear/", false},
+	 {"foo/bar/baz/sasquatch", false},
+	 {"foo/bar/baz/sasquatch/", true},
+	 {"foo/bar/baz/frobozz", false}};
 
       buffer::list bl; // empty object
       RGWLibFS *fs_private = static_cast<RGWLibFS*>(fs->fs_private);
 
-      for (const auto& obj_name : obj_names) {
+      for (const auto& [obj_name, second_form] : obj_names) {
 	if (verbose) {
 	  std::cout << "creating: " << bucket_name << ":" << obj_name
 		    << std::endl;
@@ -288,7 +301,11 @@ TEST(LibRGW, SETUP_HIER1)
 	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	int rc2 = req.get_ret();
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(rc2, 0);
+	if (key_paths_exclusive && second_form) {
+	  ASSERT_EQ(rc2, -ERR_KEY_PATH_CONFLICT);
+	} else {
+	  ASSERT_EQ(rc2, 0);
+	}
       }
     }
   }
