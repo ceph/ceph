@@ -71,6 +71,20 @@ class Cluster(multisite.Cluster):
             cmd += args
         return bash(cmd, **kwargs)
 
+    def rados(self, args=None, **kwargs):
+        """Run rados without logging pool-wide object-name output."""
+        check_retcode = kwargs.pop('check_retcode', True)
+        timeout = kwargs.pop('timeout', 180)
+        if kwargs:
+            raise TypeError('unsupported rados command options')
+        cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', self.cluster_id]
+        cmd += list(args or [])
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                timeout=timeout)
+        if check_retcode:
+            assert result.returncode == 0, 'rados command failed'
+        return result.stdout.decode('utf-8', 'surrogateescape'), result.returncode
+
     def start(self):
         cmd = [mstart_path + 'mstart.sh', self.cluster_id]
         env = None

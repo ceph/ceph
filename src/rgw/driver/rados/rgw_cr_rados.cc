@@ -3,6 +3,7 @@
 
 #include "include/compat.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_zone.h"
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"
@@ -882,17 +883,72 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 {
   ldpp_dout(dpp, 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
+  if (create_delete_marker && store->get_zone()->get_tier_type() != "archive") {
+    // A queued marker replay must not recreate heads after bucket deletion.
+    // Use the instance identity, never the entrypoint of a replacement bucket.
+    const auto &expected = bucket->get_info();
+    if (expected.bucket.bucket_id.empty()) {
+      return -EINVAL;
+    }
+    if (expected.bucket_deleted()) {
+      return -ENOENT;
+    }
+    RGWBucketInfo current;
+    // Consult current metadata instead of the retained sync-pipe snapshot.
+    int ret = store->ctl()->bucket->read_bucket_instance_info(
+        expected.bucket, &current, null_yield, dpp,
+        RGWBucketCtl::BucketInstance::GetParams());
+    if (ret < 0) {
+      return ret;
+    }
+    if (current.bucket_deleted() ||
+        current.bucket.bucket_id != expected.bucket.bucket_id ||
+        current.bucket.name != expected.bucket.name ||
+        current.bucket.tenant != expected.bucket.tenant ||
+        current.bucket.marker != expected.bucket.marker) {
+      ldpp_dout(dpp, 20)
+          << "skipping marker creation for deleted or replaced bucket "
+          << expected.bucket << dendl;
+      return -ENOENT;
+    }
+  }
+
   obj->set_atomic(true);
 
+  const bool null_verid = obj->get_instance() == "null";
   int ret = obj->load_obj_state(dpp, null_yield);
-  if (ret < 0) {
+  auto& state = static_cast<rgw::sal::RadosObject*>(obj.get())->get_state();
+  // An explicit NULL marker can have an OLH head without readable data.
+  // Retain its loaded attributes and let the index-backed unlink resolve it.
+  const bool null_instance_without_data = (ret == 0 || ret == -ENOENT) &&
+                                          versioned && null_verid &&
+                                          state.is_olh && !state.exists;
+  if (ret < 0 && !null_instance_without_data) {
     ldpp_dout(dpp, 20) << __func__ << "(): load_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
   }
 
+  auto object_mtime = obj->get_mtime();
+  if (null_instance_without_data) {
+    rgw_bucket_dir_entry marker;
+    const rgw_obj marker_obj(bucket->get_info().bucket, obj->get_key());
+    ret = store->getRados()->bi_get_delete_marker(dpp, bucket->get_info(),
+                                                  marker_obj, &marker,
+                                                  null_yield);
+    if (ret < 0 && ret != -ENOENT) {
+      return ret;
+    }
+    if (ret == 0) {
+      object_mtime = marker.meta.mtime;
+    }
+    // If absent, keep the ordinary data/absence path. CLS protects replacements.
+  }
+
   /* has there been any racing object write? */
-  if (del_if_older && (obj->get_mtime() > timestamp)) {
-    ldpp_dout(dpp, 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << obj->get_mtime() << ", request timestamp=" << timestamp << ")" << dendl;
+  if (del_if_older && (object_mtime > timestamp)) {
+    ldpp_dout(dpp, 20) << __func__ << "(): skipping object removal obj=" << obj
+                       << " (obj mtime=" << object_mtime
+                       << ", request timestamp=" << timestamp << ")" << dendl;
     return 0;
   }
 
@@ -974,7 +1030,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   del_op->params.mtime = timestamp;
   del_op->params.high_precision_time = true;
   del_op->params.zones_trace = &zones_trace;
-  del_op->params.null_verid = false;
+  del_op->params.null_verid = null_verid;
 
   ret = del_op->delete_obj(dpp, null_yield, true);
   if (ret < 0) {

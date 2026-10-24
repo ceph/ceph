@@ -1230,6 +1230,254 @@ def test_version_suspended_incremental_sync():
     log.debug('created null version id=%s', resp3.get('VersionId', 'null'))
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+def test_suspended_bucket_copy_rename_purge():
+    """Regression for tracker #81619: purge must remove retired NULL heads too."""
+    zonegroup = realm.master_zonegroup()
+    if (len(zonegroup.zones) != 2 or
+            any(z.is_read_only() or z.tier_type() != 'rados' for z in zonegroup.zones) or
+            not all(z.syncs_from(other.name) for z in zonegroup.zones
+                    for other in zonegroup.zones if z != other)):
+        raise SkipTest('requires two writable, mutually syncing RADOS zones')
+    if get_tenant():
+        raise SkipTest('requires a non-tenant user for bucket checkpoints')
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    conns = sorted(zonegroup_conns.non_account_rw_zones,
+                   key=lambda c: c.zone != realm.meta_master_zone())
+    primary, secondary = conns
+    directions = ((secondary, primary), (primary, secondary))
+    old, new = gen_bucket_name(), gen_bucket_name()
+    retired = old + '-tmp'
+    log.info('suspended migration: OLD=%s NEW=%s retired=%s', old, new, retired)
+    data = b'RGW migration reproduction: real, nonempty object data.\n' * 80
+    current = {'seed': data}
+    expected_rows = set()
+    latest_history = {}
+
+    def checkpoint(*buckets):
+        zonegroup_meta_checkpoint(zonegroup)
+        for bucket in buckets:
+            for target, source in directions:
+                zone_bucket_checkpoint(target.zone, source.zone, bucket)
+
+    def versions(conn, bucket):
+        rows = []
+        for page in conn.s3_client.get_paginator('list_object_versions').paginate(Bucket=bucket):
+            for kind, marker in (('Versions', False), ('DeleteMarkers', True)):
+                rows.extend((v['Key'], v['VersionId'], marker, v['IsLatest'],
+                             0 if marker else v['Size']) for v in page.get(kind, []))
+        return sorted(rows)
+
+    def check_old_versions():
+        for conn in conns:
+            eq(versions(conn, old), sorted(expected_rows))
+
+    def check_current(conn, bucket, plain=False):
+        keys = [o['Key'] for page in conn.s3_client.get_paginator('list_objects_v2').paginate(
+            Bucket=bucket) for o in page.get('Contents', [])]
+        eq(sorted(keys), sorted(current))
+        for key, body in current.items():
+            check_object_exists(conn, bucket, key, body)
+        if plain:
+            eq(conn.s3_client.get_bucket_versioning(Bucket=bucket).get('Status'), None)
+            eq(versions(conn, bucket), sorted(
+                (key, 'null', False, True, len(body)) for key, body in current.items()))
+
+    def stats(conn, bucket):
+        output, _ = conn.zone.cluster.admin(
+            ['bucket', 'stats', '--bucket', bucket] + conn.zone.zone_args(), read_only=True)
+        return json.loads(output)
+
+    def identity(bucket_stats):
+        result = bucket_stats['id'], bucket_stats['marker']
+        assert_true(all(result), 'bucket identity is incomplete')
+        return result
+
+    # Freeze physical identities before rename; a reused bucket name is not an OID prefix.
+    identities, pools = {}, {}
+
+    def raw_objects(conn):
+        output, ret = conn.zone.cluster.rados(['-p', pools[conn.name], 'ls'],
+                                              check_retcode=False)
+        eq(ret, 0, 'raw data-pool listing failed')
+        assert_true(isinstance(output, str) and not output.lstrip().startswith(('[', '{')),
+                    'expected plain rados object names')
+        prefix = identities[conn.name]['old'][1] + '_'
+        return [oid for oid in output.splitlines() if oid.startswith(prefix)]
+
+    for conn in conns:
+        for bucket in (old, new, retired):
+            eq(conn.get_bucket(bucket), None, 'generated fixture name already exists')
+    primary.create_bucket(old)
+    primary.s3_client.put_bucket_versioning(
+        Bucket=old, VersioningConfiguration={'Status': 'Enabled'})
+    response = primary.s3_client.put_object(Bucket=old, Key='seed', Body=data)
+    assert_true(response.get('VersionId') not in (None, '', 'null'))
+    expected_rows.add(('seed', response['VersionId'], False, True, len(data)))
+    primary.create_bucket(new)
+    primary.s3_client.put_object(Bucket=new, Key='seed', Body=data)
+    checkpoint(old, new)
+    for conn in conns:
+        old_stats = stats(conn, old)
+        identities[conn.name] = {'old': identity(old_stats), 'new': identity(stats(conn, new))}
+        assert_not_equal(identities[conn.name]['old'][0], identities[conn.name]['new'][0])
+        output, _ = conn.zone.cluster.admin(['zone', 'get'] + conn.zone.zone_args(),
+                                            read_only=True)
+        pools[conn.name], = [p['val']['storage_classes']['STANDARD']['data_pool']
+                            for p in json.loads(output)['placement_pools']
+                            if p['key'] == old_stats['placement_rule']]
+        assert_true(raw_objects(conn), 'RAW reader must see seeded OLD objects')
+        check_current(conn, old)
+        check_current(conn, new, plain=True)
+
+    # More than two purge pages, including named DATA and delete-marker versions.
+    for i in range(100):
+        key = 'history%04d' % i
+        for version in range(20):
+            body = data + (b'newer' if version % 2 else b'')
+            response = primary.s3_client.put_object(Bucket=old, Key=key, Body=body)
+            assert_true(response.get('VersionId') not in (None, '', 'null'))
+            row = (key, response['VersionId'], False, version == 19, len(body))
+            expected_rows.add(row)
+            if version == 19:
+                latest_history[key] = row
+        key = 'marker%04d' % i
+        response = primary.s3_client.put_object(Bucket=old, Key=key, Body=data)
+        assert_true(response.get('VersionId') not in (None, '', 'null'))
+        expected_rows.add((key, response['VersionId'], False, False, len(data)))
+        response = primary.s3_client.delete_object(Bucket=old, Key=key)
+        assert_true(response.get('VersionId') not in (None, '', 'null'))
+        expected_rows.add((key, response['VersionId'], True, True, 0))
+    checkpoint(old)
+    check_old_versions()
+
+    primary.s3_client.put_bucket_versioning(
+        Bucket=old, VersioningConfiguration={'Status': 'Suspended'})
+    zonegroup_meta_checkpoint(zonegroup)
+    for conn in conns:
+        for _ in range(config.checkpoint_retries):
+            if conn.s3_client.get_bucket_versioning(Bucket=old).get('Status') == 'Suspended':
+                break
+            time.sleep(config.checkpoint_delay)
+        else:
+            assert False, 'Suspended metadata did not propagate'
+
+    # Drain initial NULL data separately before overwrites and NULL delete markers.
+    for i in range(100):
+        key = 'data%04d' % i
+        primary.s3_client.put_object(Bucket=old, Key=key, Body=data)
+        expected_rows.add((key, 'null', False, True, len(data)))
+        current[key] = data
+    checkpoint(old)
+    check_old_versions()
+    for i in range(100):
+        key = 'history%04d' % i
+        body = data + b'null-overwrite'
+        primary.s3_client.put_object(Bucket=old, Key=key, Body=body)
+        row = latest_history[key]
+        expected_rows.remove(row)
+        expected_rows.add((key, row[1], False, False, row[4]))
+        expected_rows.add((key, 'null', False, True, len(body)))
+        current[key] = body
+        key = 'nullmarker%04d' % i
+        primary.s3_client.put_object(Bucket=old, Key=key, Body=data)
+        primary.s3_client.delete_object(Bucket=old, Key=key)
+        expected_rows.add((key, 'null', True, True, 0))
+    checkpoint(old)
+    check_old_versions()
+    for conn in conns:
+        check_current(conn, old)
+
+    def copy_current():
+        keys = [o['Key'] for page in primary.s3_client.get_paginator('list_objects_v2').paginate(
+            Bucket=old) for o in page.get('Contents', [])]
+        eq(sorted(keys), sorted(current))
+        for key in keys:
+            primary.s3_client.copy_object(
+                Bucket=new, Key=key, CopySource={'Bucket': old, 'Key': key},
+                MetadataDirective='COPY')
+
+    copy_current()
+    checkpoint(new)
+    for conn in conns:
+        check_current(conn, new, plain=True)
+    current['final'] = data + b'final'
+    primary.s3_client.put_object(Bucket=old, Key='final', Body=current['final'])
+    expected_rows.add(('final', 'null', False, True, len(current['final'])))
+    copy_current()
+    checkpoint(old, new)
+    check_old_versions()
+    eq(len(expected_rows), 2502)
+    eq(sum(not row[2] for row in expected_rows), 2302)
+    eq(len(current), 202)
+    for conn in conns:
+        eq(identity(stats(conn, old)), identities[conn.name]['old'])
+        eq(identity(stats(conn, new)), identities[conn.name]['new'])
+        check_current(conn, new, plain=True)
+
+    for source, target in ((old, retired), (new, old)):
+        primary.zone.cluster.admin(['bucket', 'link', '--bucket', source,
+                                    '--bucket-new-name', target, '--uid', non_account_user.id]
+                                   + primary.zone.zone_args())
+    zonegroup_meta_checkpoint(zonegroup)
+    for conn in conns:
+        eq(identity(stats(conn, retired)), identities[conn.name]['old'])
+        eq(identity(stats(conn, old)), identities[conn.name]['new'])
+
+    # After rename, do not enumerate/read retired versions or payloads. The
+    # customer acceptance checks replacement preservation and actual OLD cleanup.
+    for bucket in (retired, old):
+        for target, source in directions:
+            for _ in range(config.checkpoint_retries):
+                _, ret = target.zone.cluster.admin(
+                    ['bucket', 'sync', 'run', '--bucket', bucket,
+                     '--source-zone', source.zone.name] + target.zone.zone_args(),
+                    check_retcode=False)
+                if ret != errno.EBUSY:
+                    break
+                time.sleep(config.checkpoint_delay)
+            eq(ret, 0, 'manual bucket sync failed')
+            zone_bucket_checkpoint(target.zone, source.zone, bucket)
+    checkpoint(retired, old)
+    for conn in conns:
+        eq(identity(stats(conn, retired)), identities[conn.name]['old'])
+        eq(conn.s3_client.get_bucket_versioning(Bucket=retired).get('Status'), 'Suspended')
+        eq(identity(stats(conn, old)), identities[conn.name]['new'])
+        check_current(conn, old, plain=True)
+    primary.zone.cluster.admin(['bucket', 'rm', '--bucket', retired, '--purge-objects']
+                               + primary.zone.zone_args())
+
+    deadline, clean_since = time.monotonic() + 1800, None
+    raw_counts = {}
+    while time.monotonic() < deadline:
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_data_checkpoint(zonegroup_conns)
+        clean = True
+        for conn in conns:
+            raw = raw_objects(conn)  # Includes zero-byte OLH/delete-marker heads.
+            raw_counts[conn.name] = len(raw)
+            _, ret = conn.zone.cluster.admin(
+                ['bucket', 'stats', '--bucket', retired] + conn.zone.zone_args(),
+                check_retcode=False, read_only=True)
+            assert_true(ret in (0, errno.ENOENT), 'retired bucket stats failed')
+            absent = conn.get_bucket(retired) is None
+            clean = clean and not raw and ret == errno.ENOENT and absent
+            eq(identity(stats(conn, old)), identities[conn.name]['new'])
+            check_current(conn, old, plain=True)
+        now = time.monotonic()
+        if clean:
+            if clean_since is None:
+                clean_since = now
+            if now < deadline and now - clean_since >= 120:
+                log.info('suspended migration complete: OLD rows=%d, OLD RAW=0/0, NEW keys=%d, '
+                         'clean observation window=%.1fs', len(expected_rows), len(current),
+                         now - clean_since)
+                return
+        else:
+            clean_since = None
+        time.sleep(config.checkpoint_delay)
+    assert False, f'retired bucket {retired} namespace or RAW objects remain: {raw_counts}'
+
 def test_delete_marker_full_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
