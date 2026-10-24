@@ -24,6 +24,8 @@
      --test-map-object <objectname> [--pool <poolid>] map an object to osds
      --upmap-cleanup <file>  clean up pg_upmap[_items] entries, writing
                              commands to <file> [default: - for stdout]
+     --import-upmaps <file>  apply pg upmap commands read from <file>, in the
+                             format written by --upmap-cleanup and --upmap
      --upmap <file>          calculate pg upmap entries to balance pg layout
                              writing commands to <file> [default: - for stdout]
      --upmap-max <max-count> set max upmap entries to calculate [default: 10]
@@ -35,6 +37,7 @@
      --tree                  displays a tree of the map
      --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds
      --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)
+     --create-osds <count>   add <count> osds to the map, marked up and in, reusing the lowest unused ids before growing max_osd (but do not persist)
      --save                  write modified osdmap with upmap or crush-adjust changes
      --read <file>           calculate pg upmap entries to balance pg primaries
      --read-pool <poolname>  specify which pool the read balancer should adjust
