@@ -5185,6 +5185,70 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysRenameIsRaised)
       << "the history did not follow the leaf";
 }
 
+/* Recovery is the gateway's (raise site 5):  it moves version entries
+ * another identity wrote, under whichever request takes the version
+ * lock next.  Here the owner's own move is interrupted after one
+ * version has gone across, and the owner's next write into the source
+ * directory has to bring it back -- in `.versions` directories that are
+ * the owner's at 0770, which the gateway cannot write unraised. */
+TEST_F(NSFSImpersonatedRenameTest, AnInterruptedMoveIsRecoveredInTheOwnersTree)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "secnd"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "third"));
+  ASSERT_EQ(versions_in("src").size(), 2u)
+      << "need more than one version entry, or stopping after one does "
+	 "not leave a split";
+  ASSERT_EQ(owned("src/.versions").uid, owner_uid);
+  ASSERT_EQ(owned("src/.versions").mode, 0770u);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string intent_x = b->xattr_strategy()->disk_name("rename_intent");
+  auto intent_present = [&]() {
+    bool present = false;
+    EXPECT_EQ(with_capabilities_elsewhere(
+				      nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  const sf::path v = bucket_path() / "src" / ".versions";
+	  present = (::getxattr(v.c_str(), intent_x.c_str(), nullptr, 0) >= 0);
+	  return 0;
+	}), 0);
+    return present;
+  };
+
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-rename-fail-after",
+				{{"count", "1"}, {"abandon", "versions"}},
+				&out), 0);
+  EXPECT_NE(rename_as(alice, "src/k", "dst/k"), 0)
+      << "the injected abandon did not fail the rename";
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-rename-fail-after",
+				{{"count", "-1"}, {"abandon", "none"}},
+				&out), 0);
+
+  /* the split itself, asserted before repairing it, or this cannot tell
+   * a recovery from a move that never broke */
+  ASSERT_EQ(versions_in("dst").size(), 1u)
+      << "the abandon did not leave a version at the destination";
+  ASSERT_EQ(versions_in("src").size(), 1u)
+      << "the abandon did not leave the rest at the source";
+  ASSERT_TRUE(intent_present())
+      << "the abandon left no intent record;  nothing below tests recovery";
+  ASSERT_EQ(owned("dst/.versions").uid, owner_uid);
+
+  /* an unrelated write by the owner into the same directory takes the
+   * version lock, which is where recovery runs */
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/other", "unrelated"));
+
+  EXPECT_FALSE(intent_present())
+      << "a write to the directory did not clear the intent record";
+  EXPECT_TRUE(versions_in("dst").empty())
+      << "recovery left the stranded version at the destination";
+  EXPECT_EQ(versions_in("src").size(), 2u)
+      << "recovery did not return the whole history";
+  EXPECT_EQ(owned("src/k").err, 0) << "the leaf left its source";
+}
+
 /* NooBaa's attribute names.
  *
  * Spelled out here rather than derived from the strategy, for the same

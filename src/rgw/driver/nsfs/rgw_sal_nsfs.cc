@@ -1463,6 +1463,25 @@ static bool rename_intent_present(const nsfs::XattrStrategy* xs,
   return present;
 }
 
+/* Raise site 5 (n plan §5):  rename recovery moves version entries
+ * another identity wrote, between `.versions` directories that are
+ * their writers' at 0770, under whichever request takes the version
+ * lock next -- so it is the gateway's and not that request's.
+ * `CAP_DAC_OVERRIDE`, taken only after the gateway's own call is
+ * denied, so a gateway on its own directories never raises. */
+static constexpr uint64_t RENAME_RECOVERY_CAPS =
+  nsfs::cap_bit(CAP_DAC_OVERRIDE);
+
+static int recovery_write(const DoutPrefixProvider* dpp,
+			  const std::function<int()>& fn)
+{
+  const int ret = fn();
+  if ((ret != -EACCES) && (ret != -EPERM)) {
+    return ret;
+  }
+  return nsfs::with_capabilities(dpp, RENAME_RECOVERY_CAPS, fn);
+}
+
 /* Finish or undo an interrupted move.
  *
  * The record says what the move was;  the filesystem says how far it got.
@@ -1562,8 +1581,11 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
     }
     for (const auto& v : stranded) {
       std::string sname = in.leaf + "_" + v.ver_id;
-      if (::renameat(dst_vfd, v.entry.c_str(), src_vfd, sname.c_str()) < 0) {
-	ret = -errno;
+      ret = recovery_write(dpp, [&]() -> int {
+	return (::renameat(dst_vfd, v.entry.c_str(), src_vfd,
+			   sname.c_str()) < 0) ? -errno : 0;
+      });
+      if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: rename recovery: returning " << v.entry
 	  << " failed: " << cpp_strerror(-ret) << ";  the intent record stays "
 	  << "and " << in.leaf << " needs manual attention" << dendl;
@@ -1599,16 +1621,22 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
     }
     for (const auto& v : behind) {
       if (in.slice) {
-	if (::unlinkat(src_vfd, v.entry.c_str(), 0) < 0) {
+	ret = recovery_write(dpp, [&]() -> int {
+	  return (::unlinkat(src_vfd, v.entry.c_str(), 0) < 0) ? -errno : 0;
+	});
+	if (ret < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: rename recovery: sliced version "
-	    << v.entry << " could not be removed: " << cpp_strerror(errno)
+	    << v.entry << " could not be removed: " << cpp_strerror(-ret)
 	    << dendl;
 	  continue;
 	}
       } else {
 	std::string dname = dst_leaf + "_" + v.ver_id;
-	if (::renameat(src_vfd, v.entry.c_str(), dst_vfd, dname.c_str()) < 0) {
-	  ret = -errno;
+	ret = recovery_write(dpp, [&]() -> int {
+	  return (::renameat(src_vfd, v.entry.c_str(), dst_vfd,
+			     dname.c_str()) < 0) ? -errno : 0;
+	});
+	if (ret < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: rename recovery: forwarding " << v.entry
 	    << " failed: " << cpp_strerror(-ret) << ";  the intent record "
 	    << "stays and " << in.leaf << " needs manual attention" << dendl;
@@ -1627,9 +1655,14 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
       "forwarded ") << n << " version(s)" << dendl;
   }
 
+  /* the record is on a directory its writer owns, so its removal is
+   * raised with the moves:  left behind, it would send the next write
+   * back through recovery and keep every rename out of here at -EBUSY */
+  const std::string name = rename_intent_xattr(xs);
+  (void) recovery_write(dpp, [&]() -> int {
+    return (::fremovexattr(src_vfd, name.c_str()) < 0) ? -errno : 0;
+  });
   ::close(src_vfd);
-  clear_rename_intent(dpp, xs, src_parent_fd, nsfs::FSIdentity::none(),
-		      nullptr);
 
   /* The cache cannot describe what recovery just changed:  a rekey expresses
    * a whole move, and this was half of one.  Drop the filled flag on both
