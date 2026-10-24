@@ -225,6 +225,8 @@ Notable Changes
 * :ref:`CVE-2026-54330` is a flaw in RGW not properly verifying its SigV4 cryptographic signatures in RGW's SigV4 verifier.
 
 
+.. _squid-19-2-6-critical-upgrade-steps:
+
 Critical Upgrade Steps
 ----------------------
 
@@ -1988,6 +1990,11 @@ Telemetry
 
 Upgrading from Quincy or Reef
 --------------------------------
+
+.. warning::
+
+   Review the :ref:`squid-19-2-6-critical-upgrade-steps` before upgrading
+   from Quincy or Reef to 19.2.6 or later.
 
 Before starting, make sure your cluster is stable and healthy (no down or recovering OSDs).
 (This is optional, but recommended.) You can disable the autoscaler for all pools during the
