@@ -6,7 +6,7 @@
    instructions on this page.
 
 .. note:: If you are certain that you know what you are doing and you intend to
-   manually deploy MDS daemons, see :doc:`/cephadm/services/mds/` before
+   manually deploy MDS daemons, see :doc:`/cephadm/services/mds` before
    proceeding.
 
 ============================
