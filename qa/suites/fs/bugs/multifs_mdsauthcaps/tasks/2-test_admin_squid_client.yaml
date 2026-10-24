@@ -1,3 +1,13 @@
+teuthology:
+  postmerge:
+    # runs after the kclient mount fragment's postmerge, which picks aes256k
+    # for upstream kernels: the client node stays on squid, whose mount.ceph
+    # cannot parse aes256k keys
+    - |
+      local kclient = py_attrgetter(yaml.overrides).get('kclient')
+      if kclient ~= nil then
+        kclient.key_type = "aes"
+      end
 overrides:
   ceph:
     conf:
