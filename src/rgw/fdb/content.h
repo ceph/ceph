@@ -41,8 +41,7 @@ constexpr std::size_t encoded_string_segment_size(const std::string_view segment
  return 2 + std::size(segment) + embedded_nuls;
 }
 
-constexpr void append_encoded_string_segment(std::string& out,
-                                             const std::string_view segment)
+constexpr void append_encoded_string_segment(std::string& out, const std::string_view segment)
 {
  // FoundationDB's Tuple-layer byte-string type code makes the NUL-FF escape
  // distinguishable from a segment terminator followed by an FF byte:
@@ -66,6 +65,8 @@ constexpr void append_encoded_string_segment(std::string& out,
  out.push_back('\0');
 }
 
+// JFW: we should see how often this gets called in practice-- it may not "earn its keep", but we'll
+// find out.
 constexpr void require_valid_keyspace_root(const std::string_view segment)
 {
  if (segment.empty()) {
@@ -95,16 +96,14 @@ constexpr std::string_view first_segment_view(const auto& first, const auto&...)
  return segment_view(first);
 }
 
-constexpr void reserve_encoded_string_segments(std::string& out,
-                                               const auto& ...segments)
+constexpr void reserve_encoded_string_segments(std::string& out, const auto& ...segments)
 {
  out.reserve(out.size() +
              (encoded_string_segment_size(segment_view(segments)) +
               ... + std::size_t{0}));
 }
 
-constexpr void append_encoded_string_segments(std::string& out,
-                                              const auto& ...segments)
+constexpr void append_encoded_string_segments(std::string& out, const auto& ...segments)
 {
  (append_encoded_string_segment(out, segment_view(segments)), ...);
 }
@@ -112,9 +111,7 @@ constexpr void append_encoded_string_segments(std::string& out,
 } // namespace detail
 
 template <typename ...Segments>
-concept key_segments =
- 0 < sizeof...(Segments) &&
- (concepts::stringview_convertible<Segments> && ...);
+concept key_segments = 0 < sizeof...(Segments) && (concepts::stringview_convertible<Segments> && ...);
 
 class compiled_key;
 
