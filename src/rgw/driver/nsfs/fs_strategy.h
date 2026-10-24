@@ -259,7 +259,7 @@ protected:
                     int src_fd, off_t src_off,
                     int dst_fd, off_t dst_off, off_t len);
 
-  bool force_buffered_copy{false};
+  std::atomic<bool> force_buffered_copy{false};
   bool fs_shares_extents{false};
   std::atomic<uint64_t> buffered_copy_bytes{0};
   std::atomic<uint64_t> cross_account_sources{0};
