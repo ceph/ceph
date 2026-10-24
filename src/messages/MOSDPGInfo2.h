@@ -8,7 +8,7 @@
 
 class MOSDPGInfo2 final : public MOSDPeeringOp {
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -18,6 +18,7 @@ public:
   pg_info_t info;
   std::optional<pg_lease_t> lease;
   std::optional<pg_lease_ack_t> lease_ack;
+  std::optional<backfill_osd_space_usage_t> osd_space_usage;
 
   spg_t get_spg() const override {
     return spgid;
@@ -38,7 +39,8 @@ public:
 	info,
 	epoch_sent,
 	lease,
-	lease_ack));
+	lease_ack,
+	osd_space_usage));
   }
 
   MOSDPGInfo2() : MOSDPeeringOp{MSG_OSD_PG_INFO2,
@@ -51,14 +53,16 @@ public:
     epoch_t sent,
     epoch_t min,
     std::optional<pg_lease_t> l,
-    std::optional<pg_lease_ack_t> la)
+    std::optional<pg_lease_ack_t> la,
+    std::optional<backfill_osd_space_usage_t> osd_space_usage = {})
     : MOSDPeeringOp{MSG_OSD_PG_INFO2, HEAD_VERSION, COMPAT_VERSION},
       spgid(s),
       epoch_sent(sent),
       min_epoch(min),
       info(q),
       lease(l),
-      lease_ack(la) {
+      lease_ack(la),
+      osd_space_usage(osd_space_usage) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 
@@ -81,6 +85,7 @@ public:
     encode(info, payload);
     encode(lease, payload);
     encode(lease_ack, payload);
+    encode(osd_space_usage, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -91,6 +96,11 @@ public:
     decode(info, p);
     decode(lease, p);
     decode(lease_ack, p);
+    if (header.version >= 2) {
+      decode(osd_space_usage, p);
+    } else {
+      osd_space_usage = std::nullopt;
+    }
   }
 private:
   template<class T, typename... Args>
