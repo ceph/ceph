@@ -37,6 +37,10 @@ class CephadmNoImage(Enum):
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw',
               'rbd-mirror', 'cephfs-mirror', 'ceph-exporter']
 GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
+# rgw is a gateway too, but it uses the ceph container image and is therefore
+# listed in CEPH_TYPES, which also places it in the upgrade order. Use this
+# when you mean every gateway daemon type regardless of the image it uses.
+ALL_GATEWAY_TYPES = GATEWAY_TYPES + ['rgw']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
                           'alertmanager', 'grafana', 'loki', 'promtail', 'alloy',
                           'pushgateway']

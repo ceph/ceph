@@ -158,6 +158,37 @@ ceph ``osd ok-to-upgrade`` with the specified bucket name and type, and max set 
    This includes the name or type of any CRUSH bucket.
 
 
+Limiting the Gateway Upgrade Batch Size
+=======================================
+
+The number of gateway daemons (``rgw``, ``iscsi``, ``nfs``, ``nvmeof`` and
+``smb``) that cephadm upgrades in one pass is controlled by
+:confval:`mgr/cephadm/max_gateway_upgrades_per_pass`. The remaining daemons are
+upgraded by the subsequent passes, so the upgrade still completes without
+operator intervention. Because cephadm returns to the serve loop between passes,
+a lower value keeps the serve loop more responsive while an upgrade is in
+progress, so other work such as deploying new daemons and refreshing host
+metadata is delayed less. Raise the value to upgrade large numbers of gateway
+daemons in fewer passes:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/max_gateway_upgrades_per_pass 8
+
+For ``rgw``, ``iscsi``, ``nvmeof`` and ``smb`` the value is a plain per-daemon
+cap. A pass upgrades at most that many daemons, and a service with more daemons
+than the limit is split across passes, so the service keeps serving clients
+while it is upgraded.
+
+``nfs`` is the exception: restarting one NFS daemon sends the rest of its
+service into a grace period, so a service that is split across passes pays for
+one grace period per pass instead of one for the whole service. NFS daemons are
+therefore grouped by service and whole services are added to a pass.
+
+Setting the option to ``0`` disables the limit and restores the previous
+behavior of upgrading all daemons of the type in one pass.
+
+
 Monitoring the Upgrade
 ======================
 
