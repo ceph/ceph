@@ -103,9 +103,10 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
   co_await this->template enter_stage<interruptor>(
     repop_pipeline(*pg).send_reply);
 
+  // Reply on the connection the repop came in on: the primary sent it from
+  // the PG's reactor, so the reply lands there without a hop.
   co_await interruptor::make_interruptible(
-    pg->shard_services.send_to_osd(
-      req->from.osd, std::move(reply), pg->get_osdmap_epoch())
+    get_foreign_connection().send_with_throttling(std::move(reply))
   );
   // throttle destructs here -> release_throttle()
 }

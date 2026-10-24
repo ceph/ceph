@@ -28,12 +28,9 @@
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
 #include "crimson/net/Connection.h"
+#include "crimson/net/Messenger.h"
 #include "mgr/OSDPerfMetricTypes.h"
 #include "osd/ECExtentCache.h"
-
-namespace crimson::net {
-  class Messenger;
-}
 
 namespace crimson::mgr {
   class Client;
@@ -418,6 +415,10 @@ class ShardServices : public OSDMapService,
   seastar::metrics::metric_groups metrics;
   void register_metrics();
 
+  // This reactor's own cluster messenger. send_to_osd() sends on it
+  // instead of on reactor 0's.
+  crimson::net::MessengerRef cluster_lane_msgr;
+
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
     return osd_singleton_state.invoke_on(
@@ -536,7 +537,18 @@ public:
     register_metrics();
   }
 
-  FORWARD_TO_OSD_SINGLETON(send_to_osd)
+  seastar::future<> send_to_osd(int peer, MessageURef m, epoch_t from_epoch);
+
+  seastar::future<> start_cluster_lane(
+    uint32_t nonce,
+    entity_addrvec_t addrs,
+    uint64_t osd_required,
+    crimson::net::Dispatcher &dispatcher,
+    crimson::auth::AuthClient *auth_client,
+    crimson::auth::AuthServer *auth_server);
+  void stop_cluster_lane();
+  seastar::future<> shutdown_cluster_lane();
+  seastar::future<> mark_down_cluster_lane(entity_addr_t addr);
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
     auto store = local_state.b_store;
