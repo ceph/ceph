@@ -13,6 +13,7 @@
  *
  */
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <string>
@@ -550,7 +551,12 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
 
   std::list<librados::AioCompletion*> handles;
 
-  int max_aio = concurrent_max;
+  // A budget below 1 skips the first object's tail-stripe deletes entirely
+  // (max_aio-- evaluates false before the loop body runs, orphaning its tails)
+  // and then goes negative, so the in-loop drains never fire and the deletes
+  // run unbounded. The admin REST bucket-removal op reaches here without
+  // set_max_aio(), i.e. with the default 0; clamp as the index-check paths do.
+  int max_aio = std::max(1, concurrent_max);
   results.is_truncated = true;
 
   while (results.is_truncated) {
