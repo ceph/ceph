@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    client.0:
+      - "sudo ceph auth get client.0"
+      - "sudo ceph auth caps client.0 mds 'allow all' mgr 'allow r' mon 'allow rw' osd 'allow rwx'"
+      - "sudo ceph auth get client.0"
