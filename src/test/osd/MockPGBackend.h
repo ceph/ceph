@@ -60,6 +60,9 @@ public:
   void clear_recovery_state() override {
   }
 
+  void cancel_recovery_op(const hobject_t &soid) override {
+  }
+
   // Predicates
   IsPGRecoverablePredicate *get_is_recoverable_predicate() const override {
     return nullptr;

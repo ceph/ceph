@@ -95,6 +95,7 @@ public:
 
   void on_change();
   void clear_recovery_state();
+  void cancel_recovery_op(const hobject_t &soid);
 
   void dump_recovery_info(ceph::Formatter *f) const;
 

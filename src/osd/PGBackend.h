@@ -235,6 +235,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual bool pg_is_undersized() const = 0;
      virtual bool pg_is_repair() const = 0;
 
+     virtual void update_migration_watermark(const hobject_t &watermark) = 0;
+     virtual std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) = 0;
+
      virtual void log_operation(
        std::vector<pg_log_entry_t>&& logv,
        const std::optional<pg_hit_set_history_t> &hset_history,
@@ -428,6 +431,12 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
     */
    virtual void on_change() = 0;
    virtual void clear_recovery_state() = 0;
+   /**
+    * Cancel any in-flight backend recovery op for soid.  Safe no-op if
+    * the object has no in-flight op.  Must be called before erasing soid
+    * from PrimaryLogPG::recovering to keep the two maps in sync.
+    */
+   virtual void cancel_recovery_op(const hobject_t &soid) = 0;
 
    virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
