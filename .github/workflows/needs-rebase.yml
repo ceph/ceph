@@ -7,11 +7,11 @@ jobs:
   needs-rebase:
     runs-on: ubuntu-latest
     steps:
-      # eps1lon/actions-label-merge-conflict@v2.0.1
+      # eps1lon/actions-label-merge-conflict@v3.1.0
       # (NOTE: pinning the action to a given commit is a security best-practice:
       # https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/security-hardening-for-github-actions)
       - name: Check if PR needs rebase
-        uses: eps1lon/actions-label-merge-conflict@b8bf8341285ec9a4567d4318ba474fee998a6919
+        uses: eps1lon/actions-label-merge-conflict@e0e7fd9fd8ddda6d9727236e35daf319381a0a4f
         with:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
           dirtyLabel: "needs-rebase"
