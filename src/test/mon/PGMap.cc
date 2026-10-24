@@ -13,6 +13,9 @@
  */
 
 #include "mon/PGMap.h"
+
+#include <iomanip>  // for std::fixed, std::setprecision
+
 #include "gtest/gtest.h"
 
 #include "common/TextTable.h"

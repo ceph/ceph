@@ -24,6 +24,8 @@
 
 #include "include/ceph_features.h" // for CEPH_FEATURE_*
 #include "include/container_ios.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/util.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
@@ -332,12 +334,6 @@ namespace ceph {
     }
   }
 }
-
-
-inline const char *ceph_mon_feature_name(uint64_t b)
-{
-  return ceph::features::mon::get_feature_name(b);
-};
 
 class mon_feature_t {
 
