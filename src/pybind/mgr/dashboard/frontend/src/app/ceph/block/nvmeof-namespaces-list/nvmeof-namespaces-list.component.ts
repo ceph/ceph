@@ -144,7 +144,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     ];
 
     this.namespaces$ = this.namespaceSubject.pipe(
-      switchMap(() => {
+      switchMap((): Observable<NvmeofSubsystemNamespace[]> => {
         if (!this.groupHandler.group) {
           if (this.groupHandler.groupSelectionCleared) {
             return of([]);
