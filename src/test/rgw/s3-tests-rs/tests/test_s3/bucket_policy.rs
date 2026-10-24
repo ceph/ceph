@@ -438,7 +438,7 @@ async fn test_bucket_policy_multipart() {
     /* staging is made as the uploader in main's bucket directory, so
      * the same line as a create there */
     Access::ask(Class::Data, &bucket_name, key, &get_config().alt_user_id,
-                "c").await.judge(alt_client
+                "c").await.expect(alt_client
         .create_multipart_upload()
         .bucket(&bucket_name)
         .key(key)
@@ -2164,7 +2164,7 @@ async fn test_bucket_policy_put_obj_acl() {
     Access::ask(Class::Data, &bucket, "private-key",
                 &get_config().alt_user_id, "c")
         .await
-        .judge(alt_client
+        .expect(alt_client
         .put_object()
         .bucket(&bucket)
         .key("private-key")
@@ -2216,7 +2216,7 @@ async fn test_bucket_policy_put_obj_grant() {
     /* both creates are alt's in main's buckets:  where the configuration
      * refuses one, the checks on that object below have no object */
     let put1 = Access::ask(Class::Data, &bucket1, "key1", &cfg.alt_user_id,
-                           "c").await.judge(alt_client
+                           "c").await.expect(alt_client
         .put_object()
         .bucket(&bucket1)
         .key("key1")
@@ -2230,7 +2230,7 @@ async fn test_bucket_policy_put_obj_grant() {
 
     // put to bucket2 without grant header → allowed (no condition)
     let put2 = Access::ask(Class::Data, &bucket2, "key2", &cfg.alt_user_id,
-                           "c").await.judge(alt_client
+                           "c").await.expect(alt_client
         .put_object()
         .bucket(&bucket2)
         .key("key2")
@@ -2365,7 +2365,7 @@ async fn test_bucket_policy_put_obj_request_obj_tag() {
     // put with matching x-amz-tagging header → allowed by S3;  alt's
     // create in main's bucket, which the access model then decides
     Access::ask(Class::Data, &bucket, "testobj", &get_config().alt_user_id,
-                "c").await.judge(alt_client
+                "c").await.expect(alt_client
         .put_object()
         .bucket(&bucket)
         .key("testobj")

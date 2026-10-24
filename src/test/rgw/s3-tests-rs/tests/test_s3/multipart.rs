@@ -1224,7 +1224,7 @@ async fn test_list_multipart_upload_owner() {
      * holds main's upload alone */
     let upload_id2 = Access::ask(Class::Data, &bucket_name, key2,
                                  &cfg.alt_user_id, "c").await
-        .judge(client2
+        .expect(client2
         .create_multipart_upload()
         .bucket(&bucket_name)
         .key(key2)

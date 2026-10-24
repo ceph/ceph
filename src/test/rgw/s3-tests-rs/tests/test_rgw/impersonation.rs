@@ -135,13 +135,13 @@ async fn test_impersonation_isolates_identities() {
     /* The subject is the permission check, and it holds at every
      * access model:  alice's object is alice's, so bob's read of it is
      * denied.  What the gateway then does about that is the model's
-     * business, which `judge` asserts. */
+     * business, which `expect` asserts. */
     let access = Access::ask(Class::Data, &bucket, key,
                              &bob_u.id, "r").await;
     assert!(access.denied(),
         "the filesystem permits bob to read an object alice wrote;  \
          did not cover creation, so the object is not owned by her");
-    access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
+    access.expect(bob.get_object().bucket(&bucket).key(key).send().await);
 
 }
 
@@ -387,7 +387,7 @@ async fn test_impersonation_owns_a_nested_key() {
     assert!(create.denied(),
         "the filesystem permits bob to create in a/b/;  the directory \
          was made by alice's request, so it should be hers");
-    let wrote = create.judge(bob.put_object()
+    let wrote = create.expect(bob.put_object()
         .bucket(&bucket).key(his)
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"bob wrote this"))
         .send().await).is_some();
@@ -407,7 +407,7 @@ async fn test_impersonation_owns_a_nested_key() {
     assert!(hers_to_bob.denied(),
         "the filesystem permits bob to read alice's nested object;  it is \
          owned by her");
-    hers_to_bob.judge(
+    hers_to_bob.expect(
         bob.get_object().bucket(&bucket).key(hers).send().await);
 
     /* The other direction is the permission check and nothing else.  The policy above grants *bob* s3:GetObject;  alice has no
@@ -492,7 +492,7 @@ async fn test_impersonation_owns_a_completed_upload() {
     assert!(access.denied(),
         "the filesystem permits bob to read the object alice's upload \
          it was made as the gateway");
-    access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
+    access.expect(bob.get_object().bucket(&bucket).key(key).send().await);
 
 }
 
@@ -551,7 +551,7 @@ async fn test_impersonation_copies_as_the_requester() {
     assert!(access.denied(),
         "the filesystem permits bob to read alice's object;  the premise \
          test does not hold");
-    access.judge(bob.get_object().bucket(&bucket).key(key).send().await);
+    access.expect(bob.get_object().bucket(&bucket).key(key).send().await);
 
     /* the control:  bob can copy at all -- his own object, in his bucket */
     let put = bob.put_object()
@@ -568,7 +568,7 @@ async fn test_impersonation_copies_as_the_requester() {
     /* and the copy follows the same check as the read:  a copy is a
      * read of the source, so a model that denies bob the bytes
      * denies him the copy, and one that serves them serves it */
-    access.judge(bob.copy_object()
+    access.expect(bob.copy_object()
         .bucket(&bobs_bucket).key("stolen")
         .copy_source(format!("{bucket}/{key}"))
         .send().await);
@@ -588,7 +588,7 @@ async fn test_impersonation_copies_as_the_requester() {
     assert!(hers.denied(),
         "the filesystem permits bob to read alice's copy;  it is not owned \
          by her");
-    hers.judge(
+    hers.expect(
         bob.get_object().bucket(&bucket).key("alices-copy").send().await);
 
 }
@@ -654,7 +654,7 @@ async fn test_impersonation_honours_the_group_vector() {
                             &reader.id, "r").await;
     assert!(!gated.denied(),
         "holding gid {GID_SHARED} did not grant the read");
-    gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
+    gated.expect(alice.get_object().bucket(bucket).key("grouped.txt")
         .send().await);
 
     /* the same identity, no group */
@@ -671,7 +671,7 @@ async fn test_impersonation_honours_the_group_vector() {
         "the filesystem permitted the read without the group in the \
          vector — an absent list left the gateway's own groups in place \
          rather than clearing");
-    gated.judge(alice.get_object().bucket(bucket).key("grouped.txt")
+    gated.expect(alice.get_object().bucket(bucket).key("grouped.txt")
         .send().await);
 
     let _ = main.delete_bucket_policy().bucket(bucket).send().await;

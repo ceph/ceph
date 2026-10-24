@@ -517,7 +517,7 @@ async fn test_allow_object_actions_in_user_policy() {
      * grants:  where the configuration refuses it, its read and delete
      * have no object, and the cleanup below still runs */
     let put = Access::ask(Class::Data, &bucket, "foo", &cfg.alt_user_id,
-                          "c").await.judge(s3_client_alt
+                          "c").await.expect(s3_client_alt
         .put_object()
         .bucket(&bucket)
         .key("foo")
@@ -843,7 +843,7 @@ async fn test_allow_multipart_actions_in_user_policy() {
      * below it has an upload, and the cleanup still runs */
     let mp = Access::ask(Class::Data, &bucket, key, &cfg.alt_user_id, "c")
         .await
-        .judge(s3_client_alt
+        .expect(s3_client_alt
         .create_multipart_upload()
         .bucket(&bucket)
         .key(key)
@@ -888,7 +888,7 @@ async fn test_allow_multipart_actions_in_user_policy() {
          * 2026-10-20), and performed under s3-native */
         let delete = Access::ask(Class::Data, &bucket, key,
                                  &cfg.iam_user_id, "d").await;
-        let deleted = delete.judge(s3_client_iam
+        let deleted = delete.expect(s3_client_iam
             .delete_object()
             .bucket(&bucket)
             .key(key)
@@ -1031,7 +1031,7 @@ async fn test_allow_tagging_actions_in_user_policy() {
      * where the filesystem denies alt. */
     let tagging = Access::ask(Class::ObjectAttrs, &bucket, obj_key,
                               &cfg.alt_user_id, "w").await;
-    let tagged = tagging.judge(s3_client_alt
+    let tagged = tagging.expect(s3_client_alt
         .put_object_tagging()
         .bucket(&bucket)
         .key(obj_key)

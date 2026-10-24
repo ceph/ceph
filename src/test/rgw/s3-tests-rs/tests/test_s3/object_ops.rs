@@ -1337,7 +1337,7 @@ async fn test_object_anon_put_write_access() {
     let access = s3_tests_rs::access_model::Access::ask(
         s3_tests_rs::access_model::Class::Data,
         &bucket_name, "foo", "", "w").await;
-    access.judge(unauth
+    access.expect(unauth
         .put_object()
         .bucket(&bucket_name)
         .key("foo")

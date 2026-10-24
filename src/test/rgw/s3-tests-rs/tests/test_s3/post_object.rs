@@ -120,7 +120,7 @@ async fn test_post_object_anonymous_request() {
     let access = s3_tests_rs::access_model::Access::ask(
         s3_tests_rs::access_model::Class::Data,
         &bucket, "foo.txt", &get_config().main_user_id, "r").await;
-    if let Some(resp) = access.judge(
+    if let Some(resp) = access.expect(
             client.get_object().bucket(&bucket).key("foo.txt").send().await) {
         let body = resp.body.collect().await.unwrap().into_bytes();
         assert_eq!(&body[..], b"bar");
@@ -1144,7 +1144,7 @@ async fn test_post_object_tags_anonymous_request() {
     let data = s3_tests_rs::access_model::Access::ask(
         s3_tests_rs::access_model::Class::Data,
         &bucket, "foo.txt", &cfg.main_user_id, "r").await;
-    if let Some(resp) = data.judge(
+    if let Some(resp) = data.expect(
             client.get_object().bucket(&bucket).key("foo.txt").send().await) {
         let body = resp.body.collect().await.unwrap().into_bytes();
         assert_eq!(&body[..], b"bar");
@@ -1153,7 +1153,7 @@ async fn test_post_object_tags_anonymous_request() {
     let attrs = s3_tests_rs::access_model::Access::ask(
         s3_tests_rs::access_model::Class::ObjectAttrs,
         &bucket, "foo.txt", &cfg.main_user_id, "r").await;
-    let Some(tag_resp) = attrs.judge(
+    let Some(tag_resp) = attrs.expect(
         client.get_object_tagging().bucket(&bucket).key("foo.txt")
             .send().await) else { return };
     let tag_set = tag_resp.tag_set();

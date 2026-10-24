@@ -494,7 +494,7 @@ async fn test_object_acl_canned_bucketownerread() {
      * configuration refuses it there is no object to read back */
     let access = Access::ask(Class::Data, &bucket_name, "foo",
                              &get_config().alt_user_id, "c").await;
-    if access.judge(alt_client
+    if access.expect(alt_client
         .put_object()
         .bucket(&bucket_name)
         .key("foo")
@@ -551,7 +551,7 @@ async fn test_object_acl_canned_bucketownerfullcontrol() {
      * configuration refuses it there is no object to read back */
     let access = Access::ask(Class::Data, &bucket_name, "foo",
                              &get_config().alt_user_id, "c").await;
-    if access.judge(alt_client
+    if access.expect(alt_client
         .put_object()
         .bucket(&bucket_name)
         .key("foo")
@@ -671,7 +671,7 @@ async fn test_object_acl_full_control_verify_owner() {
      * filesystem denies alt. */
     let write = Access::ask(Class::ObjectAttrs, &bucket_name, "foo",
                             &cfg.alt_user_id, "w").await;
-    write.judge(alt_client
+    write.expect(alt_client
         .put_object_acl()
         .bucket(&bucket_name)
         .key("foo")
@@ -681,7 +681,7 @@ async fn test_object_acl_full_control_verify_owner() {
 
     let read = Access::ask(Class::ObjectAttrs, &bucket_name, "foo",
                            &cfg.alt_user_id, "r").await;
-    if let Some(response) = read.judge(alt_client
+    if let Some(response) = read.expect(alt_client
         .get_object_acl()
         .bucket(&bucket_name)
         .key("foo")
@@ -980,7 +980,7 @@ async fn check_alt_read(alt_client: &aws_sdk_s3::Client, bucket: &str,
                         key: &str, expected: &[u8]) {
     let access = Access::ask(Class::Data, bucket, key,
                              &get_config().alt_user_id, "r").await;
-    if let Some(out) = access.judge(
+    if let Some(out) = access.expect(
             alt_client.get_object().bucket(bucket).key(key).send().await) {
         let body = out.body.collect().await.unwrap().into_bytes();
         assert_eq!(&body[..], expected);
@@ -998,7 +998,7 @@ async fn check_alt_overwrite(alt_client: &aws_sdk_s3::Client, bucket: &str,
                              key: &str, body: &'static [u8]) {
     let access = Access::ask(Class::Data, bucket, key,
                              &get_config().alt_user_id, "w").await;
-    access.judge(alt_client.put_object().bucket(bucket).key(key)
+    access.expect(alt_client.put_object().bucket(bucket).key(key)
         .body(ByteStream::from_static(body)).send().await);
 }
 
@@ -1010,7 +1010,7 @@ async fn check_alt_create(alt_client: &aws_sdk_s3::Client, bucket: &str,
                           key: &str, body: &'static [u8]) -> bool {
     let access = Access::ask(Class::Data, bucket, key,
                              &get_config().alt_user_id, "c").await;
-    access.judge(alt_client.put_object().bucket(bucket).key(key)
+    access.expect(alt_client.put_object().bucket(bucket).key(key)
         .body(ByteStream::from_static(body)).send().await).is_some()
 }
 
@@ -1893,7 +1893,7 @@ async fn test_ownership_enforced(client: &aws_sdk_s3::Client, writer_id: &str,
      * is no object whose ownership could be asked */
     let access = Access::ask(Class::Data, bucket, "put-no-acl", writer_id,
                              "c").await;
-    if access.judge(client.put_object().bucket(bucket).key("put-no-acl")
+    if access.expect(client.put_object().bucket(bucket).key("put-no-acl")
                     .send().await).is_none() {
         return;
     }
@@ -1957,7 +1957,7 @@ async fn test_ownership_preferred(client: &aws_sdk_s3::Client, writer_id: &str,
      * is no object whose ownership could be asked */
     let access = Access::ask(Class::Data, bucket, "put-no-acl", writer_id,
                              "c").await;
-    if access.judge(client.put_object().bucket(bucket).key("put-no-acl")
+    if access.expect(client.put_object().bucket(bucket).key("put-no-acl")
                     .send().await).is_none() {
         return;
     }
@@ -1994,7 +1994,7 @@ async fn test_ownership_object_writer(client: &aws_sdk_s3::Client, writer_id: &s
      * is no object whose ownership could be asked */
     let access = Access::ask(Class::Data, bucket, "put-no-acl", writer_id,
                              "c").await;
-    if access.judge(client.put_object().bucket(bucket).key("put-no-acl")
+    if access.expect(client.put_object().bucket(bucket).key("put-no-acl")
                     .send().await).is_none() {
         return;
     }

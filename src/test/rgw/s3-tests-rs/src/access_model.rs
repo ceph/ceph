@@ -106,12 +106,11 @@ impl Access {
         self.model
     }
 
-    /// Judge a result against that:  AccessDenied where the
-    /// configuration denies it, the output where it serves it, and
-    /// nothing asserted where it is unknown -- `Some` only where
-    /// something was served, so a test checks what it read only where
-    /// it read.
-    pub fn judge<T, E>(&self, r: Result<T, SdkError<E, Response>>)
+    /// Expect what the configuration does with `r`:  AccessDenied
+    /// where it denies it, the output where it serves it, and nothing
+    /// asserted where it is unknown -- `Some` only where something was
+    /// served, so a test checks what it read only where it read.
+    pub fn expect<T, E>(&self, r: Result<T, SdkError<E, Response>>)
         -> Option<T>
     where
         E: ProvideErrorMetadata + std::fmt::Debug,
