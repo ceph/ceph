@@ -589,6 +589,20 @@ def _check_share_rgw(share: resources.Share, staging: Staging) -> None:
                     'other_cluster_id': cred.linked_to_cluster,
                 },
             )
+
+        # Validate the provided credentials are actually valid (skip for external clusters)
+        if not is_external_cluster:
+            if not rgw.validate_rgw_credentials(
+                staging._tool_execer,
+                cred.user_id,
+                cred.access_key_id,
+                cred.secret_access_key,
+            ):
+                raise ErrorResult(
+                    share,
+                    msg=f"Invalid RGW credentials in '{share.rgw.credential_ref}'",
+                    status={"credential_ref": share.rgw.credential_ref},
+                )
     # Validate bucket exists (skip for external clusters)
     if not is_external_cluster:
         if not rgw.validate_rgw_bucket(
