@@ -264,6 +264,44 @@ troubleshoot the SSH connection between ``cephadm`` and the Monitor:
 
       [root@mon1 ~]# ssh -F config -i ~/cephadm_private_key root@mon1
 
+#. If the SSH connection fails and you need deeper diagnostics, increase the
+   verbosity of the SSH log that cephadm captures for each failed connection.
+   Set ``asyncssh_log_level`` to ``DEBUG``:
+
+   .. prompt:: bash #
+
+      ceph config set mgr mgr/cephadm/asyncssh_log_level DEBUG
+
+   For packet-level traces (key exchange, handshake), also set:
+
+   .. prompt:: bash #
+
+      ceph config set mgr mgr/cephadm/asyncssh_debug_level 2
+
+   The captured SSH log is written at ``debug`` level and only on a failed
+   connection, so enable cephadm debug logging to view it. 
+
+   .. prompt:: bash #
+
+      # mgr log only - not sent to the monitors (preferred):
+      ceph config set mgr mgr/cephadm/log_level debug
+      # or the cluster log channel - sent to the monitors; revert promptly:
+      ceph config set mgr mgr/cephadm/log_to_cluster_level debug
+
+   The failing operation will now capture ``SSH log for`` lines, in
+   ``cephadm logs --name mgr.<active-mgr>`` or ``ceph log last 500 debug
+   cephadm`` respectively.
+
+   Reset to defaults once the issue is diagnosed:
+
+   .. prompt:: bash #
+
+      ceph config rm mgr mgr/cephadm/asyncssh_log_level
+      ceph config rm mgr mgr/cephadm/asyncssh_debug_level
+
+   See :ref:`cephadm-asyncssh-log-verbosity` for full details on these
+   options.
+
 
 Verifying that the Public Key is Listed in the ``authorized_keys`` file
 -----------------------------------------------------------------------

@@ -210,8 +210,13 @@ class SSHManager:
         logger.debug("Opening connection to {} with ssh options '{}'".format(
             n, self.mgr._ssh_options))
 
-        asyncssh.set_log_level('DEBUG')
-        asyncssh.set_debug_level(3)
+        asyncssh.set_log_level(self.mgr.asyncssh_log_level)
+        # asyncssh.set_debug_level() only accepts 1-3, so 0 (the "no extra
+        # verbosity" default) maps to asyncssh's minimum of 1. Debug output
+        # is turned off via asyncssh_log_level (INFO/WARNING/ERROR)
+
+        asyncssh.set_debug_level(self.mgr.asyncssh_debug_level
+                                 if self.mgr.asyncssh_debug_level > 0 else 1)
 
         with self.redirect_log(host, addr):
             try:
@@ -238,7 +243,9 @@ class SSHManager:
     def redirect_log(self, host: str, addr: str) -> Iterator[None]:
         log_string = StringIO()
         ch = logging.StreamHandler(log_string)
-        ch.setLevel(logging.INFO)
+        # No handler-level filter: asyncssh_log_level governs capture via the logger.
+        # Do not add ch.setLevel() here; it would be a second, tighter gate that
+        # silently drops records the logger already allowed.
         asyncssh_logger.addHandler(ch)
 
         try:

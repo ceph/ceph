@@ -589,7 +589,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'but these log statements may contain sensitive info such as cephx keys. Only relevant '
                 'when logging at debug level'
             )
-        )
+        ),
+        Option(
+            'asyncssh_log_level',
+            type='str',
+            default='INFO',
+            desc=(
+                'asyncssh library log level. Controls the verbosity of the SSH log that '
+                'cephadm captures per connection attempt and writes to the mgr log when a '
+                'connection fails. Default is INFO, WARNING or ERROR reduce the captured '
+                'output. Set to DEBUG only when actively diagnosing SSH connectivity issues.'
+            ),
+            enum_allowed=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+        ),
+        Option(
+            'asyncssh_debug_level',
+            type='int',
+            default=0,
+            desc=(
+                'asyncssh library debug verbosity level. Set asyncssh_log_level to DEBUG '
+                'first to see any debug output. 1-3 produce increasing detail (Use 3 = full '
+                'debug cautiously as it may expose passwords in clear text). 0 restores the '
+                'minimum verbosity (asyncssh level 1). To turn debug output off, set '
+                'asyncssh_log_level to INFO, WARNING, or ERROR.'
+            ),
+            min=0,
+            max=3,  # 3 is the maximum level for asyncssh
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -709,6 +735,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_check_period = 0
             self.cephadm_binary_logging_level = 'debug'
             self.log_deploy_configuration = False
+            self.asyncssh_log_level = 'INFO'
+            self.asyncssh_debug_level = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
