@@ -50,6 +50,22 @@ For all requests, condition keys we support are:
 - aws:UserAgent
 - aws:username
 
+``aws:PrincipalType`` follows the `AWS principal key values
+<https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html#policy-vars-infotouse>`_:
+``Anonymous`` for anonymous requests, ``Account`` for account root users,
+``AssumedRole`` for role sessions, and ``User`` for other authenticated users.
+Temporary credentials from ``GetSessionToken`` retain the original user's
+type. Credentials from ``AssumeRole`` and ``AssumeRoleWithWebIdentity`` have
+type ``AssumedRole``. Legacy users with full control are still classified
+as ``User``, not ``Account``.
+
+For compatibility, authenticated Keystone and LDAP users also use ``User``. During
+``AssumeRoleWithWebIdentity``, the authenticated OIDC caller uses ``User``;
+the role session issued by that API uses ``AssumedRole``. Other identities
+accepted by RGW authentication use ``User`` unless identified as account
+root users or role sessions. An unrecognized identity type does not imply
+an anonymous request, and invalid credentials are rejected by authentication.
+
 Request that authenticate with Keystone also include:
 
 - keystone:role

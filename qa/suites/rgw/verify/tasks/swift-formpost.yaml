@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw swift account in url: false
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rgw/run-swift-formpost.sh
