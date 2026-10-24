@@ -8,7 +8,12 @@
 #   shared user and are also serialized (test-group serial-quota).  The
 #   nsfs identity tests write the main and alt users' POSIX identity
 #   rows, which every request from those users resolves, so they are
-#   serialized too (test-group serial-nsfs-identity).
+#   serialized too (test-group serial-nsfs-identity).  A test that
+#   switches the gateway's access model through the driver hint changes
+#   it for the whole daemon, and every cross-identity test reads it, so
+#   it never runs beside another:  it is out of baseline, runs alone in
+#   all, and has its own profile, access-model-switch, which takes about
+#   a second and runs after baseline.
 #
 # To force serial execution: add --test-threads=1
 #
@@ -104,11 +109,12 @@ default-filter = 'test(sts::)'
 # --- Composite profiles ---
 
 # Fast pre-commit gate: everything except lifecycle (slow), bucket_logging
-# (not implemented on posix/nsfs), and stress (ignored).
+# (not implemented on posix/nsfs), stress (ignored), and the test that
+# switches the access model (profile access-model-switch, run after).
 #
 [profile.baseline]
 test-threads = 8
-default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::)'
+default-filter = 'all() & !test(lifecycle::) & !test(bucket_logging::) & !test(stress::) & !test(=impersonation::test_data_follows_the_access_model)'
 
 [[profile.baseline.overrides]]
 filter = 'test(user_policy::) | test(role::) | test(oidc::) | test(sts::) | test(group::) | test(user::)'
@@ -121,6 +127,12 @@ test-group = 'serial-quota'
 [[profile.baseline.overrides]]
 filter = 'test(identity::) | test(impersonation::) | test(custom_bucket_path::) | test(nsfs_place_bucket::)'
 test-group = 'serial-nsfs-identity'
+
+# The test that switches the gateway's access model, alone:  run it
+# after baseline, against the same gateway.
+[profile.access-model-switch]
+default-filter = 'test(=impersonation::test_data_follows_the_access_model)'
+test-threads = 1
 
 [profile.basic]
 default-filter = 'test(bucket_list::) | test(object_ops::) | test(copy::) | test(conditional::) | test(cors::) | test(acl::)'
@@ -140,6 +152,10 @@ test-group = 'serial-quota'
 [[profile.all.overrides]]
 filter = 'test(identity::) | test(impersonation::) | test(custom_bucket_path::) | test(nsfs_place_bucket::)'
 test-group = 'serial-nsfs-identity'
+
+[[profile.all.overrides]]
+filter = 'test(=impersonation::test_data_follows_the_access_model)'
+threads-required = "num-test-threads"
 
 # Bench profiles — elbencho workloads, run with --run-ignored=all
 # Smoke: quick sanity check under moderate load
