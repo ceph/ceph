@@ -1877,6 +1877,63 @@ function wait_for_pg_clean() {
 }
 
 ##
+# Wait until the mgr's PGMap - what `osd ok-to-stop` and `osd ok-to-upgrade`
+# read, as opposed to the mon's OSDMap that get_osds() reads - reports PG
+# **pgid** with the given **acting** set and a state containing **state**,
+# or until a timeout of $WAIT_FOR_CLEAN_TIMEOUT seconds. On timeout, the
+# acting set and state last reported for the PG are displayed.
+#
+# @param pgid the PG id, e.g. 1.0
+# @param acting the expected acting set, space separated and in order, e.g. "0 1 2"
+# @param state a substring the PG state must contain (default: active)
+# @return 0 if the PG reached the acting set and state, 1 otherwise
+#
+function wait_for_pg_acting() {
+    local pgid=$1
+    local acting="$2"
+    local state=${3:-active}
+    local -a delays=($(get_timeout_delays $WAIT_FOR_CLEAN_TIMEOUT .1))
+    local -i loop=0
+    local last
+
+    flush_pg_stats || return 1
+    while true ; do
+        last=$(ceph --format json pg dump pgs 2>/dev/null | \
+            jq -r --arg pgid "$pgid" \
+               '.pg_stats[] | select(.pgid == $pgid)
+                | "\(.acting | map(tostring) | join(" "))|\(.state)"')
+        if test "${last%%|*}" = "$acting" && [[ "${last#*|}" == *"$state"* ]] ; then
+            return 0
+        fi
+        if (( $loop >= ${#delays[*]} )) ; then
+            echo "PG $pgid: expected acting [$acting] with state containing '$state'," \
+                 "got acting [${last%%|*}] state '${last#*|}'"
+            return 1
+        fi
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+}
+
+function test_wait_for_pg_acting() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_mgr $dir x || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+    local pgid=$(get_pg rbd SOMETHING)
+    local acting=$(get_osds rbd SOMETHING)
+    wait_for_pg_acting $pgid "$acting" clean || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_pg_acting $pgid "$acting" degraded || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_pg_acting $pgid "9" || return 1
+    teardown $dir || return 1
+}
+
+##
 # Wait for PG data to be available from pg dump
 # Usage: wait_for_pg_data <jq_expression> [timeout]
 # Example: wait_for_pg_data '.pg_stats[0].up[]' 30
