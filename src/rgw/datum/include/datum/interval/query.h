@@ -662,9 +662,11 @@ using operand_storage =
     std::conditional_t<canonical_sequence<T> && std::is_lvalue_reference_v<T>,
                        const std::remove_reference_t<T>&, std::remove_cvref_t<T>>;
 
-template <expression LhsT, expression RhsT>
+enum struct set_operation { unite, intersect, subtract };
+
+template <set_operation Operation, expression LhsT, expression RhsT>
 requires same_expression_domain<LhsT, RhsT>
-struct difference_expr final : expression_tag
+struct binary_expression final : expression_tag
 {
     using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
 
@@ -673,24 +675,11 @@ struct difference_expr final : expression_tag
 };
 
 template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
-struct intersection_expr final : expression_tag
-{
-    using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
-
-    LhsT lhs;
-    RhsT rhs;
-};
-
+using difference_expr = binary_expression<set_operation::subtract, LhsT, RhsT>;
 template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
-struct set_union_expr final : expression_tag
-{
-    using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
-
-    LhsT lhs;
-    RhsT rhs;
-};
+using intersection_expr = binary_expression<set_operation::intersect, LhsT, RhsT>;
+template <expression LhsT, expression RhsT>
+using set_union_expr = binary_expression<set_operation::unite, LhsT, RhsT>;
 
 } // detail
 
@@ -701,16 +690,8 @@ template <interval_view IntervalT, typename SinkT>
 requires (!canonical_interval<IntervalT>)
 constexpr void for_each_interval(const IntervalT& x, SinkT&& sink);
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expression,
-                                 SinkT&& sink);
-
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::intersection_expr<LhsT, RhsT>& expression,
-                                 SinkT&& sink);
-
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::set_union_expr<LhsT, RhsT>& expression,
+template <detail::set_operation Operation, expression LhsT, expression RhsT, typename SinkT>
+constexpr void for_each_interval(const detail::binary_expression<Operation, LhsT, RhsT>& expression,
                                  SinkT&& sink);
 
 template <canonical_sequence SequenceT, typename SinkT>
@@ -985,18 +966,10 @@ constexpr bool contains(const IntervalT& x, const ValueT& value)
     return allows_after(bounds.lower(), value) && allows_before(bounds.upper(), value);
 }
 
-template <expression LhsT, expression RhsT, typename ValueT>
+template <detail::set_operation Operation, expression LhsT, expression RhsT, typename ValueT>
 requires detail::comparable_value<expression_domain_t<LhsT>, ValueT>
-constexpr bool contains(const detail::difference_expr<LhsT, RhsT>& expression, const ValueT& value);
-
-template <expression LhsT, expression RhsT, typename ValueT>
-requires detail::comparable_value<expression_domain_t<LhsT>, ValueT>
-constexpr bool contains(const detail::intersection_expr<LhsT, RhsT>& expression,
+constexpr bool contains(const detail::binary_expression<Operation, LhsT, RhsT>& expression,
                         const ValueT& value);
-
-template <expression LhsT, expression RhsT, typename ValueT>
-requires detail::comparable_value<expression_domain_t<LhsT>, ValueT>
-constexpr bool contains(const detail::set_union_expr<LhsT, RhsT>& expression, const ValueT& value);
 
 template <expression ExprT, typename ValueT>
 requires (!interval_view<ExprT>) && detail::comparable_value<expression_domain_t<ExprT>, ValueT>
@@ -1011,26 +984,22 @@ constexpr bool contains(const ExprT& expression, const ValueT& value)
     return found;
 }
 
-template <expression LhsT, expression RhsT, typename ValueT>
+template <detail::set_operation Operation, expression LhsT, expression RhsT, typename ValueT>
 requires detail::comparable_value<expression_domain_t<LhsT>, ValueT>
-constexpr bool contains(const detail::difference_expr<LhsT, RhsT>& expression, const ValueT& value)
-{
-    return interval::contains(expression.lhs, value) && !interval::contains(expression.rhs, value);
-}
-
-template <expression LhsT, expression RhsT, typename ValueT>
-requires detail::comparable_value<expression_domain_t<LhsT>, ValueT>
-constexpr bool contains(const detail::intersection_expr<LhsT, RhsT>& expression,
+constexpr bool contains(const detail::binary_expression<Operation, LhsT, RhsT>& expression,
                         const ValueT& value)
 {
-    return interval::contains(expression.lhs, value) && interval::contains(expression.rhs, value);
-}
+    if constexpr (detail::set_operation::unite == Operation) {
+        return interval::contains(expression.lhs, value) || interval::contains(expression.rhs, value);
+    }
 
-template <expression LhsT, expression RhsT, typename ValueT>
-requires detail::comparable_value<expression_domain_t<LhsT>, ValueT>
-constexpr bool contains(const detail::set_union_expr<LhsT, RhsT>& expression, const ValueT& value)
-{
-    return interval::contains(expression.lhs, value) || interval::contains(expression.rhs, value);
+    if constexpr (detail::set_operation::intersect == Operation) {
+        return interval::contains(expression.lhs, value) && interval::contains(expression.rhs, value);
+    }
+
+    if constexpr (detail::set_operation::subtract == Operation) {
+        return interval::contains(expression.lhs, value) && !interval::contains(expression.rhs, value);
+    }
 }
 
 template <interval_view LhsT, interval_view RhsT>
@@ -1341,18 +1310,15 @@ public:
 
 namespace detail {
 
-enum struct set_operation { unite, intersect, subtract };
-
 template <typename T>
 inline constexpr set_operation operation = set_operation::unite;
-template <typename L, typename R>
-inline constexpr set_operation operation<intersection_expr<L, R>> = set_operation::intersect;
-template <typename L, typename R>
-inline constexpr set_operation operation<difference_expr<L, R>> = set_operation::subtract;
+template <set_operation Operation, typename L, typename R>
+inline constexpr set_operation operation<binary_expression<Operation, L, R>> = Operation;
 template <typename T>
 inline constexpr bool union_expression = false;
-template <typename L, typename R>
-inline constexpr bool union_expression<set_union_expr<L, R>> = true;
+template <set_operation Operation, typename L, typename R>
+inline constexpr bool union_expression<binary_expression<Operation, L, R>> =
+    set_operation::unite == Operation;
 
 template <typename ExprT>
 consteval std::size_t scratch_slots()
@@ -2083,20 +2049,9 @@ constexpr void for_each_compound(const ExprT& source, SinkT& sink)
 
 } // detail
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& source, SinkT&& sink)
-{
-    detail::for_each_compound(source, sink);
-}
-
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::intersection_expr<LhsT, RhsT>& source, SinkT&& sink)
-{
-    detail::for_each_compound(source, sink);
-}
-
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::set_union_expr<LhsT, RhsT>& source, SinkT&& sink)
+template <detail::set_operation Operation, expression LhsT, expression RhsT, typename SinkT>
+constexpr void for_each_interval(const detail::binary_expression<Operation, LhsT, RhsT>& source,
+                                 SinkT&& sink)
 {
     detail::for_each_compound(source, sink);
 }

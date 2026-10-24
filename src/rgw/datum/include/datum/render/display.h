@@ -242,8 +242,7 @@ template <typename T>
 inline constexpr bool is_time_point_v = specialization_of<T>(^^std::chrono::time_point);
 
 template <typename T>
-concept display_tuple = (specialization_of<T>(^^std::tuple) || specialization_of<T>(^^std::pair)) &&
-                        !display_record<T> && !projected_display_value<T>;
+concept display_tuple = specialization_of<T>(^^std::tuple) || specialization_of<T>(^^std::pair);
 
 template <typename T>
 inline constexpr bool is_variant_v = specialization_of<T>(^^std::variant);
@@ -252,13 +251,9 @@ template <typename T>
 concept text_value = std::convertible_to<const T&, std::string_view>;
 
 template <typename T>
-concept byte_range = std::ranges::input_range<const std::remove_reference_t<T>> &&
-                     std::same_as<std::ranges::range_value_t<T>, std::byte>;
-
-template <typename T>
-concept display_range =
-    std::ranges::input_range<const std::remove_reference_t<T>> && !projected_display_value<T> &&
-    !is_optional_v<T> && !text_value<T> && !byte_range<T>;
+concept byte_range =
+    std::ranges::input_range<const std::remove_reference_t<T>> &&
+    std::same_as<std::ranges::range_value_t<const std::remove_reference_t<T>>, std::byte>;
 
 template <typename OutputT>
 concept character_output =
@@ -555,7 +550,8 @@ constexpr OutputT append_binary(OutputT output, const RangeT& value)
     return output;
 }
 
-template <character_output OutputT, display_range RangeT>
+template <character_output OutputT, typename RangeT>
+requires std::ranges::input_range<const RangeT>
 constexpr OutputT append_range(OutputT output, const RangeT& value)
 {
     depth_scope scope {output};
@@ -665,119 +661,32 @@ constexpr OutputT append_tuple(OutputT output, const TupleT& value)
     return output;
 }
 
-// Predicates are deferred: later recognition may inspect an ill-formed interface.
-// The first match preserves explicit enrollment and the existing value priority.
-enum struct display_kind {
-    record,
-    projection,
-    enumeration,
-    text,
-    boolean,
-    character,
-    integer,
-    floating,
-    duration,
-    time_point,
-    tuple,
-    optional,
-    variant,
-    monostate,
-    binary,
-    range,
-    unsupported
-};
-
-template <display_kind Kind, auto Predicate>
-struct display_rule
-{
-    static constexpr auto kind = Kind;
-    static constexpr auto matches = Predicate;
-};
-
-using display_categories = std::tuple<
-    display_rule<display_kind::record, []<typename T>() { return display_record<T>; }>,
-    display_rule<display_kind::projection, []<typename T>() { return projected_display_value<T>; }>,
-    display_rule<display_kind::enumeration, []<typename T>() { return display_enum<T>; }>,
-    display_rule<display_kind::text, []<typename T>() { return text_value<T>; }>,
-    display_rule<display_kind::boolean,
-                 []<typename T>() { return std::same_as<std::remove_cvref_t<T>, bool>; }>,
-    display_rule<display_kind::character,
-                 []<typename T>() { return std::same_as<std::remove_cvref_t<T>, char>; }>,
-    display_rule<display_kind::integer,
-                 []<typename T>() { return std::integral<std::remove_cvref_t<T>>; }>,
-    display_rule<display_kind::floating,
-                 []<typename T>() { return std::floating_point<std::remove_cvref_t<T>>; }>,
-    display_rule<display_kind::duration, []<typename T>() { return duration_value<T>; }>,
-    display_rule<display_kind::time_point, []<typename T>() { return is_time_point_v<T>; }>,
-    display_rule<display_kind::tuple, []<typename T>() { return display_tuple<T>; }>,
-    display_rule<display_kind::optional, []<typename T>() { return is_optional_v<T>; }>,
-    display_rule<display_kind::variant, []<typename T>() { return is_variant_v<T>; }>,
-    display_rule<display_kind::monostate,
-                 []<typename T>() { return std::same_as<std::remove_cvref_t<T>, std::monostate>; }>,
-    display_rule<display_kind::binary, []<typename T>() { return byte_range<T>; }>,
-    display_rule<display_kind::range, []<typename T>() { return display_range<T>; }>>;
-
-template <typename T, std::size_t Index = 0>
-consteval display_kind display_category()
-{
-    if constexpr (Index == std::tuple_size_v<display_categories>) {
-        return display_kind::unsupported;
-    }
-
-    if constexpr (Index < std::tuple_size_v<display_categories>) {
-        using category = std::tuple_element_t<Index, display_categories>;
-
-        constexpr bool matches = category::matches.template operator()<T>();
-        if constexpr (matches) {
-            return category::kind;
-        }
-
-        if constexpr (!matches) {
-            return display_category<T, Index + 1>();
-        }
-    }
-}
-
+// The first match shields enrolled values from unrelated, possibly ill-formed interfaces.
 template <character_output OutputT, typename ValueT>
 constexpr OutputT append_value(OutputT output, const ValueT& value)
 {
     using value_type = std::remove_cvref_t<ValueT>;
 
-    constexpr auto category = display_category<ValueT>();
-    if constexpr (category == display_kind::record) {
+    if constexpr (display_record<ValueT>) {
         return append_record(std::move(output), value);
-    }
-
-    if constexpr (category == display_kind::projection) {
+    } else if constexpr (projected_display_value<ValueT>) {
         depth_scope scope {output};
         if (!scope.entered) {
             return output;
         }
 
         return append_value(std::move(output), render::display_projection<value_type>::get(value));
-    }
-
-    if constexpr (category == display_kind::enumeration) {
+    } else if constexpr (display_enum<ValueT>) {
         return append_enum(std::move(output), value);
-    }
-
-    if constexpr (category == display_kind::text) {
+    } else if constexpr (text_value<ValueT>) {
         return append_quoted(std::move(output), std::string_view {value});
-    }
-
-    if constexpr (category == display_kind::boolean) {
+    } else if constexpr (std::same_as<value_type, bool>) {
         return append_text(std::move(output), value ? "true" : "false");
-    }
-
-    if constexpr (category == display_kind::character) {
+    } else if constexpr (std::same_as<value_type, char>) {
         return append_escaped_byte(std::move(output), static_cast<unsigned char>(value));
-    }
-
-    if constexpr (category == display_kind::integer) {
+    } else if constexpr (std::integral<value_type>) {
         return append_integer(std::move(output), value);
-    }
-
-    if constexpr (category == display_kind::floating) {
+    } else if constexpr (std::floating_point<value_type>) {
         std::array<char, 128> buffer;
         const auto [position, error] =
             std::to_chars(std::data(buffer), std::data(buffer) + std::size(buffer), value);
@@ -786,22 +695,14 @@ constexpr OutputT append_value(OutputT output, const ValueT& value)
         }
 
         return append_text(std::move(output), {std::data(buffer), position});
-    }
-
-    if constexpr (category == display_kind::duration) {
+    } else if constexpr (duration_value<ValueT>) {
         return append_duration(std::move(output), value);
-    }
-
-    if constexpr (category == display_kind::time_point) {
+    } else if constexpr (is_time_point_v<ValueT>) {
         // Preserve the clock's count and units without an overflowing conversion.
         return append_value(std::move(output), value.time_since_epoch());
-    }
-
-    if constexpr (category == display_kind::tuple) {
+    } else if constexpr (display_tuple<ValueT>) {
         return append_tuple(std::move(output), value);
-    }
-
-    if constexpr (category == display_kind::optional) {
+    } else if constexpr (is_optional_v<ValueT>) {
         depth_scope scope {output};
         if (!scope.entered) {
             return output;
@@ -809,9 +710,7 @@ constexpr OutputT append_value(OutputT output, const ValueT& value)
 
         return value ? append_value(std::move(output), *value)
                      : append_text(std::move(output), "null");
-    }
-
-    if constexpr (category == display_kind::variant) {
+    } else if constexpr (is_variant_v<ValueT>) {
         depth_scope scope {output};
         if (!scope.entered) {
             return output;
@@ -826,21 +725,13 @@ constexpr OutputT append_value(OutputT output, const ValueT& value)
             value);
 
         return output;
-    }
-
-    if constexpr (category == display_kind::monostate) {
+    } else if constexpr (std::same_as<value_type, std::monostate>) {
         return append_text(std::move(output), "none");
-    }
-
-    if constexpr (category == display_kind::binary) {
+    } else if constexpr (byte_range<ValueT>) {
         return append_binary(std::move(output), value);
-    }
-
-    if constexpr (category == display_kind::range) {
+    } else if constexpr (std::ranges::input_range<const ValueT>) {
         return append_range(std::move(output), value);
-    }
-
-    if constexpr (category == display_kind::unsupported) {
+    } else {
         static_assert(false, "Enroll a diagnostic schema or projection for this value type");
     }
 }

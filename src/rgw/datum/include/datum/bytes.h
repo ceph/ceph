@@ -38,8 +38,7 @@ concept byte_block = std::ranges::contiguous_range<T> && std::ranges::sized_rang
 
 template <typename T>
 concept byte_fragments =
-    std::ranges::forward_range<T> && std::ranges::forward_range<const std::remove_reference_t<T>> &&
-    byte_block<std::ranges::range_reference_t<T>> &&
+    std::ranges::forward_range<const std::remove_reference_t<T>> &&
     byte_block<std::ranges::range_reference_t<const std::remove_reference_t<T>>>;
 
 namespace detail {
@@ -100,7 +99,9 @@ constexpr std::size_t byte_capacity(const FragmentsT& fragments)
 }
 
 template <byte_value ByteT, std::size_t Extent, byte_fragments FragmentsT>
-requires (!std::is_const_v<std::remove_reference_t<
+requires std::ranges::input_range<FragmentsT> &&
+         byte_block<std::ranges::range_reference_t<FragmentsT>> &&
+         (!std::is_const_v<std::remove_reference_t<
              std::ranges::range_reference_t<std::ranges::range_reference_t<FragmentsT>>>>)
 constexpr std::size_t scatter_bytes(std::span<ByteT, Extent> source, FragmentsT&& destination)
 {
@@ -245,12 +246,13 @@ public:
 template <byte_fragments FragmentsT>
 class byte_cursor final
 {
-    std::ranges::iterator_t<const FragmentsT> current;
+    using fragments_type = std::remove_const_t<std::remove_reference_t<FragmentsT>>;
 
-    std::ranges::sentinel_t<const FragmentsT> finish;
+    std::ranges::iterator_t<const fragments_type> current;
+    std::ranges::sentinel_t<const fragments_type> finish;
     std::size_t offset = 0;
-    std::size_t available;
 
+    std::size_t available;
     std::size_t capacity;
 
 private:
@@ -281,7 +283,7 @@ private:
     }
 
 public:
-    using slice_type = byte_slice_view<std::ranges::iterator_t<const FragmentsT>>;
+    using slice_type = byte_slice_view<std::ranges::iterator_t<const fragments_type>>;
 
     class bookmark final
     {
@@ -289,7 +291,7 @@ public:
 
         const byte_cursor *owner;
 
-        std::ranges::iterator_t<const FragmentsT> fragment;
+        std::ranges::iterator_t<const fragments_type> fragment;
 
         std::size_t offset;
         std::size_t available;
@@ -303,7 +305,7 @@ public:
     };
 
 public:
-    constexpr explicit byte_cursor(const FragmentsT& fragments)
+    constexpr explicit byte_cursor(const fragments_type& fragments)
 
         : current(std::ranges::begin(fragments)), finish(std::ranges::end(fragments)),
           available(byte_capacity(fragments)), capacity(available)
@@ -311,8 +313,8 @@ public:
         skip_empty();
     }
 
-    byte_cursor(FragmentsT&&) = delete;
-    byte_cursor(const FragmentsT&&) = delete;
+    byte_cursor(fragments_type&&) = delete;
+    byte_cursor(const fragments_type&&) = delete;
     byte_cursor(const byte_cursor&) = delete;
     byte_cursor(byte_cursor&&) = delete;
 
@@ -370,11 +372,13 @@ template <typename FragmentsT>
 byte_cursor(const FragmentsT&) -> byte_cursor<FragmentsT>;
 
 // Synchronous consumption: retention of the borrowed blocks is a binding policy.
-template <byte_fragments FragmentsT, typename SinkT>
-requires requires(SinkT& sink, std::ranges::range_reference_t<const FragmentsT> block) {
-    { std::invoke(sink, block) } -> std::same_as<void>;
-}
-constexpr void write_fragments(const FragmentsT& fragments, SinkT&& sink)
+template <std::ranges::input_range FragmentsT, typename SinkT>
+requires byte_block<std::ranges::range_reference_t<FragmentsT>> &&
+         requires (SinkT& sink,
+                   const std::remove_reference_t<std::ranges::range_reference_t<FragmentsT>>& block) {
+             { std::invoke(sink, block) } -> std::same_as<void>;
+         }
+constexpr void write_fragments(FragmentsT&& fragments, SinkT&& sink)
 {
     for (const auto& block : fragments) {
         std::invoke(sink, block);

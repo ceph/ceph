@@ -256,6 +256,72 @@ TEST_CASE("byte cursor handles every fragmentation and bounded read")
     CHECK_THROWS_AS(input.consume(1), std::length_error);
 }
 
+TEST_CASE("byte transfers distinguish const sources from writable destinations")
+{
+    struct read_only_fragments final
+    {
+        std::array<std::string_view, 2> blocks;
+
+    public:
+        auto begin() const { return std::begin(blocks); }
+        void begin() = delete;
+
+        auto end() const { return std::end(blocks); }
+        void end() = delete;
+
+    };
+
+    STATIC_REQUIRE_FALSE(std::ranges::range<read_only_fragments>);
+    STATIC_REQUIRE(datum::byte_fragments<read_only_fragments>);
+    read_only_fragments source {{"ab", "cd"}};
+    std::array storage {'x', 'x', 'x', 'x'};
+    CHECK_THROWS_AS(datum::gather_bytes(source, std::span {storage}.first(3)), std::length_error);
+    CHECK(storage == std::array {'x', 'x', 'x', 'x'});
+    const auto bytes = datum::gather_bytes(source, std::span {storage});
+    CHECK(std::string_view {bytes.data(), bytes.size()} == "abcd");
+    datum::byte_cursor<const read_only_fragments&> cursor {source};
+    std::array<char, 2> prefix;
+    cursor.read_into(std::span {prefix});
+    CHECK(prefix == std::array {'a', 'b'});
+    CHECK(2 == cursor.remaining());
+
+    std::array<std::string, 2> destination {"xx", "xxx"};
+    CHECK(4 == datum::scatter_bytes(bytes, destination));
+    CHECK(destination == std::array<std::string, 2> {"ab", "cdx"});
+}
+
+TEST_CASE("fragment sinks borrow immobile consumers and accept single-pass input")
+{
+    struct sink final
+    {
+        std::string bytes;
+
+        unsigned calls = 0;
+
+    public:
+        sink() = default;
+        sink(const sink&) = delete;
+        sink(sink&&) = delete;
+
+    public:
+        void operator()(const std::string& block)
+        {
+            bytes += block;
+            ++calls;
+        }
+
+    };
+
+    std::istringstream input {"a bc def"};
+    auto fragments = std::ranges::istream_view<std::string>(input);
+    STATIC_REQUIRE(std::ranges::input_range<decltype(fragments)>);
+    STATIC_REQUIRE_FALSE(datum::byte_fragments<decltype(fragments)>);
+    sink output;
+    datum::write_fragments(fragments, output);
+    CHECK(output.bytes == "abcdef");
+    CHECK(3 == output.calls);
+}
+
 TEST_CASE("retained projections recompute after small and large owner moves")
 {
     for (const auto size : {8U, 256U}) {
@@ -1119,6 +1185,48 @@ TEST_CASE("metrics count covered units rather than coordinate width")
     STATIC_REQUIRE_FALSE(temporary_dereference<decltype(position)>);
     CHECK((*position).bounds().lower().key().value == 2);
     CHECK(address::copies == 0);
+}
+
+TEST_CASE("coverage consumers request only the arithmetic they use")
+{
+    using domain = mechanics_domain<unsigned>;
+    using Q = iv::query<domain>;
+
+    struct quantity final { unsigned value; };
+    struct measurement final
+    {
+        using quantity_type = quantity;
+
+    public:
+        quantity zero() const { return {0}; }
+        quantity distance(const unsigned first, const unsigned last) const { return {last - first}; }
+        quantity add(const quantity left, const quantity right) const
+        {
+            return {left.value + right.value};
+        }
+
+    };
+    struct quota final
+    {
+        using quantity_type = unsigned;
+
+    public:
+        unsigned zero() const { return 0; }
+        unsigned distance(const unsigned first, const unsigned last) const { return last - first; }
+        unsigned advance(const unsigned point, const unsigned amount) const { return point + amount; }
+        unsigned subtract(const unsigned left, const unsigned right) const { return left - right; }
+
+    };
+
+    STATIC_REQUIRE_FALSE(std::totally_ordered<quantity>);
+    STATIC_REQUIRE(iv::coverage_metric_for<measurement, domain>);
+    STATIC_REQUIRE(iv::coverage_metric_for<quota, domain>);
+    const std::array intervals {Q::closed_open(0, 4), Q::closed_open(10, 18)};
+    const iv::canonical_view coverage {intervals};
+    CHECK(12 == iv::measure(coverage, measurement {}).value);
+    const auto selected = iv::take_covered(coverage, 7, quota {});
+    CHECK(7 == iv::measure(selected, measurement {}).value);
+    CHECK(13 == std::ranges::next(std::begin(selected))->upper().key());
 }
 
 class constructed_pair final
@@ -2156,6 +2264,11 @@ TEST_CASE("Datum interval expressions display without compilation", "[datum][int
     CHECK(std::string::npos !=
           displayed.find("interval{lower=interval_boundary{kind=finite, key=5"));
 
+    const auto combined = interval::set_union(integer_query::closed_open(1, 3),
+                                              integer_query::closed_open(5, 9));
+    CHECK(std::format("{}", combined).starts_with("interval_union{lhs=interval{"));
+    const auto overlap = interval::intersection(combined, integer_query::closed_open(2, 7));
+    CHECK(std::format("{}", overlap).starts_with("interval_intersection{lhs=interval_union{"));
     const auto compiled = interval::compile_intervals<2>(selection);
 
     CHECK(std::string::npos !=

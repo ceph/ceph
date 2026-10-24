@@ -8,17 +8,15 @@
 
 namespace ceph::salad::datum::interval {
 
-// Profiles check arithmetic in their units. Order alone never implies a metric.
+// Profiles supply distance and its zero; each consumer requests only its arithmetic.
+// Order alone never implies a metric.
 template <typename MetricT, typename DomainT>
 concept coverage_metric_for =
-    ordered_domain<DomainT> && std::totally_ordered<typename MetricT::quantity_type> &&
-    requires (const MetricT& metric, const typename DomainT::value_type& point,
-             const typename MetricT::quantity_type& quantity) {
+    ordered_domain<DomainT> && std::move_constructible<typename MetricT::quantity_type> &&
+    std::assignable_from<typename MetricT::quantity_type&, typename MetricT::quantity_type> &&
+    requires (const MetricT& metric, const typename DomainT::value_type& point) {
         { metric.zero() } -> std::same_as<typename MetricT::quantity_type>;
         { metric.distance(point, point) } -> std::same_as<typename MetricT::quantity_type>;
-        { metric.advance(point, quantity) } -> std::same_as<typename DomainT::value_type>;
-        { metric.add(quantity, quantity) } -> std::same_as<typename MetricT::quantity_type>;
-        { metric.subtract(quantity, quantity) } -> std::same_as<typename MetricT::quantity_type>;
     };
 
 template <std::unsigned_integral IntegerT>
@@ -80,7 +78,10 @@ constexpr auto finite_half_open_bounds(const IntervalT& value)
 } // detail
 
 template <canonical_sequence CoverageT, typename MetricT>
-requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>>
+requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>> &&
+         requires (const MetricT& metric, const typename MetricT::quantity_type& quantity) {
+             { metric.add(quantity, quantity) } -> std::same_as<typename MetricT::quantity_type>;
+         }
 constexpr auto measure(const CoverageT& coverage, const MetricT& metric)
 {
     auto total = metric.zero();
@@ -97,7 +98,15 @@ constexpr auto measure(const CoverageT& coverage, const MetricT& metric)
 // Holes consume no quota. Unsupported inclusion/infinity is rejected explicitly;
 // discrete stepping and other endpoint conventions require a different profile.
 template <canonical_sequence CoverageT, typename MetricT>
-requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>>
+requires coverage_metric_for<MetricT, expression_domain_t<CoverageT>> &&
+         std::totally_ordered<typename MetricT::quantity_type> &&
+         requires (const MetricT& metric,
+                   const typename expression_domain_t<CoverageT>::value_type& point,
+                   const typename MetricT::quantity_type& quantity) {
+             { metric.advance(point, quantity) }
+                 -> std::same_as<typename expression_domain_t<CoverageT>::value_type>;
+             { metric.subtract(quantity, quantity) } -> std::same_as<typename MetricT::quantity_type>;
+         }
 constexpr auto take_covered(const CoverageT& coverage, typename MetricT::quantity_type remaining,
                             const MetricT& metric)
 {

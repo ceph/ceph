@@ -73,10 +73,11 @@ const auto payload = input.take(length);
 datum::write_fragments(payload, [&](auto block) { output.write(block); });
 ```
 
-`write_fragments()` consumes blocks synchronously through a typed sink; the binding
-decides whether to copy or retain them. It does not add fragment-native behavior
-to a contiguous-only codec. `read_into(span)` copies a bounded read into provided
-storage when a small field needs it.
+`write_fragments()` consumes even single-pass fragment ranges through a borrowed synchronous sink;
+the binding decides whether to copy or retain the blocks. Cursor bookmarks and capacity preflight
+still require stable, multipass fragments. This does not add fragment-native behavior to a
+contiguous-only codec. Bulk gathering and incremental `read_into(span)` share byte-copy primitives;
+the bulk operation needs no cursor state.
 
 `retained_view` in `ownership.h` stores an audited payload owner and a pure lens.
 Construction consumes an rvalue owner; access recomputes the projection after
@@ -241,10 +242,11 @@ native buffers, a native owner-preserving cursor may be the appropriate sink;
 borrowed spans alone do not transfer its owner. Ownership and output coverage
 remain binding responsibilities.
 
-`interval/metric.h` keeps distance separate from order. A metric supplies a
-quantity type, zero, distance, advance and checked addition/subtraction. Strong
-point and quantity types can differ; neither point assignment nor arithmetic is
-required. `unsigned_metric<T>` provides checked unsigned arithmetic.
+`interval/metric.h` keeps distance separate from order. A metric supplies a quantity type, zero,
+and distance. Measurement also needs checked addition; quota selection needs quantity ordering,
+checked subtraction, and point advancement. Strong point and quantity types can differ; neither
+point assignment nor built-in arithmetic is required. `unsigned_metric<T>` provides checked
+unsigned arithmetic.
 `measure(coverage, metric)` and `take_covered(coverage, quota, metric)` support
 finite half-open canonical coverage. Holes consume no quota. Other inclusion
 conventions and infinities throw explicitly; discrete stepping and storage

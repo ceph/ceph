@@ -160,35 +160,24 @@ struct display_projection<interval::static_interval_set<DomainT, Capacity>>
 
 };
 
-template <interval::expression LHS_T, interval::expression RHS_T>
+template <interval::detail::set_operation Operation, interval::expression LHS_T,
+          interval::expression RHS_T>
 requires render::displayable<LHS_T> && render::displayable<RHS_T>
-struct display_schema<interval::detail::difference_expr<LHS_T, RHS_T>>
+struct display_schema<interval::detail::binary_expression<Operation, LHS_T, RHS_T>>
 {
-    using expression_type = interval::detail::difference_expr<LHS_T, RHS_T>;
+    using expression_type = interval::detail::binary_expression<Operation, LHS_T, RHS_T>;
 
-    static constexpr std::string_view name = "interval_difference";
-    static constexpr auto fields =
-        std::tuple {field<&expression_type::lhs>("lhs"), field<&expression_type::rhs>("rhs")};
-};
+    static constexpr std::string_view name = [] {
+        if constexpr (interval::detail::set_operation::unite == Operation) {
+            return "interval_union";
+        }
 
-template <interval::expression LHS_T, interval::expression RHS_T>
-requires render::displayable<LHS_T> && render::displayable<RHS_T>
-struct display_schema<interval::detail::intersection_expr<LHS_T, RHS_T>>
-{
-    using expression_type = interval::detail::intersection_expr<LHS_T, RHS_T>;
+        if constexpr (interval::detail::set_operation::intersect == Operation) {
+            return "interval_intersection";
+        }
 
-    static constexpr std::string_view name = "interval_intersection";
-    static constexpr auto fields =
-        std::tuple {field<&expression_type::lhs>("lhs"), field<&expression_type::rhs>("rhs")};
-};
-
-template <interval::expression LHS_T, interval::expression RHS_T>
-requires render::displayable<LHS_T> && render::displayable<RHS_T>
-struct display_schema<interval::detail::set_union_expr<LHS_T, RHS_T>>
-{
-    using expression_type = interval::detail::set_union_expr<LHS_T, RHS_T>;
-
-    static constexpr std::string_view name = "interval_union";
+        return "interval_difference";
+    }();
     static constexpr auto fields =
         std::tuple {field<&expression_type::lhs>("lhs"), field<&expression_type::rhs>("rhs")};
 };

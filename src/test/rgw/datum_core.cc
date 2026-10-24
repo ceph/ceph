@@ -202,6 +202,45 @@ public:
 };
 } // anonymous namespace
 
+TEST_CASE("compound membership preserves short-circuit observation", "[datum][algebra]")
+{
+    struct observed_interval final
+    {
+        using domain_type = integers;
+
+        Q value;
+
+        unsigned& observations;
+
+    public:
+        const auto& lower() const
+        {
+            ++observations;
+
+            return value.lower();
+        }
+
+        const auto& upper() const
+        {
+            ++observations;
+
+            return value.upper();
+        }
+
+    };
+
+    unsigned observations = 0;
+    const observed_interval right {Q::closed(0, 4), observations};
+    const auto present = iv::set_union(Q::closed(0, 4), Q::empty());
+    const auto absent = iv::set_union(Q::closed(10, 14), Q::empty());
+    CHECK(iv::contains(iv::set_union(present, right), 1));
+    CHECK_FALSE(iv::contains(iv::intersection(absent, right), 1));
+    CHECK_FALSE(iv::contains(iv::difference(absent, right), 1));
+    CHECK(0 == observations);
+    CHECK(iv::contains(iv::intersection(present, right), 1));
+    CHECK(0 < observations);
+}
+
 TEST_CASE("Datum boundary predicates match a dense finite set model", "[datum][algebra]")
 {
     // Spaced endpoints leave observations inside every nonempty open interval.
