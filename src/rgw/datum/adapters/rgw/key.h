@@ -27,13 +27,12 @@ inline void encode_key(::ceph::datum_wire::writer& archive,
 }
 
 template <typename KeyT, auto Name, auto Instance>
-KeyT& decode_key(datum::binary_fields<Name, Instance>, ::ceph::datum_wire::reader& archive, KeyT& value)
+void decode_key(datum::binary_fields<Name, Instance>,
+                ::ceph::datum_wire::reader& archive, KeyT& value)
 {
-    return archive.frame(1, [&](auto& fields, std::uint8_t) -> KeyT& {
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
         fields.text(value.*Name);
         fields.text(value.*Instance);
-
-        return value;
     });
 }
 

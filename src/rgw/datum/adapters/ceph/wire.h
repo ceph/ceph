@@ -291,6 +291,23 @@ public:
 
 };
 
+// Build one owning frame from fields written by the supplied body.
+template <typename BodyT>
+byte_buffer encode_frame(const std::uint8_t version, const std::uint8_t compatible, BodyT&& body)
+{
+    byte_buffer output;
+    writer archive {output};
+    archive.frame(version, compatible, [&] { std::invoke(std::forward<BodyT>(body), archive); });
+
+    return output;
+}
+
+template <typename BodyT>
+byte_buffer encode_frame(const std::uint8_t version, BodyT&& body)
+{
+    return encode_frame(version, 1, std::forward<BodyT>(body));
+}
+
 template <typename CursorT>
 class basic_reader final
 {
