@@ -73,6 +73,23 @@ target_link_libraries(unittest_mgr_servicemap
   ceph-common
 )
 
+# unittest_mgr_mgroprequest
+# Scaffolding cherry-picked from ceph/ceph PR #71237 pending its merge; links
+# only the mgr object that provides MgrOpRequest. Reconcile when PR #71237 lands.
+add_executable(unittest_mgr_mgroprequest
+  test_mgroprequest.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
+)
+add_ceph_unittest(unittest_mgr_mgroprequest)
+if(WITH_LTTNG)
+  add_dependencies(unittest_mgr_mgroprequest mgr_op_tp)
+endif()
+target_link_libraries(unittest_mgr_mgroprequest
+  ceph-common
+  global
+  Python3::Python
+)
+
 # unittest_mgr_map_cache
 add_executable(unittest_mgr_map_cache
   test_mgrmapcache.cc
