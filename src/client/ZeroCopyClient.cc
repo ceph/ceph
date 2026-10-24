@@ -177,6 +177,8 @@ public:
   done:
     fini = true;
     clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_RD);
+    clnt->logger->inc(l_c_aio_completions);
+    clnt->dec_aio_in_flight();
     IoCallback user_cb = std::move(cb);
     bufferlist out;
     if (r >= 0) {
@@ -203,6 +205,9 @@ public:
   {
     ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
     clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_WR);
+    // Match C_Write_Finisher: count the op complete only after optional fsync.
+    clnt->logger->inc(l_c_aio_completions);
+    clnt->dec_aio_in_flight();
     ZeroCopyClient::queue_user_cb(clnt, std::move(cb), r < 0 ? r : io_result,
                                   {});
   }
@@ -261,7 +266,8 @@ public:
     if (r >= 0 && do_fsync) {
       // Match C_Write_Finisher: kick C_nonblocking_fsync_state under the
       // client_lock we already hold. Do not call nonblocking_fsync() — that
-      // entry point takes client_lock again and would assert.
+      // entry point takes client_lock again and would assert. aio_in_flight
+      // stays up until C_ZC_Fsync::finish (same as C_Write_Finisher).
       auto* fsync_ctx = new C_ZC_Fsync(clnt, in, cb, result);
       auto* state = new Client::C_nonblocking_fsync_state(clnt, in.get(),
                                                           syncdataonly,
@@ -271,6 +277,8 @@ public:
     }
 
     clnt->put_cap_ref(in.get(), CEPH_CAP_FILE_WR);
+    clnt->logger->inc(l_c_aio_completions);
+    clnt->dec_aio_in_flight();
     ZeroCopyClient::queue_user_cb(clnt, std::move(cb), result, {});
   }
 };
@@ -392,6 +400,11 @@ int ZeroCopyClient::async_read(Fh* fh, uint64_t off, uint64_t len, IoCallback cb
                                  std::move(cb), client->filer.get(), in->layout,
                                  in->snapid, in->truncate_size,
                                  in->truncate_seq);
+
+  // Match _read / C_Read_Finisher: count from Filer submit through final
+  // completion (short-read retries stay a single in-flight op).
+  client->logger->inc(l_c_aio_ops);
+  client->inc_aio_in_flight();
 
   lock.unlock();
   read_ctx->start();
@@ -517,6 +530,10 @@ int ZeroCopyClient::async_write(Fh* fh, uint64_t off, bufferlist data,
   uint64_t trunc_size = in->truncate_size;
   uint32_t trunc_seq = in->truncate_seq;
   inodeno_t ino = in->ino;
+
+  // Match _write / C_Write_Finisher (held through optional fsync).
+  client->logger->inc(l_c_aio_ops);
+  client->inc_aio_in_flight();
 
   lock.unlock();
 
