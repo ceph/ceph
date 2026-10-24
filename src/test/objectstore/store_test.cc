@@ -10873,6 +10873,92 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   cerr << "Completing" << std::endl;
 }
 
+// Repairing misreferenced extents relocates blob data into space taken from
+// an allocator built from the freelist. Blocks the freelist reports as free
+// while an object still uses them (false free) must not be chosen, or the
+// repair overwrites that object's data. Object C gets the lowest AU, which
+// avl's first fit would pick for the relocation.
+TEST_P(StoreTestSpecificAUSize, BluestoreRepairMisrefIntoFalseFree) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  const size_t au = 0x10000;
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "4294967296");
+  SetVal(g_conf(), "bluestore_allocation_from_file", "false"); // bitmap FM
+  SetVal(g_conf(), "bluestore_allocator", "avl");
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+  SetVal(g_conf(), "bluestore_max_blob_size", stringify(au).c_str());
+
+  StartDeferred(au);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ASSERT_FALSE(bstore->has_null_manager());
+
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+
+  ghobject_t hoidC = make_object("Object C (victim)", pool);
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_dup = make_object("Object 1(dup)", pool);
+  bufferlist blC, blA, blB;
+  blC.append(string(au, 'C'));
+  blA.append(string(au, 'A'));
+  blB.append(string(au, 'B'));
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.write(cid, hoidC, 0, blC.length(), blC);   // gets the lowest data AU
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, blA.length(), blA);
+    t.write(cid, hoid_dup, 0, blB.length(), blB);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // The test relies on C holding the lowest data AU: repair relocates
+    // into the first free AU (avl first fit), which is C's once it is
+    // falsely freed.
+    auto first_poffset = [&](const ghobject_t& oid) {
+      BlueStore::OnodeRef o = bstore->debug_get_onode(cid, oid);
+      return o->extent_map.extent_map.begin()->blob->get_blob()
+        .get_extents().front().offset;
+    };
+    ASSERT_LT(first_poffset(hoidC), first_poffset(hoid));
+    ASSERT_LT(first_poffset(hoidC), first_poffset(hoid_dup));
+  }
+  ch.reset(nullptr);
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 0);
+  bstore->mount();
+  bstore->inject_false_free(cid, hoidC);
+  bstore->inject_misreference(cid, hoid, cid, hoid_dup, 0);
+  bstore->umount();
+
+  ASSERT_GT(bstore->fsck(false), 0);
+  EXPECT_EQ(0, bstore->repair(false));
+
+  ASSERT_EQ(bstore->mount(), 0);
+  ch = store->open_collection(cid);
+  {
+    bufferlist out;
+    r = store->read(ch, hoidC, 0, au, out);
+    EXPECT_EQ(r, (int)au);
+    EXPECT_TRUE(out.contents_equal(blC)) << "victim object C was overwritten by repair";
+  }
+  ch.reset(nullptr);
+  bstore->umount();
+  EXPECT_EQ(0, bstore->fsck(false));
+  bstore->mount();
+}
+
 TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
