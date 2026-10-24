@@ -1,0 +1,11 @@
+roles:
+- - osd.0
+
+tasks:
+- install:
+- crimson_store_bench:
+    work_load_type: random_write
+    duration: 30
+    num_concurrent_io: 4
+    smp: 4
+    dump_metrics: true
