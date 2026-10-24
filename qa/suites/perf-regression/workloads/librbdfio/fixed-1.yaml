@@ -1,0 +1,8 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, client.0]
+
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
