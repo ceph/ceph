@@ -68,6 +68,8 @@ namespace rgw { class SiteConfig; }
 
 struct get_obj_data;
 
+int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &src_attrs);
+
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
 #define PUT_OBJ_EXCL        0x02
