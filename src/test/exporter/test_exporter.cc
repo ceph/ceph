@@ -749,6 +749,17 @@ TEST(Exporter, check_labels_and_metric_name) {
   // This is a special case, the daemon name is not of the required size for fetching instance_id.
   // So no labels should be added.
   ASSERT_TRUE(fail_result.empty());
+
+  // When service_unique_id is provided it takes priority over filename parsing,
+  // regardless of how many dots the store/realm name contains (e.g. Rook).
+  std::string rook_daemon_name = "ceph-client.rgw.my.store.test.a.1.94334785460384";
+  labels_t rook_result = collector.get_extra_labels(rook_daemon_name, "rook-ceph-rgw-my-store-pod-abc111");
+  ASSERT_EQ(rook_result, labels_t({{"instance_id", "\"rook-ceph-rgw-my-store-pod-abc111\""}}));
+
+  // Without service_unique_id, standard cephadm filename parsing is unchanged.
+  std::string cephadm_daemon_name = "ceph-client.rgw.foo.ceph-node-00.hrgsea.2.94739968030880";
+  labels_t cephadm_result = collector.get_extra_labels(cephadm_daemon_name, "");
+  ASSERT_EQ(cephadm_result, labels_t({{"instance_id", "\"hrgsea\""}}));
 }
 
 enum LabelType {
