@@ -741,6 +741,20 @@ function test_mon_misc()
   ceph --concise osd dump | grep '^epoch'
 
   ceph osd df | grep 'MIN/MAX VAR'
+  ceph osd df > $TMPFILE
+  grep 'MIN/MAX VAR' $TMPFILE
+  grep 'CLASS ' $TMPFILE
+
+  ceph osd df tree > $TMPFILE
+  grep 'MIN/MAX VAR' $TMPFILE
+  grep 'CLASS ' $TMPFILE
+
+  ceph osd df --format json > $TMPFILE
+  grep '"summary"' $TMPFILE
+  grep '"summary_by_class"' $TMPFILE
+
+  ceph osd df tree --format json > $TMPFILE
+  grep '"summary_by_class"' $TMPFILE
 
   # df
   ceph df > $TMPFILE
