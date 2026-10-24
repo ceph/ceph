@@ -4,6 +4,7 @@ on:
   pull_request_target:
     types: [opened, synchronize, unlabeled, labeled, reopened]
     branches:
+      - vampire
       - umbrella
       - tentacle
       - squid

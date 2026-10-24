@@ -3,11 +3,11 @@
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
 DEFAULT_IMAGE_IS_MAIN = True
-DEFAULT_IMAGE_RELEASE = 'umbrella'
+DEFAULT_IMAGE_RELEASE = 'vampire'
 DEFAULT_REGISTRY = 'quay.io'  # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
-LATEST_STABLE_RELEASE = 'umbrella'
+LATEST_STABLE_RELEASE = 'vampire'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'

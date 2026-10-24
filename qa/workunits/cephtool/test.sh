@@ -1594,10 +1594,10 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release umbrella
+  ceph osd require-osd-release vampire
   # can't lower
+  expect_false ceph osd require-osd-release umbrella
   expect_false ceph osd require-osd-release tentacle
-  expect_false ceph osd require-osd-release squid
   # these are no-ops but should succeed.
 
   ceph osd set noup

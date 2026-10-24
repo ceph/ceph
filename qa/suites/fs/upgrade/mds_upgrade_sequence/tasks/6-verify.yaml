@@ -2,5 +2,5 @@ tasks:
 - cephadm.shell:
     mon.a:
       - ceph fs dump
-      - ceph osd require-osd-release umbrella # after the upgrade, this should be bumped up
+      - ceph osd require-osd-release vampire # after the upgrade, this should be bumped up
 - fs.post_upgrade_checks:

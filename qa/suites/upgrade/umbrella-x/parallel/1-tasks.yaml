@@ -1,0 +1,49 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Telemetry requires re-opt-in
+      - telemetry module includes new collections
+tasks:
+- install:
+    branch: umbrella
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-volume
+      - ceph-osd-crimson
+- print: "**** done install task..."
+- print: "**** done start installing umbrella cephadm ..."
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:umbrella
+    compiled_cephadm_branch: umbrella
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing umbrella cephadm ..."
+
+- print: "**** done start cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+
+- print: "**** done start telemetry umbrella..."
+- workunit:
+    clients:
+      client.0:
+        - test_telemetry_umbrella.sh
+- print: "**** done end telemetry umbrella..."
+
+- print: "**** done start parallel"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done end parallel"
+
+- print: "**** done start telemetry x..."
+- workunit:
+    clients:
+      client.0:
+        - test_telemetry_umbrella_x.sh
+- print: "**** done end telemetry x..."

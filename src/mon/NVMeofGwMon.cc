@@ -264,13 +264,11 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
   ceph_assert(get_last_committed() + 1 == pending_map.epoch);
   bufferlist bl;
   uint64_t features = mon.get_quorum_con_features();
-  if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+  {
     recreate_gw_epoch();
   }
   pending_map.encode(bl, features);
-  dout(10) << " has NVMEOFHA: " << HAVE_FEATURE(features, NVMEOFHA)
-       << " has NVMEOFHAMAP: " <<  HAVE_FEATURE(features, NVMEOFHAMAP)
-       << " has BEACON_DIFF: "
+  dout(10) << " has BEACON_DIFF: "
        <<  mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF) << dendl;
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
@@ -383,10 +381,8 @@ void NVMeofGwMon::check_subs(bool t)
   for (auto sub : *(mon.session_map.subs[type])) {
     dout(10) << " dump subscriber peer_addr : "
        << sub->session->con->get_peer_addr() <<  dendl;
-    if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHAMAP)) {
+    {
       check_sub(sub);
-    } else {
-      check_sub_unconditional(sub);
     }
   }
 }
@@ -452,7 +448,7 @@ bool NVMeofGwMon::nvme_gw_show_command(ceph::Formatter* f, bufferlist &rdata, co
   f->dump_string("group", group);
   f->dump_bool("beacon_diff_enabled",
                map.published_features & NVMeofGwMap::FLAG_BEACONDIFF);
-  if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
+  {
     f->dump_string("features", "LB");
     if (map.created_gws[group_key].size()) {
       time_t seconds_since_1970 = time(NULL);
@@ -1102,8 +1098,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   bool correct_sequence = true;
   uint64_t stored_sequence;
   NVMeofGwMap ack_map;
-  bool epoch_filter_enabled = HAVE_FEATURE(mon.get_quorum_con_features(),
-                              NVMEOFHAMAP);
+  bool epoch_filter_enabled = true; // NVMEOFHAMAP
   auto& group_gws = map.created_gws[group_key];
   auto gw = group_gws.find(gw_id);
   auto& pend_gws =  pending_map.created_gws[group_key];

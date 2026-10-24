@@ -61,4 +61,4 @@ conf = Config()
 
 __version__ = "1.0.0"
 
-__release__ = "umbrella"
+__release__ = "vampire"
