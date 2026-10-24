@@ -881,6 +881,30 @@ static int unlink_if_link(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* The rule:  a name in a bucket's tree holds either an object (a file)
+ * or a directory, never both, so the keys `p` and `p/`, or `p` and any
+ * key under `p/`, cannot exist together.  The one written first holds
+ * the name until it is deleted, and a write of the other returns 409
+ * KeyPathConflict (DECISIONS.md 2026-10-24).
+ *
+ * This function enforces the half where `p` is a directory and the
+ * write is to `p`;  resolve_key_path() enforces the half where `p` is a
+ * file and the write is under it.  409 rather than 500, because the
+ * write cannot succeed until the client deletes what holds the name,
+ * and a 500 tells the client to retry. */
+static int refuse_directory_name(const DoutPrefixProvider* dpp,
+				 int dirfd, const char* name)
+{
+  struct statx stx;
+  if ((nsfs::statx(dirfd, name, AT_SYMLINK_NOFOLLOW, STATX_MODE, &stx) != 0) ||
+      !S_ISDIR(stx.stx_mode)) {
+    return 0;
+  }
+  ldpp_dout(dpp, 4) << "nsfs: rejecting key " << name
+    << ":  a directory holds its name" << dendl;
+  return -ERR_KEY_PATH_CONFLICT;
+}
+
 static int renameat_as(const DoutPrefixProvider* dpp,
 		       const nsfs::FSIdentity& id,
 		       const nsfs::AccessStrategy* model, int olddirfd,
@@ -1807,6 +1831,13 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
     /* not an object, so not a version:  nothing is demoted */
     return unlink_if_link(dpp, id, model, parent_fd, leaf.c_str());
   }
+  if (S_ISDIR(cur_stx.stx_mode)) {
+    /* the key's name holds a directory, so the write is refused by the
+     * rule at refuse_directory_name().  Checked here because link(2)
+     * returns EPERM for a directory, which would be reported as a
+     * permission denial (403). */
+    return refuse_directory_name(dpp, parent_fd, leaf.c_str());
+  }
 
   /* Demoted under the id it was recorded with, so a client holding it
    * still finds it.  An unreadable file keeps the derived id, which is
@@ -1972,8 +2003,26 @@ int resolve_key_path(const DoutPrefixProvider* dpp,
     }
     return create_dirs ? -ERR_INVALID_OBJECT_NAME : -ENOENT;
   }
-  return resolve_path(dpp, root, key_path, create_dirs, cct,
-		      dir_chain, leaf_dir, leaf_name, id, model);
+  const int ret = resolve_path(dpp, root, key_path, create_dirs, cct,
+			       dir_chain, leaf_dir, leaf_name, id, model);
+  if (create_dirs && (ret == -ENOTDIR)) {
+    /* A write under a file:  `foo/bar` is an object, so `foo/bar/xyzzy`
+     * cannot be made, by the rule at refuse_directory_name().  Both
+     * keys are legal S3, and AWS and RADOS hold both, because their
+     * keys are opaque strings.
+     *
+     * The sentinel does not help:  it names a key ending in '/', so
+     * moving the file there would rename the object rather than
+     * re-represent it.  NooBaa has the same constraint and returns
+     * 404, which says the object is absent when a conflicting one is
+     * present.  See DESIGN.md. */
+    if (dpp) {
+      ldpp_dout(dpp, 4) << "nsfs: rejecting key " << key.name
+	<< ":  a component of it is an existing object" << dendl;
+    }
+    return -ERR_KEY_PATH_CONFLICT;
+  }
+  return ret;
 }
 
 int resolve_path(const DoutPrefixProvider* dpp,
@@ -3431,6 +3480,14 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
 	return ret;
       }
     } else if (ret >= 0) {
+      /* a copy onto a directory is refused by the rule at
+       * refuse_directory_name();  removing the directory would delete
+       * every key under it */
+      if (del->get_type() != ObjectType::FILE) {
+	ldpp_dout(dpp, 4) << "nsfs: rejecting copy to " << dst_name
+			  << ":  a directory holds its name" << dendl;
+	return -ERR_KEY_PATH_CONFLICT;
+      }
       /* as the requester, whom copy_object() gave this entry:  the
        * bucket directory is not the gateway's (raise site 4), and a
        * leaf directory resolve_key_path() did not make carries no
@@ -13206,6 +13263,15 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
         return ret;
       }
     }
+
+    /* an object is a file, so a key without the trailing '/' (which
+     * maps a key to its sentinel) that names a directory has no
+     * object:  404, as NooBaa's read_object_md() returns */
+    if (ent && (ent->get_type() != ObjectType::FILE)) {
+      ent.reset();
+      state.exists = false;
+      return -ENOENT;
+    }
   } else {
     ret = ent->stat(dpp);
     if (ret < 0) {
@@ -15798,6 +15864,11 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   bool ver_enabled = pb->get_info().versioning_enabled();
   int leaf_fd = leaf_dir->get_fd();
 
+  ret = refuse_directory_name(dpp, leaf_fd, leaf_name.c_str());
+  if (ret < 0) {
+    return ret;
+  }
+
   /* conditional write checks against existing target object */
   if (if_match || if_nomatch) {
     int existing_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY | O_NOFOLLOW);
@@ -16763,30 +16834,21 @@ int NSFSAtomicWriter::prepare(optional_yield y)
   if (identity.active()) {
     obj->set_access(identity, /*ro=*/false);
   }
+  /* a key under a file is refused by resolve_key_path(), which
+   * make_ent() calls */
   ret = obj->make_ent(ObjectType::FILE);
-  if (ret == -ENOTDIR) {
-    /* A component of this key is an existing object.
-     *
-     * `foo/bar` holds bytes, so it is a file;  `foo/bar/xyzzy` needs
-     * `foo/bar` to be a directory.  One namespace entry per name, two
-     * keys that want it.  Both are legal S3, and AWS has no such
-     * conflict because its keys are opaque strings.
-     *
-     * The sentinel does not help:  it names a key ending in '/', so
-     * moving the file there would rename the object rather than
-     * re-represent it.  NooBaa has the same constraint and returns
-     * 404, which says the object is absent when the truth is that a
-     * conflicting one is present.  See DESIGN.md.
-     *
-     * 409 and an nsfs code, because the client's recourse is to
-     * delete the occupying object -- a 500 invites a retry that can
-     * never succeed, and a 404 invites a write that will not land. */
-    ldpp_dout(dpp, 4) << "nsfs: rejecting key " << obj->get_name()
-      << ":  a component of it is an existing object" << dendl;
-    return -ERR_KEY_PATH_CONFLICT;
-  }
   if (ret < 0) {
     return ret;
+  }
+  /* a key whose name holds a directory is refused here, by
+   * refuse_directory_name() */
+  if (auto* ent = obj->get_fsent(); ent && ent->get_parent() &&
+      (ent->get_parent()->get_fd() >= 0)) {
+    ret = refuse_directory_name(dpp, ent->get_parent()->get_fd(),
+				ent->get_name().c_str());
+    if (ret < 0) {
+      return ret;
+    }
   }
   /* after make_ent, so there is an entry to set it on */
   if (identity.active() && obj->get_fsent()) {
