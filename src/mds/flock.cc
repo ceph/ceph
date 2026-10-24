@@ -87,8 +87,8 @@ void ceph_lock_state_t::dump(ceph::Formatter *f) const {
 }
 
 
-std::list<ceph_lock_state_t> ceph_lock_state_t::generate_test_instances() {
-  std::list<ceph_lock_state_t> ls;
+std::vector<ceph_lock_state_t> ceph_lock_state_t::generate_test_instances() {
+  std::vector<ceph_lock_state_t> ls;
   ls.push_back(ceph_lock_state_t(NULL, 0));
   ls.push_back(ceph_lock_state_t(NULL, 1));
   ls.back().held_locks.insert(std::make_pair(1, ceph_filelock()));

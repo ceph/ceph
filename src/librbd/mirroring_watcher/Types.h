@@ -9,7 +9,7 @@
 #include "include/encoding.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include <iosfwd>
-#include <list>
+#include <vector>
 #include <string>
 #include <variant>
 
@@ -86,7 +86,7 @@ struct NotifyMessage {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<NotifyMessage> generate_test_instances();
+  static std::vector<NotifyMessage> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(NotifyMessage);
