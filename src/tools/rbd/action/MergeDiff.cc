@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "include/compat.h"
+#include "include/rbd/librbd.hpp"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
@@ -27,7 +28,18 @@ namespace merge_diff {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64_t *size)
+struct snap_namespace_info_t {
+  std::optional<librbd::snap_trash_namespace_t>
+    from_snap_trash_namespace = std::nullopt;
+  std::optional<librbd::snap_trash_namespace_t>
+    to_snap_trash_namespace = std::nullopt;
+  librbd::snap_namespace_type_t from_snap_ns_type;
+  librbd::snap_namespace_type_t to_snap_ns_type;
+};
+
+static int parse_diff_header(
+  int fd, __u8 *tag, string *from, string *to, uint64_t *size,
+  snap_namespace_info_t &snap_ns_info)
 {
   int r;
 
@@ -51,12 +63,16 @@ static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64
       return r;
 
     if (*tag == RBD_DIFF_FROM_SNAP) {
-      r = utils::read_string(fd, 4096, from);   // 4k limit to make sure we don't get a garbage string
+      r = utils::read_snaps(
+        fd, *from, snap_ns_info.from_snap_ns_type,
+        snap_ns_info.from_snap_trash_namespace);
       if (r < 0)
         return r;
       dout(2) << " from snap " << *from << dendl;
     } else if (*tag == RBD_DIFF_TO_SNAP) {
-      r = utils::read_string(fd, 4096, to);   // 4k limit to make sure we don't get a garbage string
+      r = utils::read_snaps(
+        fd, *to, snap_ns_info.to_snap_ns_type,
+        snap_ns_info.to_snap_trash_namespace);
       if (r < 0)
         return r;
       dout(2) << " to snap " << *to << dendl;
@@ -147,6 +163,45 @@ static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t 
   return 0;
 }
 
+int encode_trash_namespace(
+  librbd::snap_trash_namespace_t &trash_namespace,
+  bufferlist &bl)
+{
+  if (trash_namespace.original_namespace_type ==
+        librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_GROUP ||
+      trash_namespace.original_namespace_type ==
+        librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_MIRROR) {
+    std::cerr << "snap_id corresponds to a trashed snapshot that"
+              << "corresponds to the group namespace"
+              << ", which export-diff doesn't allow"
+              << std::endl;
+    return -EINVAL;
+  }
+  // although trash_namespace.original_namespace_type must be USER for now,
+  // we still encode it, in case of any future namespace type expansion.
+  encode(trash_namespace.original_namespace_type, bl);
+  encode(trash_namespace.original_name, bl);
+  return 0;
+}
+
+int encode_snaps(
+  librbd::snap_namespace_type_t snap_ns_type,
+  std::optional<librbd::snap_trash_namespace_t> &trash_namespace,
+  std::string &snapname,
+  bufferlist &bl)
+{
+  encode(snap_ns_type, bl);
+  encode(snapname, bl);
+  if (snap_ns_type ==
+        librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+    ceph_assert(trash_namespace);
+    return encode_trash_namespace(*trash_namespace, bl);
+  }
+
+  return 0;
+}
+
+
 /*
  * Merge two diff files into one single file
  * Note: It does not do the merging work if
@@ -172,6 +227,8 @@ static int do_merge_diff(const char *first, const char *second,
   bool f_end = false, s_end = false;
 
   bool first_stdin = !strcmp(first, "-");
+  snap_namespace_info_t from_snap_ns_info;
+  snap_namespace_info_t to_snap_ns_info;
   if (first_stdin) {
     fd = STDIN_FILENO;
   } else {
@@ -203,13 +260,13 @@ static int do_merge_diff(const char *first, const char *second,
 
   //We just handle the case like 'banner, [ftag], [ttag], stag, [wztag]*,etag',
   // and the (offset,length) in wztag must be ascending order.
-  r = parse_diff_header(fd, &f_tag, &f_from, &f_to, &f_size);
+  r = parse_diff_header(fd, &f_tag, &f_from, &f_to, &f_size, from_snap_ns_info);
   if (r < 0) {
     std::cerr << "rbd: failed to parse first diff header" << std::endl;
     goto done;
   }
 
-  r = parse_diff_header(sd, &s_tag, &s_from, &s_to, &s_size);
+  r = parse_diff_header(sd, &s_tag, &s_from, &s_to, &s_size, to_snap_ns_info);
   if (r < 0) {
     std::cerr << "rbd: failed to parse second diff header" << std::endl;
     goto done;
@@ -231,13 +288,21 @@ static int do_merge_diff(const char *first, const char *second,
     if (f_from.size()) {
       tag = RBD_DIFF_FROM_SNAP;
       encode(tag, bl);
-      encode(f_from, bl);
+      encode_snaps(
+        from_snap_ns_info.from_snap_ns_type,
+        from_snap_ns_info.from_snap_trash_namespace,
+        f_from,
+        bl);
     }
 
     if (s_to.size()) {
       tag = RBD_DIFF_TO_SNAP;
       encode(tag, bl);
-      encode(s_to, bl);
+      encode_snaps(
+        to_snap_ns_info.to_snap_ns_type,
+        to_snap_ns_info.to_snap_trash_namespace,
+        s_to,
+        bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
