@@ -4074,14 +4074,14 @@ TEST(NooBaaMPU, Names)
 TEST(NooBaaMPU, SharedFileNameIsNotADiscriminator)
 {
   nsfs::NooBaaMPUStrategy nb;
-  nsfs::StridedMPUStrategy ours;
+  nsfs::StridedMPUStrategy strided;
 
-  EXPECT_EQ(nb.shared_name(1048576), ours.shared_name(1048576));
+  EXPECT_EQ(nb.shared_name(1048576), strided.shared_name(1048576));
 
   /* what does distinguish them */
-  EXPECT_NE(nb.meta_name(), ours.meta_name());
-  EXPECT_NE(nb.assembled_name(), ours.assembled_name());
-  EXPECT_NE(nb.part_name(1), ours.part_name(1));
+  EXPECT_NE(nb.meta_name(), strided.meta_name());
+  EXPECT_NE(nb.assembled_name(), strided.assembled_name());
+  EXPECT_NE(nb.part_name(1), strided.part_name(1));
 }
 
 /* Staging is found by what the directory holds, not by its name.
@@ -5193,7 +5193,7 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysRenameIsRaised)
  * from noobaa-core 68ca22d33, the constant block at the head of
  * `namespace_fs.js` and `to_fs_xattr()`.
  */
-TEST(NooBaaXattr, NamesTheirAttributes)
+TEST(NooBaaXattr, NamesNooBaaAttributes)
 {
   nsfs::NooBaaXattrStrategy nb;
 
@@ -5241,11 +5241,11 @@ TEST(NooBaaXattr, NamesRoundTrip)
  * (DECISIONS.md 2026-10-11). */
 TEST(PrefixedXattr, OwnerIsRecordedOrNone)
 {
-  nsfs::PrefixedXattrStrategy ours;
+  nsfs::PrefixedXattrStrategy prefixed;
   const rgw::sal::Attrs none;
 
   ACLOwner owner;
-  EXPECT_EQ(ours.object_owner(none, owner), -ENODATA)
+  EXPECT_EQ(prefixed.object_owner(none, owner), -ENODATA)
       << "a file with no ACL did not read as recording no owner";
 
   rgw::sal::Attrs with;
@@ -5254,12 +5254,12 @@ TEST(PrefixedXattr, OwnerIsRecordedOrNone)
   bufferlist bl;
   policy.encode(bl);
   with[RGW_ATTR_ACL] = bl;
-  ASSERT_EQ(ours.object_owner(with, owner), 0);
+  ASSERT_EQ(prefixed.object_owner(with, owner), 0);
   EXPECT_EQ(owner.id, rgw_owner(rgw_user("someone")));
 
   rgw::sal::Attrs broken;
   broken[RGW_ATTR_ACL].append("not an acl");
-  EXPECT_EQ(ours.object_owner(broken, owner), -EIO)
+  EXPECT_EQ(prefixed.object_owner(broken, owner), -EIO)
       << "an unreadable ACL read as no owner recorded";
 }
 
@@ -5284,7 +5284,7 @@ TEST(NooBaaXattr, WhatHasNowhereToGo)
 /* NooBaa's structured attributes are claimed as unmapped rather than
  * surfaced.  Handing a caller one of NooBaa's plain strings under an RGW
  * key would feed a NooBaa value to a ceph decoder. */
-TEST(NooBaaXattr, LeavesTheirStructuredAttributesAlone)
+TEST(NooBaaXattr, LeavesNooBaaStructuredAttributesAlone)
 {
   nsfs::NooBaaXattrStrategy nb;
   std::string key;
@@ -5316,7 +5316,7 @@ TEST(NooBaaXattr, RecordsNoOwner)
 TEST(NooBaaXattr, ValuesAreNotCountedStrings)
 {
   nsfs::NooBaaXattrStrategy nb;
-  nsfs::PrefixedXattrStrategy ours;
+  nsfs::PrefixedXattrStrategy prefixed;
 
   EXPECT_FALSE(nb.counted_string_value(
       std::string(RGW_ATTR_META_PREFIX) + "colour"));
@@ -5324,7 +5324,7 @@ TEST(NooBaaXattr, ValuesAreNotCountedStrings)
 
   /* and the nsfs strategy does count at least one, so this is a
    * difference rather than a predicate nobody implements */
-  EXPECT_TRUE(ours.counted_string_value(
+  EXPECT_TRUE(prefixed.counted_string_value(
       std::string(RGW_ATTR_META_PREFIX) + "colour"));
 }
 
@@ -5534,15 +5534,15 @@ TEST(NooBaaMPU, StrategyReadsTheGeneratedTree)
   /* and the nsfs strategy misreads nothing:  NooBaa's directory is
    * not an nsfs one, NooBaa's record names are not nsfs names, and
    * asked directly it returns no upload rather than a wrong one */
-  nsfs::StridedMPUStrategy ours;
-  EXPECT_FALSE(ours.is_staging_dir(tree.upload_id));
-  EXPECT_FALSE(sf::exists(tree.staging / ours.meta_name()));
-  EXPECT_FALSE(sf::exists(tree.staging / ours.part_name(1)));
+  nsfs::StridedMPUStrategy strided;
+  EXPECT_FALSE(strided.is_staging_dir(tree.upload_id));
+  EXPECT_FALSE(sf::exists(tree.staging / strided.meta_name()));
+  EXPECT_FALSE(sf::exists(tree.staging / strided.part_name(1)));
 
   int ofd = ::open((b / *root).c_str(), O_RDONLY | O_DIRECTORY);
   ASSERT_GE(ofd, 0);
   nsfs::MPUStrategy::StagedUpload none;
-  EXPECT_FALSE(ours.staged_upload(env->dpp, ofd, tree.upload_id, none));
+  EXPECT_FALSE(strided.staged_upload(env->dpp, ofd, tree.upload_id, none));
   ::close(ofd);
 }
 
@@ -5553,15 +5553,16 @@ TEST(NooBaaMPU, StrategyReadsTheGeneratedTree)
  * agreement is deliberate rather than a coincidence nobody may rely
  * on.  What differs is asserted against a tree written by hand.
  */
-TEST(NooBaaPath, KeyConventionsMatchOurs)
+TEST(NooBaaPath, KeyConventionsMatchSentinel)
 {
   nsfs::NooBaaPathStrategy nb;
-  nsfs::SentinelPathStrategy ours;
+  nsfs::SentinelPathStrategy sentinel;
 
   for (const char* k : {"plain", "some/deep/key.bin", "_leading_underscore",
 			"__doubled", "trailing/"}) {
     rgw_obj_key key{k};
-    EXPECT_EQ(nb.object_name(key, false), ours.object_name(key, false)) << k;
+    EXPECT_EQ(nb.object_name(key, false), sentinel.object_name(key, false))
+      << k;
   }
 
   /* The two formats' directory-object file names are equal, and since
@@ -5571,11 +5572,11 @@ TEST(NooBaaPath, KeyConventionsMatchOurs)
    * asserts an agreement that either side may end, not an invariant.
    * If it ever fails, the question to ask is which side moved and
    * whether the other should. */
-  EXPECT_EQ(nb.folder_object_name(), ours.folder_object_name());
+  EXPECT_EQ(nb.folder_object_name(), sentinel.folder_object_name());
   EXPECT_EQ(nb.folder_object_name(), ".folder");
   EXPECT_EQ(nb.object_name(rgw_obj_key{"photos/"}, false), "photos/.folder");
   EXPECT_TRUE(nb.names_directory_object(".folder"));
-  EXPECT_TRUE(ours.names_directory_object(".folder"));
+  EXPECT_TRUE(sentinel.names_directory_object(".folder"));
   EXPECT_EQ(nb.key_from_name("some/key").name, "some/key");
 }
 
@@ -5585,18 +5586,18 @@ TEST(NooBaaPath, KeyConventionsMatchOurs)
 TEST(NooBaaPath, NoStagingSpelling)
 {
   nsfs::NooBaaPathStrategy nb;
-  nsfs::SentinelPathStrategy ours;
+  nsfs::SentinelPathStrategy sentinel;
   std::optional<std::string> mp{"multipart"};
 
   EXPECT_EQ(nb.bucket_dir_name("b", mp), "b");
-  EXPECT_EQ(ours.bucket_dir_name("b", mp), ".multipart_b");
+  EXPECT_EQ(sentinel.bucket_dir_name("b", mp), ".multipart_b");
   EXPECT_EQ(nb.bucket_dir_name("b", std::nullopt), "b");
 }
 
 /* No .shadow -- they have none, and claiming the name would hide a
  * directory a user may create -- and the temp directory reserved by
  * prefix, since its name carries a bucket id. */
-TEST(NooBaaPath, ReservesTheirNamesAndNotOurs)
+TEST(NooBaaPath, ReservesNooBaaNamesAndNotSentinels)
 {
   nsfs::NooBaaPathStrategy nb;
   const auto& rn = nb.reserved_names();
@@ -5616,8 +5617,8 @@ TEST(NooBaaPath, ReservesTheirNamesAndNotOurs)
 
   /* and the nsfs strategy does claim .shadow, so this is a difference
    * rather than an empty set */
-  nsfs::SentinelPathStrategy ours;
-  const auto& orn = ours.reserved_names();
+  nsfs::SentinelPathStrategy sentinel;
+  const auto& orn = sentinel.reserved_names();
   EXPECT_NE(std::find(orn.exact.begin(), orn.exact.end(), ".shadow"),
 	    orn.exact.end());
 }
@@ -5629,7 +5630,7 @@ TEST(NooBaaPath, ReservesTheirNamesAndNotOurs)
 TEST(NooBaaPath, DirectoryObjectFromTheAttribute)
 {
   nsfs::NooBaaPathStrategy nb;
-  nsfs::SentinelPathStrategy ours;
+  nsfs::SentinelPathStrategy sentinel;
   const sf::path b{base_path / "nbdirobj"};
   sf::remove_all(b);
   sf::create_directories(b / "empty");
@@ -5657,7 +5658,7 @@ TEST(NooBaaPath, DirectoryObjectFromTheAttribute)
   EXPECT_FALSE(d.content_in_sentinel);
   /* the nsfs strategy never marks a directory, and says so without looking */
   nsfs::PathStrategy::DirectoryObject od{};
-  EXPECT_FALSE(ours.directory_object(env->dpp, fd, od));
+  EXPECT_FALSE(sentinel.directory_object(env->dpp, fd, od));
   ::close(fd);
 
   d = {};
@@ -6917,11 +6918,11 @@ TEST_F(NSFSAdoptionGateTest, OnlyAdoptionsWriteGetsIn)
  * takes the write the unmarked one rejects. */
 TEST_F(NSFSAdoptionGateTest, ACopyOutIsARead)
 {
-  auto ours = marked_bucket(testname + "-ours");
+  auto marked = marked_bucket(testname + "-ours");
   const auto before = tree_snapshot(bucket_path());
-  EXPECT_EQ(copy(bucket.get(), "obj", ours.get(), "copied"), 0);
+  EXPECT_EQ(copy(bucket.get(), "obj", marked.get(), "copied"), 0);
   EXPECT_EQ(tree_snapshot(bucket_path()), before) << "the copy wrote its source";
-  EXPECT_EQ(put(ours.get(), "new"), 0) << "a marked bucket rejected a write";
+  EXPECT_EQ(put(marked.get(), "new"), 0) << "a marked bucket rejected a write";
 }
 
 /* Nothing returns a bucket to base:  set_profile() rejects it for every
@@ -7107,7 +7108,7 @@ public:
   /* A tree we did not write.  The fixture creates its bucket through
    * the SAL, which is the only way to get a Bucket, and that writes the nsfs
    * attribute;  a bucket NooBaa made carries no such thing. */
-  void remove_our_bucket_info() {
+  void remove_rgw_bucket_info() {
     ASSERT_EQ(::removexattr((bp / "root" / testname).c_str(),
 			    "user.nsfs.bucket_info"), 0);
   }
@@ -7118,7 +7119,7 @@ public:
    * exist -- harmless while nothing read `path`, and wrong once P5
    * resolves a base bucket from it.  A real NooBaa record names where
    * the storage actually is, so the fixture does too. */
-  void write_their_record(const char* versioning,
+  void write_nb_record(const char* versioning,
 		    const std::string& extra = std::string{},
 		    const char* created = "2026-01-02T03:04:05.000Z",
 		    const std::string& at = std::string{},
@@ -7135,7 +7136,7 @@ public:
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
   }
 
-  /* Read the record write_their_record() wrote, through the strategy
+  /* Read the record write_nb_record() wrote, through the strategy
    * that reads it.  No bucket is involved and no fallback.
    *
    * NooBaaBucketStateStrategy::load() takes a dir_fd and ignores it --
@@ -7149,18 +7150,18 @@ public:
    * rewritten when the fallback goes.  Tests of the fallback itself --
    * that it is consulted for a base bucket and not for a marked one --
    * are about the wiring and stay on load_bucket(). */
-  int read_their_record(RGWBucketInfo& info, Attrs& attrs) {
+  int read_nb_record(RGWBucketInfo& info, Attrs& attrs) {
     /* Cleared first, so a test which reads twice does not see the
      * first read's keys in the second result.  load() adds what the
      * record carries and removes nothing. */
     info = RGWBucketInfo{};
     attrs.clear();
 
-    auto* theirs = driver->get_noobaa_bucket_state_strategy();
-    if (! theirs) {
+    auto* nb_state = driver->get_noobaa_bucket_state_strategy();
+    if (! nb_state) {
       return -ENOENT;
     }
-    return theirs->load(env->dpp, -1, testname, attrs, info);
+    return nb_state->load(env->dpp, -1, testname, attrs, info);
   }
 };
 
@@ -7176,24 +7177,24 @@ public:
  * All three states, because NooBaa's precedence is a cascade and `false`
  * counts as defined:  a bucket that turns it off must not arrive
  * looking like a bucket that said nothing. */
-TEST_F(NSFSNooBaaStateTest, ForceMd5EtagIsCarriedInTheirShape)
+TEST_F(NSFSNooBaaStateTest, ForceMd5EtagIsCarriedInNooBaaShape)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("DISABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("DISABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_EQ(attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG), attrs.end())
       << "a record that says nothing produced an attribute";
 
-  write_their_record("DISABLED", ",\"force_md5_etag\":true");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("DISABLED", ",\"force_md5_etag\":true");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto on = attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG);
   ASSERT_NE(on, attrs.end()) << "their true was dropped";
   EXPECT_EQ(on->second.to_str(), "true");
 
-  write_their_record("DISABLED", ",\"force_md5_etag\":false");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("DISABLED", ",\"force_md5_etag\":false");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto off = attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG);
   ASSERT_NE(off, attrs.end())
       << "their explicit false read as unset -- the cascade is lost";
@@ -7209,7 +7210,7 @@ TEST_F(NSFSNooBaaStateTest, ForceMd5EtagIsCarriedInTheirShape)
  * A bucket that reads as unversioned takes a PUT in place instead of
  * demoting the current version into .versions/, so this is the silent
  * data loss and not a missing feature. */
-TEST_F(NSFSNooBaaStateTest, VersioningComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, VersioningComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
@@ -7217,11 +7218,11 @@ TEST_F(NSFSNooBaaStateTest, VersioningComesFromTheirRecord)
   /* Nothing has written a record yet, so the read finds none and says
    * so.  That is a different outcome from a record which says
    * unversioned, and the assertion below depends on the difference. */
-  ASSERT_EQ(read_their_record(info, attrs), -ENOENT)
+  ASSERT_EQ(read_nb_record(info, attrs), -ENOENT)
       << "a record was read where this test wrote none";
 
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_TRUE(info.versioned());
   EXPECT_TRUE(info.versioning_enabled());
 }
@@ -7233,9 +7234,9 @@ TEST_F(NSFSNooBaaStateTest, SuspendedIsVersionedAndSuspended)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("SUSPENDED");
+  write_nb_record("SUSPENDED");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_TRUE(info.versioned());
   EXPECT_FALSE(info.versioning_enabled());
 }
@@ -7245,9 +7246,9 @@ TEST_F(NSFSNooBaaStateTest, SuspendedIsVersionedAndSuspended)
  * The chain runs the opposite way to the object chain:  a base
  * bucket's objects are in NooBaa's format, but its state is in nsfs's
  * wherever we have written any. */
-TEST_F(NSFSNooBaaStateTest, OurStateWinsOverTheirs)
+TEST_F(NSFSNooBaaStateTest, NsfsStateWinsOverNooBaas)
 {
-  write_their_record("ENABLED");
+  write_nb_record("ENABLED");
 
   /* the nsfs attribute is still there, from create(), and says nothing
    * about versioning */
@@ -7289,8 +7290,8 @@ TEST_F(NSFSNooBaaBucketTest, ConversionRecordsTheBucketOwner)
   /* Where the ACL will land once the bucket is shared.  Asked of the
    * strategy directly, because the bucket is still base and its own
    * strategy has no name for an ACL at all. */
-  nsfs::PrefixedXattrStrategy ours;
-  const std::string disk = ours.disk_name(RGW_ATTR_ACL);
+  nsfs::PrefixedXattrStrategy prefixed;
+  const std::string disk = prefixed.disk_name(RGW_ATTR_ACL);
   ASSERT_FALSE(disk.empty()) << "shared has nowhere to put an ACL";
 
   /* Both polarities, in one run.  Absent before, present after -- so
@@ -7345,7 +7346,7 @@ TEST_F(NSFSNooBaaBucketTest, ConversionRecordsTheBucketOwner)
  * The control is the same bucket marked shared, loaded the same way,
  * whose directory must then carry nsfs's -- so the strategy assertion
  * distinguishes the two rather than passing on either. */
-TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInTheirFormat)
+TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInNooBaaFormat)
 {
   const sf::path obj{bucket_path() / "sideloaded.txt"};
   {
@@ -7558,23 +7559,23 @@ TEST_F(NSFSNooBaaBucketTest, ConversionFailsWhenItCannotInheritOwnership)
  * The one whose absence is a compliance breach rather than a missing
  * feature:  a WORM bucket that reads as unlocked accepts overwrite and
  * delete. */
-TEST_F(NSFSNooBaaStateTest, ObjectLockComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, ObjectLockComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* A record without a lock reads as unlocked, so the assertion after
    * the next one is able to fail. */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_FALSE(info.obj_lock_enabled());
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":10,)"
 	       R"("mode":"GOVERNANCE"}}})");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
 
   EXPECT_TRUE(info.obj_lock_enabled());
   ASSERT_TRUE(info.obj_lock.has_rule());
@@ -7594,13 +7595,13 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownRetentionModeFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":10,)"
 	       R"("mode":"ADVISORY"}}})");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* Years rather than days, and the other mode. */
@@ -7609,13 +7610,13 @@ TEST_F(NSFSNooBaaStateTest, ObjectLockInYearsAndCompliance)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"years":7,)"
 	       R"("mode":"COMPLIANCE"}}})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_TRUE(info.obj_lock_enabled());
   ASSERT_TRUE(info.obj_lock.has_rule());
   EXPECT_EQ(info.obj_lock.get_mode(), "COMPLIANCE");
@@ -7632,11 +7633,11 @@ TEST_F(NSFSNooBaaStateTest, ObjectLockWithoutARule)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled"})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_TRUE(info.obj_lock_enabled());
   EXPECT_FALSE(info.obj_lock.has_rule());
 }
@@ -7644,16 +7645,16 @@ TEST_F(NSFSNooBaaStateTest, ObjectLockWithoutARule)
 /* "Disabled" is NooBaa's internal state for a bucket that is not locked,
  * not a lock that is switched off.  S3 only ever validates "Enabled"
  * on the wire. */
-TEST_F(NSFSNooBaaStateTest, TheirDisabledLockIsNoLock)
+TEST_F(NSFSNooBaaStateTest, NooBaaDisabledLockIsNoLock)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Disabled"})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_FALSE(info.obj_lock_enabled());
 }
 
@@ -7665,42 +7666,42 @@ TEST_F(NSFSNooBaaStateTest, AnImpossibleRetentionFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":10,"years":7,)"
 	       R"("mode":"GOVERNANCE"}}})");
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG)
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG)
       << "a retention naming both days and years was accepted";
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"mode":"GOVERNANCE"}}})");
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG)
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG)
       << "a retention naming neither days nor years was accepted";
 }
 
 /* NooBaa's bucket policy reaches the attribute map, normalised by RGW's
  * own parser the way one set through S3 would be. */
-TEST_F(NSFSNooBaaStateTest, BucketPolicyComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, BucketPolicyComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* the control:  no policy in NooBaa's record, none in the attributes */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_EQ(attrs.find(RGW_ATTR_IAM_POLICY), attrs.end());
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[)"
 	       R"({"Sid":"one","Effect":"Allow","Principal":{"AWS":"*"},)"
 	       R"("Action":["s3:GetObject"],)"
 	       R"("Resource":["arn:aws:s3:::)" + std::string(testname) +
 	       R"(/*"]}]})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_IAM_POLICY);
   ASSERT_NE(i, attrs.end())
       << "their policy did not reach the attribute map";
@@ -7722,32 +7723,32 @@ TEST_F(NSFSNooBaaStateTest, AnUnparsablePolicyFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"s3_policy":{"Version":"2012-10-17",)"
 	       R"("Statement":[{"Effect":"Perhaps"}]})");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* NooBaa's public access block reaches the attribute map.
  *
  * Four booleans, the same four, snake_case against PascalCase. */
-TEST_F(NSFSNooBaaStateTest, PublicAccessBlockComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, PublicAccessBlockComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* the control:  no block in NooBaa's record, none in the attributes */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_EQ(attrs.find(RGW_ATTR_PUBLIC_ACCESS), attrs.end());
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"public_access_block":{"block_public_acls":true,)"
 	       R"("ignore_public_acls":false,"block_public_policy":true,)"
 	       R"("restrict_public_buckets":false})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
   ASSERT_NE(i, attrs.end());
 
@@ -7767,10 +7768,10 @@ TEST_F(NSFSNooBaaStateTest, AnOmittedPublicAccessFieldIsFalse)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"public_access_block":{"restrict_public_buckets":true})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
   ASSERT_NE(i, attrs.end());
 
@@ -7792,28 +7793,28 @@ TEST_F(NSFSNooBaaStateTest, AMisshapenFieldFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":"ten",)"
 	       R"("mode":"GOVERNANCE"}}})");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* NooBaa's website configuration, index-document branch. */
-TEST_F(NSFSNooBaaStateTest, WebsiteComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, WebsiteComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* A record with no website configures none, so the assertion after
    * the next one is able to fail. */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_FALSE(info.has_website);
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"website":{"website_configuration":{)"
 	       R"("index_document":{"suffix":"index.html"},)"
 	       R"("error_document":{"key":"oops.html"},)"
@@ -7824,7 +7825,7 @@ TEST_F(NSFSNooBaaStateTest, WebsiteComesFromTheirRecord)
 	       R"("replace_key_prefix_with":"documents/",)"
 	       R"("http_redirect_code":"301"}}]}})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   const auto& w = info.website_conf;
   ASSERT_TRUE(info.has_website);
   EXPECT_FALSE(w.is_redirect_all);
@@ -7848,12 +7849,12 @@ TEST_F(NSFSNooBaaStateTest, WebsiteRedirectAllBranch)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"website":{"website_configuration":{)"
 	       R"("redirect_all_requests_to":{"host_name":"elsewhere.net",)"
 	       R"("protocol":"HTTPS"}}})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   const auto& w = info.website_conf;
   ASSERT_TRUE(info.has_website);
   EXPECT_TRUE(w.is_redirect_all);
@@ -7873,31 +7874,31 @@ TEST_F(NSFSNooBaaStateTest, ANonNumericRedirectCodeFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"website":{"website_configuration":{)"
 	       R"("index_document":{"suffix":"index.html"},)"
 	       R"("routing_rules":[{"redirect":{)"
 	       R"("http_redirect_code":"moved"}}]}})");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* NooBaa's default encryption reaches the attribute map. */
-TEST_F(NSFSNooBaaStateTest, EncryptionComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, EncryptionComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* the control:  no encryption in NooBaa's record, none in the attrs */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_EQ(attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY), attrs.end());
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"encryption":{"algorithm":"aws:kms",)"
 	       R"("kms_key_id":"key-1234","bucket_key_enabled":true})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
   ASSERT_NE(i, attrs.end());
 
@@ -7917,24 +7918,24 @@ TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED", R"(,"encryption":{})");
+  write_nb_record("ENABLED", R"(,"encryption":{})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY), attrs.end());
 }
 
 /* `logging` reads as RGW's bucket-logging configuration from the record
  * alone, so a bucket served before its adoption returns it.  The rest
  * of RGW's configuration keeps its defaults. */
-TEST_F(NSFSNooBaaStateTest, LoggingIsReadFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, LoggingIsReadFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("DISABLED",
+  write_nb_record("DISABLED",
 		     R"(,"logging":{"log_bucket":"logs","log_prefix":"p/"})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_BUCKET_LOGGING);
   ASSERT_NE(i, attrs.end());
   rgw::bucketlogging::configuration conf;
@@ -7951,9 +7952,9 @@ TEST_F(NSFSNooBaaStateTest, LoggingWithoutATargetIsNoConfiguration)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("DISABLED", R"(,"logging":{"log_prefix":"p/"})");
+  write_nb_record("DISABLED", R"(,"logging":{"log_prefix":"p/"})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_LOGGING), attrs.end());
 }
 
@@ -7969,9 +7970,9 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsStoredNotRejected)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
+  write_nb_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0)
+  ASSERT_EQ(read_nb_record(info, attrs), 0)
       << "the bucket was rejected over an algorithm that only affects writes";
 
   auto i = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
@@ -7983,21 +7984,21 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsStoredNotRejected)
 }
 
 /* NooBaa's bucket tag set reaches the attribute map. */
-TEST_F(NSFSNooBaaStateTest, BucketTagsComeFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, BucketTagsComeFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* the control:  no tags in NooBaa's record, none in the attributes */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_EQ(attrs.find(RGW_ATTR_TAGS), attrs.end());
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"tag":[{"key":"team","value":"storage"},)"
 	       R"({"key":"env","value":"prod"}])");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_TAGS);
   ASSERT_NE(i, attrs.end());
 
@@ -8030,9 +8031,9 @@ TEST_F(NSFSNooBaaStateTest, ATagSetOverTheApiLimitIsKept)
     arr += "{\"key\":\"k" + std::to_string(n) + "\",\"value\":\"v\"}";
   }
   arr += "]";
-  write_their_record("ENABLED", arr);
+  write_nb_record("ENABLED", arr);
 
-  ASSERT_EQ(read_their_record(info, attrs), 0)
+  ASSERT_EQ(read_nb_record(info, attrs), 0)
       << "the bucket was rejected over a tag count";
 
   auto i = attrs.find(RGW_ATTR_TAGS);
@@ -8050,30 +8051,30 @@ TEST_F(NSFSNooBaaStateTest, AKeylessTagFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED", R"(,"tag":[{"key":"","value":"orphan"}])");
+  write_nb_record("ENABLED", R"(,"tag":[{"key":"","value":"orphan"}])");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* NooBaa's lifecycle rules reach the attribute map, through the same
  * parser PutBucketLifecycle uses. */
-TEST_F(NSFSNooBaaStateTest, LifecycleComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, LifecycleComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* the control:  no rules in NooBaa's record, no attribute */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_EQ(attrs.find(RGW_ATTR_LC), attrs.end());
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"expire-logs","status":"Enabled",)"
 	       R"("filter":{"prefix":"logs/"},)"
 	       R"("expiration":{"days":30}}])");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_LC);
   ASSERT_NE(i, attrs.end());
 
@@ -8099,14 +8100,14 @@ TEST_F(NSFSNooBaaStateTest, LifecycleFilterWithPrefixAndTag)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"cold","status":"Enabled",)"
 	       R"("filter":{"and":true,"prefix":"data/",)"
 	       R"("tags":[{"key":"class","value":"cold"}]},)"
 	       R"("expiration":{"days":90}}])");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_LC);
   ASSERT_NE(i, attrs.end());
 
@@ -8134,12 +8135,12 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleDateKeepsItsDay)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"newyear","status":"Enabled","filter":{},)"
 	       R"("expiration":{"date":1767225600000}}])");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0)
+  ASSERT_EQ(read_nb_record(info, attrs), 0)
       << "a midnight date was rejected";
 
   auto i = attrs.find(RGW_ATTR_LC);
@@ -8165,12 +8166,12 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleRuleRgwWouldRejectFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"both","status":"Enabled","filter":{},)"
 	       R"("expiration":{"days":30,"date":1767225600000}}])");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* A rule with no action at all is one RGW rejects too. */
@@ -8179,26 +8180,26 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleRuleWithNoActionFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"empty","status":"Enabled","filter":{}}])");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* NooBaa's CORS rules reach the attribute map, through the same parser
  * PutBucketCors uses. */
-TEST_F(NSFSNooBaaStateTest, CorsComesFromTheirRecord)
+TEST_F(NSFSNooBaaStateTest, CorsComesFromNooBaaRecord)
 {
   RGWBucketInfo info;
   Attrs attrs;
 
   /* the control:  no rules in NooBaa's record, no attribute */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   ASSERT_EQ(attrs.find(RGW_ATTR_CORS), attrs.end());
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"cors_configuration_rules":[{"id":"web",)"
 	       R"("allowed_methods":["GET","PUT"],)"
 	       R"("allowed_origins":["https://example.com"],)"
@@ -8206,7 +8207,7 @@ TEST_F(NSFSNooBaaStateTest, CorsComesFromTheirRecord)
 	       R"("expose_headers":["ETag"],)"
 	       R"("max_age_seconds":3000}])");
 
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
   auto i = attrs.find(RGW_ATTR_CORS);
   ASSERT_NE(i, attrs.end());
 
@@ -8232,12 +8233,12 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownCorsMethodFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"cors_configuration_rules":[{)"
 	       R"("allowed_methods":["TRACE"],)"
 	       R"("allowed_origins":["https://example.com"]}])");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* A rule with no origin is one NooBaa's own schema requires and RGW
@@ -8248,11 +8249,11 @@ TEST_F(NSFSNooBaaStateTest, ACorsRuleWithNoOriginFailsClosed)
   RGWBucketInfo info;
   Attrs attrs;
 
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
 	       R"(,"cors_configuration_rules":[{)"
 	       R"("allowed_methods":["GET"],"allowed_origins":[]}])");
 
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 }
 
 /* A record we cannot make sense of fails the bucket closed, the same
@@ -8265,15 +8266,15 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
   /* A well-formed record is read first, so the -EBADMSG below is this
    * record being rejected rather than the reader rejecting everything
    * it is given. */
-  write_their_record("ENABLED");
-  ASSERT_EQ(read_their_record(info, attrs), 0);
+  write_nb_record("ENABLED");
+  ASSERT_EQ(read_nb_record(info, attrs), 0);
 
   write_file(conf_root() / "buckets" / (testname + ".json"),
 	     "this is not JSON");
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG);
 
-  write_their_record("PERHAPS");
-  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG)
+  write_nb_record("PERHAPS");
+  EXPECT_EQ(read_nb_record(info, attrs), -EBADMSG)
       << "a versioning value that is none of theirs was accepted";
 }
 
@@ -8292,8 +8293,8 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
  * listed before. */
 TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
 {
-  remove_our_bucket_info();
-  write_their_record("ENABLED");
+  remove_rgw_bucket_info();
+  write_nb_record("ENABLED");
   ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
   ASSERT_TRUE(bucket->get_info().versioned())
       << "the version rows are only walked on a versioned bucket";
@@ -8445,7 +8446,7 @@ TEST_F(NSFSNooBaaBucketTest, ListsNothingBeforeAnyUpload)
  * user.noobaa.part_size and part_offset, and an etag derived from the
  * stat because the fixture computed no digest -- which is what NooBaa's
  * own _get_etag() falls back to. */
-TEST_F(NSFSNooBaaBucketTest, ListsThePartsOfTheirUpload)
+TEST_F(NSFSNooBaaBucketTest, ListsThePartsOfNooBaaUpload)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
@@ -8613,7 +8614,7 @@ TEST_F(NSFSNooBaaBucketTest, GetInfoOnAnUploadTheyStarted)
  * the attribute set, which is where RGW keeps them and where a
  * completion looks.
  */
-TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesTheirCreateParams)
+TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesNooBaaCreateParams)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
@@ -8667,7 +8668,7 @@ TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesTheirCreateParams)
  * The control:  without it the two above pass for a driver that reads
  * NooBaa's document everywhere, and an nsfs upload would lose the
  * placement and the checksum that only the nsfs record carries. */
-TEST_F(NSFSBucketTest, GetInfoOnOurOwnUpload)
+TEST_F(NSFSBucketTest, GetInfoOnAnNsfsUpload)
 {
   const std::string objname = "ours.bin";
   auto upload = bucket->get_multipart_upload(objname, rgw::sal::no_authenticated_user, "c0ffee");
@@ -8694,7 +8695,7 @@ TEST_F(NSFSBucketTest, GetInfoOnOurOwnUpload)
  *
  * Without it the test above passes for a driver that writes NooBaa's
  * names everywhere, which is the other half of the same defect. */
-TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepOurNames)
+TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepNsfsNames)
 {
   const std::string objname = "plain.bin";
   auto obj = bucket->get_object(rgw_obj_key(objname));
@@ -8755,7 +8756,7 @@ public:
 
   /* a NooBaa object, laid down by hand:  NooBaa's attribute names,
    * with no nsfs attribute anywhere on it */
-  void write_their_object(const std::string& name) {
+  void write_nb_object(const std::string& name) {
     const sf::path p{bucket_path() / name};
     write_file(p, "their bytes");
     const std::string ct{"text/plain"};
@@ -8768,9 +8769,9 @@ public:
 };
 
 /* NooBaa's attributes are read on a converting bucket. */
-TEST_F(NSFSConvertingBucketTest, ReadsTheirAttributes)
+TEST_F(NSFSConvertingBucketTest, ReadsNooBaaAttributes)
 {
-  write_their_object("theirs.bin");
+  write_nb_object("theirs.bin");
 
   auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
   ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
@@ -8790,7 +8791,7 @@ TEST_F(NSFSConvertingBucketTest, ReadsTheirAttributes)
  * The control the chain needs:  without it the test above passes for a
  * driver that reads both formats everywhere, which is the arrangement
  * the marker exists to avoid. */
-TEST_F(NSFSBucketTest, DoesNotReadTheirAttributesWithoutTheMarker)
+TEST_F(NSFSBucketTest, DoesNotReadNooBaaAttributesWithoutTheMarker)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->resolve_profile(env->dpp), 0);
@@ -8798,9 +8799,9 @@ TEST_F(NSFSBucketTest, DoesNotReadTheirAttributesWithoutTheMarker)
 
   const sf::path p{bp / "root" / testname / "theirs.bin"};
   write_file(p, "their bytes");
-  const std::string theirs{"text/plain"};
+  const std::string ctype{"text/plain"};
   ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
-		       theirs.data(), theirs.size(), 0), 0);
+		       ctype.data(), ctype.size(), 0), 0);
   const std::string md5{"0123456789abcdef0123456789abcdef"};
   ASSERT_EQ(::setxattr(p.c_str(), "user.content_md5",
 		       md5.data(), md5.size(), 0), 0);
@@ -8833,7 +8834,7 @@ TEST_F(NSFSBucketTest, DoesNotReadTheirAttributesWithoutTheMarker)
  * user.noobaa.dir_content on the directory.  This is the consumer the
  * marker is worth having for -- it is a syscall per subdirectory, and
  * the attribute chain is not. */
-TEST_F(NSFSConvertingBucketTest, ListsTheirEmptyDirectoryObject)
+TEST_F(NSFSConvertingBucketTest, ListsNooBaaEmptyDirectoryObject)
 {
   sf::create_directories(bucket_path() / "photos");
   set_u64_xattr(bucket_path() / "photos", "user.noobaa.dir_content", 0);
@@ -8857,7 +8858,7 @@ TEST_F(NSFSConvertingBucketTest, ListsTheirEmptyDirectoryObject)
 /* NooBaa's directory objects on a bucket mid-conversion, before the
  * sweep reaches them:  read through the fallback, with the directory's
  * attributes. */
-TEST_F(NSFSConvertingBucketTest, ReadsTheirDirectoryObjects)
+TEST_F(NSFSConvertingBucketTest, ReadsNooBaaDirectoryObjects)
 {
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
@@ -8990,7 +8991,7 @@ TEST_F(NSFSConvertingBucketTest, AnUnreachedVersionKeepsItsRecordedId)
 {
   bucket->get_info().flags |= BUCKET_VERSIONED;
   ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
-  write_their_object("w");
+  write_nb_object("w");
   const std::string recorded = "mtime-abc123-ino-def456";
   ASSERT_EQ(::setxattr((bucket_path() / "w").c_str(), "user.noobaa.version_id",
 		       recorded.data(), recorded.size(), 0), 0);
@@ -9081,7 +9082,7 @@ TEST_F(NSFSBucketTest, ABucketThatDoesNotOwnItsDirectoryIsStillRejectedWhileNotE
       << "the bucket's record survived its deletion";
 }
 
-TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)
+TEST_F(NSFSBucketTest, DoesNotListNooBaaDirectoryObjectWithoutTheMarker)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->resolve_profile(env->dpp), 0);
@@ -9109,7 +9110,7 @@ TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)
  * preferring whichever the chain asks first. */
 TEST_F(NSFSConvertingBucketTest, WritingPrunesTheForeignSpelling)
 {
-  write_their_object("theirs.bin");
+  write_nb_object("theirs.bin");
   const sf::path p{bucket_path() / "theirs.bin"};
 
   auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
@@ -9231,7 +9232,7 @@ TEST_F(NSFSConvertingBucketTest, TagsRemovedByAnAttributeWriteStayRemoved)
  * attributes or neither:  NooBaa's reader returns undefined unless mode
  * and date are both present (`namespace_fs.js:2890`).
  */
-TEST_F(NSFSNooBaaBucketTest, ReadsTheirObjectLock)
+TEST_F(NSFSNooBaaBucketTest, ReadsNooBaaObjectLock)
 {
   const sf::path p{bucket_path() / "locked.bin"};
   write_file(p, "bytes");
@@ -9341,7 +9342,7 @@ TEST_F(NSFSBucketTest, ObjectLockInAMarkedBucketStaysEncoded)
  * NooBaa's own gateway does not report, because it is the sole member of
  * XATTR_METADATA_IGNORE_LIST (`namespace_fs.js:111`).
  */
-TEST_F(NSFSNooBaaBucketTest, ReadsTheirStorageClass)
+TEST_F(NSFSNooBaaBucketTest, ReadsNooBaaStorageClass)
 {
   const sf::path p{bucket_path() / "cold.bin"};
   write_file(p, "bytes");
@@ -9396,7 +9397,7 @@ public:
   }
 
   /* a NooBaa object with tags, laid down by hand */
-  void their_tagged_object(const std::string& name,
+  void nb_tagged_object(const std::string& name,
 			   const std::map<std::string, std::string>& tags) {
     const sf::path p{bucket_path() / name};
     sf::create_directories(p.parent_path());
@@ -9420,9 +9421,9 @@ public:
 };
 
 /* NooBaa's tags are read as nsfs's. */
-TEST_F(NSFSTagTest, ReadsTheirTags)
+TEST_F(NSFSTagTest, ReadsNooBaaTags)
 {
-  their_tagged_object("tagged.bin", {{"colour", "green"}, {"size", "large"}});
+  nb_tagged_object("tagged.bin", {{"colour", "green"}, {"size", "large"}});
 
   auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
   ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
@@ -9464,13 +9465,13 @@ TEST_F(NSFSBucketTest, TagsInAMarkedBucketAreOneAttribute)
   }
   EXPECT_FALSE(names.contains("user.noobaa.tag.colour"))
       << "wrote their tag shape in a bucket of ours";
-  bool ours = false;
+  bool encoded = false;
   for (const auto& n : names) {
     if (n.find("x-amz-tagging") != std::string::npos) {
-      ours = true;
+      encoded = true;
     }
   }
-  EXPECT_TRUE(ours) << "our encoded tag set was not written";
+  EXPECT_TRUE(encoded) << "our encoded tag set was not written";
 }
 
 /* The upgrade:  a bucket in NooBaa's format moved to an nsfs one,
@@ -9483,7 +9484,7 @@ TEST_F(NSFSBucketTest, TagsInAMarkedBucketAreOneAttribute)
 class NSFSUpgradeTest : public NSFSNooBaaBucketTest {
 public:
   /* a NooBaa object, by hand:  NooBaa's names, nothing of nsfs's */
-  void their_object(const std::string& name, const char* ctype) {
+  void nb_object(const std::string& name, const char* ctype) {
     const sf::path p{bucket_path() / name};
     sf::create_directories(p.parent_path());
     write_file(p, "their bytes");
@@ -9497,7 +9498,7 @@ public:
 
   /* an empty NooBaa directory object:  no sentinel, the fact is on
    * the directory */
-  void their_folder(const std::string& name, const char* ctype) {
+  void nb_folder(const std::string& name, const char* ctype) {
     const sf::path p{bucket_path() / name};
     sf::create_directories(p);
     set_u64_xattr(p, "user.noobaa.dir_content", 0);
@@ -9508,7 +9509,7 @@ public:
 
   /* a NooBaa version entry, under .versions/.  NooBaa's layout is
    * nsfs's -- nsfs borrowed it -- so only the attribute names differ. */
-  void their_version(const std::string& leaf, const std::string& vid,
+  void nb_version(const std::string& leaf, const std::string& vid,
 		     const char* ctype) {
     const sf::path vdir{bucket_path() / ".versions"};
     sf::create_directories(vdir);
@@ -9522,7 +9523,7 @@ public:
   }
 
   /* a NooBaa delete marker:  no bytes, and no ACL of any kind */
-  void their_delete_marker(const std::string& leaf, const std::string& vid) {
+  void nb_delete_marker(const std::string& leaf, const std::string& vid) {
     const sf::path vdir{bucket_path() / ".versions"};
     sf::create_directories(vdir);
     const sf::path p{vdir / (leaf + "_" + vid)};
@@ -9581,7 +9582,7 @@ public:
 TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
 {
   static constexpr const char* base_name = "user.nsfs.user.rgw.iam-policy";
-  static constexpr const char* our_name = "user.nsfs.rgw.iam-policy";
+  static constexpr const char* nsfs_name = "user.nsfs.rgw.iam-policy";
   const std::string policy{"{\"Version\":\"2012-10-17\"}"};
 
   bufferlist bl;
@@ -9594,7 +9595,7 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
 				      rgw::sal::MutationPurpose::adoption), 0);
 
   auto before = xattr_names(bucket_path());
-  EXPECT_TRUE(before.contains(our_name))
+  EXPECT_TRUE(before.contains(nsfs_name))
       << "a base bucket did not write its state in the nsfs spelling";
   EXPECT_FALSE(before.contains(base_name));
 
@@ -9609,9 +9610,9 @@ TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
   ASSERT_TRUE(prog.complete);
 
   auto after = xattr_names(bucket_path());
-  EXPECT_TRUE(after.contains(our_name));
+  EXPECT_TRUE(after.contains(nsfs_name));
   EXPECT_FALSE(after.contains(base_name));
-  EXPECT_EQ(str_xattr(bucket_path(), our_name), policy);
+  EXPECT_EQ(str_xattr(bucket_path(), nsfs_name), policy);
 
   /* the profile markers are not bucket state and the pass leaves them
    * alone;  the mask is still there and still says strong */
@@ -9627,11 +9628,11 @@ TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
 {
   const std::string v1{"mtime-dlyy3p93o4mt-ino-430o2"};
   const std::string v2{"mtime-dlyy3p96naq6-ino-430o3"};
-  their_object("photo.jpg", "image/jpeg");
-  their_version("photo.jpg", v1, "image/jpeg");
+  nb_object("photo.jpg", "image/jpeg");
+  nb_version("photo.jpg", v1, "image/jpeg");
   /* a leaf with an underscore in it, which is what makes the entry
    * name ambiguous and the split non-trivial */
-  their_version("my_photo.jpg", v2, "image/png");
+  nb_version("my_photo.jpg", v2, "image/png");
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(nullptr, &prog), 0);
@@ -9661,7 +9662,7 @@ TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
  * root. */
 TEST_F(NSFSUpgradeTest, TheConversionCountsEveryLinkByWhatItResolvesTo)
 {
-  their_object("photo.jpg", "image/jpeg");
+  nb_object("photo.jpg", "image/jpeg");
   const sf::path bdir = bucket_path();
   const sf::path outside = bp / "outside-the-bucket";
   write_file(outside, "outside");
@@ -9712,7 +9713,7 @@ TEST_F(NSFSUpgradeTest, ADeleteMarkerStillReadsAsOneAfterConversion)
   const std::string vid{"mtime-dlyy3p9ezde0-ino-hu35vm"};
   /* no leaf object:  a DELETE of a key that does not exist still
    * writes a marker, and that is the case with no ACL to inherit */
-  their_delete_marker("gone.bin", vid);
+  nb_delete_marker("gone.bin", vid);
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(nullptr, &prog), 0);
@@ -9731,8 +9732,8 @@ TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
 {
   const std::string vid{"mtime-dlyy3p99mgtk-ino-430o4"};
   const std::string dmid{"mtime-dlyy3p9muo1r-ino-hu35vn"};
-  their_version("doc.txt", vid, "text/plain");
-  their_delete_marker("doc.txt", dmid);
+  nb_version("doc.txt", vid, "text/plain");
+  nb_delete_marker("doc.txt", dmid);
 
   for (const auto& p : {version_path("doc.txt", vid),
 			version_path("doc.txt", dmid)}) {
@@ -9766,7 +9767,7 @@ TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
 TEST_F(NSFSUpgradeTest, TheVersionsLockIsNotAVersion)
 {
   const std::string vid{"mtime-dlyy3p9clmwx-ino-430o5"};
-  their_version("only.bin", vid, "text/plain");
+  nb_version("only.bin", vid, "text/plain");
   write_file(bucket_path() / ".versions" / ".lock", "");
 
   nsfs::ConvertProgress prog;
@@ -9779,7 +9780,7 @@ TEST_F(NSFSUpgradeTest, TheVersionsLockIsNotAVersion)
  * the only time the converting marker exists. */
 TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
 {
-  their_object("flat.bin", "text/plain");
+  nb_object("flat.bin", "text/plain");
 
   nsfs::convert_cb_t stop =
     [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
@@ -9801,9 +9802,9 @@ TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
 /* Everything in the tree ends up in nsfs names, and the marker is gone. */
 TEST_F(NSFSUpgradeTest, ConvertsTheTree)
 {
-  their_object("flat.bin", "text/plain");
-  their_object("deep/nested.bin", "application/json");
-  their_folder("photos", "application/directory");
+  nb_object("flat.bin", "text/plain");
+  nb_object("deep/nested.bin", "application/json");
+  nb_folder("photos", "application/directory");
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(nullptr, &prog), 0);
@@ -9845,8 +9846,8 @@ TEST_F(NSFSUpgradeTest, ConvertsTheTree)
 /* Every phase is reported, in order, for every item. */
 TEST_F(NSFSUpgradeTest, ReportsEachPhase)
 {
-  their_object("a.bin", "text/plain");
-  their_object("b.bin", "text/plain");
+  nb_object("a.bin", "text/plain");
+  nb_object("b.bin", "text/plain");
 
   std::vector<std::string> seen;
   nsfs::convert_cb_t cb =
@@ -9881,7 +9882,7 @@ TEST_F(NSFSUpgradeTest, ReportsEachPhase)
  */
 TEST_F(NSFSUpgradeTest, AReaderHeldAtWrittenSeesTheNewValue)
 {
-  their_object("held.bin", "text/plain");
+  nb_object("held.bin", "text/plain");
 
   std::string seen_ct, seen_etag;
   nsfs::convert_cb_t cb =
@@ -9925,7 +9926,7 @@ TEST_F(NSFSUpgradeTest, AReaderHeldAtWrittenSeesTheNewValue)
 TEST_F(NSFSUpgradeTest, StopsAndResumes)
 {
   for (int i = 0; i < 4; ++i) {
-    their_object("obj-" + std::to_string(i) + ".bin", "text/plain");
+    nb_object("obj-" + std::to_string(i) + ".bin", "text/plain");
   }
 
   int seen = 0;
@@ -9950,14 +9951,14 @@ TEST_F(NSFSUpgradeTest, StopsAndResumes)
 				     "did not finish";
 
   /* half the tree is nsfs's and half is NooBaa's, and both read */
-  int ours = 0, theirs = 0;
+  int nsfs_count = 0, nb_count = 0;
   for (int i = 0; i < 4; ++i) {
     auto names = xattr_names(bucket_path() /
 			     ("obj-" + std::to_string(i) + ".bin"));
     if (names.contains("user.noobaa.content_type")) {
-      ++theirs;
+      ++nb_count;
     } else {
-      ++ours;
+      ++nsfs_count;
     }
     auto obj = bucket->get_object(
 	rgw_obj_key("obj-" + std::to_string(i) + ".bin"));
@@ -9967,8 +9968,8 @@ TEST_F(NSFSUpgradeTest, StopsAndResumes)
 	      "0123456789abcdef0123456789abcdef")
 	<< "obj-" << i << " unreadable mid-conversion";
   }
-  EXPECT_EQ(ours, 2);
-  EXPECT_EQ(theirs, 2);
+  EXPECT_EQ(nsfs_count, 2);
+  EXPECT_EQ(nb_count, 2);
 
   /* and the rest of it converts */
   nsfs::ConvertProgress second;
@@ -9988,7 +9989,7 @@ TEST_F(NSFSUpgradeTest, StopsAndResumes)
  * idempotent or a restart corrupts what the first run finished. */
 TEST_F(NSFSUpgradeTest, ConvertingTwiceIsTheSameAsOnce)
 {
-  their_object("once.bin", "text/plain");
+  nb_object("once.bin", "text/plain");
   ASSERT_EQ(upgrade(nullptr, nullptr), 0);
   const auto after_one = xattr_names(bucket_path() / "once.bin");
 
@@ -10017,7 +10018,7 @@ TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
-  their_object("beside.bin", "text/plain");
+  nb_object("beside.bin", "text/plain");
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(nullptr, &prog), 0);
@@ -10031,8 +10032,8 @@ TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
   /* and the nsfs one is there, named as nsfs names one */
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   const std::string meta = tree.key + "." + tree.upload_id;
-  const sf::path ours{bucket_path() / b->mpu_strategy()->staging_dir_name(meta)};
-  ASSERT_TRUE(sf::is_directory(ours)) << ours;
+  const sf::path staging{bucket_path() / b->mpu_strategy()->staging_dir_name(meta)};
+  ASSERT_TRUE(sf::is_directory(staging)) << staging;
 
   /* the upload lists, through the nsfs layout */
   std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
@@ -10410,13 +10411,13 @@ TEST_F(NSFSUpgradeTest, AListingCachedBeforeTheUpgradeEqualsOneBuiltAfterIt)
 	      ->merge_and_store_attrs(env->dpp, none, null_yield,
 				      rgw::sal::MutationPurpose::adoption), 0);
 
-  their_object("plain.bin", "text/plain");
+  nb_object("plain.bin", "text/plain");
   lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
   lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
 
   /* a versioned object:  its current version and one earlier one, each
    * with the id NooBaa recorded */
-  their_object("v.bin", "text/plain");
+  nb_object("v.bin", "text/plain");
   const std::string cur_vid = "mtime-abc123-ino-10";
   ASSERT_EQ(::setxattr((bucket_path() / "v.bin").c_str(),
 		       "user.noobaa.version_id", cur_vid.data(),
@@ -10547,7 +10548,7 @@ TEST_F(NSFSUpgradeTest, ReportsPartsAndStopsInsideAnUpload)
  * NooBaa's directory is removed last for exactly this reason:  a run that
  * dies partway has copied some parts and must leave the source where
  * the next run can find it. */
-TEST_F(NSFSUpgradeTest, StoppingMidUploadKeepsTheirStaging)
+TEST_F(NSFSUpgradeTest, StoppingMidUploadKeepsNooBaaStaging)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
@@ -10649,7 +10650,7 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
    * arrive;  the production wait would put five seconds in the suite */
   driver->set_gate_waits(std::chrono::milliseconds(20),
 			 std::chrono::milliseconds(60000));
-  their_object("gated.bin", "text/plain");
+  nb_object("gated.bin", "text/plain");
 
   bool checked = false;
   nsfs::convert_cb_t probe =
@@ -10702,8 +10703,8 @@ TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
  * resumes would turn a partial conversion into an outage. */
 TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
 {
-  their_object("a.bin", "text/plain");
-  their_object("b.bin", "text/plain");
+  nb_object("a.bin", "text/plain");
+  nb_object("b.bin", "text/plain");
 
   nsfs::convert_cb_t stop =
     [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
@@ -10732,7 +10733,7 @@ TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
  * first is not already doing. */
 TEST_F(NSFSUpgradeTest, RejectsASecondConversion)
 {
-  their_object("a.bin", "text/plain");
+  nb_object("a.bin", "text/plain");
 
   int inner = 0;
   nsfs::convert_cb_t reenter =
@@ -11001,7 +11002,7 @@ TEST_F(NSFSStrongBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
 TEST_F(NSFSUpgradeTest, ReissuingTheSameProfileResumes)
 {
   for (int i = 0; i < 4; ++i) {
-    their_object("obj-" + std::to_string(i) + ".bin", "text/plain");
+    nb_object("obj-" + std::to_string(i) + ".bin", "text/plain");
   }
 
   int seen = 0;
@@ -11046,8 +11047,8 @@ TEST_F(NSFSUpgradeTest, ReissuingTheSameProfileResumes)
  * rewrite runs. */
 TEST_F(NSFSUpgradeTest, ReportsTheProfileAndTheConvertingState)
 {
-  their_object("a.bin", "text/plain");
-  their_object("b.bin", "text/plain");
+  nb_object("a.bin", "text/plain");
+  nb_object("b.bin", "text/plain");
 
   uint32_t ext = 0;
   std::string pname;
@@ -11418,7 +11419,7 @@ public:
  *
  * One test over all three rather than one each, because the thing
  * being established is that a store reads as a store. */
-TEST_F(NooBaaStoreTest, AStoreTheirToolsWroteReadsBack)
+TEST_F(NooBaaStoreTest, AStoreNooBaaToolsWroteReadsBack)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
   add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
@@ -11865,7 +11866,7 @@ TEST(NooBaaSecretShape, OnlyACredentialIsPlausible)
  * GCM's default is 12;  a decryption that did not set the length
  * explicitly would run a different construction and this comparison
  * would fail rather than merely warn. */
-TEST_F(NooBaaKeysTest, TheirKeyOpensTheirSecret)
+TEST_F(NooBaaKeysTest, NooBaaKeyOpensNooBaaSecret)
 {
   write_file(store + "/master_keys.json", NB_MASTER_KEYS);
   auto keys = load(file_store());
@@ -12523,7 +12524,7 @@ public:
  * like:  NooBaa's `_id` is a 24-character hex ObjectId and the minted
  * account id is `RGW` followed by digits, which is why no
  * transformation of one is the other. */
-TEST_F(NooBaaPlanTest, AStoreTheirToolsWroteMapsCleanly)
+TEST_F(NooBaaPlanTest, AStoreNooBaaToolsWroteMapsCleanly)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
   add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
@@ -13027,7 +13028,7 @@ TEST_F(NooBaaImportTest, ASecondRunRecognisesWhatTheFirstWrote)
  *
  * This is why the id is the key and the name is not.  The same record
  * under a new name is the same identity. */
-TEST_F(NooBaaImportTest, ARenameOnTheirSideIsStillTheSameIdentity)
+TEST_F(NooBaaImportTest, ARenameInNooBaaIsStillTheSameIdentity)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
   write_file(store + "/master_keys.json", NB_MASTER_KEYS);
@@ -13792,7 +13793,7 @@ public:
 
 TEST_F(NooBaaBucketImportTest, TheOwnerAndLoggingReachRgw)
 {
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
       R"(,"logging":{"log_bucket":"audit","log_prefix":"logs/"})");
 
   ASSERT_EQ(run(), 0) << why();
@@ -13832,7 +13833,7 @@ TEST_F(NooBaaBucketImportTest, TheOwnerAndLoggingReachRgw)
  * the import, which carries RGW's default, ObjectWriter. */
 TEST_F(NooBaaBucketImportTest, AnImportedBucketIsBucketOwnerEnforced)
 {
-  write_their_record("DISABLED");
+  write_nb_record("DISABLED");
 
   auto load = [&] {
     RGWBucketInfo info;
@@ -13859,7 +13860,7 @@ TEST_F(NooBaaBucketImportTest, ItRecordsWhetherTheBucketOwnsItsStorage)
   for (bool should_create : {false, true}) {
     SCOPED_TRACE(should_create ? "NooBaa made the directory"
 			       : "the directory was supplied");
-    write_their_record("DISABLED", "", "2026-01-02T03:04:05.000Z", "",
+    write_nb_record("DISABLED", "", "2026-01-02T03:04:05.000Z", "",
 		       should_create);
     ASSERT_EQ(run(), 0) << why();
 
@@ -13907,7 +13908,7 @@ TEST_F(NooBaaBucketImportTest, CreationRejectsANameNooBaaHolds)
  * with nsfs's row at the record's own path, which imports. */
 TEST_F(NooBaaBucketImportTest, ARecordForANameNsfsHoldsElsewhereIsRejected)
 {
-  write_their_record("DISABLED");
+  write_nb_record("DISABLED");
   nsfs::BucketPlacement row;
   row.owner = "RGW00000000000000001";
   row.bucket_name = testname;
@@ -13938,7 +13939,7 @@ TEST_F(NooBaaBucketImportTest, ARecordForANameNsfsHoldsElsewhereIsRejected)
  * bucket.  A directory nothing places is not listed. */
 TEST_F(NooBaaBucketImportTest, TheMetadataListingIsRowsAndUnimportedRecords)
 {
-  write_their_record("DISABLED");
+  write_nb_record("DISABLED");
   write_file(conf_root() / "buckets" / "only-theirs.json",
 	     R"({"_id":"6560e1f1c0ffee00000000cc","name":"only-theirs",)"
 	     R"("path":"/ibm/gpfs/fs1/only-theirs"})");
@@ -13967,7 +13968,7 @@ TEST_F(NooBaaBucketImportTest, TheMetadataListingIsRowsAndUnimportedRecords)
 
 TEST_F(NooBaaBucketImportTest, ABucketWithAnUnknownOwnerIsRejected)
 {
-  write_their_record("DISABLED");
+  write_nb_record("DISABLED");
   mapping.account_by_noobaa_id.clear();
 
   EXPECT_EQ(run(), -EIO);
@@ -13994,7 +13995,7 @@ TEST_F(NooBaaBucketImportTest, ABucketWithAnUnknownOwnerIsRejected)
  * pointing at nothing is not. */
 TEST_F(NooBaaBucketImportTest, TheBucketIsWrittenWhenItsPolicyIsRejected)
 {
-  write_their_record("ENABLED",
+  write_nb_record("ENABLED",
       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
         "Effect":"Allow","Principal":{"AWS":["ghost"]},
         "Action":["s3:GetObject"],
@@ -14020,7 +14021,7 @@ TEST_F(NooBaaBucketImportTest, TheBucketIsWrittenWhenItsPolicyIsRejected)
 /* And a resolvable one is written, rewritten. */
 TEST_F(NooBaaBucketImportTest, AResolvablePolicyIsRewrittenAndWritten)
 {
-  write_their_record("DISABLED",
+  write_nb_record("DISABLED",
       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
         "Effect":"Allow","Principal":{"AWS":["their-acct"]},
         "Action":["s3:GetObject"],
@@ -14054,7 +14055,7 @@ TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
 {
   const sf::path elsewhere = bp / "another-filesystem" / testname;
   sf::create_directories(elsewhere);
-  write_their_record("DISABLED",
+  write_nb_record("DISABLED",
       R"(,"notifications":[{"id":["n1"],"event":["s3:ObjectCreated:*"],
         "topic":["arn:noobaa:sns:::t1"]}])",
       "2026-01-02T03:04:05.000Z", elsewhere.string());
@@ -14087,7 +14088,7 @@ TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
  * an earlier, interrupted adoption already did. */
 TEST_F(NooBaaBucketImportTest, TheImportRecordsTheBucketsPath)
 {
-  write_their_record("DISABLED");
+  write_nb_record("DISABLED");
   nsfs::BucketPlacement row;
   ASSERT_EQ(driver->get_identity_db()->get_bucket_placement(
 		env->dpp, testname, "", row), -ENOENT)
@@ -14134,7 +14135,7 @@ TEST_F(NooBaaBucketImportTest, ARecordWithoutAPathIsRejected)
  * one, is rejected, naming the path. */
 TEST_F(NooBaaBucketImportTest, ARecordNestedWithAnotherBucketIsRejected)
 {
-  write_their_record("DISABLED");
+  write_nb_record("DISABLED");
   nsfs::BucketPlacement other;
   other.owner = "RGW00000000000000001";
   other.bucket_name = "inner";
@@ -14195,14 +14196,14 @@ public:
 
 TEST_F(NSFSPlaceOverNooBaaTest, ANooBaaBucketsDirectoryIsRejected)
 {
-  const sf::path theirs = bp / "noobaa-data" / "theirs";
-  sf::create_directories(theirs / "inside");
+  const sf::path nb_dir = bp / "noobaa-data" / "theirs";
+  sf::create_directories(nb_dir / "inside");
   /* with the trailing slash NooBaa often writes */
-  write_their_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
-		     theirs.string() + "/");
+  write_nb_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
+		     nb_dir.string() + "/");
 
-  EXPECT_EQ(place("another-name", theirs), -EEXIST);
-  EXPECT_EQ(place("another-name", theirs / "inside"), -EEXIST)
+  EXPECT_EQ(place("another-name", nb_dir), -EEXIST);
+  EXPECT_EQ(place("another-name", nb_dir / "inside"), -EEXIST)
       << "nested inside it";
   EXPECT_EQ(place("another-name", bp / "noobaa-data"), -EEXIST)
       << "enclosing it";
@@ -14212,7 +14213,7 @@ TEST_F(NSFSPlaceOverNooBaaTest, ANooBaaBucketsDirectoryIsRejected)
 
   /* the control:  without the record the directory is free */
   ASSERT_TRUE(sf::remove(conf_root() / "buckets" / (testname + ".json")));
-  EXPECT_EQ(place("another-name", theirs), 0);
+  EXPECT_EQ(place("another-name", nb_dir), 0);
 }
 
 /* Creation is held to the same rule:  an owner whose new_buckets_path
@@ -14221,13 +14222,13 @@ TEST_F(NSFSPlaceOverNooBaaTest, ANooBaaBucketsDirectoryIsRejected)
  * the row insert saw no row to nest with. */
 TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRejected)
 {
-  const sf::path theirs = bp / "noobaa-data" / "theirs";
-  sf::create_directories(theirs);
-  write_their_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
-		     theirs.string() + "/");
+  const sf::path nb_dir = bp / "noobaa-data" / "theirs";
+  sf::create_directories(nb_dir);
+  write_nb_record("DISABLED", "", "2026-01-02T03:04:05.000Z",
+		     nb_dir.string() + "/");
   nsfs::Identity id;
   id.key = to_string(owner);
-  id.new_buckets_path = theirs.string();
+  id.new_buckets_path = nb_dir.string();
   ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, id), 0);
 
   auto create = [this](const std::string& name) {
@@ -14240,7 +14241,7 @@ TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRejected)
     return b->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user);
   };
   EXPECT_EQ(create("inner"), -EEXIST);
-  EXPECT_FALSE(sf::exists(theirs / "inner")) << "the directory was made";
+  EXPECT_FALSE(sf::exists(nb_dir / "inner")) << "the directory was made";
   nsfs::BucketPlacement row;
   EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
 	      env->dpp, "inner", "", row), -ENOENT);
@@ -14248,7 +14249,7 @@ TEST_F(NSFSPlaceOverNooBaaTest, CreationInsideANooBaaBucketsDirectoryIsRejected)
   /* the control:  without the record the same creation succeeds */
   ASSERT_TRUE(sf::remove(conf_root() / "buckets" / (testname + ".json")));
   EXPECT_EQ(create("inner"), 0);
-  EXPECT_TRUE(sf::is_directory(theirs / "inner"));
+  EXPECT_TRUE(sf::is_directory(nb_dir / "inner"));
 }
 
 /* ------------------------------------------------------------------ *
@@ -14264,19 +14265,19 @@ class NooBaaModeTest : public NSFSNooBaaStateTest {
 public:
   /* The fixture's write_file() does not create parents, and an
    * identity lives at identities/<id>/identity.json. */
-  void add_their_identity(const std::string& id, const std::string& record) {
+  void add_nb_identity(const std::string& id, const std::string& record) {
     const auto dir = conf_root() / "identities" / id;
     std::filesystem::create_directories(dir);
     write_file(dir / "identity.json", record);
   }
 
-  /* The account `write_their_record()`'s bucket is owned by.
+  /* The account `write_nb_record()`'s bucket is owned by.
    *
    * NooBaa's bucket record names its owner by `_id`, and the bucket
    * import rejects a bucket whose owner this run did not write -- so
    * the account has to carry the id the record names, not an
    * arbitrary one. */
-  static constexpr const char* THEIR_OWNER_ID =
+  static constexpr const char* NB_OWNER_ID =
     "6560e1f1c0ffee0000000002";
 
   void add_the_owning_account() {
@@ -14284,9 +14285,9 @@ public:
     const std::string from = "6ac7cb27fd4af356919110a3";
     for (auto at = rec.find(from); at != std::string::npos;
 	 at = rec.find(from)) {
-      rec.replace(at, from.size(), THEIR_OWNER_ID);
+      rec.replace(at, from.size(), NB_OWNER_ID);
     }
-    add_their_identity(THEIR_OWNER_ID, rec);
+    add_nb_identity(NB_OWNER_ID, rec);
   }
 
   std::map<std::string, std::string> ask(
@@ -14306,7 +14307,7 @@ TEST_F(NooBaaModeTest, CommandIsTheDefaultAndAdoptsNothing)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
+  write_nb_record("ENABLED");
 
   auto st = ask();
   EXPECT_EQ(st["configured"], "true") << "the fixture has a store";
@@ -14368,7 +14369,7 @@ TEST_F(NooBaaModeTest, IdentitiesAreImportedByCommand)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
+  write_nb_record("ENABLED");
 
   auto st = ask({{"identities", "true"}});
   EXPECT_EQ(st["ran"], "true") << " error=" << st["error"];
@@ -14400,7 +14401,7 @@ TEST_F(NooBaaModeTest, IdentitiesAreImportedByCommand)
 TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
 {
   /* a record that does not parse */
-  add_their_identity("bad", "{ not json");
+  add_nb_identity("bad", "{ not json");
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
 
   std::map<std::string, std::string> out;
@@ -14424,7 +14425,7 @@ TEST_F(NooBaaModeTest, OneBucketIsAdoptedByCommand)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
+  write_nb_record("ENABLED");
 
   /* identities first, which is the store-wide half */
   auto st = ask({{"identities", "true"}});
@@ -14481,7 +14482,7 @@ TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
+  write_nb_record("ENABLED");
 
   std::map<std::string, std::string> out;
   EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
@@ -14504,8 +14505,8 @@ TEST_F(NooBaaModeTest, AnUnadoptedBucketTakesItsOwnerFromTheImport)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
-  remove_our_bucket_info();
+  write_nb_record("ENABLED");
+  remove_rgw_bucket_info();
 
   auto loaded_owner = [this]() {
     std::unique_ptr<rgw::sal::Bucket> b;
@@ -14518,7 +14519,7 @@ TEST_F(NooBaaModeTest, AnUnadoptedBucketTakesItsOwnerFromTheImport)
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
   std::string imported;
   ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
-		env->dpp, THEIR_OWNER_ID, imported), 0);
+		env->dpp, NB_OWNER_ID, imported), 0);
   EXPECT_NE(before, imported)
       << "the control:  the owner was there before the import";
 
@@ -14539,7 +14540,7 @@ public:
     NooBaaModeTest::SetUp();
     add_the_owning_account();
     write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-    write_their_record("ENABLED");
+    write_nb_record("ENABLED");
   }
 
   void restart() {
@@ -14660,8 +14661,8 @@ TEST_F(NooBaaCompletionTest, TheRecordSurvivesARestart)
 class NooBaaAbandonTest : public NooBaaCompletionTest {
 public:
   static constexpr const char* UNOWNED_ID = "6560e1f1c0ffee00000000dd";
-  /* the `_id` write_their_record() writes */
-  static constexpr const char* THEIR_BUCKET_ID = "6560e1f1c0ffee0000000001";
+  /* the `_id` write_nb_record() writes */
+  static constexpr const char* NB_BUCKET_ID = "6560e1f1c0ffee0000000001";
 
   void add_unowned() {
     const sf::path at = bp / "root" / "unowned";
@@ -14696,15 +14697,15 @@ public:
  * hold, and a record already consumed. */
 TEST_F(NooBaaAbandonTest, AbandoningRejectsWhatItShould)
 {
-  EXPECT_EQ(abandon(THEIR_BUCKET_ID, ""), -EINVAL);
+  EXPECT_EQ(abandon(NB_BUCKET_ID, ""), -EINVAL);
   EXPECT_EQ(abandon("6560e1f1c0ffee0000000bad", "gone"), -ENOENT);
 
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
-  EXPECT_EQ(abandon(THEIR_OWNER_ID, "imported already"), -EEXIST)
+  EXPECT_EQ(abandon(NB_OWNER_ID, "imported already"), -EEXIST)
       << "an imported identity was abandoned";
 
   ASSERT_EQ(run(), 0);
-  EXPECT_EQ(abandon(THEIR_BUCKET_ID, "adopted already"), -EEXIST)
+  EXPECT_EQ(abandon(NB_BUCKET_ID, "adopted already"), -EEXIST)
       << "an adopted bucket, or anything after completion, was abandoned";
 }
 
@@ -14750,7 +14751,7 @@ TEST_F(NooBaaAbandonTest, AnUnconvertedBucketAbandonedStaysServed)
 					 nullptr), 0);
 
   nsfs::AbandonedRecord r;
-  ASSERT_EQ(abandon(THEIR_BUCKET_ID, "left in NooBaa's format", &r), 0);
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "left in NooBaa's format", &r), 0);
   EXPECT_EQ(r.stage, "not converted");
 
   ASSERT_EQ(run(), 0);
@@ -14771,7 +14772,7 @@ TEST_F(NooBaaAbandonTest, AnUnconvertedBucketAbandonedStaysServed)
 TEST_F(NooBaaAbandonTest, AnAbandonedRecordIsNotAdoptedByName)
 {
   ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
-  ASSERT_EQ(abandon(THEIR_BUCKET_ID, "not this one"), 0);
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "not this one"), 0);
 
   std::map<std::string, std::string> out;
   EXPECT_EQ(driver->driver_hint(env->dpp, "adoption", {{"bucket", testname}},
@@ -14787,7 +14788,7 @@ TEST_F(NooBaaAbandonTest, AnAbandonedRecordIsNotAdoptedByName)
 				       &had, &had_profile), 0)
       << "the profile endpoint adopted an abandoned bucket";
 
-  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, THEIR_BUCKET_ID), 0);
+  ASSERT_EQ(driver->unabandon_noobaa_record(env->dpp, NB_BUCKET_ID), 0);
   EXPECT_EQ(ask({{"bucket", testname}})["adopted"], "true");
 }
 
@@ -14819,7 +14820,7 @@ TEST_F(NooBaaAbandonTest, APartlyConvertedBucketCanBeAbandoned)
   }
 
   nsfs::AbandonedRecord r;
-  ASSERT_EQ(abandon(THEIR_BUCKET_ID, "the rest will not convert", &r), 0);
+  ASSERT_EQ(abandon(NB_BUCKET_ID, "the rest will not convert", &r), 0);
   EXPECT_EQ(r.stage, "partly converted");
 
   ASSERT_EQ(run(), 0);
@@ -14850,7 +14851,7 @@ TEST_F(NooBaaAbandonTest, UnabandoningLetsThePassTryAgain)
 TEST_F(NooBaaAbandonTest, AnAbandonedIdentityIsNotImported)
 {
   nsfs::AbandonedRecord r;
-  ASSERT_EQ(abandon(THEIR_OWNER_ID, "a collision nobody will resolve", &r),
+  ASSERT_EQ(abandon(NB_OWNER_ID, "a collision nobody will resolve", &r),
 	    0);
   /* what depends on it is said, since each now fails its import */
   EXPECT_EQ(r.dependent_buckets, std::vector<std::string>{testname});
@@ -14858,7 +14859,7 @@ TEST_F(NooBaaAbandonTest, AnAbandonedIdentityIsNotImported)
   EXPECT_EQ(st["identities_abandoned"], "1");
   std::string owner;
   EXPECT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
-		env->dpp, THEIR_OWNER_ID, owner), -ENOENT);
+		env->dpp, NB_OWNER_ID, owner), -ENOENT);
 }
 
 /* import_noobaa_bucket(), adoption's first step, imports a bucket's
@@ -14873,7 +14874,7 @@ TEST_F(NooBaaModeTest, ImportWritesTheRecordAndNotTheObjects)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
+  write_nb_record("ENABLED");
   auto ids = ask({{"identities", "true"}});
   ASSERT_EQ(ids["ran"], "true") << ids["error"];
 
@@ -14913,7 +14914,7 @@ TEST_F(NooBaaModeTest, ARunAdoptsTheWholeStore)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("ENABLED");
+  write_nb_record("ENABLED");
 
   auto st = ask({{"run", "true"}});
   EXPECT_EQ(st["ran"], "true") << st["error"];
@@ -14941,10 +14942,10 @@ TEST_F(NooBaaModeTest, ARunAdoptsTheWholeStore)
  * The control is the assertion before the conversion:  the bucket is
  * versioned there, and only from NooBaa's record, so the assertion after
  * it is able to fail. */
-TEST_F(NooBaaModeTest, ConversionKeepsTheVersioningTheirRecordSupplied)
+TEST_F(NooBaaModeTest, ConversionKeepsTheVersioningNooBaaRecordSupplied)
 {
-  remove_our_bucket_info();
-  write_their_record("ENABLED");
+  remove_rgw_bucket_info();
+  write_nb_record("ENABLED");
   /* Leaving base imports the record, which needs its owner imported */
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
@@ -15497,16 +15498,16 @@ TEST_F(NSFSPlacedBucketTest, ListBucketsIsPerTenant)
  * the damage is visible to a listing that opens it -- and not ours. */
 TEST_F(NSFSPlacedBucketTest, ListBucketsOpensOnlyTheCallersBuckets)
 {
-  auto mine = make_bucket("mine");
+  auto own = make_bucket("mine");
 
   const rgw_user other{"tenant", "somebody-else"};
   RGWBucketInfo info;
   info.bucket.name = "theirs";
   info.owner = other;
-  auto theirs = driver->get_bucket(info);
+  auto others = driver->get_bucket(info);
   rgw::sal::Bucket::CreateParams cp;
   cp.owner = other;
-  ASSERT_EQ(theirs->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
+  ASSERT_EQ(others->create(env->dpp, cp, null_yield, rgw::sal::no_authenticated_user), 0);
   const sf::path t = bp / "root" / "theirs";
   ASSERT_EQ(::chmod(t.c_str(), 0), 0);
   auto restore = make_scope_guard([&t] { ::chmod(t.c_str(), 0755); });
@@ -15959,15 +15960,15 @@ TEST_F(NSFSPlaceBucketTest, AUserIsRejectedAsOwner)
  * of the thread, which would spoil other tests' controls on this one. */
 TEST_F(NSFSPlaceBucketTest, ABucketOverAnotherUidsDirectoryTakesItsState)
 {
-  static constexpr uid_t theirs_uid = 70170;
+  static constexpr uid_t other_uid = 70170;
   auto impersonate = [](const char* v) {
     g_conf().set_val_or_die("rgw_nsfs_impersonate", v);
     g_conf().apply_changes(nullptr);
   };
   nsfs::Identity row;
   row.key = to_string(account);
-  row.uid = theirs_uid;
-  row.gid = theirs_uid;
+  row.uid = other_uid;
+  row.gid = other_uid;
   ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
   impersonate("true");
   auto restore = make_scope_guard([&] { impersonate("false"); });
@@ -15976,7 +15977,7 @@ TEST_F(NSFSPlaceBucketTest, ABucketOverAnotherUidsDirectoryTakesItsState)
   ASSERT_EQ(::chmod(at.c_str(), 0770), 0);
   const int cret = with_capabilities_elsewhere(nsfs::cap_bit(CAP_CHOWN),
     [&]() -> int {
-      return (::chown(at.c_str(), theirs_uid, theirs_uid) < 0) ? -errno : 0;
+      return (::chown(at.c_str(), other_uid, other_uid) < 0) ? -errno : 0;
     });
   if (cret == -EPERM) {
     GTEST_SKIP() << "the binary cannot give the directory away;  run the "
@@ -16379,7 +16380,7 @@ TEST_F(NSFSPlacedBucketTest, NoSetUnlessTheRelaxedPolicy)
 
 class NSFSRecordedPathTest : public NSFSNooBaaStateTest {
 public:
-  sf::path their_storage() const { return bp / "their-filesystem"; }
+  sf::path nb_storage() const { return bp / "their-filesystem"; }
 
   /* Where a bucket resolved to, read rather than written.
    *
@@ -16409,9 +16410,9 @@ public:
  *
  * The read is the one serve mode already does for a bucket's
  * configuration, so this adds no consumer of NooBaa's store. */
-TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtTheirRecordedPath)
+TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtNooBaaRecordedPath)
 {
-  const sf::path at = their_storage() / "scattered";
+  const sf::path at = nb_storage() / "scattered";
   sf::create_directories(at);
   record_at(at, "ENABLED");
 
@@ -16429,9 +16430,9 @@ TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtTheirRecordedPath)
  * for, so the decision to adopt stays open.  Reading where a
  * bucket lives must not adopt it -- adoption happens at startup in
  * `automatic` mode, or by command. */
-TEST_F(NSFSRecordedPathTest, ResolvingTheirPathDoesNotAdoptTheBucket)
+TEST_F(NSFSRecordedPathTest, ResolvingNooBaaPathDoesNotAdoptTheBucket)
 {
-  const sf::path at = their_storage() / "untouched";
+  const sf::path at = nb_storage() / "untouched";
   sf::create_directories(at);
   record_at(at);
 
@@ -16479,26 +16480,26 @@ TEST_F(NSFSRecordedPathTest, ResolvingTheirPathDoesNotAdoptTheBucket)
  * Once a bucket is adopted the index is authoritative, and NooBaa's store is
  * not consulted for it again -- which is what makes adoption an
  * adoption rather than a permanent bridge. */
-TEST_F(NSFSRecordedPathTest, OurRowWinsOverTheirRecord)
+TEST_F(NSFSRecordedPathTest, PlacementRowWinsOverNooBaaRecord)
 {
-  const sf::path theirs = their_storage() / "theirs";
-  const sf::path ours = their_storage() / "ours";
-  sf::create_directories(theirs);
-  sf::create_directories(ours);
-  record_at(theirs);
+  const sf::path recorded = nb_storage() / "theirs";
+  const sf::path placed = nb_storage() / "ours";
+  sf::create_directories(recorded);
+  sf::create_directories(placed);
+  record_at(recorded);
 
   nsfs::BucketPlacement row;
 
   row.owner = "RGW00000000000000001";
   row.bucket_name = testname;
-  row.path = ours.string();
+  row.path = placed.string();
   ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
 							    row), 0);
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
 				&loaded, null_yield), 0);
-  EXPECT_EQ(resolved_at(loaded.get()), ours.string())
+  EXPECT_EQ(resolved_at(loaded.get()), placed.string())
       << "their recorded path was used although we had a row";
 }
 
@@ -16509,9 +16510,9 @@ TEST_F(NSFSRecordedPathTest, OurRowWinsOverTheirRecord)
  * the record that named somewhere else. */
 TEST_F(NSFSRecordedPathTest, ARowForTheBasePathDoesNotFallThrough)
 {
-  const sf::path theirs = their_storage() / "elsewhere";
-  sf::create_directories(theirs);
-  record_at(theirs);
+  const sf::path recorded = nb_storage() / "elsewhere";
+  sf::create_directories(recorded);
+  record_at(recorded);
 
   nsfs::BucketPlacement row;
 
@@ -16555,7 +16556,7 @@ TEST_F(NSFSRecordedPathTest, APathWeWouldNotStoreIsNotServedFrom)
 /* With no store configured, nothing about resolution changes.
  *
  * Every deployment today, and the arm that must not break. */
-TEST_F(NSFSBucketTest, WithoutATheirStoreResolutionIsUnchanged)
+TEST_F(NSFSBucketTest, WithoutANooBaaStoreResolutionIsUnchanged)
 {
   std::unique_ptr<rgw::sal::Bucket> loaded;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
