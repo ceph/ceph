@@ -2493,6 +2493,14 @@ options:
   level: dev
   default: 32
   with_legacy: true
+- name: objecter_dispatch_to_session_strand
+  type: bool
+  level: advanced
+  desc: Offload OSD session message handlers to a per-session ASIO strand instead of running them on the messenger thread
+  long_desc: When false (default), OSD op replies, watch notifies, backoffs, and OSD command replies are handled directly on the messenger thread (pre-strand behavior). When true, handlers are posted to the per-OSDSession strand. Enable for NFS-Ganesha / FSAL_CEPH workloads that benefit from not blocking messenger dispatch; leave disabled for latency-sensitive small-IO clients such as librbd fio.
+  default: false
+  flags:
+  - startup
 # suppress watch pings
 - name: objecter_inject_no_watch_ping
   type: bool
