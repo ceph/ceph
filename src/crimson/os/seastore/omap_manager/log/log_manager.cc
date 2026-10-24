@@ -139,7 +139,9 @@ LogManager::omap_set_keys(
    * live entry and is never freed.
    */
   bool has_ow_key = false;
-  if (kvs.size() == OW_SIZE) {
+  if (kvs.size() == OW_SIZE &&
+      is_pg_log_key(kvs.begin()->first) &&
+      is_ow_key(kvs.rbegin()->first)) {
     std::vector<std::pair<std::string, ceph::bufferlist>> kvs_for_ow;
     kvs_for_ow.reserve(2);
     for (const auto& [k, v] : kvs) {
