@@ -101,6 +101,7 @@ extern const std::string PREFIX_SHARED_BLOB;
 
 extern const std::string BLUESTORE_GLOBAL_STATFS_KEY;
 
+/* BPF-EXPORT-START */
 enum {
   l_bluestore_first = 732430,
   // space utilization stats
@@ -290,6 +291,7 @@ enum {
   //****************************************
   l_bluestore_last
 };
+/* BPF-EXPORT-END */
 
 #define META_POOL_ID ((uint64_t)-1ull)
 using bptr_c_it_t = buffer::ptr::const_iterator;
