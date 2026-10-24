@@ -33,6 +33,7 @@ Client Config Reference
 ------------------------
 
 .. confval:: client_acl_type
+.. confval:: client_alternate_name_visible
 .. confval:: client_cache_mid
 .. confval:: client_cache_size
 .. confval:: client_caps_release_delay
