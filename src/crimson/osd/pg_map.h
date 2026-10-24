@@ -4,6 +4,8 @@
 #pragma once
 
 #include <map>
+#include <optional>
+#include <vector>
 #include <algorithm>
 
 #include <seastar/core/future.hh>
@@ -14,6 +16,7 @@
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/osd_operation.h"
 #include "osd/osd_types.h"
+#include "osd/osd_shard_map.h"
 
 namespace crimson::osd {
 class PG;
@@ -24,6 +27,12 @@ class PG;
  * Maintains a mapping from spg_t to the core containing that PG.  Internally, each
  * core has a local copy of the mapping to enable core-local lookups.  Updates
  * are proxied to core 0, and the back out to all other cores -- see get_or_create_pg_mapping.
+ *
+ * It also maintains the published shard map (osd_shard_map_t): an override
+ * for every PG whose core differs from the default placement, replicated to
+ * every core alongside pg_to_core. Not persisted: the version carries a
+ * per-boot nonce in its high 32 bits, so after a restart every client sees
+ * a different version and refetches.
  */
 class PGShardMapping : public seastar::peering_sharded_service<PGShardMapping> {
 public:
@@ -47,9 +56,29 @@ public:
 
   seastar::future<> dump_store_shards(Formatter *f) const;
 
+  /// This core's replica of the published shard map.
+  const osd_shard_map_t &get_shard_map() const { return shard_map; }
+  /// The map is published only once reactor ports are (see
+  /// crimson_osd_client_shard_ports); until then replies carry 0, which
+  /// clients treat as "no map", and the reply encoding is unchanged.
+  bool is_shard_map_published() const { return !shard_map.shard_ports.empty(); }
+  uint64_t get_shard_map_version() const {
+    return is_shard_map_published() ? shard_map.version : 0;
+  }
+  /// Per-reactor client ports, set once at startup on every core.
+  void set_shard_ports(std::vector<uint16_t> ports) {
+    shard_map.shard_ports = std::move(ports);
+  }
+
   /// Map to cores in [min_core_mapping, core_mapping_limit)
-  PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, uint32_t store_shard_nums)
+  /// boot_nonce: same nonzero value on every core
+  PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit,
+                 uint32_t store_shard_nums, uint32_t boot_nonce)
     : store_shard_nums(store_shard_nums) {
+    ceph_assert_always(min_core_mapping == 0 && boot_nonce != 0);
+    shard_map.n_cores = core_mapping_limit;
+    shard_map.n_store_shards = store_shard_nums;
+    shard_map.version = uint64_t(boot_nonce) << 32;
     ceph_assert_always(min_core_mapping < core_mapping_limit);
     auto max_core_mapping = std::min(min_core_mapping + store_shard_nums, core_mapping_limit);
     auto num_shard_services = (store_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
@@ -91,6 +120,13 @@ private:
   //<pg, <core_id, store_index>>
   std::map<spg_t, std::pair<core_id_t, store_index_t>> pg_to_core;
 
+  // per-shard, updated by shard 0 together with pg_to_core
+  osd_shard_map_t shard_map;
+  /// shard 0: record pgid's core; returns the override to replicate
+  /// (nullopt = none) and bumps the version if anything changed
+  std::optional<uint16_t> record_core(spg_t pgid, std::optional<core_id_t> core);
+  /// other shards: apply what shard 0 recorded
+  void apply_core(spg_t pgid, std::optional<uint16_t> ov, uint64_t version);
 };
 
 /**

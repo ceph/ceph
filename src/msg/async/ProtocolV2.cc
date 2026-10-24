@@ -2175,7 +2175,11 @@ CtPtr ProtocolV2::handle_server_ident(ceph::bufferlist &payload)
   // is this who we intended to talk to?
   // be a bit forgiving here, since we may be connecting based on addresses parsed out
   // of mon_host or something.
-  if (!server_ident.addrs().contains(connection->target_addr)) {
+  // a connection to a Crimson reactor port: the server identifies with its
+  // advertised address, not the reactor port we dialled
+  if (!server_ident.addrs().contains(connection->target_addr) &&
+      !(connection->shard_base_addr &&
+        server_ident.addrs().contains(*connection->shard_base_addr))) {
     ldout(cct,1) << __func__ << " peer identifies as " << server_ident.addrs()
 		 << ", does not include " << connection->target_addr << dendl;
     return _fault();

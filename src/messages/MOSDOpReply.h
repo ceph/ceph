@@ -37,7 +37,7 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -53,6 +53,9 @@ private:
   int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
+  /// Crimson: version of the replying OSD's reactor placement table
+  /// (osd_shard_map_t). 0 == OSD does not publish one. v9+.
+  uint64_t shard_map_version = 0;
 
 public:
   const object_t& get_oid() const { return oid; }
@@ -99,6 +102,8 @@ public:
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
   bool is_redirect_reply() const { return do_redirect; }
+  void set_shard_map_version(uint64_t v) { shard_map_version = v; }
+  uint64_t get_shard_map_version() const { return shard_map_version; }
 
   void add_flags(int f) { flags |= f; }
 
@@ -229,6 +234,15 @@ public:
         }
       }
       encode_trace(payload, features);
+      if (header.version >= 9) {
+        if (shard_map_version) {
+          // Appended last: v8 decoders stop after the trace and ignore it.
+          encode(shard_map_version, payload);
+        } else {
+          // nothing to publish: byte-identical to a v8 reply
+          header.version = 8;
+        }
+      }
     }
   }
   void decode_payload() override {
@@ -236,7 +250,8 @@ public:
     auto p = payload.cbegin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    // (v8 and v9 differ only by the trailing shard_map_version)
+    if (header.version == HEAD_VERSION || header.version == 8) {
       decode(oid, p);
       decode(pgid, p);
       decode(flags, p);
@@ -262,6 +277,9 @@ public:
       if (do_redirect)
 	decode(redirect, p);
       decode_trace(p);
+      if (header.version >= 9) {
+        decode(shard_map_version, p);
+      }
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       decode(head, p);

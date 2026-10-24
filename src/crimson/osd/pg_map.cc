@@ -16,6 +16,11 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
   f->dump_int("this shard id", seastar::this_shard_id());
   f->dump_int("osd shard nums", seastar::this_smp_shard_count());
   f->dump_int("store_shard_nums", store_shard_nums);
+  if (is_shard_map_published()) {
+    f->open_object_section("shard_map");
+    shard_map.dump(f);
+    f->close_section();
+  }
 
   for (const auto &i : core_to_num_pgs) {
     f->open_object_section("core_pgs");
@@ -55,6 +60,31 @@ seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
     }
   }
   return seastar::now();
+}
+
+std::optional<uint16_t> PGShardMapping::record_core(
+  spg_t pgid, std::optional<core_id_t> core)
+{
+  assert(seastar::this_shard_id() == 0);
+  const bool changed = core ? shard_map.set_core(pgid, *core)
+                            : shard_map.clear_core(pgid);
+  if (changed) {
+    ++shard_map.version;
+  }
+  auto it = shard_map.overrides.find(pgid);
+  return it == shard_map.overrides.end()
+    ? std::nullopt : std::optional<uint16_t>(it->second);
+}
+
+void PGShardMapping::apply_core(
+  spg_t pgid, std::optional<uint16_t> ov, uint64_t version)
+{
+  if (ov) {
+    shard_map.overrides[pgid] = *ov;
+  } else {
+    shard_map.overrides.erase(pgid);
+  }
+  shard_map.version = std::max(shard_map.version, version);
 }
 
 seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_create_pg_mapping(
@@ -171,8 +201,11 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
               pgid, core_to_update, count_iter->second, shard_index_update);
       }
       assert(core_to_update != NULL_CORE);
+      const auto ov = primary_mapping.record_core(pgid, core_to_update);
+      const auto version = primary_mapping.shard_map.version;
       return primary_mapping.container().invoke_on_others(
-          [pgid, core_to_update, shard_index_update, FNAME](auto &other_mapping) {
+          [pgid, core_to_update, shard_index_update, ov, version, FNAME](auto &other_mapping) {
+        other_mapping.apply_core(pgid, ov, version);
         auto find_iter = other_mapping.pg_to_core.find(pgid);
         if (find_iter == other_mapping.pg_to_core.end()) {
           DEBUG("mapping pg {} to core {} (others), store_index {}",
@@ -247,8 +280,11 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
 
     primary_mapping.pg_to_core.erase(find_iter);
     DEBUG("pg {} mapping erased (primary)", pgid);
+    std::ignore = primary_mapping.record_core(pgid, std::nullopt);
+    const auto version = primary_mapping.shard_map.version;
     return primary_mapping.container().invoke_on_others(
-      [pgid, FNAME](auto &other_mapping) {
+      [pgid, version, FNAME](auto &other_mapping) {
+      other_mapping.apply_core(pgid, std::nullopt, version);
       auto find_iter = other_mapping.pg_to_core.find(pgid);
       if (find_iter == other_mapping.pg_to_core.end()) {
         ERROR("trying to remove non-exist mapping for pg {} (others)", pgid);

@@ -141,6 +141,10 @@ public:
 
   int get_con_mode() const override;
 
+  /// For a connection to a Crimson reactor port: the OSD's advertised
+  /// address, which the server identifies as instead of the reactor port.
+  std::optional<entity_addr_t> shard_base_addr;
+
   bool is_unregistered() const {
     return unregistered;
   }

@@ -836,6 +836,45 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket,
   w->get_perf_counter()->inc(l_msgr_active_connections);
 }
 
+ConnectionRef AsyncMessenger::connect_to_osd_shard(
+  const entity_addrvec_t& dest, uint32_t core, uint16_t port)
+{
+  if (port == 0) {
+    return nullptr;
+  }
+  // Crimson speaks msgr2 only; dial the msgr2 address at the reactor port
+  entity_addrvec_t av;
+  std::optional<entity_addr_t> base;
+  for (const auto& a : _filter_addrs(dest).v) {
+    if (!a.is_msgr2()) {
+      continue;
+    }
+    auto shard = a;
+    shard.set_port(port);
+    av.v.push_back(shard);
+    base = a;
+    break;
+  }
+  if (av.empty()) {
+    return nullptr;
+  }
+  std::lock_guard l{lock};
+  // anon: kept out of conns[] so it neither replaces nor is returned for the
+  // regular OSD session connection
+  Worker *w = stack->get_worker();
+  auto conn = ceph::make_ref<AsyncConnection>(cct, this, &dispatch_queue, w,
+                                              true, false);
+  conn->anon = true;
+  conn->shard_base_addr = base;
+  entity_addr_t target = av.front();   // connect() takes a non-const ref
+  conn->connect(av, CEPH_ENTITY_TYPE_OSD, target);
+  anon_conns.insert(conn);
+  w->get_perf_counter()->inc(l_msgr_active_connections);
+  ldout(cct, 10) << __func__ << " " << conn << " reactor " << core
+                 << " via " << av.front() << dendl;
+  return conn;
+}
+
 AsyncConnectionRef AsyncMessenger::create_connect(
   const entity_addrvec_t& addrs, int type, bool anon)
 {

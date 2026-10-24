@@ -179,6 +179,9 @@ extern const char *ceph_con_mode_name(int con_mode);
 #define CEPH_MSG_OSD_OPREPLY            43
 #define CEPH_MSG_WATCH_NOTIFY           44
 #define CEPH_MSG_OSD_BACKOFF            61
+/* crimson reactor placement (shard-aware client routing) */
+#define CEPH_MSG_OSD_SHARD_MAP_GET      137
+#define CEPH_MSG_OSD_SHARD_MAP          138
 
 /* FSMap subscribers (see all MDS clusters at once) */
 #define CEPH_MSG_FS_MAP                 45

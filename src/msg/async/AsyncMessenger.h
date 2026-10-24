@@ -191,6 +191,9 @@ public:
   void mark_down_all() override {
     shutdown_connections(true);
   }
+
+  ConnectionRef connect_to_osd_shard(const entity_addrvec_t& dest,
+                                     uint32_t core, uint16_t port) override;
   /** @} // Connection Management */
 
   /**

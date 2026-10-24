@@ -98,6 +98,8 @@
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDBackoff.h"
+#include "messages/MOSDShardMap.h"
+#include "messages/MOSDShardMapGet.h"
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
@@ -561,6 +563,12 @@ Message *decode_message(CephContext *cct,
     break;
   case CEPH_MSG_OSD_BACKOFF:
     m = make_message<MOSDBackoff>();
+    break;
+  case CEPH_MSG_OSD_SHARD_MAP_GET:
+    m = make_message<MOSDShardMapGet>();
+    break;
+  case CEPH_MSG_OSD_SHARD_MAP:
+    m = make_message<MOSDShardMap>();
     break;
 
   case CEPH_MSG_OSD_MAP:
