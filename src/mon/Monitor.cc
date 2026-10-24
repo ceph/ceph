@@ -6864,7 +6864,10 @@ int Monitor::handle_auth_request(
     // set up partial session
     s = new MonSession(con);
     s->auth_handler = auth_handler.release();
-    con->set_priv(RefCountedPtr{s, false});
+    // keep our own reference: a concurrent ms_handle_reset may drop the
+    // connection's while we still use s
+    priv = RefCountedPtr{s, false};
+    con->set_priv(priv);
 
     dout(20) << __func__ << ": starting session: " << *s << dendl;
 
