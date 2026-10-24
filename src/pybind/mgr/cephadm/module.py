@@ -3843,6 +3843,7 @@ Then run the following:
 
     @handle_orch_error
     def create_osds(self, drive_group: DriveGroupSpec, skip_validation: bool = False) -> str:
+        self.osd_service.validate_encryption(drive_group)
         hosts: List[HostSpec] = self.inventory.all_specs()
         filtered_hosts: List[str] = drive_group.placement.filter_matching_hostspecs(hosts)
         if not filtered_hosts:
@@ -4456,6 +4457,7 @@ Then run the following:
             return self._add_host(cast(HostSpec, spec))
 
         if spec.service_type == 'osd':
+            self.osd_service.validate_encryption(cast(DriveGroupSpec, spec))
             # _trigger preview refresh needs to be smart and
             # should only refresh if a change has been detected
             self._trigger_preview_refresh(specs=[cast(DriveGroupSpec, spec)])
