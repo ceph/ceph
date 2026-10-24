@@ -6,6 +6,7 @@ import {
   OnChanges,
   OnInit,
   SimpleChanges,
+  TemplateRef,
   ViewChild
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -27,10 +28,10 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-
+import { RgwAccountRolePolicyFormComponent } from '../rgw-account-role-policy-form/rgw-account-role-policy-form.component';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { DurationPipe } from '~/app/shared/pipes/duration.pipe';
-import { RgwRole } from '../models/rgw-role';
+import { RgwRole, RgwRolePoliciesCountCellContext } from '../models/rgw-role';
 import { RgwDaemon } from '../models/rgw-daemon';
 import { RgwZonegroup } from '../models/rgw-multisite';
 
@@ -50,6 +51,9 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
   @ViewChild('table')
   table: TableComponent;
 
+  @ViewChild('policiesCountTpl', { static: true })
+  policiesCountTpl: TemplateRef<RgwRolePoliciesCountCellContext>;
+
   columns: CdTableColumn[] = [];
   data$: Observable<RgwRole[]>;
   tableActions: CdTableAction[] = [];
@@ -57,6 +61,11 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
   permission: Permission;
   // Fail open until we know the selected daemon is on a secondary zone.
   isMasterZone = true;
+  expandedRow: RgwRole;
+
+  policyPanelOpen = false;
+  selectedPolicyRoleName = '';
+  selectedPolicyName = '';
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly secondaryZoneDisableMsg = $localize`Role changes must be made on the master zone`;
@@ -80,31 +89,27 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
     this.resolveMasterZone();
     this.columns = [
       {
-        name: $localize`Role name`,
+        name: $localize`Name`,
         prop: 'RoleName',
         flexGrow: 2
       },
       {
-        name: $localize`Path`,
-        prop: 'Path',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Arn`,
-        prop: 'Arn',
-        flexGrow: 3
-      },
-      {
-        name: $localize`Created at`,
-        prop: 'CreateDate',
-        flexGrow: 2,
-        pipe: this.cdDatePipe
+        name: $localize`Policies`,
+        prop: 'policies_count',
+        flexGrow: 1,
+        cellTemplate: this.policiesCountTpl
       },
       {
         name: $localize`Max session duration`,
         prop: 'MaxSessionDuration',
         flexGrow: 2,
         pipe: this.durationPipe
+      },
+      {
+        name: $localize`Created`,
+        prop: 'CreateDate',
+        flexGrow: 2,
+        pipe: this.cdDatePipe
       }
     ];
 
@@ -122,6 +127,13 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
         icon: Icons.edit,
         click: () => this.openRoleForm(true),
         name: this.actionLabels.EDIT,
+        disable: () => this.getRoleActionDisable(true)
+      },
+      {
+        permission: 'update',
+        icon: Icons.add,
+        click: () => this.openAttachPolicyModal(),
+        name: $localize`Attach policy`,
         disable: () => this.getRoleActionDisable(true)
       },
       {
@@ -145,7 +157,20 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
       this.data$ = of([]);
       return;
     }
-    this.data$ = this.rgwRoleService.list(this.accountId);
+    this.data$ = this.rgwRoleService.list(this.accountId).pipe(
+      map((roles: RgwRole[]) => {
+        return (roles || []).map((role) => {
+          let count = role.policies_count;
+          if (count === undefined && role.PermissionPolicies) {
+            count = role.PermissionPolicies.length;
+          }
+          return {
+            ...role,
+            policies_count: count ?? 0
+          };
+        });
+      })
+    );
   }
 
   updateSelection(selection: CdTableSelection): void {
@@ -195,6 +220,10 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
     return !masterZone || masterZone.name === daemon.zone_name;
   }
 
+  setExpandedRow(role: RgwRole): void {
+    this.expandedRow = role;
+  }
+
   openRoleForm(isEdit: boolean): void {
     if (!this.isMasterZone) {
       return;
@@ -203,11 +232,49 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
     const modalRef = this.modalService.show(RgwAccountRoleFormComponent, {
       accountId: this.accountId,
       accountName: this.accountName,
-      roleName: role ? role.RoleName : '',
+      roleName: role?.RoleName || '',
       isEdit: isEdit,
       role: role
     });
     modalRef?.close?.subscribe(() => this.loadRoles());
+  }
+
+  openAttachPolicyModal(): void {
+    if (!this.isMasterZone) {
+      return;
+    }
+    const role = this.selection.first();
+    if (!role) {
+      return;
+    }
+    const modalRef = this.modalService.show(RgwAccountRolePolicyFormComponent, {
+      accountId: this.accountId,
+      roleName: role.RoleName
+    });
+    modalRef?.close?.subscribe(() => this.loadRoles());
+  }
+
+  openPolicyPanel(roleName: string, policyName: string): void {
+    if (!roleName || !policyName) {
+      return;
+    }
+    // Brief close/reopen so the panel resets when switching policies (CephFS pattern).
+    this.policyPanelOpen = false;
+    setTimeout(() => {
+      this.selectedPolicyRoleName = roleName;
+      this.selectedPolicyName = policyName;
+      this.policyPanelOpen = true;
+    });
+  }
+
+  closePolicyPanel(): void {
+    this.policyPanelOpen = false;
+    this.selectedPolicyRoleName = '';
+    this.selectedPolicyName = '';
+  }
+
+  onPolicyPanelChanged(): void {
+    this.loadRoles();
   }
 
   deleteRole(): void {
@@ -219,7 +286,7 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
       itemDescription: $localize`Role`,
       itemNames: [roleName],
       submitActionObservable: () => {
-        return new Observable((observer: Subscriber<any>) => {
+        return new Observable((observer: Subscriber<unknown>) => {
           this.rgwRoleService.delete(roleName, this.accountId).subscribe({
             next: () => {
               this.notificationService.show(

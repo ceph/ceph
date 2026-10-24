@@ -2,7 +2,7 @@ import { Component, Inject, OnInit, Optional, ViewChild } from '@angular/core';
 import { FormArray, NgForm, Validators } from '@angular/forms';
 import { BaseModal } from 'carbon-components-angular';
 import { forkJoin, of } from 'rxjs';
-import { catchError, finalize, map, switchMap } from 'rxjs/operators';
+import { catchError, filter, finalize, map, switchMap, take } from 'rxjs/operators';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -22,7 +22,6 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   @ViewChild('formDir') formDir: NgForm;
 
   form: CdFormGroup;
-  mode: string;
   isSubmitLoading = false;
 
   readonly steps = [{ label: $localize`Role details`, invalid: false }];
@@ -49,7 +48,6 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   }
 
   ngOnInit(): void {
-    this.mode = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.title = this.isEdit ? $localize`Edit session duration` : $localize`Create role`;
     this.modalHeaderLabel = this.isEdit ? $localize`Role` : $localize`User account`;
     this.description = this.isEdit
@@ -58,9 +56,7 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     this.submitButtonLabel = this.isEdit
       ? this.actionLabels.SAVE_CHANGES
       : this.actionLabels.CREATE;
-    this.submitButtonLoadingLabel = this.isEdit
-      ? this.actionLabels.SAVING
-      : this.actionLabels.CREATING;
+    this.submitButtonLoadingLabel = this.isEdit ? $localize`Saving` : this.actionLabels.CREATING;
 
     this.createForm();
     if (this.isEdit && this.role) {
@@ -151,6 +147,18 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   }
 
   onSubmit() {
+    // Unique-name async validator leaves the form PENDING briefly; wait so Create
+    // does not no-op when invalid is false during PENDING, then fail silently after.
+    if (this.form.pending) {
+      this.form.statusChanges
+        .pipe(
+          filter((status) => status !== 'PENDING'),
+          take(1)
+        )
+        .subscribe(() => this.onSubmit());
+      return;
+    }
+
     if (this.form.invalid) {
       // Tearsheet Create/Save is a footer button, not a native form submit.
       // Mark form submitted + touched so cdValidate / form.showError show field errors

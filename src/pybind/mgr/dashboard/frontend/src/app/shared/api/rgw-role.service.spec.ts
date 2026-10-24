@@ -88,6 +88,37 @@ describe('RgwRoleService', () => {
     });
   });
 
+  it('should call listPolicies', () => {
+    service.listPolicies('test-role', 'test-account').subscribe();
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role/policy');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getPolicy and return a formatted policy document', () => {
+    const policyDoc = '{"Version":"2012-10-17","Statement":[]}';
+    const formatted = JSON.stringify(JSON.parse(policyDoc), null, 2);
+    service.getPolicy('test-role', 'test-policy', 'test-account').subscribe((doc) => {
+      expect(doc).toBe(formatted);
+    });
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/policy/test-policy'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({ PolicyName: 'test-policy', PolicyDocument: policyDoc });
+  });
+
+  it('should format radosgw-admin Permission policy responses', () => {
+    const policyDoc = '{"Version":"2012-10-17","Statement":[{"Effect":"Allow"}]}';
+    service.getPolicy('test-role', 'test-policy', 'test-account').subscribe((doc) => {
+      expect(doc).toContain('"Version": "2012-10-17"');
+      expect(doc).toContain('"Effect": "Allow"');
+    });
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/policy/test-policy'
+    );
+    req.flush({ 'Permission policy': policyDoc });
+  });
+
   it('should call deletePolicy', () => {
     service.deletePolicy('test-role', 'test-policy', 'test-account').subscribe();
     const req = httpTesting.expectOne(
