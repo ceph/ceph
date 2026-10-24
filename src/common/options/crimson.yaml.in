@@ -170,6 +170,46 @@ options:
              packet during the outgoing message sweep. Prevents overflow of the
              Seastar packet fragment counter (uint16_t).
 
+- name: crimson_msgr_ack_delay
+  type: millisecs
+  level: advanced
+  default: 5
+  desc: How long a lossless connection may defer acking received messages
+  long_desc: Every outgoing message carries the ack of the messages received
+             so far, so on request/reply traffic (e.g. a repop and its reply)
+             acks need no frame of their own. A standalone ack frame is written
+             only if no message was written for this long since an ack became
+             owed. 0 writes an ack frame as soon as a message is received,
+             unless a message is already pending to carry it. Read when a
+             connection is created.
+  see_also:
+  - crimson_msgr_ack_max_pending_msgs
+  - crimson_msgr_ack_max_pending_bytes
+
+- name: crimson_msgr_ack_max_pending_msgs
+  type: uint
+  level: advanced
+  default: 64
+  min: 1
+  desc: Write an ack frame once this many received messages are unacked
+  long_desc: Bounds the number of messages the peer of a lossless connection
+             keeps for resending while acks are deferred. Read when a
+             connection is created.
+  see_also:
+  - crimson_msgr_ack_delay
+
+- name: crimson_msgr_ack_max_pending_bytes
+  type: size
+  level: advanced
+  default: 4_M
+  min: 1
+  desc: Write an ack frame once this many received payload bytes are unacked
+  long_desc: Bounds the memory the peer of a lossless connection keeps for
+             resending while acks are deferred. Read when a connection is
+             created.
+  see_also:
+  - crimson_msgr_ack_delay
+
 - name: crimson_allow_pg_split
   type: bool
   level: advanced

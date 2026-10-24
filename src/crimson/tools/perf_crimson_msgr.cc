@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <deque>
 #include <iomanip>
 #include <map>
 #include <boost/program_options.hpp>
@@ -15,6 +16,7 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/core/timer.hh>
 
 #include "common/ceph_time.h"
 #include "messages/MOSDOp.h"
@@ -81,6 +83,15 @@ enum class perf_mode_t {
   server
 };
 
+// lossy: like a client and an OSD, nothing is acked or resent.
+// lossless: like two OSDs, the received messages are acked and the sent
+// ones kept for resending until acked. The client side reconnects.
+bool load_lossless(bpo::variables_map& options) {
+  auto policy = options["msgr-policy"].as<std::string>();
+  ceph_assert_always(policy == "lossy" || policy == "lossless");
+  return policy == "lossless";
+}
+
 struct client_config {
   entity_addr_t server_addr;
   unsigned block_size;
@@ -90,6 +101,7 @@ struct client_config {
   unsigned num_conns;
   unsigned depth;
   bool skip_core_0;
+  bool lossless;
 
   std::string str() const {
     std::ostringstream out;
@@ -101,6 +113,7 @@ struct client_config {
         << ", num_conns=" << num_conns
         << ", depth=" << depth
         << ", skip_core_0=" << skip_core_0
+        << ", lossless=" << lossless
         << ")";
     return out.str();
   }
@@ -121,6 +134,7 @@ struct client_config {
     ceph_assert_always(conf.num_conns > 0);
     conf.depth = options["depth"].as<unsigned>();
     conf.skip_core_0 = options["client-skip-core-0"].as<bool>();
+    conf.lossless = load_lossless(options);
     return conf;
   }
 };
@@ -130,6 +144,8 @@ struct server_config {
   unsigned block_size;
   bool is_fixed_cpu;
   unsigned core;
+  bool lossless;
+  std::chrono::microseconds reply_delay;
 
   std::string str() const {
     std::ostringstream out;
@@ -137,6 +153,8 @@ struct server_config {
         << "](bs=" << block_size
         << ", is_fixed_cpu=" << is_fixed_cpu
         << ", core=" << core
+        << ", lossless=" << lossless
+        << ", reply_delay_us=" << reply_delay.count()
         << ")";
     return out.str();
   }
@@ -151,6 +169,9 @@ struct server_config {
     conf.block_size = options["server-bs"].as<unsigned>();
     conf.is_fixed_cpu = options["server-fixed-cpu"].as<bool>();
     conf.core = options["server-core"].as<unsigned>();
+    conf.lossless = load_lossless(options);
+    conf.reply_delay = std::chrono::microseconds(
+        options["server-reply-delay-us"].as<unsigned>());
     return conf;
   }
 };
@@ -161,7 +182,8 @@ static seastar::future<> run(
     perf_mode_t mode,
     const client_config& client_conf,
     const server_config& server_conf,
-    bool crc_enabled)
+    bool crc_enabled,
+    std::map<std::string, std::string> ceph_options)
 {
   struct test_state {
     struct Server final
@@ -185,11 +207,25 @@ static seastar::future<> run(
       unsigned msg_len;
       bufferlist msg_data;
 
-      Server(seastar::shard_id msgr_sid, unsigned msg_len, bool needs_report)
+      // replies held back to model a replica, which replies only once the
+      // write is committed. Due in the order they were queued.
+      const std::chrono::microseconds reply_delay;
+      struct delayed_reply_t {
+        seastar::steady_clock_type::time_point due;
+        crimson::net::ConnectionRef conn;
+        MessageURef msg;
+      };
+      std::deque<delayed_reply_t> delayed_replies;
+      seastar::timer<seastar::steady_clock_type> reply_timer;
+
+      Server(seastar::shard_id msgr_sid, unsigned msg_len, bool needs_report,
+             std::chrono::microseconds reply_delay)
         : msgr_sid{msgr_sid},
-          msg_len{msg_len} {
+          msg_len{msg_len},
+          reply_delay{reply_delay} {
         lname = fmt::format("server@{}", msgr_sid);
         msg_data.append_zero(msg_len);
+        reply_timer.set_callback([this] { send_due_replies(); });
 
         if (seastar::this_shard_id() == msgr_sid &&
             needs_report) {
@@ -237,7 +273,11 @@ static seastar::future<> run(
         rep->write(0, server.msg_len, data);
         rep->set_tid(m->get_tid());
         ++server.msg_count;
-        std::ignore = c->send(std::move(rep));
+        if (server.reply_delay == 0us) {
+          std::ignore = c->send(std::move(rep));
+        } else {
+          server.delay_reply(std::move(c), std::move(rep));
+        }
 
         if (server.msg_count % 16 == 0) {
           server.last_msg = std::move(m);
@@ -245,14 +285,17 @@ static seastar::future<> run(
         return {seastar::now()};
       }
 
-      seastar::future<> init(const entity_addr_t& addr, bool is_fixed_cpu) {
+      seastar::future<> init(
+          const entity_addr_t& addr, bool is_fixed_cpu, bool lossless) {
         return container().invoke_on(
-            msgr_sid, [addr, is_fixed_cpu](auto &server) {
+            msgr_sid, [addr, is_fixed_cpu, lossless](auto &server) {
           // server msgr is always with nonce 0
           server.msgr = crimson::net::Messenger::create(
               entity_name_t::OSD(server.msgr_sid),
               server.lname, 0, is_fixed_cpu);
-          server.msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
+          server.msgr->set_default_policy(lossless ?
+              crimson::net::SocketPolicy::stateful_server(0) :
+              crimson::net::SocketPolicy::stateless_server(0));
           server.msgr->set_auth_client(&server.dummy_auth);
           server.msgr->set_auth_server(&server.dummy_auth);
           server.is_fixed_cpu = is_fixed_cpu;
@@ -267,20 +310,45 @@ static seastar::future<> run(
         });
       }
 
+      void delay_reply(crimson::net::ConnectionRef conn, MessageURef msg) {
+        auto due = seastar::steady_clock_type::now() + reply_delay;
+        delayed_replies.push_back({due, std::move(conn), std::move(msg)});
+        if (!reply_timer.armed()) {
+          reply_timer.arm(due);
+        }
+      }
+
+      void send_due_replies() {
+        auto now = seastar::steady_clock_type::now();
+        while (!delayed_replies.empty() &&
+               delayed_replies.front().due <= now) {
+          auto &reply = delayed_replies.front();
+          std::ignore = reply.conn->send(std::move(reply.msg));
+          delayed_replies.pop_front();
+        }
+        if (!delayed_replies.empty()) {
+          reply_timer.arm(delayed_replies.front().due);
+        }
+      }
+
       seastar::future<> shutdown() {
         logger().info("{} shutdown...", lname);
-        return container().invoke_on(
-            msgr_sid, [](auto &server) {
-          server.is_stopped = true;
-          ceph_assert(server.msgr);
-          server.msgr->stop();
-          return server.msgr->shutdown(
-          ).then([&server] {
-            if (server.fut_report.has_value()) {
-              return std::move(server.fut_report.value());
-            } else {
-              return seastar::now();
-            }
+        return container().invoke_on_all([](auto &server) {
+          server.reply_timer.cancel();
+          server.delayed_replies.clear();
+        }).then([this] {
+          return container().invoke_on(msgr_sid, [](auto &server) {
+            server.is_stopped = true;
+            ceph_assert(server.msgr);
+            server.msgr->stop();
+            return server.msgr->shutdown(
+            ).then([&server] {
+              if (server.fut_report.has_value()) {
+                return std::move(server.fut_report.value());
+              } else {
+                return seastar::now();
+              }
+            });
           });
         });
       }
@@ -577,6 +645,7 @@ static seastar::future<> run(
       bufferlist msg_data;
       const unsigned nr_depth;
       const unsigned nonce_base;
+      const bool lossless;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
       std::vector<ConnState> conn_states;
@@ -586,6 +655,7 @@ static seastar::future<> run(
              unsigned msg_len,
              unsigned _depth,
              unsigned nonce_base,
+             bool lossless,
              std::optional<unsigned> server_sid)
         : sid{seastar::this_shard_id()},
           id{sid + num_clients - seastar::this_smp_shard_count()},
@@ -594,7 +664,8 @@ static seastar::future<> run(
           num_conns{num_conns},
           msg_len{msg_len},
           nr_depth{_depth},
-          nonce_base{nonce_base} {
+          nonce_base{nonce_base},
+          lossless{lossless} {
         if (is_active()) {
           for (unsigned i = 0; i < num_conns; ++i) {
             conn_states.emplace_back(nr_depth);
@@ -665,7 +736,9 @@ static seastar::future<> run(
               conn_state.msgr = crimson::net::Messenger::create(
                   entity_name_t::OSD(client.id * client.num_conns + i),
                   name, client.nonce_base + client.id * client.num_conns + i, true);
-              conn_state.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
+              conn_state.msgr->set_default_policy(client.lossless ?
+                  crimson::net::SocketPolicy::lossless_client(0) :
+                  crimson::net::SocketPolicy::lossy_client(0));
               conn_state.msgr->set_auth_client(&client.dummy_auth);
               conn_state.msgr->set_auth_server(&client.dummy_auth);
               return conn_state.msgr->start({&client});
@@ -1082,7 +1155,8 @@ static seastar::future<> run(
         return create_sharded<test_state::Server>(
           server_conf.core,
           server_conf.block_size,
-          server_needs_report);
+          server_needs_report,
+          server_conf.reply_delay);
       }
     }),
     seastar::futurize_invoke([mode, client_conf, server_sid] {
@@ -1097,6 +1171,7 @@ static seastar::future<> run(
           client_conf.block_size,
           client_conf.depth,
           nonce_base,
+          client_conf.lossless,
           server_sid);
       }
     }),
@@ -1107,6 +1182,11 @@ static seastar::future<> run(
     }).then([crc_enabled] {
       return crimson::common::local_conf().set_val(
           "ms_crc_data", crc_enabled ? "true" : "false");
+    }).then([ceph_options=std::move(ceph_options)] {
+      return seastar::do_for_each(ceph_options, [](auto &kv) {
+        logger().info("setting {}={}", kv.first, kv.second);
+        return crimson::common::local_conf().set_val(kv.first, kv.second);
+      });
     })
   ).then([=](auto&& ret) {
     auto server = std::move(std::get<0>(ret).get());
@@ -1125,7 +1205,8 @@ static seastar::future<> run(
       return seastar::when_all_succeed(
         // it is not reasonable to allow server/client to shared cores for
         // performance benchmarking purposes.
-        server->init(server_conf.addr, server_conf.is_fixed_cpu),
+        server->init(server_conf.addr, server_conf.is_fixed_cpu,
+                     server_conf.lossless),
         client->init()
       ).then_unpack([client, addr = client_conf.server_addr] {
         return client->connect_wait_verify(addr);
@@ -1162,7 +1243,8 @@ static seastar::future<> run(
       return seastar::async([server, server_conf] {
         // FIXME: SIGINT is not received by stop_signal
         seastar_apps_lib::stop_signal should_stop;
-        server->init(server_conf.addr, server_conf.is_fixed_cpu).get();
+        server->init(server_conf.addr, server_conf.is_fixed_cpu,
+                     server_conf.lossless).get();
         should_stop.wait().get();
         server->shutdown().get();
       });
@@ -1217,17 +1299,35 @@ int main(int argc, char** argv)
      "server messenger running core")
     ("server-bs", bpo::value<unsigned>()->default_value(0),
      "server block size")
+    ("server-reply-delay-us", bpo::value<unsigned>()->default_value(0),
+     "delay each reply by this long, to model a replica that replies "
+     "only once the write is committed")
     ("crc-enabled", bpo::value<bool>()->default_value(false),
-     "enable CRC checks");
+     "enable CRC checks")
+    ("msgr-policy", bpo::value<std::string>()->default_value("lossy"),
+     "lossy: client-OSD like, no acks; "
+     "lossless: OSD-OSD like, messages are acked and kept until acked")
+    ("ceph-option", bpo::value<std::vector<std::string>>()->composing(),
+     "set a ceph config option, as name=value (e.g. "
+     "crimson_msgr_ack_delay=0); may be repeated");
   return app.run(argc, argv, [&app] {
       auto&& config = app.configuration();
       auto mode = config["mode"].as<unsigned>();
       ceph_assert(mode <= 2);
       auto _mode = static_cast<perf_mode_t>(mode);
       bool crc_enabled = config["crc-enabled"].as<bool>();
+      std::map<std::string, std::string> ceph_options;
+      if (config.count("ceph-option")) {
+        for (auto &opt : config["ceph-option"].as<std::vector<std::string>>()) {
+          auto pos = opt.find('=');
+          ceph_assert_always(pos != std::string::npos);
+          ceph_options[opt.substr(0, pos)] = opt.substr(pos + 1);
+        }
+      }
       auto server_conf = server_config::load(config);
       auto client_conf = client_config::load(config);
-      return run(_mode, client_conf, server_conf, crc_enabled
+      return run(_mode, client_conf, server_conf, crc_enabled,
+                 std::move(ceph_options)
       ).then([] {
           logger().info("\nsuccessful!\n");
         }).handle_exception([] (auto eptr) {

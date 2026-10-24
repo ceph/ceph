@@ -1369,6 +1369,12 @@ class FailoverSuite : public Dispatcher {
     ceph_assert(tracked_conn);
     return tracked_conn->is_protocol_standby();
   }
+
+  // how many times the test side hit bp, e.g. wrote an ack frame
+  unsigned get_breakpoint_count(const Breakpoint& bp) {
+    assert(seastar::this_shard_id() == primary_sid);
+    return interceptor.breakpoints_counter[bp].counter;
+  }
 };
 
 class FailoverTest : public Dispatcher {
@@ -2172,56 +2178,139 @@ test_v2_lossless_connected_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_lossless_connected_fault2(FailoverTest& test) {
-  return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::ACK, bp_type_t::READ},
-      {Tag::ACK, bp_type_t::WRITE},
-      {Tag::KEEPALIVE2, bp_type_t::READ},
-      {Tag::KEEPALIVE2, bp_type_t::WRITE},
-      {Tag::KEEPALIVE2_ACK, bp_type_t::READ},
-      {Tag::KEEPALIVE2_ACK, bp_type_t::WRITE},
-  }, [&test] (auto& failure_cases) {
-    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
-      TestInterceptor interceptor;
-      interceptor.make_fault(bp);
-      return test.run_suite(
-          fmt::format("test_v2_lossless_connected_fault2 -- {}", bp),
-          interceptor,
-          policy_t::lossless_client,
-          policy_t::stateful_server,
-          [&test] (FailoverSuite& suite) {
-        return seastar::futurize_invoke([&suite] {
-          return suite.connect_peer();
-        }).then([&suite] {
-          return suite.wait_established();
-        }).then([&suite] {
-          return suite.send_peer();
-        }).then([&suite] {
-          return suite.keepalive_peer();
-        }).then([&suite] {
-          return suite.wait_established();
-        }).then([&test] {
-          return test.peer_send_me();
-        }).then([&test] {
-          return test.peer_keepalive_me();
-        }).then([&suite] {
-          return suite.wait_established();
-        }).then([&suite] {
-          return suite.send_peer();
-        }).then([&suite] {
-          return suite.wait_established();
-        }).then([&test] {
-          return test.peer_send_me();
-        }).then([&suite] {
-          return suite.wait_established();
-        }).then([&suite] {
-          return suite.wait_results(1);
-        }).then([] (ConnResults& results) {
-          results[0].assert_state_at(conn_state_t::established);
-          results[0].assert_connect(2, 1, 1, 2);
-          results[0].assert_accept(0, 0, 0, 0);
-          results[0].assert_reset(0, 0);
+  // the faults are injected on ack frames: write one as soon as a message
+  // is read, rather than letting a later message carry the ack
+  return local_conf().set_val("crimson_msgr_ack_delay", "0"
+  ).then([&test] {
+    return seastar::do_with(std::vector<Breakpoint>{
+        {Tag::ACK, bp_type_t::READ},
+        {Tag::ACK, bp_type_t::WRITE},
+        {Tag::KEEPALIVE2, bp_type_t::READ},
+        {Tag::KEEPALIVE2, bp_type_t::WRITE},
+        {Tag::KEEPALIVE2_ACK, bp_type_t::READ},
+        {Tag::KEEPALIVE2_ACK, bp_type_t::WRITE},
+    }, [&test] (auto& failure_cases) {
+      return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+        TestInterceptor interceptor;
+        interceptor.make_fault(bp);
+        return test.run_suite(
+            fmt::format("test_v2_lossless_connected_fault2 -- {}", bp),
+            interceptor,
+            policy_t::lossless_client,
+            policy_t::stateful_server,
+            [&test] (FailoverSuite& suite) {
+          return seastar::futurize_invoke([&suite] {
+            return suite.connect_peer();
+          }).then([&suite] {
+            return suite.wait_established();
+          }).then([&suite] {
+            return suite.send_peer();
+          }).then([&suite] {
+            return suite.keepalive_peer();
+          }).then([&suite] {
+            return suite.wait_established();
+          }).then([&test] {
+            return test.peer_send_me();
+          }).then([&test] {
+            return test.peer_keepalive_me();
+          }).then([&suite] {
+            return suite.wait_established();
+          }).then([&suite] {
+            return suite.send_peer();
+          }).then([&suite] {
+            return suite.wait_established();
+          }).then([&test] {
+            return test.peer_send_me();
+          }).then([&suite] {
+            return suite.wait_established();
+          }).then([&suite] {
+            return suite.wait_results(1);
+          }).then([] (ConnResults& results) {
+            results[0].assert_state_at(conn_state_t::established);
+            results[0].assert_connect(2, 1, 1, 2);
+            results[0].assert_accept(0, 0, 0, 0);
+            results[0].assert_reset(0, 0);
+          });
         });
       });
+    });
+  }).finally([] {
+    return local_conf().rm_val("crimson_msgr_ack_delay");
+  });
+}
+
+void assert_ack_frames_written(FailoverSuite& suite, unsigned expected) {
+  auto written = suite.get_breakpoint_count({Tag::ACK, bp_type_t::WRITE});
+  if (written != expected) {
+    throw std::runtime_error(fmt::format(
+        "wrote {} ack frames, not the expected {}", written, expected));
+  }
+}
+
+seastar::future<>
+test_v2_lossless_deferred_ack(FailoverTest& test) {
+  // no ack frame by the timer: one only once 3 messages are unacked
+  return local_conf().set_val("crimson_msgr_ack_delay", "600000"
+  ).then([] {
+    return local_conf().set_val("crimson_msgr_ack_max_pending_msgs", "3");
+  }).then([&test] {
+    TestInterceptor interceptor;
+    return test.run_suite(
+        "test_v2_lossless_deferred_ack",
+        interceptor,
+        policy_t::lossless_client,
+        policy_t::stateful_server,
+        [&test] (FailoverSuite& suite) {
+      return seastar::futurize_invoke([&suite] {
+        return suite.connect_peer();
+      }).then([&suite] {
+        return suite.wait_established();
+      }).then([&test] {
+        return test.peer_send_me();
+      }).then([&test] {
+        return test.peer_send_me();
+      }).then([&suite] {
+        return suite.wait_established();
+      }).then([] {
+        // an ack frame would reach the interceptor by then
+        return seastar::sleep(100ms);
+      }).then([&suite] {
+        // 2 messages are unacked, below the limit
+        assert_ack_frames_written(suite, 0);
+        // carries the ack of both
+        return suite.send_peer();
+      }).then([&suite] {
+        return suite.wait_established();
+      }).then([&test] {
+        return test.peer_send_me();
+      }).then([&test] {
+        return test.peer_send_me();
+      }).then([&suite] {
+        return suite.wait_established();
+      }).then([] {
+        return seastar::sleep(100ms);
+      }).then([&suite, &test] {
+        // 2 unacked again: the ack went with the message, not in a frame
+        assert_ack_frames_written(suite, 0);
+        return test.peer_send_me();
+      }).then([&suite] {
+        return suite.wait_established();
+      }).then([] {
+        return seastar::sleep(100ms);
+      }).then([&suite] {
+        // the 3rd unacked message reached the limit
+        assert_ack_frames_written(suite, 1);
+        return suite.wait_results(1);
+      }).then([] (ConnResults& results) {
+        results[0].assert_state_at(conn_state_t::established);
+        results[0].assert_connect(1, 1, 0, 1);
+        results[0].assert_accept(0, 0, 0, 0);
+        results[0].assert_reset(0, 0);
+      });
+    });
+  }).finally([] {
+    return local_conf().rm_val("crimson_msgr_ack_delay").then([] {
+      return local_conf().rm_val("crimson_msgr_ack_max_pending_msgs");
     });
   });
 }
@@ -3720,6 +3809,8 @@ test_v2_protocol(entity_addr_t test_addr,
       return test_v2_lossless_connected_fault(*test);
     }).then([test] {
       return test_v2_lossless_connected_fault2(*test);
+    }).then([test] {
+      return test_v2_lossless_deferred_ack(*test);
     }).then([test] {
       return test_v2_lossless_reconnect_fault(*test);
     }).then([test] {
