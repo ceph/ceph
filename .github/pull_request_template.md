@@ -45,6 +45,8 @@
   - [ ] Includes [integration test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/testing_integration_tests/)
   - [ ] Includes bug reproducer
   - [ ] No tests
+- QA log ignorelist (only if the PR adds `log-ignorelist` entries to qa yaml)
+  - [ ] The team owning the affected suites agreed these warnings are expected
 
 <details>
 <summary>Show available Jenkins commands</summary>

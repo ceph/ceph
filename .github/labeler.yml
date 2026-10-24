@@ -184,6 +184,7 @@ cephfs:
   - doc/man/8/ceph-syn.rst
   - doc/man/8/mount.ceph.rst
   - doc/man/8/mount.fuse.ceph.rst
+  - qa/cephfs/**
   - qa/suites/fs/**
   - qa/suites/multimds/**
   - qa/tasks/ceph_fuse.py
