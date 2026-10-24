@@ -258,8 +258,7 @@ public:
   }
 
   bool is_module_active(const std::string &name) {
-    ceph_assert(active_modules);
-    return active_modules->module_exists(name);
+    return active_modules && active_modules->module_exists(name);
   }
 
   auto& get_active_module_finisher(const std::string &name) {
@@ -277,6 +276,10 @@ public:
   // Return set of active modules where class instances are not yet created.
   // Protected by const; we only want to view the contents- not modify anything.
   const std::set<std::string, std::less<>>& get_pending_modules() const {
+    static const std::set<std::string, std::less<>> empty;
+    if (!active_modules) {
+      return empty;
+    }
     return active_modules->get_pending_modules();
   }
 
