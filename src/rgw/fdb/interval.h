@@ -701,12 +701,11 @@ constexpr void emit_bounds(SinkT&& sink, const LowerT& lower, const UpperT& uppe
   return;
  }
 
- // The "else" branch here is a case where it's truly needed and as far as I can
- // grok, significantly simpler than alternatives:
+ // Keep the else to discard the unsupported call during template instantiation;
+ // an early return cannot do that, and separate guards repeat the condition:
  if constexpr (requires(SinkT&& s) { std::forward<SinkT>(s).emit_interval(lower, upper); }) {
   std::forward<SinkT>(sink).emit_interval(lower, upper);
- } 
- else {
+ } else {
   std::invoke(std::forward<SinkT>(sink), query<domain_type>::between(lower, upper));
  }
 }
