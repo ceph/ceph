@@ -132,6 +132,20 @@ options:
   flags:
   - startup
 
+- name: crimson_smp_metrics
+  type: bool
+  level: dev
+  default: false
+  desc: Export Seastar's per reactor pair cross-core message counters.
+  long_desc: Seastar registers smp_total_sent_messages,
+             smp_total_received_messages and smp_total_completed_messages for
+             every (source, destination) reactor pair, but keeps them disabled.
+             When set, the OSD enables them at startup. This shows every
+             cross-core hop, including ones no OSD counter tracks. The number
+             of series grows with the square of the reactor count.
+  flags:
+  - startup
+
 # Crimson OSD options:
 
 - name: crimson_osd_obc_lru_size

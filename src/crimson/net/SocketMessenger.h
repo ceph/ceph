@@ -24,6 +24,7 @@
 #include <seastar/core/shared_future.hh>
 
 #include "crimson/net/chained_dispatchers.h"
+#include "crimson/net/msgr_stats.h"
 #include "Messenger.h"
 #include "Socket.h"
 #include "SocketConnection.h"
@@ -38,12 +39,22 @@ public:
   SocketMessenger(const entity_name_t& myname,
                   const std::string& logic_name,
                   uint32_t nonce,
-                  bool dispatch_only_on_this_shard);
+                  bool dispatch_only_on_this_shard,
+                  bool export_metrics);
 
   ~SocketMessenger() override;
 
   const entity_name_t &get_myname() const override {
     return my_name;
+  }
+
+  const std::string &get_logic_name() const {
+    return logic_name;
+  }
+
+  // this reactor's stats, valid between start() and shutdown()
+  msgr_stats_t &get_stats() {
+    return stats.local();
   }
 
   const entity_addrvec_t &get_myaddrs() const override {
@@ -179,6 +190,8 @@ private:
   const std::string logic_name;
   const uint32_t nonce;
   const bool dispatch_only_on_sid;
+  const bool export_metrics;
+  seastar::sharded<msgr_stats_t> stats;
 
   entity_name_t my_name;
   entity_addrvec_t my_addrs;

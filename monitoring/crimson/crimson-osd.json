@@ -1621,7 +1621,7 @@
     },
     {
       "type": "row",
-      "title": "SeaStore",
+      "title": "Summary: cluster funnel and client locality",
       "id": 26,
       "collapsed": false,
       "gridPos": {
@@ -1629,6 +1629,2057 @@
         "w": 24,
         "x": 0,
         "y": 100
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Cluster messenger (OSD <> OSD): share of messages sent per shard",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Each shard's share of the messages the OSD's cluster messenger sent (repops on a primary, repop replies on a replica); a row adds up to 100%. Today shard 0 sends nearly all of them. After a fix, each shard's share should follow the PGs it owns.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace((100 * sum by (ceph_daemon, shard) (increase(osd_msgr_msgs_sent{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__range])) / on (ceph_daemon) group_left sum by (ceph_daemon) (sum by (ceph_daemon, shard) (increase(osd_msgr_msgs_sent{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__range])))) or 0 * sum by (ceph_daemon, shard) (osd_reactor_utilization{ceph_daemon=~\"$osd\"}), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 27,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 101
+      }
+    },
+    {
+      "type": "table",
+      "title": "Cluster messenger (OSD <> OSD): share of messages received per shard",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Each shard's share of the messages the OSD's cluster messenger received (repops on a replica, repop replies on a primary); a row adds up to 100%. Shows which shards read the peers' connections. After a fix, each shard's share should follow the PGs it owns.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace((100 * sum by (ceph_daemon, shard) (increase(osd_msgr_msgs_received{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__range])) / on (ceph_daemon) group_left sum by (ceph_daemon) (sum by (ceph_daemon, shard) (increase(osd_msgr_msgs_received{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__range])))) or 0 * sum by (ceph_daemon, shard) (osd_reactor_utilization{ceph_daemon=~\"$osd\"}), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 28,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 101
+      }
+    },
+    {
+      "type": "table",
+      "title": "Client messenger (Client <> OSD): client ops that arrived on their PG's shard",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "op_local / (op_local + op_remote) of client requests, by the shard they arrived on. Today about 100/N% on every shard: an op lands on its PG's shard only by chance. Routing ops to their PG's shard should bring it to 100%.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(100 * sum by (ceph_daemon, shard) (increase(osd_osd_pg_shard_op_local{ceph_daemon=~\"$osd\", op_type=\"client_request\"}[$__range])) / (sum by (ceph_daemon, shard) (increase(osd_osd_pg_shard_op_local{ceph_daemon=~\"$osd\", op_type=\"client_request\"}[$__range])) + sum by (ceph_daemon, shard) (increase(osd_osd_pg_shard_op_remote{ceph_daemon=~\"$osd\", op_type=\"client_request\"}[$__range]))) and (sum by (ceph_daemon, shard) (increase(osd_osd_pg_shard_op_local{ceph_daemon=~\"$osd\", op_type=\"client_request\"}[$__range])) + sum by (ceph_daemon, shard) (increase(osd_osd_pg_shard_op_remote{ceph_daemon=~\"$osd\", op_type=\"client_request\"}[$__range]))) > 0, \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "continuous-RdYlGr"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 29,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 101
+      }
+    },
+    {
+      "type": "row",
+      "title": "PG placement and cross-core hops",
+      "id": 30,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 109
+      },
+      "panels": []
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "client_request ops executed per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Counted on the PG's shard, after any cross-core hop: the real work per shard.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_osd_pg_shard_op_executed{ceph_daemon=~\"$osd\", op_type=\"client_request\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 31,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 110
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "replicated_request ops executed per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Counted on the PG's shard, after any cross-core hop: the real work per shard.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_osd_pg_shard_op_executed{ceph_daemon=~\"$osd\", op_type=\"replicated_request\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 32,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 119
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Share of ops that needed a cross-core hop",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "op_remote / (op_local + op_remote): 1 means every op arrived on a shard other than its PG's.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, op_type) (rate(osd_osd_pg_shard_op_remote{ceph_daemon=~\"$osd\", op_type=~\"client_request|replicated_request|replicated_request_reply\"}[$__rate_interval])) / (sum by (ceph_daemon, op_type) (rate(osd_osd_pg_shard_op_remote{ceph_daemon=~\"$osd\", op_type=~\"client_request|replicated_request|replicated_request_reply\"}[$__rate_interval])) + sum by (ceph_daemon, op_type) (rate(osd_osd_pg_shard_op_local{ceph_daemon=~\"$osd\", op_type=~\"client_request|replicated_request|replicated_request_reply\"}[$__rate_interval])))",
+          "legendFormat": "{{ceph_daemon}} {{op_type}}",
+          "refId": "A"
+        }
+      ],
+      "id": 33,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 128
+      }
+    },
+    {
+      "type": "table",
+      "title": "Primary PGs per shard (current)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: current number of PGs. Placement balances PG counts, not roles, so a shard with more primaries does more client work.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (osd_osd_shard_pgs{ceph_daemon=~\"$osd\", role=\"primary\"}), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 34,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 136
+      }
+    },
+    {
+      "type": "table",
+      "title": "Replica PGs per shard (current)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Rows: OSDs. Columns: reactor shards. Cell: current number of PGs. Placement balances PG counts, not roles, so a shard with more primaries does more client work.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (ceph_daemon, shard) (osd_osd_shard_pgs{ceph_daemon=~\"$osd\", role=\"replica\"}), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "ceph_daemon",
+            "columnField": "shard",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ceph_daemon\\shard"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OSD \\ shard"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "OSD \\ shard",
+            "desc": false
+          }
+        ]
+      },
+      "id": 35,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 136
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "Client ops in flight per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Client ops being processed by PGs on the shard. Divide by primaries for the average concurrency per PG.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (osd_osd_shard_client_ops_in_flight{ceph_daemon=~\"$osd\"}), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 36,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 144
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "Reactor kernel CPU share per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Kernel time / total CPU time of the reactor thread. High on a busy shard: it is in the kernel, e.g. doing network work.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_osd_shard_cpu_sys_ms{ceph_daemon=~\"$osd\"}[$__rate_interval])) / (sum by (shard) (rate(osd_osd_shard_cpu_sys_ms{ceph_daemon=~\"$osd\"}[$__rate_interval])) + sum by (shard) (rate(osd_osd_shard_cpu_user_ms{ceph_daemon=~\"$osd\"}[$__rate_interval]))), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 37,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 153
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "seastar::submit_to between reactors, per shard (sent / received): $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Needs crimson_smp_metrics. Seastar messages each reactor sent to and received from the other reactors: every cross-core hop, including ones no OSD counter tracks.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(label_replace(sum by (from) (label_replace(rate(osd_smp_total_sent_messages{ceph_daemon=~\"$osd\"}[$__rate_interval]), \"from\", \"$1\", \"shard\", \"^([0-9]+)-[0-9]+$\")), \"shard\", \"$1\", \"from\", \"(.*)\"), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}} sent",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(label_replace(sum by (to) (label_replace(rate(osd_smp_total_sent_messages{ceph_daemon=~\"$osd\"}[$__rate_interval]), \"to\", \"$1\", \"shard\", \"^[0-9]+-([0-9]+)$\")), \"shard\", \"$1\", \"to\", \"(.*)\"), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}} received",
+          "refId": "B"
+        }
+      ],
+      "id": 38,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 162
+      }
+    },
+    {
+      "type": "row",
+      "title": "Cluster messenger (OSD <> OSD)",
+      "id": 39,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 171
+      },
+      "panels": []
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "Messages sent and received per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Messages encoded and written, or read and decoded, on each shard: which reactors do this messenger's socket work.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_msgr_msgs_sent{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}} sent",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_msgr_msgs_received{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}} received",
+          "refId": "B"
+        }
+      ],
+      "id": 40,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 172
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "Sends handed to another shard's connection: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "send() called on a shard other than the one the connection's IO runs on, counted on the caller. Stays near 0 on main: replication sends are forwarded to shard 0 before reaching the messenger, and the connection's IO also runs on shard 0. That funnel shows in the cross-core messages graph instead.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_msgr_send_cross_core{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 41,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 181
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "p99 send queue wait per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "From send() until the message is encoded, including any cross-core hop. A shard that funnels traffic shows up here as queueing.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(histogram_quantile(0.99, sum by (le, shard) (rate(osd_msgr_send_queue_wait_ms_bucket{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval]))), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 42,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 190
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Bytes / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_bytes_sent{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} sent",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_bytes_received{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} received",
+          "refId": "B"
+        }
+      ],
+      "id": 43,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 199
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages per flush (batching)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "msgs_sent / out_flushes. Lower means smaller socket writes and more syscalls per message.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_msgs_sent{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_msgr_out_flushes{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 44,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 199
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg send queue wait",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "From send() until the message is encoded, including any cross-core hop. Sends are not throttled, so queueing shows here.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_send_queue_wait_ms_sum{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_msgr_send_queue_wait_ms_count{ceph_daemon=~\"$osd\", msgr=\"cluster\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 45,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 207
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Open connections",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_msgr_connections_open{ceph_daemon=~\"$osd\", msgr=\"cluster\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 46,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 207
+      }
+    },
+    {
+      "type": "row",
+      "title": "Client messenger (Client <> OSD)",
+      "id": 47,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 215
+      },
+      "panels": []
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "Messages sent and received per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Messages encoded and written, or read and decoded, on each shard: which reactors do this messenger's socket work.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_msgr_msgs_sent{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}} sent",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_msgr_msgs_received{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}} received",
+          "refId": "B"
+        }
+      ],
+      "id": 48,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 216
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "Sends handed to another shard's connection: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "send() called on a shard other than the one the connection's IO runs on, counted on the caller. Op replies leave the PG's shard for the shard holding the client's connection, so this is the client-side cross-core hop.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(sum by (shard) (rate(osd_msgr_send_cross_core{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval])), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 49,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 225
+      }
+    },
+    {
+      "repeat": "osd",
+      "repeatDirection": "h",
+      "maxPerRow": 3,
+      "type": "timeseries",
+      "title": "p99 send queue wait per shard: $osd",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "From send() until the message is encoded, including any cross-core hop. A shard that funnels traffic shows up here as queueing.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "label_replace(histogram_quantile(0.99, sum by (le, shard) (rate(osd_msgr_send_queue_wait_ms_bucket{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval]))), \"shard\", \"0$1\", \"shard\", \"^([0-9])$\")",
+          "legendFormat": "shard {{shard}}",
+          "refId": "A"
+        }
+      ],
+      "id": 50,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 234
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Bytes / s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_bytes_sent{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} sent",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_bytes_received{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} received",
+          "refId": "B"
+        }
+      ],
+      "id": 51,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 243
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages per flush (batching)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "msgs_sent / out_flushes. Lower means smaller socket writes and more syscalls per message.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_msgs_sent{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_msgr_out_flushes{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 52,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 243
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg send queue wait",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "From send() until the message is encoded, including any cross-core hop. Sends are not throttled, so queueing shows here.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (rate(osd_msgr_send_queue_wait_ms_sum{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval])) / sum by (ceph_daemon) (rate(osd_msgr_send_queue_wait_ms_count{ceph_daemon=~\"$osd\", msgr=\"client\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 53,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 251
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Open connections",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon) (osd_msgr_connections_open{ceph_daemon=~\"$osd\", msgr=\"client\"})",
+          "legendFormat": "{{ceph_daemon}}",
+          "refId": "A"
+        }
+      ],
+      "id": 54,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 251
+      }
+    },
+    {
+      "type": "row",
+      "title": "Write latency breakdown (client and replication)",
+      "id": 55,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 259
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Client write (primary): avg latency by stage",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "tail=\"all\". total is arrival to reply; the stages add up to it.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, stage) (rate(osd_osd_op_client_write_stage_lat_ms_sum{ceph_daemon=~\"$osd\", tail=\"all\"}[$__rate_interval])) / sum by (ceph_daemon, stage) (rate(osd_osd_op_client_write_stage_lat_ms_count{ceph_daemon=~\"$osd\", tail=\"all\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{stage}}",
+          "refId": "A"
+        }
+      ],
+      "id": 56,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 260
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Client write (primary): avg latency by stage, slow ops (total >= 10 ms)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Which stages the tail spends its time in.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, stage) (rate(osd_osd_op_client_write_stage_lat_ms_sum{ceph_daemon=~\"$osd\", tail=\"slow\"}[$__rate_interval])) / sum by (ceph_daemon, stage) (rate(osd_osd_op_client_write_stage_lat_ms_count{ceph_daemon=~\"$osd\", tail=\"slow\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{stage}}",
+          "refId": "A"
+        }
+      ],
+      "id": 57,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 260
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Repop (replica): avg latency by stage",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "tail=\"all\". total is arrival to reply; the stages add up to it.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, stage) (rate(osd_osd_op_rep_op_stage_lat_ms_sum{ceph_daemon=~\"$osd\", tail=\"all\"}[$__rate_interval])) / sum by (ceph_daemon, stage) (rate(osd_osd_op_rep_op_stage_lat_ms_count{ceph_daemon=~\"$osd\", tail=\"all\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{stage}}",
+          "refId": "A"
+        }
+      ],
+      "id": 58,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 268
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Repop (replica): avg latency by stage, slow ops (total >= 10 ms)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "Which stages the tail spends its time in.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, stage) (rate(osd_osd_op_rep_op_stage_lat_ms_sum{ceph_daemon=~\"$osd\", tail=\"slow\"}[$__rate_interval])) / sum by (ceph_daemon, stage) (rate(osd_osd_op_rep_op_stage_lat_ms_count{ceph_daemon=~\"$osd\", tail=\"slow\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{stage}}",
+          "refId": "A"
+        }
+      ],
+      "id": 59,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 268
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Replication latency on the primary (avg)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "repop_rtt: repop sent until each replica's reply. local_commit: repops sent until the primary's own commit. wait_peers: own commit until all replicas acked.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "sum by (ceph_daemon, what) (rate(osd_osd_op_replication_lat_ms_sum{ceph_daemon=~\"$osd\"}[$__rate_interval])) / sum by (ceph_daemon, what) (rate(osd_osd_op_replication_lat_ms_count{ceph_daemon=~\"$osd\"}[$__rate_interval]))",
+          "legendFormat": "{{ceph_daemon}} {{what}}",
+          "refId": "A"
+        }
+      ],
+      "id": 60,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 276
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Replication latency on the primary (p99)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS}"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS}"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le, ceph_daemon, what) (rate(osd_osd_op_replication_lat_ms_bucket{ceph_daemon=~\"$osd\"}[$__rate_interval])))",
+          "legendFormat": "{{ceph_daemon}} {{what}}",
+          "refId": "A"
+        }
+      ],
+      "id": 61,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 276
+      }
+    },
+    {
+      "type": "row",
+      "title": "SeaStore",
+      "id": 62,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 284
       },
       "panels": []
     },
@@ -1679,12 +3730,12 @@
           "refId": "A"
         }
       ],
-      "id": 27,
+      "id": 63,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 101
+        "y": 285
       }
     },
     {
@@ -1734,12 +3785,12 @@
           "refId": "A"
         }
       ],
-      "id": 28,
+      "id": 64,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 101
+        "y": 285
       }
     },
     {
@@ -1798,12 +3849,12 @@
           "refId": "B"
         }
       ],
-      "id": 29,
+      "id": 65,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 109
+        "y": 293
       }
     },
     {
@@ -1853,24 +3904,24 @@
           "refId": "A"
         }
       ],
-      "id": 30,
+      "id": 66,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 109
+        "y": 293
       }
     },
     {
       "type": "row",
       "title": "SeaStore cache",
-      "id": 31,
+      "id": 67,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 117
+        "y": 301
       },
       "panels": []
     },
@@ -1962,12 +4013,12 @@
           }
         ]
       },
-      "id": 32,
+      "id": 68,
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 118
+        "y": 302
       }
     },
     {
@@ -2017,12 +4068,12 @@
           "refId": "A"
         }
       ],
-      "id": 33,
+      "id": 69,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 126
+        "y": 310
       }
     },
     {
@@ -2081,12 +4132,12 @@
           "refId": "B"
         }
       ],
-      "id": 34,
+      "id": 70,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 126
+        "y": 310
       }
     },
     {
@@ -2136,12 +4187,12 @@
           "refId": "A"
         }
       ],
-      "id": 35,
+      "id": 71,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 134
+        "y": 318
       }
     },
     {
@@ -2200,12 +4251,12 @@
           "refId": "B"
         }
       ],
-      "id": 36,
+      "id": 72,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 134
+        "y": 318
       }
     },
     {
@@ -2273,12 +4324,12 @@
           "refId": "C"
         }
       ],
-      "id": 37,
+      "id": 73,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 142
+        "y": 326
       }
     },
     {
@@ -2346,12 +4397,12 @@
           "refId": "C"
         }
       ],
-      "id": 38,
+      "id": 74,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 142
+        "y": 326
       }
     },
     {
@@ -2401,12 +4452,12 @@
           "refId": "A"
         }
       ],
-      "id": 39,
+      "id": 75,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 150
+        "y": 334
       }
     },
     {
@@ -2456,12 +4507,12 @@
           "refId": "A"
         }
       ],
-      "id": 40,
+      "id": 76,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 150
+        "y": 334
       }
     },
     {
@@ -2511,12 +4562,12 @@
           "refId": "A"
         }
       ],
-      "id": 41,
+      "id": 77,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 158
+        "y": 342
       }
     },
     {
@@ -2593,24 +4644,24 @@
           "refId": "D"
         }
       ],
-      "id": 42,
+      "id": 78,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 158
+        "y": 342
       }
     },
     {
       "type": "row",
       "title": "Journal and background work (segmented and RBM)",
-      "id": 43,
+      "id": 79,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 166
+        "y": 350
       },
       "panels": []
     },
@@ -2661,12 +4712,12 @@
           "refId": "A"
         }
       ],
-      "id": 44,
+      "id": 80,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 167
+        "y": 351
       }
     },
     {
@@ -2734,12 +4785,12 @@
           "refId": "C"
         }
       ],
-      "id": 45,
+      "id": 81,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 167
+        "y": 351
       }
     },
     {
@@ -2798,12 +4849,12 @@
           "refId": "B"
         }
       ],
-      "id": 46,
+      "id": 82,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 175
+        "y": 359
       }
     },
     {
@@ -2853,24 +4904,24 @@
           "refId": "A"
         }
       ],
-      "id": 47,
+      "id": 83,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 175
+        "y": 359
       }
     },
     {
       "type": "row",
       "title": "Segmented backend (segment cleaner and segment manager)",
-      "id": 48,
+      "id": 84,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 183
+        "y": 367
       },
       "panels": []
     },
@@ -2921,12 +4972,12 @@
           "refId": "A"
         }
       ],
-      "id": 49,
+      "id": 85,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 184
+        "y": 368
       }
     },
     {
@@ -2976,12 +5027,12 @@
           "refId": "A"
         }
       ],
-      "id": 50,
+      "id": 86,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 184
+        "y": 368
       }
     },
     {
@@ -3040,12 +5091,12 @@
           "refId": "B"
         }
       ],
-      "id": 51,
+      "id": 87,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 192
+        "y": 376
       }
     },
     {
@@ -3095,24 +5146,24 @@
           "refId": "A"
         }
       ],
-      "id": 52,
+      "id": 88,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 192
+        "y": 376
       }
     },
     {
       "type": "row",
       "title": "RBM backend (RBM cleaner and circular bounded journal)",
-      "id": 53,
+      "id": 89,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 200
+        "y": 384
       },
       "panels": []
     },
@@ -3181,12 +5232,12 @@
           "refId": "C"
         }
       ],
-      "id": 54,
+      "id": 90,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 201
+        "y": 385
       }
     },
     {
@@ -3236,12 +5287,12 @@
           "refId": "A"
         }
       ],
-      "id": 55,
+      "id": 91,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 201
+        "y": 385
       }
     },
     {
@@ -3309,12 +5360,12 @@
           "refId": "C"
         }
       ],
-      "id": 56,
+      "id": 92,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 209
+        "y": 393
       }
     },
     {
@@ -3382,12 +5433,12 @@
           "refId": "C"
         }
       ],
-      "id": 57,
+      "id": 93,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 209
+        "y": 393
       }
     },
     {
@@ -3437,12 +5488,12 @@
           "refId": "A"
         }
       ],
-      "id": 58,
+      "id": 94,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 217
+        "y": 401
       }
     },
     {
@@ -3501,24 +5552,24 @@
           "refId": "B"
         }
       ],
-      "id": 59,
+      "id": 95,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 217
+        "y": 401
       }
     },
     {
       "type": "row",
       "title": "Memory",
-      "id": 60,
+      "id": 96,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 225
+        "y": 409
       },
       "panels": []
     },
@@ -3578,12 +5629,12 @@
           "refId": "B"
         }
       ],
-      "id": 61,
+      "id": 97,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 226
+        "y": 410
       }
     },
     {
@@ -3633,12 +5684,12 @@
           "refId": "A"
         }
       ],
-      "id": 62,
+      "id": 98,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 226
+        "y": 410
       }
     }
   ]

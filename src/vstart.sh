@@ -289,6 +289,8 @@ options:
 	--crimson-alienstore-physical-only: use only one cpu per physical core for alienstore
 	--crimson-balance-cpu: distribute the Seastar reactors uniformly across OSDs (osd) or NUMA (socket)
 	--crimson-poll-mode: enable poll-mode (100% cpu usage)
+	--crimson-prometheus-port <base>: serve crimson OSD metrics for Prometheus, osd.N on port base+N
+	--crimson-smp-metrics: also export seastar's per reactor pair cross-core message counters
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
@@ -664,7 +666,14 @@ case $1 in
         ;;
     --crimson-poll-mode)
         crimson_poll_mode=true
+        ;;
+    --crimson-prometheus-port)
+        [ -z "$2" ] && usage_exit
+        extra_conf+=$'\n'"crimson_prometheus_port_base = $2"
         shift
+        ;;
+    --crimson-smp-metrics)
+        extra_conf+=$'\n'"crimson_smp_metrics = true"
         ;;
     --bluestore-spdk)
         [ -z "$2" ] && usage_exit

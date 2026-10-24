@@ -5,11 +5,13 @@
 
 #include <vector>
 
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/util/later.hh>
 
 #include "crimson/common/gated.h"
 #include "crimson/common/smp_helpers.h"
 #include "Fwd.h"
+#include "msgr_stats.h"
 #include "SocketConnection.h"
 #include "FrameAssemblerV2.h"
 
@@ -404,9 +406,12 @@ public:
 
   void assign_frame_assembler(FrameAssemblerV2Ref);
 
-  seastar::future<> send_recheck_shard(cc_seq_t, core_id_t, MessageFRef);
+  using send_stamp_t = seastar::lowres_clock::time_point;
 
-  seastar::future<> do_send(cc_seq_t, core_id_t, MessageFRef);
+  seastar::future<> send_recheck_shard(
+      cc_seq_t, core_id_t, MessageFRef, send_stamp_t);
+
+  seastar::future<> do_send(cc_seq_t, core_id_t, MessageFRef, send_stamp_t);
 
   seastar::future<> send_keepalive_recheck_shard(cc_seq_t, core_id_t);
 
@@ -478,6 +483,9 @@ public:
 
   seastar::future<> cleanup_prv_shard(seastar::shard_id prv_sid);
 
+  // this reactor's stats of the connection's messenger
+  msgr_stats_t &get_stats();
+
 private:
   shard_states_ref_t shard_states;
 
@@ -515,6 +523,9 @@ private:
 
   // messages to be resent after connection gets reset
   std::deque<MessageFRef> out_pending_msgs;
+
+  // when each out_pending_msgs entry was sent, for send_queue_wait
+  std::deque<send_stamp_t> out_pending_stamps;
 
   // messages sent, but not yet acked by peer
   std::deque<MessageFRef> out_sent_msgs;
