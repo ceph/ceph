@@ -334,7 +334,17 @@ void ProtocolV2::reset_throttle() {
 CtPtr ProtocolV2::_fault() {
   ldout(cct, 10) << __func__ << dendl;
 
-  if (state == CLOSED || state == NONE) {
+  // A connection mid-reuse_connection() has replacing set and its protocol
+  // state reset to NONE while the socket swap is pending. If a fault lands
+  // in that window (e.g. the socket being swapped in dies again), returning
+  // here without cleanup would leave the connection registered with
+  // replacing stuck true: every later reconnect from the peer is answered
+  // with WAIT/RETRY and the pair can never re-establish until the daemon
+  // restarts. The swap completion path (deactivate_existing()/
+  // transfer_existing()) already tolerates the protocol having been stopped
+  // in the meantime, so it is safe to fall through and tear the connection
+  // down properly.
+  if (state == CLOSED || (state == NONE && !replacing)) {
     ldout(cct, 10) << __func__ << " connection is already closed" << dendl;
     return nullptr;
   }
