@@ -74,9 +74,10 @@ public:
   void update_kv_data(
     const std::string prefix,
     bool incremental,
-    const std::map<std::string, std::optional<bufferlist>, std::less<>>& data) {
+    const std::map<std::string, std::optional<bufferlist>, std::less<>>& data,
+    const std::vector<MKVData::range_delete_t>& range_deletes = {}) {
     ceph_assert(active_modules);
-    active_modules->update_kv_data(prefix, incremental, data);
+    active_modules->update_kv_data(prefix, incremental, data, range_deletes);
   }
 
   /**
