@@ -3490,6 +3490,9 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
       ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
+    // Form credentials replace the identity used to build the IAM environment.
+    rgw_update_iam_principal_type(s);
+
     ceph::bufferlist decoded_policy;
     try {
       decoded_policy.decode_base64(s->auth.s3_postobj_creds.encoded_policy);
