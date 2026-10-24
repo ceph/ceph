@@ -691,7 +691,7 @@
         {
           alert: 'PowerSupplyDegraded',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="power"} == 1',
+          expr: 'ceph_hardware_status{category="power"} == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'Power supply {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -701,7 +701,7 @@
         {
           alert: 'PowerSupplyFailed',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="power"} == 2',
+          expr: 'ceph_hardware_status{category="power"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.5' },
           annotations: {
             summary: 'Power supply {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -711,7 +711,7 @@
         {
           alert: 'CoolingDegraded',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="fans"} == 1',
+          expr: 'ceph_hardware_status{category="fans"} == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'Fan {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -721,7 +721,7 @@
         {
           alert: 'CoolingFailed',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="fans"} == 2',
+          expr: 'ceph_hardware_status{category="fans"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.6' },
           annotations: {
             summary: 'Fan {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -731,7 +731,7 @@
         {
           alert: 'NVMeDriveDegraded',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="storage"} == 1',
+          expr: 'ceph_hardware_status{category="storage"} == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'Storage device {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -741,7 +741,7 @@
         {
           alert: 'NVMeDriveFailed',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="storage"} == 2',
+          expr: 'ceph_hardware_status{category="storage"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.1' },
           annotations: {
             summary: 'Storage device {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -751,7 +751,7 @@
         {
           alert: 'MemoryDegraded',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="memory"} == 1',
+          expr: 'ceph_hardware_status{category="memory"} == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'Memory module {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -761,7 +761,7 @@
         {
           alert: 'MemoryFailed',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="memory"} == 2',
+          expr: 'ceph_hardware_status{category="memory"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.2' },
           annotations: {
             summary: 'Memory module {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -771,7 +771,7 @@
         {
           alert: 'ProcessorDegraded',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="processors"} == 1',
+          expr: 'ceph_hardware_status{category="processors"} == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'Processor {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -781,7 +781,7 @@
         {
           alert: 'ProcessorFailed',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="processors"} == 2',
+          expr: 'ceph_hardware_status{category="processors"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.3' },
           annotations: {
             summary: 'Processor {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -791,7 +791,7 @@
         {
           alert: 'NetworkDegraded',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="network"} == 1',
+          expr: 'ceph_hardware_status{category="network"} == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'Network interface {{ $labels.component }} degraded on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
@@ -801,11 +801,81 @@
         {
           alert: 'NetworkFailed',
           'for': '1m',
-          expr: 'ceph_hardware_health{category="network"} == 2',
+          expr: 'ceph_hardware_status{category="network"} == 2',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.4' },
           annotations: {
             summary: 'Network interface {{ $labels.component }} failed on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
             description: 'A network fault has been detected on {{ $labels.hostname }}. Network interface {{ $labels.component }} has failed.',
+          },
+        },
+        {
+          alert: 'PowerSupplyNotEnabled',
+          'for': '15m',
+          expr: 'count by (%(cluster)shostname, state) (ceph_hardware_status{category="power", state!="Enabled"}) > 0' % $.MultiClusterQuery(),
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.7' },
+          annotations: {
+            summary: '{{ $value }} power supply component(s) are in {{ $labels.state }} on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $value }} power supply component(s) on {{ $labels.hostname }} are in {{ $labels.state }}.',
+          },
+        },
+        {
+          alert: 'CoolingNotEnabled',
+          'for': '15m',
+          expr: 'count by (%(cluster)shostname, state) (ceph_hardware_status{category="fans", state!="Enabled"}) > 0' % $.MultiClusterQuery(),
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.8' },
+          annotations: {
+            summary: '{{ $value }} fan component(s) are in {{ $labels.state }} on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $value }} fan component(s) on {{ $labels.hostname }} are in {{ $labels.state }}.',
+          },
+        },
+        {
+          alert: 'NVMeDriveNotEnabled',
+          'for': '15m',
+          expr: 'count by (%(cluster)shostname, state) (ceph_hardware_status{category="storage", state!="Enabled"}) > 0' % $.MultiClusterQuery(),
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.9' },
+          annotations: {
+            summary: '{{ $value }} storage device component(s) are in {{ $labels.state }} on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $value }} storage device component(s) on {{ $labels.hostname }} are in {{ $labels.state }}.',
+          },
+        },
+        {
+          alert: 'MemoryNotEnabled',
+          'for': '15m',
+          expr: 'count by (%(cluster)shostname, state) (ceph_hardware_status{category="memory", state!="Enabled"}) > 0' % $.MultiClusterQuery(),
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.10' },
+          annotations: {
+            summary: '{{ $value }} memory module component(s) are in {{ $labels.state }} on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $value }} memory module component(s) on {{ $labels.hostname }} are in {{ $labels.state }}.',
+          },
+        },
+        {
+          alert: 'ProcessorNotEnabled',
+          'for': '15m',
+          expr: 'count by (%(cluster)shostname, state) (ceph_hardware_status{category="processors", state!="Enabled"}) > 0' % $.MultiClusterQuery(),
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.11' },
+          annotations: {
+            summary: '{{ $value }} processor component(s) are in {{ $labels.state }} on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $value }} processor component(s) on {{ $labels.hostname }} are in {{ $labels.state }}.',
+          },
+        },
+        {
+          alert: 'NetworkNotEnabled',
+          'for': '15m',
+          expr: 'count by (%(cluster)shostname, state) (ceph_hardware_status{category="network", state!="Enabled"}) > 0' % $.MultiClusterQuery(),
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.12' },
+          annotations: {
+            summary: '{{ $value }} network interface component(s) are in {{ $labels.state }} on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $value }} network interface component(s) on {{ $labels.hostname }} are in {{ $labels.state }}.',
+          },
+        },
+        {
+          alert: 'TemperatureSensorNotEnabled',
+          'for': '15m',
+          expr: 'count by (%(cluster)shostname, state) (ceph_hardware_status{category="temperatures", state!="Enabled"}) > 0' % $.MultiClusterQuery(),
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.13' },
+          annotations: {
+            summary: '{{ $value }} temperature sensor component(s) are in {{ $labels.state }} on {{ $labels.hostname }}%(cluster)s' % $.MultiClusterSummary(),
+            description: '{{ $value }} temperature sensor component(s) on {{ $labels.hostname }} are in {{ $labels.state }}.',
           },
         },
         {
