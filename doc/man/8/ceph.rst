@@ -959,6 +959,18 @@ Usage::
 
     ceph osd crush rule ls
 
+Subcommand ``ls-by-class`` lists the CRUSH rules that use device class <class>.
+
+Usage::
+
+    ceph osd crush rule ls-by-class <class>
+
+Subcommand ``rename`` renames CRUSH rule <srcname> to <dstname>.
+
+Usage::
+
+    ceph osd crush rule rename <srcname> <dstname>
+
 Subcommand ``rm`` removes CRUSH rule <name>.
 
 Usage::
@@ -1238,18 +1250,32 @@ Subcommand ``get`` gets pool parameter <var>.
 Usage::
 
     ceph osd pool get <poolname> size|min_size|pg_num|pgp_num|crush_rule|hashpspool|
-    nodelete|nopgchange|nosizechange|write_fadvise_dontneed
+    nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|
+    nodeep-scrub|bulk|fast_read|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|
+    pg_num_max|target_size_bytes|target_size_ratio|compression_mode|
+    compression_algorithm|compression_required_ratio|compression_min_blob_size|
+    compression_max_blob_size|csum_type|csum_min_block|csum_max_block|
+    scrub_min_interval|scrub_max_interval|deep_scrub_interval|scrub_priority|
+    recovery_priority|recovery_op_priority|dedup_tier|dedup_chunk_algorithm|
+    dedup_cdc_chunk_size|fingerprint_algorithm|pct_update_delay|supports_omap|
+    use_gmt_hitset|crimson_allow_pg_merge
 
 Only for tiered pools::
 
     ceph osd pool get <poolname> hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
     target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|
     cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|
-    min_read_recency_for_promote|hit_set_grade_decay_rate|hit_set_search_last_n
+    min_read_recency_for_promote|min_write_recency_for_promote|
+    hit_set_grade_decay_rate|hit_set_search_last_n
 
 Only for erasure-coded pools::
 
-    ceph osd pool get <poolname> erasure_code_profile
+    ceph osd pool get <poolname> erasure_code_profile|allow_ec_overwrites|
+    allow_ec_optimizations|ec_data_shard_count|ec_coding_shard_count
+
+Only for replicated pools::
+
+    ceph osd pool get <poolname> read_ratio
 
 Use ``all`` to get all pool parameters that apply to the pool's type::
 
@@ -1291,17 +1317,31 @@ Usage::
 
     ceph osd pool rmsnap <poolname> <snap>
 
-Subcommand ``set`` sets pool parameter <var> to <val>.
+Subcommand ``set`` sets pool parameter <var> to <val>. The ``hit_set_*``,
+``target_max_*``, ``cache_*``, ``min_*_recency_for_promote`` and
+``use_gmt_hitset`` variables apply only to tiered pools;
+``allow_ec_overwrites``, ``allow_ec_optimizations`` and ``fast_read`` only to
+erasure-coded pools; and ``read_ratio`` only to replicated pools.
 
 Usage::
 
     ceph osd pool set <poolname> size|min_size|pg_num|
     pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|
+    noscrub|nodeep-scrub|bulk|fast_read|pg_autoscale_mode|pg_autoscale_bias|
+    pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|
+    compression_mode|compression_algorithm|compression_required_ratio|
+    compression_min_blob_size|compression_max_blob_size|csum_type|
+    csum_min_block|csum_max_block|scrub_min_interval|scrub_max_interval|
+    deep_scrub_interval|scrub_priority|recovery_priority|recovery_op_priority|
+    allow_ec_overwrites|allow_ec_optimizations|read_ratio|dedup_tier|
+    dedup_chunk_algorithm|dedup_cdc_chunk_size|fingerprint_algorithm|
+    pct_update_delay|crimson_allow_pg_merge|
     hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
     target_max_bytes|target_max_objects|cache_target_dirty_ratio|
     cache_target_dirty_high_ratio|
     cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|
-    min_read_recency_for_promote|write_fadvise_dontneed|hit_set_grade_decay_rate|
+    min_read_recency_for_promote|min_write_recency_for_promote|use_gmt_hitset|
+    write_fadvise_dontneed|hit_set_grade_decay_rate|
     hit_set_search_last_n
     <val> {--yes-i-really-mean-it}
 
