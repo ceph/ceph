@@ -1,5 +1,6 @@
 from .ceph import Ceph, OSD, CephExporter, Crash
 from .custom import CustomContainer
+from .fcm_dedup import FcmDedup
 from .ingress import HAproxy, Keepalived
 from .iscsi import CephIscsi
 from .monitoring import Monitoring
@@ -19,6 +20,7 @@ __all__ = [
     'CephIscsi',
     'CephNvmeof',
     'CustomContainer',
+    'FcmDedup',
     'HAproxy',
     'Keepalived',
     'Monitoring',
