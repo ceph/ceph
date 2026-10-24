@@ -2385,6 +2385,9 @@ private:
   std::map<std::string, int64_t> parts;
   std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
   std::string dm_version_id;
+  /* the last stat() found a directory under a key without the trailing
+   * '/', which has no object (stat()) */
+  bool names_directory{false};
 
   /* How this object's entry is to be reached, held until an entry
    * exists to apply it to.

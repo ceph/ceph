@@ -13313,6 +13313,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
     dir_chain.clear();
     state.is_dm = false;
     dm_version_id.clear();
+    names_directory = false;
     Directory* leaf_dir;
     std::string leaf_name;
     ret = resolve_key_path(dpp,
@@ -13528,6 +13529,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
      * maps a key to its sentinel) that names a directory has no
      * object:  404, as NooBaa's read_object_md() returns */
     if (ent && (ent->get_type() != ObjectType::FILE)) {
+      names_directory = (ent->get_type() == ObjectType::DIRECTORY);
       ent.reset();
       state.exists = false;
       return -ENOENT;
@@ -14995,6 +14997,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         return r;
       }
     }
+  }
+
+  /* a key that names a directory has no object, and none can be
+   * written while the directory holds its name (DECISIONS.md
+   * 2026-10-24), so its delete writes no marker:  204 and nothing
+   * else, as NooBaa's delete_object() returns for it */
+  if ((ret == -ENOENT) && source->names_directory) {
+    ldpp_dout(dpp, 10) << "delete_obj: " << source->get_name()
+      << " names a directory;  no delete marker" << dendl;
+    return 0;
   }
 
   nsfs::FSEnt* ent = source->get_fsent();
