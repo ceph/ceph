@@ -4005,6 +4005,12 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
 	return ret;
       }
     } else if (ret >= 0) {
+      /* a copy onto a directory is refused;  see File::copy() */
+      if (del->get_type() != ObjectType::FILE) {
+	ldpp_dout(dpp, 4) << "nsfs: rejecting copy to " << dst_name
+			  << ":  a directory holds its name" << dendl;
+	return -ERR_KEY_PATH_CONFLICT;
+      }
       /* as the requester, whom copy_object() gave this entry:  the
        * bucket directory is not the gateway's (raise site 4), and a
        * leaf directory resolve_key_path() did not make carries no
@@ -4273,6 +4279,12 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
   } else if (ret >= 0) {
+    /* a copy onto a directory is refused;  see File::copy() */
+    if (del->get_type() != ObjectType::FILE) {
+      ldpp_dout(dpp, 4) << "nsfs: rejecting copy to " << name
+			<< ":  a directory holds its name" << dendl;
+      return -ERR_KEY_PATH_CONFLICT;
+    }
     /* as the requester;  see File::copy() */
     del->set_identity(identity);
     del->set_access_model(access_model);

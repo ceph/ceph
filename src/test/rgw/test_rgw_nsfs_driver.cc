@@ -6989,6 +6989,26 @@ TEST_F(NSFSAdoptionGateTest, ACopyOutIsARead)
   EXPECT_EQ(put(marked.get(), "new"), 0) << "a marked bucket rejected a write";
 }
 
+/* Their empty directory object, copied to a key that names a directory
+ * in a marked bucket, is refused as any copy onto a directory is
+ * (refuse_directory_name()):  the directory holds its name, and the
+ * keys under it are other objects.  An empty one, because a directory
+ * object with bytes copies through its `.folder`, a File. */
+TEST_F(NSFSAdoptionGateTest, ACopyOfTheirDirectoryObjectOntoADirectoryKeepsTheKeysUnderIt)
+{
+  ASSERT_NO_FATAL_FAILURE(lay_noobaa_directory_object(
+      bucket_path() / "s", "", "application/x-directory", "s"));
+  auto marked = marked_bucket(testname + "-ours");
+  ASSERT_EQ(put(marked.get(), "e/x"), 0);
+  const sf::path kept = bp / "root" / (testname + "-ours") / "e" / "x";
+  ASSERT_TRUE(sf::is_regular_file(kept));
+
+  EXPECT_EQ(copy(bucket.get(), "s/", marked.get(), "e"),
+	    -ERR_KEY_PATH_CONFLICT);
+  EXPECT_TRUE(sf::is_regular_file(kept))
+      << "the copy removed the keys under its destination";
+}
+
 /* Nothing returns a bucket to base:  set_profile() rejects it for every
  * caller, the profile hint among them, and the bucket stays marked. */
 TEST_F(NSFSBucketTest, NothingReturnsABucketToBase)
