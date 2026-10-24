@@ -13,7 +13,9 @@ use s3_tests_rs::admin::{driver_hint_results, nsfs_delete_identity, nsfs_put_ide
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::features::{cross_account_data, features};
-use s3_tests_rs::fixtures::{get_new_bucket, PrivateUser, TestGuard};
+use s3_tests_rs::fixtures::{
+    check_configure_versioning_retry, get_new_bucket, PrivateUser, TestGuard,
+};
 use s3_tests_rs::hints::{clear_hint, with_hint};
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
 
@@ -1213,4 +1215,74 @@ async fn test_the_gateway_unlinks_a_base_path_bucket() {
         .expect("alice could not delete her own empty bucket");
     assert!(!bucket_exists(alice, &bucket).await,
         "the delete succeeded, and the bucket is still there");
+}
+
+/// bob, granted `s3:*` by alice's policy, copies her object onto itself
+/// in a versioned bucket, replacing its metadata.  The self-copy
+/// demotes the current version and then clones it back into her key
+/// directory, which is hers at 0770, so the clone's create and publish
+/// are bob's to be denied:  403 under `posix-strict`, served under
+/// `s3-native`, where the gateway performs them.
+///
+/// Under every model the key still has its current entry on disk, and
+/// whose it is follows who acted:  bob's where his copy was served, as
+/// the gateway gives a raised create to its requester, and alice's
+/// where it was refused.  The current entry is checked because the
+/// demote runs before the clone, so a clone that fails must not leave
+/// the key without one.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_a_versioned_self_copy_follows_the_access_model() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some((alice_u, bob_u)) = alice_and_bob("vsc", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
+    check_configure_versioning_retry(alice, &bucket, "Enabled", "Enabled").await;
+    let key = "k";
+    alice.put_object().bucket(&bucket).key(key)
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"alice's"))
+        .send().await
+        .expect("alice could not write her own object");
+
+    let doc = make_json_policy(
+        "s3:*", &make_arn_resource(&format!("{bucket}/*")),
+        Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
+                                                bob_u.id)]})),
+        None, None);
+    alice.put_bucket_policy().bucket(&bucket).policy(&doc).send().await
+        .expect("could not grant bob s3:*");
+
+    /* the clone's create, as bob, in alice's key directory */
+    let access = Access::ask(Class::Data, &bucket, key, &bob_u.id, "c").await;
+    assert!(access.denied(),
+        "the filesystem permits bob to create in alice's key directory;  \
+         it is not hers at 0770");
+    let copied = access.expect(bob.copy_object()
+        .bucket(&bucket).key(key)
+        .copy_source(format!("{bucket}/{key}"))
+        .metadata_directive(aws_sdk_s3::types::MetadataDirective::Replace)
+        .metadata("by", "bob")
+        .send().await)
+        .is_some();
+
+    let on_disk = driver_hint_results("symlink",
+        &[("op", "stat"), ("bucket", &bucket), ("key", key)]).await
+        .expect("the symlink hint did not answer;  rgw_driver_debug_apis");
+    assert_eq!(on_disk.get("kind").map(String::as_str), Some("file"),
+        "the key has no current entry after bob's self-copy");
+    let want = if copied { UID_BOB } else { UID_ALICE };
+    assert_eq!(on_disk.get("uid").map(String::as_str), Some(want),
+        "the current entry is not the acting principal's");
 }
