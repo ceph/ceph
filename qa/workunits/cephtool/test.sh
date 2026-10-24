@@ -630,6 +630,120 @@ function test_auth()
   expect_true ceph auth rm client.admin2
   rm keyring[1234]
 
+  # test rotate-pending: the old key stays valid until commit-pending, so a
+  # client that loses the reply can reconnect and retry instead of being locked out
+  ceph auth get-or-create client.admin4 mon 'allow *'
+  ceph auth get client.admin4 >> keyring1
+  env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth rotate-pending client.admin4 >> keyring2
+  # the new key is reported as pending
+  expect_true grep "pending" keyring2
+  # old key still works before commit
+  expect_true env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth get client.admin4
+  # a retry must return the SAME pending key, not mint a fresh one
+  env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth rotate-pending client.admin4 >> keyring3
+  expect_true diff -au keyring2 keyring3
+  ceph auth commit-pending client.admin4
+  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin4 auth get client.admin4
+  expect_true ceph auth rm client.admin4
+  rm keyring[123]
+
+  # auth rotate is a full rotation: it drops any pending key
+  ceph auth get-or-create client.admin5 mon 'allow *'
+  ceph auth rotate-pending client.admin5
+  ceph auth rotate client.admin5
+  ceph auth get client.admin5 >> keyring1
+  expect_false grep "pending" keyring1
+  expect_true ceph auth rm client.admin5
+  rm keyring1
+
+  # test get-or-create-pending: explicit two-phase rotation
+  ceph auth get-or-create client.admin3 mon 'allow *'
+  ceph auth get client.admin3 >> keyring1
+  # generate a pending key
+  ceph auth get-or-create-pending client.admin3 >> keyring2
+  # calling it again returns the same result, it does not generate a fresh key each time
+  ceph auth get-or-create-pending client.admin3 >> keyring3
+  expect_true diff -au keyring2 keyring3
+  # auth get shows the pending key in the keyring
+  ceph auth get client.admin3 >> keyring4
+  expect_true grep "pending" keyring4
+  # old key still works before commit
+  expect_true env CEPH_KEYRING=keyring1 ceph -n client.admin3 auth get client.admin3
+  # commit the pending key: promotes pending_key -> active key, invalidates the old one
+  ceph auth commit-pending client.admin3
+  # old key no longer works
+  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin3 auth get client.admin3
+  # committing when there is no pending key is harmless
+  ceph auth commit-pending client.admin3
+  expect_true ceph auth rm client.admin3
+  rm keyring[1234]
+
+  # test clear-pending: abort a rotation before it commits
+  ceph auth get-or-create client.admin3 mon 'allow *'
+  ceph auth get client.admin3 >> keyring1
+  ceph auth get-or-create-pending client.admin3
+  # auth get shows the pending key
+  ceph auth get client.admin3 >> keyring2
+  expect_true grep "pending" keyring2
+  # cancel the rotation
+  ceph auth clear-pending client.admin3
+  # calling clear-pending again when nothing is pending is harmless
+  ceph auth clear-pending client.admin3
+  # auth get no longer shows a pending key
+  ceph auth get client.admin3 >> keyring3
+  expect_false grep "pending" keyring3
+  # original key still works, clear-pending did not touch it
+  expect_true env CEPH_KEYRING=keyring1 ceph -n client.admin3 auth get client.admin3
+  expect_true ceph auth rm client.admin3
+  rm keyring[123]
+
+  # rotate-pending must not return an existing pending key of another type
+  allowed_ciphers=$(ceph mon dump --format=json | jq -r '[.auth_allowed_ciphers[].name] | join(",")')
+  ceph mon set auth_allowed_ciphers aes,aes256k
+  ceph config set mon mon_auth_allow_insecure_key true
+  ceph auth get-or-create client.admin3 mon 'allow *'
+  ceph auth rotate-pending client.admin3 --key-type=aes
+  expect_false ceph auth rotate-pending client.admin3 --key-type=aes256k
+  # the same type, or no type, still returns the pending key
+  ceph auth rotate-pending client.admin3 --key-type=aes
+  ceph auth rotate-pending client.admin3
+  ceph auth clear-pending client.admin3
+  ceph auth rotate-pending client.admin3 --key-type=aes256k
+  expect_true ceph auth rm client.admin3
+  ceph config rm mon mon_auth_allow_insecure_key
+  ceph mon set auth_allowed_ciphers $allowed_ciphers
+
+  # a pending key in an imported keyring must not be restored
+  ceph auth get-or-create client.admin3 mon 'allow *'
+  ceph auth rotate-pending client.admin3
+  ceph auth get client.admin3 >> keyring1
+  expect_true grep "pending" keyring1
+  ceph auth clear-pending client.admin3
+  ceph auth import -i keyring1
+  ceph auth get client.admin3 >> keyring2
+  expect_false grep "pending" keyring2
+  expect_true ceph auth rm client.admin3
+  # same for auth add
+  ceph auth add client.admin3 -i keyring1
+  ceph auth get client.admin3 >> keyring3
+  expect_false grep "pending" keyring3
+  expect_true ceph auth rm client.admin3
+  rm keyring[123]
+
+  # test AUTH_PENDING_KEY_NOT_COMMITTED: a rotation left uncommitted past the
+  # configured TTL must raise a health warning, and it must clear once the
+  # rotation is finished (committed or cleared)
+  ceph config set mon mon_auth_pending_key_ttl 1
+  ceph auth get-or-create client.pendingwarn mon 'allow r'
+  ceph auth rotate-pending client.pendingwarn > /dev/null
+  sleep 2
+  wait_for_health 'AUTH_PENDING_KEY_NOT_COMMITTED'
+  ceph health detail | grep 'client.pendingwarn'
+  ceph auth commit-pending client.pendingwarn
+  wait_for_health_gone 'AUTH_PENDING_KEY_NOT_COMMITTED'
+  ceph auth rm client.pendingwarn
+  ceph config rm mon mon_auth_pending_key_ttl
+
   # (almost) interactive mode
   echo -e 'auth add client.xx mon "allow *" osd "allow *"\n' | ceph
   ceph auth get client.xx
