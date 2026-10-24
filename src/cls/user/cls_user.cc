@@ -59,7 +59,7 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
 }
 
 template <typename T>
-static int read_header(cls_method_context_t hctx, T *header)
+static int read_header(cls_method_context_t hctx, T& header)
 {
   bufferlist bl;
 
@@ -68,12 +68,12 @@ static int read_header(cls_method_context_t hctx, T *header)
     return ret;
 
   if (bl.length() == 0) {
-    *header = T();
+    header = T();
     return 0;
   }
 
   try {
-    decode(*header, bl);
+    decode(header, bl);
   } catch (ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: failed to decode user header");
     return -EIO;
@@ -82,25 +82,26 @@ static int read_header(cls_method_context_t hctx, T *header)
   return 0;
 }
 
-static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void add_header_stats(cls_user_stats& stats, const cls_user_bucket_entry& entry)
 {
-  stats->total_entries += entry.count;
-  stats->total_bytes += entry.size;
-  stats->total_bytes_rounded += entry.size_rounded;
+  stats.total_entries += entry.count;
+  stats.total_bytes += entry.size;
+  stats.total_bytes_rounded += entry.size_rounded;
 }
 
-static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void dec_header_stats(cls_user_stats& stats, const cls_user_bucket_entry& entry)
 {
-  stats->total_bytes -= entry.size;
-  stats->total_bytes_rounded -= entry.size_rounded;
-  stats->total_entries -= entry.count;
+  stats.total_bytes -= entry.size;
+  stats.total_bytes_rounded -= entry.size_rounded;
+  stats.total_entries -= entry.count;
 }
 
-static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
+static void apply_entry_stats(const cls_user_bucket_entry& src_entry,
+                               cls_user_bucket_entry& target_entry)
 {
-  target_entry->size = src_entry.size;
-  target_entry->size_rounded = src_entry.size_rounded;
-  target_entry->count = src_entry.count;
+  target_entry.size = src_entry.size;
+  target_entry.size_rounded = src_entry.size_rounded;
+  target_entry.count = src_entry.count;
 }
 
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -116,15 +117,13 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
   }
 
   cls_user_header header;
-  int ret = read_header(hctx, &header);
+  int ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
     return ret;
   }
 
-  for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
-    cls_user_bucket_entry& update_entry = *iter;
-
+  for (const auto& update_entry : op.entries) {
     const auto& key = update_entry.bucket.name;
 
     cls_user_bucket_entry entry;
@@ -147,8 +146,10 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
-    } else if (ret >= 0 && entry.user_stats_sync) {
-      dec_header_stats(&header.stats, entry);
+    }
+
+    if (entry.user_stats_sync) {
+      dec_header_stats(header.stats, entry);
     }
 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
@@ -158,7 +159,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     // new entry we already have copied update_entry earlier, OTOH, for an existing entry
     // we end up clobbering the existing stats for the bucket
     if (!op.add){
-      apply_entry_stats(update_entry, &entry);
+      apply_entry_stats(update_entry, entry);
     }
     entry.user_stats_sync = true;
 
@@ -166,7 +167,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0)
       return ret;
 
-    add_header_stats(&header.stats, entry);
+    add_header_stats(header.stats, entry);
   }
 
   bufferlist bl;
@@ -198,7 +199,7 @@ static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *i
   }
 
   cls_user_header header;
-  int ret = read_header(hctx, &header);
+  int ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
     return ret;
@@ -231,7 +232,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   }
 
   cls_user_header header;
-  int ret = read_header(hctx, &header);
+  int ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
     return ret;
@@ -259,7 +260,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return 0;
   }
 
-  dec_header_stats(&header.stats, entry);
+  dec_header_stats(header.stats, entry);
 
   CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
 
@@ -351,7 +352,7 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
 
   ::cls::rgw::user_datum::header_reply op_ret;
 
-  int ret = read_header(hctx, &op_ret.header);
+  int ret = read_header(hctx, op_ret.header);
   if (ret < 0)
     return ret;
 
@@ -402,7 +403,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 		__func__, kv.first.c_str());
 	return -EIO;
       }
-      add_header_stats(&header.stats, e);
+      add_header_stats(header.stats, e);
     }
     if (!keys.empty()) {
       from_index = keys.rbegin()->first;
@@ -459,7 +460,7 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
 	      __func__, kv.first.c_str());
       return -EIO;
     }
-    add_header_stats(&ret.acc_stats, e);
+    add_header_stats(ret.acc_stats, e);
   }
 
   if (! ret.truncated) {
@@ -490,8 +491,7 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
 // convert all keys to lowercase
 static std::string resource_key(std::string_view name)
 {
-  std::string key;
-  key.resize(name.size());
+  std::string key(name.size(), '\0');
   std::transform(name.begin(), name.end(), key.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   return key;
@@ -525,7 +525,7 @@ static int cls_account_resource_add(cls_method_context_t hctx,
   std::optional<cls_user_account_header> header;
   if (!exists) {
     // if this is a new entry, update the resource count in the account header
-    ret = read_header(hctx, &header.emplace());
+    ret = read_header(hctx, header.emplace());
     if (ret < 0) {
       CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
       return ret;
@@ -626,7 +626,7 @@ static int cls_account_resource_rm(cls_method_context_t hctx,
 
   // update resource count in the account header
   cls_user_account_header header;
-  ret = read_header(hctx, &header);
+  ret = read_header(hctx, header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
     return ret;

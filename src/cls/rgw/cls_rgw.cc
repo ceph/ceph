@@ -288,13 +288,10 @@ static int get_obj_vals(cls_method_context_t hctx,
    * outside the "ugly namespace"
    */
 
-  auto comp = [](const pair<std::string, bufferlist>& l, const std::string &r) {
-		return l.first < r;
-	      };
   std::string new_start = {static_cast<char>(BI_PREFIX_CHAR + 1)};
 
-  auto lower = pkeys->lower_bound(string{static_cast<char>(BI_PREFIX_CHAR)});
-  auto upper = std::lower_bound(lower, pkeys->end(), new_start, comp);
+  const auto lower = pkeys->lower_bound(string{static_cast<char>(BI_PREFIX_CHAR)});
+  const auto upper = pkeys->lower_bound(new_start);
   pkeys->erase(lower, upper);
 
   if (num_entries == (int)pkeys->size() || !(*pmore)) {
@@ -2448,12 +2445,7 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 
   /* remove all versions up to and including ver from the pending map */
   auto& log = olh_data_entry.pending_log;
-  auto liter = log.begin();
-  while (liter != log.end() && liter->first <= op.ver) {
-    auto rm_iter = liter;
-    ++liter;
-    log.erase(rm_iter);
-  }
+  log.erase(log.begin(), log.upper_bound(op.ver));
 
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
@@ -2568,7 +2560,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
   CLS_LOG_BITX(bitx_inst, 10, "ENTERING %s for object oid=%s key=%s",
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
-  bufferlist header_bl;
   rgw_bucket_dir_header header;
   bool header_changed = false;
 
@@ -2664,7 +2655,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 		       __func__,
 		       cur_iter->first.c_str(),
 		       cur_iter->second.state,
-		       modify_op_str(iter->second.op).c_str());
+		       modify_op_str(cur_iter->second.op).c_str());
           cur_disk.pending_map.erase(cur_iter);
         }
       } // while

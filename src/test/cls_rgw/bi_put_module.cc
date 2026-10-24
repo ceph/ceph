@@ -754,6 +754,39 @@ TEST_CASE("Index complete preserves storage error stages and reshard rejection",
     CHECK(effect_names(state) == std::vector<std::string> {"read-header"});
 }
 
+TEST_CASE("Index suggestions retain live pending entries and expire the final entry",
+          "[rgw][cls][suggest]")
+{
+    for (const bool retain_pending : {true, false}) {
+        storage state;
+        ::rgw_bucket_dir_entry current;
+        current.key.name = "object";
+        ::rgw_bucket_pending_info pending;
+        pending.op = ::CLS_RGW_OP_ADD;
+        current.pending_map.emplace("expired", pending);
+        if (retain_pending) {
+            pending.op = ::CLS_RGW_OP_DEL;
+            pending.timestamp = ::ceph::real_clock::from_time_t(1234567890);
+            current.pending_map.emplace("retained", pending);
+        }
+        ::encode(current, state.values[current.key.name]);
+
+        ::rgw_bucket_dir_entry suggestion;
+        suggestion.key = current.key;
+        byte_buffer input;
+        ::ceph::encode(static_cast<std::uint8_t>(CEPH_RGW_REMOVE), input);
+        ::encode(suggestion, input);
+        REQUIRE(invoke(state, std::move(input), "dir_suggest_changes") == 0);
+        CHECK(state.values.contains(current.key.name) == retain_pending);
+        if (retain_pending) {
+            CHECK(effect_names(state) == std::vector<std::string> {"read-header", "get-value"});
+        } else {
+            CHECK(effect_names(state) ==
+                  std::vector<std::string> {"read-header", "get-value", "remove"});
+        }
+    }
+}
+
 TEST_CASE("OLH trim retains its inclusive epoch and tag guards", "[rgw][cls][write]")
 {
     storage state;
@@ -773,6 +806,33 @@ TEST_CASE("OLH trim retains its inclusive epoch and tag guards", "[rgw][cls][wri
     trim.olh_tag = "wrong";
     CHECK(invoke_write(state, trim, "bucket_trim_olh_log") == -ECANCELED);
     CHECK(effect_names(state) == std::vector<std::string> {"get-value"});
+}
+
+TEST_CASE("OLH trim handles sparse epochs and the maximum inclusive boundary", "[rgw][cls][write]")
+{
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    for (const auto limit : {std::uint64_t {0}, std::uint64_t {1}, std::uint64_t {2},
+                            maximum - 2, maximum - 1, maximum}) {
+        storage state;
+        ::rgw_bucket_olh_entry original;
+        original.key.name = "object";
+        original.tag = "olh-tag";
+        original.pending_log = {{1, {}}, {maximum - 1, {}}, {maximum, {}}};
+        ::encode(original, state.values[olh_key()]);
+        ::rgw_cls_trim_olh_log_op trim;
+        trim.olh.name = original.key.name;
+        trim.olh_tag = original.tag;
+        trim.ver = limit;
+        REQUIRE(invoke_write(state, trim, "bucket_trim_olh_log") == 0);
+        const auto retained = olh_entry(state);
+        CHECK(retained.tag == original.tag);
+        CHECK(retained.pending_log.contains(1) == (limit < 1));
+        CHECK(retained.pending_log.contains(maximum - 1) == (limit < maximum - 1));
+        CHECK(retained.pending_log.contains(maximum) == (limit < maximum));
+        const std::size_t expected_size =
+            (limit < 1) + (limit < maximum - 1) + (limit < maximum);
+        CHECK(retained.pending_log.size() == expected_size);
+    }
 }
 
 TEST_CASE("OLH link preserves version, time and tag behavior", "[rgw][cls][write]")
