@@ -396,13 +396,13 @@ thread_local RingRegistrar tl_registrar;
 static constexpr size_t GENERATION_SHARDS = 256;
 static std::array<std::atomic<uint64_t>, GENERATION_SHARDS> generations{};
 
-static size_t generation_shard(const rgw_user& key)
+static size_t generation_shard(const rgw_owner& key)
 {
-  return ankerl::unordered_dense::hash<rgw_user>{}(key) %
+  return ankerl::unordered_dense::hash<rgw_owner>{}(key) %
       GENERATION_SHARDS;
 }
 
-void note_identity_changed(const rgw_user& key)
+void note_identity_changed(const rgw_owner& key)
 {
   generations[generation_shard(key)].fetch_add(1, std::memory_order_relaxed);
 }
@@ -414,14 +414,14 @@ void note_all_identities_changed()
   }
 }
 
-uint64_t identity_generation(const rgw_user& key)
+uint64_t identity_generation(const rgw_owner& key)
 {
   return generations[generation_shard(key)].load(std::memory_order_relaxed);
 }
 
 namespace {
 struct ShardedGenerations : GenerationSource {
-  uint64_t generation(const rgw_user& key) const override {
+  uint64_t generation(const rgw_owner& key) const override {
     return generations[generation_shard(key)].load(
 	std::memory_order_relaxed);
   }
@@ -771,13 +771,13 @@ int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
   return fn();
 }
 
-int find_personality(const rgw_user& key, PersonalityRef* out,
+int find_personality(const rgw_owner& key, PersonalityRef* out,
 		     const DoutPrefixProvider* dpp)
 {
   return thread_personality_table().find(key, out, dpp);
 }
 
-int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,
+int acquire_personality(const DoutPrefixProvider* dpp, const rgw_owner& key,
 			const Credentials& cred, PersonalityRef* out)
 {
   auto& table = thread_personality_table();

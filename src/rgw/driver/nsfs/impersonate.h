@@ -26,6 +26,13 @@
 
 namespace rgw { namespace sal { namespace nsfs {
 
+/* No identity in `o`:  the empty user, which is what
+ * rgw::sal::no_authenticated_user holds, or an empty account id. */
+inline bool owner_empty(const rgw_owner& o)
+{
+  return std::visit([](const auto& id) { return id.empty(); }, o);
+}
+
 /* Whether this task may change its own credentials.
  *
  * Registering an io_uring personality copies the credentials of the
@@ -84,7 +91,7 @@ PersonalityTable& thread_personality_table();
  *   -EBUSY   every slot is held by a live operation
  *   < 0      the registration failed
  */
-int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,
+int acquire_personality(const DoutPrefixProvider* dpp, const rgw_owner& key,
 			const Credentials& cred, PersonalityRef* out);
 
 /* Say that an identity's record has changed.
@@ -101,7 +108,7 @@ int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,
  * cost everybody, so sharding is strictly the weaker hammer at the
  * same price:  the read on the request path is one relaxed load
  * either way. */
-void note_identity_changed(const rgw_user& key);
+void note_identity_changed(const rgw_owner& key);
 
 /* Every identity's record may have changed.
  *
@@ -117,7 +124,7 @@ void note_all_identities_changed();
 
 /* The current generation `key` is read at, for tests.  A personality
  * registered at one generation is re-resolved once this moves. */
-uint64_t identity_generation(const rgw_user& key);
+uint64_t identity_generation(const rgw_owner& key);
 
 /* The level-1 lookup on its own:  a pinned personality if this ring
  * already has one for `key`, without resolving credentials.
@@ -129,7 +136,7 @@ uint64_t identity_generation(const rgw_user& key);
  *   0        `out` is pinned;  out.credentials() is usable
  *   -ENOENT  this ring has not seen `key`
  */
-int find_personality(const rgw_user& key, PersonalityRef* out,
+int find_personality(const rgw_owner& key, PersonalityRef* out,
 		     const DoutPrefixProvider* dpp = nullptr);
 
 /* Run one filesystem call as `cred`, on a thread that does nothing
@@ -196,10 +203,10 @@ int run_as(const DoutPrefixProvider* dpp, const Credentials& cred,
  * cannot express is run by a helper thread that assumes `cred`
  * itself. */
 struct FSIdentity {
-  rgw_user key;
+  rgw_owner key;
   Credentials cred;
 
-  bool active() const { return !key.empty(); }
+  bool active() const { return !owner_empty(key); }
 
   /* No identity:  the gateway's own credentials.  A reference to bind,
    * where `FSIdentity{}` in a ternary would be a temporary and the

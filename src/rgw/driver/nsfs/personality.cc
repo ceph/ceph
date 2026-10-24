@@ -93,7 +93,7 @@ bool PersonalityTable::invalidate(uint32_t slot)
   return true;
 }
 
-int PersonalityTable::find(const rgw_user& key, PersonalityRef* out,
+int PersonalityTable::find(const rgw_owner& key, PersonalityRef* out,
 			   const DoutPrefixProvider* dpp)
 {
   auto it = by_key.find(key);
@@ -168,7 +168,7 @@ uint32_t PersonalityTable::claim_slot(const DoutPrefixProvider* dpp)
 }
 
 int PersonalityTable::insert(const DoutPrefixProvider* dpp,
-			     const rgw_user& key, const Credentials& cred,
+			     const rgw_owner& key, const Credentials& cred,
 			     PersonalityRef* out)
 {
   /* A concurrent insert of the same key cannot happen -- one task

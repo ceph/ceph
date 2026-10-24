@@ -407,7 +407,7 @@ std::unique_ptr<struct ds3_bucket_info> DaosBucket::get_encoded_info(
 
 int DaosBucket::remove(const DoutPrefixProvider* dpp,
                        bool delete_children, optional_yield y,
-                       const rgw_user& authenticated_user) {
+                       const rgw_owner& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: remove_bucket, delete_children="
                      << delete_children << dendl;
 
@@ -702,7 +702,7 @@ int DaosBucket::list_multiparts(
     const string& delim, const int& max_uploads,
     vector<std::unique_ptr<MultipartUpload>>& uploads,
     map<string, bool>* common_prefixes, bool* is_truncated,
-    const rgw_user& authenticated_user) {
+    const rgw_owner& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: list_multiparts" << dendl;
   // End of uploading
   if (max_uploads == 0) {
@@ -902,7 +902,7 @@ DaosObject::~DaosObject() { close(nullptr); }
 
 int DaosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                               Attrs* delattrs, optional_yield y, uint32_t flags,
-                              const rgw_user& authenticated_user) {
+                              const rgw_owner& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: DaosObject::set_obj_attrs()" << dendl;
   // TODO handle target_obj
   // Get object's metadata (those stored in rgw_bucket_dir_entry)
@@ -937,7 +937,7 @@ int DaosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 int DaosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                  optional_yield y,
                                  const DoutPrefixProvider* dpp,
-                                 const rgw_user& authenticated_user, uint32_t flags) {
+                                 const rgw_owner& authenticated_user, uint32_t flags) {
   // Get object's metadata (those stored in rgw_bucket_dir_entry)
   ldpp_dout(dpp, 20) << "DEBUG: modify_obj_attrs" << dendl;
   rgw_bucket_dir_entry ent;
@@ -956,7 +956,7 @@ int DaosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 
 int DaosObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
                                  const char* attr_name, optional_yield y,
-                                 const rgw_user& authenticated_user) {
+                                 const rgw_owner& authenticated_user) {
   ldpp_dout(dpp, 20) << "DEBUG: delete_obj_attrs" << dendl;
   rgw_obj target = get_obj();
   Attrs rmattr;
@@ -1060,7 +1060,7 @@ int DaosObject::dump_obj_layout(const DoutPrefixProvider* dpp, optional_yield y,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-std::unique_ptr<Object::ReadOp> DaosObject::get_read_op(const rgw_user& authenticated_user) {
+std::unique_ptr<Object::ReadOp> DaosObject::get_read_op(const rgw_owner& authenticated_user) {
   return std::make_unique<DaosObject::DaosReadOp>(this);
 }
 
@@ -1171,7 +1171,7 @@ int DaosObject::DaosReadOp::get_attr(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-std::unique_ptr<Object::DeleteOp> DaosObject::get_delete_op(const rgw_user& authenticated_user) {
+std::unique_ptr<Object::DeleteOp> DaosObject::get_delete_op(const rgw_owner& authenticated_user) {
   return std::make_unique<DaosObject::DaosDeleteOp>(this);
 }
 
@@ -2015,7 +2015,7 @@ std::unique_ptr<Writer> DaosMultipartUpload::get_writer(
     rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t part_num,
     const std::string& part_num_str,
-    const rgw_user& authenticated_user) {
+    const rgw_owner& authenticated_user) {
   ldpp_dout(dpp, 20) << "DaosMultipartUpload::get_writer(): enter part="
                      << part_num << " head_obj=" << _head_obj << dendl;
   return std::make_unique<DaosMultipartWriter>(
@@ -2174,7 +2174,7 @@ int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
 
 std::unique_ptr<MultipartUpload> DaosBucket::get_multipart_upload(
     const std::string& oid,
-    const rgw_user& authenticated_user, std::optional<std::string> upload_id,
+    const rgw_owner& authenticated_user, std::optional<std::string> upload_id,
     ACLOwner owner, ceph::real_time mtime) {
   return std::make_unique<DaosMultipartUpload>(store, this, oid, upload_id,
                                                owner, mtime);
@@ -2186,7 +2186,7 @@ std::unique_ptr<Writer> DaosStore::get_append_writer(
     const rgw_placement_rule* ptail_placement_rule,
     const std::string& unique_tag, uint64_t position,
     uint64_t* cur_accounted_size,
-    const rgw_user& authenticated_user) {
+    const rgw_owner& authenticated_user) {
   DAOS_NOT_IMPLEMENTED_LOG(dpp);
   return nullptr;
 }
@@ -2196,7 +2196,7 @@ std::unique_ptr<Writer> DaosStore::get_atomic_writer(
     rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
     const std::string& unique_tag,
-    const rgw_user& authenticated_user) {
+    const rgw_owner& authenticated_user) {
   ldpp_dout(dpp, 20) << "get_atomic_writer" << dendl;
   return std::make_unique<DaosAtomicWriter>(dpp, y, obj, this,
                                             owner, ptail_placement_rule,

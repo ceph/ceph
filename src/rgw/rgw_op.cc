@@ -123,10 +123,23 @@ static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, re
  * account is the member;  `s->owner` would be the account.  A
  * request with nothing authenticated -- anonymous, and the paths
  * that run with no req_state user -- says so rather than leaving a
- * driver to run the operation as the daemon. */
-const rgw_user& authenticated_user(const req_state* s)
+ * driver to run the operation as the daemon.
+ *
+ * A role session is the exception.  Its `s->user` is the user that
+ * assumed the role, and a role in an account acts as that account,
+ * as RoleApplier::get_aclowner() does. */
+rgw_owner authenticated_user(const req_state* s)
 {
-  return s->user ? s->user->get_id() : rgw::sal::no_authenticated_user;
+  if (s->auth.identity &&
+      s->auth.identity->get_identity_type() == TYPE_ROLE) {
+    if (const auto& account = s->auth.identity->get_account(); account) {
+      return account->id;
+    }
+  }
+  if (s->user) {
+    return s->user->get_id();
+  }
+  return rgw::sal::no_authenticated_user;
 }
 
 static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
@@ -344,7 +357,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
                                     CephContext *cct,
 				    rgw::sal::Driver* driver,
 				    const ACLOwner& bucket_owner,
-				    const rgw_user& auth_user,
+				    const rgw_owner& auth_user,
 				    RGWAccessControlPolicy& policy,
                                     string *storage_class,
 				    rgw::sal::Object* obj,
@@ -518,7 +531,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
 
   int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
-				     s->user ? s->user->get_id() : rgw_user{},
+				     authenticated_user(s),
 				     acl, storage_class, object, s->yield);
   if (ret == -ENOENT) {
     // the object doesn't exist, but we can't expose that information to clients

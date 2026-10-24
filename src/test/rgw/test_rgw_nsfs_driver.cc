@@ -2155,11 +2155,11 @@ static nsfs::Credentials creds_for(uid_t uid)
 class ManualGenerations : public nsfs::GenerationSource {
 public:
   std::map<std::string, uint64_t> gens;
-  uint64_t generation(const rgw_user& key) const override {
-    auto it = gens.find(key.id);
+  uint64_t generation(const rgw_owner& key) const override {
+    auto it = gens.find(to_string(key));
     return it == gens.end() ? 0 : it->second;
   }
-  void bump(const rgw_user& key) { ++gens[key.id]; }
+  void bump(const rgw_owner& key) { ++gens[to_string(key)]; }
 };
 
 class NSFSPersonalityTest : public ::testing::Test {

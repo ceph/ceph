@@ -1815,7 +1815,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 {
   ldpp_dout(dpp, 10) << "nsfs: demote enter leaf=" << leaf
     << " enabled=" << ver_enabled << " as="
-    << (id.active() ? id.key.to_str() : std::string("gateway")) << dendl;
+    << (id.active() ? to_string(id.key) : std::string("gateway")) << dendl;
   int vfd = open_versions_dir(dpp, parent_fd, id, model);
   if (vfd < 0) {
     ldpp_dout(dpp, 10) << "nsfs: demote " << leaf
@@ -3225,7 +3225,7 @@ int File::open(const DoutPrefixProvider* dpp)
    * impersonation means the open ran as the gateway. */
   ldpp_dout(dpp, 20) << "nsfs: open " << get_name()
     << (ro ? " O_RDONLY" : " O_RDWR")
-    << " as " << (identity.active() ? identity.key.to_str() : "the gateway")
+    << " as " << (identity.active() ? to_string(identity.key) : "the gateway")
     << " -> " << ret << dendl;
   if (ret == -ELOOP) {
     /* O_NOFOLLOW met a link swapped in after the stat:  not an object */
@@ -6250,7 +6250,7 @@ std::unique_ptr<Writer> NSFSDriver::get_append_writer(const DoutPrefixProvider *
 				  const std::string& unique_tag,
 				  uint64_t position,
 				  uint64_t *cur_accounted_size,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   return nullptr;
 }
@@ -6262,7 +6262,7 @@ std::unique_ptr<Writer> NSFSDriver::get_atomic_writer(const DoutPrefixProvider *
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
 
   return std::make_unique<NSFSAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag,
@@ -6379,16 +6379,45 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
   }
 }
 
+/* A requester's credentials:  a user's own row, else its account's;
+ * an account's -- a role session in one -- its row.
+ *
+ * A user's account is needed only here, and such a user is normally in
+ * the user cache already, since authenticating it put it there.  A
+ * user that will not load still resolves under its own key.
+ * `account`, if given, receives the account a user resolved through. */
+static int resolve_requester(const DoutPrefixProvider* dpp,
+			     NSFSDriver* driver, const rgw_owner& who,
+			     optional_yield y, rgw_account_id* account,
+			     nsfs::Credentials& cred)
+{
+  const auto* user = std::get_if<rgw_user>(&who);
+  if (! user) {
+    return nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
+				     who, cred);
+  }
+  rgw_account_id acct;
+  std::unique_ptr<User> u = driver->get_user(*user);
+  if (u->load_user(dpp, y) == 0) {
+    acct = u->get_info().account_id;
+  }
+  if (account) {
+    *account = acct;
+  }
+  return nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
+				   *user, acct, cred);
+}
+
 /* Defined below, beside the operations that use it most. */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
-			       NSFSDriver* driver, const rgw_user& who,
+			       NSFSDriver* driver, const rgw_owner& who,
 			       nsfs::FSIdentity* ident,
 			       bool tolerate_absent = false);
 
 int NSFSBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
 			optional_yield y,
-			const rgw_user& authenticated_user)
+			const rgw_owner& authenticated_user)
 {
   info.owner = params.owner;
 
@@ -7643,7 +7672,7 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
 int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y,
-			const rgw_user& authenticated_user)
+			const rgw_owner& authenticated_user)
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
@@ -7675,7 +7704,7 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
    * or a caller with no request -- is the gateway throughout, raised
    * after a denial as before. */
   nsfs::FSIdentity id;
-  if (!is_internal() && !authenticated_user.empty()) {
+  if (!is_internal() && !nsfs::owner_empty(authenticated_user)) {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
 					 &id);
     if ((pret < 0) && (pret != -ENODATA)) {
@@ -10446,7 +10475,7 @@ int NSFSBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 
 std::unique_ptr<MultipartUpload> NSFSBucket::get_multipart_upload(
 				  const std::string& oid,
-				  const rgw_user& authenticated_user,
+				  const rgw_owner& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
@@ -10534,7 +10563,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
 				  bool *is_truncated, optional_yield y,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   /* S3 returns uploads ordered by key and then upload id, and a
    * directory offers no order.  Every entry is examined and the first
@@ -10708,7 +10737,7 @@ int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct
 
 int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
 				    CephContext* cct, optional_yield y,
-				    const rgw_user& requester)
+				    const rgw_owner& requester)
 {
   constexpr int max = 1000;
   std::vector<std::unique_ptr<MultipartUpload>> uploads;
@@ -10731,7 +10760,7 @@ int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
        * (remove_staging());  the gateway's is raised after a denial */
       auto abort = [&]() -> int { return upload->abort(dpp, cct, y); };
       ret = abort();
-      if (requester.empty() && ((ret == -EACCES) || (ret == -EPERM))) {
+      if (nsfs::owner_empty(requester) && ((ret == -EACCES) || (ret == -EPERM))) {
 	ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, abort);
       }
       if ((ret < 0) && (ret != -ENOENT) && (ret != -ERR_NO_SUCH_UPLOAD)) {
@@ -10752,9 +10781,9 @@ int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
 }
 
 int NSFSBucket::make_dir(const DoutPrefixProvider* dpp, optional_yield y,
-			 bool* existed, const rgw_user& creator)
+			 bool* existed, const rgw_owner& creator)
 {
-  if (is_internal() || creator.empty() ||
+  if (is_internal() || nsfs::owner_empty(creator) ||
       parent_is_base_path(driver->default_bucket_location(),
 			  dir->get_name())) {
     return dir->create(dpp, y, existed);
@@ -10808,7 +10837,7 @@ int NSFSBucket::make_dir(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* existed,
-		       const rgw_user& creator)
+		       const rgw_owner& creator)
 {
   int ret = make_dir(dpp, y, existed, creator);
   if (ret < 0) {
@@ -10854,16 +10883,8 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
   if ((ret == 0) && made && !is_internal() &&
       nsfs::impersonation_enabled()) {
     nsfs::Credentials cred;
-    if (!creator.empty()) {
-      /* the user's row, else its account's, as pin_personality_for()
-       * resolves a requester */
-      rgw_account_id account;
-      std::unique_ptr<User> u = driver->get_user(creator);
-      if (u->load_user(dpp, y) == 0) {
-	account = u->get_info().account_id;
-      }
-      ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
-				      creator, account, cred);
+    if (!nsfs::owner_empty(creator)) {
+      ret = resolve_requester(dpp, driver, creator, y, nullptr, cred);
     } else {
       ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
 				      info.owner, cred);
@@ -10883,7 +10904,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
     /* by whoever made it:  under a location the account owns the
      * gateway cannot remove its entry (make_dir()) */
     nsfs::FSIdentity id;
-    if (!creator.empty() &&
+    if (!nsfs::owner_empty(creator) &&
 	!parent_is_base_path(driver->default_bucket_location(),
 			     dir->get_name())) {
       (void) pin_personality_for(dpp, driver, creator, &id);
@@ -11016,7 +11037,7 @@ int NSFSObject::delete_object(const DoutPrefixProvider* dpp,
 int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
 		       rgw::sal::Bucket* dest_bucket,
 		       const rgw_obj_key& dest_key, uint32_t flags,
-		       const rgw_user& authenticated_user)
+		       const rgw_owner& authenticated_user)
 {
   NSFSBucket* sb = static_cast<NSFSBucket*>(get_bucket());
   NSFSBucket* db = static_cast<NSFSBucket*>(dest_bucket);
@@ -11046,7 +11067,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
    * record:  both key directories and their `.versions` are theirs.
    * Nobody named is the gateway, as for set_obj_attrs(). */
   nsfs::FSIdentity id;
-  if (! authenticated_user.empty()) {
+  if (! nsfs::owner_empty(authenticated_user)) {
     const int pret = pin_personality_for(dpp, driver, authenticated_user, &id);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
@@ -11057,7 +11078,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   }
   /* what this rename chose, for the `ran-as` hint:  before anything
    * touches the filesystem, so a rename that then fails still says */
-  driver->note_ran_as("rename", authenticated_user.to_str(), id);
+  driver->note_ran_as("rename", to_string(authenticated_user), id);
   const nsfs::AccessStrategy* model = driver->get_access_strategy();
 
   int ret = stat(dpp);
@@ -12845,7 +12866,7 @@ int NSFSObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, 
 
 int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags,
-                            const rgw_user& authenticated_user)
+                            const rgw_owner& authenticated_user)
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
@@ -12953,7 +12974,7 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 
 int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp,
-                               const rgw_user& authenticated_user, uint32_t flags)
+                               const rgw_owner& authenticated_user, uint32_t flags)
 {
   /* held off while this bucket's tree is being rewritten, as the other
    * attribute writes are;  see NSFSDriver::mutation_enter() */
@@ -13044,9 +13065,9 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
 }
 
 int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
-				       const rgw_user& who)
+				       const rgw_owner& who)
 {
-  if (who.empty()) {
+  if (nsfs::owner_empty(who)) {
     return 0;				/* nobody asked;  see the header */
   }
   nsfs::FSIdentity id;
@@ -13061,12 +13082,12 @@ int NSFSObject::pin_identity_for_attrs(const DoutPrefixProvider* dpp,
     set_access(id, /*ro=*/false);
   }
   /* what this attribute write chose, for the `ran-as` hint */
-  driver->note_ran_as("attrs", who.to_str(), id);
+  driver->note_ran_as("attrs", to_string(who), id);
   return 0;
 }
 
 int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y, const rgw_user& authenticated_user)
+                               optional_yield y, const rgw_owner& authenticated_user)
 {
   /* held off while this bucket's tree is being rewritten;  see
    * NSFSDriver::mutation_enter() */
@@ -13668,12 +13689,12 @@ int NSFSObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> NSFSObject::get_read_op(const rgw_user& authenticated_user)
+std::unique_ptr<Object::ReadOp> NSFSObject::get_read_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<NSFSReadOp>(this, authenticated_user);
 }
 
-std::unique_ptr<Object::DeleteOp> NSFSObject::get_delete_op(const rgw_user& authenticated_user)
+std::unique_ptr<Object::DeleteOp> NSFSObject::get_delete_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<NSFSDeleteOp>(this, authenticated_user);
 }
@@ -14189,7 +14210,7 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
  * the user it would be acting for.
  */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
-			       NSFSDriver* driver, const rgw_user& who,
+			       NSFSDriver* driver, const rgw_owner& who,
 			       nsfs::FSIdentity* ident,
 			       bool tolerate_absent)
 {
@@ -14199,7 +14220,7 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   if (ident->active()) {
     return 0;				/* already resolved */
   }
-  if (who.empty()) {
+  if (nsfs::owner_empty(who)) {
     /* This request specified no identity.  Under the switch that
      * is a gap in the call site rather than an anonymous request,
      * and serving it as the daemon is the thing to avoid.
@@ -14227,19 +14248,10 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  /* The account is needed only on a miss, and such a user is normally in
-   * the user cache already, since authenticating it put it there.  A
-   * user that will not load still resolves under its own key. */
   rgw_account_id account;
-  {
-    std::unique_ptr<User> u = driver->get_user(who);
-    if (u->load_user(dpp, null_yield) == 0) {
-      account = u->get_info().account_id;
-    }
-  }
   nsfs::Credentials cred;
-  const int ret = nsfs::resolve_credentials(
-      dpp, *driver->get_identity_db(), who, account, cred);
+  const int ret = resolve_requester(dpp, driver, who, null_yield,
+				    &account, cred);
   if (ret == -ENOENT) {
     /* A valid account always has an identity record;  one without
      * is a provisioning fault, reported rather than repaired. */
@@ -14586,7 +14598,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     }
   }
   /* what this delete chose, for the `ran-as` hint */
-  source->driver->note_ran_as("delete", auth_user.to_str(), identity);
+  source->driver->note_ran_as("delete", to_string(auth_user), identity);
   /* and the object's walk and removals with it.  Read-only:  a delete
    * reads the entry, and its unlink is the directory's */
   if (identity.active()) {
@@ -15825,7 +15837,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
 
   /* Nobody asked when the bucket's deletion aborts it
    * (NSFSBucket::abort_multiparts()), which raises for it itself. */
-  if (!auth_user.empty()) {
+  if (!nsfs::owner_empty(auth_user)) {
     const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
@@ -16547,7 +16559,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   load(dpp);
 

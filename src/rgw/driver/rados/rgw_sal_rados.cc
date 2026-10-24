@@ -171,7 +171,7 @@ int RadosStore::list_buckets(const DoutPrefixProvider* dpp,
 int RadosBucket::create(const DoutPrefixProvider* dpp,
                         const CreateParams& params,
                         optional_yield y,
-                        const rgw_user& authenticated_user)
+                        const rgw_owner& authenticated_user)
 {
   rgw_bucket key = get_key();
   key.marker = params.marker;
@@ -371,7 +371,7 @@ RadosBucket::~RadosBucket() {}
 int RadosBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y,
-			const rgw_user& authenticated_user)
+			const rgw_owner& authenticated_user)
 {
   int ret;
 
@@ -930,7 +930,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
 
 std::unique_ptr<MultipartUpload> RadosBucket::get_multipart_upload(
 				  const std::string& oid,
-				  const rgw_user& authenticated_user,
+				  const rgw_owner& authenticated_user,
 				  std::optional<std::string> upload_id,
 				  ACLOwner owner, ceph::real_time mtime)
 {
@@ -946,7 +946,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				 vector<std::unique_ptr<MultipartUpload>>& uploads,
 				 map<string, bool> *common_prefixes,
 				 bool *is_truncated, optional_yield y,
-				 const rgw_user& authenticated_user)
+				 const rgw_owner& authenticated_user)
 {
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
@@ -2684,7 +2684,7 @@ std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *
 				  const std::string& unique_tag,
 				  uint64_t position,
 				  uint64_t *cur_accounted_size,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
   RGWObjectCtx& obj_ctx = static_cast<RadosObject*>(obj)->get_ctx();
@@ -2704,7 +2704,7 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
   if (bucket_info.versioning_enabled() && !obj->have_instance()) {
@@ -2914,7 +2914,7 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
 
 int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			       Attrs* delattrs, optional_yield y, uint32_t flags,
-			       const rgw_user& authenticated_user)
+			       const rgw_owner& authenticated_user)
 {
   Attrs empty;
   const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
@@ -2947,7 +2947,7 @@ int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 
 int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 				  optional_yield y, const DoutPrefixProvider* dpp,
-				  const rgw_user& authenticated_user, uint32_t flags)
+				  const rgw_owner& authenticated_user, uint32_t flags)
 {
   rgw_obj target = get_obj();
   rgw_obj save = get_obj();
@@ -2974,7 +2974,7 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 
 int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
 				  const char* attr_name, optional_yield y,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   Attrs rmattr;
   bufferlist bl;
@@ -3654,7 +3654,7 @@ int RadosObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> RadosObject::get_read_op(const rgw_user& authenticated_user)
+std::unique_ptr<Object::ReadOp> RadosObject::get_read_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<RadosObject::RadosReadOp>(this, rados_ctx);
 }
@@ -3713,7 +3713,7 @@ int RadosObject::RadosReadOp::get_attr(const DoutPrefixProvider* dpp, const char
   return parent_op.get_attr(dpp, name, dest, y);
 }
 
-std::unique_ptr<Object::DeleteOp> RadosObject::get_delete_op(const rgw_user& authenticated_user)
+std::unique_ptr<Object::DeleteOp> RadosObject::get_delete_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<RadosObject::RadosDeleteOp>(this);
 }
@@ -4627,7 +4627,7 @@ std::unique_ptr<Writer> RadosMultipartUpload::get_writer(
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
   RGWObjectCtx& obj_ctx = static_cast<RadosObject*>(obj)->get_ctx();

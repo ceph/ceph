@@ -68,7 +68,7 @@ namespace rgw::sal {
   int DBBucket::create(const DoutPrefixProvider *dpp,
                        const CreateParams& params,
                        optional_yield y,
-                       const rgw_user& authenticated_user)
+                       const rgw_owner& authenticated_user)
   {
     rgw_bucket key = get_key();
     key.marker = params.marker;
@@ -149,7 +149,7 @@ namespace rgw::sal {
   }
 
   int DBBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y,
-                       const rgw_user& authenticated_user)
+                       const rgw_owner& authenticated_user)
   {
     int ret;
 
@@ -398,7 +398,7 @@ namespace rgw::sal {
 
   std::unique_ptr<MultipartUpload> DBBucket::get_multipart_upload(
 				const std::string& oid,
-				const rgw_user& authenticated_user,
+				const rgw_owner& authenticated_user,
 				std::optional<std::string> upload_id,
 				ACLOwner owner, ceph::real_time mtime) {
     return std::make_unique<DBMultipartUpload>(this->store, this, oid, upload_id,
@@ -413,7 +413,7 @@ namespace rgw::sal {
 				vector<std::unique_ptr<MultipartUpload>>& uploads,
 				map<string, bool> *common_prefixes,
 				bool *is_truncated, optional_yield y,
-				const rgw_user& authenticated_user) {
+				const rgw_owner& authenticated_user) {
     return 0;
   }
 
@@ -547,7 +547,7 @@ namespace rgw::sal {
 
   int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			      Attrs* delattrs, optional_yield y, uint32_t flags,
-			      const rgw_user& authenticated_user)
+			      const rgw_owner& authenticated_user)
   {
     Attrs empty;
     DB::Object op_target(store->getDB(),
@@ -565,7 +565,7 @@ namespace rgw::sal {
 
   int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 				 optional_yield y, const DoutPrefixProvider* dpp,
-				 const rgw_user& authenticated_user, uint32_t flags)
+				 const rgw_owner& authenticated_user, uint32_t flags)
   {
     rgw_obj target = get_obj();
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
@@ -583,7 +583,7 @@ namespace rgw::sal {
 
   int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
 				 const char* attr_name, optional_yield y,
-				 const rgw_user& authenticated_user)
+				 const rgw_owner& authenticated_user)
   {
     Attrs rmattr;
     bufferlist bl;
@@ -669,7 +669,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  std::unique_ptr<Object::ReadOp> DBObject::get_read_op(const rgw_user& authenticated_user)
+  std::unique_ptr<Object::ReadOp> DBObject::get_read_op(const rgw_owner& authenticated_user)
   {
     return std::make_unique<DBObject::DBReadOp>(this, nullptr);
   }
@@ -719,7 +719,7 @@ namespace rgw::sal {
     return parent_op.get_attr(dpp, name, dest);
   }
 
-  std::unique_ptr<Object::DeleteOp> DBObject::get_delete_op(const rgw_user& authenticated_user)
+  std::unique_ptr<Object::DeleteOp> DBObject::get_delete_op(const rgw_owner& authenticated_user)
   {
     return std::make_unique<DBObject::DBDeleteOp>(this);
   }
@@ -1166,7 +1166,7 @@ namespace rgw::sal {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
   {
     return std::make_unique<DBMultipartWriter>(dpp, y, this, obj, store, owner,
 				 ptail_placement_rule, part_num, part_num_str);
@@ -1546,7 +1546,7 @@ namespace rgw::sal {
 				  const std::string& unique_tag,
 				  uint64_t position,
 				  uint64_t *cur_accounted_size,
-				  const rgw_user& authenticated_user) {
+				  const rgw_owner& authenticated_user) {
     return nullptr;
   }
 
@@ -1557,7 +1557,7 @@ namespace rgw::sal {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag,
-				  const rgw_user& authenticated_user) {
+				  const rgw_owner& authenticated_user) {
     if (obj->get_bucket()->get_info().versioning_enabled() &&
         !obj->have_instance()) {
       obj->gen_rand_obj_instance_name();

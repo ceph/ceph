@@ -1490,7 +1490,7 @@ public:
 				const std::string& unique_tag,
 				uint64_t position,
 				uint64_t *cur_accounted_size,
-				const rgw_user& authenticated_user) override;
+				const rgw_owner& authenticated_user) override;
   virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				optional_yield y,
 				rgw::sal::Object* obj,
@@ -1498,7 +1498,7 @@ public:
 				const rgw_placement_rule *ptail_placement_rule,
 				uint64_t olh_epoch,
 				const std::string& unique_tag,
-				const rgw_user& authenticated_user) override;
+				const rgw_owner& authenticated_user) override;
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
@@ -2061,7 +2061,7 @@ public:
 			    optional_yield y, MutationPurpose purpose);
   virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
 		     optional_yield y,
-		     const rgw_user& authenticated_user) override;
+		     const rgw_owner& authenticated_user) override;
   virtual int remove_bypass_gc(int concurrent_max,
 			       bool keep_index_consistent,
 			       optional_yield y,
@@ -2069,7 +2069,7 @@ public:
   virtual int create(const DoutPrefixProvider* dpp,
 		     const CreateParams& params,
 		     optional_yield y,
-		     const rgw_user& authenticated_user) override;
+		     const rgw_owner& authenticated_user) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
 
   /* Read the extensions marker and resolve it, if that has not happened
@@ -2313,7 +2313,7 @@ public:
 
   virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid,
-				const rgw_user& authenticated_user,
+				const rgw_owner& authenticated_user,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
   virtual int list_multiparts(const DoutPrefixProvider *dpp,
@@ -2324,7 +2324,7 @@ public:
 			      std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 			      std::map<std::string, bool> *common_prefixes,
 			      bool *is_truncated, optional_yield y,
-			      const rgw_user& authenticated_user) override;
+			      const rgw_owner& authenticated_user) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 			       CephContext* cct, optional_yield y) override;
 
@@ -2333,12 +2333,12 @@ public:
    * model;  no_authenticated_user is the gateway, raised after a
    * denial, as abort_multiparts() is */
   int abort_multiparts_as(const DoutPrefixProvider* dpp, CephContext* cct,
-			  optional_yield y, const rgw_user& requester);
+			  optional_yield y, const rgw_owner& requester);
   /* The bucket directory made by whoever had to be able to make it
    * (DECISIONS.md 2026-10-24):  the gateway in the base path, `creator`
    * under a location the account owns. */
   int make_dir(const DoutPrefixProvider* dpp, optional_yield y,
-	       bool* existed, const rgw_user& creator);
+	       bool* existed, const rgw_owner& creator);
   /* An owned bucket directory removed with `id` acting where the
    * requester acts (remove()):  everything in it, and its entry in a
    * location the account owns;  the gateway removes its entry from the
@@ -2349,7 +2349,7 @@ public:
   /* `creator` is who the directory is given to (raise site 4), or
    * no_authenticated_user where no request made it */
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed,
-	     const rgw_user& creator);
+	     const rgw_owner& creator);
   nsfs::Directory* get_dir() { return dir.get(); }
   int get_dir_fd(const DoutPrefixProvider *dpp) { dir->open(dpp); return dir->get_fd(); }
   /* TODO dang Escape the bucket name for file use */
@@ -2443,7 +2443,7 @@ public:
     NSFSObject* source;
     int64_t part_ofs{0};
 
-    NSFSReadOp(NSFSObject* _source, const rgw_user& _auth_user) :
+    NSFSReadOp(NSFSObject* _source, const rgw_owner& _auth_user) :
       source(_source), auth_user(_auth_user) {}
     virtual ~NSFSReadOp() = default;
 
@@ -2460,7 +2460,7 @@ public:
      * byte costs no registration.  No personality is held across the
      * operation:  each submission looks one up on the thread it runs
      * on. */
-    rgw_user auth_user;
+    rgw_owner auth_user;
     nsfs::FSIdentity identity;
     /* resolve who this op runs as, into `identity`.  0 or -errno;
      * -ENODATA means impersonation is off and the caller proceeds as
@@ -2477,9 +2477,9 @@ public:
     NSFSObject* source;
     /* who asked, from get_delete_op(), for the writes a delete makes
      * inside `.versions` */
-    rgw_user auth_user;
+    rgw_owner auth_user;
 
-    NSFSDeleteOp(NSFSObject* _source, const rgw_user& _auth_user) :
+    NSFSDeleteOp(NSFSObject* _source, const rgw_owner& _auth_user) :
       source(_source), auth_user(_auth_user) {}
     virtual ~NSFSDeleteOp() = default;
 
@@ -2529,7 +2529,7 @@ public:
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
   		     rgw::sal::Bucket* dest_bucket,
   		     const rgw_obj_key& dest_key, uint32_t flags,
-		     const rgw_user& authenticated_user) override;
+		     const rgw_owner& authenticated_user) override;
 
   virtual int copy_object(const ACLOwner& owner,
                const rgw_user& remote_user,
@@ -2580,14 +2580,14 @@ public:
   virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y, uint32_t flags,
-			    const rgw_user& authenticated_user) override;
+			    const rgw_owner& authenticated_user) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 			       optional_yield y, const DoutPrefixProvider* dpp,
-			       const rgw_user& authenticated_user,
+			       const rgw_owner& authenticated_user,
 			       uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-			       optional_yield y, const rgw_user& authenticated_user) override;
+			       optional_yield y, const rgw_owner& authenticated_user) override;
   virtual bool is_expired() override;
   virtual void gen_rand_obj_instance_name() override;
   virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, optional_yield y,
@@ -2621,8 +2621,8 @@ public:
 				       const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
 				    const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual std::unique_ptr<ReadOp> get_read_op(const rgw_user& authenticated_user) override;
-  virtual std::unique_ptr<DeleteOp> get_delete_op(const rgw_user& authenticated_user) override;
+  virtual std::unique_ptr<ReadOp> get_read_op(const rgw_owner& authenticated_user) override;
+  virtual std::unique_ptr<DeleteOp> get_delete_op(const rgw_owner& authenticated_user) override;
   virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 				    const std::set<std::string>& keys,
 				    Attrs* vals) override;
@@ -2675,7 +2675,7 @@ public:
    * `rgw::sal::no_authenticated_user` means -- lifecycle, restore, a
    * chown -- and those run as the gateway by design. */
   int pin_identity_for_attrs(const DoutPrefixProvider* dpp,
-			     const rgw_user& who);
+			     const rgw_owner& who);
 
   /* Run an attribute operation, and where the filesystem denied the
    * requester an operation S3 had authorised, run it again as the
@@ -2811,13 +2811,13 @@ protected:
   ceph::real_time mtime;
   std::unique_ptr<rgw::sal::NSFSBucket> shadow;
   /* who the upload's operations are for, from get_multipart_upload() */
-  rgw_user auth_user;
+  rgw_owner auth_user;
   nsfs::FSIdentity identity;
 
 public:
   NSFSMultipartUpload(NSFSDriver* _driver, Bucket* _bucket, const std::string& _oid,
 		       std::optional<std::string> _upload_id, ACLOwner _owner,
-		       ceph::real_time _mtime, const rgw_user& _auth_user) :
+		       ceph::real_time _mtime, const rgw_owner& _auth_user) :
     StoreMultipartUpload(_bucket), driver(_driver),
     mp_obj(driver, _oid, _upload_id, _owner), mtime(_mtime),
     auth_user(_auth_user) {}
@@ -2871,7 +2871,7 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str,
-			  const rgw_user& authenticated_user) override;
+			  const rgw_owner& authenticated_user) override;
 
   NSFSBucket* get_shadow() { return shadow.get(); }
 
@@ -2918,7 +2918,7 @@ private:
   NSFSObject* obj;
   QD2PendingWrite pending_write;
   optional_yield yield;
-  rgw_user auth_user;
+  rgw_owner auth_user;
   nsfs::FSIdentity identity;
   /* who uring_write's transfers run as;  declared before it, so it
    * outlives it */
@@ -2936,7 +2936,7 @@ public:
                     const rgw_placement_rule *_ptail_placement_rule,
                     uint64_t _olh_epoch,
                     const std::string& _unique_tag,
-                    const rgw_user& _auth_user) :
+                    const rgw_owner& _auth_user) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),
@@ -2964,7 +2964,7 @@ public:
 
 class NSFSMultipartWriter : public StoreWriter {
 private:
-  rgw_user auth_user;
+  rgw_owner auth_user;
   nsfs::FSIdentity identity;
   /* who uring_write's transfers run as;  declared before it, so it
    * outlives it */
@@ -3055,7 +3055,7 @@ public:
                     uint64_t _part_num,
 		    nsfs::MPUStrategy* _mpu_strat,
 		    file::listing::MultipartCacheKey&& _mp_cache_key,
-		    const rgw_user& _auth_user,
+		    const rgw_owner& _auth_user,
 		    uint64_t _base_offset = 0,
 		    bool _shared_target = false,
 		    const std::string& _shared_name = std::string(),

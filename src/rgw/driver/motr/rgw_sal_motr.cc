@@ -541,7 +541,7 @@ int MotrUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutP
 }
 
 int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y,
-                       const rgw_user& authenticated_user)
+                       const rgw_owner& authenticated_user)
 {
   int ret;
 
@@ -991,7 +991,7 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
       vector<std::unique_ptr<MultipartUpload>>& uploads,
       map<string, bool> *common_prefixes,
       bool *is_truncated,
-      const rgw_user& authenticated_user)
+      const rgw_owner& authenticated_user)
 {
   int rc;
   vector<string> key_vec(max_uploads);
@@ -1189,7 +1189,7 @@ MotrObject::~MotrObject() {
 
 int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			      Attrs* delattrs, optional_yield y, uint32_t flags,
-			      const rgw_user& authenticated_user)
+			      const rgw_owner& authenticated_user)
 {
   // TODO: implement
   ldpp_dout(dpp, 20) <<__func__<< ": MotrObject::set_obj_attrs()" << dendl;
@@ -1238,7 +1238,7 @@ int MotrObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, r
 
 int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 				 optional_yield y, const DoutPrefixProvider* dpp,
-				 const rgw_user& authenticated_user, uint32_t flags)
+				 const rgw_owner& authenticated_user, uint32_t flags)
 {
   rgw_obj target = get_obj();
   int r = get_obj_attrs(y, dpp, &target);
@@ -1253,7 +1253,7 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 
 int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
 				 const char* attr_name, optional_yield y,
-				 const rgw_user& authenticated_user)
+				 const rgw_owner& authenticated_user)
 {
   rgw_obj target = get_obj();
   Attrs rmattr;
@@ -1325,7 +1325,7 @@ int MotrObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> MotrObject::get_read_op(const rgw_user& authenticated_user)
+std::unique_ptr<Object::ReadOp> MotrObject::get_read_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<MotrObject::MotrReadOp>(this);
 }
@@ -1453,7 +1453,7 @@ int MotrObject::MotrReadOp::get_attr(const DoutPrefixProvider* dpp, const char* 
   return -ENODATA;
 }
 
-std::unique_ptr<Object::DeleteOp> MotrObject::get_delete_op(const rgw_user& authenticated_user)
+std::unique_ptr<Object::DeleteOp> MotrObject::get_delete_op(const rgw_owner& authenticated_user)
 {
   return std::make_unique<MotrObject::MotrDeleteOp>(this);
 }
@@ -2977,7 +2977,7 @@ std::unique_ptr<Writer> MotrMultipartUpload::get_writer(
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str,
-				  const rgw_user& authenticated_user)
+				  const rgw_owner& authenticated_user)
 {
   return std::make_unique<MotrMultipartWriter>(dpp, y, this,
 				 obj, store, owner,
@@ -3136,7 +3136,7 @@ int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
 }
 
 std::unique_ptr<MultipartUpload> MotrBucket::get_multipart_upload(const std::string& oid,
-                                                                  const rgw_user& authenticated_user,
+                                                                  const rgw_owner& authenticated_user,
                                 std::optional<std::string> upload_id,
                                 ACLOwner owner, ceph::real_time mtime)
 {
@@ -3151,7 +3151,7 @@ std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *d
         const std::string& unique_tag,
         uint64_t position,
         uint64_t *cur_accounted_size,
-        const rgw_user& authenticated_user) {
+        const rgw_owner& authenticated_user) {
   return nullptr;
 }
 
@@ -3162,7 +3162,7 @@ std::unique_ptr<Writer> MotrStore::get_atomic_writer(const DoutPrefixProvider *d
         const rgw_placement_rule *ptail_placement_rule,
         uint64_t olh_epoch,
         const std::string& unique_tag,
-        const rgw_user& authenticated_user) {
+        const rgw_owner& authenticated_user) {
   return std::make_unique<MotrAtomicWriter>(dpp, y,
                   obj, this, owner,
                   ptail_placement_rule, olh_epoch, unique_tag);

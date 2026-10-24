@@ -49,6 +49,21 @@ struct hash<rgw_user> {
     return XXH3_64bits_withSeed(u.ns.data(), u.ns.size(), h);
   }
 };
+
+/* The personality key:  a user, or an account where a role session
+ * acts as one.  The alternative's index seeds the hash, so a user and
+ * an account with the same id are different keys. */
+template <>
+struct hash<rgw_owner> {
+  using is_avalanching = void;
+  auto operator()(const rgw_owner& o) const noexcept -> uint64_t {
+    if (const auto* u = std::get_if<rgw_user>(&o); u) {
+      return hash<rgw_user>{}(*u);
+    }
+    const auto& a = std::get<rgw_account_id>(o);
+    return XXH3_64bits_withSeed(a.data(), a.size(), o.index());
+  }
+};
 } // namespace ankerl::unordered_dense
 
 namespace rgw { namespace sal { namespace nsfs {
@@ -71,7 +86,7 @@ struct GenerationSource {
   virtual ~GenerationSource() = default;
   /* Any change to this identity must make this return something it
    * has not returned before. */
-  virtual uint64_t generation(const rgw_user& key) const = 0;
+  virtual uint64_t generation(const rgw_owner& key) const = 0;
 };
 
 /* A pinned slot.
@@ -184,7 +199,7 @@ public:
    * slot keeps the credentials for that reason:  without them a
    * hit would still have to resolve, because the thread-pool
    * fallback assumes the identity itself. */
-  int find(const rgw_user& key, PersonalityRef* out,
+  int find(const rgw_owner& key, PersonalityRef* out,
 	   const DoutPrefixProvider* dpp = nullptr);
 
   /* Register `cred` and install it, evicting if the table is full.
@@ -194,7 +209,7 @@ public:
    *            request rather than serve it unimpersonated
    *   < 0      whatever the registrar returned
    */
-  int insert(const DoutPrefixProvider* dpp, const rgw_user& key,
+  int insert(const DoutPrefixProvider* dpp, const rgw_owner& key,
 	     const Credentials& cred, PersonalityRef* out);
 
   size_t capacity() const { return slots.size(); }
@@ -205,7 +220,7 @@ private:
   friend class PersonalityRef;
 
   struct Slot {
-    rgw_user key;
+    rgw_owner key;
     Credentials cred;
     /* what the generation source said when this was registered */
     uint64_t gen{0};
@@ -224,7 +239,7 @@ private:
   bool invalidate(uint32_t slot);
 
   std::vector<Slot> slots;
-  ankerl::unordered_dense::map<rgw_user, uint32_t> by_key;
+  ankerl::unordered_dense::map<rgw_owner, uint32_t> by_key;
   uint32_t cursor{0};
   Registrar* registrar;
   const GenerationSource* gen_source;

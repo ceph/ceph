@@ -177,9 +177,11 @@ static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
  * An `authenticated_user` parameter names who an operation is for:
  * the identity the request authenticated as, which for a member of an
  * account is the member and not the account that owns what it
- * touches.  A driver that maps an identity to filesystem credentials
- * needs the member, or every member of an account is served as one;
- * a driver with no such mapping ignores it.
+ * touches, and for a session of a role in an account is that account,
+ * since a role has no user of its own.  A driver that maps an
+ * identity to filesystem credentials needs the member, or every member
+ * of an account is served as one;  a driver with no such mapping
+ * ignores it.
  *
  * The parameter is not defaulted, deliberately:  such a driver runs an
  * unnamed operation as the daemon, which reaches more of the
@@ -187,7 +189,7 @@ static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
  * made to say which it is.  This names the cases that genuinely have
  * nobody -- lifecycle, restore, sync, a cache's own writeback -- and
  * makes them greppable as a set. */
-inline const rgw_user no_authenticated_user{};
+inline const rgw_owner no_authenticated_user{};
 
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
@@ -727,7 +729,7 @@ class Driver {
 				  const std::string& unique_tag,
 				  uint64_t position,
 				  uint64_t *cur_accounted_size,
-				  const rgw_user& authenticated_user) = 0;
+				  const rgw_owner& authenticated_user) = 0;
     /** Get a Writer that atomically writes an entire object, for
      * `authenticated_user` */
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
@@ -737,7 +739,7 @@ class Driver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag,
-				  const rgw_user& authenticated_user) = 0;
+				  const rgw_owner& authenticated_user) = 0;
 
     /** Get the compression type of a placement rule */
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
@@ -979,7 +981,7 @@ class Bucket {
      * see no_authenticated_user */
     virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
 		       optional_yield y,
-		       const rgw_user& authenticated_user) = 0;
+		       const rgw_owner& authenticated_user) = 0;
     /** Remove this bucket, bypassing garbage collection.  May be removed */
     virtual int remove_bypass_gc(int concurrent_max, bool
 				 keep_index_consistent,
@@ -1017,7 +1019,7 @@ class Bucket {
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
                        optional_yield y,
-                       const rgw_user& authenticated_user) = 0;
+                       const rgw_owner& authenticated_user) = 0;
 
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
@@ -1119,7 +1121,7 @@ class Bucket {
      * which an undefaulted one cannot follow. */
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
 				const std::string& oid,
-				const rgw_user& authenticated_user,
+				const rgw_owner& authenticated_user,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) = 0;
     /** List multipart uploads currently in this bucket.  Each upload is
@@ -1132,7 +1134,7 @@ class Bucket {
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated, optional_yield y,
-				const rgw_user& authenticated_user) = 0;
+				const rgw_owner& authenticated_user) = 0;
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct, optional_yield y) = 0;
@@ -1447,7 +1449,7 @@ public:
 
     virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
 		       Bucket* dest_bucket, const rgw_obj_key& dest_key,
-		       uint32_t flags, const rgw_user& authenticated_user) {
+		       uint32_t flags, const rgw_owner& authenticated_user) {
       return -ENOTSUP;
     }
 
@@ -1533,18 +1535,18 @@ public:
      * `authenticated_user`:  see no_authenticated_user. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			      Attrs* delattrs, optional_yield y, uint32_t flags,
-			      const rgw_user& authenticated_user) = 0;
+			      const rgw_owner& authenticated_user) = 0;
     /** Get attributes for this object */
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) = 0;
     /** Modify attributes for this object. */
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 				 optional_yield y, const DoutPrefixProvider* dpp,
-				 const rgw_user& authenticated_user,
+				 const rgw_owner& authenticated_user,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) = 0;
     /** Delete attributes for this object */
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp,
 				 const char* attr_name, optional_yield y,
-				 const rgw_user& authenticated_user) = 0;
+				 const rgw_owner& authenticated_user) = 0;
     /** Check to see if this object has expired */
     virtual bool is_expired() = 0;
     /** Create a randomized instance ID for this object */
@@ -1674,10 +1676,10 @@ public:
     /** Get a new ReadOp for this object, for `authenticated_user` (see
      * no_authenticated_user) */
     virtual std::unique_ptr<ReadOp> get_read_op(
-				const rgw_user& authenticated_user) = 0;
+				const rgw_owner& authenticated_user) = 0;
     /** Get a new DeleteOp for this object, for `authenticated_user` */
     virtual std::unique_ptr<DeleteOp> get_delete_op(
-				const rgw_user& authenticated_user) = 0;
+				const rgw_owner& authenticated_user) = 0;
 
     /// Return stored torrent info or -ENOENT if there isn't any.
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
@@ -1849,7 +1851,7 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str,
-			  const rgw_user& authenticated_user) = 0;
+			  const rgw_owner& authenticated_user) = 0;
 
   /** Print the Upload to @a out */
   virtual void print(std::ostream& out) const = 0;
