@@ -8,7 +8,11 @@
 #include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/Types.h"
+#include <deque>
+#include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 struct Context;
 
@@ -33,9 +37,12 @@ public:
       const std::string &global_group_id,
       bool resync,
       librbd::asio::ContextWQ *work_queue,
+      const std::map<std::string, std::pair<int64_t, std::string>>
+        &extra_trash_images,
       Context *on_finish) {
     return new RemoveLocalGroupRequest(io_ctx, global_group_id,
-                                       resync, work_queue, on_finish);
+                                       resync, work_queue,
+                                       extra_trash_images, on_finish);
   }
 
   RemoveLocalGroupRequest(
@@ -43,9 +50,12 @@ public:
       const std::string &global_group_id,
       bool resync,
       librbd::asio::ContextWQ *work_queue,
+      const std::map<std::string, std::pair<int64_t, std::string>>
+        &extra_trash_images,
       Context *on_finish)
     : m_io_ctx(io_ctx), m_global_group_id(global_group_id),
-      m_resync(resync), m_work_queue(work_queue), m_on_finish(on_finish) {
+      m_resync(resync), m_work_queue(work_queue), m_on_finish(on_finish),
+      m_trash_images(extra_trash_images) {
   }
 
   void send();
@@ -69,11 +79,31 @@ private:
    * DISABLE_MIRROR_GROUP
    *    |
    *    v
+   * LIST_GROUP_SNAPSHOTS
+   *    |
+   *    v
+   * OPEN_SNAPSHOT_IMAGES
+   *    |
+   *    v
+   * REMOVE_GROUP_SNAPSHOTS
+   *    |
+   *    v
+   * CLOSE_SNAPSHOT_IMAGES
+   *    |
+   *    v
+   * LIST_GROUP_IMAGES
+   *    |
+   *    v
+   * GET_MIRROR_IMAGES
+   *    |
+   *    v
    * REMOVE_IMAGE_FROM_GROUP <--
    *    |                      |
-   *    v                      |
-   * IMAGE_TRASH_MOVE ----------
-   *    |
+   *    v                      |  fail
+   * IMAGE_TRASH_MOVE -------- + --------> RESTORE_IMAGE_TO_GROUP
+   *    |                                          |
+   *    |                                          v
+   *    |                                       <finish>
    *    v
    * REMOVE_LOCAL_GROUP
    *    |
@@ -101,9 +131,14 @@ private:
   std::string m_group_id;
   std::string m_group_name;
   uint64_t m_num_images;
+  int m_ret_val = 0;
 
   bufferlist m_out_bl;
+  std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
+  size_t m_group_snap_index = 0;
+  std::vector<ImageCtxT *> m_snapshot_image_ctxs;
   std::list<cls::rbd::GroupImageStatus> m_images;
+  std::deque<std::pair<int64_t, std::string>> m_unmirrored_images;
 
   cls::rbd::MirrorGroup m_mirror_group;
   librbd::mirror::PromotionState m_promotion_state;
@@ -123,17 +158,35 @@ private:
   void disable_mirror_group();
   void handle_disable_mirror_group(int r);
 
+  void list_group_snapshots();
+  void handle_list_group_snapshots(int r);
+
+  void open_snapshot_images();
+  void handle_open_snapshot_images(int r);
+
+  void remove_group_snapshot();
+  void handle_remove_group_snapshot(int r);
+
+  void close_snapshot_images();
+  void handle_close_snapshot_images(int r);
+
   void list_group_images();
   void handle_list_group_images(int r);
 
   void get_mirror_images();
   void handle_get_mirror_images(int r);
 
+  void remove_unmirrored_image_from_group();
+  void handle_remove_unmirrored_image_from_group(int r);
+
   void remove_image_from_group();
   void handle_remove_image_from_group(int r);
 
   void move_image_to_trash();
   void handle_move_image_to_trash(int r);
+
+  void restore_image_to_group();
+  void handle_restore_image_to_group(int r);
 
   void remove_local_group();
   void handle_remove_local_group(int r);
@@ -158,4 +211,3 @@ private:
 extern template class rbd::mirror::group_replayer::RemoveLocalGroupRequest<librbd::ImageCtx>;
 
 #endif // RBD_MIRROR_GROUP_REPLAYER_REMOVE_LOCAL_GROUP_REQUEST_H
-

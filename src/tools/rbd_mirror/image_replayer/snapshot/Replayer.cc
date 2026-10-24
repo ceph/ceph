@@ -994,6 +994,17 @@ template <typename I>
 void Replayer<I>::create_non_primary_snapshot() {
   auto local_image_ctx = m_state_builder->local_image_ctx;
 
+  cls::rbd::GroupSpec local_group_spec;
+  {
+    std::unique_lock locker{m_lock};
+    // A historical member can already be detached from the live group, so
+    // ImageCtx::group_spec is no longer usable. Preserve the local group
+    // identity supplied with this group snapshot.
+    if (m_remote_group_image_snap_id == m_remote_snap_id_end) {
+      local_group_spec = m_local_group_spec;
+    }
+  }
+
   if (m_local_snap_id_start > 0) {
     std::shared_lock local_image_locker{local_image_ctx->image_lock};
 
@@ -1068,7 +1079,8 @@ void Replayer<I>::create_non_primary_snapshot() {
     local_image_ctx, m_remote_mirror_snap_ns.is_demoted(),
     m_remote_mirror_snap_ns.group_snap_id,
     m_state_builder->remote_mirror_uuid, m_remote_snap_id_end,
-    m_local_mirror_snap_ns.snap_seqs, m_image_state, &m_local_snap_id_end, ctx);
+    m_local_mirror_snap_ns.snap_seqs, m_image_state, &m_local_snap_id_end, ctx,
+    local_group_spec);
   req->send();
 }
 
@@ -1396,11 +1408,35 @@ void Replayer<I>::unlink_peer(uint64_t remote_snap_id) {
   // start snapshot in the remote image
   dout(10) << "remote_snap_id=" << remote_snap_id << dendl;
 
+  bool allow_remove = false;
+  auto remote_image_ctx = m_state_builder->remote_image_ctx;
+  {
+    std::shared_lock image_locker{remote_image_ctx->image_lock};
+    auto snap_it = remote_image_ctx->snap_info.find(remote_snap_id);
+    if (snap_it != remote_image_ctx->snap_info.end()) {
+      auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+        &snap_it->second.snap_namespace);
+      if (mirror_ns != nullptr && !mirror_ns->group_spec.is_valid()) {
+        for (++snap_it; snap_it != remote_image_ctx->snap_info.end();
+             ++snap_it) {
+          auto newer_mirror_ns =
+            std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+              &snap_it->second.snap_namespace);
+          if (newer_mirror_ns != nullptr &&
+              newer_mirror_ns->group_spec.is_valid()) {
+            allow_remove = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_unlink_peer>(this);
   auto req = librbd::mirror::snapshot::UnlinkPeerRequest<I>::create(
-    m_state_builder->remote_image_ctx, remote_snap_id,
-    m_remote_mirror_peer_uuid, false, ctx);
+    remote_image_ctx, remote_snap_id, m_remote_mirror_peer_uuid,
+    allow_remove, ctx);
   req->send();
 }
 

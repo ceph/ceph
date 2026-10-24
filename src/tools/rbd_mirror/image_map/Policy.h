@@ -32,14 +32,15 @@ public:
   // init -- called during initialization
   void init(const std::map<GlobalId, cls::rbd::MirrorImageMap> &image_mapping);
 
-  // lookup an image from the map
+  // lookup an entity from the map
   LookupInfo lookup(const GlobalId &global_id);
 
-  // add, remove
+  // Add, remove, or reweight a mirrored entity.
   bool add_entity(const GlobalId &global_id, uint64_t weight);
   bool remove_entity(const GlobalId &global_id);
+  bool modify_entity(const GlobalId &global_id, uint64_t weight);
 
-  // shuffle images when instances are added/removed
+  // shuffle entities when instances are added/removed
   void add_instances(const InstanceIds &instance_ids, GlobalIds* global_ids);
   void remove_instances(const InstanceIds &instance_ids, GlobalIds* global_ids);
 
@@ -62,9 +63,9 @@ protected:
   virtual std::string do_map(const InstanceToImageMap& map,
                              const GlobalId &global_id) = 0;
 
-  // shuffle images when instances are added/removed
+  // shuffle entities when instances are added/removed
   virtual void do_shuffle_add_instances(
-      const InstanceToImageMap& map, size_t image_count,
+      const InstanceToImageMap& map, size_t entity_weight,
       GlobalIds *remap_global_ids) = 0;
 
 private:

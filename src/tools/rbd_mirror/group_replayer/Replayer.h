@@ -11,6 +11,7 @@
 #include "librbd/mirror/snapshot/Types.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/group_replayer/Types.h"
+#include <set>
 #include <string>
 
 class Context;
@@ -20,6 +21,7 @@ namespace rbd {
 namespace mirror {
 
 template <typename> class ImageReplayer;
+template <typename> class InstanceWatcher;
 class PoolMetaCache;
 template <typename> struct Threads;
 
@@ -38,10 +40,11 @@ public:
       std::string local_group_id,
       std::string remote_group_id,
       GroupCtx *local_group_ctx,
+      InstanceWatcher<ImageCtxT> *instance_watcher,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers) {
     return new Replayer(threads, local_io_ctx, remote_io_ctx, global_group_id,
         local_mirror_uuid, pool_meta_cache, local_group_id, remote_group_id,
-        local_group_ctx, image_replayers);
+        local_group_ctx, instance_watcher, image_replayers);
   }
 
   Replayer(
@@ -54,6 +57,7 @@ public:
       std::string local_group_id,
       std::string remote_group_id,
       GroupCtx *local_group_ctx,
+      InstanceWatcher<ImageCtxT> *instance_watcher,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers);
   ~Replayer();
 
@@ -91,6 +95,8 @@ private:
  * remote group snapshots, validates snapshot synchronization, creates new
  * group snapshots, waits for image replay and marks group snaps to complete,
  * updates group state, and prunes snapshots that are no longer needed.
+ * A membership change restarts bootstrap so the next saved membership is
+ * reconciled before the replayer continues.
  *
  * STATES:
  * ======
@@ -167,6 +173,14 @@ private:
  *                   + --------> m_state = STATE_IDLE                                      |                                       |
  *                   |                                                                     |                                       |
  *                   v                                                                     |                                       |
+ *          PREPARE_GROUP_SNAPSHOT                                                         |                                       |
+ *                   |                                                                     |                                       |
+ *                   v                                                                     |                                       |
+ *       LOCAL_GROUP_IMAGE_LIST_BY_ID                                                      |                                       |
+ *                   | load error or membership cannot be resolved                         |                                       |
+ *                   + -------------------------------------------> HANDLE_REPLAY_COMPLETE |                                       |
+ *                   |                                                                     |                                       |
+ *                   v                                                                     |                                       |
  *         CREATE_USER_GROUP_SNAPSHOTS                                                     |                                       |
  *                   |                                                                     |                                       |
  *                   v                                                                     |                                       |
@@ -237,8 +251,6 @@ private:
  *                                                           v c_gather waits for all callbacks                                --+ |
  *                                                           + ------------------------------------------------------------------> +
  *
- *
- *
  * PRUNE_CREATING_GROUP_SNAPSHOTS PATH
  * ===================================
  *
@@ -287,17 +299,62 @@ private:
  *          LOAD_REPLAYER
  *
  *
+ *  IMAGE SNAPSHOT PRUNING PATH
+ *  ===========================
+ *
+ *      PRUNE_ALL_IMAGE_SNAPSHOTS
+ *                   |
+ *                   | group-owned image
+ *                   |-------------------------> PRUNE_IMAGE_SNAPSHOT
+ *                   |                                  |
+ *                   |                                  v
+ *                   |                       SCHEDULE_LOAD_GROUP_SNAPSHOTS
+ *                   |
+ *                   | standalone image
+ *                   |-------------------------> INSTANCE_REPLAYER_PRUNE_IMAGE_SNAPSHOT
+ *                   |                                  |
+ *                   |                                  v
+ *                   |                       SCHEDULE_LOAD_GROUP_SNAPSHOTS
+ *                   |
+ *                   | detached image
+ *                   |-------------------------> REMOVE_IMAGE_SNAPSHOT_REQUEST
+ *                                                      |
+ *                                                      v
+ *                                           SCHEDULE_LOAD_GROUP_SNAPSHOTS
+ *
+ *      Once all image snapshots are absent, PRUNE_GROUP_SNAPSHOT removes the
+ *      group snapshot and MIRROR_GROUP_SNAPSHOT_UNLINK_PEER drops its peer
+ *      link. Every pending or failed image prune is retried by the scheduler.
+ *
+ *
+ *  HANDLE_REPLAY_COMPLETE PATH
+ *  ===========================
+ *
+ *   HANDLE_REPLAY_COMPLETE
+ *              | m_state = STATE_COMPLETE
+ *              v
+ *     NOTIFY_GROUP_LISTENER
+ *              |
+ *              v
+ *        STATE_COMPLETE
+ *
+ *
  *  SHUTDOWN PATH
  *  =============
  *
  *   SHUT_DOWN
  *      |
- *      + -> CANCEL_LOAD_GROUP_SNAPSHOTS
+ *      v
+ *   STATE_COMPLETE
  *      |
- *      + -> WAIT_FOR_IN_FLIGHT_OPS
- *                |
- *                v
- *           STATE_COMPLETE
+ *      v
+ *   CANCEL_LOAD_GROUP_SNAPSHOTS
+ *      |
+ *      v
+ *   WAIT_FOR_IN_FLIGHT_OPS
+ *      |
+ *      v
+ *   <finish>
  *
  * @endverbatim
  *
@@ -305,6 +362,7 @@ private:
  * =================
  * GET_REPLAYERS_BY_IMAGE_ID
  * GET_GLOBAL_IMAGE_ID
+ * SET_IMAGE_REPLAYER_LIMITS
  * SET_IMAGE_REPLAYER_END_LIMITS
  * NOTIFY_GROUP_LISTENER
  * IS_REPLAY_INTERRUPTED
@@ -329,6 +387,7 @@ private:
   std::string m_local_group_id;
   std::string m_remote_group_id;
   GroupCtx *m_local_group_ctx;
+  InstanceWatcher<ImageCtxT> *m_instance_watcher;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
 
   mutable ceph::mutex m_lock;
@@ -339,6 +398,7 @@ private:
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
   std::vector<std::pair<std::string, ImageReplayer<ImageCtxT> *>> m_replayers_by_image_id;
+  std::set<std::pair<std::string, uint64_t>> m_prune_image_snapshots_in_progress;
   const cls::rbd::GroupSnapshot* m_last_local_snap = nullptr;
   const cls::rbd::GroupSnapshot* m_prune_group_snap = nullptr;
   bool m_update_group_state = true;
@@ -363,6 +423,13 @@ private:
   bool m_check_creating_snaps = true; // check and identify creating snaps just after restart
   bool m_resync_requested = false;
   bool m_refresh_snaps = false;
+
+  bufferlist m_local_group_image_bl;
+  std::vector<cls::rbd::GroupImageStatus> m_local_group_images;
+  cls::rbd::GroupSnapshot m_pending_remote_snap;
+  std::vector<cls::rbd::GroupSnapshot> m_pending_user_snapshots;
+  std::vector<cls::rbd::ImageSnapshotSpec> m_pending_local_image_snaps;
+  bool m_reconcile_image_replayers = false;
 
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
 
@@ -400,19 +467,18 @@ private:
   void check_local_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>* locker);
-  void create_user_group_snapshots(std::unique_lock<ceph::mutex>* locker,
-    cls::rbd::GroupSnapshot* mirror_snap,
-    std::vector<cls::rbd::GroupSnapshot>& user_snapshots);
-  void handle_create_user_group_snapshots(
-    int r, cls::rbd::GroupSnapshot* mirror_snap);
-  void create_mirror_group_snapshot(std::unique_lock<ceph::mutex>* locker,
-                                    cls::rbd::GroupSnapshot *snap);
-  void handle_create_mirror_group_snapshot(
-    int r, cls::rbd::GroupSnapshot *snap);
 
-  void update_local_group_state(std::unique_lock<ceph::mutex>* locker,
-                                cls::rbd::GroupSnapshot* snap);
-  void handle_update_local_group_state(int r, cls::rbd::GroupSnapshot* snap);
+  void prepare_group_snapshot(std::unique_lock<ceph::mutex>* locker,
+    const cls::rbd::GroupSnapshot& mirror_snap,
+    std::vector<cls::rbd::GroupSnapshot> user_snapshots);
+  void handle_prepare_group_snapshot(int r);
+  void create_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void handle_create_user_group_snapshots(int r);
+  void create_mirror_group_snapshot(std::unique_lock<ceph::mutex>* locker);
+  void handle_create_mirror_group_snapshot(int r);
+
+  void update_local_group_state(cls::rbd::GroupSnapshot snap);
+  void handle_update_local_group_state(int r, cls::rbd::GroupSnapshot snap);
 
   void mirror_snapshot_complete(
     const std::string &group_snap_id, Context *on_finish);
@@ -469,13 +535,13 @@ private:
   void mirror_group_snapshot_unlink_peer(std::unique_lock<ceph::mutex>* locker,
     const std::string &snap_id, Context *on_unlink);
   void unlink_peer_uuid_from_image_snaps(
-    cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+    cls::rbd::GroupSnapshot *remote_snap, Context *on_unlink);
   void handle_unlink_peer_uuid_from_image_snaps(
-    int r, cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+    int r, cls::rbd::GroupSnapshot *remote_snap, Context *on_unlink);
   void unlink_peer_uuid_from_group_snap(
-    cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+    cls::rbd::GroupSnapshot *remote_snap, Context *on_unlink);
   void handle_unlink_peer_uuid_from_group_snap(
-    int r, const std::string &group_snap_id, Context* on_unlink);
+    int r, const std::string &group_snap_id, Context *on_unlink);
 
   void prune_image_snapshot(ImageReplayer<ImageCtxT>* image_replayer,
       uint64_t snap_id,
@@ -501,13 +567,17 @@ private:
                            std::unique_lock<ceph::mutex>* locker);
 
   void get_replayers_by_image_id(std::unique_lock<ceph::mutex>* locker);
+  bool mirror_snapshot_membership_matches(
+    const cls::rbd::GroupSnapshot &remote_snap,
+    const std::vector<cls::rbd::GroupImageStatus> &local_group_images,
+    std::vector<cls::rbd::ImageSnapshotSpec> *local_image_snaps,
+    std::unique_lock<ceph::mutex> *locker);
   std::string get_global_image_id(ImageReplayer<ImageCtxT>* image_replayer,
       std::unique_lock<ceph::mutex>& locker);
   void set_image_replayer_end_limits(ImageReplayer<ImageCtxT>* image_replayer,
       uint64_t snap_id, std::unique_lock<ceph::mutex>& locker);
-  void set_image_replayer_limits(const std::string &image_id,
-                                 const cls::rbd::GroupSnapshot *remote_snap,
-                                 std::unique_lock<ceph::mutex>* locker);
+  void set_image_replayer_limits(const cls::rbd::GroupSnapshot *remote_snap,
+    std::unique_lock<ceph::mutex> *locker);
   void wait_for_in_flight_ops();
   void handle_wait_for_in_flight_ops(int r);
 };

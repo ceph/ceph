@@ -44,10 +44,15 @@ private:
    *
    * <start>
    *    |
+   *    |   /--------------------\
+   *    |   |                    |
+   *    v   v                    | (more images)
+   * STANDALONE_IMAGE_LIST ------/
+   *    |
    *    |   /-------------\
    *    |   |             |
    *    v   v             | (more images)
-   * MIRROR_IMAGE_LIST ---/
+   * ALL_IMAGE_LIST ------/
    *    |
    *    |   /-------------\
    *    |   |             |
@@ -71,6 +76,7 @@ private:
 
   bufferlist m_out_bl;
   std::string m_start_after;
+  bool m_list_all_images = false;
 
   std::map<std::string, cls::rbd::MirrorGroup> m_groups;
   cls::rbd::GroupImageSpec m_start_group_image_list_after;

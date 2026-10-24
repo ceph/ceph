@@ -79,7 +79,8 @@ void RemoveImageRequest<I>::handle_remove_group(int r) {
 
   if (r < 0) {
     lderr(cct) << "failed to remove image group: " << cpp_strerror(r) << dendl;
-    finish(r);
+    m_ret_val = r;
+    restore_group_image();
     return;
   }
 
@@ -110,11 +111,66 @@ void RemoveImageRequest<I>::handle_post_unlink(int r) {
   if (r < 0) {
     lderr(cct) << "failed to post unlink group image: " << cpp_strerror(r)
                << dendl;
-    finish(r);
+    m_ret_val = r;
+    restore_image_group();
     return;
   }
 
   finish(0);
+}
+
+template <typename I>
+void RemoveImageRequest<I>::restore_image_group() {
+  CephContext *cct = (CephContext *)m_image_io_ctx.cct();
+  ldout(cct, 10) << dendl;
+
+  librados::ObjectWriteOperation op;
+  cls_client::image_group_add(&op, {m_group_id, m_group_io_ctx.get_id()});
+  auto comp = create_rados_callback<RemoveImageRequest<I>,
+    &RemoveImageRequest<I>::handle_restore_image_group>(this);
+
+  int r = m_image_io_ctx.aio_operate(util::header_name(m_image_id), comp, &op);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void RemoveImageRequest<I>::handle_restore_image_group(int r) {
+  CephContext *cct = (CephContext *)m_image_io_ctx.cct();
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -EEXIST) {
+    lderr(cct) << "failed to restore image group: " << cpp_strerror(r) << dendl;
+  }
+  restore_group_image();
+}
+
+template <typename I>
+void RemoveImageRequest<I>::restore_group_image() {
+  CephContext *cct = (CephContext *)m_image_io_ctx.cct();
+  ldout(cct, 10) << dendl;
+
+  librados::ObjectWriteOperation op;
+  cls_client::group_image_set(&op, {m_image_id, m_image_io_ctx.get_id(),
+                                     cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED});
+  auto comp = create_rados_callback<RemoveImageRequest<I>,
+    &RemoveImageRequest<I>::handle_restore_group_image>(this);
+
+  int r = m_group_io_ctx.aio_operate(util::group_header_name(m_group_id), comp,
+    &op);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void RemoveImageRequest<I>::handle_restore_group_image(int r) {
+  CephContext *cct = (CephContext *)m_image_io_ctx.cct();
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to restore group image: " << cpp_strerror(r) << dendl;
+  }
+  finish(m_ret_val);
 }
 
 template <typename I>

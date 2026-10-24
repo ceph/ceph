@@ -10,6 +10,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 
 #include <string>
+#include <set>
 #include <vector>
 
 class Context;
@@ -54,6 +55,11 @@ private:
   Context *m_on_finish;
 
   CephContext *m_cct;
+  int m_ret_val = 0;
+  std::vector<ImageCtx *> m_owned_image_ctxs;
+
+  void open_missing_image_contexts();
+  void handle_open_missing_image_contexts(int r);
 
   void remove_group_image_snapshots();
   void handle_remove_group_image_snapshots(int r);
@@ -63,6 +69,8 @@ private:
 
   void remove_image_snapshot(ImageCtx *image_ctx, uint64_t snap_id,
                              C_Gather *ctx);
+  void close_owned_image_contexts();
+  void handle_close_owned_image_contexts(int r);
   void finish(int r);
 };
 
