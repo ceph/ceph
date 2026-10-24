@@ -19,7 +19,7 @@ function run() {
 function TEST_bluestore() {
     local dir=$1
 
-    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_MON="127.0.0.1:7244" # git grep '\<7244\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -341,7 +341,7 @@ function TEST_bluestore() {
 function TEST_bluestore2() {
     local dir=$1
 
-    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_MON="127.0.0.1:7244" # git grep '\<7244\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -403,7 +403,7 @@ function TEST_bluestore2() {
 function TEST_bluestore_expand() {
     local dir=$1
 
-    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_MON="127.0.0.1:7244" # git grep '\<7244\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -486,7 +486,7 @@ function TEST_bluestore_expand() {
 function TEST_bluestore_expand_online() {
     local dir=$1
 
-    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_MON="127.0.0.1:7244" # git grep '\<7244\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -568,7 +568,7 @@ function TEST_bluestore_expand_online() {
 function TEST_bluestore_expand_with_allocmap_recovery() {
     local dir=$1
 
-    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_MON="127.0.0.1:7244" # git grep '\<7244\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
