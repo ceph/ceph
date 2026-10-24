@@ -1,5 +1,6 @@
 export interface PathLevel {
   options: string[];
+  loading: boolean;
   selected: string;
 }
 
@@ -12,7 +13,7 @@ export interface PathEntry {
 export function createPathEntry(expanded = true): PathEntry {
   return {
     fullPath: '',
-    levels: [{ options: [], selected: '' }],
+    levels: [{ options: [], loading: false, selected: '' }],
     expanded
   };
 }
