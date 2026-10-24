@@ -189,7 +189,7 @@ example spec file:
     placement:
       count: 1
     networks:
-    - 192.169.142.0/24
+    - 192.168.142.0/24
     spec:
       port: 4200
       protocol: http
