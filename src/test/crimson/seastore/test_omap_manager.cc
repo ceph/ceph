@@ -1019,19 +1019,19 @@ struct log_manager_fastinfo_test_t : omap_manager_test_t {
 
   // SeaStore merges queued transactions of a collection into one
   // (SeaStore::Shard::build_next_batch). Return a transaction whose first
-  // write moved the tail to a new node, so that the tail is initial_pending
+  // write moved the head to a new node, so that the head is initial_pending
   // for the rest of the transaction.
-  TransactionRef txn_with_new_tail(omap_root_t &root) {
+  TransactionRef txn_with_new_head(omap_root_t &root) {
     for (int i = 0; i < 1000; ++i) {
       auto t = create_mutate_transaction();
-      auto old_tail = root.addr;
+      auto old_head_addr = root.addr;
       write(*t, root, LOG_VAL);
-      if (root.addr != old_tail) {
+      if (root.addr != old_head_addr) {
 	return t;
       }
       submit_transaction(std::move(t));
     }
-    ceph_abort_msg("the log tail never moved to a new node");
+    ceph_abort_msg("the log head never moved to a new node");
   }
 
   void check_one_live_fastinfo(omap_root_t &root) {
@@ -1089,10 +1089,10 @@ struct log_manager_fastinfo_test_t : omap_manager_test_t {
   }
 
   // a log value that is too large to go over the _fastinfo at the end of
-  // the tail, but small enough for one node
-  size_t too_large_for_fastinfo_slot(log_manager::LogNode &tail) {
-    return tail.free_space() - tail.get_reserved_len() +
-      tail.get_entry_size(log_manager::get_ow_key().size(), FASTINFO_VAL);
+  // the head, but small enough for one node
+  size_t too_large_for_fastinfo_slot(log_manager::LogNode &node) {
+    return node.free_space() - node.get_reserved_len() +
+      node.get_entry_size(log_manager::get_ow_key().size(), FASTINFO_VAL);
   }
 
   // the pg log trim removes a continuous range of log keys
@@ -1115,12 +1115,12 @@ struct log_manager_fastinfo_test_t : omap_manager_test_t {
   }
 };
 
-// merged writes, the first one moves the tail to a new node
-TEST_P(log_manager_fastinfo_test_t, merged_writes_new_tail)
+// merged writes, the first one moves the head to a new node
+TEST_P(log_manager_fastinfo_test_t, merged_writes_new_head)
 {
   run_async([this] {
     auto root = init_root();
-    auto t = txn_with_new_tail(root);
+    auto t = txn_with_new_head(root);
     write(*t, root, LOG_VAL);
     submit_transaction(std::move(t));
     check_one_live_fastinfo(root);
@@ -1131,11 +1131,11 @@ TEST_P(log_manager_fastinfo_test_t, merged_writes_new_tail)
 }
 
 // many merged writes in the new node
-TEST_P(log_manager_fastinfo_test_t, many_merged_writes_new_tail)
+TEST_P(log_manager_fastinfo_test_t, many_merged_writes_new_head)
 {
   run_async([this] {
     auto root = init_root();
-    auto t = txn_with_new_tail(root);
+    auto t = txn_with_new_head(root);
     for (int i = 0; i < 32; ++i) {
       write(*t, root, LOG_VAL);
     }
@@ -1146,12 +1146,12 @@ TEST_P(log_manager_fastinfo_test_t, many_merged_writes_new_tail)
 }
 
 // merged writes, a log entry does not fit over the _fastinfo of the new node
-TEST_P(log_manager_fastinfo_test_t, merged_writes_new_tail_overflow)
+TEST_P(log_manager_fastinfo_test_t, merged_writes_new_head_overflow)
 {
   run_async([this] {
     auto root = init_root();
-    auto t = txn_with_new_tail(root);
-    const auto new_tail = root.addr;
+    auto t = txn_with_new_head(root);
+    const auto new_head_addr = root.addr;
     for (;;) {
       auto node = read_node(*t, root.addr);
       ASSERT_TRUE(node->is_initial_pending());
@@ -1159,21 +1159,21 @@ TEST_P(log_manager_fastinfo_test_t, merged_writes_new_tail_overflow)
 	break;
       }
       write(*t, root, LOG_VAL);
-      ASSERT_EQ(root.addr, new_tail);
+      ASSERT_EQ(root.addr, new_head_addr);
     }
     auto node = read_node(*t, root.addr);
     ASSERT_TRUE(node->can_ow());
     const size_t len = too_large_for_fastinfo_slot(*node);
     ASSERT_LT(len, node->get_max_val_length(log_key(0).size()));
     write(*t, root, len);
-    ASSERT_NE(root.addr, new_tail);
+    ASSERT_NE(root.addr, new_head_addr);
     submit_transaction(std::move(t));
     check_one_live_fastinfo(root);
   });
 }
 
-// a large log entry overflows a committed tail
-TEST_P(log_manager_fastinfo_test_t, large_entry_overflows_tail)
+// a large log entry overflows a committed head
+TEST_P(log_manager_fastinfo_test_t, large_entry_overflows_head)
 {
   run_async([this] {
     auto root = init_root();
@@ -1183,16 +1183,16 @@ TEST_P(log_manager_fastinfo_test_t, large_entry_overflows_tail)
     ASSERT_TRUE(node->can_ow());
     const size_t len = too_large_for_fastinfo_slot(*node);
     ASSERT_LT(len, node->get_max_val_length(log_key(0).size()));
-    auto old_tail = root.addr;
+    auto old_head_addr = root.addr;
     write(*t, root, len);
-    ASSERT_NE(root.addr, old_tail);
+    ASSERT_NE(root.addr, old_head_addr);
     submit_transaction(std::move(t));
     check_one_live_fastinfo(root);
   });
 }
 
-// merged writes go over the _fastinfo of a committed tail, then a large log
-// entry overflows it. The earlier writes are still deltas of the tail, not
+// merged writes go over the _fastinfo of a committed head, then a large log
+// entry overflows it. The earlier writes are still deltas of the head, not
 // applied to it, when the large entry comes.
 TEST_P(log_manager_fastinfo_test_t, large_entry_after_merged_writes)
 {
@@ -1200,17 +1200,17 @@ TEST_P(log_manager_fastinfo_test_t, large_entry_after_merged_writes)
     auto root = init_root();
     write_one(root, LOG_VAL);
     auto t = create_mutate_transaction();
-    const auto old_tail = root.addr;
+    const auto old_head_addr = root.addr;
     for (int i = 0; i < 3; ++i) {
       write(*t, root, LOG_VAL);
     }
-    ASSERT_EQ(root.addr, old_tail);
+    ASSERT_EQ(root.addr, old_head_addr);
     auto node = read_node(*t, root.addr);
     ASSERT_TRUE(node->can_ow());
     const size_t len = too_large_for_fastinfo_slot(*node);
     ASSERT_LT(len, node->get_max_val_length(log_key(0).size()));
     write(*t, root, len);
-    ASSERT_NE(root.addr, old_tail);
+    ASSERT_NE(root.addr, old_head_addr);
     submit_transaction(std::move(t));
     check_one_live_fastinfo(root);
     replay_log();
@@ -1256,7 +1256,7 @@ TEST_P(log_manager_fastinfo_test_t, entry_larger_than_node_trim)
 // are newer than its live ones. The trim must still remove the live ones.
 struct log_manager_trim_test_t : log_manager_fastinfo_test_t {
   // PGLog::_write_log_and_missing with dirty_to = max, for the log
-  // (tail, head]
+  // (tail, head], with tail and head as in pg_log_t
   void rewrite_log(omap_root_t &root, uint64_t tail) {
     std::map<std::string, bufferlist> kvs;
     for (auto v = tail + 1; v <= head; ++v) {
@@ -1285,22 +1285,22 @@ struct log_manager_trim_test_t : log_manager_fastinfo_test_t {
 };
 
 // the log is (first - 3, first + 1], where first is the oldest log entry of
-// the tail, then the log is rewritten into the tail and the trim removes
-// first - 2 and first - 1
+// the head LogNode, then the log is rewritten into the head LogNode and the
+// trim removes first - 2 and first - 1
 TEST_P(log_manager_trim_test_t, trim_after_log_rewrite)
 {
   run_async([this] {
     auto root = init_root();
-    for (auto old_tail = root.addr; root.addr == old_tail; ) {
+    for (auto old_head_addr = root.addr; root.addr == old_head_addr; ) {
       write_one(root, LOG_VAL);
     }
     const uint64_t first = head;
     write_one(root, LOG_VAL);
     trim(root, 1, first - 3);
-    const auto tail = root.addr;
+    const auto head_addr = root.addr;
     rewrite_log(root, first - 3);
     // the test reads this LogNode, so the rewrite must not leave it
-    ASSERT_EQ(root.addr, tail);
+    ASSERT_EQ(root.addr, head_addr);
     trim(root, first - 2, first - 1);
     // the trimmed keys came back when the OSD read the log again
     replay_log();
@@ -1312,22 +1312,22 @@ TEST_P(log_manager_trim_test_t, trim_after_log_rewrite)
 }
 
 // after the rewrite, remove the newest log entries first and first + 1, so
-// that the tail starts and ends with removed log keys around the live
+// that the head LogNode starts and ends with removed log keys around the live
 // first - 2 and first - 1
 TEST_P(log_manager_trim_test_t, live_checks_after_log_rewrite)
 {
   run_async([this] {
     auto root = init_root();
-    for (auto old_tail = root.addr; root.addr == old_tail; ) {
+    for (auto old_head_addr = root.addr; root.addr == old_head_addr; ) {
       write_one(root, LOG_VAL);
     }
     const uint64_t first = head;
     write_one(root, LOG_VAL);
     trim(root, 1, first - 3);
-    const auto tail = root.addr;
+    const auto head_addr = root.addr;
     rewrite_log(root, first - 3);
     // the test reads this LogNode, so the rewrite must not leave it
-    ASSERT_EQ(root.addr, tail);
+    ASSERT_EQ(root.addr, head_addr);
     trim(root, first, first + 1);
     auto t = create_read_transaction();
     auto node = read_node(*t, root.addr);
@@ -1345,22 +1345,22 @@ TEST_P(log_manager_trim_test_t, trim_after_log_rewrite_in_merged_txn)
 {
   run_async([this] {
     auto root = init_root();
-    for (auto old_tail = root.addr; root.addr == old_tail; ) {
+    for (auto old_head_addr = root.addr; root.addr == old_head_addr; ) {
       write_one(root, LOG_VAL);
     }
     const uint64_t first = head;
     write_one(root, LOG_VAL);
     trim(root, 1, first - 3);
-    const auto tail = root.addr;
+    const auto head_addr = root.addr;
     rewrite_log(root, first - 3);
-    ASSERT_EQ(root.addr, tail);
+    ASSERT_EQ(root.addr, head_addr);
     auto t = create_mutate_transaction();
     std::map<std::string, bufferlist> kvs;
     kvs[log_key(++head)] = rand_buffer(LOG_VAL);
     with_trans_intr(*t, [&](auto &t) {
       return get_lm().omap_set_keys(root, t, kvs);
     }).unsafe_get();
-    ASSERT_EQ(root.addr, tail);
+    ASSERT_EQ(root.addr, head_addr);
     const std::set<std::string> keys = {log_key(first - 2), log_key(first - 1)};
     with_trans_intr(*t, [&](auto &t) {
       return get_lm().omap_rm_keys(root, t, keys);

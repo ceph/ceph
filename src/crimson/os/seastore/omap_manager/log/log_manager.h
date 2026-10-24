@@ -88,9 +88,15 @@ private:
  *   1) pg_log_entry_t list (including all KV entries except pg_log_dup_t)
  *   2) pg_log_dup_t list (duplicate entries only)
  *
- * The ONode points to the LogNode that contains the latest
- * pg_log_entry_t. That pg_log_entry_t, in turn, holds a pointer
- * to the head of the pg_log_dup_t list.
+ * Head and tail have the same meaning as in pg_log_t: the head is the
+ * newest LogNode of a list and the tail is the oldest one. Each LogNode
+ * points to the next older LogNode with its prev address, so a walk from
+ * the head goes back in time and ends at the tail, whose prev address is
+ * L_ADDR_NULL. New entries are always appended to the head.
+ *
+ * The ONode (omap_root_t::addr) points to the head of the pg_log_entry_t
+ * list. That LogNode, in turn, holds the address of the head of the
+ * pg_log_dup_t list (dup head).
  *
  * Layout:
  *
@@ -100,13 +106,15 @@ private:
  *                        |
  *                        v
  *        +----------------------------------+
- *    <-  | LogNode (latest pg_log_entry_t)  |
+ *    <-  | LogNode (latest pg_log_entry_t)  |  head of the log list
  *        +----------------------------------+
  *                        |
  *                        v
  *        +----------------------------------+
- *    <-  | LogNode (latest pg_log_dup_t)    |
+ *    <-  | LogNode (latest pg_log_dup_t)    |  head of the dup list
  *        +----------------------------------+
+ *
+ *    <-  : prev address, to the next older LogNode of the same list
  *
  * This separation allows efficient ranged updates while
  * avoiding full traversal of duplicate entries.
@@ -122,7 +130,7 @@ public:
   /**
    * omap_set_keys
    *
-   *  Load the LOG tail extent and, for each (key, value):
+   *  Load the LOG head extent and, for each (key, value):
    *    - If the key belongs to the LOG node, write via _log_set_key().
    *
    * @param root   LOG root the higher layer passed in.
@@ -273,22 +281,22 @@ public:
   /**
    * _log_set_key
    *
-   *  - Fast path: if the current LOG node (tail) has enough space for (key,value),
+   *  - Fast path: if the current LOG node (head) has enough space for (key,value),
    *    get a mutable view within this transaction and append in place.
    *  - Split path: if appending would overflow the LOG node, allocate
    *  	a fresh LogNode extent,
-   *    make it the new LOG tail (update log_root), append the KV there, and link
+   *    make it the new LOG head (update log_root), append the KV there, and link
    *    the previous head via prev_addr.
    *
    * @param log_root  LOG root descriptor
    * @param t         Transaction context
-   * @param tail      Current append target
+   * @param head      Current append target
    * @param key       Key to set/append.
    * @param value     Value to set/append.
    *
    */
   omap_set_key_ret _log_set_key(omap_root_t &log_root,
-    Transaction &t, LogNodeRef e, const std::string &key,
+    Transaction &t, LogNodeRef head, const std::string &key,
     const ceph::bufferlist &value);
 
   /**
@@ -309,11 +317,12 @@ public:
    * @param t     Transaction context.
    * @param dst   Logical address of the LogNode to start searching from.
    * @param key   The key to be removed.
-   * @param prev  The next LogNode in the chain (nullptr if @dst is the tail).
+   * @param next  The next newer LogNode, whose prev address is @dst
+   *              (nullptr if @dst is the head).
    */
 
   omap_rm_key_ret remove_kv(Transaction &t, laddr_t dst, const std::string &key,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   /**
    * remove_kv_set
@@ -337,13 +346,13 @@ public:
    *                         These are not touched here; the caller must pass
    *                         each of them to remove_kv(), which knows how to
    *                         unlink an entire chunk chain.
-   * @param prev             The successor of @dst in the forward direction
-   *                         (nullptr if @dst is the tail).
+   * @param next             The next newer LogNode, whose prev address is
+   *                         @dst (nullptr if @dst is the head).
    */
   omap_rm_key_ret remove_kv_set(Transaction &t, laddr_t dst,
     pending_keys_t &keys,
     std::vector<std::string> &multi_block_keys,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   /**
    * remove_kvs
@@ -351,42 +360,44 @@ public:
    * Starting at logical address dst, this loads a LogNode extent,
    * gathers entries in the [first, last] range, and decides
    * whether the current extent can be removed
-   * If so, it removes the extent and fixes the link pointer
-   * with prev. Otherwise it recurses to the previous extent.
+   * If so, it removes the extent and fixes the prev address of
+   * @next. Then it recurses to the next older extent.
    *
    * @param t       Transaction context.
    * @param dst     Logical address of the starting extent
    * @param first   lower key bound (optional).
    * @param last    upper key bound (optional). Empty string => unbounded.
-   * @param prev    The successor of dst in the forward direction (used to fix links
-   *                when dst is removed). For the initial call at tail, pass nullptr.
+   * @param next    The next newer LogNode, whose prev address is dst (used to
+   *                fix the link when dst is removed). For the initial call at
+   *                the head, pass nullptr.
    *
    * @return omap_rm_key_ret 
    */
   omap_rm_key_ret remove_kvs(Transaction &t, laddr_t dst,
     std::optional<std::string> first, 
     std::optional<std::string> last,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   
   /**
    * remove_node
    *
-   * If @prev is nullptr, the node is the tail of the chain. In this case,
+   * If @next is nullptr, the node is the head of the chain. In this case,
    * the node is not physically removed; instead, it is re-initialized
    * while preserving its prev pointer (if any).
    *
    * Otherwise, the node is physically removed from the transaction manager,
-   * and the previous node (@prev) is updated to bypass the removed node
+   * and the next newer node (@next) is updated to bypass the removed node
    * by inheriting its prev address.
    *
    * @param t     Transaction context.
    * @param mut   The LogNode to be removed or re-initialized.
-   * @param prev  The next LogNode in the chain (nullptr if @mut is the tail).
+   * @param next  The next newer LogNode, whose prev address is @mut
+   *              (nullptr if @mut is the head).
    */
   LogManager::omap_rm_key_ret remove_node(Transaction &t,
     LogNodeRef mut,
-    LogNodeRef prev);
+    LogNodeRef next);
 
   base_iertr::future<laddr_t> get_dup_addr_from_root(Transaction &t, laddr_t addr);
 
@@ -428,7 +439,7 @@ public:
     std::map<std::string, bufferlist> &kvs);
   omap_set_key_ret
   _log_set_multi_block_key(omap_root_t &log_root,
-    Transaction &t, LogNodeRef tail,
+    Transaction &t, LogNodeRef head,
     const std::string &key, const ceph::bufferlist &value);
 
 
