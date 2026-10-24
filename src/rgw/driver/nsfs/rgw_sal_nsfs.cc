@@ -18683,7 +18683,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * gateway makes one, as `unplaced-directory` makes a directory.
      *
      *   op=create bucket= key= target=   fails if the key's name exists
-     *   op=stat bucket= key=             kind=link|file|directory|other|none
+     *   op=stat bucket= key=             kind=link|file|directory|other|none,
+     *                                    and the entry's uid where it exists
      *
      * The key's directories must exist.  as=<user>:  made as that user,
      * as a filesystem client of that identity would make it, so its
@@ -18753,17 +18754,22 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     }
 
     const char* kind = "none";
+    std::optional<uid_t> uid;
     struct statx stx;
-    if (nsfs::statx(pfd, leaf.c_str(), AT_SYMLINK_NOFOLLOW, STATX_MODE,
-		    &stx) == 0) {
+    if (nsfs::statx(pfd, leaf.c_str(), AT_SYMLINK_NOFOLLOW,
+		    STATX_MODE | STATX_UID, &stx) == 0) {
       kind = S_ISLNK(stx.stx_mode) ? "link"
 	: S_ISDIR(stx.stx_mode) ? "directory"
 	: S_ISREG(stx.stx_mode) ? "file" : "other";
+      uid = stx.stx_uid;
     } else if (errno != ENOENT) {
       return -errno;
     }
     if (out) {
       (*out)["kind"] = kind;
+      if (uid) {
+	(*out)["uid"] = std::to_string(*uid);
+      }
       (*out)["bucket_path"] = fd_path(bdir->get_fd());
     }
     return 0;
