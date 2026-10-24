@@ -623,3 +623,11 @@ add_rgw_cargo_test_binary(
   UNIT_TEST
   DEPENDS   ceph_rgw_sal_test_env)
 endif()
+
+# unittest_rgw_sts_jwks
+add_executable(unittest_rgw_sts_jwks test_rgw_sts_jwks.cc)
+add_ceph_unittest(unittest_rgw_sts_jwks)
+target_include_directories(unittest_rgw_sts_jwks
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_sts_jwks
+  ceph-common ${UNITTEST_LIBS})
