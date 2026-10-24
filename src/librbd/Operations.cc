@@ -26,8 +26,8 @@
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/MetadataRemoveRequest.h"
 #include "librbd/operation/MetadataSetRequest.h"
+#include "librbd/operation/CheckObjectMapRequest.h"
 #include "librbd/operation/MigrateRequest.h"
-#include "librbd/operation/ObjectMapIterate.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
 #include "librbd/operation/RenameRequest.h"
 #include "librbd/operation/ResizeRequest.h"
@@ -386,18 +386,6 @@ struct C_InvokeAsyncRequest : public Context {
   }
 };
 
-template <typename I>
-bool needs_invalidate(I& image_ctx, uint64_t object_no,
-		     uint8_t current_state, uint8_t new_state) {
-  if ( (current_state == OBJECT_EXISTS ||
-	current_state == OBJECT_EXISTS_CLEAN) &&
-       (new_state == OBJECT_NONEXISTENT ||
-	new_state == OBJECT_PENDING)) {
-    return false;
-  }
-  return true;
-}
-
 } // anonymous namespace
 
 template <typename I>
@@ -627,9 +615,8 @@ int Operations<I>::check_object_map(ProgressContext &prog_ctx) {
 }
 
 template <typename I>
-void Operations<I>::object_map_iterate(ProgressContext &prog_ctx,
-				       operation::ObjectIterateWork<I> handle_mismatch,
-				       Context *on_finish) {
+void Operations<I>::check_object_map(ProgressContext &prog_ctx,
+				     Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
               m_image_ctx.exclusive_lock->is_lock_owner());
@@ -639,16 +626,9 @@ void Operations<I>::object_map_iterate(ProgressContext &prog_ctx,
     return;
   }
 
-  operation::ObjectMapIterateRequest<I> *req =
-    new operation::ObjectMapIterateRequest<I>(m_image_ctx, on_finish,
-					      prog_ctx, handle_mismatch);
+  operation::CheckObjectMapRequest<I> *req =
+    new operation::CheckObjectMapRequest<I>(m_image_ctx, on_finish, prog_ctx);
   req->send();
-}
-
-template <typename I>
-void Operations<I>::check_object_map(ProgressContext &prog_ctx,
-				     Context *on_finish) {
-  object_map_iterate(prog_ctx, needs_invalidate, on_finish);
 }
 
 template <typename I>

@@ -47,7 +47,8 @@ private:
    *    |             REFRESH_PARENT (skip if no parent
    *    |                 |           or refresh not needed)
    *    |                 v
-   *    |             OPEN_OBJECT_MAP (skip if map disabled)
+   *    |             OPEN_OBJECT_MAP (skip if map disabled or if the
+   *    |                 |             snapshot has a live parent overlap)
    *    |                 |
    *    |                 v
    *    |              <apply>
@@ -86,6 +87,7 @@ private:
   RefreshParentRequest<ImageCtxT> *m_refresh_parent;
 
   bool m_writes_blocked;
+  bool m_skip_object_map = false;
 
   void send_block_writes();
   Context *handle_block_writes(int *result);

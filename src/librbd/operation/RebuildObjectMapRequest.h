@@ -11,6 +11,7 @@ namespace librbd {
 
 class ImageCtx;
 class ProgressContext;
+template <typename> class ObjectMap;
 
 namespace operation {
 
@@ -24,6 +25,7 @@ public:
       m_prog_ctx(prog_ctx), m_attempted_trim(false)
   {
   }
+  ~RebuildObjectMapRequest() override;
 
   void send() override;
 
@@ -36,6 +38,10 @@ private:
    * verify per-object state:
    *
    * <start>
+   *  .   |
+   *  .   v
+   *  . STATE_OPEN_OBJECT_MAP (skip if the object map is already loaded)
+   *  .   |
    *  .   |               . . . . . . . . . .
    *  .   |               .                 .
    *  .   v               v                 .
@@ -55,6 +61,7 @@ private:
    * only be hit if the resize failed due to an in-use object.
    */
   enum State {
+    STATE_OPEN_OBJECT_MAP,
     STATE_RESIZE_OBJECT_MAP,
     STATE_TRIM_IMAGE,
     STATE_VERIFY_OBJECTS,
@@ -64,9 +71,12 @@ private:
 
   ImageCtxT &m_image_ctx;
   ProgressContext &m_prog_ctx;
+  ObjectMap<ImageCtxT> *m_object_map = nullptr;
+  ObjectMap<ImageCtxT> *m_opened_object_map = nullptr;
   State m_state = STATE_RESIZE_OBJECT_MAP;
   bool m_attempted_trim;
 
+  void send_open_object_map(uint64_t snap_id);
   void send_resize_object_map();
   void send_trim_image();
   void send_verify_objects();
