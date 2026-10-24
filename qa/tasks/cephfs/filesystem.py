@@ -1224,7 +1224,7 @@ class FilesystemBase(MDSClusterBase):
         try:
             self.run_ceph_cmd(args=cmd)
         except CommandFailedError:
-            cmd += ' --yes--i-really-mean-it'
+            cmd += ' --yes-i-really-mean-it'
             self.run_ceph_cmd(args=cmd)
 
     def rank_is_running(self, rank=0, status=None):
