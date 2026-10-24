@@ -1415,3 +1415,103 @@ def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: Ceph
                         assert wait(cephadm_module, cephadm_module.upgrade_start(
                             '', '21.2.0', host_placement='test2')
                         ).startswith('Initiating upgrade')
+
+
+def _test_rgw_dd(
+    daemon_id: str,
+    hostname: str,
+    ports: List[int],
+    ip: Optional[str] = None,
+) -> DaemonDescription:
+    return DaemonDescription(
+        daemon_type='rgw',
+        daemon_id=daemon_id,
+        hostname=hostname,
+        ip=ip,
+        ports=ports,
+        container_image_id='old-image-id',
+        container_image_name='old-image',
+    )
+
+
+@pytest.mark.parametrize(
+    'daemons, expected',
+    [
+        # Same host + same wildcard listener: serialize.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host1', [8500]),
+            ],
+            ['rgw.a'],
+        ),
+
+        # Same port on different hosts: independent.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host2', [8500]),
+            ],
+            ['rgw.a', 'rgw.b'],
+        ),
+
+        # Same host, different ports: independent.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host1', [8600]),
+            ],
+            ['rgw.a', 'rgw.b'],
+        ),
+
+        # Same host/port, different explicit IPs: independent.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500], '10.0.0.1'),
+                _test_rgw_dd('b', 'host1', [8500], '10.0.0.2'),
+            ],
+            ['rgw.a', 'rgw.b'],
+        ),
+
+        # Wildcard overlaps an explicit bind.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500]),
+                _test_rgw_dd('b', 'host1', [8500], '10.0.0.2'),
+            ],
+            ['rgw.a'],
+        ),
+
+        # Same explicit IP + same port: serialize.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500], '10.0.0.1'),
+                _test_rgw_dd('b', 'host1', [8500], '10.0.0.1'),
+            ],
+            ['rgw.a'],
+        ),
+
+        # Partial overlap is enough to conflict.
+        (
+            [
+                _test_rgw_dd('a', 'host1', [8500, 8501]),
+                _test_rgw_dd('b', 'host1', [8501, 8600]),
+            ],
+            ['rgw.a'],
+        ),
+    ],
+)
+def test_to_upgrade_rgw_listener_batching(
+    cephadm_module: CephadmOrchestrator,
+    daemons: List[DaemonDescription],
+    expected: List[str],
+):
+    need_upgrade = [(d, False) for d in daemons]
+
+    proceed, to_upgrade = cephadm_module.upgrade._to_upgrade(
+        need_upgrade,
+        'target-image',
+    )
+
+    assert proceed is True
+    assert [d.name() for d, _ in to_upgrade] == expected

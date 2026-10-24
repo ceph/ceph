@@ -1662,6 +1662,12 @@ class CephadmUpgrade:
     # to_upgrade is a list of daemons that need to be upgraded
     def _to_upgrade(self, need_upgrade: List[Tuple[DaemonDescription, bool]], target_image: str) -> Tuple[bool, List[Tuple[DaemonDescription, bool]]]:
         to_upgrade: List[Tuple[DaemonDescription, bool]] = []
+
+        # Track RGWs already selected on each host so that daemons with
+        # overlapping listeners are not restarted in the same batch.
+        # RGWs using the same port on different explicit IPs are independent
+        # listeners and may be upgraded together.
+        selected_rgws_by_host: Dict[str, List[DaemonDescription]] = {}
         known_ok_to_stop: List[str] = []
         known_ok_to_upgrade: List[str] = []
         self._ok_to_upgrade_all_osds_upgraded = False
@@ -1758,6 +1764,40 @@ class CephadmUpgrade:
                 and not self.is_osd_upgrade_valid_for_failure_domain(d)
             ):
                 continue
+
+            if d.daemon_type == 'rgw' and d.ports:
+                selected_rgws = selected_rgws_by_host.setdefault(d.hostname, [])
+
+                conflicting_rgw = None
+                shared_ports: Set[int] = set()
+
+                for selected in selected_rgws:
+                    ports = set(d.ports) & set(selected.ports or [])
+                    if not ports:
+                        continue
+
+                    # Different explicit bind IPs are independent listeners.
+                    # If either IP is unset, treat it as a wildcard listener
+                    # which conflicts with every address on the shared port.
+                    if d.ip and selected.ip and d.ip != selected.ip:
+                        continue
+
+                    conflicting_rgw = selected
+                    shared_ports = ports
+                    break
+
+                if conflicting_rgw:
+                    logger.info(
+                        'Upgrade: Deferring %s to a later pass because %s on host %s '
+                        'has an overlapping listener on port(s) %s',
+                        d.name(),
+                        conflicting_rgw.name(),
+                        d.hostname,
+                        sorted(shared_ports),
+                    )
+                    continue
+
+                selected_rgws.append(d)
 
             to_upgrade.append(d_entry)
 
