@@ -121,6 +121,11 @@
   and such an image simply runs without a cache. Note that ``ceph config set
   ... rwl`` now fails, which may break automation.
 
+* RADOS: ``bluestore_compression_required_ratio`` is now validated to the
+  range ``[0, 1]``. Values outside that range are rejected with ``EINVAL``,
+  matching the existing pool-level ``compression_required_ratio`` check.
+  The default remains ``0.875``.
+
 >=21.0.0
 * CephFS: The ``fs subvolumegroup create`` command now supports the
   ``--namespace-isolated`` option. When a subvolume group is created with this flag,
