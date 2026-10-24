@@ -893,6 +893,21 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     std::visit(HandlePayloadVisitor(this), message.payload);
   }
 
+  // Nothing else flows back to the daemon on this session, and the
+  // messenger's idle check counts only received traffic, so without a
+  // keepalive the daemon faults the session every
+  // ms_connection_idle_timeout. Sending one per quarter of our own
+  // period also covers daemons whose timeout is set lower than ours.
+  auto priv = m->get_connection()->get_priv();
+  if (auto session = static_cast<MgrSession*>(priv.get()); session) {
+    auto now = ceph::coarse_mono_clock::now();
+    if (now - session->last_keepalive >=
+        std::chrono::seconds(cct->_conf->ms_connection_idle_timeout / 4)) {
+      m->get_connection()->send_keepalive();
+      session->last_keepalive = now;
+    }
+  }
+
   return true;
 }
 
