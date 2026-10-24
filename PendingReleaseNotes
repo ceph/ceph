@@ -45,6 +45,11 @@
   remove bilog entries that other zones have not synced yet.
 * RGW: ``radosgw-admin bilog trim`` no longer accepts ``--start-marker``, since
   FIFO-backed bilogs can only be trimmed from the front.
+* RGW: ``radosgw-admin metadata sync`` commands reject ``--source-zone`` and
+  ``--source-zone-id``. ``metadata sync status`` on the metadata master zone
+  now fails with a clear error instead of returning an empty ``init`` status;
+  use ``mdlog status`` on the master. ``data sync`` commands reject a source
+  zone that is the local zone.
 
 * RGW: Fixed a bug in same-account evaluation of bucket policy statements that
   allow the account principal. Users and roles in that account now require a
