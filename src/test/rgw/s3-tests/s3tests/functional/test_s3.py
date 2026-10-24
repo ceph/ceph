@@ -10192,6 +10192,77 @@ def test_lifecycle_cloud_transition():
         assert status == 404
         assert error_code == 'NoSuchKey'
 
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_transition
+@pytest.mark.cloud_transition
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_cloud_transition_object_lock():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc == None:
+        pytest.skip('no cloud_storage_class configured')
+
+    target_by_bucket = get_cloud_target_by_bucket()
+    if target_by_bucket != None and target_by_bucket == "true":
+        pytest.skip('test expects the shared cloud target bucket (target_by_bucket = false)')
+    target_path = get_cloud_target_path()
+    if target_path == None:
+        target_path = "rgwx-default-" + cloud_sc.lower() + "-cloud-bucket"
+    target_sc = get_cloud_target_storage_class()
+    retain_current = get_cloud_retain_current_version()
+
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+
+    # current versions under retention or legal hold must stay on the cluster;
+    # the unlocked one shows that the rule did run
+    retention = {'Mode':'GOVERNANCE', 'RetainUntilDate':datetime.datetime(2140,1,1,tzinfo=pytz.UTC)}
+    locked = client.put_object(Bucket=bucket_name, Key='locked', Body='locked',
+                               ObjectLockMode=retention['Mode'],
+                               ObjectLockRetainUntilDate=retention['RetainUntilDate'])
+    held = client.put_object(Bucket=bucket_name, Key='held', Body='held',
+                             ObjectLockLegalHoldStatus='ON')
+    free = client.put_object(Bucket=bucket_name, Key='free', Body='free')
+
+    rules=[{'ID': 'rule1', 'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}], 'Prefix': '', 'Status': 'Enabled'}]
+    lifecycle = {'Rules': rules}
+    client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration=lifecycle)
+
+    lc_interval = get_lc_debug_interval()
+    time.sleep(10*lc_interval)
+
+    cloud_client = get_cloud_client()
+    prefix = bucket_name + "/"
+
+    # the unlocked object was transitioned. the cloud object key is
+    # "<bucket>/<key>", with "-<version id>" appended for current versions
+    # when retain_current_version is enabled
+    free_key = prefix + 'free'
+    if retain_current != None and retain_current == "true":
+        free_key += '-' + free['VersionId']
+    verify_object(cloud_client, target_path, free_key, 'free', target_sc)
+
+    # the locked objects were not copied to the cloud endpoint, under any key
+    response = cloud_client.list_objects_v2(Bucket=target_path, Prefix=prefix)
+    cloud_keys = [o['Key'] for o in response.get('Contents', [])]
+    assert free_key in cloud_keys
+    for key in ['locked', 'held']:
+        assert not [k for k in cloud_keys if k == prefix + key or k.startswith(prefix + key + '-')]
+
+    # and are still current, local and readable
+    for key, response, body in [('locked', locked, 'locked'), ('held', held, 'held')]:
+        version_id = response['VersionId']
+        head = client.head_object(Bucket=bucket_name, Key=key)
+        assert head['VersionId'] == version_id
+        assert head.get('StorageClass', 'STANDARD') == 'STANDARD'
+        verify_object(client, bucket_name, key, body)
+
+    client.put_object_legal_hold(Bucket=bucket_name, Key='held', VersionId=held['VersionId'],
+                                 LegalHold={'Status': 'OFF'})
+    client.delete_object(Bucket=bucket_name, Key='held', VersionId=held['VersionId'])
+    client.delete_object(Bucket=bucket_name, Key='locked', VersionId=locked['VersionId'],
+                         BypassGovernanceRetention=True)
+
 # Similar to 'test_lifecycle_transition' but for cloud transition
 @pytest.mark.lifecycle
 @pytest.mark.lifecycle_transition
