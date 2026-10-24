@@ -33,6 +33,7 @@ To clear the configured MOTD run:
    ceph dashboard motd clear
 
 A MOTD with a severity of ``info`` or ``warning`` can be closed by the user.
-The ``info`` MOTD is not displayed until the local storage cookies are
-cleared or a new MOTD with a different severity is displayed. A MOTD with a
-``warning`` severity will be displayed again in a new session.
+A closed ``info`` MOTD stays hidden until the browser's local storage is
+cleared, or until the severity or the message changes. A closed ``warning``
+MOTD is shown again in a new browser session, or as soon as its severity or
+message changes.
