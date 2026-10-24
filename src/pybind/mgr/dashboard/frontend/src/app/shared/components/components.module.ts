@@ -149,6 +149,7 @@ import { PageHeaderResourceComponent } from './page-header-resource/page-header-
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
 import { OverviewComponent } from './resource-overview-card/resource-overview-card.component';
+import { OverviewFooterDirective } from './resource-overview-card/overview-footer.directive';
 
 @NgModule({
   imports: [
@@ -254,7 +255,8 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     PageHeaderResourceComponent,
     SidebarLayoutComponent,
     NumberWithUnitComponent,
-    OverviewComponent
+    OverviewComponent,
+    OverviewFooterDirective
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -304,6 +306,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     SidebarLayoutComponent,
     NumberWithUnitComponent,
     OverviewComponent,
+    OverviewFooterDirective,
     ProductiveCardComponent
   ]
 })

@@ -109,4 +109,9 @@
       }
     </div>
   </section>
+  @if (footer) {
+    <div class="border-subtle-top cds-mt-5 cds-pt-5">
+      <ng-content select="[cdOverviewFooter]"></ng-content>
+    </div>
+  }
 </cds-tile>
