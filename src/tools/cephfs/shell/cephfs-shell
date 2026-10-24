@@ -19,6 +19,14 @@ import distro
 
 from cmd2 import Cmd
 from cmd2 import __version__ as cmd2_version
+
+# cmd2 >= 2.4.0 requires Cmd2ArgumentParser for @with_argparser;
+# older versions accept argparse.ArgumentParser.
+try:
+    from cmd2 import Cmd2ArgumentParser
+except ImportError:
+    import argparse as _argparse
+    Cmd2ArgumentParser = _argparse.ArgumentParser
 from packaging.version import Version
 
 # DFLAG is used to override the checks done by cephfs-shell
@@ -435,7 +443,7 @@ class CephFSShell(Cmd):
         else:
             usage = doc_lines
             description = []
-        parser = argparse.ArgumentParser(
+        parser = Cmd2ArgumentParser(
             prog=command,
             usage='\n'.join(usage),
             description='\n'.join(description),
@@ -589,7 +597,7 @@ class CephFSShell(Cmd):
 
             setattr(namespace, self.dest, str(oct(o_mode)))
 
-    mkdir_parser = argparse.ArgumentParser(
+    mkdir_parser = Cmd2ArgumentParser(
         description='Create the directory(ies), if they do not already exist.')
     mkdir_parser.add_argument('dirs', type=str,
                               action=path_to_bytes,
@@ -629,7 +637,7 @@ class CephFSShell(Cmd):
         index_dict = {1: self.path_complete}
         return self.index_based_complete(text, line, begidx, endidx, index_dict)
 
-    put_parser = argparse.ArgumentParser(
+    put_parser = Cmd2ArgumentParser(
         description='Copy a file/directory to Ceph File System from Local File System.')
     put_parser.add_argument('local_path', type=str, action=path_to_bytes,
                             help='Path of the file in the local system')
@@ -738,7 +746,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    get_parser = argparse.ArgumentParser(
+    get_parser = Cmd2ArgumentParser(
         description='Copy a file from Ceph File System to Local Directory.')
     get_parser.add_argument('remote_path', type=str, action=path_to_bytes,
                             help='Path of the file in the remote system')
@@ -799,13 +807,98 @@ class CephFSShell(Cmd):
 
         return 0
 
+    def complete_copy_file_range(self, text, line, begidx, endidx):
+        """
+        auto complete of file name.
+        """
+        return self.complete_filenames(text, line, begidx, endidx)
+
+    copy_file_range_parser = Cmd2ArgumentParser(
+        description='Copy a byte range from one file to another, using '
+                    'server-side copy offload (COPY2) when possible.')
+    copy_file_range_parser.add_argument('src_path', type=str, action=path_to_bytes,
+                                        help='Source file path.')
+    copy_file_range_parser.add_argument('dst_path', type=str, action=path_to_bytes,
+                                        help='Destination file path.')
+    copy_file_range_parser.add_argument('-s', '--src-offset', type=int, default=0,
+                                        help='Source file offset (default: 0).')
+    copy_file_range_parser.add_argument('-d', '--dst-offset', type=int, default=0,
+                                        help='Destination file offset (default: 0).')
+    copy_file_range_parser.add_argument('-l', '--length', type=int, default=-1,
+                                        help='Number of bytes to copy (default: '
+                                             'entire source file from src_offset).')
+    copy_file_range_parser.add_argument('--flags', type=int, default=0,
+                                        help='Copy flags (reserved, default: 0).')
+
+    @with_argparser(copy_file_range_parser)
+    def do_copy_file_range(self, args):
+        """
+        Copy a byte range from one file to another using copy_file_range.
+        Uses server-side copy offload (COPY2) for object-aligned ranges,
+        which is significantly faster than read+write for large files.
+        """
+        # Validate source exists
+        if not is_file_exists(args.src_path):
+            set_exit_code_msg(errno.ENOENT,
+                              f"error: source file "
+                              f"'{args.src_path.decode('utf-8')}' "
+                              f"does not exist")
+            return
+
+        # Determine length if not specified
+        length = args.length
+        if length < 0:
+            try:
+                st = cephfs.stat(args.src_path)
+                length = st.st_size - args.src_offset
+                if length <= 0:
+                    set_exit_code_msg(errno.EINVAL,
+                                      f"error: src_offset "
+                                      f"({args.src_offset}) >= file size "
+                                      f"({st.st_size})")
+                    return
+            except libcephfs.Error as e:
+                set_exit_code_msg(msg=e)
+                return
+
+        # Open source file
+        try:
+            src_fd = cephfs.open(args.src_path, os.O_RDONLY, 0)
+        except libcephfs.Error as e:
+            set_exit_code_msg(msg=e)
+            return
+
+        # Open destination file (create if not exists, otherwise open for writing)
+        dst_flags = os.O_WRONLY | os.O_CREAT
+        try:
+            dst_fd = cephfs.open(args.dst_path, dst_flags, 0o666)
+        except libcephfs.Error as e:
+            cephfs.close(src_fd)
+            set_exit_code_msg(msg=e)
+            return
+
+        try:
+            copied, new_src_off, new_dst_off = cephfs.copy_file_range(
+                src_fd, dst_fd, length,
+                src_offset=args.src_offset,
+                dst_offset=args.dst_offset,
+                flags=args.flags)
+            poutput(f"Copied {copied} bytes "
+                    f"(src: {args.src_offset} -> {new_src_off}, "
+                    f"dst: {args.dst_offset} -> {new_dst_off})")
+        except libcephfs.Error as e:
+            set_exit_code_msg(msg=e)
+        finally:
+            cephfs.close(src_fd)
+            cephfs.close(dst_fd)
+
     def complete_ln(self, text, line, begidx, endidx):
         """
         auto complete of file name.
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    ln_parser = argparse.ArgumentParser(
+    ln_parser = Cmd2ArgumentParser(
         description='Add a hard link to an existing file or create a symbolic '
                     'link to an existing file or directory.')
     ln_parser.add_argument('target', type=str, action=path_to_bytes,
@@ -924,7 +1017,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    ls_parser = argparse.ArgumentParser(
+    ls_parser = Cmd2ArgumentParser(
         description='List all the files and directories in the current working directory.')
     ls_parser.add_argument('-l', '--long', action='store_true',
                            help='Detailed list of items in the directory.')
@@ -1011,7 +1104,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    rmdir_parser = argparse.ArgumentParser(
+    rmdir_parser = Cmd2ArgumentParser(
         description='Remove the directory(ies), if they are empty.')
     rmdir_parser.add_argument('paths', help='Directory Path(s)', nargs='+',
                               action=path_to_bytes)
@@ -1092,7 +1185,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    rm_parser = argparse.ArgumentParser(description='Remove File.')
+    rm_parser = Cmd2ArgumentParser(description='Remove File.')
     rm_parser.add_argument('paths', help='File Path.', nargs='+',
                            action=path_to_bytes)
 
@@ -1130,7 +1223,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    mv_parser = argparse.ArgumentParser(description='Rename a file or Move a file\
+    mv_parser = Cmd2ArgumentParser(description='Rename a file or Move a file\
                                          from source path to the destination.')
     mv_parser.add_argument('src_path', type=str, action=path_to_bytes,
                            help='Source File Path.')
@@ -1150,7 +1243,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    cd_parser = argparse.ArgumentParser(description='Change working directory')
+    cd_parser = Cmd2ArgumentParser(description='Change working directory')
     cd_parser.add_argument('path', type=str, help='Name of the directory.',
                            action=path_to_bytes, nargs='?', default='/')
 
@@ -1175,7 +1268,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    chmod_parser = argparse.ArgumentParser(description='Change permission of a file/directory.')
+    chmod_parser = Cmd2ArgumentParser(description='Change permission of a file/directory.')
     chmod_parser.add_argument('mode', type=str, action=ModeAction, help='Mode')
     chmod_parser.add_argument('paths', type=str, action=path_to_bytes,
                               help='Path of the file/directory', nargs='+')
@@ -1198,7 +1291,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    cat_parser = argparse.ArgumentParser(description='Print contents of a file')
+    cat_parser = Cmd2ArgumentParser(description='Print contents of a file')
     cat_parser.add_argument('paths', help='Name of Files', action=path_to_bytes,
                             nargs='+')
 
@@ -1214,7 +1307,7 @@ class CephFSShell(Cmd):
                 set_exit_code_msg(errno.ENOENT, '{}: no such file'.format(
                     path.decode('utf-8')))
 
-    umask_parser = argparse.ArgumentParser(description='Set umask value.')
+    umask_parser = Cmd2ArgumentParser(description='Set umask value.')
     umask_parser.add_argument('mode', help='Mode', type=str, action=ModeAction,
                               nargs='?', default='')
 
@@ -1235,7 +1328,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    write_parser = argparse.ArgumentParser(description='Writes data into a file')
+    write_parser = Cmd2ArgumentParser(description='Writes data into a file')
     write_parser.add_argument('path', type=str, action=path_to_bytes,
                               help='Name of File')
 
@@ -1254,7 +1347,7 @@ class CephFSShell(Cmd):
         index_dict = {1: self.path_complete}
         return self.index_based_complete(text, line, begidx, endidx, index_dict)
 
-    lcd_parser = argparse.ArgumentParser(description='Moves into the given local directory')
+    lcd_parser = Cmd2ArgumentParser(description='Moves into the given local directory')
     lcd_parser.add_argument('path', type=str, action=path_to_bytes, help='Path')
 
     @with_argparser(lcd_parser)
@@ -1275,7 +1368,7 @@ class CephFSShell(Cmd):
         index_dict = {1: self.path_complete}
         return self.index_based_complete(text, line, begidx, endidx, index_dict)
 
-    lls_parser = argparse.ArgumentParser(
+    lls_parser = Cmd2ArgumentParser(
         description='List files in local system.')
     lls_parser.add_argument('paths', help='Paths', action=path_to_bytes,
                             nargs='*')
@@ -1314,7 +1407,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    df_parser = argparse.ArgumentParser(description='Show information about\
+    df_parser = Cmd2ArgumentParser(description='Show information about\
                 the amount of available disk space')
     df_parser.add_argument('file', help='Name of the file', nargs='*',
                            default=['.'], action=path_to_bytes)
@@ -1356,7 +1449,7 @@ class CephFSShell(Cmd):
                 set_exit_code_msg(e.get_error_code(), "could not statfs {}: {}".format(
                     file.decode('utf-8'), e.strerror))
 
-    locate_parser = argparse.ArgumentParser(
+    locate_parser = Cmd2ArgumentParser(
         description='Find file within file system')
     locate_parser.add_argument('name', help='name', type=str,
                                action=path_to_bytes)
@@ -1391,7 +1484,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    du_parser = argparse.ArgumentParser(
+    du_parser = Cmd2ArgumentParser(
         description='Disk Usage of a Directory')
     du_parser.add_argument('paths', type=str, action=get_list_of_bytes_path,
                            help='Name of the directory.', nargs='*',
@@ -1434,7 +1527,7 @@ class CephFSShell(Cmd):
             else:
                 print_disk_usage(path)
 
-    quota_parser = argparse.ArgumentParser(
+    quota_parser = Cmd2ArgumentParser(
         description='Quota management for a Directory')
     quota_parser.add_argument('op', choices=['get', 'set'],
                               help='Quota operation type.')
@@ -1501,7 +1594,7 @@ class CephFSShell(Cmd):
             except libcephfs.Error as e:
                 set_exit_code_msg(e.get_error_code(), 'max_files is not set')
 
-    snap_parser = argparse.ArgumentParser(description='Snapshot Management')
+    snap_parser = Cmd2ArgumentParser(description='Snapshot Management')
     snap_parser.add_argument('op', type=str,
                              help='Snapshot operation: create or delete')
     snap_parser.add_argument('name', type=str, action=path_to_bytes,
@@ -1575,7 +1668,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    stat_parser = argparse.ArgumentParser(
+    stat_parser = Cmd2ArgumentParser(
         description='Display file or file system status')
     stat_parser.add_argument('paths', type=str, help='file paths',
                              action=path_to_bytes, nargs='+')
@@ -1606,7 +1699,7 @@ class CephFSShell(Cmd):
             except libcephfs.Error as e:
                 set_exit_code_msg(msg=e)
 
-    setxattr_parser = argparse.ArgumentParser(
+    setxattr_parser = Cmd2ArgumentParser(
         description='Set extended attribute for a file')
     setxattr_parser.add_argument('path', type=str, action=path_to_bytes, help='Name of the file')
     setxattr_parser.add_argument('name', type=str, help='Extended attribute name')
@@ -1628,7 +1721,7 @@ class CephFSShell(Cmd):
         except libcephfs.Error as e:
             set_exit_code_msg(msg=e)
 
-    getxattr_parser = argparse.ArgumentParser(
+    getxattr_parser = Cmd2ArgumentParser(
         description='Get extended attribute set for a file')
     getxattr_parser.add_argument('path', type=str, action=path_to_bytes,
                                  help='Name of the file')
@@ -1645,7 +1738,7 @@ class CephFSShell(Cmd):
         except libcephfs.Error as e:
             set_exit_code_msg(msg=e)
 
-    listxattr_parser = argparse.ArgumentParser(
+    listxattr_parser = Cmd2ArgumentParser(
         description='List extended attributes set for a file')
     listxattr_parser.add_argument('path', type=str, action=path_to_bytes,
                                   help='Name of the file')
@@ -1664,7 +1757,7 @@ class CephFSShell(Cmd):
         except libcephfs.Error as e:
             set_exit_code_msg(msg=e)
 
-    removexattr_parser = argparse.ArgumentParser(
+    removexattr_parser = Cmd2ArgumentParser(
         description='Remove extended attribute set for a file')
     removexattr_parser.add_argument('path', type=str, action=path_to_bytes,
                                     help='Name of the file')
@@ -1768,7 +1861,7 @@ def get_shell_conffile_path(arg_conf=''):
 
 
 def manage_args():
-    main_parser = argparse.ArgumentParser(description='')
+    main_parser = Cmd2ArgumentParser(description='')
     main_parser.add_argument('-b', '--batch', action='store',
                              help='Path to CephFS shell script/batch file'
                                   'containing CephFS shell commands',
