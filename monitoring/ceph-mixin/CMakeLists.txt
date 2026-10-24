@@ -46,6 +46,8 @@ if(WITH_GRAFANA)
       if(NOT rc)
         add_ceph_test(run-promtool-unittests
           ${PROMTOOL_EXECUTABLE} test rules ${CMAKE_SOURCE_DIR}/monitoring/ceph-mixin/tests_alerts/test_alerts.yml)
+        add_ceph_test(run-promtool-nvmeof-cpu
+          ${PROMTOOL_EXECUTABLE} test rules ${CMAKE_SOURCE_DIR}/monitoring/ceph-mixin/tests_alerts/test_nvmeof_cpu.yml)
       elseif(NOT promtool_executable_checked)
         message(WARNING "'${PROMTOOL_EXECUTABLE} test rules' does not work, "
           "please use a newer prometheus")
