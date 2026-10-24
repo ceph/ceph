@@ -380,6 +380,12 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_RESTORE_ALREADY_IN_PROGRESS 2500
 #define ERR_EXPIRED_TOKEN 2501
 
+/* RGW-specific HTTP mapping (transport / lifecycle; not AWS S3 API codes). */
+#define ERR_RGW_CONNECTION_RESET   2502
+#define ERR_RGW_BROKEN_PIPE        2503
+#define ERR_RGW_CONNECTION_ABORTED 2504
+#define ERR_RGW_REQUEST_ABORTED    2505
+
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
@@ -1484,6 +1490,8 @@ struct req_state : DoutPrefixProvider {
   CephContext* get_cct() const override { return cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
 };
+
+int rgw_http_error_map_key(int err_no);
 
 void set_req_state_err(req_state*, int);
 void set_req_state_err(req_state*, int, const std::string&);

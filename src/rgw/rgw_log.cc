@@ -269,6 +269,9 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_string("uri", entry.uri);
   formatter->dump_string("http_status", entry.http_status);
   formatter->dump_string("error_code", entry.error_code);
+  if (entry.error_ret != 0) {
+    formatter->dump_int("error_ret", entry.error_ret);
+  }
   formatter->dump_int("bytes_sent", entry.bytes_sent);
   formatter->dump_int("bytes_received", entry.bytes_received);
   formatter->dump_int("object_size", entry.obj_size);
@@ -677,6 +680,7 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
     entry.http_status = "200"; // default
   }
   entry.error_code = s->err.err_code;
+  entry.error_ret = s->err.ret;
   entry.bucket_id = bucket_id;
   entry.trans_id = s->trans_id;
   if (olog) {
@@ -726,6 +730,9 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("uri", uri);
   f->dump_string("http_status", http_status);
   f->dump_string("error_code", error_code);
+  if (error_ret != 0) {
+    f->dump_int("error_ret", error_ret);
+  }
   f->dump_unsigned("bytes_sent", bytes_sent);
   f->dump_unsigned("bytes_received", bytes_received);
   f->dump_unsigned("obj_size", obj_size);

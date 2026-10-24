@@ -25,6 +25,7 @@
 #include "common/armor.h"
 #include "common/async/spawn_throttle.h"
 #include "common/errno.h"
+#include "common/error_code.h"
 #include "common/mime.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -1845,7 +1846,7 @@ int RGWOp::do_aws4_auth_completion()
         return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
       }
     } catch (const rgw::io::Exception& e) {
-      return -e.code().value();
+      return ceph::from_error_code(e.code());
     }
 
     ldpp_dout(this, 10) << "v4 auth ok -- do_aws4_auth_completion" << dendl;
@@ -5106,7 +5107,7 @@ void RGWPutObj::execute(optional_yield y)
 	       multipart_cksum_type,
 	       multipart_cksum_flags);
     } catch (const rgw::io::Exception& e) {
-      op_ret = -e.code().value();
+      op_ret = ceph::from_error_code(e.code());
       return;
     }
 
@@ -5501,7 +5502,7 @@ void RGWPostObj::execute(optional_yield y)
                filter, *s->info.env, rgw::cksum::Type::none /* no override */,
 	       rgw::cksum::Cksum::FLAG_CKSUM_NONE);
     } catch (const rgw::io::Exception& e) {
-      op_ret = -e.code().value();
+      op_ret = ceph::from_error_code(e.code());
       return;
     }
     if (cksum_filter) {
