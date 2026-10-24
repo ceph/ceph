@@ -127,7 +127,12 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_UNPROCESSABLE_ENTITY, {422, "UnprocessableEntity" }},
     { ERR_LOCKED, {423, "Locked" }},
     { ERR_INTERNAL_ERROR, {500, "InternalError" }},
+    { ERR_RGW_CONNECTION_RESET, {500, "ConnectionReset" }},
+    { ERR_RGW_BROKEN_PIPE, {500, "BrokenPipe" }},
+    { ERR_RGW_CONNECTION_ABORTED, {500, "ConnectionAborted" }},
+    { ERR_RGW_REQUEST_ABORTED, {408, "RequestAborted" }},
     { ERR_NOT_IMPLEMENTED, {501, "NotImplemented" }},
+    { ERR_BUSY_RESHARDING, {503, "BucketResharding"}},
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
     { EBUSY, {503, "ServiceUnavailable"}},
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
@@ -331,6 +336,27 @@ bool search_err(rgw_http_errors& errs, int err_no, int& http_ret, string& code)
   return false;
 }
 
+int rgw_http_error_map_key(int err_no)
+{
+  if (err_no < 0) {
+    err_no = -err_no;
+  }
+  switch (err_no) {
+  case EIO:
+    return ERR_INTERNAL_ERROR;
+  case EPIPE:
+    return ERR_RGW_BROKEN_PIPE;
+  case ECONNABORTED:
+    return ERR_RGW_CONNECTION_ABORTED;
+  case ECONNRESET:
+    return ERR_RGW_CONNECTION_RESET;
+  case ECANCELED:
+    return ERR_RGW_REQUEST_ABORTED;
+  default:
+    return err_no;
+  }
+}
+
 void set_req_state_err(struct rgw_err& err,	/* out */
 			int err_no,		/* in  */
 			const int prot_flags)	/* in  */
@@ -343,23 +369,25 @@ void set_req_state_err(struct rgw_err& err,	/* out */
     return;
   }
 
+  const int map_key = rgw_http_error_map_key(err_no);
+
   if (prot_flags & RGW_REST_SWIFT) {
-    if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code))
+    if (search_err(rgw_http_swift_errors, map_key, err.http_ret, err.err_code))
       return;
   }
 
   if (prot_flags & RGW_REST_STS) {
-    if (search_err(rgw_http_sts_errors, err_no, err.http_ret, err.err_code))
+    if (search_err(rgw_http_sts_errors, map_key, err.http_ret, err.err_code))
       return;
   }
 
   if (prot_flags & RGW_REST_IAM) {
-    if (search_err(rgw_http_iam_errors, err_no, err.http_ret, err.err_code))
+    if (search_err(rgw_http_iam_errors, map_key, err.http_ret, err.err_code))
       return;
   }
 
   //Default to searching in s3 errors
-  if (search_err(rgw_http_s3_errors, err_no, err.http_ret, err.err_code))
+  if (search_err(rgw_http_s3_errors, map_key, err.http_ret, err.err_code))
       return;
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no
 	<< " resorting to 500" << dendl;
