@@ -40,18 +40,11 @@ namespace ceph::salad::datum::key {
 template <typename DomainT>
 concept ordered_domain = interval::ordered_domain<DomainT>;
 
-struct byte_string_domain final
+// View parameters preserve borrowed comparison across strings, views, and literals.
+struct byte_string_domain
+ : interval::comparison_domain<std::string,
+     [](const std::string_view lhs, const std::string_view rhs) noexcept { return lhs <=> rhs; }>
 {
-    using value_type = std::string;
-
-public:
-    static constexpr std::strong_ordering compare(const std::string_view lhs,
-                                                  const std::string_view rhs) noexcept
-    {
-        return lhs <=> rhs;
-    }
-
-public:
     static constexpr bool empty_prefix(const std::string_view prefix) noexcept
     {
         return std::empty(prefix);

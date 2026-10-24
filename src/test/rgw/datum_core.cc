@@ -9,6 +9,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 #include <expected>
@@ -45,16 +46,68 @@ namespace iv = datum::interval;
 
 namespace {
 
-struct integers
-{
-    using value_type = int;
-
-public:
-    static constexpr std::strong_ordering compare(int lhs, int rhs) { return lhs <=> rhs; }
-
-};
+struct integers : iv::comparison_domain<int>
+{};
 
 using Q = iv::query<integers>;
+
+TEST_CASE("comparison profiles preserve domain identity and the supplied policy", "[datum][domain]")
+{
+    struct source_offsets_domain final : iv::comparison_domain<int> {};
+    struct destination_offsets_domain final : iv::comparison_domain<int> {};
+    STATIC_REQUIRE(iv::ordered_domain<source_offsets_domain>);
+    STATIC_REQUIRE_FALSE(iv::interval_for<iv::query<source_offsets_domain>,
+                                          destination_offsets_domain>);
+    STATIC_REQUIRE_FALSE(iv::ordered_domain<iv::comparison_domain<int, std::less<> {}>>);
+    STATIC_REQUIRE_FALSE(iv::ordered_domain<iv::comparison_domain<int, std::weak_order>>);
+
+    struct point final { int value; };
+    struct point_order final
+    {
+        bool reversed;
+
+    public:
+        constexpr explicit point_order(const bool reversed) : reversed(reversed)
+        {}
+
+    public:
+        constexpr auto operator()(const point& lhs, const point& rhs) const noexcept
+        {
+            return reversed ? rhs.value <=> lhs.value : lhs.value <=> rhs.value;
+        }
+
+    };
+    using forward_domain = iv::comparison_domain<point, point_order {false}>;
+    using reverse_domain = iv::comparison_domain<point, point_order {true}>;
+
+    STATIC_REQUIRE_FALSE(std::three_way_comparable<point>);
+    STATIC_REQUIRE_FALSE(std::default_initializable<point_order>);
+    STATIC_REQUIRE_FALSE(iv::ordered_domain<iv::comparison_domain<point>>);
+    STATIC_REQUIRE(iv::ordered_domain<forward_domain>);
+    STATIC_REQUIRE(iv::ordered_domain<reverse_domain>);
+    STATIC_REQUIRE(noexcept(forward_domain::compare(point {1}, point {2})));
+    CHECK(iv::contains(iv::query<forward_domain>::closed(point {3}, point {8}), point {5}));
+    CHECK(iv::contains(iv::query<reverse_domain>::closed(point {8}, point {3}), point {5}));
+}
+
+TEST_CASE("floating domains require an explicit strong ordering policy", "[datum][domain]")
+{
+    STATIC_REQUIRE_FALSE(iv::ordered_domain<iv::comparison_domain<double>>);
+    using total_domain = iv::comparison_domain<double, std::strong_order>;
+    STATIC_REQUIRE(iv::ordered_domain<total_domain>);
+    using total_query = iv::query<total_domain>;
+
+    if constexpr (std::numeric_limits<double>::is_iec559) {
+        const auto negative_zero = total_query::singleton(-0.0);
+        CHECK(iv::contains(negative_zero, -0.0));
+        CHECK_FALSE(iv::contains(negative_zero, +0.0));
+
+        const auto nan = std::numeric_limits<double>::quiet_NaN();
+        const auto nan_only = total_query::singleton(nan);
+        CHECK(iv::contains(nan_only, nan));
+        CHECK_FALSE(iv::contains(nan_only, 0.0));
+    }
+}
 
 constexpr Q interval(int lower, int upper, unsigned flags)
 {

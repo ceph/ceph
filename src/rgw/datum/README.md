@@ -103,20 +103,23 @@ arithmetic are unnecessary. Domain ordering and lens purity are semantic laws;
 concepts check the corresponding expressions and types. A boundary's kind must
 agree with its finite/infinity predicates; its key is available only when finite.
 
+`comparison_domain<T, Compare>` supplies the value type and a compile-time comparison object.
+Its default, [`std::compare_three_way`](https://eel.is/c++draft/comparisons.three.way), retains
+that object's native constraints; `ordered_domain` checks the supplied comparison's result.
+Custom policies can order points without native comparison operators. Name derived profiles
+`<semantic_role>_domain` to preserve distinct coordinate systems with the same representation.
+`key::byte_string_domain` also supports derived profiles, retaining owning strings, borrowed
+comparisons, and neutral prefix successors. Backend keyspace restrictions stay with consumers.
+Floating defaults return partial ordering; choose an explicit policy such as
+[`std::strong_order`](https://eel.is/c++draft/cmp.alg) when its NaN and signed-zero ordering fits.
+
 ```cpp
 #include <datum/interval/query.h>
 
 namespace iv = ::ceph::salad::datum::interval;
 
-struct positions
-{
-    using value_type = int;
-
-public:
-    static constexpr std::strong_ordering compare(const int a, const int b) { return a <=> b; }
-
-};
-using Q = iv::query<positions>;
+struct positions_domain : iv::comparison_domain<int> {};
+using Q = iv::query<positions_domain>;
 
 constexpr auto selected = iv::difference(Q::closed_open(0, 100), Q::singleton(40));
 static_assert(iv::contains(selected, 39));
@@ -169,9 +172,9 @@ struct segment
 const std::array records {segment {0, 10}, segment {20, 30}};
 iv::intervals_view geometry {
     records, [](const segment& value) { return Q::closed_open(value.begin, value.end); }};
-static_assert(iv::interval_range_for<decltype(geometry), positions>);
+static_assert(iv::interval_range_for<decltype(geometry), positions_domain>);
 
-iv::interval_batch<positions, 8> owned {geometry};
+iv::interval_batch<positions_domain, 8> owned {geometry};
 const auto progress = iv::visit_intervals(owned, [](const Q& value) {
     return iv::contains(value, 5) ? iv::acceptance::accept : iv::acceptance::reject_and_stop;
 });
@@ -232,16 +235,25 @@ flags. The record and its point storage still belong to the caller:
 ```cpp
 struct extent_view
 {
-    using domain_type = positions;
+    using domain_type = positions_domain;
 
     const segment& origin;
 
 public:
-    constexpr auto lower() const { return iv::boundary_ref<positions>::closed(origin.begin); }
-    constexpr auto upper() const { return iv::boundary_ref<positions>::open(origin.end); }
+    constexpr auto lower() const
+    {
+        return iv::boundary_ref<positions_domain>::closed(origin.begin);
+    }
+
+    constexpr auto upper() const
+    {
+        return iv::boundary_ref<positions_domain>::open(origin.end);
+    }
 
 };
-const iv::clip_view cuts {records, selected, [](const segment& row) { return extent_view {row}; }};
+const iv::canonical_set prepared_selection {selected};
+const iv::clip_view cuts {
+    records, prepared_selection, [](const segment& row) { return extent_view {row}; }};
 ```
 
 Source-preserving cuts compose with byte cursors without a shared native payload
@@ -319,7 +331,7 @@ const iv::canonical_set prepared {expression};
 const iv::canonical_view borrowed {prepared};
 iv::for_each_interval(iv::difference(borrowed, exclusions), sink);
 
-iv::workspace<positions> scratch {{.intermediate_intervals = 256, .work = 4096}};
+iv::workspace<positions_domain> scratch {{.intermediate_intervals = 256, .work = 4096}};
 const auto result = iv::evaluate(iv::intersection(prepared, requested), scratch);
 ```
 

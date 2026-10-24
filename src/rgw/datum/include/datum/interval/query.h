@@ -46,6 +46,15 @@
 
 namespace ceph::salad::datum::interval {
 
+// Named derived profiles retain domain identity while sharing a comparison policy.
+template <typename ValueT, auto Compare = std::compare_three_way {}>
+struct comparison_domain
+{
+    using value_type = ValueT;
+
+    static constexpr auto compare = Compare;
+};
+
 template <typename DomainT>
 concept ordered_domain =
     requires (const typename DomainT::value_type& lhs, const typename DomainT::value_type& rhs) {

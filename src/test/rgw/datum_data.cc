@@ -1913,17 +1913,8 @@ TEST_CASE("redacting a scalar skips its unneeded getter", "[datum][fmt]")
 
 namespace interval = ceph::salad::datum::interval;
 
-struct integer_domain final
+struct integer_domain final : interval::comparison_domain<int>
 {
-    using value_type = int;
-
-public:
-    static constexpr std::strong_ordering compare(const int lhs, const int rhs) noexcept
-    {
-        return lhs <=> rhs;
-    }
-
-public:
     static constexpr std::optional<int> successor(const int value) noexcept
     {
         if (100 == value) {
@@ -1937,17 +1928,8 @@ public:
 
 using integer_query = interval::query<integer_domain>;
 
-struct dense_domain final
-{
-    using value_type = int;
-
-public:
-    static constexpr std::strong_ordering compare(const int lhs, const int rhs) noexcept
-    {
-        return lhs <=> rhs;
-    }
-
-};
+struct dense_domain final : interval::comparison_domain<int>
+{};
 
 using dense_query = interval::query<dense_domain>;
 
@@ -1960,18 +1942,8 @@ public:
 
 };
 
-struct tagged_domain final
+struct tagged_domain final : interval::comparison_domain<tagged_value>
 {
-    using value_type = tagged_value;
-
-public:
-    static constexpr std::strong_ordering compare(const tagged_value lhs,
-                                                  const tagged_value rhs) noexcept
-    {
-        return lhs <=> rhs;
-    }
-
-public:
     static constexpr std::optional<tagged_value> successor(const tagged_value value) noexcept
     {
         if (10 == value.value) {
@@ -4145,6 +4117,59 @@ TEST_CASE("Datum key layout and page traversal work without a native context", "
     CHECK(result.complete());
     CHECK(result.pages == 3);
     CHECK(consumed == 3);
+}
+
+TEST_CASE("named byte domains retain borrowed comparisons and neutral prefixes", "[datum][domain]")
+{
+    struct bucket_keys_domain final : datum::key::byte_string_domain {};
+    struct object_keys_domain final : datum::key::byte_string_domain {};
+    STATIC_REQUIRE(iv::successor_domain<object_keys_domain>);
+    STATIC_REQUIRE_FALSE(iv::interval_for<iv::query<bucket_keys_domain>, object_keys_domain>);
+
+    struct borrowed_key final
+    {
+        std::string_view bytes;
+        unsigned& observations;
+
+    public:
+        operator std::string_view() const noexcept
+        {
+            ++observations;
+
+            return bytes;
+        }
+
+        operator std::string() const = delete;
+
+    };
+    unsigned observations = 0;
+    const auto names = iv::query<object_keys_domain>::closed_open("a", "z");
+    CHECK(iv::contains(names, borrowed_key {"middle", observations}));
+    CHECK(0 < observations);
+
+    const std::array prefixes {
+        std::string {}, std::string {"\0", 1}, std::string {"\x7F", 1},
+        std::string {"\x80", 1}, std::string {"\xFF", 1}, std::string {"a\0", 2},
+        std::string {"a\xFF", 2}, std::string {"\xFF\xFF", 2}};
+    const char pivot = static_cast<char>(0x80);
+    for (unsigned value = 0; value < 256; ++value) {
+        const char byte = static_cast<char>(value);
+        CHECK((value <=> 128U) == object_keys_domain::compare(
+                  std::string_view {&byte, 1}, std::string_view {&pivot, 1}));
+    }
+    for (const auto& prefix : prefixes) {
+        const auto selected = iv::prefix<object_keys_domain>(prefix);
+        CHECK(iv::contains(selected, prefix + '\0'));
+        for (const auto& candidate : prefixes) {
+            CHECK(iv::contains(selected, std::string_view {candidate}) ==
+                  std::string_view {candidate}.starts_with(prefix));
+        }
+        for (unsigned value = 0; value < 256; ++value) {
+            const char byte = static_cast<char>(value);
+            const std::string_view candidate {&byte, 1};
+            CHECK(iv::contains(selected, candidate) == candidate.starts_with(prefix));
+        }
+    }
 }
 
 TEST_CASE("segmented keys reject terminator-consuming prefixes", "[datum][key]")
