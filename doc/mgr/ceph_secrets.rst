@@ -4,29 +4,34 @@
 Ceph Secrets Module
 ===================
 
-The ``ceph_secrets`` manager module provides centralised secret storage for
+The ``ceph_secrets`` manager module provides centralized secret storage for
 Ceph operators and Ceph manager modules.  Instead of embedding plaintext
 credentials in service specifications or configuration objects, secrets are
-stored once and referenced by URI.  Ceph manager modules such as cephadm
-and rook can store secret payloads centrally, reference them by URI, and
-resolve them to plaintext only when needed at deploy time.
+stored once and referenced by URI.  Other Manager modules can store and
+resolve secrets through ``CephSecretsClient`` (see Module API below). No
+module uses it yet: cephadm and Rook do not resolve ``secret:/`` references.
 
-For example, a cephadm-managed service may need an API token.  Instead of
-embedding that token directly in the service specification, an operator can
-store it once:
+.. note::
+
+   The ``ceph_secrets`` module is not part of Squid 19.2, Tentacle 20.2, or
+   Umbrella 21. It is available only in later releases.
+
+For example, an operator can store an API token once:
 
 .. prompt:: bash $
 
    ceph secret set cephadm/service/my-service/api_token -i /tmp/api-token
 
-and then use the URI
-``secret:/cephadm/service/my-service/api_token`` in the
-service spec instead of the plaintext token.  A cephadm integration can then
-resolve the URI at deploy time and write the token only into the daemon files
-that need it.
+A module that supports ``secret:/`` references could then accept the URI
+``secret:/cephadm/service/my-service/api_token`` in place of the plaintext
+token and resolve it at deploy time with ``resolve_object()``. Cephadm does
+not support these references yet, so do not put ``secret:/`` URIs in cephadm
+service specifications.
 
-Secrets are stored in the Monitor KV store under the ``secret_store/v1/`` prefix
-and are organised by namespace, scope, and name.  Each secret is versioned and
+Secrets are stored in the Monitors' configuration key store (``ceph config-key``)
+under the ``mgr/ceph_secrets/secret_store/v1/`` prefix and are organized by
+namespace, scope, target, and name.  Each record, including the secret data, is
+stored as unencrypted JSON.  Each secret is versioned and
 carries ``created``/``updated`` timestamps.  A per-namespace epoch counter
 is incremented on every ``set`` and on any ``rm`` that actually removes a
 secret, allowing consumers to detect changes without fetching the full secret
@@ -34,12 +39,13 @@ list.
 
 .. note::
 
-   The ``mon`` backend stores secrets in the Monitor KV store, which is not an
-   external KMS or vault.  Users and MGR modules with sufficient Ceph
-   permissions can still reveal or resolve stored secret values.  Namespaces
-   provide logical and storage isolation, not an authorisation boundary.
+   The ``mon`` backend stores secrets in the Monitors' configuration key
+   store, which is not an external KMS or vault.  Users and MGR modules with
+   sufficient Ceph permissions can still reveal or resolve stored secret
+   values.  Namespaces provide logical and storage isolation, not an
+   authorization boundary.
 
-If the module is not already enabled, run::
+The module is not enabled by default. To enable it, run::
 
     ceph mgr module enable ceph_secrets
 
@@ -55,9 +61,9 @@ Namespace
 ---------
 
 A namespace is a logical storage boundary, typically matching the name of
-the consuming MGR module (e.g. ``cephadm``, ``rook``).  Secrets in different
+the consuming MGR module (for example ``cephadm``).  Secrets in different
 namespaces are stored independently and have independent epoch counters.
-Namespaces are not an authorisation boundary; any caller with access to the
+Namespaces are not an authorization boundary; any caller with access to the
 ``ceph_secrets`` module can read secrets from any namespace.
 
 Scope
@@ -117,8 +123,9 @@ resolved at deploy time.
 CLI Reference
 =============
 
-All CLI commands use the path form described above.  Responses are JSON by
-default; pass ``--format yaml`` for YAML output.
+All CLI commands use the path form described above.  Except for
+``secret get-value``, which prints the stored string, the commands print
+JSON by default; pass ``--format yaml`` for YAML output.
 
 .. _mgr-ceph-secrets-set:
 
@@ -145,7 +152,16 @@ Example:
 .. prompt:: bash $
 
    ceph secret set cephadm/service/my-service/api_token -i /tmp/api-token
-   {"metadata": {"version": 1, "created": "2025-06-01T12:00:00Z", "updated": "2025-06-01T12:00:00Z"}}
+
+.. code-block:: console
+
+   {
+     "metadata": {
+       "created": "2025-06-01T12:00:00Z",
+       "updated": "2025-06-01T12:00:00Z",
+       "version": 1
+     }
+   }
 
 .. _mgr-ceph-secrets-get:
 
@@ -165,22 +181,30 @@ Example:
 .. prompt:: bash $
 
    ceph secret get cephadm/service/my-service/api_token
+
+.. code-block:: console
+
    {
      "metadata": {
-       "version": 1,
        "created": "2025-06-01T12:00:00Z",
-       "updated": "2025-06-01T12:00:00Z"
+       "updated": "2025-06-01T12:00:00Z",
+       "version": 1
      }
    }
 
+.. prompt:: bash $
+
    ceph secret get cephadm/service/my-service/api_token --reveal
+
+.. code-block:: console
+
    {
+     "data": "api-token-value",
      "metadata": {
-       "version": 1,
        "created": "2025-06-01T12:00:00Z",
-       "updated": "2025-06-01T12:00:00Z"
-     },
-     "data": "api-token-value"
+       "updated": "2025-06-01T12:00:00Z",
+       "version": 1
+     }
    }
 
 .. _mgr-ceph-secrets-get-value:
@@ -201,6 +225,9 @@ Example:
 .. prompt:: bash $
 
    ceph secret get-value cephadm/service/my-service/api_token
+
+.. code-block:: console
+
    api-token-value
 
 .. _mgr-ceph-secrets-ls:
@@ -224,18 +251,21 @@ Example:
 .. prompt:: bash $
 
    ceph secret ls --namespace cephadm --scope host --sec_target node1
+
+.. code-block:: console
+
    {
      "cephadm/host/node1/ssh_key": {
        "metadata": {
-         "version": 3,
          "created": "2025-05-10T08:00:00Z",
-         "updated": "2025-06-01T09:00:00Z"
+         "updated": "2025-06-01T09:00:00Z",
+         "version": 3
        },
        "ref": {
+         "name": "ssh_key",
          "namespace": "cephadm",
          "scope": "host",
-         "target": "node1",
-         "name": "ssh_key"
+         "target": "node1"
        }
      }
    }
@@ -257,10 +287,20 @@ Example:
 .. prompt:: bash $
 
    ceph secret rm cephadm/service/my-service/api_token
-   {"status": "removed"}
 
-   ceph secret rm cephadm/service/my-service/api_token
-   {"status": "not_found"}
+.. code-block:: console
+
+   {
+     "status": "removed"
+   }
+
+If you run the command again for the same path, it reports:
+
+.. code-block:: console
+
+   {
+     "status": "not_found"
+   }
 
 .. _mgr-ceph-secrets-get-epoch:
 
@@ -429,6 +469,4 @@ Configuration
 .. mgr_module:: ceph_secrets
 .. confval:: secrets_backend
 
-   The storage backend used for secrets.  Currently only the Monitor KV store
-   (``mon``) is supported.  This option is reserved for future backends
-   (e.g. HashiCorp Vault).
+   This option is reserved for future backends (e.g. HashiCorp Vault).
