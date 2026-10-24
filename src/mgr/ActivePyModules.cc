@@ -267,7 +267,9 @@ PyObject *ActivePyModules::get_python(std::string_view what, const bool get_muta
     cluster_state.with_osdmap([&](const OSDMap &osd_map){
       no_gil.acquire_gil();
       if (what == "osd_map") {
-        osd_map.dump(&f, g_ceph_context);
+        // without read balance scores, which copy the map and map every PG
+        // of each replicated pool; the balancer gets them from get_osdmap()
+        osd_map.dump(&f, g_ceph_context, false);
       } else if (what == "osd_map_tree") {
         osd_map.print_tree(&f, nullptr);
       } else if (what == "osd_map_crush") {
