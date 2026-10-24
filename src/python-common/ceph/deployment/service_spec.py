@@ -1395,6 +1395,7 @@ class NFSServiceSpec(ServiceSpec):
         'cluster_qos_port',
         'rdma_port'
     ]
+    MAX_CLIENTS_PER_POOL = 64
 
     def __init__(self,
                  service_type: str = 'nfs',
@@ -1440,6 +1441,7 @@ class NFSServiceSpec(ServiceSpec):
                  cephfs_client_log_level: Optional[int] = None,
                  cephfs_client_log_dir: Optional[str] = None,
                  mem_stats_disable: bool = False,
+                 clients_per_pool: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1484,6 +1486,9 @@ class NFSServiceSpec(ServiceSpec):
         # Disables per-component memory-statistics capture in NFS_CORE_PARAM.
         # Applied at daemon startup only; requires daemon restart to take effect.
         self.mem_stats_disable = mem_stats_disable
+
+        # Max independent CephFS client handles Ganesha may use per filesystem.
+        self.clients_per_pool = clients_per_pool
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1577,6 +1582,15 @@ class NFSServiceSpec(ServiceSpec):
 
         verify_boolean(self.enable_client_object_cache, "enable_client_object_cache")
         verify_boolean(self.mem_stats_disable, "mem_stats_disable")
+        if self.clients_per_pool is not None:
+            verify_int(self.clients_per_pool, "clients_per_pool")
+            if not 2 <= self.clients_per_pool <= self.MAX_CLIENTS_PER_POOL:
+                raise SpecValidationError(
+                    "Invalid NFS spec: clients_per_pool must be an integer between 2 "
+                    f"and {self.MAX_CLIENTS_PER_POOL} (NFS-Ganesha rejects a larger "
+                    "pool). Once an NFS cluster uses a pool this field can only "
+                    "be raised."
+                )
         cache_size = verify_size_with_units(
             self.client_object_cache_size, "client_object_cache_size"
         )

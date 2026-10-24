@@ -34,6 +34,10 @@ class NFSService(CephService):
     def __init__(self, mgr: "CephadmOrchestrator"):
         super().__init__(mgr)
         self._fencing_store_lock = Lock()
+        # The dependency check that drives the sizing runs once per daemon,
+        # this keeps the pool itself to one reconcile per change.
+        self._reconciled_client_pools: Dict[str, int] = {}
+        self._reconciled_client_pools_lock = Lock()
 
     def allow_colo(self) -> bool:
         return True
@@ -147,6 +151,34 @@ class NFSService(CephService):
         assert self.TYPE == spec.service_type
         create_ganesha_pool(self.mgr)
 
+    def _reconcile_client_pool(self, spec: NFSServiceSpec) -> bool:
+        """Have the nfs module size the CephFS client pool to the spec.
+
+        Pool users are normally provisioned by the first cmount_path=/ export
+        of a filesystem. A cluster that enables or raises clients_per_pool
+        when those exports already exist has no such trigger, so the pools are
+        topped up from here instead.
+        """
+        clients_per_pool = spec.clients_per_pool
+        if not clients_per_pool or not spec.service_id:
+            return True
+        service_name = spec.service_name()
+        with self._reconciled_client_pools_lock:
+            if self._reconciled_client_pools.get(service_name) == clients_per_pool:
+                return True
+            try:
+                created = self.mgr.remote('nfs', 'reconcile_client_pool',
+                                          spec.service_id, clients_per_pool)
+            except Exception:
+                logger.exception('Failed to size the CephFS client pool of %s to %s',
+                                 service_name, clients_per_pool)
+                return False
+            self._reconciled_client_pools[service_name] = clients_per_pool
+        if created:
+            logger.info(
+                f'Added CephFS client pool users to {service_name}: {created}')
+        return True
+
     @classmethod
     def _get_service_dependencies(
         cls,
@@ -198,6 +230,10 @@ class NFSService(CephService):
                 )
         if nfs_spec.mem_stats_disable:
             deps.append(f'mem_stats_disable: {nfs_spec.mem_stats_disable}')
+        # CephFS client pool: the size reaches Ganesha through ganesha.conf,
+        # so a pool that is enabled or grown has to reconfigure the daemons.
+        if nfs_spec.clients_per_pool is not None:
+            deps.append(f'clients_per_pool: {nfs_spec.clients_per_pool}')
 
         return sorted(deps)
 
@@ -313,6 +349,15 @@ class NFSService(CephService):
             spec if spec is not None else self.mgr.spec_store[daemon_spec.service_name].spec,
         )
 
+        # The deps check sizes the pool before it gets this far, but a daemon
+        # whose last config time is unknown is reconfigured without one. This
+        # is the last point at which clients_per_pool can be kept out of a
+        # ganesha.conf the CEPH_USERS object cannot back.
+        if not self._reconcile_client_pool(nfs_spec):
+            raise OrchestratorError(
+                f'Cannot configure {daemon_spec.name()} for a CephFS client pool '
+                f'of {nfs_spec.clients_per_pool}: the pool could not be sized')
+
         nodeid = self.get_daemon_nodeid(nfs_spec.service_name(), daemon_spec.rank)
 
         nfs_idmap_conf = '/etc/ganesha/idmap.conf'
@@ -419,6 +464,7 @@ class NFSService(CephService):
                     if nfs_spec.client_object_cache_max_dirty is not None else None
                 ),
                 "mem_stats_disable": nfs_spec.mem_stats_disable,
+                "clients_per_pool": nfs_spec.clients_per_pool,
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -701,6 +747,9 @@ class NFSService(CephService):
     def purge(self, service_name: str) -> None:
         # Clear after all daemons are gone (post_remove already cleaned keys).
         self._clear_legacy_nfs_store_markers(service_name)
+        # A cluster recreated under the same name starts with no pool.
+        with self._reconciled_client_pools_lock:
+            self._reconciled_client_pools.pop(service_name, None)
 
         if service_name not in self.mgr.spec_store:
             return
@@ -832,6 +881,15 @@ class NFSService(CephService):
         }
         if not sym_diff:
             return utils.NextDaemonStep(scheduled_action)
+        if spec is not None and any(d.startswith('clients_per_pool:') for d in sym_diff):
+            # The pool has to be on disk before the daemons are reconfigured
+            # for it, so size it here and leave them alone if that fails.
+            if not self._reconcile_client_pool(cast(NFSServiceSpec, spec)):
+                logger.warning(
+                    'Not reconfiguring %s: its CephFS client pool could not be '
+                    'sized to %s, so the daemons keep the config they have',
+                    spec.service_name(), cast(NFSServiceSpec, spec).clients_per_pool)
+                return utils.NextDaemonStep(scheduled_action)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
             spec.service_name() if spec else daemon_type,

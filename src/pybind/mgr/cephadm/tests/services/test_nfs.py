@@ -1038,6 +1038,256 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert 'Mem_Stats_Disable' not in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_clients_per_pool_in_ganesha_conf(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """clients_per_pool is written into a CEPH block."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                clients_per_pool=3,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                                                service_name=nfs_spec.service_name(),
+                                                                rank=0)))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert ganesha_conf.count('CEPH {') == 1
+                assert "clients_per_pool = 3;" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_clients_per_pool_enable_on_existing_cluster(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """A cluster without a client pool can be converted to one."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+            )
+            with with_service(cephadm_module, nfs_spec):
+                changed = NFSServiceSpec(
+                    service_id="foo",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=3,
+                )
+                cephadm_module.apply_nfs(changed)
+                stored = cephadm_module.spec_store['nfs.foo'].spec
+                assert cast(NFSServiceSpec, stored).clients_per_pool == 3
+
+                # Growing the pool is allowed too.
+                grown = NFSServiceSpec(
+                    service_id="foo",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=5,
+                )
+                cephadm_module.apply_nfs(grown)
+                stored = cephadm_module.spec_store['nfs.foo'].spec
+                assert cast(NFSServiceSpec, stored).clients_per_pool == 5
+
+                # A spec that says nothing about the pool leaves it alone.
+                silent = NFSServiceSpec(
+                    service_id="foo",
+                    placement=PlacementSpec(hosts=['test']),
+                )
+                cephadm_module.apply_nfs(silent)
+                stored = cephadm_module.spec_store['nfs.foo'].spec
+                assert cast(NFSServiceSpec, stored).clients_per_pool == 5
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_clients_per_pool_cannot_shrink(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """clients_per_pool cannot be lowered on an existing cluster."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            pool_spec = NFSServiceSpec(
+                service_id="bar",
+                placement=PlacementSpec(hosts=['test']),
+                clients_per_pool=4,
+            )
+            with with_service(cephadm_module, pool_spec):
+                shrunk = NFSServiceSpec(
+                    service_id="bar",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=3,
+                )
+                with pytest.raises(OrchestratorError, match="cannot be lowered"):
+                    cephadm_module.apply_nfs(shrunk)
+                stored = cephadm_module.spec_store['nfs.bar'].spec
+                assert cast(NFSServiceSpec, stored).clients_per_pool == 4
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_clients_per_pool_reconciles_and_reconfigures(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Enabling the pool tops up CEPH_USERS and reconfigures the daemons."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        def pool_calls():
+            return [call for call in cephadm_module.remote.call_args_list
+                    if call.args[:2] == ('nfs', 'reconcile_client_pool')]
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="baz",
+                placement=PlacementSpec(hosts=['test']),
+            )
+            with with_service(cephadm_module, nfs_spec):
+                svc = service_registry.get_service('nfs')
+                before = svc.get_dependencies(cephadm_module, nfs_spec)
+
+                pooled = NFSServiceSpec(
+                    service_id="baz",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=3,
+                )
+                # The pool size reaches ganesha.conf, so it has to be a
+                # dependency or the running daemons would keep the old conf.
+                after = svc.get_dependencies(cephadm_module, pooled)
+                assert after != before
+                assert 'clients_per_pool: 3' in after
+
+                # Configuring the service does not size the pool: that waits
+                # for the daemons to be about to pick the new size up.
+                cephadm_module.remote.reset_mock()
+                svc.config(pooled)
+                assert pool_calls() == []
+
+                # The dependency change does, and asks for a redeploy.
+                cephadm_module.remote.reset_mock()
+                step = svc.choose_next_action(
+                    utils.Action.NO_ACTION, 'nfs', pooled,
+                    curr_deps=after, last_deps=before)
+                assert step.action == utils.Action.REDEPLOY
+                assert [c.args for c in pool_calls()] == [
+                    ('nfs', 'reconcile_client_pool', 'baz', 3)]
+
+                # Every other daemon of the service sees the same change, but
+                # the pool is only sized once.
+                cephadm_module.remote.reset_mock()
+                for _ in range(3):
+                    assert svc.choose_next_action(
+                        utils.Action.NO_ACTION, 'nfs', pooled,
+                        curr_deps=after, last_deps=before,
+                    ).action == utils.Action.REDEPLOY
+                assert pool_calls() == []
+
+                # Growing the pool is a change of its own, so it is sized again.
+                grown = NFSServiceSpec(
+                    service_id="baz",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=5,
+                )
+                grown_deps = svc.get_dependencies(cephadm_module, grown)
+                cephadm_module.remote.reset_mock()
+                svc.choose_next_action(utils.Action.NO_ACTION, 'nfs', grown,
+                                       curr_deps=grown_deps, last_deps=after)
+                assert [c.args for c in pool_calls()] == [
+                    ('nfs', 'reconcile_client_pool', 'baz', 5)]
+
+                # A deps change that has nothing to do with the pool leaves
+                # the nfs module alone.
+                cephadm_module.remote.reset_mock()
+                svc.choose_next_action(utils.Action.NO_ACTION, 'nfs', grown,
+                                       curr_deps=grown_deps + ['tls_debug: True'],
+                                       last_deps=grown_deps)
+                assert pool_calls() == []
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_clients_per_pool_unsizable_pool_holds_daemons(
+            self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """A pool that cannot be sized does not reach the daemons.
+
+        Ganesha refuses a CEPH_USERS block narrower than clients_per_pool, so
+        a daemon reconfigured for a pool that was never written would fail to
+        start.
+        """
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="qux",
+                placement=PlacementSpec(hosts=['test']),
+            )
+            with with_service(cephadm_module, nfs_spec):
+                svc = service_registry.get_service('nfs')
+                before = svc.get_dependencies(cephadm_module, nfs_spec)
+                pooled = NFSServiceSpec(
+                    service_id="qux",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=3,
+                )
+                after = svc.get_dependencies(cephadm_module, pooled)
+
+                real_remote = cephadm_module.remote
+
+                def failing_remote(module, method, *args, **kwargs):
+                    if (module, method) == ('nfs', 'reconcile_client_pool'):
+                        raise RuntimeError('mon is unavailable')
+                    return real_remote(module, method, *args, **kwargs)
+
+                with patch.object(cephadm_module, 'remote', failing_remote):
+                    step = svc.choose_next_action(
+                        utils.Action.NO_ACTION, 'nfs', pooled,
+                        curr_deps=after, last_deps=before)
+                # The daemons keep the config they have, and the serve loop is
+                # not interrupted over it.
+                assert step.action == utils.Action.NO_ACTION
+
+                # The nfs module being gone is no different, the pool is just
+                # as unpersisted.
+                with patch.object(cephadm_module, 'remote',
+                                  MagicMock(side_effect=ImportError('no nfs module'))):
+                    step = svc.choose_next_action(
+                        utils.Action.NO_ACTION, 'nfs', pooled,
+                        curr_deps=after, last_deps=before)
+                assert step.action == utils.Action.NO_ACTION
+
+                # A daemon whose last config time is unknown is reconfigured
+                # without the deps check, so the config itself refuses to name
+                # a pool size CEPH_USERS cannot back.
+                with patch.object(cephadm_module, 'remote', failing_remote):
+                    with pytest.raises(OrchestratorError, match='could not be sized'):
+                        svc.generate_config(DaemonDeployContext(
+                            CephadmDaemonDeploySpec(
+                                host='test', daemon_id='qux.test.0.0',
+                                service_name=pooled.service_name(), rank=0),
+                            service_spec=pooled))
+
+                # Nothing was remembered, so the next pass tries again and the
+                # daemons are reconfigured once it works.
+                cephadm_module.remote.reset_mock()
+                step = svc.choose_next_action(
+                    utils.Action.NO_ACTION, 'nfs', pooled,
+                    curr_deps=after, last_deps=before)
+                assert step.action == utils.Action.REDEPLOY
+                cephadm_module.remote.assert_any_call(
+                    'nfs', 'reconcile_client_pool', 'qux', 3)
+
 
 def test_nfs_enable_nfs_metrics_spec_roundtrip():
     """Verify enable_nfs_metrics survives JSON serialization round-trip."""
