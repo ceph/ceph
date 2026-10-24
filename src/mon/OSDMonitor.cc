@@ -4592,15 +4592,17 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 
   if (osdmap.osd_xinfo[from].last_purged_snaps_scrub <
       beacon->last_purged_snaps_scrub) {
+    // Record the stamp, but don't propose a new map just for it: nothing
+    // reads it, and every OSD would otherwise add an epoch per scrub. It
+    // goes out with the next proposal, and the OSD resends it in each
+    // beacon until then.
     if (pending_inc.new_xinfo.count(from) == 0) {
       pending_inc.new_xinfo[from] = osdmap.osd_xinfo[from];
     }
     pending_inc.new_xinfo[from].last_purged_snaps_scrub =
       beacon->last_purged_snaps_scrub;
-    return true;
-  } else {
-    return false; /* nothing to propose */
   }
+  return false; /* nothing to propose */
 }
 
 // ---------------
