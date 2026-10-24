@@ -19,7 +19,7 @@
 #include "include/msgr.h"
 #include "osd/osd_types.h"
 
-#include <list>
+#include <vector>
 #include <functional>
 
 namespace ceph {
@@ -36,12 +36,8 @@ namespace ceph {
 template <typename T, typename K>
 class OpQueue {
 public:
-  // Ops of this class should be deleted immediately. If out isn't
-  // nullptr then items should be added to the front in
-  // front-to-back order. The typical strategy is to visit items in
-  // the queue in *reverse* order and to use *push_front* to insert
-  // them into out.
-  virtual void remove_by_class(K k, std::list<T> *out) = 0;
+  // Remove and return this class in front-to-back order.
+  virtual std::vector<T> remove_by_class(K k) = 0;
 
   // Enqueue op in the back of the strict queue
   virtual void enqueue_strict(K cl, unsigned priority, T &&item) = 0;

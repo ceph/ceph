@@ -60,7 +60,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
-using std::list;
 using std::map;
 using std::string;
 using std::vector;
@@ -1029,7 +1028,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
-  list<aio_t>::iterator e = ioc->running_aios.begin();
+  auto e = ioc->running_aios.begin();
   ioc->running_aios.splice(e, ioc->pending_aios);
 
   int pending = ioc->num_pending.load();
@@ -1039,7 +1038,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
   ceph_assert(ioc->pending_aios.size() == 0);
 
   if (cct->_conf->bdev_debug_aio) {
-    list<aio_t>::iterator p = ioc->running_aios.begin();
+    auto p = ioc->running_aios.begin();
     while (p != e) {
       dout(30) << __func__ << " " << *p << dendl;
       std::lock_guard l(debug_queue_lock);

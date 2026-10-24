@@ -655,9 +655,14 @@ void namespace_list_start(librados::ObjectReadOperation *op,
                           const std::string &start, uint64_t max_return);
 int namespace_list_finish(ceph::buffer::list::const_iterator *it,
                           std::list<std::string> *entries);
+int namespace_list_finish(ceph::buffer::list::const_iterator& cursor,
+                          std::vector<std::string>& entries);
 int namespace_list(librados::IoCtx *ioctx,
                    const std::string &start, uint64_t max_return,
                    std::list<std::string> *entries);
+int namespace_list(librados::IoCtx& ioctx,
+                   const std::string& start, uint64_t max_return,
+                   std::vector<std::string>& entries);
 
 // operations on data objects
 void assert_snapc_seq(neorados::WriteOp* op,

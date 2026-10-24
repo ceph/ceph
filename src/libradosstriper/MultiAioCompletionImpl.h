@@ -16,7 +16,6 @@
 #ifndef CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H
 #define CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H
 
-#include <list>
 #include <mutex>
 #include "common/ceph_mutex.h"
 #include "include/radosstriper/libradosstriper.hpp"
@@ -33,7 +32,6 @@ struct MultiAioCompletionImpl {
   void *callback_complete_arg, *callback_safe_arg;
   bool building;       ///< true if we are still building this completion
   bufferlist bl;       /// only used for read case in C api of rados striper
-  std::list<bufferlist*> bllist; /// keep temporary buffer lists used for destriping
 
   MultiAioCompletionImpl()
   : ref(1), rval(0),
@@ -41,16 +39,6 @@ struct MultiAioCompletionImpl {
     callback_complete(0), callback_safe(0),
     callback_complete_arg(0), callback_safe_arg(0),
     building(true) {};
-
-  ~MultiAioCompletionImpl() {
-    // deallocate temporary buffer lists
-    for (std::list<bufferlist*>::iterator it = bllist.begin();
-	 it != bllist.end();
-	 it++) {
-      delete *it;
-    }
-    bllist.clear();
-  }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
     std::scoped_lock l{lock};

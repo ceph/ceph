@@ -3,15 +3,18 @@
 
 #include "include/types.h"
 
-#include <cerrno>
 #include <map>
+#include <cerrno>
 #include <string>
 #include <vector>
 #include <utility>
+#include <iterator>
+#include <string_view>
 
 #include <fmt/format.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/container/small_vector.hpp>
 
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
@@ -23,7 +26,6 @@
 #include <boost/lexical_cast.hpp>
 
 using std::pair;
-using std::list;
 using std::map;
 using std::string;
 using std::vector;
@@ -440,16 +442,20 @@ static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_ke
   return 0;
 }
 
-static void split_key(const string& key, list<string>& vals)
+static auto split_key(const string& key)
 {
+  boost::container::small_vector<std::string_view, 3> values;
+
   size_t pos = 0;
   const char *p = key.c_str();
   while (pos < key.size()) {
     size_t len = strlen(p);
-    vals.push_back(p);
+    values.emplace_back(p, len);
     pos += len + 1;
     p += len + 1;
   }
+
+  return values;
 }
 
 static std::string escape_str(const std::string& s)
@@ -477,27 +483,18 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
     return 0;
   }
 
-  list<string> vals;
-  split_key(index_key, vals);
+  auto values = split_key(index_key);
+  key->name.assign(values.front());
 
-  if (vals.empty()) {
-    CLS_LOG(0, "ERROR: %s: bad index_key (%s): split_key() returned empty vals", __func__, escape_str(index_key).c_str());
-    return -EIO;
-  }
-
-  auto iter = vals.begin();
-  key->name = *iter;
-  ++iter;
-
-  if (iter == vals.end()) {
+  if (std::size(values) < 2) {
     CLS_LOG(0, "ERROR: %s: bad index_key (%s): no vals", __func__, escape_str(index_key).c_str());
     return -EIO;
   }
 
-  for (; iter != vals.end(); ++iter) {
-    string& val = *iter;
+  for (std::size_t i = 1; i < std::size(values); ++i) {
+    const auto& val = values[i];
     if (val[0] == 'i') {
-      key->instance = val.substr(1);
+      key->instance.assign(val.substr(1));
     } else if (val[0] == 'v') {
       // what we are dealing here with is the string representation of the versioned epoch (as converted to by
       // decreasing_str() func); the first char is always 'v' to indicate that it is the versioned epoch; the
@@ -506,7 +503,7 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
       // the lexicographical comparison; hence +2 (1 for the value indicator and one for the range prefix);
       string err;
       if (val.size() > 2) {
-        const char *s = val.c_str() + 2;
+        const char *s = val.data() + 2;
         *ver = strict_strtoull(s, 10, &err);
         if (!err.empty()) {
           CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
@@ -3156,7 +3153,7 @@ static int list_plain_entries_help(cls_method_context_t hctx,
 				   const std::string& start_after_key, // exclusive
 				   const std::string& end_key, // exclusive
 				   uint32_t max,
-				   std::list<rgw_cls_bi_entry>* entries,
+				   std::vector<rgw_cls_bi_entry>& entries,
 				   bool& end_key_reached,
 				   bool& more)
 {
@@ -3210,14 +3207,14 @@ static int list_plain_entries_help(cls_method_context_t hctx,
     entry.idx = iter.first;
     entry.data = iter.second;
 
-    entries->push_back(entry);
-    count++;
-
     CLS_LOG(20, "%s: adding entry %d entry.idx=\"%s\" e.key.name=\"%s\"",
 	    __func__,
-	    count,
+	    1 + count,
             escape_str(entry.idx).c_str(),
 	    escape_str(e.key.name).c_str());
+
+    entries.push_back(std::move(entry));
+    count++;
 
     if (count >= int(max)) {
       // NB: this looks redundant, but leave in for time being
@@ -3241,7 +3238,7 @@ static int list_plain_entries(cls_method_context_t hctx,
                               const std::string& name_filter,
                               const std::string& marker,
                               uint32_t max,
-                              std::list<rgw_cls_bi_entry>* entries,
+                              std::vector<rgw_cls_bi_entry>& entries,
                               bool* pmore,
 			      const PlainEntriesRegion region = PlainEntriesRegion::Both)
 {
@@ -3252,7 +3249,7 @@ static int list_plain_entries(cls_method_context_t hctx,
   int r = 0;
   bool end_key_reached = false;
   bool more = false;
-  const size_t start_size = entries->size();
+  const size_t start_size = std::size(entries);
 
   if (region <= PlainEntriesRegion::Both && marker < BI_PREFIX_BEGIN) {
     // listing ascii plain namespace
@@ -3271,7 +3268,7 @@ static int list_plain_entries(cls_method_context_t hctx,
 	*pmore = more;
       }
 
-      return int(entries->size() - start_size);
+      return int(std::size(entries) - start_size);
     }
 
     max = max - r;
@@ -3294,14 +3291,14 @@ static int list_plain_entries(cls_method_context_t hctx,
     *pmore = more;
   }
 
-  return int(entries->size() - start_size);
+  return int(std::size(entries) - start_size);
 }
 
 static int list_instance_entries(cls_method_context_t hctx,
 				 const std::string& name, // filters entries for this obj
 				 const std::string& marker,
 				 uint32_t max,
-                                 std::list<rgw_cls_bi_entry>* entries,
+                                 std::vector<rgw_cls_bi_entry>& entries,
 				 bool* pmore)
 {
   CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
@@ -3395,9 +3392,9 @@ static int list_instance_entries(cls_method_context_t hctx,
       return count;
     }
 
-    entries->push_back(entry);
-    count++;
     start_after_key = entry.idx;
+    entries.push_back(std::move(entry));
+    count++;
   }
 
   return count;
@@ -3407,7 +3404,7 @@ static int list_olh_entries(cls_method_context_t hctx,
 			    const std::string& name, // filters entries for this obj
 			    const std::string& marker,
 			    uint32_t max,
-                            std::list<rgw_cls_bi_entry>* entries,
+                            std::vector<rgw_cls_bi_entry>& entries,
 			    bool* pmore)
 {
   CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
@@ -3499,16 +3496,16 @@ static int list_olh_entries(cls_method_context_t hctx,
       return count;
     }
 
-    entries->push_back(entry);
-    count++;
     start_after_key = entry.idx;
+    entries.push_back(std::move(entry));
+    count++;
   }
 
   return count;
 } // list_olh_entries
 
 static int reshard_log_list_entries(cls_method_context_t hctx, const string& marker,
-                                    uint32_t max, list<rgw_cls_bi_entry>& entries, bool *truncated)
+                                    uint32_t max, vector<rgw_cls_bi_entry>& entries, bool *truncated)
 {
   string start_key, end_key;
   start_key = BI_PREFIX_CHAR;
@@ -3553,7 +3550,7 @@ static int reshard_log_list_entries(cls_method_context_t hctx, const string& mar
 
     CLS_LOG(20, "reshard_log_list_entries key=%s bl.length=%d\n", entry.idx.c_str(), (int)iter->second.length());
 
-    entries.push_back(entry);
+    entries.push_back(std::move(entry));
   }
   return 0;
 }
@@ -3566,15 +3563,17 @@ static int check_index(cls_method_context_t hctx,
   calc_header->ver = existing_header.ver;
   calc_header->syncstopped = existing_header.syncstopped;
 
-  std::list<rgw_cls_bi_entry> entries;
+  std::vector<rgw_cls_bi_entry> entries;
   string start_obj;
   string filter_prefix;
 
 #define CHECK_CHUNK_SIZE 1000
+  entries.reserve(CHECK_CHUNK_SIZE);
   bool more;
 
   do {
-    int rc = list_plain_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    int rc = list_plain_entries(hctx, filter_prefix, start_obj,
+                                CHECK_CHUNK_SIZE, entries, &more);
     if (rc < 0) {
       return rc;
     }
@@ -3603,7 +3602,8 @@ static int check_index(cls_method_context_t hctx,
 
   start_obj = "";
   do {
-    int rc = list_instance_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    int rc = list_instance_entries(hctx, filter_prefix, start_obj,
+                                   CHECK_CHUNK_SIZE, entries, &more);
     if (rc < 0) {
       return rc;
     }
@@ -3697,7 +3697,7 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
  *
  * Additionally, each of the three segment functions, if successful,
  * is expected to return the number of entries added to the output
- * list as a non-negative value. As per usual, negative return values
+ * sequence as a non-negative value. As per usual, negative return values
  * indicate error conditions.
  */
 static int rgw_bi_list_op(cls_method_context_t hctx,
@@ -3726,6 +3726,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 
   int ret;
   rgw_cls_bi_list_ret op_ret;
+  op_ret.entries.reserve(max);
 
   if (op.reshardlog) {
     ret = reshard_log_list_entries(hctx, op.marker, max,
@@ -3744,7 +3745,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   bool more = false;
 
   ret = list_plain_entries(hctx, op.name_filter, op.marker, max,
-			   &op_ret.entries, &more, PlainEntriesRegion::Low);
+			   op_ret.entries, &more, PlainEntriesRegion::Low);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s: list_plain_entries (low) returned ret=%d, "
 	    "marker=\"%s\", filter=\"%s\", max=%d",
@@ -3759,7 +3760,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 
   if (!more) {
     ret = list_instance_entries(hctx, op.name_filter, op.marker,
-				max - count, &op_ret.entries, &more);
+				max - count, op_ret.entries, &more);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_instance_entries returned ret=%d",
 	      __func__, ret);
@@ -3773,7 +3774,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 
   if (!more) {
     ret = list_olh_entries(hctx, op.name_filter, op.marker, max - count,
-			   &op_ret.entries, &more);
+			   op_ret.entries, &more);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_olh_entries returned ret=%d",
 	      __func__, ret);
@@ -3786,7 +3787,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 
   if (!more) {
     ret = list_plain_entries(hctx, op.name_filter, op.marker, max - count,
-			     &op_ret.entries, &more,
+			     op_ret.entries, &more,
 			     PlainEntriesRegion::High);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_plain_entries (high) returned ret=%d, "
@@ -3828,46 +3829,25 @@ int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
 }
 
 
-static int bi_log_iterate_entries(cls_method_context_t hctx,
-				  const string& marker,
-				  const string& end_marker,
-				  string& key_iter,
-				  uint32_t max_entries,
-				  bool *truncated,
-				  int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
-				  void *param)
+static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
+			       uint32_t max_entries,
+			       vector<rgw_bi_log_entry>& entries,
+			       bool *truncated)
 {
-  CLS_LOG(10, "bi_log_iterate_range");
+  CLS_LOG(10, "bi_log_list_entries");
 
   map<string, bufferlist> keys;
-  string filter_prefix, end_key;
-  uint32_t i = 0;
-  string key;
+  string start_after_key(1, BI_PREFIX_CHAR);
+  start_after_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+  start_after_key.append(marker);
 
   if (truncated)
     *truncated = false;
 
-  string start_after_key;
-  if (key_iter.empty()) {
-    key = BI_PREFIX_CHAR;
-    key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
-    key.append(marker);
+  string end_key(1, BI_PREFIX_CHAR);
+  end_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX + 1]);
 
-    start_after_key = key;
-  } else {
-    start_after_key = key_iter;
-  }
-
-  if (end_marker.empty()) {
-    end_key = BI_PREFIX_CHAR;
-    end_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX + 1]);
-  } else {
-    end_key = BI_PREFIX_CHAR;
-    end_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
-    end_key.append(end_marker);
-  }
-
-  CLS_LOG(10, "bi_log_iterate_entries start_after_key=%s end_key=%s",
+  CLS_LOG(10, "bi_log_list_entries start_after_key=%s end_key=%s",
 	  start_after_key.c_str(), end_key.c_str());
 
   string filter;
@@ -3877,20 +3857,20 @@ static int bi_log_iterate_entries(cls_method_context_t hctx,
   if (ret < 0)
     return ret;
 
-  auto iter = keys.begin();
-  if (iter == keys.end())
+  auto iter = std::begin(keys);
+
+  if (iter == std::end(keys))
     return 0;
 
-  uint32_t num_keys = keys.size();
+  entries.reserve(std::size(entries) + std::size(keys));
 
-  for (; iter != keys.end(); ++iter,++i) {
+  for (; iter != std::end(keys); ++iter) {
     const string& key = iter->first;
     rgw_bi_log_entry e;
 
     CLS_LOG(10, "bi_log_iterate_entries key=%s bl.length=%d", key.c_str(), (int)iter->second.length());
 
     if (key.compare(end_key) > 0) {
-      key_iter = key;
       if (truncated) {
         *truncated = false;
       }
@@ -3901,34 +3881,10 @@ static int bi_log_iterate_entries(cls_method_context_t hctx,
     if (ret < 0)
       return ret;
 
-    ret = cb(hctx, key, e, param);
-    if (ret < 0)
-      return ret;
-
-    if (i == num_keys - 1) {
-      key_iter = key;
-    }
+    entries.push_back(std::move(e));
   }
 
   return 0;
-}
-
-static int bi_log_list_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
-{
-  list<rgw_bi_log_entry> *l = (list<rgw_bi_log_entry> *)param;
-  l->push_back(info);
-  return 0;
-}
-
-static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
-			   uint32_t max, list<rgw_bi_log_entry>& entries, bool *truncated)
-{
-  string key_iter;
-  string end_marker;
-  int ret = bi_log_iterate_entries(hctx, marker, end_marker,
-                              key_iter, max, truncated,
-                              bi_log_list_cb, &entries);
-  return ret;
 }
 
 static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -4816,14 +4772,14 @@ static int gc_iterate_entries(cls_method_context_t hctx,
 
 static int gc_list_cb(cls_method_context_t hctx, const string& key, cls_rgw_gc_obj_info& info, void *param)
 {
-  list<cls_rgw_gc_obj_info> *l = (list<cls_rgw_gc_obj_info> *)param;
-  l->push_back(info);
+  auto& entries = *static_cast<vector<cls_rgw_gc_obj_info> *>(param);
+  entries.push_back(info);
   return 0;
 }
 
 static int gc_list_entries(cls_method_context_t hctx, const string& marker,
 			   uint32_t max, bool expired_only,
-                           list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+                           vector<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
 {
   int ret = gc_iterate_entries(hctx, marker, expired_only,
                               next_marker, max, truncated,
@@ -5196,6 +5152,9 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   if (ret < 0)
     return ret;
   cls_rgw_reshard_entry entry;
+  if (op.max) {
+    op_ret.entries.reserve(std::size(vals));
+  }
   int i = 0;
   for (auto it = vals.begin(); i < (int)op.max && it != vals.end(); ++it, ++i) {
     auto iter = it->second.cbegin();

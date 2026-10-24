@@ -27,8 +27,8 @@
 #include "librbd/journal/PromoteRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include <vector>
 #include <functional>
-#include <list>
 #include <shared_mutex> // for std::shared_lock
 #include <boost/scope_exit.hpp>
 
@@ -251,7 +251,7 @@ public:
   typedef journal::OpenRequest<MockJournalImageCtx> MockJournalOpenRequest;
   typedef journal::ObjectDispatch<MockJournalImageCtx> MockObjectDispatch;
   typedef std::function<void(::journal::ReplayHandler*)> ReplayAction;
-  typedef std::list<Context *> Contexts;
+  using Contexts = std::vector<Context *>;
 
   TestMockJournal() = default;
   ~TestMockJournal() override {

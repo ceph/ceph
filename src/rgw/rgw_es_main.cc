@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include <list>
 #include <string>
 #include <iostream>
 
@@ -34,7 +33,7 @@ int main(int argc, char *argv[])
     expr = "age >= 30";
   }
 
-  ESQueryCompiler es_query(expr, nullptr, "x-amz-meta-");
+  ESQueryCompiler es_query(expr, {}, "x-amz-meta-");
 
   map<string, string, ltstr_nocase> aliases = { { "key", "name" },
                                   { "etag", "meta.etag" },
@@ -76,4 +75,3 @@ int main(int argc, char *argv[])
 
   return 0;
 }
-

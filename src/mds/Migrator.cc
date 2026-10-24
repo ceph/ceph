@@ -14,6 +14,9 @@
  */
 
 #include "Migrator.h"
+
+#include <list>
+
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "CInode.h"
@@ -136,8 +139,7 @@ struct Migrator::import_state_t {
   mds_rank_t peer = 0;
   uint64_t tid = 0;
   std::set<mds_rank_t> bystanders;
-  std::list<dirfrag_t> bound_ls;
-  std::list<ScatterLock*> updated_scatterlocks;
+  std::vector<dirfrag_t> bound_ls;
   std::map<client_t,std::pair<Session*,uint64_t> > session_map;
   std::map<CInode*, std::map<client_t,Capability::Export> > peer_exports;
   MutationRef mut;
@@ -2882,7 +2884,6 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
                       le,
                       mds->mdlog->get_current_segment(),
                       it->second.peer_exports,
-                      it->second.updated_scatterlocks,
                       num_imported_inodes);
   }
   dout(10) << " " << m->bounds.size() << " imported bounds" << dendl;
@@ -2931,13 +2932,11 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
 
   // bounding inodes
   set<inodeno_t> did;
-  for (list<dirfrag_t>::iterator p = stat.bound_ls.begin();
-       p != stat.bound_ls.end();
-       ++p) {
-    if (did.count(p->ino))
+  for (const auto& bound : stat.bound_ls) {
+    if (did.count(bound.ino))
       continue;
-    did.insert(p->ino);
-    CInode *in = mdcache->get_inode(p->ino);
+    did.insert(bound.ino);
+    CInode *in = mdcache->get_inode(bound.ino);
     ceph_assert(in);
     in->put_stickydirs();
   }
@@ -3431,8 +3430,7 @@ void Migrator::dump_export_states(Formatter *f)
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 				   mds_rank_t oldauth, LogSegmentRef const& ls,
-				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
-				   list<ScatterLock*>& updated_scatterlocks)
+				   map<CInode*, map<client_t,Capability::Export> >& peer_exports)
 { 
   CInode *in;
   bool added = false;
@@ -3484,12 +3482,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   // clear if dirtyscattered, since we're going to journal this
   //  but not until we _actually_ finish the import...
   if (in->filelock.is_dirty()) {
-    updated_scatterlocks.push_back(&in->filelock);
     mds->locker->mark_updated_scatterlock(&in->filelock);
   }
 
   if (in->dirfragtreelock.is_dirty()) {
-    updated_scatterlocks.push_back(&in->dirfragtreelock);
     mds->locker->mark_updated_scatterlock(&in->dirfragtreelock);
   }
 
@@ -3606,7 +3602,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
 				EImportStart *le,
 				LogSegmentRef const& ls,
 				map<CInode*,map<client_t,Capability::Export> >& peer_exports,
-				list<ScatterLock*>& updated_scatterlocks, int &num_imported)
+				int &num_imported)
 {
   DECODE_START(1, blp);
   // set up dir
@@ -3708,14 +3704,12 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       ceph_assert(le);
       if (icode == 'i') {
         DECODE_START(2, blp);
-        decode_import_inode(dn, blp, oldauth, ls,
-                            peer_exports, updated_scatterlocks);
+        decode_import_inode(dn, blp, oldauth, ls, peer_exports);
         ceph_assert(!dn->is_projected());
         decode(dn->alternate_name, blp);
         DECODE_FINISH(blp);
       } else {
-        decode_import_inode(dn, blp, oldauth, ls,
-                            peer_exports, updated_scatterlocks);
+        decode_import_inode(dn, blp, oldauth, ls, peer_exports);
       }
     }
     

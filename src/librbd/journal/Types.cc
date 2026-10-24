@@ -518,8 +518,8 @@ void EventEntry::decode_metadata(bufferlist::const_iterator& it) {
   DECODE_FINISH(it);
 }
 
-std::list<EventEntry> EventEntry::generate_test_instances() {
-  std::list<EventEntry> o;
+std::vector<EventEntry> EventEntry::generate_test_instances() {
+  std::vector<EventEntry> o;
 
   o.push_back(EventEntry(AioDiscardEvent()));
   o.push_back(EventEntry(AioDiscardEvent(123, 345, 4096), utime_t(1, 1)));
@@ -732,8 +732,8 @@ void ClientData::dump(Formatter *f) const {
   std::visit(DumpVisitor(f, "client_meta_type"), client_meta);
 }
 
-std::list<ClientData> ClientData::generate_test_instances() {
-  std::list<ClientData> o;
+std::vector<ClientData> ClientData::generate_test_instances() {
+  std::vector<ClientData> o;
   o.push_back(ClientData(ImageClientMeta()));
   o.push_back(ClientData(ImageClientMeta(123)));
   o.push_back(ClientData(MirrorPeerClientMeta()));
@@ -788,8 +788,8 @@ void TagData::dump(Formatter *f) const {
   f->close_section();
 }
 
-std::list<TagData> TagData::generate_test_instances() {
-  std::list<TagData> o;
+std::vector<TagData> TagData::generate_test_instances() {
+  std::vector<TagData> o;
   o.push_back(TagData());
   o.push_back(TagData("mirror-uuid"));
   o.push_back(TagData("mirror-uuid", "remote-mirror-uuid", true, 123, 234));

@@ -2281,14 +2281,14 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   // open the user id list array section
   formatter->open_array_section("keys");
   do {
-    std::list<std::string> keys;
+    std::vector<std::string> keys;
     left = op_state.max_entries - count;
     ret = driver->meta_list_keys_next(dpp, handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     } if (ret != -ENOENT) {
-      for (std::list<std::string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-      formatter->dump_string("key", *iter);
+      for (const auto& key : keys) {
+        formatter->dump_string("key", key);
         ++count;
       }
     }
@@ -2770,7 +2770,7 @@ class RGWUserMetadataHandler : public RGWMetadataHandler {
   int list_keys_init(const DoutPrefixProvider* dpp, const std::string& marker,
                      void** phandle) override;
   int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
-                     std::list<std::string>& keys, bool* truncated) override;
+                     std::vector<std::string>& keys, bool* truncated) override;
   void list_keys_complete(void *handle) override;
   std::string get_marker(void *handle) override;
 };
@@ -2868,7 +2868,7 @@ int RGWUserMetadataHandler::list_keys_init(const DoutPrefixProvider* dpp,
 
 int RGWUserMetadataHandler::list_keys_next(const DoutPrefixProvider* dpp,
                                            void* handle, int max,
-                                           std::list<std::string>& keys,
+                                           std::vector<std::string>& keys,
                                            bool* truncated)
 {
   auto lister = static_cast<RGWMetadataLister*>(handle);
@@ -3027,4 +3027,3 @@ void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
 }
-

@@ -29,7 +29,7 @@ std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
   return out;
 }
 
-std::ostream &operator<<(std::ostream &out, const lba_mapping_list_t &rhs)
+std::ostream &operator<<(std::ostream &out, const lba_mappings_t &rhs)
 {
   bool first = true;
   out << '[';

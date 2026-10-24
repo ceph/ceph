@@ -220,7 +220,7 @@ RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(const DoutPrefixProvider *_
 RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store, const rgw_raw_obj& _obj,
                              uint64_t _window_size)
                       : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
-                        store(_store), obj(_obj), going_down(false), num_pending_entries(0), window_size(_window_size), total_entries(0)
+                        store(_store), obj(_obj), going_down(false), pending_count(0), window_size(_window_size), total_entries(0)
 {
 }
 
@@ -588,26 +588,21 @@ int RGWOmapAppend::operate(const DoutPrefixProvider *dpp) {
   return 0;
 }
 
-void RGWOmapAppend::flush_pending() {
-  receive(pending_entries);
-  num_pending_entries = 0;
-}
-
 bool RGWOmapAppend::append(const string& s) {
   if (is_done()) {
     return false;
   }
   ++total_entries;
-  pending_entries.push_back(s);
-  if (++num_pending_entries >= (int)window_size) {
-    flush_pending();
+  const bool wakeup = window_size <= ++pending_count;
+  receive(s, wakeup);
+  if (wakeup) {
+    pending_count = 0;
   }
   return true;
 }
 
 bool RGWOmapAppend::finish() {
   going_down = true;
-  flush_pending();
   set_sleeping(false);
   return (!is_done());
 }

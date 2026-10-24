@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <list>
 #include <map>
 #include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "include/types.h" // for version_t
 #include "include/utime.h"
@@ -113,7 +113,7 @@ struct ConfigMap {
   Section global;
   std::map<std::string,Section, std::less<>> by_type;
   std::map<std::string,Section, std::less<>> by_id;
-  std::list<std::unique_ptr<Option>> stray_options;
+  std::vector<std::unique_ptr<Option>> stray_options;
 
   Section *find_section(const std::string& name) {
     if (name == "global") {

@@ -8,9 +8,9 @@
 #include "tools/rbd/ArgumentTypes.h"
 
 #include <iosfwd>
-#include <list>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace rbd {
 
@@ -35,15 +35,13 @@ struct MirrorService {
   std::string client_id;
   std::string ceph_version;
   std::string hostname;
-  std::list<std::string> callouts;
+  std::vector<std::string> callouts;
 
   MirrorHealth health = MIRROR_HEALTH_UNKNOWN;
 
   std::string get_image_description() const;
   void dump_image(argument_types::Format::Formatter formatter) const;
 };
-
-typedef std::list<MirrorService> MirrorServices;
 
 class MirrorDaemonServiceInfo {
 public:
@@ -55,7 +53,7 @@ public:
   const MirrorService* get_by_service_id(const std::string& service_id) const;
   const MirrorService* get_by_instance_id(const std::string& instance_id) const;
 
-  MirrorServices get_mirror_services() const;
+  std::vector<MirrorService> get_mirror_services() const;
   MirrorHealth get_daemon_health() const {
     return m_daemon_health;
   }

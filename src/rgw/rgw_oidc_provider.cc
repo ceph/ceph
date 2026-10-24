@@ -51,9 +51,9 @@ void RGWOIDCProviderInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("thumbprints", thumbprints, obj);
 }
 
-std::list<RGWOIDCProviderInfo> RGWOIDCProviderInfo::generate_test_instances()
+std::vector<RGWOIDCProviderInfo> RGWOIDCProviderInfo::generate_test_instances()
 {
-  std::list<RGWOIDCProviderInfo> l;
+  std::vector<RGWOIDCProviderInfo> l;
   RGWOIDCProviderInfo p;
   p.id = "id";
   p.provider_url = "server.example.com";

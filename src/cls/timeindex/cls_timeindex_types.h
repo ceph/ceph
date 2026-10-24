@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_TIMEINDEX_TYPES_H
 #define CEPH_CLS_TIMEINDEX_TYPES_H
 
+#include <vector>
 #include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/types.h"
@@ -39,7 +40,7 @@ struct cls_timeindex_entry {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_timeindex_entry> generate_test_instances();
+  static std::vector<cls_timeindex_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_timeindex_entry)
 

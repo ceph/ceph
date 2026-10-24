@@ -500,8 +500,9 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
     }
     log.roll_forward_to(log.head, &info, rollbacker);
 
-    mempool::osd_pglog::list<pg_log_entry_t> new_entries;
-    new_entries.splice(new_entries.end(), olog.log, from, to);
+    // The append step copies these into the durable log; borrow the suffix:
+    const auto new_entries = std::ranges::subrange(from, to);
+
     append_log_entries_update_missing(
       info.last_backfill,
       new_entries,
@@ -1130,8 +1131,8 @@ namespace {
 
     std::map<eversion_t, hobject_t> divergent_priors;
     bool must_rebuild = false;
-    std::list<pg_log_entry_t> entries;
-    std::list<pg_log_dup_t> dups;
+    mempool::osd_pglog::list<pg_log_entry_t> entries;
+    mempool::osd_pglog::list<pg_log_dup_t> dups;
 
     std::optional<std::string> next;
 
@@ -1167,7 +1168,7 @@ namespace {
         if (!dups.empty()) {
           ceph_assert(dups.back().version < dup.version);
         }
-        dups.push_back(dup);
+        dups.push_back(std::move(dup));
       } else {
         pg_log_entry_t e;
         e.decode_with_checksum(bp);
@@ -1177,9 +1178,9 @@ namespace {
           ceph_assert(last_e.version.version < e.version.version);
           ceph_assert(last_e.version.epoch <= e.version.epoch);
         }
-        entries.push_back(e);
+        entries.push_back(std::move(e));
         if (log_keys_debug)
-          log_keys_debug->insert(e.get_key_name());
+          log_keys_debug->insert(entries.back().get_key_name());
       }
     }
 
