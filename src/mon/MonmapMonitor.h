@@ -84,6 +84,8 @@ class MonmapMonitor : public PaxosService {
 private:
   void check_subs();
   ceph::buffer::list monmap_bl;
+  // the last monmap epoch tick() checked for a disallowed leader
+  epoch_t notified_epoch = 0;
   /**
    * Check validity of inputs and monitor state to
    * engage stretch mode. Designed to be used with
