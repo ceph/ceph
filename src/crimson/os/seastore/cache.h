@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
@@ -768,6 +770,118 @@ public:
   void update_read_ratio(Transaction &t) {
     stats.read_hit_hot += t.read_hit_hot;
     stats.read_hit_cold += t.read_hit_cold;
+  }
+
+  // A logical extent of type ext is being read by laddr.
+  void account_laddr_lookup(Transaction &t, extent_types_t ext) {
+    ++get_by_ext(get_by_src(stats.laddr_lookups_by_src_ext, t.get_src()), ext);
+  }
+
+  // laddr index: laddr -> cached metadata extent, to skip the LBA walk.
+  // Any change to the mapping invalidates the extent, so a valid entry is safe.
+  static constexpr bool is_laddr_indexed(extent_types_t type) {
+    switch (type) {
+    case extent_types_t::COLL_BLOCK:
+    case extent_types_t::ONODE_BLOCK_STAGED:
+    case extent_types_t::LOG_NODE:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  // Returns the indexed extent at laddr if t can use it, or null.
+  // len == 0 skips the length check.
+  CachedExtentRef laddr_index_lookup(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t laddr,
+    extent_len_t len) {
+    if (!is_laddr_indexed(type)) {
+      return CachedExtentRef();
+    }
+    auto it = laddr_index.find(laddr);
+    if (it == laddr_index.end()) {
+      return CachedExtentRef();
+    }
+    LogicalCachedExtent &extent = *it;
+    if (!extent.is_valid()) {
+      laddr_index_unlink(it);
+      return CachedExtentRef();
+    }
+    assert(extent.get_type() == type);
+    if (!extent.is_stable() ||
+        (len && extent.get_length() != len) ||
+        !extent.is_fully_loaded() ||
+        // t retired it
+        !extent.maybe_get_transactional_view(t)) {
+      return CachedExtentRef();
+    }
+    ++get_by_ext(get_by_src(stats.laddr_index_hits_by_src_ext, t.get_src()), type);
+    return CachedExtentRef(&extent);
+  }
+
+  // Called after a lookup miss. That miss does not mean the slot is empty:
+  // lookup only unlinks invalid extents, and returns null without unlinking
+  // when the entry is unstable, wrong-length, not fully loaded, or not
+  // visible to t. So insert must cope with this extent already being indexed
+  // or with another (stale) extent still occupying laddr.
+  //
+  // Invariant: while an extent is linked into the index, its key is get_laddr().
+  void laddr_index_insert(laddr_t laddr, CachedExtentRef extent) {
+    if (!is_laddr_indexed(extent->get_type()) ||
+        !extent->is_valid() ||
+        !extent->is_stable()) {
+      return;
+    }
+    auto &lext = static_cast<LogicalCachedExtent&>(*extent);
+    assert(lext.get_laddr() == laddr);
+    if (lext.laddr_index_hook.is_linked()) {
+      assert(&*laddr_index.find(laddr) == &lext);
+      return;
+    }
+    auto [it, inserted] = laddr_index.insert(lext);
+    if (!inserted) {
+      // a stale extent still occupies laddr; replace it (erase unlinks it)
+      assert(&*it != &lext);
+      laddr_index.erase(it);
+      [[maybe_unused]] auto [it2, ok] = laddr_index.insert(lext);
+      assert(ok);
+    }
+  }
+
+  // On mutation commit: if prev is in the index, point the entry at next.
+  void laddr_index_replace(CachedExtentRef next, CachedExtentRef prev) {
+    if (!is_laddr_indexed(prev->get_type())) {
+      return;
+    }
+    auto &lprev = static_cast<LogicalCachedExtent&>(*prev);
+    if (!lprev.laddr_index_hook.is_linked()) {
+      return;
+    }
+    auto &lnext = static_cast<LogicalCachedExtent&>(*next);
+    assert(!lnext.laddr_index_hook.is_linked());
+    assert(lnext.get_laddr() == lprev.get_laddr());
+    lprev.laddr_index_hook.unlink();
+    [[maybe_unused]] auto [it, ok] = laddr_index.insert(lnext);
+    assert(ok);
+  }
+
+  // On retire commit: the extent is no longer reachable by laddr.
+  void laddr_index_erase(CachedExtentRef ref) {
+    if (!is_laddr_indexed(ref->get_type())) {
+      return;
+    }
+    auto &lref = static_cast<LogicalCachedExtent&>(*ref);
+    // O(1), no laddr re-hash
+    if (lref.laddr_index_hook.is_linked()) {
+      lref.laddr_index_hook.unlink();
+    }
+  }
+
+  void laddr_index_clear() {
+    // auto_unlink hooks: clear() resets each entry's hook to unlinked.
+    laddr_index.clear();
   }
 
 private:
@@ -1811,6 +1925,22 @@ private:
 
   const bool force_backref = false;
 
+  // Fixed bucket array backing laddr_index. The intrusive set never rehashes,
+  // so this is sized generously; if the index outgrows it, lookups just get
+  // slower (longer chains), never incorrect. Each bucket is one pointer.
+  static constexpr std::size_t LADDR_INDEX_BUCKETS = 8192; // power of 2
+  laddr_extent_index_t::bucket_type laddr_index_buckets[LADDR_INDEX_BUCKETS];
+
+  // doesn't hold refs, so it never keeps an evicted extent alive; evicted
+  // extents self-unlink via their auto_unlink hook, see ~LogicalCachedExtent()
+  laddr_extent_index_t laddr_index;
+
+  // drops the entry, the extent stays alive
+  void laddr_index_unlink(laddr_extent_index_t::iterator it) {
+    assert(it != laddr_index.end());
+    laddr_index.erase(it);
+  }
+
   /**
    * dirty
    *
@@ -1920,6 +2050,10 @@ private:
     counter_by_src_t<uint64_t> cache_absent_by_src;
     counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
       access_by_src_ext;
+    counter_by_src_t<counter_by_extent_t<uint64_t> >
+      laddr_lookups_by_src_ext;
+    counter_by_src_t<counter_by_extent_t<uint64_t> >
+      laddr_index_hits_by_src_ext;
 
     uint64_t onode_tree_depth = 0;
     int64_t onode_tree_extents_num = 0;

@@ -39,6 +39,8 @@ Cache::Cache(
         "seastore_data_delta_based_overwrite") > 0),
     force_backref(crimson::common::get_conf<bool>(
         "seastore_lbc_test_stress")),
+    laddr_index(laddr_extent_index_t::bucket_traits(
+        laddr_index_buckets, LADDR_INDEX_BUCKETS)),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
        "seastore_cachepin_size_pershard"),
@@ -185,6 +187,41 @@ void Cache::register_metrics(store_index_t store_index)
         ),
       }
     );
+  }
+
+  /*
+   * laddr_lookups: logical extents read by laddr
+   * laddr_index_hits: of those, found in the laddr index without an LBA walk
+   */
+  for (auto& [src, src_label] : labels_by_src) {
+    auto& lookups_by_ext = get_by_src(stats.laddr_lookups_by_src_ext, src);
+    auto& hits_by_ext = get_by_src(stats.laddr_index_hits_by_src_ext, src);
+    for (auto& [ext, ext_label] : labels_by_ext) {
+      if (!is_logical_type(ext)) {
+        continue;
+      }
+      std::vector<sm::label_instance> merged_labels = src_label;
+      merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "laddr_lookups",
+            get_by_ext(lookups_by_ext, ext),
+            sm::description("total number of logical extents read by laddr, "
+                            "including retried attempts"),
+            merged_labels
+          ),
+          sm::make_counter(
+            "laddr_index_hits",
+            get_by_ext(hits_by_ext, ext),
+            sm::description("total number of laddr lookups served by the "
+                            "laddr index without an lba walk"),
+            merged_labels
+          ),
+        }
+      );
+    }
   }
 
   /*
@@ -1000,6 +1037,7 @@ void Cache::commit_retire_extent(
   remove_extent(ref, &t_src);
 
   ref->dirty_from = JOURNAL_SEQ_NULL;
+  laddr_index_erase(ref);
   invalidate_extent(t, *ref);
 }
 
@@ -1066,6 +1104,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next, &t_src);
   }
 
+  laddr_index_replace(next, prev);
   invalidate_extent(t, *prev);
 
 }
@@ -2234,6 +2273,12 @@ void Cache::complete_commit(
       i->invalidate_hints();
       add_extent(i);
       touch_extent_fully(*i, &t_src, t.get_cache_hint());
+      // index newly created onode/coll/log nodes so the first read by
+      // laddr can skip the LBA walk
+      if (is_laddr_indexed(i->get_type())) {
+        laddr_index_insert(
+          i->cast<LogicalCachedExtent>()->get_laddr(), i);
+      }
     }
     i->reset_prior_instance();
     i->complete_io();
@@ -2391,6 +2436,7 @@ void Cache::init()
     remove_extent(root, nullptr);
     root = nullptr;
   }
+  laddr_index_clear();
   root = CachedExtent::make_cached_extent_ref<RootBlock>();
   // Make it simpler to keep root dirty
   root->init(CachedExtent::extent_state_t::DIRTY,
@@ -2434,6 +2480,7 @@ Cache::close_ertr::future<> Cache::close()
        extents_index.size(),
        extents_index.get_bytes());
   root.reset();
+  laddr_index_clear();
   clear_dirty();
   backref_extents.clear();
   backref_entryrefs_by_seq.clear();
