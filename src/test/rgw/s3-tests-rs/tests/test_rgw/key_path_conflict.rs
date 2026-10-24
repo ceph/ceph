@@ -298,3 +298,46 @@ async fn test_versioned_directory_object_keeps_its_versions() {
     assert_eq!((dir_versions, dir_markers), (2, 1), "d/:  two versions and a marker");
     assert_eq!(body(&client, &b, "d/y").await, b"child");
 }
+
+/* A directory object is one object.  Copying `d/` copies that one empty
+ * object and nothing under it, as on every S3:  `d/a` is a key of its
+ * own, and the copy has no business with it. */
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: untested")]
+#[tokio::test]
+async fn test_copying_a_directory_object_copies_only_it() {
+    let _guard = TestGuard::setup();
+    let client = get_client();
+    let b = get_new_bucket(Some(&client)).await;
+    put(&client, &b, "d/", b"").await;
+    put(&client, &b, "d/a", b"child").await;
+
+    client.copy_object().bucket(&b).key("e/")
+        .copy_source(format!("{b}/d/")).send().await
+        .expect("copying a directory object should succeed");
+
+    assert_eq!(body(&client, &b, "e/").await, b"");
+    assert_eq!(keys(&client, &b).await, vec!["d/", "d/a", "e/"],
+        "the copy reached keys under the directory object");
+}
+
+/* And copying one onto a directory object that already exists replaces
+ * that one object:  the keys under the destination are other objects,
+ * and are left as they were. */
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: untested")]
+#[tokio::test]
+async fn test_copying_onto_a_directory_object_keeps_the_keys_under_it() {
+    let _guard = TestGuard::setup();
+    let client = get_client();
+    let b = get_new_bucket(Some(&client)).await;
+    put(&client, &b, "d/", b"").await;
+    put(&client, &b, "e/", b"").await;
+    put(&client, &b, "e/x", b"kept").await;
+
+    client.copy_object().bucket(&b).key("e/")
+        .copy_source(format!("{b}/d/")).send().await
+        .expect("copying onto a directory object should succeed");
+
+    assert_eq!(body(&client, &b, "e/x").await, b"kept",
+        "the copy removed a key under its destination");
+    assert_eq!(keys(&client, &b).await, vec!["d/", "e/", "e/x"]);
+}
