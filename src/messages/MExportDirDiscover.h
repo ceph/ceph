@@ -16,7 +16,7 @@
 #ifndef CEPH_MEXPORTDIRDISCOVER_H
 #define CEPH_MEXPORTDIRDISCOVER_H
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "include/types.h"
 #include "messages/MMDSOp.h"
 

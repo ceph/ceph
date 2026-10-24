@@ -16,7 +16,7 @@
 #ifndef CEPH_MDSFINDINO_H
 #define CEPH_MDSFINDINO_H
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "messages/MMDSOp.h"
 
 class MMDSFindIno final : public MMDSOp {
