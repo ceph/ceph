@@ -3194,6 +3194,12 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     }
   }
 
+  // bci.info is now created; let's make sure it has a marker to avoid exploits
+  if (bci.info.bucket.marker.empty()) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): bucket's marker is empty" << dendl;
+    return -EINVAL;
+  }
+
   //always keep bucket versioning enabled on archive zone
   if (!bci.info.is_vector() &&
       driver->get_zone()->get_tier_type() == "archive") {
