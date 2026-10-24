@@ -204,3 +204,97 @@ async fn test_versioned_directory_holds_its_name_while_history_remains() {
     put(&client, &b, "d", b"file").await;
     assert_eq!(body(&client, &b, "d").await, b"file");
 }
+
+/* Every key a version listing holds under `prefix`, versions and delete
+ * markers both */
+async fn versioned_keys(client: &S3Client, b: &str, prefix: &str) -> Vec<String> {
+    let listed = client.list_object_versions().bucket(b).prefix(prefix).send().await
+        .expect("list versions");
+    let mut keys: Vec<String> = listed.versions().iter().filter_map(|v| v.key())
+        .chain(listed.delete_markers().iter().filter_map(|m| m.key()))
+        .map(str::to_string).collect();
+    keys.sort();
+    keys
+}
+
+/* In a versioned bucket a directory holds its name against the key as
+ * it does unversioned.  A delete of the key writes no delete marker:
+ * `d` names no object and none can be written while `d/` holds the
+ * name, so the delete returns 204 and changes nothing, as NooBaa's
+ * delete_object() does (DECISIONS.md 2026-10-24).  A multi-object
+ * delete of it does the same. */
+#[cfg_attr(feature = "fails_on_aws", ignore = "fails on aws")]
+#[cfg_attr(feature = "fails_on_rados", ignore = "fails on rados")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: untested")]
+#[tokio::test]
+async fn test_versioned_directory_holds_its_name_and_its_key_has_no_marker() {
+    let _guard = TestGuard::setup();
+    let client = get_client();
+    let b = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &b, "Enabled", "Enabled").await;
+    put(&client, &b, "src", b"source").await;
+    put(&client, &b, "d/", b"").await;
+    put(&client, &b, "d/y", b"child").await;
+
+    every_write_conflicts(&client, &b, "d", "src").await;
+
+    let r = client.delete_object().bucket(&b).key("d").send().await
+        .expect("DELETE d should succeed");
+    assert!(!r.delete_marker().unwrap_or(false), "DELETE d wrote a delete marker");
+    assert_eq!(r.version_id(), None, "DELETE d returned a version id");
+
+    let delete = aws_sdk_s3::types::Delete::builder()
+        .objects(ObjectIdentifier::builder().key("d").build().expect("identifier"))
+        .build().expect("delete");
+    let r = client.delete_objects().bucket(&b).delete(delete).send().await
+        .expect("DeleteObjects d should succeed");
+    assert!(r.errors().is_empty(), "DeleteObjects d: {:?}", r.errors());
+    for d in r.deleted() {
+        assert!(!d.delete_marker().unwrap_or(false),
+                "DeleteObjects d wrote a delete marker");
+    }
+
+    assert_eq!(versioned_keys(&client, &b, "d").await, vec!["d/", "d/y"]);
+    assert_eq!(body(&client, &b, "d/y").await, b"child");
+}
+
+/* A directory object is versioned as any object is:  each PUT of `d/`
+ * keeps the one before as a version, a delete leaves a marker, and
+ * the versions read back by id. */
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: untested")]
+#[tokio::test]
+async fn test_versioned_directory_object_keeps_its_versions() {
+    let _guard = TestGuard::setup();
+    let client = get_client();
+    let b = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &b, "Enabled", "Enabled").await;
+
+    let v1 = client.put_object().bucket(&b).key("d/")
+        .body(ByteStream::from_static(b"one")).send().await
+        .expect("PUT d/ once").version_id().expect("a version id").to_string();
+    put(&client, &b, "d/y", b"child").await;
+    let v2 = client.put_object().bucket(&b).key("d/")
+        .body(ByteStream::from_static(b"two")).send().await
+        .expect("PUT d/ again").version_id().expect("a version id").to_string();
+    assert_ne!(v1, v2);
+    assert_eq!(body(&client, &b, "d/").await, b"two");
+
+    let r = client.delete_object().bucket(&b).key("d/").send().await
+        .expect("DELETE d/ should succeed");
+    assert!(r.delete_marker().unwrap_or(false), "DELETE d/ wrote no delete marker");
+    let r = client.get_object().bucket(&b).key("d/").send().await;
+    s3_tests_rs::assert_s3_err!(r, 404, "NoSuchKey");
+
+    for (v, want) in [(&v1, &b"one"[..]), (&v2, &b"two"[..])] {
+        let got = client.get_object().bucket(&b).key("d/").version_id(v).send().await
+            .unwrap_or_else(|e| panic!("GET d/ version {v}: {e:?}"));
+        assert_eq!(got.body.collect().await.expect("body").into_bytes().as_ref(), want);
+    }
+    let listed = client.list_object_versions().bucket(&b).prefix("d/").send().await
+        .expect("list versions");
+    let dir_versions = listed.versions().iter().filter(|v| v.key() == Some("d/")).count();
+    let dir_markers = listed.delete_markers().iter().filter(|m| m.key() == Some("d/")).count();
+    assert_eq!((dir_versions, dir_markers), (2, 1), "d/:  two versions and a marker");
+    assert_eq!(body(&client, &b, "d/y").await, b"child");
+}
