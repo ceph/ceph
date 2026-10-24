@@ -22,7 +22,10 @@
 #include "include/utime.h"
 #include "include/buffer.h"
 
+#include <memory>
+#include <set>
 #include <string>
+#include <vector>
 
 class CryptoKeyContext;
 namespace ceph { class Formatter; }
