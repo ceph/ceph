@@ -1318,6 +1318,34 @@ running the affected OSD(s) are correctly installed and that the OSD daemon(s)
 have been restarted. If the problem persists, check the OSD log for information
 about the source of the problem.
 
+BLUESTORE_INVALID_COMPRESSION_PARAMS
+____________________________________
+
+One or more OSDs have detected invalid BlueStore compression parameters, either
+in the OSD configuration (``bluestore_compression_*`` options) or in a pool's
+compression settings (``compression_min_blob_size`` and
+``compression_max_blob_size``). The following conditions are reported:
+
+* an unrecognized compression mode, in which case compression is disabled;
+* a compression blob size that is not a multiple of the OSD's
+  ``min_alloc_size``, in which case the value is not applied. An invalid pool
+  value falls back to the corresponding OSD-wide setting;
+* a minimum compression blob size that exceeds the maximum one.
+
+The alert details list the offending parameters and their values. To resolve
+this issue, correct the reported values, for example:
+
+.. prompt:: bash $
+
+   ceph config set osd bluestore_compression_min_blob_size <size>
+   ceph osd pool set <pool-name> compression_min_blob_size <size>
+
+To check an OSD's ``min_alloc_size``, run:
+
+.. prompt:: bash $
+
+   ceph osd metadata <osd-id> | grep bluestore_min_alloc_size
+
 BLUESTORE_SPURIOUS_READ_ERRORS
 ______________________________
 
