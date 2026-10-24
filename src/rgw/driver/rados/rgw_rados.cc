@@ -6859,10 +6859,6 @@ static int resync_encrypted_multipart(const DoutPrefixProvider* dpp,
   // only overwrite if the tag hasn't changed
   obj_ctx.set_atomic(state.obj, true);
 
-  // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
-  // won't return ERR_NOT_MODIFIED when resyncing the object
-  const auto set_mtime = state.mtime + std::chrono::nanoseconds(1);
-
   // use set_attrs() to update the mtime in a bucket index transaction so the
   // change is recorded in bilog and datalog entries. this will cause any peer
   // zones to resync the object
@@ -6871,7 +6867,7 @@ static int resync_encrypted_multipart(const DoutPrefixProvider* dpp,
   };
 
   return store->set_attrs(dpp, &obj_ctx, bucket_info, state.obj,
-                          add_attrs, nullptr, y, true, set_mtime);
+                          add_attrs, nullptr, y, true);
 }
 
 static void try_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
@@ -7997,8 +7993,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs,
                         optional_yield y,
-                        bool log_op,
-                        ceph::real_time set_mtime /* = zero() */)
+                        bool log_op)
 {
   rgw_obj obj = src_obj;
   if (obj.key.instance == "null") {
@@ -8097,8 +8092,10 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
    * set the metadata.
    * Hence do not update mtime for any other attr changes */
   real_time mtime = state->mtime;
-  if (set_mtime != ceph::real_clock::zero()) {
-    mtime = set_mtime;
+  if (log_op) {
+    // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
+    // won't return ERR_NOT_MODIFIED when syncing the modified object
+    mtime += ceph::timespan{std::chrono::nanoseconds{1}};
   }
   struct timespec mtime_ts = real_clock::to_timespec(mtime);
   op.mtime2(&mtime_ts);
