@@ -48,7 +48,7 @@ export class SmbClusterListComponent implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
-  smbClusters$: Observable<SMBCluster[]>;
+  smbClusters$: Observable<SMBCluster[] | null>;
   subject$ = new BehaviorSubject<SMBCluster[]>([]);
   selection = new CdTableSelection();
   modalRef: NgbModalRef;
