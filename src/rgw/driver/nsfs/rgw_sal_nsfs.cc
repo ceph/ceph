@@ -11587,11 +11587,34 @@ int NSFSObject::copy_object(const ACLOwner& owner,
         << cpp_strerror(-ret) << dendl;
       return ret;
     }
+    /* the source as the requester, and as the gateway where the
+     * filesystem denies it and the model permits, as the cross-object
+     * copy opens it (clone_file_by_copy());  clone_fd() then reopens
+     * it as the requester and falls back to this descriptor only where
+     * the model permits.  The gateway's descriptor is this call's, never
+     * the entry's (with_cross_account_retry()). */
     int src_fd = ent->get_fd();
+    int gw_fd = -1;
     if (src_fd < 0) {
-      ent->open(dpp);
+      int oret = ent->open(dpp);
       src_fd = ent->get_fd();
+      if ((src_fd < 0) && (oret == -EACCES) && copy_source_as_gateway()) {
+	oret = nsfs::with_capabilities(dpp, nsfs::cap_bit(CAP_DAC_OVERRIDE),
+				       [&]() -> int {
+	  gw_fd = ent->open_scratch_as_gateway(dpp, /*read_only=*/true);
+	  return (gw_fd < 0) ? gw_fd : 0;
+	});
+	src_fd = gw_fd;
+      }
+      if (src_fd < 0) {
+	return (oret < 0) ? oret : -EIO;
+      }
     }
+    auto close_gw = make_scope_guard([gw_fd] {
+      if (gw_fd >= 0) {
+	::close(gw_fd);
+      }
+    });
     ret = driver->get_fs_strategy()->clone_fd(
       dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, y, identity,
       copy_source_as_gateway());

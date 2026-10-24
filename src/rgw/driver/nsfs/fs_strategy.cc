@@ -701,8 +701,6 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
   });
   const int src_fd = (own_fd >= 0) ? own_fd : gw_src_fd;
 
-  return nsfs::with_identity(dpp, id, [&]() -> int {
-
   struct statx stx;
   if (nsfs::statx(src_fd, "", AT_EMPTY_PATH, STATX_SIZE, &stx) < 0) {
     int err = errno;
@@ -711,32 +709,76 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY,
-			file_create_mode());
-  if (tmp_fd < 0) {
-    int err = errno;
-    ldpp_dout(dpp, 0) << "ERROR: clone_fd: O_TMPFILE failed: "
-      << cpp_strerror(err) << dendl;
-    return -err;
+  /* The destination is on the access-model axis as the source is, and
+   * as clone_file_by_copy()'s is:  the O_TMPFILE as `id`, and raised
+   * where the filesystem denies it and the model permits, then given
+   * to `id`.  An O_TMPFILE open spends nothing, so a retry is safe;
+   * its mode is set while the gateway may still set it. */
+  static constexpr uint64_t COPY_DEST_CAPS =
+    nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  static constexpr uint64_t COPY_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
+  int tmp_fd = -1;
+  auto open_tmp = [&]() -> int {
+    tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY,
+		      file_create_mode());
+    return (tmp_fd < 0) ? -errno : 0;
+  };
+  int ret = nsfs::with_identity(dpp, id, open_tmp, y);
+  if (((ret == -EACCES) || (ret == -EPERM)) && src_as_gateway &&
+      id.active()) {
+    ret = nsfs::with_capabilities(dpp, COPY_DEST_CAPS, open_tmp);
+    if (ret == 0) {
+      ret = apply_create_mode(dpp, tmp_fd, file_create_mode(), null_yield);
+    }
+    if (ret == 0) {
+      ret = nsfs::with_capabilities(dpp, COPY_CHOWN_CAPS, [&]() -> int {
+	return (::fchown(tmp_fd, id.cred.uid, id.cred.gid) < 0) ? -errno : 0;
+      });
+    }
+    if (ret == 0) {
+      ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem denied the"
+	" requester the destination " << dst_name << " and the gateway made"
+	" it as theirs, which the access model permits" << dendl;
+    }
   }
-  if (int mret = apply_create_mode(dpp, tmp_fd, file_create_mode(), null_yield);
-      mret < 0) {
-    ::close(tmp_fd);
-    return mret;
-  }
-
-  int ret = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size);
   if (ret < 0) {
-    ::close(tmp_fd);
+    if (tmp_fd >= 0) {
+      ::close(tmp_fd);
+    }
+    ldpp_dout(dpp, 0) << "ERROR: clone_fd: O_TMPFILE failed: "
+      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  auto close_tmp = make_scope_guard([tmp_fd] { ::close(tmp_fd); });
+
+  ret = nsfs::with_identity(dpp, id, [&]() -> int {
+    int r = apply_create_mode(dpp, tmp_fd, file_create_mode(), null_yield);
+    if (r == 0) {
+      r = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size);
+    }
+    return r;
+  }, y);
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: clone_fd: copy -> " << dst_name
       << " failed: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  ret = link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp, null_yield);
-  ::close(tmp_fd);
-  return ret;
-  }, y);
+  /* The publish is decided in advance, as NSFSObject::link_temp_file()
+   * decides it:  its first linkat spends the O_TMPFILE's one link, so it
+   * cannot be retried after a denial.  Under a model that permits it
+   * the gateway publishes, with CAP_FOWNER for fs.protected_hardlinks
+   * on the requester's inode and CAP_DAC_OVERRIDE for a directory that
+   * is not the gateway's;  the inode stays the requester's. */
+  static constexpr uint64_t PUBLISH_AS_GATEWAY_CAPS =
+    nsfs::cap_bit(CAP_FOWNER) | nsfs::cap_bit(CAP_DAC_OVERRIDE);
+  if (src_as_gateway && id.active()) {
+    return nsfs::with_capabilities(dpp, PUBLISH_AS_GATEWAY_CAPS,
+				   [&]() -> int {
+      return link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp, null_yield);
+    });
+  }
+  return link_temp_file(tmp_fd, dst_dir_fd, dst_name, dpp, null_yield, id);
 }
 
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
