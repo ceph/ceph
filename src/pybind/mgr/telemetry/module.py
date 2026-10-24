@@ -797,14 +797,26 @@ class Module(MgrModule):
 
         return result
 
+    def _get_crashinfo(self, crashid: str) -> Optional[str]:
+        # Falls back to remote() if crash hasn't declared SHARED_STORE yet
+        # (e.g. mid rolling-upgrade), so one unshared key doesn't abort the
+        # whole crash report.
+        try:
+            return self.get_store_ex('crash', f'crash/{crashid}')
+        except (PermissionError, ImportError) as e:
+            self.log.debug(f"get_store_ex('crash', ...) failed ({e}), "
+                           "falling back to remote('crash', 'do_info', ...)")
+            errno, crashinfo, err = self.remote('crash', 'do_info', crashid)
+            return None if errno else crashinfo
+
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
         errno, crashids, err = self.remote('crash', 'ls')
         if errno:
             return crashlist
         for crashid in crashids.split():
-            errno, crashinfo, err = self.remote('crash', 'do_info', crashid)
-            if errno:
+            crashinfo = self._get_crashinfo(crashid)
+            if crashinfo is None:
                 continue
             c = json.loads(crashinfo)
 

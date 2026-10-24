@@ -26,6 +26,7 @@
 #include "common/perf_counters.h"
 #include "Python.h"
 #include "Gil.h"
+#include "SharedStore.h"
 #include "mon/MgrMap.h"
 
 #ifdef WITH_CRIMSON
@@ -106,6 +107,9 @@ private:
   int load_notify_types();
   std::set<std::string> notify_types;
 
+  int load_shared_store();
+  SharedStorePolicy shared_store;
+
 public:
   std::unique_ptr<PerfCounters> perfcounter;
   static std::string mgr_store_prefix;
@@ -177,6 +181,10 @@ public:
 
   bool should_notify(const std::string& notify_type) const {
     return notify_types.count(notify_type);
+  }
+
+  bool can_read_shared(std::string_view reader, std::string_view key) const {
+    return shared_store.allows(reader, key);
   }
 
   const std::string &get_name() const {
