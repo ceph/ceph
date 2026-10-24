@@ -81,6 +81,10 @@ public:
     CInode::old_inode_map_const_ptr old_inodes;
     snapid_t oldest_snap;
     damage_flags_t damage_flags;
+    // used with mds_verify_frag_bytes, this is to ensure/check if a value
+    // length calculated by dentry_value_length() equals what was encoded in
+    // _omap_commit_ops()
+    uint64_t expected_len = 0;
   };
 
   // -- freezing --
@@ -204,6 +208,7 @@ public:
   static const int DUMP_STATES           = (1 << 6);
   static const int DUMP_MDS_CACHE_OBJECT = (1 << 7);
   static const int DUMP_ITEMS            = (1 << 8);
+  static const int DUMP_FRAG_BYTES       = (1 << 9);
   static const int DUMP_ALL              = (-1);
   static const int DUMP_DEFAULT          = DUMP_ALL & (~DUMP_ITEMS);
 
@@ -360,6 +365,18 @@ public:
   unsigned get_num_snap_items() const { return num_snap_items; }
   unsigned get_num_snap_null() const { return num_snap_null; }
   unsigned get_num_any() const { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
+
+  void mark_frag_bytes_untrusted() { frag_bytes_untrusted = true; }
+  void clear_frag_bytes_untrusted() { frag_bytes_untrusted = false; }
+  bool is_frag_bytes_untrusted() const { return frag_bytes_untrusted; }
+
+  // gives length of the omap value a commit would write for this dentry from
+  // its projected or its current state
+  uint64_t dentry_value_length(CDentry *dn, bool projected);
+  int64_t get_frag_bytes() const;
+  // sum of the dentries counted_size. note: use only if the dirfrag is
+  // complete in cache
+  int64_t get_dentries_counted_bytes() const;
   
   bool check_rstats(bool scrub=false);
 
@@ -717,6 +734,8 @@ protected:
   unsigned num_head_null = 0;
   unsigned num_snap_items = 0;
   unsigned num_snap_null = 0;
+
+  bool frag_bytes_untrusted = false;
 
   int num_dirty = 0;
 

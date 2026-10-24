@@ -606,6 +606,9 @@ private:
 
   void update_segment(LogSegmentRef const& ls);
   void replay(MDSRank *mds, LogSegmentRef const& ls, int type, MDPeerUpdate *su=NULL);
+  // marks a repaired dirfrag's frag_bytes untrusted if a cached snapshot
+  // dentry may be written back (MDCache::repair_dirfrag_bytes())
+  void check_frag_bytes_repair(MDSRank *mds) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
