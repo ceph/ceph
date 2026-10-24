@@ -1545,6 +1545,10 @@ namespace rgw::sal {
     return zone.get_rgw_params().get_compression_type(rule);
   }
 
+  uint64_t DBStore::get_compression_min_size(const rgw_placement_rule& rule) {
+    return zone.get_rgw_params().get_compression_min_size(rule);
+  }
+
   bool DBStore::valid_placement(const rgw_placement_rule& rule)
   {
     // XXX: Till zonegroup, zone and storage-classes can be configured

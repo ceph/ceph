@@ -14,12 +14,41 @@
 #include "rgw_compression_types.h"
 #include "rgw_crypt.h"
 
+struct RGWZonePlacementInfo;
+
 int rgw_compression_info_from_attr(const bufferlist& attr,
                                    bool& need_decompress,
                                    RGWCompressionInfo& cs_info);
 int rgw_compression_info_from_attrset(const std::map<std::string, bufferlist>& attrs,
                                       bool& need_decompress,
                                       RGWCompressionInfo& cs_info);
+
+// true if an object of the given logical size is below the placement's
+// compression min size, so it should be stored uncompressed. an unknown size
+// is never below it
+bool rgw_compression_below_min_size(uint64_t min_size,
+                                    std::optional<uint64_t> size);
+
+// multisite sync tells the source zone which compression type the
+// destination zone uses for each of its storage classes, as a comma-separated
+// list of <storage class>:<type>. an empty storage class stands for objects
+// without one, which go to the bucket's default storage class, and "*" for
+// every object, when sync policy picks the storage class. the source sends an
+// object that already uses its type as stored, without decompressing it
+
+// the list for objects stored under the given placement, either in the
+// storage class from sync policy or by their own storage class. types whose
+// plugin can't be loaded are left out, so those objects are recompressed (or
+// stored uncompressed) here as before
+std::string rgw_sync_compression_types(CephContext* cct,
+                                       const RGWZonePlacementInfo& placement,
+                                       const std::string& default_storage_class,
+                                       const std::optional<std::string>& storage_class);
+
+// true if the list asks for objects of this storage class and compression type
+bool rgw_sync_compression_type_matches(std::string_view types,
+                                       std::string_view storage_class,
+                                       std::string_view compression_type);
 
 class RGWGetObj_Decompress : public RGWGetObj_Filter
 {

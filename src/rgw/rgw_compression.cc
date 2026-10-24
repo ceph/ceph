@@ -3,6 +3,8 @@
 
 #include "rgw_compression.h"
 #include "rgw_range_projection.h"
+#include "rgw_zone_types.h"
+#include "common/split.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -38,6 +40,80 @@ int rgw_compression_info_from_attrset(const map<string, bufferlist>& attrs,
     return 0;
   }
   return rgw_compression_info_from_attr(value->second, need_decompress, cs_info);
+}
+
+bool rgw_compression_below_min_size(uint64_t min_size,
+                                    std::optional<uint64_t> size)
+{
+  return size && *size < min_size;
+}
+
+static bool sync_compression_type_usable(CephContext* cct, const std::string& type)
+{
+  // there's nothing to match without a fixed type
+  if (type.empty() || type == "none" || type == "random") {
+    return false;
+  }
+  // plugins don't come and go at runtime, so whether each one loads is
+  // checked once per process
+  static ceph::mutex lock = ceph::make_mutex("rgw_sync_compression_types");
+  static std::map<std::string, bool, std::less<>> loadable;
+  std::lock_guard l{lock};
+  auto [i, inserted] = loadable.try_emplace(type, false);
+  if (inserted) {
+    i->second = static_cast<bool>(Compressor::create(cct, type));
+  }
+  return i->second;
+}
+
+std::string rgw_sync_compression_types(CephContext* cct,
+                                       const RGWZonePlacementInfo& placement,
+                                       const std::string& default_storage_class,
+                                       const std::optional<std::string>& storage_class)
+{
+  std::string types;
+  auto add = [cct, &types] (std::string_view sc, const std::string& type) {
+    if (!sync_compression_type_usable(cct, type)) {
+      return;
+    }
+    if (!types.empty()) {
+      types += ',';
+    }
+    types.append(sc).append(":").append(type);
+  };
+  if (storage_class) {
+    // an empty storage class from sync policy means the bucket's default
+    add("*", placement.get_compression_type(storage_class->empty() ?
+                                            default_storage_class : *storage_class));
+    return types;
+  }
+  add("", placement.get_compression_type(default_storage_class));
+  for (const auto& [sc, storage] : placement.storage_classes.get_all()) {
+    // the separators can't be escaped, and "*" stands for every class
+    if (sc.empty() || sc == "*" || sc.find_first_of(",:") != sc.npos) {
+      continue;
+    }
+    add(sc, storage.compression_type.value_or(""));
+  }
+  return types;
+}
+
+bool rgw_sync_compression_type_matches(std::string_view types,
+                                       std::string_view storage_class,
+                                       std::string_view compression_type)
+{
+  for (std::string_view entry : ceph::split(types, ",")) {
+    const auto pos = entry.find(':');
+    if (pos == entry.npos) {
+      continue;
+    }
+    const auto sc = entry.substr(0, pos);
+    if ((sc == storage_class || sc == "*") &&
+        entry.substr(pos + 1) == compression_type) {
+      return true;
+    }
+  }
+  return false;
 }
 
 //------------RGWPutObj_Compress---------------

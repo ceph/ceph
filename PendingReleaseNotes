@@ -45,6 +45,14 @@
   remove bilog entries that other zones have not synced yet.
 * RGW: ``radosgw-admin bilog trim`` no longer accepts ``--start-marker``, since
   FIFO-backed bilogs can only be trimmed from the front.
+* RGW: Multisite sync now transfers an object that is already compressed with
+  the type that the destination zone uses for its storage class as stored,
+  without decompressing and recompressing it. Such an object keeps its
+  compression even if it is smaller than the destination's
+  ``compression_min_size``, and ``rgw_sync_obj_etag_verify`` does not verify it.
+  Set ``rgw_sync_obj_skip_decompress`` to ``false`` to restore the previous
+  behavior. Sync notifications now report the object's size for replicas of
+  objects that are both compressed and encrypted, rather than their stored size.
 
 * RGW: Fixed a bug in same-account evaluation of bucket policy statements that
   allow the account principal. Users and roles in that account now require a

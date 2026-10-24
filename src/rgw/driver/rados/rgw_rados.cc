@@ -3818,6 +3818,10 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw::sal::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
   bool try_etag_verify;
+  // compression types to ask the source to send as stored
+  std::string skip_decompress_types;
+  bool compressed_transfer{false}; // the source sent compressed data as stored
+  std::string compressed_transfer_type; // and its compression type
   rgw::putobj::etag_verifier_ptr etag_verifier;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
@@ -3826,6 +3830,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   void *progress_data;
   bufferlist extra_data_bl, manifest_bl;
   std::optional<RGWCompressionInfo> compression_info;
+  std::optional<uint64_t> src_size; // bytes of object data to be received, if known
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   uint64_t data_len{0};
@@ -3856,12 +3861,14 @@ public:
                  void *_progress_data,
                  std::function<int(map<string, bufferlist>&)> _attrs_handler,
                  const rgw_obj& src_obj,
-                 const std::optional<RGWUserPermHandler::Bucket>& _src_bucket_perms = std::nullopt) :
+                 const std::optional<RGWUserPermHandler::Bucket>& _src_bucket_perms = std::nullopt,
+                 std::string skip_decompress_types = {}) :
                        dpp(dpp),
                        cct(cct),
                        filter(p),
                        compressor(compressor),
                        try_etag_verify(cct->_conf->rgw_sync_obj_etag_verify),
+                       skip_decompress_types(std::move(skip_decompress_types)),
                        plugin(plugin),
                        processor(p),
                        progress_cb(_progress_cb),
@@ -3883,17 +3890,35 @@ public:
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
       encrypted = src_attrs.count(RGW_ATTR_CRYPT_MODE);
-      if (encrypted) {
-        // we won't have access to the decrypted data for checksumming
+      if (encrypted || compressed_transfer) {
+        // we won't have access to the decrypted or decompressed data for
+        // checksumming
         try_etag_verify = false;
       }
 
-      // if the object is both compressed and encrypted, it was transferred
-      // in its encrypted+compressed form. we need to preserve the original
-      // RGW_ATTR_COMPRESSION instead of falling back to default compression
-      // settings
+      // if the object is both compressed and encrypted, or the source skipped
+      // decompression, it was transferred in its compressed form. we need to
+      // preserve the original RGW_ATTR_COMPRESSION instead of falling back to
+      // default compression settings
       auto iter = src_attrs.find(RGW_ATTR_COMPRESSION);
-      if (iter != src_attrs.end() && !encrypted) {
+      if (compressed_transfer && !encrypted) {
+        // the data stays compressed, so make sure we can read it back
+        RGWCompressionInfo info;
+        bool compressed = false;
+        if (iter == src_attrs.end() ||
+            rgw_compression_info_from_attr(iter->second, compressed, info) < 0 ||
+            !compressed) {
+          ldpp_dout(dpp, 0) << "ERROR: missing compression info for " << src_obj
+              << " transferred compressed" << dendl;
+          return -EIO;
+        }
+        if (!Compressor::create(cct, info.compression_type)) {
+          ldpp_dout(dpp, 0) << "ERROR: cannot load plugin for compression type "
+              << info.compression_type << " of " << src_obj << dendl;
+          return -EIO;
+        }
+        compressed_transfer_type = info.compression_type;
+      } else if (iter != src_attrs.end() && !encrypted) {
         const bufferlist bl = std::move(iter->second);
         src_attrs.erase(iter); // don't preserve source compression info
 
@@ -3948,13 +3973,19 @@ public:
       }
     }
 
+    if (compressed_transfer && !encrypted && compressed_transfer_type.empty()) {
+      ldpp_dout(dpp, 0) << "ERROR: missing compression info for " << src_obj
+          << " transferred compressed" << dendl;
+      return -EIO;
+    }
+
     int ret = attrs_handler(src_attrs);
     if (ret < 0) {
       return ret;
     }
 
-    // do not compress if object is encrypted
-    if (plugin && !encrypted) {
+    // do not compress if object is encrypted or already compressed
+    if (plugin && !encrypted && !compressed_transfer) {
       compressor = boost::in_place(cct, plugin, filter);
       // add a filter that buffers data so we don't try to compress tiny blocks.
       // libcurl reads in 16k at a time, and we need at least 64k to get a good
@@ -4033,6 +4064,10 @@ public:
   bufferlist& get_extra_data() { return extra_data_bl; }
 
   map<string, bufferlist>& get_attrs() { return src_attrs; }
+  std::optional<uint64_t> get_src_size() const { return src_size; }
+  const std::string& get_skip_decompress_types() const { return skip_decompress_types; }
+  bool is_compressed_transfer() const { return compressed_transfer; }
+  const std::string& get_compressed_transfer_type() const { return compressed_transfer_type; }
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
@@ -4055,6 +4090,18 @@ public:
   int handle_headers(const map<string, string>& headers, int http_status) override {
     if (http_status == 503) {
       return -EBUSY;
+    }
+
+    // size of the object data that follows the embedded metadata, which
+    // arrives before the attrs are processed. when the data gets compressed
+    // here, this is its logical size
+    if (auto i = headers.find("RGWX_OBJECT_SIZE"); i != headers.end()) {
+      src_size = ceph::parse<uint64_t>(i->second);
+    }
+
+    // older zones ignore rgwx-skip-decompress and send decompressed data
+    if (!skip_decompress_types.empty()) {
+      compressed_transfer = headers.count("RGWX_DECOMPRESS_SKIPPED");
     }
 
     if (src_bucket_perms && http_status != 403 && http_status != 401) {
@@ -4609,6 +4656,7 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
   constexpr bool rgwx_stat = true;
   constexpr bool sync_manifest = true;
   constexpr bool skip_decrypt = true;
+  const std::string skip_decompress_types;
   constexpr bool sync_cloudtiered = true;
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
@@ -4616,7 +4664,8 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
     int ret = conn->get_obj(dpp, user_id, nullptr, info, src_obj, pmod, unmod_ptr,
                             dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                             prepend_meta, get_op, rgwx_stat,
-                            sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
+                            sync_manifest, skip_decrypt, skip_decompress_types,
+                            nullptr, sync_cloudtiered,
                             true, &cb, &in_stream_req);
     if (ret < 0) {
       return ret;
@@ -4677,8 +4726,12 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
 				      std::optional<rgw_user> *poverride_owner,
                                       const rgw_placement_rule **prule)
 {
-  const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
-  if (!ptail_rule) {
+  const rgw_placement_rule *ptail_rule = nullptr;
+  if (dest_placement_rule) {
+    // the parameter is destroyed when this returns, so point at a member
+    dest_rule = *dest_placement_rule;
+    ptail_rule = &dest_rule;
+  } else {
     auto iter = obj_attrs.find(RGW_ATTR_STORAGE_CLASS);
     if (iter != obj_attrs.end()) {
       dest_rule.storage_class = iter->second.to_str();
@@ -4726,7 +4779,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                std::optional<rgw_zone_set_entry> source_trace_entry,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred,
-               bool keep_tags)
+               bool keep_tags,
+               const std::string& skip_decompress_types)
 {
   /* source is in a different zonegroup, copy from there */
 
@@ -4831,7 +4885,42 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
                       processor.set_tail_placement(*ptail_rule);
 
-                      const auto& compression_type = svc.zone->get_zone_params().get_compression_type(*ptail_rule);
+                      // objects smaller than the minimum size are stored
+                      // uncompressed. the object size header has been
+                      // received by the time the attrs are processed
+                      const auto& zone_params = svc.zone->get_zone_params();
+                      std::string compression_type = zone_params.get_compression_type(*ptail_rule);
+                      const uint64_t min_size = zone_params.get_compression_min_size(*ptail_rule);
+                      const bool encrypted = obj_attrs.count(RGW_ATTR_CRYPT_MODE);
+                      // an object fetched as stored keeps its compression,
+                      // which must be the type of the storage class it goes
+                      // to. otherwise fetch it again decompressed, before
+                      // anything is written
+                      if (cb.is_compressed_transfer() && !encrypted &&
+                          cb.get_compressed_transfer_type() != compression_type) {
+                        ldpp_dout(rctx.dpp, 5) << "fetched " << fetched_obj
+                            << " compressed with " << cb.get_compressed_transfer_type()
+                            << " but storage class " << ptail_rule->get_storage_class()
+                            << " uses " << compression_type << ", will fetch it decompressed"
+                            << dendl;
+                        return -ERR_SYNC_COMPRESSION_MISMATCH;
+                      }
+                      // objects transferred as stored (encrypted, or
+                      // compressed by the source) keep the source's
+                      // compression
+                      if (encrypted || cb.is_compressed_transfer()) {
+                        if (cb.is_compressed_transfer() && !encrypted) {
+                          // the data is already compressed
+                          dest_obj_ctx.set_compressed(dest_obj);
+                        }
+                        compression_type = "none";
+                      } else if (compression_type != "none" &&
+                                 rgw_compression_below_min_size(min_size, cb.get_src_size())) {
+                        ldpp_dout(rctx.dpp, 20) << "not compressing replicated object of size "
+                            << *cb.get_src_size() << " below compression min size "
+                            << min_size << dendl;
+                        compression_type = "none";
+                      }
                       if (compression_type != "none") {
                         plugin = Compressor::create(cct, compression_type);
                         if (!plugin) {
@@ -4845,7 +4934,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                         return ret;
                       }
                       return 0;
-                    }, src_obj, src_bucket_perms);
+                    }, src_obj, src_bucket_perms, skip_decompress_types);
 
   string etag;
   real_time set_mtime;
@@ -4882,7 +4971,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     ret = conn->get_obj(rctx.dpp, user_id, perm_check_uid, info, src_obj, pmod, unmod_ptr,
                         dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver, prepend_meta, get_op, rgwx_stat,
-                        sync_manifest, skip_decrypt, &dst_zone_trace,
+                        sync_manifest, skip_decrypt, cb.get_skip_decompress_types(), &dst_zone_trace,
                         sync_cloudtiered, true,
                         &cb, &in_stream_req);
     if (ret < 0) {
@@ -4924,13 +5013,22 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;
   } else if (auto c = cb.get_attrs().find(RGW_ATTR_COMPRESSION);
              c != cb.get_attrs().end()) {
-    // if the object was transferred in its compressed+encrypted form, use its
+    // if the object was transferred in its compressed form, use its
     // original uncompressed size
     try {
       RGWCompressionInfo info;
       auto p = c->second.cbegin();
       decode(info, p);
       accounted_size = info.orig_size;
+      // data that stays compressed must match its compression info
+      if (cb.is_compressed_transfer() && !cb.get_attrs().count(RGW_ATTR_CRYPT_MODE) &&
+          cb.get_data_len() != info.blocks.back().new_ofs + info.blocks.back().len) {
+        ret = -EIO;
+        ldpp_dout(rctx.dpp, 0) << "ERROR: " << fetched_obj << " transferred "
+            "compressed has " << cb.get_data_len() << " bytes but its compression "
+            "info expects " << info.blocks.back().new_ofs + info.blocks.back().len << dendl;
+        goto set_err_state;
+      }
     } catch (const buffer::error&) {
       ldpp_dout(rctx.dpp, 0) << "ERROR: could not decode compression attr for "
           "replicated " << fetched_obj << dendl;
@@ -5117,7 +5215,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   }
 
   if (bytes_transferred) {
-    *bytes_transferred = cb.get_data_len();
+    // the object's logical size, even if it was transferred compressed
+    *bytes_transferred = accounted_size;
   }
   return 0;
 set_err_state:
@@ -5844,6 +5943,18 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
+  // logical (uncompressed, decrypted) size, from the state cached by
+  // prepare(). look it up before obj's key is modified below
+  uint64_t accounted_size = 0;
+  {
+    RGWObjState *astate = nullptr;
+    ret = get_obj_state(dpp, &obj_ctx, bucket_info, obj, &astate, nullptr, true, y);
+    if (ret < 0) {
+      return ret;
+    }
+    accounted_size = astate->accounted_size;
+  }
+
   ret = fixup_manifest_to_parts_len(dpp, attrs);
   if (ret < 0) {
     return ret;
@@ -5893,6 +6004,19 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
       !svc.zone->get_zonegroup().supports(
           rgw::zone_features::compress_encrypted)) {
     dest_compression = "none";
+  }
+
+  // objects smaller than the destination's minimum size are stored
+  // uncompressed. compare the logical size
+  {
+    const uint64_t min_size =
+        svc.zone->get_zone_params().get_compression_min_size(placement_rule);
+    if (dest_compression != "none" &&
+        rgw_compression_below_min_size(min_size, accounted_size)) {
+      ldpp_dout(dpp, 20) << "not compressing transition of size " << accounted_size
+          << " below compression min size " << min_size << dendl;
+      dest_compression = "none";
+    }
   }
 
   /*
@@ -5988,7 +6112,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       dp_factory,
                       dpp,
                       y,
-                      0, /* src_accounted_size: unknown here, keep ofs-based size */
+                      0, /* src_accounted_size: keep the ofs-based size for transitions */
                       log_op);
   if (ret < 0) {
     return ret;

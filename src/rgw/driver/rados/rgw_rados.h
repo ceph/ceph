@@ -1256,7 +1256,8 @@ public:
                        std::optional<rgw_zone_set_entry> source_trace_entry,
                        rgw_zone_set *zones_trace = nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0,
-                       bool keep_tags = true);
+                       bool keep_tags = true,
+                       const std::string& skip_decompress_types = {});
   /**
    * Copy an object.
    * dest_obj: the object to copy into

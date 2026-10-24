@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+  rgw:
+    # with a realm, a period commit makes the running gateway reload the
+    # zone's placement config
+    realm: compression
+    zonegroup: default
+    zone: default

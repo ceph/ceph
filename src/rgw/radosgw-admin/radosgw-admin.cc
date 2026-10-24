@@ -468,6 +468,7 @@ void usage()
   cout << "   --placement-inline-data=<true>    set whether the placement target is configured to store a data\n";
   cout << "                                     chunk inline in head objects\n";
   cout << "   --compression=<type>              placement target compression type (plugin name or empty/none)\n";
+  cout << "   --compression-min-size=<size>     placement target minimum object size to compress (e.g. 64K; 0 compresses any size)\n";
   cout << "   --tier-type=<type>                zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]       set zone tier config keys, values\n";
   cout << "   --tier-config-rm=<k>[,...]        unset zone tier config keys\n";
@@ -3566,6 +3567,7 @@ int main(int argc, const char **argv)
 #endif
 
   boost::optional<std::string> compression_type;
+  boost::optional<uint64_t> compression_min_size;
 
   string totp_serial;
   string totp_seed;
@@ -4131,6 +4133,12 @@ int main(int argc, const char **argv)
 #endif
     } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
       compression_type = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--compression-min-size", (char*)NULL)) {
+      compression_min_size = strict_iec_cast<uint64_t>(val, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse compression min size: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*)NULL)) {
       role_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
@@ -6532,6 +6540,9 @@ int main(int argc, const char **argv)
 
           rgw_pool dp = opt_data_pool;
           info.storage_classes.set_storage_class(storage_class, &dp, compression_type.get_ptr());
+          if (compression_min_size) {
+            info.storage_classes.set_compression_min_size(storage_class, *compression_min_size);
+          }
 
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;

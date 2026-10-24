@@ -1612,6 +1612,7 @@ int DaosMultipartUpload::init(const DoutPrefixProvider* dpp, optional_yield y,
   multipart_upload_info upload_info;
   upload_info.dest_placement = dest_placement;
   upload_info.cksum_type = cksum_type;
+  upload_info.compression_type = compression_type;
 
   ent.encode(bl);
   encode(attrs, bl);
@@ -1997,6 +1998,7 @@ int DaosMultipartUpload::get_info(const DoutPrefixProvider* dpp,
   // Now decode the placement rule
   decode(upload_info, iter);
   cksum_type = upload_info.cksum_type;
+  compression_type = upload_info.compression_type;
   placement = upload_info.dest_placement;
   *rule = &placement;
 
@@ -2195,6 +2197,10 @@ std::unique_ptr<Writer> DaosStore::get_atomic_writer(
 const std::string& DaosStore::get_compression_type(
     const rgw_placement_rule& rule) {
   return zone.zone_params->get_compression_type(rule);
+}
+
+uint64_t DaosStore::get_compression_min_size(const rgw_placement_rule& rule) {
+  return zone.zone_params->get_compression_min_size(rule);
 }
 
 bool DaosStore::valid_placement(const rgw_placement_rule& rule) {

@@ -2997,6 +2997,11 @@ const std::string& RadosStore::get_compression_type(const rgw_placement_rule& ru
       return svc()->zone->get_zone_params().get_compression_type(rule);
 }
 
+uint64_t RadosStore::get_compression_min_size(const rgw_placement_rule& rule)
+{
+  return svc()->zone->get_zone_params().get_compression_min_size(rule);
+}
+
 bool RadosStore::valid_placement(const rgw_placement_rule& rule)
 {
   return svc()->zone->get_zone_params().valid_placement(rule);
@@ -4452,6 +4457,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     upload_info.dest_placement = dest_placement;
     upload_info.cksum_type = cksum_type;
     upload_info.cksum_flags = cksum_flags;
+    upload_info.compression_type = compression_type;
 
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
@@ -4907,6 +4913,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
   }
   cksum_type = upload_info.cksum_type;
   cksum_flags = upload_info.cksum_flags;
+  compression_type = upload_info.compression_type;
   placement = upload_info.dest_placement;
   upload_information = upload_info;
   *rule = &placement;

@@ -321,6 +321,8 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   // attributes needed to support decryption on the other zone
   if (s->system_request) {
     skip_decrypt = s->info.args.exists(RGW_SYS_PARAM_PREFIX "skip-decrypt");
+    // and compressed data as stored, if the destination can decompress it
+    skip_decompress_types = s->info.args.get(RGW_SYS_PARAM_PREFIX "skip-decompress");
   }
 
   // multisite sync requests should fetch cloudtiered objects
@@ -449,6 +451,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     }
 
     dump_header(s, "Rgwx-Perm-Checked", "true");
+
+    // tells the destination that the data is compressed as stored
+    if (decompress_skipped) {
+      dump_header(s, "Rgwx-Decompress-Skipped", "true");
+    }
 
     // check for GetObject(Version)Tagging permission to include tags in response
     auto action = s->object_key.instance.empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
