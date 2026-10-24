@@ -10316,7 +10316,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
       // object from being cleaned by another thread that was deleting the last
       // existing version. We invoke a best-effort update_olh here to handle this case.
       if (! skip_olh_obj_update) {
-        int r = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y, zones_trace, log_data_change);
+        int r = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y, zones_trace, false /* null_verid */, log_data_change);
         if (r < 0 && r != -ECANCELED) {
           ldpp_dout(dpp, 20) << "update_olh() target_obj=" << olh_obj << " returned " << r << dendl;
         }
@@ -10337,7 +10337,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
     return 0;
   }
 
-  ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y, zones_trace, log_data_change);
+  ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y, zones_trace, false /* null_verid */, log_data_change);
   if (ret == -ECANCELED) { /* already did what we needed, no need to retry, raced with another user */
     ret = 0;
   }
