@@ -10,6 +10,18 @@ describe('OSDs page', () => {
     osds.navigateTo();
   });
 
+  describe('Create OSDs tearsheet', () => {
+    // Runs in cephadm e2e where Orchestrator is available.
+    it('should open create modal and close it on cancel, updating the URL', () => {
+      osds.openCreateTearsheet();
+      cy.get('[data-testid="osd-create-tearsheet-header"]').should('contain.text', 'Create OSDs');
+      cy.location('hash').should('eq', '#/osd/(modal:create)');
+
+      // Cancel closes the modal and redirects back to /osd
+      osds.closeCreateTearsheet();
+    });
+  });
+
   it('should check if atleast 3 osds are created', { retries: 3 }, () => {
     // we have created a total of more than 3 osds throughout
     // the whole tests so ensuring that atleast
