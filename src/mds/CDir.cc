@@ -1540,6 +1540,10 @@ void CDir::log_mark_dirty()
 void CDir::mark_complete() {
   state_set(STATE_COMPLETE);
   bloom.reset();
+  // Count keyed-fetch hits afresh: once trimming drops the dir back to
+  // incomplete, a saturated counter would relaunch a full background fetch
+  // on the very next miss.
+  backend_hit_count = 0;
 }
 
 void CDir::first_get()
@@ -1614,7 +1618,11 @@ void CDir::fetch(std::string_view dname, snapid_t last,
       if (backend_hit_count < threshold) {
         ++backend_hit_count;
       }
+      // A dirfrag loaded into a cache that is already over its reservation
+      // is trimmed straight back out, so skip the warm-up rather than read
+      // the whole frag only to evict it.
       if (g_conf().get_val<bool>("mds_dir_prefetch_backend") &&
+	  !mdcache->cache_toofull() &&
 	  !state_test(CDir::STATE_FETCHING) &&
 	  backend_hit_count >= threshold &&
 	  mdcache->num_backend_fetching < g_conf().get_val<uint64_t>("mds_dir_prefetch_backend_max")) {
@@ -2341,7 +2349,23 @@ void CDir::go_bad(bool complete)
     mark_complete();
   }
 
-  state_clear(STATE_FETCHING);
+  // Only a failed full fetch owns STATE_FETCHING.  A keyed fetch may fail
+  // while a background full fetch is still in flight; clearing the state
+  // then would let a second full fetch start on this dir and release the
+  // backend throttle slot early.
+  if (complete) {
+    state_clear(STATE_FETCHING);
+
+    // The fetch may have been a background prefetch; release its throttle
+    // slot.  Without this the counter leaks and the STATE_BACKEND_FETCH
+    // bit stays stuck, silently disabling all future backend prefetches
+    // once mds_dir_prefetch_backend_max is saturated.
+    if (state_test(STATE_BACKEND_FETCH)) {
+      state_clear(STATE_BACKEND_FETCH);
+      --mdcache->num_backend_fetching;
+    }
+  }
+
   auth_unpin(this);
   /*
    * fetch_keys() parks its completion contexts in waiting_on_dentry
