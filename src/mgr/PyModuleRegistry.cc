@@ -20,7 +20,7 @@
 #include "include/stringify.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 
 #include "BaseMgrModule.h"
 #include "PyOSDMap.h"
@@ -330,7 +330,7 @@ std::string PyModuleRegistry::get_site_packages()
 std::vector<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
 {
   const auto opt = g_conf().get_val<std::string>("mgr_disabled_modules");
-  const auto disabled_modules = ceph::split(opt);
+  const auto disabled_modules = ceph::split(opt, ";,= \t\n");
 
   std::vector<std::string> modules;
   for (const auto& entry: fs::directory_iterator(path)) {
@@ -338,7 +338,7 @@ std::vector<std::string> PyModuleRegistry::probe_modules(const std::string &path
       continue;
     }
     const std::string name = entry.path().filename();
-    if (std::count(disabled_modules.begin(), disabled_modules.end(), name)) {
+    if (ceph::util::contains(disabled_modules, name)) {
       dout(10) << "ignoring disabled module " << name << dendl;
       continue;
     }

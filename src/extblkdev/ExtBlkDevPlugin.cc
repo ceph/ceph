@@ -26,7 +26,7 @@
 #include "ExtBlkDevPlugin.h"
 #include "common/errno.h"
 #include "include/dlfcn_compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -199,15 +199,12 @@ namespace ceph {
       string plugins = conf.get_val<std::string>("osd_extblkdev_plugins");
       dout(10) << "starting preload of extblkdev plugins: " << plugins << dendl;
 
-      list<string> plugins_list;
-      get_str_list(plugins, plugins_list);
-
       auto registry = cct->get_plugin_registry();
       {
 	std::lock_guard l(registry->lock);
-	for (auto& plg : plugins_list) {
+	for (const auto plg : ceph::split(plugins)) {
 	  dout(10) << "starting load of extblkdev plugin: " << plg << dendl;
-	  int rc = registry->load("extblkdev", std::string("ebd_") + plg);
+	  int rc = registry->load("extblkdev", "ebd_" + std::string { plg });
 	  if (rc) {
 	    derr << __func__ << " failed preloading extblkdev plugin: " << plg << dendl;
             preload_result = rc;
