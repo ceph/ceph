@@ -2303,15 +2303,53 @@ options:
 - name: rgw_graceful_stop
   type: bool
   level: advanced
-  desc: Delay the shutdown until all outstanding requests have completed
-  long_desc: Wait for up to `rgw_exit_timeout_secs` for all outstanding requests to complete
-    before exiting unconditionally. (new HTTP requests will not be accepted during this time.)
+  desc: Delay the shutdown or realm reload until all outstanding requests have completed
+  long_desc: On shutdown, wait for up to `rgw_exit_timeout_secs` for all outstanding requests
+    to complete before exiting unconditionally. On realm reload (for example after
+    `radosgw-admin period update --commit`), wait for up to `rgw_realm_reload_pause_timeout`
+    for outstanding requests to complete before closing the remaining connections. When
+    disabled, connections are closed immediately and outstanding requests fail. (new HTTP
+    requests will not be accepted during this time.)
   default: false
   services:
   - rgw
   see_also:
   - rgw_exit_timeout_secs
+  - rgw_realm_reload_pause_timeout
   with_legacy: true
+- name: rgw_realm_reload_pause_timeout
+  type: secs
+  level: advanced
+  desc: Maximum time a realm reload waits for outstanding requests
+  long_desc: When `rgw_graceful_stop` is enabled, a realm reload pauses the frontends and
+    waits for outstanding requests to complete before applying the new period. If requests
+    are still running after this many seconds, their connections are closed so the reload
+    can proceed. A value of 0 waits without a limit.
+  default: 30
+  min: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_graceful_stop
+  flags:
+  - runtime
+- name: rgw_realm_reload_max_delay
+  type: secs
+  level: advanced
+  desc: Maximum random delay before a realm reload
+  long_desc: When a gateway is notified of a new period (for example after
+    `radosgw-admin period update --commit`), it waits a random delay between 0 and this
+    many seconds before pausing its frontends to reload the realm configuration. This
+    spreads the reloads of gateways behind the same load balancer so that they don't all
+    stop serving requests at the same time. A value of 0 reloads immediately.
+  default: 0
+  min: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_realm_reload_pause_timeout
+  flags:
+  - runtime
 - name: rgw_get_obj_window_size
   type: size
   level: advanced
