@@ -336,7 +336,10 @@ struct shard_extent_set_t {
   bool empty() const { return map.empty(); }
   void swap(shard_extent_set_t &other) noexcept { map.swap(other.map); }
   void clear() { map.clear(); }
-  auto erase(shard_id_t shard) { return map.erase(shard); }
+  auto erase(shard_id_t shard) {
+    ceph_assert(shard < shard_id_t(map.max_size()));
+    return map.erase(shard);
+  }
 
   auto erase(shard_id_map<extent_set>::iterator &iter) {
     return map.erase(iter);
@@ -712,12 +715,69 @@ public:
     return k + m;
   }
 
+  unsigned int get_num_zones() const {
+    ceph_assert(pool);
+    return pool->get_num_zones();
+  }
+
   const shard_id_t get_shard(const raw_shard_id_t raw_shard) const {
     return chunk_mapping[int(raw_shard)];
   }
 
   raw_shard_id_t get_raw_shard(shard_id_t shard) const {
-    return chunk_mapping_reverse.at(int(shard));
+    return chunk_mapping_reverse.at((int)get_rel_shard(shard));
+  }
+
+  // Get the relative shard (shard ID relative to zone 0)
+  // For absolute shard ID = rel_shard + zone * (k+m)
+  shard_id_t get_rel_shard(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m), also handles negative shards
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return shard;
+    }
+    // Modern compilers optimize % well on recent CPUs
+    return shard_id_t(shard.id % k_plus_m);
+  }
+
+  // Get the zone number for a shard
+  int get_shard_zone(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m)
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return 0;
+    }
+    // Modern compilers optimize / well on recent CPUs
+    return shard.id / k_plus_m;
+  }
+
+  // Get both the relative shard and zone
+  // For absolute shard ID = rel_shard + zone * (k+m)
+  std::pair<shard_id_t, int> get_rel_shard_and_zone(shard_id_t shard) const {
+    int k_plus_m = get_k_plus_m();
+    // Fast path for common case (id < k+m), also handles negative shards
+    if (std::cmp_less(shard.id, k_plus_m)) {
+      return std::make_pair(shard, 0);
+    }
+    // Modern compilers optimize % and / well on recent CPUs
+    return std::make_pair(shard_id_t(shard.id % k_plus_m), shard.id / k_plus_m);
+  }
+
+  shard_id_t get_abs_shard(shard_id_t rel_shard, int zone) const {
+    return shard_id_t(rel_shard.id + zone * get_k_plus_m());
+  }
+
+  shard_id_set zones_or(shard_id_set in) const {
+    shard_id_set out;
+    shard_id_set mask;
+    mask.insert_range(shard_id_t(0), get_k_plus_m());
+
+    while (!in.empty()) {
+      out |= (in & mask);
+      in >>= get_k_plus_m();
+    }
+
+    return out;
   }
 
   /* Return a "span" - which can be iterated over */
@@ -989,6 +1049,7 @@ public:
   }
 
   extent_set get_extent_set(const shard_id_t &shard) const {
+    ceph_assert(shard < shard_id_t(extent_maps.max_size()));
     extent_set ret;
     if (extent_maps.contains(shard)) {
       extent_maps.at(shard).to_interval_set(ret);
@@ -1003,6 +1064,7 @@ public:
   }
 
   bool contains_shard(shard_id_t shard) const {
+    ceph_assert(shard < shard_id_t(extent_maps.max_size()));
     return extent_maps.contains(shard);
   }
 
@@ -1178,5 +1240,21 @@ struct log_entry_t {
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
+
+// The shards of an optimized EC pool that cannot become a primary: raw shards
+// 1 to k-1 in every zone. The other shards may not have up to date copies of
+// the xattrs, including the object info.
+inline shard_id_set nonprimary_shards(
+    int k, int m, const std::vector<shard_id_t> &chunk_mapping, int num_zones) {
+  shard_id_set shards;
+  for (int raw_shard = 1; raw_shard < k; ++raw_shard) {
+    const int rel_shard = static_cast<size_t>(raw_shard) < chunk_mapping.size()
+      ? int(chunk_mapping[raw_shard]) : raw_shard;
+    for (int zone = 0; zone < num_zones; ++zone) {
+      shards.insert(shard_id_t(rel_shard + (k + m) * zone));
+    }
+  }
+  return shards;
+}
 }
 

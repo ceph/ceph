@@ -118,6 +118,8 @@ struct pool_conf_t {
   uint8_t type{pg_pool_t::TYPE_REPLICATED};
   std::optional<erasure_code_profile_conf_t> erasure_code_profile;
   std::set<shard_id_t> nonprimary_shards;
+  // an erasure coded pool without allow_ec_optimizations when false
+  bool ec_optimizations{true};
 };
 
 using attr_t = std::map<std::string, std::string>;
@@ -239,7 +241,8 @@ struct RealObjsConf {
   std::vector<RealObj> objs;
 };
 
-RealObjsConf make_erasure_code_configuration(int8_t k, int8_t m);
+RealObjsConf make_erasure_code_configuration(int8_t k, int8_t m,
+                                             int num_zones = 1);
 
 CorruptFuncList make_erasure_code_hash_corruption_functions(int num_osds);
 

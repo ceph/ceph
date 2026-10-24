@@ -59,6 +59,12 @@ See :ref:`pg-autoscaler`.
 .. confval:: osd_pool_default_crush_rule
 .. confval:: osd_pool_erasure_code_stripe_unit
 .. confval:: osd_pool_default_size
+.. confval:: osd_pool_default_replica
+.. confval:: osd_pool_default_num_zones
+.. confval:: osd_pool_default_zone_failure_domain
+.. confval:: osd_pool_default_osd_failure_domain
+.. confval:: osd_pool_default_root
+.. confval:: osd_pool_default_class
 .. confval:: osd_pool_default_min_size
 .. confval:: osd_pool_default_pg_num
 .. confval:: osd_pool_default_pgp_num

@@ -19,6 +19,7 @@
 #include <stdlib.h>
 
 #include "erasure-code/ErasureCode.h"
+#include "crush/CrushWrapper.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
@@ -70,6 +71,7 @@ public:
     ceph_abort_msg("ErasureCode::decode_chunks not implemented");
   }
 
+  using ErasureCode::create_rule;
   int create_rule(const string &name,
 		  CrushWrapper &crush,
 		  ostream *ss) const override { return 0; }
@@ -171,6 +173,22 @@ TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
     ASSERT_TRUE(encoded[i].is_aligned(ErasureCode::SIMD_ALIGN));
     ASSERT_TRUE(encoded[i].is_n_align_sized(chunk_size));
   }
+}
+
+// A profile records a zone type only when it is given: the Monitor resolves
+// the default, and a rule over zones needs the zone type it is given.
+TEST(ErasureCodeTest, zone_failure_domain_comes_from_the_caller)
+{
+  ErasureCodeTest erasure_code(2, 1, 4096);
+  ErasureCodeProfile profile;
+  ostringstream ss;
+  ASSERT_EQ(0, erasure_code.ErasureCode::init(profile, &ss));
+  EXPECT_FALSE(profile.contains("crush-zone-failure-domain"));
+  EXPECT_EQ("host", profile["crush-failure-domain"]);
+
+  CrushWrapper crush;
+  crush.create();
+  EXPECT_EQ(-EINVAL, erasure_code.create_rule("r", 2, "", "", "", "", crush, &ss));
 }
 
 /*

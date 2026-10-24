@@ -7699,9 +7699,11 @@ void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRe
       pgid = m->get_spg();
       //Pre-tentacle clients encode the shard_id_t incorrectly for optimized EC
       //pools with pg_temp set. Correct the mistake here.
-      if (!m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE)) {
-        auto pi = osdmap->get_pg_pool(pgid.pool());
-	pgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, pgid.pgid, pgid.shard));
+      if (!m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE) &&
+          !osdmap->undo_pre_tentacle_primaryfirst(&pgid)) {
+        dout(10) << __func__ << " dropping " << *m << ": shard " << pgid.shard
+                 << " is not in e" << osdmap->get_epoch() << dendl;
+        continue;
       }
     }
     enqueue_op(pgid, std::move(op), m->get_map_epoch());
