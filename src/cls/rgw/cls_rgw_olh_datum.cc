@@ -137,7 +137,7 @@ std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
                                        const std::string_view tag, ::ceph::buffer::list& output)
 {
     fragment_cursor<SingleFragment> cursor {input};
-    ::cls::rgw::wire::basic_reader archive {cursor};
+    ::ceph::datum_wire::basic_reader archive {cursor};
     unsigned lower = 0;
     unsigned upper = 0;
     std::uint32_t selected = 0;
@@ -188,7 +188,7 @@ std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
     }
 
     ::ceph::buffer::list candidate;
-    ::cls::rgw::wire::writer writer {candidate};
+    ::ceph::datum_wire::writer writer {candidate};
     writer.frame(1, [&] {
         writer.scalar(selected);
         writer.payload(input, lower, upper - lower);
@@ -209,7 +209,7 @@ std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 {
-    ::cls::rgw::wire::decode_record(value, input, [](auto& cursor, auto& candidate) {
+    ::ceph::datum_wire::decode_record(value, input, [](auto& cursor, auto& candidate) {
         ::cls::rgw::olh_wire::decode_request<::ceph::buffer::ptr>(cursor,
             [&candidate](std::string&& name, std::string&& instance, const std::uint64_t marker,
                          ::ceph::buffer::ptr&& tag, const bool stales) {

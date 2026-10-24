@@ -1,5 +1,5 @@
 // RGW CLS: Native compatibility and independent Datum/zpp representations.
-#include "cls/rgw/cls_rgw_datum_wire.h"
+#include "common/datum_wire.h"
 #include "test/cls_rgw/wire_test.h"
 #include "bi_native_oracle.h"
 #include "cls/rgw/cls_rgw_bi_datum.h"
@@ -163,37 +163,37 @@ TEST_CASE("BI requests preserve native bytes and old version defaults", "[rgw][c
 
 TEST_CASE("RGW field archives preserve successful bytes and report undersized schemas", "[rgw][cls][datum]")
 {
-    using record = ::cls::rgw::wire::scalar_record<std::uint32_t>;
+    using record = ::ceph::datum_wire::scalar_record<std::uint32_t>;
 
     const record original {0x01020304};
     const auto fields = datum::binary_fields<&record::value> {};
     byte_buffer bytes;
-    ::cls::rgw::wire::writer output {bytes};
+    ::ceph::datum_wire::writer output {bytes};
     CHECK_NOTHROW(output.fields(fields, original, 4));
     byte_buffer expected;
     ::ceph::encode(original.value, expected);
     CHECK(bytes.contents_equal(expected));
 
     auto cursor = bytes.cbegin();
-    ::cls::rgw::wire::reader input {cursor};
+    ::ceph::datum_wire::reader input {cursor};
     record decoded {0};
     CHECK_NOTHROW(input.fields<4>(fields, decoded));
     CHECK(decoded.value == original.value);
     CHECK(cursor.end());
 
     byte_buffer short_bytes;
-    ::cls::rgw::wire::writer short_output {short_bytes};
+    ::ceph::datum_wire::writer short_output {short_bytes};
     CHECK_THROWS_AS(short_output.fields(fields, original, 3), std::system_error);
     byte_buffer truncated;
     truncated.substr_of(bytes, 0, 3);
     cursor = truncated.cbegin();
-    ::cls::rgw::wire::reader short_input {cursor};
+    ::ceph::datum_wire::reader short_input {cursor};
     CHECK_THROWS_AS(short_input.fields<3>(fields, decoded), std::system_error);
 }
 
 TEST_CASE("RGW frame callbacks preserve metadata, reference returns, and extension bounds", "[rgw][cls][datum]")
 {
-    namespace shared = ::cls::rgw::wire;
+    namespace shared = ::ceph::datum_wire;
 
     byte_buffer encoded;
     shared::writer output {encoded};
@@ -289,7 +289,7 @@ TEST_CASE("RGW fixed fields and frame bounds need only remaining, fragments, and
     };
 
     byte_buffer encoded;
-    ::cls::rgw::wire::writer output {encoded};
+    ::ceph::datum_wire::writer output {encoded};
     output.frame(1, [&] {
         output.scalar(std::uint64_t {0x0102030405060708});
         output.scalar(std::uint16_t {0xFFFF});
@@ -298,7 +298,7 @@ TEST_CASE("RGW fixed fields and frame bounds need only remaining, fragments, and
 
     SECTION("Split scalars and skipped extensions preserve the following message") {
         minimal_cursor cursor {std::span<const char> {stored}};
-        ::cls::rgw::wire::basic_reader archive {cursor};
+        ::ceph::datum_wire::basic_reader archive {cursor};
         const auto value = archive.frame(1, [](auto& fields, std::uint8_t) {
             return fields.template scalar<std::uint64_t>();
         });
@@ -309,7 +309,7 @@ TEST_CASE("RGW fixed fields and frame bounds need only remaining, fragments, and
     SECTION("Every proper frame truncation is rejected") {
         for (unsigned size = 0; size < encoded.length(); ++size) {
             minimal_cursor cursor {std::span<const char> {stored.data(), size}};
-            ::cls::rgw::wire::basic_reader archive {cursor};
+            ::ceph::datum_wire::basic_reader archive {cursor};
             CHECK_THROWS_AS(archive.frame(1, [](auto& fields, std::uint8_t) {
                 fields.template scalar<std::uint64_t>();
             }), ::ceph::buffer::error);
@@ -319,7 +319,7 @@ TEST_CASE("RGW fixed fields and frame bounds need only remaining, fragments, and
     SECTION("A field cannot consume bytes beyond its declared frame") {
         stored[2] = 4; // The little-endian body length now admits only half the scalar.
         minimal_cursor cursor {std::span<const char> {stored}};
-        ::cls::rgw::wire::basic_reader archive {cursor};
+        ::ceph::datum_wire::basic_reader archive {cursor};
         CHECK_THROWS_AS(archive.frame(1, [](auto& fields, std::uint8_t) {
             fields.template scalar<std::uint64_t>();
         }), ::ceph::buffer::malformed_input);
@@ -336,13 +336,13 @@ TEST_CASE("RGW owning byte reads replace destinations and preserve payload owner
         const auto *backing = input.buffers().back().c_str();
 
         auto cursor = input.cbegin();
-        ::cls::rgw::wire::reader text_archive {cursor};
+        ::ceph::datum_wire::reader text_archive {cursor};
         std::string text = "old text";
         text_archive.text(text);
         CHECK(cursor.end());
 
         cursor = input.cbegin();
-        ::cls::rgw::wire::reader payload_archive {cursor};
+        ::ceph::datum_wire::reader payload_archive {cursor};
         auto bytes = payload();
         payload_archive.payload(bytes);
         CHECK(cursor.end());
@@ -369,7 +369,7 @@ TEST_CASE("RGW scalar metadata preserves native bytes across append boundaries",
         {
             auto storage = bytes.get_contiguous_appender(tail);
         }
-        ::cls::rgw::wire::writer output {bytes};
+        ::ceph::datum_wire::writer output {bytes};
         output.scalar(std::uint8_t {0xFF});
         output.scalar(std::uint16_t {0xABCD});
         output.scalar(std::uint32_t {0xABCDEF12});
@@ -415,7 +415,7 @@ TEST_CASE("RGW metadata spans preserve bytes across fresh and shared append stor
                     ::ceph::encode(static_cast<std::uint32_t>(body.length()), expected);
                 }
                 expected.append(body);
-                ::cls::rgw::wire::writer output {bytes};
+                ::ceph::datum_wire::writer output {bytes};
                 if (framed) {
                     output.frame(fields, 3, value);
                 }
@@ -432,7 +432,7 @@ TEST_CASE("RGW metadata spans preserve bytes across fresh and shared append stor
 
 TEST_CASE("RGW metadata sizes follow selected order and field conversions", "[rgw][cls][datum]")
 {
-    namespace metadata = ::cls::rgw::wire;
+    namespace metadata = ::ceph::datum_wire;
     struct fixed final
     {
         std::uint64_t epoch;
@@ -473,7 +473,7 @@ TEST_CASE("RGW metadata sizes follow selected order and field conversions", "[rg
 
 TEST_CASE("RGW automatic metadata sizing preserves explicit codecs and rejects errors", "[rgw][cls][datum]")
 {
-    namespace metadata = ::cls::rgw::wire;
+    namespace metadata = ::ceph::datum_wire;
     using explicit_record = metadata::scalar_record<std::array<std::uint8_t, 3>>;
 
     const explicit_record value {{1, 2, 3}};
@@ -715,12 +715,12 @@ TEST_CASE("RGW request publication accepts assign-only records and move-only dec
             }
         };
         if (fail) {
-            CHECK_THROWS_AS(::cls::rgw::wire::decode_record<1>(value, cursor, std::move(decode)), std::runtime_error);
+            CHECK_THROWS_AS(::ceph::datum_wire::decode_record<1>(value, cursor, std::move(decode)), std::runtime_error);
             CHECK(999 == value.number);
             CHECK(6 == cursor.get_off());
             continue;
         }
-        CHECK_NOTHROW(::cls::rgw::wire::decode_record<1>(value, cursor, std::move(decode)));
+        CHECK_NOTHROW(::ceph::datum_wire::decode_record<1>(value, cursor, std::move(decode)));
         CHECK(43 == value.number);
         CHECK(cursor.end());
     }
@@ -728,7 +728,7 @@ TEST_CASE("RGW request publication accepts assign-only records and move-only dec
 
 TEST_CASE("RGW publication borrows immobile mutable decoders", "[rgw][cls][datum]")
 {
-    namespace shared = ::cls::rgw::wire;
+    namespace shared = ::ceph::datum_wire;
 
     struct record final { std::uint32_t number = 99; };
     struct decoder final

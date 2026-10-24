@@ -1,8 +1,9 @@
-// RGW CLS: Shared native framing and metadata adapters over Datum/zpp.
-// Native buffers and wire bounds belong here, never in Datum's pure core.
-#ifndef CEPH_CLS_RGW_DATUM_WIRE_H
- #define CEPH_CLS_RGW_DATUM_WIRE_H
+// Ceph native framing and metadata adapters over Datum/zpp.
+// This consumer adapter requires C++26; native buffers stay outside Datum's pure core.
+#ifndef CEPH_COMMON_DATUM_WIRE_H
+ #define CEPH_COMMON_DATUM_WIRE_H
 
+#include "common/buffer_cursor.h"
 #include "common/container_concepts.h"
 #include "datum/codec/zpp.h"
 #include "include/encoding.h"
@@ -24,7 +25,7 @@
 #include <string>
 #include <string_view>
 
-namespace cls::rgw::wire {
+namespace ceph::datum_wire {
 
 namespace datum = ::ceph::salad::datum;
 using byte_buffer = ::ceph::buffer::list;
@@ -32,7 +33,7 @@ using byte_buffer = ::ceph::buffer::list;
 constexpr std::uint32_t checked_count(const std::uint64_t size)
 {
     if (size > std::numeric_limits<std::uint32_t>::max()) {
-        throw std::length_error {"RGW CLS wire length exceeds uint32"};
+        throw std::length_error {"Ceph wire length exceeds uint32"};
     }
 
     return static_cast<std::uint32_t>(size);
@@ -47,7 +48,7 @@ std::uint8_t checked_byte(const T value)
 
     if constexpr (!std::is_enum_v<T>) {
         if (!std::in_range<std::uint8_t>(value)) {
-            throw std::length_error {"RGW CLS wire value exceeds uint8"};
+            throw std::length_error {"Ceph wire value exceeds uint8"};
         }
 
         return static_cast<std::uint8_t>(value);
@@ -60,16 +61,8 @@ struct scalar_record final
     T value;
 };
 
-struct frame_header final
-{
-    std::uint8_t version;
-    std::uint8_t compatible;
-
-    std::uint32_t length;
-};
-
-using header_fields = datum::binary_fields<&frame_header::version,
-    &frame_header::compatible, &frame_header::length>;
+using frame_header = ::ceph::encoding_detail::struct_header;
+using header_fields = datum::binary_fields<&frame_header::v, &frame_header::compat, &frame_header::len>;
 
 inline constexpr auto growing_metadata = std::true_type {};
 
@@ -147,7 +140,7 @@ public:
     void ensure(const std::uint64_t additional) const
     {
         if (additional > std::numeric_limits<std::uint32_t>::max() - output.length()) {
-            throw std::length_error {"RGW CLS message exceeds uint32"};
+            throw std::length_error {"Ceph message exceeds uint32"};
         }
     }
 
@@ -237,7 +230,7 @@ public:
         }
     }
 
-    // Keep established nested RGW codecs while borrowing their owning records:
+    // Keep established nested native codecs while borrowing their owning records:
     template <typename T>
     void native(const T& value)
     {
@@ -315,7 +308,7 @@ public:
     void require(const std::size_t size) const
     {
         if (size > remaining()) {
-            throw ::ceph::buffer::malformed_input {"RGW CLS field exceeds its frame"};
+            throw ::ceph::buffer::malformed_input {"Ceph field exceeds its frame"};
         }
     }
 
@@ -326,7 +319,7 @@ public:
         const auto size = scalar<std::uint32_t>();
         require(tail);
         if (size > (remaining() - tail) / Minimum) {
-            throw ::ceph::buffer::malformed_input {"RGW CLS count exceeds frame capacity"};
+            throw ::ceph::buffer::malformed_input {"Ceph count exceeds frame capacity"};
         }
 
         return size;
@@ -337,22 +330,7 @@ public:
     {
         require(Size);
         std::array<char, Size> storage CEPH_INDETERMINATE;
-        const char *bytes = nullptr;
-        std::size_t first;
-        do {
-            first = input.get_ptr_and_advance(Size, &bytes);
-        } while (0 == first && 0 < Size);
-        if (first < Size) {
-            std::copy_n(bytes, first, storage.data());
-            for (auto copied = first; copied < Size;) {
-                const char *fragment = nullptr;
-                const auto count = input.get_ptr_and_advance(Size - copied, &fragment);
-                std::copy_n(fragment, count, storage.data() + copied);
-                copied += count;
-            }
-            bytes = storage.data();
-        }
-        std::span view {bytes, Size};
+        const auto view = ::ceph::buffer::read_contiguous(input, storage).template first<Size>();
         zpp::bits::in archive {view, zpp::bits::endian::little {}};
         throw_if_error(datum::serialize_schema(archive, value, selected));
     }
@@ -472,17 +450,17 @@ public:
     {
         frame_header header CEPH_INDETERMINATE;
         fields<6>(header_fields {}, header);
-        if (header.compatible > supported) {
-            throw ::ceph::buffer::malformed_input {"RGW CLS frame needs a newer decoder"};
+        if (header.compat > supported) {
+            throw ::ceph::buffer::malformed_input {"Ceph frame needs a newer decoder"};
         }
-        require(header.length);
-        const auto trailing = input.get_remaining() - header.length;
+        require(header.len);
+        const auto trailing = input.get_remaining() - header.len;
         basic_reader fields {input, trailing};
         auto decode_body = [&body, &fields, &header]() -> decltype(auto) {
             if constexpr (std::invocable<BodyT, basic_reader&, std::uint8_t, std::uint8_t>) {
-                return std::invoke(std::forward<BodyT>(body), fields, header.version, header.compatible);
+                return std::invoke(std::forward<BodyT>(body), fields, header.v, header.compat);
             } else {
-                return std::invoke(std::forward<BodyT>(body), fields, header.version);
+                return std::invoke(std::forward<BodyT>(body), fields, header.v);
             }
         };
         if constexpr (std::is_void_v<decltype(decode_body())>) {
@@ -496,8 +474,8 @@ public:
         }
     }
 
-    // Prepare/complete versions before the framed format have only a version
-    // byte. Their field profiles determine where the old message ends:
+    // Older formats can have only a version byte. Their field profiles
+    // determine where the unframed message ends:
     template <typename BodyT>
     decltype(auto) frame(const std::uint8_t supported, const std::uint8_t first_framed,
                          BodyT&& body)
@@ -521,11 +499,11 @@ public:
     {
         frame_header header CEPH_INDETERMINATE;
         fields<6>(header_fields {}, header);
-        require(header.length);
-        if (version != header.version || 1 != header.compatible) {
+        require(header.len);
+        if (version != header.v || 1 != header.compat) {
             return false;
         }
-        basic_reader fields {input, input.get_remaining() - header.length};
+        basic_reader fields {input, input.get_remaining() - header.len};
 
         return std::invoke(std::forward<BodyT>(body), fields) && 0 == fields.remaining();
     }
@@ -564,40 +542,6 @@ template <std::uint8_t Supported, std::uint8_t FirstFramed = 0, typename T, type
     });
 }
 
-struct key_fields final
-{
-    std::string_view name;
-    std::string_view instance;
-};
+} // ceph::datum_wire
 
-inline void encode_key(writer& archive, const std::string_view name, const std::string_view instance)
-{
-    archive.frame(1, [&] {
-        archive.fields(datum::binary_fields<&key_fields::name, &key_fields::instance> {}, key_fields {name, instance});
-    });
-}
-
-template <typename KeyT, auto Name, auto Instance>
-KeyT& decode_key(datum::binary_fields<Name, Instance>, reader& archive, KeyT& value)
-{
-    return archive.frame(1, [&](auto& fields, std::uint8_t) -> KeyT& {
-        fields.text(value.*Name);
-        fields.text(value.*Instance);
-
-        return value;
-    });
-}
-
-inline auto decode_key(reader& archive)
-{
-    using key = std::pair<std::string, std::string>;
-
-    key value;
-    decode_key(datum::binary_fields<&key::first, &key::second> {}, archive, value);
-
-    return value;
-}
-
-} // cls::rgw::wire
-
-#endif // CEPH_CLS_RGW_DATUM_WIRE_H
+#endif // CEPH_COMMON_DATUM_WIRE_H

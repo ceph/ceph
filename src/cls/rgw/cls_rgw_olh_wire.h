@@ -2,7 +2,7 @@
 #ifndef CEPH_CLS_RGW_OLH_WIRE_H
  #define CEPH_CLS_RGW_OLH_WIRE_H
 
-#include "cls_rgw_datum_wire.h"
+#include "rgw/rgw_datum_wire.h"
 
 #include <cstdint>
 #include <utility>
@@ -20,11 +20,11 @@ using byte_buffer = ::ceph::buffer::list;
 
 namespace detail {
 
-using ::cls::rgw::wire::checked_count;
-using ::cls::rgw::wire::decode_key;
-using ::cls::rgw::wire::encode_key;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::checked_count;
+using ::rgw::datum_wire::decode_key;
+using ::rgw::datum_wire::encode_key;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 
 struct request_tail final
 {
@@ -53,7 +53,7 @@ void encode_event(datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
 
         archive.fields(datum::binary_fields<&prefix::epoch, &prefix::operation, &prefix::tag> {},
                        prefix {datum::member_lens<Epoch> {}(value),
-                               ::cls::rgw::wire::checked_byte(datum::member_lens<Operation> {}(value)), tag});
+                               ::ceph::datum_wire::checked_byte(datum::member_lens<Operation> {}(value)), tag});
         const auto& key = datum::member_lens<Key> {}(value);
         encode_key(archive, datum::member_lens<Name> {}(key), datum::member_lens<Instance> {}(key));
         archive.scalar(static_cast<std::uint8_t>(datum::member_lens<Deleted> {}(value)));

@@ -4,7 +4,7 @@
 #ifndef CEPH_CLS_RGW_BI_WIRE_H
  #define CEPH_CLS_RGW_BI_WIRE_H
 
-#include "cls_rgw_datum_wire.h"
+#include "rgw/rgw_datum_wire.h"
 
 #include <concepts>
 #include <cstddef>
@@ -23,9 +23,9 @@ using byte_buffer = ::ceph::buffer::list;
 
 namespace detail {
 
-using ::cls::rgw::wire::checked_count;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::checked_count;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 
 template <typename BytesT>
 std::size_t payload_size(const BytesT& value)
@@ -87,7 +87,7 @@ std::uint8_t decode_request(datum::binary_fields<Maximum, Filter, Marker, Reshar
                     byte_buffer::const_iterator& input, RequestT& value)
 {
     std::uint8_t decoded_version = 0;
-    ::cls::rgw::wire::decode_record<2>(value, input, [&decoded_version](auto& fields, auto& candidate, const std::uint8_t version) {
+    ::ceph::datum_wire::decode_record<2>(value, input, [&decoded_version](auto& fields, auto& candidate, const std::uint8_t version) {
         candidate.*Maximum = fields.template scalar<std::uint32_t>();
         fields.text(candidate.*Filter);
         fields.text(candidate.*Marker);
@@ -105,7 +105,7 @@ inline byte_buffer encode_get_request(const std::string_view name, const std::st
     byte_buffer output;
     detail::writer archive {output};
     archive.frame(1, [&] {
-        ::cls::rgw::wire::encode_key(archive, name, instance);
+        ::rgw::datum_wire::encode_key(archive, name, instance);
         archive.scalar(kind);
     });
 
@@ -118,7 +118,7 @@ std::uint8_t decode_get_request(datum::binary_fields<Member...> selected, byte_b
     detail::reader archive {input};
 
     return archive.frame(1, [&](auto& fields, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(selected, fields, key);
+        ::rgw::datum_wire::decode_key(selected, fields, key);
 
         return fields.template scalar<std::uint8_t>();
     });
@@ -132,7 +132,7 @@ void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, con
     const auto& data = datum::member_lens<Payload> {}(value);
     const std::string_view key = datum::member_lens<Key> {}(value);
     const auto length = checked_count(payload_size(data));
-    const auto kind = ::cls::rgw::wire::checked_byte(datum::member_lens<Kind> {}(value));
+    const auto kind = ::ceph::datum_wire::checked_byte(datum::member_lens<Kind> {}(value));
     using prefix = entry_prefix;
 
     if constexpr (1 == Version) {
@@ -143,7 +143,7 @@ void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, con
     }
 
     if constexpr (2 == Version) {
-        archive.fields(::cls::rgw::wire::growing_metadata, entry_prefix_fields, prefix {kind, key, length});
+        archive.fields(::ceph::datum_wire::growing_metadata, entry_prefix_fields, prefix {kind, key, length});
         archive.payload(data);
     }
 }

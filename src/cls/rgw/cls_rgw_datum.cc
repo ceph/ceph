@@ -18,7 +18,7 @@
 namespace cls::rgw::bi_datum {
 
 namespace datum = ::ceph::salad::datum;
-using ::cls::rgw::wire::decode_record;
+using ::ceph::datum_wire::decode_record;
 
 namespace {
 
@@ -155,9 +155,9 @@ decode_reply(const ::ceph::buffer::list& input);
 
 namespace cls::rgw::bilog_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 
 void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
 {
@@ -204,7 +204,7 @@ void encode(const reply& value, ::ceph::buffer::list& output)
     ::ceph::buffer::list candidate;
     writer archive {candidate};
     archive.frame(1, [&] {
-        archive.scalar(::cls::rgw::wire::checked_count(value.entries.size()));
+        archive.scalar(::ceph::datum_wire::checked_count(value.entries.size()));
         for (const auto& entry : value.entries) {
             archive.native(entry);
         }
@@ -239,9 +239,9 @@ decode_reply(const ::ceph::buffer::list& input);
 
 namespace cls::rgw::bucket_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_request(const ::cls_rgw_obj_key& start, const std::string_view prefix,
                                     const std::string_view delimiter, const std::uint32_t maximum,
@@ -252,7 +252,7 @@ using ::cls::rgw::wire::writer;
     archive.frame(6, 4, [&] {
         archive.scalar(maximum);
         archive.text(prefix);
-        ::cls::rgw::wire::encode_key(archive, start.name, start.instance);
+        ::rgw::datum_wire::encode_key(archive, start.name, start.instance);
         archive.scalar(static_cast<std::uint8_t>(versions));
         archive.text(delimiter);
     });
@@ -274,7 +274,7 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
             fields.text(candidate.filter_prefix);
         }
         if (version >= 4) {
-            ::cls::rgw::wire::decode_key(datum::binary_fields<&key::name, &key::instance> {}, fields, candidate.start_obj);
+            ::rgw::datum_wire::decode_key(datum::binary_fields<&key::name, &key::instance> {}, fields, candidate.start_obj);
         }
         if (version >= 5) {
             candidate.list_versions = 0 != fields.template scalar<std::uint8_t>();
@@ -292,14 +292,14 @@ void encode(const reply& value, ::ceph::buffer::list& output)
     archive.frame(4, 2, [&] {
         archive.frame(2, 2, [&] {
             archive.native(value.dir.header);
-            archive.scalar(::cls::rgw::wire::checked_count(value.dir.m.size()));
+            archive.scalar(::ceph::datum_wire::checked_count(value.dir.m.size()));
             for (const auto& [key, entry] : value.dir.m) {
                 archive.text(key);
                 archive.native(entry);
             }
         });
         archive.scalar(static_cast<std::uint8_t>(value.is_truncated));
-        ::cls::rgw::wire::encode_key(archive, value.marker.name, value.marker.instance);
+        ::rgw::datum_wire::encode_key(archive, value.marker.name, value.marker.instance);
     });
     output.claim_append(candidate);
 }
@@ -332,7 +332,7 @@ list_reply<EntriesT> decode_reply(const ::ceph::buffer::list& input)
         candidate.is_truncated = 0 != fields.template scalar<std::uint8_t>();
         candidate.cls_filtered = version >= 3;
         if (version >= 4) {
-            ::cls::rgw::wire::decode_key(datum::binary_fields<&key::name, &key::instance> {}, fields, candidate.marker);
+            ::rgw::datum_wire::decode_key(datum::binary_fields<&key::name, &key::instance> {}, fields, candidate.marker);
         }
     });
 
@@ -444,9 +444,9 @@ namespace cls::rgw::write_datum {
 namespace {
 
 namespace datum = ::ceph::salad::datum;
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 using key = ::cls_rgw_obj_key;
 
 constexpr auto key_fields = datum::binary_fields<&key::name, &key::instance> {};
@@ -483,7 +483,7 @@ void decode(prepare_request& value, ::ceph::buffer::list::const_iterator& input)
             candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
         }
         if (version >= 5) {
-            ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
+            ::rgw::datum_wire::decode_key(key_fields, fields, candidate.key);
         }
         if (version >= 6) {
             candidate.bilog_flags = fields.template scalar<std::uint16_t>();
@@ -517,7 +517,7 @@ void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input
                 fields.text(removed.name);
             }
             if (!names_only) {
-                ::cls::rgw::wire::decode_key(key_fields, fields, removed);
+                ::rgw::datum_wire::decode_key(key_fields, fields, removed);
             }
         }
         if (version >= 5) {
@@ -530,7 +530,7 @@ void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input
             candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
         }
         if (version >= 7) {
-            ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
+            ::rgw::datum_wire::decode_key(key_fields, fields, candidate.key);
         }
         if (version >= 8) {
             candidate.bilog_flags = fields.template scalar<std::uint16_t>();
@@ -544,7 +544,7 @@ void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input
 void decode(link_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<5>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
-        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
+        ::rgw::datum_wire::decode_key(key_fields, fields, candidate.key);
         fields.text(candidate.olh_tag);
         candidate.delete_marker = 0 != fields.template scalar<std::uint8_t>();
         fields.text(candidate.op_tag);
@@ -573,7 +573,7 @@ void decode(link_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.olh);
+        ::rgw::datum_wire::decode_key(key_fields, fields, candidate.olh);
         candidate.ver = fields.template scalar<std::uint64_t>();
         fields.text(candidate.olh_tag);
     });
@@ -582,7 +582,7 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(unlink_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<3>(value, input, [](auto& fields, auto& candidate, const std::uint8_t version) {
-        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
+        ::rgw::datum_wire::decode_key(key_fields, fields, candidate.key);
         fields.text(candidate.op_tag);
         candidate.olh_epoch = fields.template scalar<std::uint64_t>();
         candidate.log_op = 0 != fields.template scalar<std::uint8_t>();
@@ -599,7 +599,7 @@ void decode(unlink_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(clear_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
+        ::rgw::datum_wire::decode_key(key_fields, fields, candidate.key);
         fields.text(candidate.olh_tag);
     });
 }
@@ -607,7 +607,7 @@ void decode(clear_request& value, ::ceph::buffer::list::const_iterator& input)
 void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     decode_record<1>(value, input, [](auto& fields, auto& candidate, std::uint8_t) {
-        ::cls::rgw::wire::decode_key(key_fields, fields, candidate.key);
+        ::rgw::datum_wire::decode_key(key_fields, fields, candidate.key);
     });
 }
 
@@ -621,7 +621,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
 
         archive.fields(datum::binary_fields<&prefix::operation, &prefix::tag, &prefix::locator, &prefix::log> {},
                        prefix {static_cast<std::uint8_t>(operation), tag, locator, 0});
-        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.scalar(std::uint16_t {0});
         archive.scalar(std::uint32_t {0}); // Empty compatibility zone set.
     });
@@ -652,7 +652,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
         archive.native(removed ? *removed : empty_keys);
         archive.native(version);
         archive.scalar(static_cast<std::uint8_t>(log));
-        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.scalar(flags);
         archive.native(zones ? *zones : empty_zones);
     });
@@ -671,7 +671,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     ::ceph::buffer::list output;
     writer archive {output};
     archive.frame(5, [&] {
-        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.text(tag);
         archive.scalar(static_cast<std::uint8_t>(deleted));
         archive.text(operation_tag);
@@ -694,7 +694,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     ::ceph::buffer::list output;
     writer archive {output};
     archive.frame(1, [&] {
-        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.scalar(version);
         archive.text(tag);
     });
@@ -709,7 +709,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     ::ceph::buffer::list output;
     writer archive {output};
     archive.frame(3, [&] {
-        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.text(operation_tag);
         archive.scalar(epoch);
         archive.scalar(static_cast<std::uint8_t>(log));
@@ -726,7 +726,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     ::ceph::buffer::list output;
     writer archive {output};
     archive.frame(1, [&] {
-        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.text(tag);
     });
 
@@ -738,7 +738,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
     ::ceph::buffer::list output;
     writer archive {output};
     archive.frame(1, [&] {
-        ::cls::rgw::wire::encode_key(archive, key.name, key.instance);
+        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
     });
 
     return output;
@@ -748,15 +748,15 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
 
 namespace cls::rgw::object_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_remove(const std::list<std::string>& prefixes)
 {
     ::ceph::buffer::list output;
     writer archive {output};
     if (prefixes.empty()) {
-        using record = ::cls::rgw::wire::scalar_record<std::uint32_t>;
+        using record = ::ceph::datum_wire::scalar_record<std::uint32_t>;
 
         archive.frame(::ceph::salad::datum::binary_fields<&record::value> {}, 1, record {0});
 
@@ -840,9 +840,9 @@ void decode(mtime_request& value, ::ceph::buffer::list::const_iterator& input)
 
 namespace cls::rgw::usage_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_add(const std::vector<::rgw_usage_log_entry>& entries)
 {
@@ -974,9 +974,9 @@ decode_reply(const ::ceph::buffer::list& input);
 
 namespace cls::rgw::reshard_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_add(const ::cls_rgw_reshard_entry& entry, const bool create_only)
 {
@@ -1170,8 +1170,8 @@ decode_reply(const ::ceph::buffer::list& input);
 
 namespace cls::rgw::lc_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode(const std::string_view marker)
 {
@@ -1292,7 +1292,7 @@ namespace cls::rgw::multipart_datum {
     // borrowing the other fields. Borrowing the raw info would change the wire.
     const ::RGWObjManifest manifest {info.manifest};
     ::ceph::buffer::list output;
-    ::cls::rgw::wire::writer archive {output};
+    ::ceph::datum_wire::writer archive {output};
     archive.frame(1, [&] {
         archive.text(part_key);
         archive.frame(7, 2, [&] {
@@ -1315,7 +1315,7 @@ namespace cls::rgw::multipart_datum {
 void decode(update_request& value, ::ceph::buffer::list::const_iterator& input)
 {
     auto cursor = input;
-    ::cls::rgw::wire::reader archive {cursor};
+    ::ceph::datum_wire::reader archive {cursor};
     archive.frame(1, [&](auto& fields, std::uint8_t) {
         fields.text(value.part_key);
         fields.native(value.info);

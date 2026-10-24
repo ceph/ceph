@@ -92,6 +92,11 @@ GC bindings in ``cls_rgw_datum_gc``, and user bindings in ``cls_user_datum``.
 Their language requirements and Datum headers do not propagate through the
 client libraries' public interfaces. Datum supplies the RGW-owned CLS wire
 bindings; there is no alternate native implementation switch.
+Ceph framing, metadata I/O, bounds checks, and candidate publication live in
+``common/datum_wire.h``, independently of CLS records. This consumer adapter
+requires C++26 and ``datum::zpp``; it keeps native buffers outside Datum's core.
+The RGW object-index key profile lives in ``rgw/rgw_datum_wire.h``. Fragment gathering
+uses the C++23 ``common/buffer_cursor.h`` helper shared with RGW deduplication.
 The general implementation is ``cls_rgw_datum.cc``, with its existing
 per-family namespace sections in one translation unit.
 

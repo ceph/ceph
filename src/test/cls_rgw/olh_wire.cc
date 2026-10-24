@@ -168,12 +168,12 @@ TEST_CASE("OLH request tags retain storage across field boundaries", "[rgw][cls]
 TEST_CASE("Retained wire text replaces an existing value, including empty text", "[rgw][cls][datum][olh][request]")
 {
     byte_buffer bytes;
-    ::cls::rgw::wire::writer output {bytes};
+    ::ceph::datum_wire::writer output {bytes};
     output.text("previous");
     output.text("replacement");
     output.text("");
     auto cursor = bytes.cbegin();
-    ::cls::rgw::wire::reader input {cursor};
+    ::ceph::datum_wire::reader input {cursor};
     ::ceph::buffer::ptr value;
     input.text(value);
     CHECK(std::string_view {value.c_str(), value.length()} == "previous");

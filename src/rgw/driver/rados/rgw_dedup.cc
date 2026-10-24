@@ -2606,6 +2606,11 @@ namespace rgw::dedup {
       unsigned slab_rec_count = 0;
       auto bl_itr = bl.cbegin();
       for (uint32_t block_num = 0; block_num < DISK_BLOCK_COUNT; block_num++, seq_number++) {
+        if (sizeof(block_buff) > bl_itr.get_remaining()) {
+          ldpp_dout(dpp, 1) << __func__ << "::Short slab at block=" << seq_number << dendl;
+          p_stats->failed_block_load++;
+          return -EIO;
+        }
         disk_block_id_t disk_block_id(worker_id, seq_number);
         const char *p = get_next_data_ptr(bl_itr, block_buff, sizeof(block_buff),
                                           dpp);

@@ -1,13 +1,13 @@
 // GC wire implementation shared only by the two RGW-owned CLS classes.
 #include "cls_rgw_gc_datum.h"
-#include "cls_rgw_datum_wire.h"
+#include "common/datum_wire.h"
 #include "cls/rgw_gc/cls_rgw_gc_datum.h"
 
 namespace cls::rgw::gc_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::reader;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::reader;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_set(const std::uint32_t expiration, const ::cls_rgw_gc_obj_info& info)
 {
@@ -129,8 +129,8 @@ template list_reply<std::list<::cls_rgw_gc_obj_info>> decode_reply(const ::ceph:
 
 namespace cls::rgw::queued_gc_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_init(const std::uint64_t size, const std::uint64_t deferred)
 {

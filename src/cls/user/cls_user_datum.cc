@@ -1,11 +1,11 @@
 // RGW user CLS wire profiles over the existing Datum conversion hooks.
 #include "cls_user_datum.h"
-#include "cls/rgw/cls_rgw_datum_wire.h"
+#include "common/datum_wire.h"
 
 namespace cls::rgw::user_datum {
 
-using ::cls::rgw::wire::decode_record;
-using ::cls::rgw::wire::writer;
+using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_bulk(const std::list<::cls_user_bucket_entry>& entries,
                                  const bool add, const ::ceph::real_time time)
