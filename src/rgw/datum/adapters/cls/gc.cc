@@ -7,53 +7,37 @@ namespace cls::rgw::gc_datum {
 
 using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
-using ::ceph::datum_wire::writer;
+using ::ceph::datum_wire::encode_frame;
 
 ::ceph::buffer::list encode_set(const std::uint32_t expiration, const ::cls_rgw_gc_obj_info& info)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.scalar(expiration);
         archive.native(info);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_defer(const std::uint32_t expiration, const std::string_view tag)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.scalar(expiration);
         archive.text(tag);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum,
                                  const bool expired)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, [&] {
+    return encode_frame(2, [&](auto& archive) {
         archive.text(marker);
         archive.scalar(maximum);
         archive.scalar(static_cast<std::uint8_t>(expired));
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_remove(const std::vector<std::string>& tags)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.native(tags); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.native(tags); });
 }
 
 void decode(set_request& value, ::ceph::buffer::list::const_iterator& input)
@@ -93,9 +77,7 @@ void decode(remove_request& value, ::ceph::buffer::list::const_iterator& input)
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    ::ceph::buffer::list candidate;
-    writer archive {candidate};
-    archive.frame(2, [&] {
+    auto candidate = encode_frame(2, [&](auto& archive) {
         archive.native(value.entries);
         archive.text(value.next_marker);
         archive.scalar(static_cast<std::uint8_t>(value.truncated));
@@ -130,6 +112,7 @@ template list_reply<std::list<::cls_rgw_gc_obj_info>> decode_reply(const ::ceph:
 namespace cls::rgw::queued_gc_datum {
 
 using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::encode_frame;
 using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_init(const std::uint64_t size, const std::uint64_t deferred)
@@ -144,11 +127,7 @@ using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_remove(const std::uint64_t count)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.scalar(count); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.scalar(count); });
 }
 
 void decode(init_request& value, ::ceph::buffer::list::const_iterator& input)

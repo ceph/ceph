@@ -5,99 +5,68 @@
 namespace cls::rgw::user_datum {
 
 using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::encode_frame;
 using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_bulk(const std::list<::cls_user_bucket_entry>& entries,
                                  const bool add, const ::ceph::real_time time)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.native(entries);
         archive.scalar(static_cast<std::uint8_t>(add));
         archive.native(time);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_bucket(const ::cls_user_bucket& bucket)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.native(bucket); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.native(bucket); });
 }
 
 ::ceph::buffer::list encode_bucket_list(const std::string_view marker,
                                         const std::string_view end_marker, const int maximum)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, [&] {
+    return encode_frame(2, [&](auto& archive) {
         archive.text(marker);
         archive.native(maximum);
         archive.text(end_marker);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_get_header()
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [] {});
-
-    return output;
+    return encode_frame(1, [](auto&) {});
 }
 
 ::ceph::buffer::list encode_time(const ::ceph::real_time time)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.native(time); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.native(time); });
 }
 
 ::ceph::buffer::list encode_resource_add(const ::cls_user_account_resource& entry,
                                          const bool exclusive, const std::uint32_t limit)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.native(entry);
         archive.scalar(static_cast<std::uint8_t>(exclusive));
         archive.scalar(limit);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_name(const std::string_view name)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.text(name); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.text(name); });
 }
 
 ::ceph::buffer::list encode_resource_list(const std::string_view marker,
                                           const std::string_view path_prefix,
                                           const std::uint32_t maximum)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.text(marker);
         archive.text(path_prefix);
         archive.scalar(maximum);
     });
-
-    return output;
 }
 
 void decode(bulk_request& value, ::ceph::buffer::list::const_iterator& input)

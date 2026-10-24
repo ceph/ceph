@@ -28,52 +28,53 @@ constexpr auto client_event_fields = datum::binary_fields<&client_entry::epoch, 
     &client_entry::tag, &client_entry::object, &client_entry::delete_marker> {};
 constexpr auto client_key_fields = datum::binary_fields<&client_key::name, &client_key::instance> {};
 
-// Track the current physical fragment while inspecting metadata. The input owns its bytes.
+// The unread span is the active suffix; next_fragment points past accounted-for fragments.
+// Empty spans load the next fragment lazily. The input owns all bytes.
 template <bool SingleFragment>
 class fragment_cursor final
 {
-    ::ceph::buffer::list::buffers_t::const_iterator current;
-    ::ceph::buffer::list::buffers_t::const_iterator finish;
+    ::ceph::buffer::list::buffers_t::const_iterator next_fragment;
+    ::ceph::buffer::list::buffers_t::const_iterator fragments_end;
 
-    std::span<const char> block;
+    std::span<const char> unread;
 
-    unsigned position = 0;
-    unsigned length;
+    unsigned offset = 0;
+    unsigned input_size;
 
 public:
     explicit fragment_cursor(const ::ceph::buffer::list& input)
-        : length(input.length())
+        : input_size(input.length())
     {
         if constexpr (SingleFragment) {
             const auto& fragment = input.buffers().front();
-            block = {fragment.c_str(), fragment.length()};
+            unread = {fragment.c_str(), fragment.length()};
         } else {
-            current = input.buffers().begin();
-            finish = input.buffers().end();
+            next_fragment = input.buffers().begin();
+            fragments_end = input.buffers().end();
         }
     }
 
 public:
-    unsigned get_offset() const noexcept { return position; }
-    unsigned get_remaining() const noexcept { return length - position; }
+    unsigned get_offset() const noexcept { return offset; }
+    unsigned get_remaining() const noexcept { return input_size - offset; }
 
     std::size_t get_ptr_and_advance(const std::size_t wanted, const char **bytes)
     {
         if constexpr (!SingleFragment) {
-            while (block.empty() && current != finish) {
-                const auto& fragment = *current++;
+            while (unread.empty() && next_fragment != fragments_end) {
+                const auto& fragment = *next_fragment++;
                 if (fragment.length()) {
-                    block = {fragment.c_str(), fragment.length()};
+                    unread = {fragment.c_str(), fragment.length()};
                 }
             }
-            if (block.empty() && wanted) {
+            if (unread.empty() && wanted) {
                 throw ::ceph::buffer::end_of_buffer {};
             }
         }
-        const auto size = SingleFragment ? wanted : std::min(wanted, block.size());
-        *bytes = block.data();
-        block = block.subspan(size);
-        position += size;
+        const auto size = SingleFragment ? wanted : std::min(wanted, unread.size());
+        *bytes = unread.data();
+        unread = unread.subspan(size);
+        offset += size;
 
         return size;
     }
@@ -81,27 +82,27 @@ public:
     fragment_cursor& operator+=(const unsigned size)
     {
         if constexpr (SingleFragment) {
-            block = block.subspan(size);
+            unread = unread.subspan(size);
         } else {
             auto remaining = size;
-            const auto step = std::min<std::size_t>(remaining, block.size());
-            block = block.subspan(step);
+            const auto step = std::min<std::size_t>(remaining, unread.size());
+            unread = unread.subspan(step);
             remaining -= step;
-            // Whole skipped fragments need only their lengths.
+            // Skip whole fragments by length; only the final suffix needs a byte span.
             while (remaining) {
-                if (current == finish) {
+                if (next_fragment == fragments_end) {
                     throw ::ceph::buffer::end_of_buffer {};
                 }
-                const auto& fragment = *current++;
+                const auto& fragment = *next_fragment++;
                 if (remaining < fragment.length()) {
-                    block = {fragment.c_str() + remaining, fragment.length() - remaining};
+                    unread = {fragment.c_str() + remaining, fragment.length() - remaining};
                     remaining = 0;
                 } else {
                     remaining -= fragment.length();
                 }
             }
         }
-        position += size;
+        offset += size;
 
         return *this;
     }
@@ -132,9 +133,9 @@ bool canonical_event(auto& archive)
 }
 
 template <bool SingleFragment>
-std::optional<int> encode_stored_reply(std::bool_constant<SingleFragment>,
-                                       const ::ceph::buffer::list& input, const std::uint64_t marker,
-                                       const std::string_view tag, ::ceph::buffer::list& output)
+std::optional<int> try_encode_stored_reply(
+    std::bool_constant<SingleFragment>, const ::ceph::buffer::list& input,
+    const std::uint64_t marker, const std::string_view tag, ::ceph::buffer::list& output)
 {
     fragment_cursor<SingleFragment> cursor {input};
     ::ceph::datum_wire::basic_reader archive {cursor};
@@ -230,8 +231,9 @@ void encode_reply(const log_page groups, const bool stales, const bool truncated
     output.claim_append(candidate);
 }
 
-std::optional<int> encode_stored_reply(const ::ceph::buffer::list& input, const std::uint64_t marker,
-                                       const std::string_view tag, ::ceph::buffer::list& output)
+std::optional<int> try_encode_stored_reply(const ::ceph::buffer::list& input,
+                                           const std::uint64_t marker, const std::string_view tag,
+                                           ::ceph::buffer::list& output)
 try {
     // Dense fragment chains favor the existing single-pass owning decoder.
     const auto owner_bytes = std::uint64_t {input.get_num_buffers()} * sizeof(::ceph::buffer::ptr_node);
@@ -239,10 +241,10 @@ try {
         return std::nullopt;
     }
     if (1 == input.get_num_buffers() && input.length()) {
-        return encode_stored_reply(std::true_type {}, input, marker, tag, output);
+        return try_encode_stored_reply(std::true_type {}, input, marker, tag, output);
     }
 
-    return encode_stored_reply(std::false_type {}, input, marker, tag, output);
+    return try_encode_stored_reply(std::false_type {}, input, marker, tag, output);
 } catch (const ::ceph::buffer::error&) {
     // Let the established stored-record decoder retain native error behavior.
     return std::nullopt;

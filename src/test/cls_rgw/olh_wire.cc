@@ -349,7 +349,7 @@ TEST_CASE("Stored OLH projection retains canonical bytes and their owners", "[rg
             byte_buffer wanted;
             ::encode(expected, wanted);
             byte_buffer output;
-            const auto status = native::encode_stored_reply(input, marker, stored.tag, output);
+            const auto status = native::try_encode_stored_reply(input, marker, stored.tag, output);
             if (fragments) {
                 CHECK_FALSE(status.has_value());
                 CHECK(output.length() == 0);
@@ -372,7 +372,7 @@ TEST_CASE("Stored OLH projection retains canonical bytes and their owners", "[rg
         owners.emplace_back(start, start + fragment.length());
     }
     byte_buffer retained;
-    REQUIRE(native::encode_stored_reply(source, 0, stored.tag, retained) == 0);
+    REQUIRE(native::try_encode_stored_reply(source, 0, stored.tag, retained) == 0);
     CHECK(std::ranges::any_of(retained.buffers(), [&owners](const auto& fragment) {
         const auto start = reinterpret_cast<std::uintptr_t>(fragment.c_str());
         return std::ranges::any_of(owners, [start, size = fragment.length()](const auto& owner) {
@@ -389,26 +389,26 @@ TEST_CASE("Stored OLH projection retains canonical bytes and their owners", "[rg
     byte_buffer preserved;
     preserved.append("preserve", 8);
     auto output = preserved;
-    const auto mismatch = native::encode_stored_reply(original, 0, "wrong", output);
+    const auto mismatch = native::try_encode_stored_reply(original, 0, "wrong", output);
     REQUIRE(mismatch.has_value());
     CHECK(*mismatch == -ECANCELED);
     CHECK(output.contents_equal(preserved));
     for (unsigned size = 0; size < original.length(); ++size) {
         byte_buffer prefix;
         prefix.substr_of(original, 0, size);
-        CHECK_FALSE(native::encode_stored_reply(prefix, 0, stored.tag, output).has_value());
+        CHECK_FALSE(native::try_encode_stored_reply(prefix, 0, stored.tag, output).has_value());
         CHECK(output.contents_equal(preserved));
     }
     auto compatible = original.to_str();
     compatible[0] = 2;
     byte_buffer future;
     future.append(compatible);
-    CHECK_FALSE(native::encode_stored_reply(future, 0, stored.tag, output).has_value());
+    CHECK_FALSE(native::try_encode_stored_reply(future, 0, stored.tag, output).has_value());
     compatible[0] = 1;
     compatible[1] = 0;
     future.clear();
     future.append(compatible);
-    CHECK_FALSE(native::encode_stored_reply(future, 0, stored.tag, output).has_value());
+    CHECK_FALSE(native::try_encode_stored_reply(future, 0, stored.tag, output).has_value());
     CHECK(output.contents_equal(preserved));
 }
 
@@ -441,8 +441,8 @@ TEST_CASE("Stored OLH projection handles every physical field boundary", "[rgw][
             input.append(::ceph::buffer::copy(bytes.data() + split, bytes.size() - split));
         }
         byte_buffer output;
-        REQUIRE(native::encode_stored_reply(input, 0, stored.tag, output) == 0);
-        CHECK(native::encode_stored_reply(input, 0, "wrong", output) == -ECANCELED);
+        REQUIRE(native::try_encode_stored_reply(input, 0, stored.tag, output) == 0);
+        CHECK(native::try_encode_stored_reply(input, 0, "wrong", output) == -ECANCELED);
         input.clear();
         CHECK(output.contents_equal(wanted));
     }
@@ -482,7 +482,7 @@ TEST_CASE("Stored OLH pagination agrees across native and sparse fragment chains
         ::encode(expected, wanted);
         for (const auto& input : inputs) {
             byte_buffer output;
-            REQUIRE(native::encode_stored_reply(input, marker, stored.tag, output) == 0);
+            REQUIRE(native::try_encode_stored_reply(input, marker, stored.tag, output) == 0);
             CHECK(output.contents_equal(wanted));
         }
     }

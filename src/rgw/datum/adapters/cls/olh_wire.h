@@ -62,18 +62,16 @@ void encode_event(datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
 
 template <typename EntryT, auto Epoch, auto Operation, auto Tag, auto Key, auto Deleted,
           auto ...KeyMember>
-EntryT& decode_event(datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
-                     datum::binary_fields<KeyMember...> key_fields, reader& archive, EntryT& value)
+void decode_event(datum::binary_fields<Epoch, Operation, Tag, Key, Deleted>,
+                  datum::binary_fields<KeyMember...> key_fields, reader& archive, EntryT& value)
 {
-    return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
         value.*Epoch = fields.template scalar<std::uint64_t>();
         auto& operation = value.*Operation;
         operation = static_cast<std::remove_cvref_t<decltype(operation)>>(fields.template scalar<std::uint8_t>());
         fields.text(value.*Tag);
         decode_key(key_fields, fields, value.*Key);
         value.*Deleted = 0 != fields.template scalar<std::uint8_t>();
-
-        return value;
     });
 }
 

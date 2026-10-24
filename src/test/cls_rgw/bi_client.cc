@@ -351,7 +351,9 @@ TEST_CASE("Index prepare and complete builders borrow arguments with native wire
 
     for (const auto epoch : {0ull, 127ull, 128ull, 256ull, 65536ull,
                               std::numeric_limits<unsigned long long>::max()}) {
-        for (const bool populated : {false, true}) {
+        for (unsigned controls = 0; controls < 8; ++controls) {
+            const bool removals = controls & 1;
+            const bool zones = controls & 2;
             byte_buffer expected;
             {
                 ::rgw_cls_obj_complete_op reference;
@@ -359,9 +361,9 @@ TEST_CASE("Index prepare and complete builders borrow arguments with native wire
                 reference.key = {std::string(80, 'n'), std::string(32, 'i')};
                 reference.op_tag = std::string(32, 't');
                 reference.locator = std::string {"a\0b", 3};
-                reference.ver.pool = populated ? -1 : 128;
+                reference.ver.pool = zones ? -1 : 128;
                 reference.ver.epoch = epoch;
-                reference.log_op = populated;
+                reference.log_op = controls & 4;
                 reference.bilog_flags = 0xABCD;
                 reference.meta.category = ::RGWObjCategory::Main;
                 reference.meta.size = 65536;
@@ -376,17 +378,20 @@ TEST_CASE("Index prepare and complete builders borrow arguments with native wire
                 reference.meta.storage_class = "STANDARD";
                 reference.meta.appendable = true;
                 reference.meta.restore_status = 255;
-                if (populated) {
+                if (removals) {
                     reference.remove_objs.push_back({std::string(80, 'r'), std::string(32, 'v')});
                     reference.remove_objs.push_back({"second", ""});
+                }
+                if (zones) {
                     reference.zones_trace.insert(std::string(36, 'z'), std::string(80, 'l'));
                     reference.zones_trace.insert("other", std::nullopt);
                 }
                 ::encode(reference, expected);
                 ::librados::ObjectWriteOperation operation;
                 ::cls_rgw_bucket_complete_op(operation, reference.op, reference.op_tag, reference.ver,
-                    reference.key, reference.meta, populated ? &reference.remove_objs : nullptr,
-                    reference.log_op, reference.bilog_flags, populated ? &reference.zones_trace : nullptr,
+                    reference.key, reference.meta, removals ? &reference.remove_objs : nullptr,
+                    reference.log_op, reference.bilog_flags,
+                    zones ? &reference.zones_trace : nullptr,
                     reference.locator);
             }
             CHECK(request_method == "bucket_complete_op");
@@ -407,7 +412,8 @@ TEST_CASE("Index prepare and complete builders borrow arguments with native wire
 TEST_CASE("OLH link and trim builders own encoded bytes from borrowed fragmented arguments", "[rgw][cls][write]")
 {
     for (const unsigned length : {0u, 3u, 32u, 4096u}) {
-        for (const bool populated : {false, true}) {
+        for (unsigned controls = 0; controls < 16; ++controls) {
+            const bool populated = controls & 8;
             byte_buffer expected;
             byte_buffer receipt;
             {
@@ -415,9 +421,9 @@ TEST_CASE("OLH link and trim builders own encoded bytes from borrowed fragmented
                 reference.key = {std::string {"n\0m", 3}, std::string(32, 'i')};
                 reference.olh_tag = std::string(length, 't');
                 reference.op_tag = std::string(32, 'o');
-                reference.delete_marker = populated;
-                reference.log_op = populated;
-                reference.high_precision_time = populated;
+                reference.delete_marker = controls & 1;
+                reference.log_op = controls & 4;
+                reference.high_precision_time = controls & 2;
                 reference.olh_epoch = std::numeric_limits<std::uint64_t>::max();
                 reference.unmod_since = ::ceph::real_time {std::chrono::seconds {123} + std::chrono::nanoseconds {456}};
                 if (populated) {

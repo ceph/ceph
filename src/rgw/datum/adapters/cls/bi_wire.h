@@ -149,23 +149,21 @@ void encode_entry(datum::binary_fields<Kind, Key, Payload>, writer& archive, con
 }
 
 template <std::uint8_t Version = 1, typename EntryT, auto Kind, auto Key, auto Payload>
-EntryT& decode_entry(datum::binary_fields<Kind, Key, Payload>, reader& archive, EntryT& value)
+void decode_entry(datum::binary_fields<Kind, Key, Payload>, reader& archive, EntryT& value)
 {
-    const auto body = [&](auto& fields) -> EntryT& {
+    const auto body = [&](auto& fields) {
         auto& kind = value.*Kind;
         kind = static_cast<std::remove_cvref_t<decltype(kind)>>(fields.template scalar<std::uint8_t>());
         fields.text(value.*Key);
         fields.payload(value.*Payload);
-
-        return value;
     };
 
     if constexpr (1 == Version) {
-        return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& { return body(fields); });
+        archive.frame(1, [&](auto& fields, std::uint8_t) { body(fields); });
     }
 
     if constexpr (2 == Version) {
-        return body(archive);
+        body(archive);
     }
 }
 
@@ -174,11 +172,12 @@ EntryT& decode_entry(datum::binary_fields<Kind, Key, Payload>, reader& archive, 
 // Fill unpublished candidates; the binding commits them after decoding succeeds.
 // Selected payload fields retain native owners beyond the input envelope.
 template <typename EntryT, auto ...Member>
-EntryT& decode_entry(datum::binary_fields<Member...> selected, byte_buffer::const_iterator& input, EntryT& value)
+void decode_entry(datum::binary_fields<Member...> selected,
+                  byte_buffer::const_iterator& input, EntryT& value)
 {
     detail::reader archive {input};
 
-    return detail::decode_entry(selected, archive, value);
+    detail::decode_entry(selected, archive, value);
 }
 
 // A single-entry message wraps the same entry profile in its own native frame.
@@ -195,13 +194,13 @@ byte_buffer encode_entry_message(datum::binary_fields<Member...> selected, const
 }
 
 template <typename EntryT, auto ...Member>
-EntryT& decode_entry_message(datum::binary_fields<Member...> selected,
-                             byte_buffer::const_iterator& input, EntryT& value)
+void decode_entry_message(datum::binary_fields<Member...> selected,
+                          byte_buffer::const_iterator& input, EntryT& value)
 {
     detail::reader archive {input};
 
-    return archive.frame(1, [&](auto& fields, std::uint8_t) -> EntryT& {
-        return detail::decode_entry(selected, fields, value);
+    archive.frame(1, [&](auto& fields, std::uint8_t) {
+        detail::decode_entry(selected, fields, value);
     });
 }
 

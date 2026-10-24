@@ -141,13 +141,12 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
                                const cls_rgw_obj_key& key, const std::string& locator);
 
-void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
-                                const rgw_bucket_entry_ver& ver,
-                                const cls_rgw_obj_key& key,
-                                const rgw_bucket_dir_entry_meta& dir_meta,
-				const std::list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                                uint16_t bilog_op, const rgw_zone_set *zones_trace,
-				const std::string& obj_locator = ""); // ignored if it's the empty string
+void cls_rgw_bucket_complete_op(
+    librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
+    const rgw_bucket_entry_ver& ver, const cls_rgw_obj_key& key,
+    const rgw_bucket_dir_entry_meta& dir_meta, const std::list<cls_rgw_obj_key> *remove_objs,
+    bool log_op, uint16_t bilog_flags, const rgw_zone_set *zones_trace,
+    const std::string& obj_locator = ""); // ignored if it's the empty string
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, std::list<std::string>& keep_attr_prefixes);
 void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const std::string& attr);
@@ -172,11 +171,12 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
 
-void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
-                            const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
-                            bool delete_marker, const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace,
-                            ceph::buffer::list* epoch_out_bl = nullptr);
+void cls_rgw_bucket_link_olh(
+    librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
+    const ceph::buffer::list& olh_tag, bool delete_marker,
+    const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
+    uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
+    bool log_op, const rgw_zone_set& zones_trace, ceph::buffer::list *epoch_out_bl = nullptr);
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const std::string& op_tag,
                                    const std::string& olh_tag, uint64_t olh_epoch, bool log_op, uint16_t bilog_flags, const rgw_zone_set& zones_trace,

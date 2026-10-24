@@ -89,6 +89,39 @@ struct refresh_request final
     ::cls_rgw_obj_key key;
 };
 
+// Encoding borrows these inputs only for the call; the returned message owns its bytes.
+struct complete_view final
+{
+    ::RGWModifyOp operation;
+    std::string_view operation_tag;
+    std::string_view locator;
+
+    const ::cls_rgw_obj_key& key;
+    const ::rgw_bucket_entry_ver& version;
+    const ::rgw_bucket_dir_entry_meta& metadata;
+    const std::list<::cls_rgw_obj_key> *removed_keys = nullptr;
+    const ::rgw_zone_set *zones_trace = nullptr;
+
+    bool log = false;
+    std::uint16_t bilog_flags = 0;
+};
+
+struct link_view final
+{
+    const ::cls_rgw_obj_key& key;
+    const ::ceph::buffer::list& olh_tag;
+    std::string_view operation_tag;
+    const ::rgw_bucket_dir_entry_meta *metadata = nullptr;
+    const ::rgw_zone_set& zones_trace;
+
+    std::uint64_t olh_epoch = 0;
+    ::ceph::real_time unmodified_since {};
+
+    bool delete_marker = false;
+    bool high_precision_time = false;
+    bool log = false;
+};
+
 // Publish the complete candidate and input cursor together after validation.
 void decode(prepare_request& value, ::ceph::buffer::list::const_iterator& input);
 void decode(complete_request& value, ::ceph::buffer::list::const_iterator& input);
@@ -100,19 +133,8 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
 
 ::ceph::buffer::list encode_prepare(::RGWModifyOp operation, std::string_view tag,
                                     const ::cls_rgw_obj_key& key, std::string_view locator);
-::ceph::buffer::list encode_complete(::RGWModifyOp operation, std::string_view tag,
-                                     const ::rgw_bucket_entry_ver& version,
-                                     const ::cls_rgw_obj_key& key,
-                                     const ::rgw_bucket_dir_entry_meta& metadata,
-                                     const std::list<::cls_rgw_obj_key> *removed,
-                                     bool log, std::uint16_t flags,
-                                     const ::rgw_zone_set *zones, std::string_view locator);
-::ceph::buffer::list encode_link(const ::cls_rgw_obj_key& key,
-                                 const ::ceph::buffer::list& tag, bool deleted,
-                                 std::string_view operation_tag,
-                                 const ::rgw_bucket_dir_entry_meta *metadata,
-                                 std::uint64_t epoch, ::ceph::real_time unmodified,
-                                 bool precise, bool log, const ::rgw_zone_set& zones);
+::ceph::buffer::list encode(const complete_view& value);
+::ceph::buffer::list encode(const link_view& value);
 ::ceph::buffer::list encode_trim(const ::cls_rgw_obj_key& key, std::uint64_t version,
                                  std::string_view tag);
 ::ceph::buffer::list encode_unlink(const ::cls_rgw_obj_key& key, std::string_view operation_tag,

@@ -104,20 +104,18 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const st
   o.exec(method::bucket_prepare_op, in);
 }
 
-void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const string& tag,
-                                const rgw_bucket_entry_ver& ver,
-                                const cls_rgw_obj_key& key,
-                                const rgw_bucket_dir_entry_meta& dir_meta,
-				const list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                                uint16_t bilog_flags,
-                                const rgw_zone_set *zones_trace,
-				const std::string& obj_locator)
+void cls_rgw_bucket_complete_op(
+    ObjectWriteOperation& o, RGWModifyOp op, const string& tag,
+    const rgw_bucket_entry_ver& ver, const cls_rgw_obj_key& key,
+    const rgw_bucket_dir_entry_meta& dir_meta, const list<cls_rgw_obj_key> *remove_objs,
+    bool log_op, uint16_t bilog_flags, const rgw_zone_set *zones_trace,
+    const std::string& obj_locator)
 {
-  auto in = write_datum::encode_complete(op, tag,
-                                         ver, key, dir_meta,
-                                         remove_objs,
-                                         log_op, bilog_flags, zones_trace,
-                                         obj_locator);
+  auto in = write_datum::encode(write_datum::complete_view {
+    .operation = op, .operation_tag = tag, .locator = obj_locator,
+    .key = key, .version = ver, .metadata = dir_meta,
+    .removed_keys = remove_objs, .zones_trace = zones_trace,
+    .log = log_op, .bilog_flags = bilog_flags});
   o.exec(method::bucket_complete_op, in);
 }
 
@@ -307,16 +305,18 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
 }
 
 
-void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
-                            const bufferlist& olh_tag, bool delete_marker,
-                            const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace,
-                            bufferlist* epoch_out_bl)
+void cls_rgw_bucket_link_olh(
+    librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
+    const bufferlist& olh_tag, bool delete_marker,
+    const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
+    uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
+    bool log_op, const rgw_zone_set& zones_trace, bufferlist *epoch_out_bl)
 {
-  auto in = write_datum::encode_link(key, olh_tag, delete_marker,
-                                     op_tag, meta,
-                                     olh_epoch, unmod_since, high_precision_time,
-                                     log_op, zones_trace);
+  auto in = write_datum::encode(write_datum::link_view {
+    .key = key, .olh_tag = olh_tag, .operation_tag = op_tag,
+    .metadata = meta, .zones_trace = zones_trace,
+    .olh_epoch = olh_epoch, .unmodified_since = unmod_since,
+    .delete_marker = delete_marker, .high_precision_time = high_precision_time, .log = log_op});
   if (epoch_out_bl) {
     op.exec(method::bucket_link_olh, in, epoch_out_bl, nullptr);
   } else {

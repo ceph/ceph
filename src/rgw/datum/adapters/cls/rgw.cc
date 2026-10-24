@@ -157,7 +157,7 @@ namespace cls::rgw::bilog_datum {
 
 using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
-using ::ceph::datum_wire::writer;
+using ::ceph::datum_wire::encode_frame;
 
 void decode(list_request& value, ::ceph::buffer::list::const_iterator& input)
 {
@@ -177,33 +177,23 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
 
 ::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.text(marker);
         archive.scalar(maximum);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_trim(const std::string_view start, const std::string_view end)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.text(start);
         archive.text(end);
     });
-
-    return output;
 }
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    ::ceph::buffer::list candidate;
-    writer archive {candidate};
-    archive.frame(1, [&] {
+    auto candidate = encode_frame(1, [&](auto& archive) {
         archive.scalar(::ceph::datum_wire::checked_count(value.entries.size()));
         for (const auto& entry : value.entries) {
             archive.native(entry);
@@ -241,23 +231,19 @@ namespace cls::rgw::bucket_datum {
 
 using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
-using ::ceph::datum_wire::writer;
+using ::ceph::datum_wire::encode_frame;
 
 ::ceph::buffer::list encode_request(const ::cls_rgw_obj_key& start, const std::string_view prefix,
                                     const std::string_view delimiter, const std::uint32_t maximum,
                                     const bool versions)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(6, 4, [&] {
+    return encode_frame(6, 4, [&](auto& archive) {
         archive.scalar(maximum);
         archive.text(prefix);
         ::rgw::datum_wire::encode_key(archive, start.name, start.instance);
         archive.scalar(static_cast<std::uint8_t>(versions));
         archive.text(delimiter);
     });
-
-    return output;
 }
 
 void decode(request& value, ::ceph::buffer::list::const_iterator& input)
@@ -287,9 +273,7 @@ void decode(request& value, ::ceph::buffer::list::const_iterator& input)
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    ::ceph::buffer::list candidate;
-    writer archive {candidate};
-    archive.frame(4, 2, [&] {
+    auto candidate = encode_frame(4, 2, [&](auto& archive) {
         archive.frame(2, 2, [&] {
             archive.native(value.dir.header);
             archive.scalar(::ceph::datum_wire::checked_count(value.dir.m.size()));
@@ -370,9 +354,7 @@ stat_associations decode_stats(reader& fields)
 ::ceph::buffer::list encode_stats(const bool absolute, const ::rgw_bucket_dir_stats& stats,
                                   const ::rgw_bucket_dir_stats *dec_stats)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, [&] {
+    return encode_frame(2, [&](auto& archive) {
         archive.scalar(static_cast<std::uint8_t>(absolute));
         archive.native(stats);
         if (dec_stats) {
@@ -382,17 +364,11 @@ stat_associations decode_stats(reader& fields)
         }
         archive.scalar(std::uint32_t {0});
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_timeout(const std::uint64_t timeout)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.scalar(timeout); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.scalar(timeout); });
 }
 
 void decode(stats_request& value, ::ceph::buffer::list::const_iterator& input)
@@ -415,9 +391,7 @@ void decode(timeout_request& value, ::ceph::buffer::list::const_iterator& input)
 
 void encode(const check_reply& value, ::ceph::buffer::list& output)
 {
-    ::ceph::buffer::list candidate;
-    writer archive {candidate};
-    archive.frame(1, [&] {
+    auto candidate = encode_frame(1, [&](auto& archive) {
         archive.native(value.existing_header);
         archive.native(value.calculated_header);
     });
@@ -446,7 +420,7 @@ namespace {
 namespace datum = ::ceph::salad::datum;
 using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
-using ::ceph::datum_wire::writer;
+using ::ceph::datum_wire::encode_frame;
 using key = ::cls_rgw_obj_key;
 
 constexpr auto key_fields = datum::binary_fields<&key::name, &key::instance> {};
@@ -614,9 +588,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
 ::ceph::buffer::list encode_prepare(const ::RGWModifyOp operation, const std::string_view tag,
                                     const ::cls_rgw_obj_key& key, const std::string_view locator)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(7, 5, [&] {
+    return encode_frame(7, 5, [&](auto& archive) {
         using prefix = prepare_prefix;
 
         archive.fields(datum::binary_fields<&prefix::operation, &prefix::tag, &prefix::locator, &prefix::log> {},
@@ -625,90 +597,66 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
         archive.scalar(std::uint16_t {0});
         archive.scalar(std::uint32_t {0}); // Empty compatibility zone set.
     });
-
-    return output;
 }
 
-::ceph::buffer::list encode_complete(const ::RGWModifyOp operation, const std::string_view tag,
-                                     const ::rgw_bucket_entry_ver& version,
-                                     const ::cls_rgw_obj_key& key,
-                                     const ::rgw_bucket_dir_entry_meta& metadata,
-                                     const std::list<::cls_rgw_obj_key> *removed,
-                                     const bool log, const std::uint16_t flags,
-                                     const ::rgw_zone_set *zones, const std::string_view locator)
+::ceph::buffer::list encode(const complete_view& value)
 {
     const std::list<::cls_rgw_obj_key> empty_keys;
     const ::rgw_zone_set empty_zones;
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(9, 7, [&] {
+
+    return encode_frame(9, 7, [&](auto& archive) {
         using prefix = complete_prefix;
 
         archive.fields(datum::binary_fields<&prefix::operation, &prefix::epoch> {},
-                       prefix {static_cast<std::uint8_t>(operation), version.epoch});
-        archive.native(metadata);
-        archive.text(tag);
-        archive.text(locator);
-        archive.native(removed ? *removed : empty_keys);
-        archive.native(version);
-        archive.scalar(static_cast<std::uint8_t>(log));
-        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
-        archive.scalar(flags);
-        archive.native(zones ? *zones : empty_zones);
+                       prefix {static_cast<std::uint8_t>(value.operation), value.version.epoch});
+        archive.native(value.metadata);
+        archive.text(value.operation_tag);
+        archive.text(value.locator);
+        archive.native(value.removed_keys ? *value.removed_keys : empty_keys);
+        archive.native(value.version);
+        archive.scalar(static_cast<std::uint8_t>(value.log));
+        ::rgw::datum_wire::encode_key(archive, value.key.name, value.key.instance);
+        archive.scalar(value.bilog_flags);
+        archive.native(value.zones_trace ? *value.zones_trace : empty_zones);
     });
-
-    return output;
 }
 
-::ceph::buffer::list encode_link(const ::cls_rgw_obj_key& key,
-                                 const ::ceph::buffer::list& tag, const bool deleted,
-                                 const std::string_view operation_tag,
-                                 const ::rgw_bucket_dir_entry_meta *metadata,
-                                 const std::uint64_t epoch, const ::ceph::real_time unmodified,
-                                 const bool precise, const bool log, const ::rgw_zone_set& zones)
+::ceph::buffer::list encode(const link_view& value)
 {
     const ::rgw_bucket_dir_entry_meta empty_metadata;
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(5, [&] {
-        ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
-        archive.text(tag);
-        archive.scalar(static_cast<std::uint8_t>(deleted));
-        archive.text(operation_tag);
-        archive.native(metadata ? *metadata : empty_metadata);
-        archive.scalar(epoch);
-        archive.scalar(static_cast<std::uint8_t>(log));
-        archive.scalar(std::uint16_t {0}); // The existing public link builder has no flags argument.
-        archive.scalar(static_cast<std::uint64_t>(::ceph::real_clock::to_time_t(unmodified)));
-        archive.native(unmodified);
-        archive.scalar(static_cast<std::uint8_t>(precise));
-        archive.native(zones);
-    });
 
-    return output;
+    return encode_frame(5, [&](auto& archive) {
+        ::rgw::datum_wire::encode_key(archive, value.key.name, value.key.instance);
+        archive.text(value.olh_tag);
+        archive.scalar(static_cast<std::uint8_t>(value.delete_marker));
+        archive.text(value.operation_tag);
+        archive.native(value.metadata ? *value.metadata : empty_metadata);
+        archive.scalar(value.olh_epoch);
+        archive.scalar(static_cast<std::uint8_t>(value.log));
+        archive.scalar(std::uint16_t {0}); // The existing public link builder has no flags argument.
+        archive.scalar(static_cast<std::uint64_t>(
+            ::ceph::real_clock::to_time_t(value.unmodified_since)));
+        archive.native(value.unmodified_since);
+        archive.scalar(static_cast<std::uint8_t>(value.high_precision_time));
+        archive.native(value.zones_trace);
+    });
 }
 
 ::ceph::buffer::list encode_trim(const ::cls_rgw_obj_key& key, const std::uint64_t version,
                                  const std::string_view tag)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.scalar(version);
         archive.text(tag);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_unlink(const ::cls_rgw_obj_key& key, const std::string_view operation_tag,
                                    const std::string_view tag, const std::uint64_t epoch,
                                    const bool log, const std::uint16_t flags, const ::rgw_zone_set& zones)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(3, [&] {
+    return encode_frame(3, [&](auto& archive) {
         ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.text(operation_tag);
         archive.scalar(epoch);
@@ -717,31 +665,21 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
         archive.text(tag);
         archive.native(zones);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_clear(const ::cls_rgw_obj_key& key, const std::string_view tag)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
         archive.text(tag);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_refresh(const ::cls_rgw_obj_key& key)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         ::rgw::datum_wire::encode_key(archive, key.name, key.instance);
     });
-
-    return output;
 }
 
 } // cls::rgw::write_datum
@@ -749,6 +687,7 @@ void decode(refresh_request& value, ::ceph::buffer::list::const_iterator& input)
 namespace cls::rgw::object_datum {
 
 using ::ceph::datum_wire::decode_record;
+using ::ceph::datum_wire::encode_frame;
 using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_remove(const std::list<std::string>& prefixes)
@@ -769,37 +708,25 @@ using ::ceph::datum_wire::writer;
 
 ::ceph::buffer::list encode_version(const std::string_view attribute)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.text(attribute); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.text(attribute); });
 }
 
 ::ceph::buffer::list encode_prefix(const std::string_view prefix, const bool fail_if_exist)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.text(prefix);
         archive.scalar(static_cast<std::uint8_t>(fail_if_exist));
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_mtime(const ::ceph::real_time mtime, const bool precise,
                                   const std::uint8_t type)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, [&] {
+    return encode_frame(2, [&](auto& archive) {
         archive.native(mtime);
         archive.scalar(type);
         archive.scalar(static_cast<std::uint8_t>(precise));
     });
-
-    return output;
 }
 
 void decode(remove_request& value, ::ceph::buffer::list::const_iterator& input)
@@ -842,27 +769,21 @@ namespace cls::rgw::usage_datum {
 
 using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
-using ::ceph::datum_wire::writer;
+using ::ceph::datum_wire::encode_frame;
 
 ::ceph::buffer::list encode_add(const std::vector<::rgw_usage_log_entry>& entries)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, [&] {
+    return encode_frame(2, [&](auto& archive) {
         archive.frame(1, [&] { archive.native(entries); });
         archive.scalar(std::uint32_t {0}); // The public builder leaves the unused user empty.
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_read(const std::string_view owner, const std::string_view bucket,
                                  const std::uint64_t start, const std::uint64_t finish,
                                  const std::uint32_t maximum, const std::string_view marker)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, [&] {
+    return encode_frame(2, [&](auto& archive) {
         archive.scalar(start);
         archive.scalar(finish);
         archive.text(owner);
@@ -870,23 +791,17 @@ using ::ceph::datum_wire::writer;
         archive.scalar(maximum);
         archive.text(bucket);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_trim(const std::string_view user, const std::string_view bucket,
                                  const std::uint64_t start, const std::uint64_t finish)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(3, 2, [&] {
+    return encode_frame(3, 2, [&](auto& archive) {
         archive.scalar(start);
         archive.scalar(finish);
         archive.text(user);
         archive.text(bucket);
     });
-
-    return output;
 }
 
 void decode(add_request& value, ::ceph::buffer::list::const_iterator& input)
@@ -929,9 +844,7 @@ void decode(trim_request& value, ::ceph::buffer::list::const_iterator& input)
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    ::ceph::buffer::list candidate;
-    writer archive {candidate};
-    archive.frame(1, [&] {
+    auto candidate = encode_frame(1, [&](auto& archive) {
         archive.native(value.usage);
         archive.scalar(static_cast<std::uint8_t>(value.truncated));
         archive.text(value.next_iter);
@@ -976,80 +889,54 @@ namespace cls::rgw::reshard_datum {
 
 using ::ceph::datum_wire::decode_record;
 using ::ceph::datum_wire::reader;
-using ::ceph::datum_wire::writer;
+using ::ceph::datum_wire::encode_frame;
 
 ::ceph::buffer::list encode_add(const ::cls_rgw_reshard_entry& entry, const bool create_only)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, [&] {
+    return encode_frame(2, [&](auto& archive) {
         archive.native(entry);
         archive.scalar(static_cast<std::uint8_t>(create_only));
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_entry(const ::cls_rgw_reshard_entry& entry)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.native(entry); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.native(entry); });
 }
 
 ::ceph::buffer::list encode_list(const std::string_view marker, const std::uint32_t maximum)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.scalar(maximum);
         archive.text(marker);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_remove(const ::cls_rgw_reshard_entry& entry)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] {
+    return encode_frame(1, [&](auto& archive) {
         archive.text(entry.tenant);
         archive.text(entry.bucket_name);
         archive.text(entry.bucket_id);
     });
-
-    return output;
 }
 
 ::ceph::buffer::list encode_instance(const ::cls_rgw_bucket_instance_entry& entry)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.native(entry); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.native(entry); });
 }
 
 ::ceph::buffer::list encode_empty()
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [] {});
-
-    return output;
+    return encode_frame(1, [](auto&) {});
 }
 
 ::ceph::buffer::list encode_guard(const int error)
 {
     static_assert(sizeof(int) == sizeof(std::int32_t));
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.scalar(std::bit_cast<std::uint32_t>(error)); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) {
+        archive.scalar(std::bit_cast<std::uint32_t>(error));
+    });
 }
 
 void decode(add_request& value, ::ceph::buffer::list::const_iterator& input)
@@ -1119,9 +1006,7 @@ void encode(const instance_message& value, ::ceph::buffer::list& output)
 
 void encode(const reply& value, ::ceph::buffer::list& output)
 {
-    ::ceph::buffer::list candidate;
-    writer archive {candidate};
-    archive.frame(1, [&] {
+    auto candidate = encode_frame(1, [&](auto& archive) {
         archive.native(value.entries);
         archive.scalar(static_cast<std::uint8_t>(value.is_truncated));
     });
@@ -1171,45 +1056,29 @@ decode_reply(const ::ceph::buffer::list& input);
 namespace cls::rgw::lc_datum {
 
 using ::ceph::datum_wire::decode_record;
-using ::ceph::datum_wire::writer;
+using ::ceph::datum_wire::encode_frame;
 
 ::ceph::buffer::list encode(const std::string_view marker)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.text(marker); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.text(marker); });
 }
 
 ::ceph::buffer::list encode(const ::cls_rgw_lc_entry& entry)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(2, 2, [&] { archive.native(entry); });
-
-    return output;
+    return encode_frame(2, 2, [&](auto& archive) { archive.native(entry); });
 }
 
 ::ceph::buffer::list encode(const ::cls_rgw_lc_obj_head& head)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(1, [&] { archive.native(head); });
-
-    return output;
+    return encode_frame(1, [&](auto& archive) { archive.native(head); });
 }
 
 ::ceph::buffer::list encode(const std::string_view marker, const std::uint32_t maximum)
 {
-    ::ceph::buffer::list output;
-    writer archive {output};
-    archive.frame(3, [&] {
+    return encode_frame(3, [&](auto& archive) {
         archive.text(marker);
         archive.scalar(maximum);
     });
-
-    return output;
 }
 
 void decode(marker_request& value, ::ceph::buffer::list::const_iterator& input)
@@ -1262,9 +1131,7 @@ void encode(const head_message& value, ::ceph::buffer::list& output)
 
 void encode(const list_reply& value, ::ceph::buffer::list& output)
 {
-    ::ceph::buffer::list candidate;
-    writer archive {candidate};
-    archive.frame(value.compat_v, [&] {
+    auto candidate = encode_frame(value.compat_v, [&](auto& archive) {
         if (value.compat_v <= 2) {
             std::map<std::string_view, int> old_entries;
             for (const auto& entry : value.entries) {

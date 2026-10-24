@@ -206,17 +206,21 @@ change packed-integer boundary behavior. Optional arguments preserve their nativ
 defaults, and link retains its existing zero bilog flags and epoch-output path.
 The public interfaces remain C++23; the C++26 implementations remain private.
 
-The client implementation groups the complete builder's borrowed arguments by
-role, using its existing ``cls::rgw`` namespace import::
+The private complete and link encoders accept borrowed views with named fields.
+The client adapts its existing arguments directly, without constructing an owning
+operation record::
 
-    auto in = write_datum::encode_complete(op, tag,
-                                           ver, key, dir_meta,
-                                           remove_objs,
-                                           log_op, bilog_flags, zones_trace,
-                                           obj_locator);
+    auto in = write_datum::encode(write_datum::complete_view {
+      .operation = op, .operation_tag = tag, .locator = obj_locator,
+      .key = key, .version = ver, .metadata = dir_meta,
+      .removed_keys = remove_objs, .zones_trace = zones_trace,
+      .log = log_op, .bilog_flags = bilog_flags});
 
-The operation identity, object state, removals, logging controls and locator stay
-visible at the call site. There is no additional argument record or builder layer.
+The views retain references, string views, and optional pointers only during
+encoding. Required objects remain references; absent optional inputs retain the
+native defaults. Named fields distinguish the tags, object state, and logging
+controls without changing the public client signatures.
+
 The asynchronous directory-header helper uses the same borrowed bucket-list
 request encoder with a zero entry limit. Its callback retains native decoding,
 including a header decoded before a later response error.
