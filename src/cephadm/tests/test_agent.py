@@ -1088,3 +1088,87 @@ class TestVersionStatusUpdaterAgent:
 
         _gav.assert_not_called()
         assert val.get('version') is None
+
+
+@mock.patch("cephadmlib.agent.urlopen")
+@mock.patch("cephadmlib.agent.Request")
+def test_http_query_url(_request, _urlopen):
+    from cephadmlib.agent import http_query
+
+    _urlopen.return_value.__enter__.return_value.read.return_value = b''
+    _urlopen.return_value.__enter__.return_value.status = 200
+
+    http_query(addr='10.0.0.1', port='7150', data=b'{}', endpoint='/data')
+    assert _request.call_args[0][0] == 'https://10.0.0.1:7150/data'
+
+    http_query(addr='2001:db8::1', port='7150', data=b'{}', endpoint='/data')
+    assert _request.call_args[0][0] == 'https://[2001:db8::1]:7150/data'
+
+    http_query(addr='[2001:db8::1]', port='7150', data=b'{}', endpoint='/data')
+    assert _request.call_args[0][0] == 'https://[2001:db8::1]:7150/data'
+
+    http_query(addr='mgr.example.com', port='7150', data=b'{}', endpoint='/data')
+    assert _request.call_args[0][0] == 'https://mgr.example.com:7150/data'
+
+
+class FakeListenSocket:
+    created = []
+    fail_create = set()
+    fail_bind = set()
+
+    def __init__(self, family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0, fileno=None):
+        if family in self.fail_create:
+            raise OSError(97, 'Address family not supported by protocol')
+        self.family = family
+        self.sockopts = []
+        self.bound = None
+        self.closed = False
+        self.created.append(self)
+
+    def setsockopt(self, level, opt, value):
+        self.sockopts.append((level, opt, value))
+
+    def bind(self, addr):
+        if self.family in self.fail_bind:
+            raise OSError(99, 'Cannot assign requested address')
+        self.bound = addr
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def fake_listen_socket():
+    FakeListenSocket.created = []
+    FakeListenSocket.fail_create = set()
+    FakeListenSocket.fail_bind = set()
+    with mock.patch("socket.socket", FakeListenSocket):
+        yield FakeListenSocket
+
+
+def test_bind_listen_socket_dual_stack(fake_listen_socket):
+    s = _cephadm.bind_listen_socket(7150)
+    assert s.family == socket.AF_INET6
+    assert s.bound == ('::', 7150)
+    assert (socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0) in s.sockopts
+    assert (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) in s.sockopts
+    assert len(fake_listen_socket.created) == 1
+
+
+def test_bind_listen_socket_ipv4_fallback_on_bind(fake_listen_socket):
+    fake_listen_socket.fail_bind = {socket.AF_INET6}
+    s = _cephadm.bind_listen_socket(7150)
+    assert s.family == socket.AF_INET
+    assert s.bound == ('0.0.0.0', 7150)
+    assert (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) in s.sockopts
+    v6 = [c for c in fake_listen_socket.created if c.family == socket.AF_INET6]
+    assert len(v6) == 1
+    assert v6[0].closed
+
+
+def test_bind_listen_socket_ipv4_fallback_on_create(fake_listen_socket):
+    fake_listen_socket.fail_create = {socket.AF_INET6}
+    s = _cephadm.bind_listen_socket(7150)
+    assert s.family == socket.AF_INET
+    assert s.bound == ('0.0.0.0', 7150)
+    assert len(fake_listen_socket.created) == 1
