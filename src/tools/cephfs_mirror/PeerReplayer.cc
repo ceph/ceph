@@ -1625,7 +1625,8 @@ int PeerReplayer::propagate_snap_renames(
   return 0;
 }
 
-int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx) {
+int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx,
+                                              bool *created) {
   dout(10) << ": remote epath=" << epath << dendl;
 
   int r = ceph_mkdirat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFDIR);
@@ -1635,8 +1636,18 @@ int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const st
     return r;
   }
 
-  r = ceph_chownat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
-                   AT_SYMLINK_NOFOLLOW);
+  if (created) {
+    *created = (r == 0);
+  }
+  return 0;
+}
+
+int PeerReplayer::SyncMechanism::remote_dir_setattr(const std::string &epath,
+                                                    const struct ceph_statx &stx) {
+  dout(10) << ": remote epath=" << epath << dendl;
+
+  int r = ceph_chownat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
+                       AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to chown remote directory=" << epath << ": " << cpp_strerror(r)
          << dendl;
@@ -1672,8 +1683,14 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
            << num_blocks << dendl;
   int l_fd;
   int r_fd;
-  void *ptr;
+  void *ptr = nullptr;
   struct iovec iov[NR_IOVECS];
+  static thread_local char *copy_buf = nullptr;
+  static thread_local uint64_t copy_buf_cap = 0;
+  const uint64_t max_buf = (uint64_t)NR_IOVECS * IOVEC_SIZE;
+  uint64_t buf_len = 0;
+  bool whole_file = num_blocks == 1 && b && b->offset == 0 &&
+                    b->len == stx.stx_size;
 
   uint64_t bytes_read = 0;
   uint64_t bytes_written = 0;
@@ -1690,8 +1707,12 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   }
 
   l_fd = r;
+  int oflags = O_CREAT | O_WRONLY | O_NOFOLLOW;
+  if (whole_file) {
+    oflags |= O_TRUNC;
+  }
   r = ceph_openat(m_remote_mount, fh.r_fd_dir_root, epath.c_str(),
-                  O_CREAT | O_WRONLY | O_NOFOLLOW, stx.stx_mode);
+                  oflags, stx.stx_mode);
   if (r < 0) {
     derr << ": failed to create remote file path=" << epath << ": "
          << cpp_strerror(r) << dendl;
@@ -1699,11 +1720,24 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   }
 
   r_fd = r;
-  ptr = malloc(NR_IOVECS * IOVEC_SIZE);
-  if (!ptr) {
-    r = -ENOMEM;
-    derr << ": failed to allocate memory" << dendl;
-    goto close_remote_fd;
+  // Reuse a per-thread buffer. Cap at 64 MiB for large files; avoid
+  // malloc(64 MiB)/free per small file (kernel-untar ~16 KiB).
+  buf_len = stx.stx_size;
+  if (buf_len > max_buf) {
+    buf_len = max_buf;
+  }
+  if (buf_len > 0) {
+    if (copy_buf_cap < buf_len) {
+      void *n = realloc(copy_buf, buf_len);
+      if (!n) {
+        r = -ENOMEM;
+        derr << ": failed to allocate memory" << dendl;
+        goto close_remote_fd;
+      }
+      copy_buf = (char *)n;
+      copy_buf_cap = buf_len;
+    }
+    ptr = copy_buf;
   }
 
   while (num_blocks > 0) {
@@ -1724,9 +1758,12 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
         break;
       }
 
+      if (buf_len == 0) {
+        break;
+      }
       auto cut_off = len;
-      if (cut_off > NR_IOVECS*IOVEC_SIZE) {
-        cut_off = NR_IOVECS*IOVEC_SIZE;
+      if (cut_off > buf_len) {
+        cut_off = buf_len;
       }
 
       int num_buffers = cut_off / IOVEC_SIZE;
@@ -1792,18 +1829,17 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   add_io(dir_root, bytes_read, bytes_written, read_time.count(), write_time.count());
 
   if (num_blocks == 0 && r >= 0) { // handle blocklist case
-    dout(20) << ": truncating epath=" << epath << " to " << stx.stx_size << " bytes"
-             << dendl;
-    r = ceph_ftruncate(m_remote_mount, r_fd, stx.stx_size);
-    if (r < 0) {
-      derr << ": failed to truncate remote file path=" << epath << ": "
-           << cpp_strerror(r) << dendl;
-      goto freeptr;
+    if (!whole_file || bytes_written != stx.stx_size) {
+      dout(20) << ": truncating epath=" << epath << " to " << stx.stx_size << " bytes"
+               << dendl;
+      r = ceph_ftruncate(m_remote_mount, r_fd, stx.stx_size);
+      if (r < 0) {
+        derr << ": failed to truncate remote file path=" << epath << ": "
+             << cpp_strerror(r) << dendl;
+        goto close_remote_fd;
+      }
     }
   }
-
-freeptr:
-  free(ptr);
 
 close_remote_fd:
   if (ceph_close(m_remote_mount, r_fd) < 0) {
@@ -2606,6 +2642,15 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
     int r;
     snapid_t snapid;
     std::string e_name;
+    std::vector<SyncEntry> children;
+    bool children_pushed = false;
+    BOOST_SCOPE_EXIT_ALL(&) {
+      if (!children_pushed) {
+        for (auto &c : children) {
+          fini_directory(c);
+        }
+      }
+    };
     while (true) {
       e_name.clear();
       r = next_entry(entry, &e_name, &snapid);
@@ -2645,8 +2690,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
           }
 
           m_deleted[entry.epath].emplace(e_name);
-          r = 1; //Continue with the outer loop
-          break;
+          continue;
         }
 
         struct ceph_statx estx;
@@ -2728,18 +2772,16 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
             se.set_purged_or_itype_changed();
           }
 
-          m_sync_stack.emplace(se);
-          dout(20) << ": Added directory to stack =" << _epath << dendl;
           r = remote_mkdir(_epath, estx);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
+            fini_directory(se);
             return r;
           }
-          //Fill epath to avoid caller treat this as failure and breaking the loop early.
-          *epath = _epath;
-          *stx = estx;
-          return r; // New directory added to stack
+          se.need_remote_attrs = true;
+          dout(20) << ": Added directory to pending children =" << _epath << dendl;
+          children.emplace_back(std::move(se));
         } else {
           push_dataq_entry(SyncEntry(_epath, estx, !pic));
           dout(10) << ": sync_check=" << *sync_check << " for epath=" << _epath << dendl;
@@ -2751,7 +2793,22 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
       continue;
 
     if (r == 0) {
+      if (!children.empty()) {
+        for (auto it = children.rbegin(); it != children.rend(); ++it) {
+          m_sync_stack.push(std::move(*it));
+        }
+        children_pushed = true;
+        *epath = m_sync_stack.top().epath;
+        *stx = m_sync_stack.top().stx;
+        return 0;
+      }
       dout(10) << ": done for directory=" << entry.epath << dendl;
+      if (entry.need_remote_attrs) {
+        r = remote_dir_setattr(entry.epath, entry.stx);
+        if (r < 0) {
+          return r;
+        }
+      }
       fini_directory(entry);
       m_sync_stack.pop();
       continue;
@@ -2932,23 +2989,38 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     }
 
     // entry is a directory -- propagate deletes for missing entries
-    // (and changed inode types) to the remote filesystem.
+    // (and changed inode types) to the remote filesystem. Skip for
+    // directories created in this crawl; they are empty on the remote.
     if (!entry.needs_remote_sync()) {
-      int r = dirsync_func(entry.epath);
-      if (r < 0 && r != -ENOENT) {
-        derr << ": failed to propagate missing dirs: " << cpp_strerror(r) << dendl;
-        return r;
+      if (!entry.skip_dirsync) {
+        int r = dirsync_func(entry.epath);
+        if (r < 0 && r != -ENOENT) {
+          derr << ": failed to propagate missing dirs: " << cpp_strerror(r) << dendl;
+          return r;
+        }
       }
       entry.set_remote_synced();
     }
 
     int r;
+    std::vector<SyncEntry> children;
+    bool children_pushed = false;
+    BOOST_SCOPE_EXIT_ALL(&) {
+      if (!children_pushed) {
+        for (auto &c : children) {
+          if (ceph_closedir(m_local, c.dirp) < 0) {
+            derr << ": failed to close local directory=" << c.epath << dendl;
+          }
+        }
+      }
+    };
     while (true) {
       struct dirent de;
-      r = ceph_readdirplus_r(m_local, entry.dirp, &de, NULL,
+      struct ceph_statx cstx;
+      r = ceph_readdirplus_r(m_local, entry.dirp, &de, &cstx,
                              CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                              CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                             AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW, NULL);
+                             AT_SYMLINK_NOFOLLOW, NULL);
       if (r < 0) {
         derr << ": failed to local read directory=" << entry.epath << dendl;
         break;
@@ -2959,17 +3031,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
 
       auto d_name = std::string(de.d_name);
       if (d_name != "." && d_name != "..") {
-        struct ceph_statx cstx;
         auto _epath = entry_path(entry.epath, d_name);
-        r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &cstx,
-                         CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
-                         CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                         AT_SYMLINK_NOFOLLOW);
-        if (r < 0) {
-          derr << ": failed to stat epath=" << _epath << ": " << cpp_strerror(r)
-               << dendl;
-          return r;
-        }
 
         if (S_ISDIR(cstx.stx_mode)) {
           ceph_dir_result *dirp;
@@ -2980,18 +3042,21 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
             return r;
           }
 
-          m_sync_stack.emplace(SyncEntry(_epath, dirp, cstx));
-          dout(20) << ": Added directory to stack =" << _epath << dendl;
-          r = remote_mkdir(_epath, cstx);
+          SyncEntry se(_epath, dirp, cstx);
+          bool created = false;
+          r = remote_mkdir(_epath, cstx, &created);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
+            if (ceph_closedir(m_local, dirp) < 0) {
+              derr << ": failed to close local directory=" << _epath << dendl;
+            }
             return r;
           }
-          //Fill epath to avoid caller treat this as failure and breaking the loop early.
-          *epath = _epath;
-          *stx = cstx;
-          return r; // New directory added to stack
+          se.need_remote_attrs = true;
+          se.skip_dirsync = created;
+          dout(20) << ": Added directory to pending children =" << _epath << dendl;
+          children.emplace_back(std::move(se));
         } else {
           push_dataq_entry(SyncEntry(_epath, cstx));
         }
@@ -2999,7 +3064,22 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     }
 
     if (r == 0) {
+      if (!children.empty()) {
+        for (auto it = children.rbegin(); it != children.rend(); ++it) {
+          m_sync_stack.push(std::move(*it));
+        }
+        children_pushed = true;
+        *epath = m_sync_stack.top().epath;
+        *stx = m_sync_stack.top().stx;
+        return 0;
+      }
       dout(10) << ": done for directory=" << entry.epath << dendl;
+      if (entry.need_remote_attrs) {
+        r = remote_dir_setattr(entry.epath, entry.stx);
+        if (r < 0) {
+          return r;
+        }
+      }
       if (ceph_closedir(m_local, entry.dirp) < 0) {
         derr << ": failed to close local directory=" << entry.epath << dendl;
       }
