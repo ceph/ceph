@@ -109,9 +109,17 @@ that object's native constraints; `ordered_domain` checks the supplied compariso
 Custom policies can order points without native comparison operators. Name derived profiles
 `<semantic_role>_domain` to preserve distinct coordinate systems with the same representation.
 `key::byte_string_domain` also supports derived profiles, retaining owning strings, borrowed
-comparisons, and neutral prefix successors. Backend keyspace restrictions stay with consumers.
+comparisons, and neutral prefix upper bounds. Backend keyspace restrictions stay with consumers.
 Floating defaults return partial ordering; choose an explicit policy such as
 [`std::strong_order`](https://eel.is/c++draft/cmp.alg) when its NaN and signed-zero ordering fits.
+
+Prefix construction additionally requires `prefix_domain`: its `prefix_upper_bound()` supplies
+an optional exclusive upper key. An absent upper key extends the prefix to positive infinity.
+This bounds all keys with a prefix; it is separate from finding the next individual key.
+For example, the byte prefix `"ab"` has upper bound `"ac"`. Ordinary interval operations and
+open/closed endpoints need no stepping operation. An optional `empty_prefix()` returning `bool`
+identifies the universal prefix. Both `query<D>::prefix()` and `prefix<D>()` use that policy in
+the same construction path, observing the domain's prefix functions through const arguments.
 
 ```cpp
 #include <datum/interval/query.h>

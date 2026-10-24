@@ -51,6 +51,36 @@ struct integers : iv::comparison_domain<int>
 
 using Q = iv::query<integers>;
 
+TEST_CASE("prefix construction observes const policies and canonical empty prefixes",
+          "[datum][domain][prefix]")
+{
+    struct const_prefix_domain final : iv::comparison_domain<int>
+    {
+        static constexpr bool empty_prefix(const int& value) noexcept { return 0 == value; }
+        static bool empty_prefix(int&) = delete;
+
+        static constexpr std::optional<int> prefix_upper_bound(const int& value) noexcept
+        {
+            return 0 == value ? std::nullopt : std::optional {10};
+        }
+
+        static std::optional<int> prefix_upper_bound(int&) = delete;
+    };
+    using query_type = iv::query<const_prefix_domain>;
+
+    STATIC_REQUIRE(iv::prefix_domain<const_prefix_domain>);
+    STATIC_REQUIRE_FALSE(iv::prefix_domain<integers>);
+    constexpr auto all = query_type::prefix(0);
+    constexpr auto selected = query_type::prefix(4);
+    STATIC_REQUIRE(all == query_type::universal());
+    STATIC_REQUIRE(iv::prefix<const_prefix_domain>(0) == all);
+    STATIC_REQUIRE(selected == query_type::closed_open(4, 10));
+    STATIC_REQUIRE(iv::prefix<const_prefix_domain>(4) == selected);
+    CHECK(iv::contains(all, -1));
+    CHECK(iv::contains(selected, 9));
+    CHECK_FALSE(iv::contains(selected, 10));
+}
+
 TEST_CASE("comparison profiles preserve domain identity and the supplied policy", "[datum][domain]")
 {
     struct source_offsets_domain final : iv::comparison_domain<int> {};

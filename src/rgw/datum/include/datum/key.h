@@ -51,7 +51,7 @@ struct byte_string_domain
     }
 
 public:
-    static constexpr std::optional<std::string> successor(const std::string_view prefix)
+    static constexpr std::optional<std::string> prefix_upper_bound(const std::string_view prefix)
     {
         constexpr auto max_byte = static_cast<unsigned char>(0xFF);
 

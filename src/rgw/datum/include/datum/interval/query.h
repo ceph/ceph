@@ -63,10 +63,12 @@ concept ordered_domain =
         { DomainT::compare(lhs, rhs) } -> std::same_as<std::strong_ordering>;
     };
 
+// Prefix bounds are optional; ordinary interval operations need only ordering.
 template <typename DomainT>
-concept successor_domain =
+concept prefix_domain =
     ordered_domain<DomainT> && requires(const typename DomainT::value_type& value) {
-        { DomainT::successor(value) } -> std::same_as<std::optional<typename DomainT::value_type>>;
+        { DomainT::prefix_upper_bound(value) }
+            -> std::same_as<std::optional<typename DomainT::value_type>>;
     };
 
 namespace detail {
@@ -510,10 +512,18 @@ public:
 
 public:
     static constexpr query prefix(value_type prefix)
-    requires successor_domain<DomainT>
+    requires prefix_domain<DomainT>
     {
-        if (auto successor = DomainT::successor(prefix)) {
-            return closed_open(std::move(prefix), std::move(*successor));
+        if constexpr (requires (const value_type& value) {
+            { DomainT::empty_prefix(value) } -> std::same_as<bool>;
+        }) {
+            if (DomainT::empty_prefix(std::as_const(prefix))) {
+                return universal();
+            }
+        }
+
+        if (auto upper = DomainT::prefix_upper_bound(std::as_const(prefix))) {
+            return closed_open(std::move(prefix), std::move(*upper));
         }
 
         return query(boundary_type::closed(std::move(prefix)), boundary_type::positive_infinity());
@@ -2511,11 +2521,6 @@ constexpr auto boundary_for(const typename DomainT::value_type& value,
     return boundary_type::open(value);
 }
 
-template <typename T>
-concept detects_empty_prefix = requires(const typename T::value_type& value) {
-    { T::empty_prefix(value) } -> std::same_as<bool>;
-};
-
 template <typename EndpointT, ordered_domain DomainT, typename ValueT>
 requires domain_value_source<DomainT, ValueT>
 constexpr EndpointT endpoint_for(ValueT&& value, const endpoint_inclusion inclusion)
@@ -2688,19 +2693,11 @@ constexpr auto open_between(LowerT&& lower, UpperT&& upper)
                    upper_before<DomainT>(std::forward<UpperT>(upper)));
 }
 
-template <successor_domain DomainT, typename ValueT>
+template <prefix_domain DomainT, typename ValueT>
 requires detail::domain_value_source<DomainT, ValueT>
 constexpr auto prefix(ValueT&& value)
 {
-    auto prefix_value = detail::value_for<DomainT>(std::forward<ValueT>(value));
-
-    if constexpr (detail::detects_empty_prefix<DomainT>) {
-        if (DomainT::empty_prefix(prefix_value)) {
-            return query<DomainT>::universal();
-        }
-    }
-
-    return query<DomainT>::prefix(std::move(prefix_value));
+    return query<DomainT>::prefix(detail::value_for<DomainT>(std::forward<ValueT>(value)));
 }
 
 template <expression ExprT, typename ValueT>
@@ -2763,7 +2760,7 @@ constexpr auto without_prefix(ExprT&& expression, ValueT&& value)
                       prefix<domain_type>(std::forward<ValueT>(value)));
 }
 
-template <successor_domain DomainT, typename PrefixT, typename CursorT>
+template <prefix_domain DomainT, typename PrefixT, typename CursorT>
 requires detail::domain_value_source<DomainT, PrefixT> &&
          detail::domain_value_source<DomainT, CursorT>
 constexpr auto prefix_starting_at(PrefixT&& prefix_value, CursorT&& cursor)
@@ -2772,7 +2769,7 @@ constexpr auto prefix_starting_at(PrefixT&& prefix_value, CursorT&& cursor)
                        std::forward<CursorT>(cursor));
 }
 
-template <successor_domain DomainT, typename PrefixT, typename CursorT>
+template <prefix_domain DomainT, typename PrefixT, typename CursorT>
 requires detail::domain_value_source<DomainT, PrefixT> &&
          detail::domain_value_source<DomainT, CursorT>
 constexpr auto prefix_starting_after(PrefixT&& prefix_value, CursorT&& cursor)

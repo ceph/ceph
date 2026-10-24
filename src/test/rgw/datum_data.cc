@@ -1915,7 +1915,7 @@ namespace interval = ceph::salad::datum::interval;
 
 struct integer_domain final : interval::comparison_domain<int>
 {
-    static constexpr std::optional<int> successor(const int value) noexcept
+    static constexpr std::optional<int> prefix_upper_bound(const int value) noexcept
     {
         if (100 == value) {
             return std::nullopt;
@@ -1944,7 +1944,8 @@ public:
 
 struct tagged_domain final : interval::comparison_domain<tagged_value>
 {
-    static constexpr std::optional<tagged_value> successor(const tagged_value value) noexcept
+    static constexpr std::optional<tagged_value> prefix_upper_bound(
+        const tagged_value value) noexcept
     {
         if (10 == value.value) {
             return std::nullopt;
@@ -2183,7 +2184,7 @@ constexpr bool helpers_are_generic_over_ordered_domains()
            2 == interval::interval_count(without_nested);
 }
 
-constexpr bool dense_domains_do_not_need_successor()
+constexpr bool dense_domains_do_not_need_prefix_bounds()
 {
     constexpr auto query =
         interval::intersection(dense_query::closed_open(1, 10), interval::after<dense_domain>(4));
@@ -2194,7 +2195,7 @@ constexpr bool dense_domains_do_not_need_successor()
 
 static_assert(interval::ordered_domain<integer_domain>);
 static_assert(interval::ordered_domain<dense_domain>);
-static_assert(!interval::successor_domain<dense_domain>);
+static_assert(!interval::prefix_domain<dense_domain>);
 static_assert(interval::interval_view<projected_integer_interval>);
 static_assert(interval::interval_view<counted_projected_interval>);
 static_assert(interval::expression<integer_query>);
@@ -2221,7 +2222,7 @@ static_assert(helper_layer_is_compile_time_capable());
 static_assert(helper_predicates_accept_expressions());
 static_assert(helpers_accept_projected_interval_views());
 static_assert(helpers_are_generic_over_ordered_domains());
-static_assert(dense_domains_do_not_need_successor());
+static_assert(dense_domains_do_not_need_prefix_bounds());
 
 TEST_CASE("Datum interval expressions display without compilation", "[datum][interval][display]")
 {
@@ -2325,7 +2326,7 @@ TEST_CASE("Datum interval algorithms accept foreign interval views", "[datum][in
                                      interval::boundary<integer_domain>::positive_infinity())});
 }
 
-TEST_CASE("Datum interval prefix queries use domain supplied successor", "[datum][interval]")
+TEST_CASE("Datum interval prefix queries use the domain's prefix upper bound", "[datum][interval]")
 {
     const auto integers = integer_query::prefix(41);
     const auto max_prefix = integer_query::prefix(100);
@@ -4123,7 +4124,9 @@ TEST_CASE("named byte domains retain borrowed comparisons and neutral prefixes",
 {
     struct bucket_keys_domain final : datum::key::byte_string_domain {};
     struct object_keys_domain final : datum::key::byte_string_domain {};
-    STATIC_REQUIRE(iv::successor_domain<object_keys_domain>);
+    using query_type = iv::query<object_keys_domain>;
+
+    STATIC_REQUIRE(iv::prefix_domain<object_keys_domain>);
     STATIC_REQUIRE_FALSE(iv::interval_for<iv::query<bucket_keys_domain>, object_keys_domain>);
 
     struct borrowed_key final
@@ -4143,9 +4146,16 @@ TEST_CASE("named byte domains retain borrowed comparisons and neutral prefixes",
 
     };
     unsigned observations = 0;
-    const auto names = iv::query<object_keys_domain>::closed_open("a", "z");
+    const auto names = query_type::closed_open("a", "z");
     CHECK(iv::contains(names, borrowed_key {"middle", observations}));
     CHECK(0 < observations);
+
+    CHECK(query_type::prefix("") == query_type::universal());
+    CHECK(object_keys_domain::prefix_upper_bound("ab") == std::optional<std::string> {"ac"});
+    CHECK_FALSE(object_keys_domain::prefix_upper_bound(std::string {"\xFF\xFF", 2}));
+    const std::string_view extended_key {"ab\0", 3};
+    CHECK(iv::contains(query_type::prefix("ab"), extended_key));
+    CHECK_FALSE(iv::contains(query_type::singleton("ab"), extended_key));
 
     const std::array prefixes {
         std::string {}, std::string {"\0", 1}, std::string {"\x7F", 1},
@@ -4159,6 +4169,7 @@ TEST_CASE("named byte domains retain borrowed comparisons and neutral prefixes",
     }
     for (const auto& prefix : prefixes) {
         const auto selected = iv::prefix<object_keys_domain>(prefix);
+        CHECK(query_type::prefix(prefix) == selected);
         CHECK(iv::contains(selected, prefix + '\0'));
         for (const auto& candidate : prefixes) {
             CHECK(iv::contains(selected, std::string_view {candidate}) ==
