@@ -90,7 +90,16 @@ void ssl::OpenSSLDigest::Restart() {
 void ssl::OpenSSLDigest::SetFlags(int flags) {
   if (flags == EVP_MD_CTX_FLAG_NON_FIPS_ALLOW && OpenSSL_version_num() >= 0x30000000L && mpType == EVP_md5() && !mpType_FIPS) {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
-    mpType_FIPS = EVP_MD_fetch(NULL, "MD5", "fips=no");
+    // EVP_MD_fetch() is expensive on OpenSSL 3 (provider store lookup under
+    // a global lock), and this path runs once per digest instance, i.e. per
+    // rgw request for MD5 etags. Fetch once per process and share the result;
+    // EVP_MD objects are reference-counted and safe to share across threads,
+    // so take a reference for this instance to keep the EVP_MD_free() in the
+    // destructor balanced.
+    static EVP_MD* const md5_non_fips = EVP_MD_fetch(NULL, "MD5", "fips=no");
+    if (md5_non_fips && EVP_MD_up_ref(md5_non_fips)) {
+      mpType_FIPS = md5_non_fips;
+    }
 #endif  // OPENSSL_VERSION_NUMBER >= 0x30000000L
   } else {
     EVP_MD_CTX_set_flags(mpContext, flags);
