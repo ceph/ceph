@@ -407,6 +407,12 @@ def conf_setup(ctx, config):
                     'mon', 'set', 'auth_allowed_ciphers', f'{client_key_type},aes256k']
             mon_remote.run(args=args)
 
+            # keys created later by tests (e.g. `fs authorize`) use the
+            # preferred cipher, which legacy clients may not understand
+            args = ['sudo', 'ceph', '--cluster', cluster_name,
+                    'mon', 'set', 'auth_preferred_cipher', client_key_type]
+            mon_remote.run(args=args)
+
             auth_warnings = [
                 'AUTH_INSECURE_CLIENT_KEY_TYPE',
                 'AUTH_INSECURE_KEYS_ALLOWED',
