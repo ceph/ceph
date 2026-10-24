@@ -1333,6 +1333,20 @@ options:
   desc: Time before an idle connection is closed (seconds)
   default: 900
   with_legacy: true
+- name: ms_connection_stall_timeout
+  type: uint
+  level: advanced
+  desc: Reset a lossless connection when no message has been acknowledged for
+    this long while messages are outstanding (seconds, 0 to disable)
+  long_desc: A TCP connection can stop delivering data while both ends still
+    consider it open. Each end checks its own messages against its own setting,
+    so either end can reset the connection. After a reset, a client or a peer
+    daemon (OSD to OSD, MDS to MDS, mon to mon) reconnects and resends the
+    unacknowledged messages, while a server end, such as an MDS's connection to
+    a client, closes it and waits for the peer to reconnect. Only msgr2
+    connections are checked.
+  default: 0
+  with_legacy: true
 - name: ms_pq_max_tokens_per_priority
   type: uint
   level: dev
@@ -1373,6 +1387,15 @@ options:
   level: dev
   desc: Inject various internal delays to induce races (seconds)
   default: 0
+  with_legacy: true
+- name: ms_inject_blackhole_lossless
+  type: bool
+  level: dev
+  desc: Stop all I/O on the next lossless connection to an OSD, without closing
+    it (testing only)
+  default: false
+  flags:
+  - runtime
   with_legacy: true
 - name: ms_inject_network_congestion
   type: uint
