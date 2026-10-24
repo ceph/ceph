@@ -1,5 +1,5 @@
 =============
-Influx Module 
+Influx Module
 =============
 
 .. mgr_module:: influx
@@ -7,11 +7,17 @@ Influx Module
 The influx module continuously collects and sends time series data to an
 influxdb database.
 
-The influx module was introduced in the 13.x *Mimic* release.
+--------
+Enabling
+--------
 
---------
-Enabling 
---------
+.. note::
+
+   The module needs the ``influxdb`` Python package in the environment of
+   every Manager daemon. The Ceph container image does not include this
+   package, so in a cephadm deployment ``ceph mgr module enable influx``
+   fails with ``module 'influx' reports that it cannot run on the active
+   manager daemon: influxdb python module not found``.
 
 To enable the module, use the following command:
 
@@ -27,7 +33,7 @@ If you wish to subsequently disable the module, you can use the equivalent
    ceph mgr module disable influx
 
 -------------
-Configuration 
+Configuration
 -------------
 
 For the influx module to send statistics to an InfluxDB server, it
@@ -50,7 +56,15 @@ For example, a typical configuration might look like this:
    ceph config set mgr mgr/influx/hostname influx.mydomain.com
    ceph config set mgr mgr/influx/username admin123
    ceph config set mgr mgr/influx/password p4ssw0rd
-    
+
+The module reads its settings when it starts. Set them before you enable the
+module, or disable and enable the module after you change them:
+
+.. prompt:: bash #
+
+   ceph mgr module disable influx
+   ceph mgr module enable influx
+
 Following is the list of all configuration settings:
 
 .. confval:: hostname
@@ -65,7 +79,7 @@ Following is the list of all configuration settings:
 .. confval:: batch_size
 
 ---------
-Debugging 
+Debugging
 ---------
 
 By default, a few debugging statements as well as error statements have been set to print in the log files. Users can add more if necessary.
@@ -78,9 +92,14 @@ To make use of the debugging option in the module:
      [mgr]
         debug_mgr = 20  
 
-- Use this command ``ceph influx self-test``.
-- Check the log files. Users may find it easier to filter the log files using
-  ``mgr[influx]``.
+- Run ``ceph influx send`` to make the module send its statistics at once.
+  The command replies ``Sending data to Influx`` even when sending fails.
+  Failures are written to the Manager log and raised as health checks such
+  as ``MGR_INFLUX_NO_SERVER`` and ``MGR_INFLUX_DB_LIST_FAILED``; check them
+  with ``ceph health detail``.
+- Check the Manager log. Users may find it easier to filter the log for
+  ``[influx``: each message from this module contains that tag, followed by
+  the log level, for example ``[influx ERROR influx]``.
 
 --------------------
 Interesting counters
@@ -104,7 +123,8 @@ Pools
 +---------------+-----------------------------------------------------+
 |wr_bytes       | Number of bytes written in the pool                 |
 +---------------+-----------------------------------------------------+
-|dirty          | Number of bytes dirty in the pool                   |
+|dirty          | Number of objects in a cache-tier pool not yet      |
+|               | flushed to the base pool (always 0 for other pools) |
 +---------------+-----------------------------------------------------+
 |rd_bytes       | Number of bytes read in the pool                    |
 +---------------+-----------------------------------------------------+
@@ -165,11 +185,9 @@ OSDs
 |                        | and wait for finished)                                                    |
 +------------------------+---------------------------------------------------------------------------+
 |op_before_queue_op_lat  | Latency of I/O before calling queue (before really queue into ShardedOpWq)|
-|                        | op_before_dequeue_op_lat                                                  |
-+------------------------+---------------------------------------------------------------------------+
-|op_before_dequeue_op_lat| Latency of I/O before calling dequeue_op(already dequeued and get PG lock)|
 +------------------------+---------------------------------------------------------------------------+
 
-Latency counters are measured in microseconds unless otherwise specified in
-the description.
+Latency counters are sent as running totals in nanoseconds: each value is
+the sum of the latencies that the daemon has recorded. The module does not
+send the number of operations with it.
 
