@@ -5799,6 +5799,38 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_page_cache_read
+  type: bool
+  level: advanced
+  desc: Read object data through the Linux page cache
+  long_desc: BlueStore opens the block device O_DIRECT, so object data is cached only
+    by BlueStore itself, inside osd_memory_target. With this enabled, reads that
+    BlueStore would cache go through a buffered file descriptor as well, so the
+    kernel page cache can serve repeated reads from memory the host is not otherwise
+    using, and give that memory back under pressure. This lets an OSD run with a
+    small osd_memory_target, and so a small resident size, without losing its read
+    cache, which matters most on rotational devices. It is the mechanism
+    bluefs_buffered_io already applies to RocksDB reads, extended to object data.
+    To avoid holding the same data twice, give BlueStore's own data cache little or
+    nothing when enabling it. Buffered reads are synchronous, which gives up the
+    parallelism across the extents of one large read; a page cache hit returns at
+    once. Reads the client hints as NOCACHE or DONTNEED, and blobs without a
+    checksum, are always read O_DIRECT. A page cache read that fails its checksum,
+    as one left stale by a racing O_DIRECT write would, drops the cached pages and
+    is retried O_DIRECT; see the page_cache_csum_retries perf counter. Page cache
+    pressure can cause kernel swapping and stalls, as with bluefs_buffered_io, so
+    disabling swap is recommended. Kernel readahead is disabled on the buffered
+    descriptor, so repeated reads are cached but nothing is prefetched.
+  default: false
+  see_also:
+  - bluefs_buffered_io
+  - bluestore_default_buffered_read
+  - bluestore_cache_meta_ratio
+  - bluestore_cache_kv_ratio
+  - osd_memory_target
+  flags:
+  - runtime
+  with_legacy: true
 - name: bluestore_default_buffered_write
   type: bool
   level: advanced

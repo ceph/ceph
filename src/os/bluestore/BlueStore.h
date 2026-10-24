@@ -144,6 +144,8 @@ enum {
   l_bluestore_csum_lat,
   l_bluestore_read_eio,
   l_bluestore_reads_with_retries,
+  l_bluestore_page_cache_read_bytes,
+  l_bluestore_page_cache_csum_retries,
   l_bluestore_read_lat,
   //****************************************
 
@@ -1855,7 +1857,9 @@ private:
   int _prepare_read_ioc(
     blobs2read_t& blobs2read,
     std::vector<ceph::buffer::list>* compressed_blob_bls,
-    IOContext* ioc);
+    IOContext* ioc,
+    bool page_cache);
+  void _drop_page_cache(blobs2read_t& blobs2read);
 
   int _generate_read_result_bl(
     OnodeRef& o,
