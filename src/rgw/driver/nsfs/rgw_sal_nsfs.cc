@@ -843,7 +843,9 @@ static int openat_as(const DoutPrefixProvider* dpp, const nsfs::FSIdentity& id,
 		     const nsfs::AccessStrategy* model,
 		     int dirfd, const char* name, int flags)
 {
-  return nsfs::open_as_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+  return nsfs::open_as_or_raise(dpp, id, model,
+				nsfs::AccessClass::data,
+				RAISED_KEYDIR_CAPS,
 				dirfd, name, flags, 0);
 }
 
@@ -852,7 +854,9 @@ static int unlinkat_as(const DoutPrefixProvider* dpp,
 		       const nsfs::AccessStrategy* model,
 		       int dirfd, const char* name)
 {
-  return nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+  return nsfs::with_identity_or_raise(dpp, id, model,
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS,
 				      [&]() -> int {
     return (::unlinkat(dirfd, name, 0) < 0) ? -errno : 0;
   }, null_yield);
@@ -910,7 +914,9 @@ static int renameat_as(const DoutPrefixProvider* dpp,
 		       const nsfs::AccessStrategy* model, int olddirfd,
 		       const char* oldname, int newdirfd, const char* newname)
 {
-  return nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+  return nsfs::with_identity_or_raise(dpp, id, model,
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS,
 				      [&]() -> int {
     return (::renameat(olddirfd, oldname, newdirfd, newname) < 0)
 	? -errno : 0;
@@ -1215,6 +1221,7 @@ static int ensure_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
     bool raised = false;
     bool made = false;
     const int ret = nsfs::with_identity_or_raise(dpp, id, model,
+						 nsfs::AccessClass::data,
 						 RAISED_CREATE_CAPS,
 						 [&]() -> int {
       if (::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), mode) < 0) {
@@ -1365,6 +1372,7 @@ static int write_rename_intent(const DoutPrefixProvider* dpp,
   std::string name = rename_intent_xattr(xs);
   /* as `id`:  the `.versions` the record lives on is the requester's */
   const int err = nsfs::with_identity_or_raise(dpp, id, model,
+						 nsfs::AccessClass::data,
 						 RAISED_KEYDIR_CAPS,
 						 [&]() -> int {
     return (::fsetxattr(vfd, name.c_str(), rec.data(), rec.size(), 0) < 0)
@@ -1414,7 +1422,9 @@ static void clear_rename_intent(const DoutPrefixProvider* dpp,
     return;
   }
   std::string name = rename_intent_xattr(xs);
-  (void) nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+  (void) nsfs::with_identity_or_raise(dpp, id, model,
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS,
 				      [&]() -> int {
     return (::fremovexattr(vfd, name.c_str()) < 0) ? -errno : 0;
   }, null_yield);
@@ -1647,7 +1657,9 @@ static int open_versions_lockfile(const DoutPrefixProvider* dpp,
   }
   if (id.active()) {
     bool raised = false;
-    const int fd = nsfs::open_as_or_raise(dpp, id, model, RAISED_CREATE_CAPS,
+    const int fd = nsfs::open_as_or_raise(dpp, id, model,
+					  nsfs::AccessClass::data,
+					  RAISED_CREATE_CAPS,
 					  parent_fd, VERSIONS_LOCKFILE.c_str(),
 					  O_RDWR | O_CREAT,
 					  nsfs::file_create_mode(), &raised);
@@ -1862,7 +1874,9 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
   /* the link inside the wrapper, so a denial can be the gateway's to
    * perform:  as `id` on the helper, then raised */
   SafeResult sr = SafeResult::ERROR;
-  (void) nsfs::with_identity_or_raise(dpp, id, model, RAISED_KEYDIR_CAPS,
+  (void) nsfs::with_identity_or_raise(dpp, id, model,
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS,
 				      [&]() -> int {
     sr = fs_strategy->safe_link(
       dpp, parent_fd, leaf,
@@ -1885,6 +1899,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
       const std::string ts_x =
 	xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
       const int tret = nsfs::with_identity_or_raise(dpp, id, model,
+						    nsfs::AccessClass::data,
 						    RAISED_KEYDIR_CAPS,
 						    [&]() -> int {
 	return (::fsetxattr(demoted_fd, ts_x.c_str(), now_ms.c_str(),
@@ -3099,6 +3114,7 @@ int File::create(const DoutPrefixProvider *dpp, optional_yield y,
   bool raised = false;
   if (identity.active()) {
     ret = nsfs::open_as_or_raise(dpp, identity, access_model,
+				 nsfs::AccessClass::data,
 				 RAISED_CREATE_CAPS, parent->get_fd(),
 				 path.c_str(), flags | O_NOFOLLOW, mode,
 				 &raised);
@@ -3445,6 +3461,7 @@ int File::rename(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* as the entry's identity:  both directories are the requester's */
   const int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+						 nsfs::AccessClass::data,
 						 RAISED_KEYDIR_CAPS,
 						 [&]() -> int {
     return (::renameat(src_fd, fname.c_str(), dst_fd, dst_name.c_str()) < 0)
@@ -3532,6 +3549,7 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
   int parent_fd = parent->get_fd();
   /* as the entry's identity:  its directory is the requester's */
   int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+					   nsfs::AccessClass::data,
 					   RAISED_KEYDIR_CAPS, [&]() -> int {
     return (::unlinkat(parent_fd, fname.c_str(), 0) < 0) ? -errno : 0;
   }, y);
@@ -3614,6 +3632,7 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
     const mode_t mode = nsfs::dir_create_mode();
     bool raised = false;
     const int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+						 nsfs::AccessClass::data,
 						 RAISED_CREATE_CAPS,
 						 [&]() -> int {
       if (::mkdirat(at, fname.c_str(), mode) < 0) {
@@ -3772,6 +3791,7 @@ int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool dele
    * (raise site 3). */
   if (identity.active() && !delete_children) {
     return nsfs::with_identity_or_raise(dpp, identity, access_model,
+						nsfs::AccessClass::data,
 						RAISED_KEYDIR_CAPS,
 						[&]() -> int {
       return delete_directory(at, fname.c_str(), false, dpp,
@@ -4539,6 +4559,7 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
     const int pfd = parent->get_fd();
     bool raised = false;
     const int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
+						 nsfs::AccessClass::data,
 						 RAISED_CREATE_CAPS,
 						 [&]() -> int {
       if (::mkdirat(pfd, path.c_str(), dir_mode) < 0) {
@@ -14865,6 +14886,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
        * carried one. */
       SafeResult sr = SafeResult::ERROR;
       (void) nsfs::with_identity_or_raise(dpp, identity, model,
+                                          nsfs::AccessClass::data,
                                           RAISED_KEYDIR_CAPS, [&]() -> int {
         sr = source->driver->get_fs_strategy()->safe_link(
                                 dpp, parent_fd, dm_leaf,
@@ -14883,6 +14905,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         const std::string ts_x =
           source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
         const int tret = nsfs::with_identity_or_raise(dpp, identity, model,
+                                                      nsfs::AccessClass::data,
                                                       RAISED_KEYDIR_CAPS,
                                                       [&]() -> int {
           const int dfd = ::openat(vfd, ver_name.c_str(), O_RDONLY | O_NOFOLLOW);
@@ -14903,6 +14926,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
          * requester's too:  the entry it removes is in the bucket
          * directory, which phase D hands to the account. */
         (void) nsfs::with_identity_or_raise(dpp, identity, model,
+                                            nsfs::AccessClass::data,
                                             RAISED_KEYDIR_CAPS, [&]() -> int {
           const SafeResult ur = source->driver->get_fs_strategy()->safe_unlink(
                       dpp, parent_fd, dm_leaf, vfd,
@@ -14975,6 +14999,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   int dm_fd = -1;
   bool dm_raised = false;
   const int dmret = nsfs::with_identity_or_raise(dpp, identity, model,
+                                                 nsfs::AccessClass::data,
                                                  RAISED_CREATE_CAPS,
                                                  [&]() -> int {
     dm_fd = ::openat(vfd, dm_tmp.c_str(),
@@ -15616,6 +15641,7 @@ int NSFSMultipartUpload::remove_staging(const DoutPrefixProvider* dpp,
   shadow->get_dir()->close();
   return nsfs::with_identity_or_raise(dpp, identity,
 				      driver->get_access_strategy(),
+				      nsfs::AccessClass::data,
 				      RAISED_KEYDIR_CAPS, [&]() -> int {
     return delete_directory(at, name.c_str(), true, dpp,
 			    driver->get_reserved_names());

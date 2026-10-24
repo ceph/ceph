@@ -365,13 +365,15 @@ int with_capabilities(const DoutPrefixProvider* dpp, uint64_t caps,
 constexpr uint64_t cap_bit(int cap) { return 1ull << cap; }
 
 /* Perform `fn` as `id`, and where the filesystem denies it and `model`
- * permits AccessClass::data, perform it again as the gateway, raising
- * `caps` for the call.
+ * permits `what`, perform it again as the gateway, raising `caps` for
+ * the call:  a model's raise.
  *
- * The one place the gateway decides to perform a directory operation
- * the requester was denied:  creating, linking, renaming or unlinking
- * in a key directory or its `.versions` that is another identity's.
- * Under s3-native S3 has authorised it, and the filesystem is storage.
+ * `what` is the class of the operation (access_strategy.h), named by
+ * the caller and never assumed here.  Every current caller passes
+ * AccessClass::data:  creating, linking, renaming or unlinking in a key
+ * directory or its `.versions` that is another identity's is a change a
+ * side-loading client can observe.  Under s3-native S3 has authorised
+ * it, and the gateway performs it as S3's agent.
  *
  * `fn` must not yield, as for with_capabilities():  the second call
  * runs on this thread, raised.  It runs plain syscalls, which are the
@@ -382,15 +384,17 @@ constexpr uint64_t cap_bit(int cap) { return 1ull << cap; }
  * `id` is the gateway already, and `fn` runs once. */
 int with_identity_or_raise(const DoutPrefixProvider* dpp,
 			   const FSIdentity& id, const AccessStrategy* model,
-			   uint64_t caps, const ImpersonatedFn& fn,
+			   AccessClass what, uint64_t caps,
+			   const ImpersonatedFn& fn,
 			   optional_yield y, bool* raised = nullptr);
 
 /* open_as(), and as the gateway where with_identity_or_raise() would
  * raise:  the open through the ring as `id`, then a plain openat(2)
- * raising `caps`.  An inactive `id` is a plain openat(2).  A
- * descriptor, or -errno. */
+ * raising `caps`, where `model` permits `what`.  An inactive `id` is a
+ * plain openat(2).  A descriptor, or -errno. */
 int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
-		     const AccessStrategy* model, uint64_t caps,
+		     const AccessStrategy* model, AccessClass what,
+		     uint64_t caps,
 		     int dirfd, const char* path, uint64_t flags,
 		     uint64_t mode, bool* raised = nullptr);
 

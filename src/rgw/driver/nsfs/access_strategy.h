@@ -13,23 +13,26 @@ namespace rgw { namespace sal { namespace nsfs {
 
 /* What a denied operation was touching.
  *
- * The axis has different answers for different things, which is why
- * this is a parameter and not one switch:  nobody wants the gateway
- * overwriting another identity's bytes, and a deployment may well
- * want an S3 grant to reach that object's tags. */
+ * The classes follow one criterion:  S3 may decide what a side-loading
+ * client -- anyone reaching the bucket's storage other than through
+ * RGW, an NFS or SMB export, a local process -- cannot observe, and the
+ * filesystem decides what that client can (GLOSSARY.md, "access
+ * model").  A caller names the class of what it does;  nothing infers
+ * it. */
 enum class AccessClass {
-  /* the object's bytes */
+  /* what a side-loading client can observe:  an object's bytes, and
+   * every entry in the tree, so creating, linking, renaming or
+   * removing a file or a directory is data */
   data,
   /* the gateway's own records *about* an object -- its tags and its
-   * ACL.  Invisible to an NFS or SMB client, and NooBaa stores no
-   * ACLs at all, so there is no "the filesystem should govern this"
-   * story behind them. */
+   * ACL.  Invisible to a side-loading client, and NooBaa stores no
+   * ACLs at all. */
   object_attrs,
   /* the directories on the way to an object, which the walk opens
-   * before the object's own open.  A path is namespace, which the
-   * gateway reads whatever the model (the listing rule), so permitting
-   * it lets the walk go on as the gateway holding read-search;  the
-   * content is still decided at the object, by its own class. */
+   * before the object's own open.  A path shows nothing a listing does
+   * not, and listings are complete under every model, so permitting it
+   * lets the walk go on as the gateway holding read-search;  the
+   * object is still decided by its own class. */
   path,
 };
 
@@ -41,18 +44,20 @@ enum class AccessClass {
  * bucket could want cross-account policy, and an extended bucket
  * could want strict parity.
  *
- * Two values, by which access path is native:  `posix-strict` (the
- * filesystem;  a side-loading NFS or SMB client is co-equal, so POSIX
- * permissions must stay truthful) and `s3-native` (S3;  the filesystem
- * is storage).  The classes are finer than the two values need, so a
- * model that draws the line between them can be added without
- * reclassifying a call site.
+ * Under impersonation the requester's POSIX identity can carry two
+ * things:  authority, whether an operation may happen, and
+ * attribution, whose its result is on disk.  A model says which the
+ * identity keeps.  `posix-strict` keeps both;  `s3-native` keeps
+ * attribution and gives authority to S3.  The classes are finer than
+ * the two models need, so a model that draws the line between them
+ * can be added without reclassifying a call site.
  *
  * It answers one question:  whether the gateway performs an operation
- * itself.  A further position exists in the tree and is a different
- * question:  lifecycle acts as the **bucket owner** (DECISIONS.md
- * §6.3), which is neither the requester nor the gateway -- *who*
- * performs it, not *whether* the gateway does.  See
+ * itself, with a raise, once S3 has authorised it and the filesystem
+ * has refused the requester.  A further position exists in the tree
+ * and is a different question:  lifecycle acts as the **bucket owner**
+ * (DECISIONS.md §6.3), which is neither the requester nor the gateway
+ * -- *who* performs it, not *whether* the gateway does.  See
  * inflight/access-model-axis.md, which catalogues the positions found
  * so far. */
 class AccessStrategy {
@@ -72,24 +77,33 @@ public:
   virtual const char* name() const = 0;
 };
 
-/* Both must allow.  The default, and NooBaa's model:  they perform
- * every operation as the requesting account, and their IAM users and
- * roles carry their account's uid, so S3 and POSIX cannot disagree
- * inside an account.  NooBaa walks as the requester, too. */
+/* The identity carries authority and attribution:  both S3 and POSIX
+ * must allow, so POSIX permissions remain an accurate account of who
+ * can reach what, and a side-loading client has the same standing as
+ * an S3 client.
+ *
+ * The default, and NooBaa's model:  they perform every operation as
+ * the requesting account, and their IAM users and roles carry their
+ * account's uid, so S3 and POSIX cannot disagree inside an account.
+ * NooBaa walks as the requester, too.  It is the model under which an
+ * in-place upgrade of a NooBaa installation keeps its semantics. */
 class PosixStrictAccess final : public AccessStrategy {
 public:
   bool permits(AccessClass) const override { return false; }
   const char* name() const override { return "posix-strict"; }
 };
 
-/* S3 is the native access model:  S3 decides, for data as well as
- * metadata.
+/* The identity carries attribution only, and S3 has authority:  IAM,
+ * bucket policy and ACLs decide, as on every other RGW backend.  Where
+ * S3 granted what the identity cannot do, the gateway performs it as
+ * S3's agent, with a raise, and what that creates is attributed as the
+ * requester's own would be:  an object the requester's, a directory
+ * its parent's owner's (DECISIONS.md 2026-10-20).
  *
- * The filesystem is storage, and a side-loading NFS or SMB client is
- * secondary -- so POSIX permissions no longer describe who can reach
- * an object's bytes.  A deployment choosing this accepts that;  one
- * that cannot should run `posix-strict`, which is Spectrum Scale's
- * default.
+ * The filesystem is storage that records whose things are.  A
+ * side-loading client still answers to POSIX, so it sees what S3 did
+ * and whose it is, but its permissions do not bound S3.  A deployment
+ * that needs them to should run `posix-strict`, the default.
  *
  * This is what `rgw::sal::POSIXDriver` already does.  `rgw_sal_posix.cc`
  * has no `FSIdentity`, no `run_as` and no identity plumbing:  every

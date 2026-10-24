@@ -811,10 +811,10 @@ uint64_t raised_operations()
 /* Whether the gateway performs what `id` was denied:  the decision
  * both entry points below take, so it is made in one place. */
 static bool raise_permitted(const FSIdentity& id, const AccessStrategy* model,
-			    int ret)
+			    AccessClass what, int ret)
 {
   return id.active() && ((ret == -EACCES) || (ret == -EPERM)) &&
-    model && model->permits(AccessClass::data);
+    model && model->permits(what);
 }
 
 static int raise_for(const DoutPrefixProvider* dpp, const FSIdentity& id,
@@ -840,21 +840,23 @@ static int raise_for(const DoutPrefixProvider* dpp, const FSIdentity& id,
 
 int with_identity_or_raise(const DoutPrefixProvider* dpp,
 			   const FSIdentity& id, const AccessStrategy* model,
-			   uint64_t caps, const ImpersonatedFn& fn,
+			   AccessClass what, uint64_t caps,
+			   const ImpersonatedFn& fn,
 			   optional_yield y, bool* raised)
 {
   if (raised) {
     *raised = false;
   }
   const int ret = with_identity(dpp, id, fn, y);
-  if (! raise_permitted(id, model, ret)) {
+  if (! raise_permitted(id, model, what, ret)) {
     return ret;
   }
   return raise_for(dpp, id, model, caps, fn, raised);
 }
 
 int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
-		     const AccessStrategy* model, uint64_t caps,
+		     const AccessStrategy* model, AccessClass what,
+		     uint64_t caps,
 		     int dirfd, const char* path, uint64_t flags,
 		     uint64_t mode, bool* raised)
 {
@@ -869,7 +871,7 @@ int open_as_or_raise(const DoutPrefixProvider* dpp, const FSIdentity& id,
     return plain();
   }
   const int ret = open_as(dpp, id, dirfd, path, flags, mode);
-  if (! raise_permitted(id, model, ret)) {
+  if (! raise_permitted(id, model, what, ret)) {
     return ret;
   }
   return raise_for(dpp, id, model, caps, plain, raised);
