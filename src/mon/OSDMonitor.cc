@@ -9555,6 +9555,13 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "read_ratio must be between 0 and 100";
         return -ERANGE;
       }
+    } else if (var == "read_lease_interval") {
+      // a non-positive lease interval would have the PG primaries renew
+      // their leases with no delay. (0 unsets the option.)
+      if (f < 0) {
+        ss << "read_lease_interval must be a positive number of seconds";
+        return -ERANGE;
+      }
     }
 
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
