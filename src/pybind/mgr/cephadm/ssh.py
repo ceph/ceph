@@ -320,7 +320,7 @@ class SSHManager:
         except Exception:
             address = host
         if log_command:
-            logger.debug(f'Running command: {rcmd}')
+            logger.debug(f'[{host}] Running command: {rcmd}')
 
         # Retry logic for transient connection/channel errors
         for attempt in range(self.SSH_RETRY_COUNT):
