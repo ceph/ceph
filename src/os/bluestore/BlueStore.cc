@@ -1869,16 +1869,51 @@ void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
 
   uint64_t max_shard_onodes = static_cast<uint64_t>(
       (meta_alloc / (double) onode_shards) / meta_cache->get_bytes_per_onode());
-  uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / buffer_shards);
+
+  // Occupancy-weighted buffer shard limits.  Collections map to shards by
+  // pg seed % shards (coll_t::hash_to_shard; the meta collection always
+  // lands on shard 0), so the load per shard is uneven and an equal split
+  // lets loaded shards trim on every insert while light ones never fill.
+  // Each shard gets 1/SHARD_FLOOR_DIV of its even share as a floor; the
+  // rest is split by what each shard holds now, so sum(limits) <= alloc
+  // and budget flows to the shards that fill.  A shard holding exactly its
+  // even share is a fixed point: this helps while some shard's demand is
+  // below its share; it is not an LRU across shards.
+  static constexpr uint64_t SHARD_FLOOR_DIV = 8;
+  // One snapshot per shard: buffer_bytes is updated under the shard lock
+  // by op threads; a lockless read here matches DataCache::_get_used_bytes().
+  // Using one snapshot for the total and the shares keeps sum(limits) <= alloc.
+  std::vector<uint64_t> buffer_held(buffer_shards);
+  uint64_t total_buffer = 0;
+  for (size_t s = 0; s < buffer_shards; ++s) {
+    buffer_held[s] = store->buffer_cache_shards[s]->_get_bytes();
+    total_buffer += buffer_held[s];
+  }
+  auto shard_limit = [](uint64_t alloc, size_t shards,
+                        uint64_t held, uint64_t total) -> uint64_t {
+    uint64_t even = alloc / shards;
+    if (total == 0) {
+      return even;
+    }
+    uint64_t floor = even / SHARD_FLOOR_DIV;
+    uint64_t rest = alloc - floor * shards;
+    // double: rest * held overflows uint64 once both pass 4 GiB.
+    return floor + static_cast<uint64_t>(
+        static_cast<double>(rest) * static_cast<double>(held) /
+        static_cast<double>(total));
+  };
+  uint64_t buffer_alloc = data_alloc > 0 ? static_cast<uint64_t>(data_alloc) : 0;
 
   dout(30) << __func__ << " max_shard_onodes: " << max_shard_onodes
-                 << " max_shard_buffer: " << max_shard_buffer << dendl;
+           << " data_alloc: " << data_alloc
+           << " total_buffer: " << total_buffer << dendl;
 
   for (auto i : store->onode_cache_shards) {
     i->set_max(max_shard_onodes);
   }
-  for (auto i : store->buffer_cache_shards) {
-    i->set_max(max_shard_buffer);
+  for (size_t s = 0; s < buffer_shards; ++s) {
+    store->buffer_cache_shards[s]->set_max(
+        shard_limit(buffer_alloc, buffer_shards, buffer_held[s], total_buffer));
   }
 }
 
