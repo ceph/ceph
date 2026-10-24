@@ -169,6 +169,11 @@ add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager ${rgw_libs})
 
+# unittest_rgw_curl_client
+add_executable(unittest_rgw_curl_client test_rgw_curl_client.cc)
+add_ceph_unittest(unittest_rgw_curl_client)
+target_link_libraries(unittest_rgw_curl_client rgw_curl fmt::fmt)
+
 if(WITH_RADOSGW_RADOS)
 # unittest_rgw_bucket_metadata
 add_executable(unittest_rgw_bucket_metadata test_rgw_bucket_metadata.cc)
