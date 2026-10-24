@@ -1321,7 +1321,8 @@ public:
                const DoutPrefixProvider *dpp,
                optional_yield y,
                uint64_t src_accounted_size = 0,
-               bool log_op = true);
+               bool log_op = true,
+               bool *pcanceled = nullptr);
 
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
