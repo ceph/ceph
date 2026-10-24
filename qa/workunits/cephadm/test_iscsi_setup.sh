@@ -45,7 +45,12 @@ container_gwcli /iscsi-targets create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
 # I've seen this give a nonzero error code with an error message even when
 # creating the gateway successfully, so this command is allowed to fail
 # If it actually failed to make the gateway, some of the follow up commands will fail
-container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create ${FQDN} ${NODE_IP} || true
+#
+# skipchecks=true: rbd-target-api checkversions runs inside the Ceph container
+# and validates container OS/RPM state, not the host kernel used for LIO/tcmu.
+# Without skipchecks, gateway create can return HTTP 400 after checkversions
+# 500 (e.g. Rocky-based images), and later host setup fails with No such path.
+container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create ${FQDN} ${NODE_IP} skipchecks=true || true
 container_gwcli /disks create pool=${ISCSI_POOL} image=disk_1 size=2G
 container_gwcli /disks create pool=${ISCSI_POOL} image=disk_2 size=2G
 container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts create iqn.1994-05.com.redhat:client1

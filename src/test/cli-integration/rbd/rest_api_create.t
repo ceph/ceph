@@ -12,7 +12,7 @@ Create the first gateway
 ========================
   $ HOST=`python3 -c "import socket; print(socket.getfqdn())"`
   > IP=`hostname -i | awk '{print $1}'`
-  > sudo curl --user admin:admin -d ip_address=$IP -X PUT http://127.0.0.1:5000/api/gateway/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/$HOST -s
+  > sudo curl --user admin:admin -d ip_address=$IP -d skipchecks=true -X PUT http://127.0.0.1:5000/api/gateway/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/$HOST -s
   {"message":"Gateway creation successful"}
 
 Create the second gateway
@@ -20,11 +20,11 @@ Create the second gateway
   $ IP=`cat /etc/ceph/iscsi-gateway.cfg |grep 'trusted_ip_list' | awk -F'[, ]' '{print $3}'`
   > if [ "$IP" != `hostname -i | awk '{print $1}'` ]; then
   >   HOST=`python3 -c "import socket; print(socket.getfqdn('$IP'))"`
-  >   sudo curl --user admin:admin -d ip_address=$IP -X PUT http://127.0.0.1:5000/api/gateway/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/$HOST -s
+  >   sudo curl --user admin:admin -d ip_address=$IP -d skipchecks=true -X PUT http://127.0.0.1:5000/api/gateway/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/$HOST -s
   > else
   >   IP=`cat /etc/ceph/iscsi-gateway.cfg |grep 'trusted_ip_list' | awk -F'[, ]' '{print $4}'`
   >   HOST=`python3 -c "import socket; print(socket.getfqdn('$IP'))"`
-  >   sudo curl --user admin:admin -d ip_address=$IP -X PUT http://127.0.0.1:5000/api/gateway/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/$HOST -s
+  >   sudo curl --user admin:admin -d ip_address=$IP -d skipchecks=true -X PUT http://127.0.0.1:5000/api/gateway/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/$HOST -s
   > fi
   {"message":"Gateway creation successful"}
 
