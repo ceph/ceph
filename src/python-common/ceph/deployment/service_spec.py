@@ -210,8 +210,17 @@ class HostPlacementSpec(NamedTuple):
                 else:
                     ip_address(unwrap_ipv6(network))
             except ValueError as e:
-                # logging?
+                try:
+                    port_val = int(host_spec.network)
+                except ValueError:
+                    port_val = None
+                if port_val not in (None, 0):
+                       validate_port(port_val, 'rgw_frontend_port')
                 raise e
+
+        if not require_network:
+            return host_spec
+
         host_spec.validate()
         return host_spec
 
@@ -1873,6 +1882,9 @@ class RGWSpec(ServiceSpec):
                     'Cannot add RGW: Realm specified but no zone specified')
         if self.rgw_zone and not self.rgw_realm:
             raise SpecValidationError('Cannot add RGW: Zone specified but no realm specified')
+
+        if self.rgw_frontend_port not in (None, 0):
+            validate_port(self.rgw_frontend_port, 'rgw_frontend_port')
 
         if self.rgw_frontend_type is not None:
             if self.rgw_frontend_type not in ['beast', 'civetweb']:
