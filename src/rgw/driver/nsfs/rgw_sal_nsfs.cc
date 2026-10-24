@@ -17531,8 +17531,13 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *   rename_enabled  rgw_nsfs_enable_rename;  the same outcome by config
    *                   rather than by backend.
    *   shares_extents  copy_file_range clones rather than copies, measured
-   *                   at mount.  When false a copy costs its own size. */
+   *                   at mount.  When false a copy costs its own size.
+   *   key_paths_exclusive
+   *                   a name holds a key or its directory form, not both:
+   *                   with `a` present, a PUT of `a/` returns
+   *                   ERR_KEY_PATH_CONFLICT, and the reverse. */
   features["fsio"] = "true";
+  features["key_paths_exclusive"] = "true";
   if (fs_strategy) {
     features["strategy"] = fs_strategy->name();
     features["can_rename"] = fs_strategy->can_rename() ? "true" : "false";
