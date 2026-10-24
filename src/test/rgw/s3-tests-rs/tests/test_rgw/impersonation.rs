@@ -149,11 +149,10 @@ async fn test_impersonation_isolates_identities() {
 /// inferred from whichever tests happen to read data.
 ///
 /// `rgw_nsfs_access_model` decides what the gateway does with an
-/// operation S3 authorised and the permission check denied.  For an
-/// object's tags and ACL, `s3-metadata` and `s3-native` perform it
-/// and `posix-strict` denies it;  for the object's bytes, only
-/// `s3-native` performs it, which is what the posix driver and every
-/// other RGW backend do.  This test asserts the data line at the
+/// operation S3 authorised and the permission check denied.
+/// `posix-strict` denies it, for the object's bytes and for its tags
+/// and ACL alike;  `s3-native` performs it, which is what the posix
+/// driver and every other RGW backend do.  This test asserts the data line at the
 /// configured model, then switches to `s3-native` and asserts that
 /// the same read succeeds -- so the denials are evidence of the
 /// model rather than of the fixture.
@@ -168,8 +167,8 @@ async fn test_impersonation_isolates_identities() {
 /// thing that caught it was an unrelated acl test.  This test exists
 /// so that the next person to widen a retry here is told by name.
 ///
-/// Both classes matter.  The metadata half must *succeed* under
-/// `s3-metadata`, or a gateway that simply denies everything would
+/// Both classes matter.  The metadata half must *succeed* where the
+/// model performs it, or a gateway that simply denies everything would
 /// pass the data half and look correct.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
@@ -333,7 +332,7 @@ async fn test_data_follows_the_access_model() {
 /// bob, granted the write by bucket policy, then writes beside her, and
 /// the filesystem denies him creating there whatever the model, because
 /// the directory is hers.  What the gateway does about it is the access
-/// model's:  `posix-strict` and `s3-metadata` let the denial stand, as
+/// model's:  `posix-strict` lets the denial stand, as
 /// NooBaa does, and `s3-native` performs the write.  Where bob's write
 /// is served, S3 grants each the other's read and the filesystem then
 /// denies both -- the isolation test's argument, one level down.

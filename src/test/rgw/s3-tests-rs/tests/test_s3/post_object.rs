@@ -1138,8 +1138,8 @@ async fn test_post_object_tags_anonymous_request() {
      * `s3-native` the object's `public-read` ACL decides, as S3 says
      * it should.
      *
-     * The tags are the other class, so they follow `s3-metadata` as
-     * well as `s3-native`. */
+     * The tags are the other class, asked separately, so a model that
+     * drew the line between the classes is followed too. */
     let cfg = get_config();
     let data = s3_tests_rs::access_model::Access::ask(
         s3_tests_rs::access_model::Class::Data,

@@ -3,12 +3,10 @@
 //!
 //! `rgw_nsfs_access_model` decides what the gateway does when the
 //! filesystem denies an operation S3 authorised:  `posix-strict`
-//! denies it too, `s3-metadata` performs the object's *metadata*
-//! work itself -- tags and ACL -- and `s3-native` performs the data
-//! work as well, which is what the posix driver and every other RGW
-//! backend do.
+//! denies it too, and `s3-native` performs it, which is what the
+//! posix driver and every other RGW backend do.
 //!
-//! **Under the first two it must never do that for the object's
+//! **Under `posix-strict` it must never do that for the object's
 //! bytes**, and it has already been broken once:
 //! on 2026-10-16 an attribute read left a gateway-opened descriptor
 //! cached on the object and a data read found it, serving bytes the
@@ -29,9 +27,9 @@ use crate::admin::{driver_hint_results, fs_access, FsAccess};
 /// The class of operation, as the driver names it
 /// (`nsfs::AccessClass`):  an object's bytes, or its tags and ACL.
 ///
-/// The classes differ because the models do:  `s3-metadata` performs
-/// an object's metadata work for an identity the filesystem denied
-/// and leaves its bytes alone.
+/// The two current models answer both classes alike;  the classes are
+/// kept so that a model drawing the line between them is a new value,
+/// not a reclassification of every test.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
     Data,
@@ -134,7 +132,7 @@ impl Access {
 /// Point the gateway at another access model for the rest of the
 /// process, returning the one it had.
 ///
-/// `posix-strict`, `s3-metadata`, `s3-native`, or `default`.
+/// `posix-strict`, `s3-native`, or `default`.
 /// Switching to `s3-native` is how a test asserting the byte line
 /// gets its other polarity:  the same read the strict models deny
 /// is served there, so the denial is shown to be the model's doing

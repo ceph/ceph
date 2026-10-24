@@ -64,7 +64,7 @@ macro_rules! assert_s3_err {
 ///
 /// Which way this goes is the gateway's access model, not the
 /// permission check, so it cannot be asked of `admin::fs_access`:
-/// under `s3-metadata` and `s3-native` the gateway performs the
+/// under `s3-native` the gateway performs the
 /// operation itself once S3 has authorised it, and under `posix-strict`
 /// the filesystem's denial stands.  `features::cross_account_metadata()` reports
 /// which, by interrogating the gateway.

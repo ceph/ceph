@@ -117,8 +117,7 @@ pub async fn feature_bool(name: &str) -> Option<bool> {
 /// filesystem denies an operation S3 authorised.
 ///
 /// `"posix-strict"` -- both must allow, which is NooBaa's model.
-/// `"s3-metadata"` -- S3 decides for an object's tags and ACL, never
-/// for its bytes.
+/// `"s3-native"` -- S3 decides, as on every other RGW backend.
 ///
 /// **Asked of the gateway first, and that is the point.**  A
 /// deployment cannot be wrong about its own configuration, while a
@@ -176,7 +175,8 @@ pub async fn lifecycle_day_secs() -> Option<Option<u64>> {
 /// backend where the filesystem would deny it.
 ///
 /// The data half of the question [`cross_account_metadata`] asks, and
-/// a separate one:  `s3-metadata` answers yes to that and no to this.
+/// a separate one:  the current models answer both alike, and a model
+/// that drew the line between them would not.
 /// `None` is unknown; `Some(false)` is a backend that reported a model
 /// which does not do this.
 ///
@@ -193,7 +193,7 @@ pub async fn cross_account_data() -> Option<bool> {
     }
     match access_model().await.as_deref() {
         Some("s3-native") => Some(true),
-        Some("s3-metadata") | Some("posix-strict") => Some(false),
+        Some("posix-strict") => Some(false),
         /* a model this suite has not heard of: unknown, not false */
         Some(_) => None,
         None => None,
@@ -203,8 +203,8 @@ pub async fn cross_account_data() -> Option<bool> {
 /// Whether an S3 grant reaches another identity's object *metadata* --
 /// its tags and ACL -- on a backend where the filesystem would deny it.
 ///
-/// The question nearly every affected test actually asks.  Both
-/// `s3-metadata` and `s3-native` do this, S3 policy governing it;
+/// The question nearly every affected test actually asks.
+/// `s3-native` does this, S3 policy governing it;
 /// `posix-strict` does not, as NooBaa does not.  `None` is unknown;
 /// `Some(false)` is a backend that reported a model which does not do
 /// this.
@@ -216,7 +216,7 @@ pub async fn cross_account_metadata() -> Option<bool> {
         return Some(true);
     }
     match access_model().await.as_deref() {
-        Some("s3-metadata") | Some("s3-native") => Some(true),
+        Some("s3-native") => Some(true),
         Some("posix-strict") => Some(false),
         /* a model this suite has not heard of: unknown, not false */
         Some(_) => None,
