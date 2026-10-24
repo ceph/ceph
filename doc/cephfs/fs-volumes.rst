@@ -2108,10 +2108,11 @@ instead of getting served. Which eventually causes policy throttles to kick in
 and the Manager becomes unresponsive.
 
 In this event, the volumes plugin can be disabled even though it is an
-``always on`` module in the Manager. To do so, run ``ceph mgr module disable volumes
---yes-i-really-mean-it``. Do note that this command will disable operations
-and remove commands of the volumes plugin since it will disable all CephFS
-services on the Ceph cluster accessed through this plugin.
+``always on`` module in the Manager. To do so, run
+``ceph mgr module force disable volumes --yes-i-really-mean-it`` (Squid 19.2.3
+and later releases). Do note that this command will disable operations and
+remove commands of the volumes plugin since it will disable all CephFS services
+on the Ceph cluster accessed through this plugin.
 
 Before resorting to a measure as drastic as this, it is a good idea to try less
 drastic measures and then assess if the file system experience has improved due
