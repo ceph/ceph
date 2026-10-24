@@ -42,6 +42,7 @@
 #include "BlockDevice.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
+#include <sys/sysctl.h>
 #endif
 #include "common/debug.h"
 #include "common/numa.h"
@@ -233,8 +234,18 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
-    goto out_fail;
+    if (r == -ENODEV) {
+      // posix_fadvise() is advisory. FreeBSD only implements it for
+      // regular files and returns ENODEV for anything else, which includes
+      // every disk device (disks are character devices there). There is no
+      // readahead to tune, so this is a no-op, not a failure.
+      dout(10) << __func__ << " posix_fadvise not supported on this device, "
+               << "ignoring: " << cpp_strerror(r) << dendl;
+      r = 0;
+    } else {
+      derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
+      goto out_fail;
+    }
   }
 
   if (lock_exclusive) {
@@ -565,16 +576,69 @@ int KernelDevice::_aio_start()
 {
   if (aio) {
     dout(10) << __func__ << dendl;
+#if defined(HAVE_POSIXAIO)
+    // FreeBSD's POSIX AIO limits are sysctls whose defaults are far below
+    // what an OSD submits. vfs.aio.max_buf_aio counts iovecs and must
+    // cover an aio_writev() of up to IOV_MAX segments.
+    // vfs.aio.max_aio_queue_per_proc is per process, and an OSD opens at
+    // least two KernelDevices with their own queue of
+    // bdev_aio_max_queue_depth (BlueStore's block device, and BlueFS
+    // opening the same device again), plus one more for each separate
+    // db or wal device. If a limit is too low, submissions fail with
+    // EAGAIN until submit_batch() gives up and aio_submit() asserts, so
+    // refuse to start with a clear message instead.
+    // vfs.aio.max_aio_queue is system-wide and shared by all OSDs on the
+    // host, so it cannot be checked per process.
+    auto check_sysctl = [this, func = __func__](const char *name,
+                                                int needed,
+                                                const char *hint) {
+      int value = 0;
+      size_t len = sizeof(value);
+      if (::sysctlbyname(name, &value, &len, nullptr, 0) < 0) {
+        int r = -errno;
+        derr << func << " sysctl " << name << " failed: "
+             << cpp_strerror(r) << dendl;
+        return r;
+      }
+      if (value < needed) {
+        derr << func << " " << name << " is " << value
+             << ", but at least " << needed << " is required; raise it"
+             << " with 'sysctl " << name << "=" << needed << "'"
+             << hint << dendl;
+        return -EINVAL;
+      }
+      return 0;
+    };
+    int depth = static_cast<int>(cct->_conf->bdev_aio_max_queue_depth);
+    int r = check_sysctl("vfs.aio.max_buf_aio", IOV_MAX, "");
+    if (r == 0) {
+      r = check_sysctl("vfs.aio.max_aio_queue_per_proc", 2 * depth,
+                       " (each OSD opens its block device twice; add "
+                       "bdev_aio_max_queue_depth for each separate db or "
+                       "wal device)");
+    }
+    if (r == 0) {
+      r = io_queue->init(fd_directs);
+      if (r < 0) {
+        derr << __func__ << " aio queue init (kqueue) failed: "
+             << cpp_strerror(r) << dendl;
+      }
+    }
+    if (r < 0) {
+      return r;
+    }
+#else
     int r = io_queue->init(fd_directs);
     if (r < 0) {
       if (r == -EAGAIN) {
-	derr << __func__ << " io_setup(2) failed with EAGAIN; "
-	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+        derr << __func__ << " io_setup(2) failed with EAGAIN; "
+             << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
       } else {
-	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+        derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
       }
       return r;
     }
+#endif
     aio_thread.create("bstore_aio");
   }
   return 0;
@@ -734,7 +798,7 @@ void KernelDevice::_aio_thread()
 		path.c_str(),
 		r,
 #if defined(HAVE_POSIXAIO)
-                aio[i]->aio.aiocb.aio_lio_opcode,
+                aio[i]->aio.aio_lio_opcode,
 #else
                 aio[i]->iocb.aio_lio_opcode,
 #endif
@@ -1185,7 +1249,7 @@ int KernelDevice::aio_write(
 
   _aio_log_start(ioc, off, len);
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -1500,7 +1564,7 @@ int KernelDevice::aio_read(
 	  << dendl;
 
   int r = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
@@ -1646,6 +1710,13 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   int r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, POSIX_FADV_DONTNEED);
   if (r) {
     r = -r;
+    if (r == -ENODEV || r == -EOPNOTSUPP) {
+      // No page cache to drop: FreeBSD returns ENODEV for anything that
+      // is not a regular file, including all disk devices.
+      dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+               << " posix_fadvise not supported on this device, ignoring" << dendl;
+      return 0;
+    }
     derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	 << " error: " << cpp_strerror(r) << dendl;
   }
