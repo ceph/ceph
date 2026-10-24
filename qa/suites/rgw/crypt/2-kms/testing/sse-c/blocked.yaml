@@ -1,0 +1,8 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw s3 block sse c by default: true
+  s3tests:
+    sse-c-block-by-default: true
+    extra_attrs: [sse_c_block_by_default]
