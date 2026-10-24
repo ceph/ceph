@@ -35,6 +35,7 @@ from mgr_util import format_bytes
 from cephadm.services.service_registry import service_registry
 from cephadm.services.nfs import NFSService
 from cephadm.services.ingress import IngressService
+from cephadm.services.nvmeof import NvmeofService
 
 from . import utils
 from . import exchange
@@ -1211,6 +1212,7 @@ class CephadmServe:
         self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
+        nvmeof_redeploy_groups: Set[Tuple[str, str]] = set()
         for dd in daemons:
             # orphan?
             spec = self.mgr.spec_store.active_specs.get(dd.service_name(), None)
@@ -1265,6 +1267,12 @@ class CephadmServe:
             action = scheduled_action = (
                 self.mgr.cache.get_scheduled_daemon_action(
                     dd.hostname, dd.name()
+                )
+            )
+            scheduled_action_force = (
+                self.mgr.cache.get_scheduled_daemon_action_force(
+                    dd.hostname,
+                    dd.name(),
                 )
             )
             skip_restart_for_reconfig = False
@@ -1368,6 +1376,33 @@ class CephadmServe:
                             action, dd.name(), r.stderr,
                         )
                         continue
+                nvmeof_redeploy_group = None
+
+                if (
+                    dd.daemon_type == 'nvmeof'
+                    and action == 'redeploy'
+                ):
+                    forced_redeploy = (
+                        scheduled_action == 'redeploy'
+                        and scheduled_action_force
+                    )
+
+                    nvmeof_service = cast(NvmeofService, svc_obj)
+
+                    r, nvmeof_redeploy_group = nvmeof_service.ok_to_redeploy(
+                        dd,
+                        nvmeof_redeploy_groups,
+                        force=forced_redeploy,
+                    )
+
+                    if r.retval:
+                        self.log.info(
+                            'Delaying redeploy of %s: %s',
+                            dd.name(),
+                            r.stderr,
+                        )
+                        continue
+
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
                     reconfig_extras: dict[str, Any] = {}
@@ -1376,6 +1411,8 @@ class CephadmServe:
                     if send_signal_to_daemon:
                         reconfig_extras['send_signal_to_daemon'] = send_signal_to_daemon
                     self.mgr._daemon_action(daemon_spec, action=action, **reconfig_extras)
+                    if nvmeof_redeploy_group is not None:
+                        nvmeof_redeploy_groups.add(nvmeof_redeploy_group)
 
                     if self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name()):
                         self.mgr.cache.save_host(dd.hostname)
