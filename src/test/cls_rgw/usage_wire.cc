@@ -1,6 +1,6 @@
 // RGW CLS: Independent sequence/associative usage bindings and native codecs.
 #include "test/cls_rgw/wire_test.h"
-#include "cls/rgw/cls_rgw_usage_datum.h"
+#include "rgw/datum/adapters/cls/usage.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include <catch2/catch_test_macros.hpp>

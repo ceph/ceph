@@ -9,7 +9,7 @@
 #include "cls/rgw_gc/cls_rgw_gc_const.h"
 #include "cls/queue/cls_queue_const.h"
 
-#include "cls_rgw_gc_datum.h"
+#include "rgw/datum/adapters/cls/queued_gc.h"
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 
 using std::list;

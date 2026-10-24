@@ -2,8 +2,8 @@
 #ifndef CEPH_CLS_RGW_OLH_DATUM_H
  #define CEPH_CLS_RGW_OLH_DATUM_H
 
-#include "cls_rgw_types.h"
-#include "cls_rgw_olh_types.h"
+#include "cls/rgw/cls_rgw_types.h"
+#include "olh_types.h"
 #include "include/buffer.h"
 
 #include <cstdint>

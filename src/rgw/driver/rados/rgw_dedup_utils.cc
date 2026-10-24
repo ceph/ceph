@@ -14,7 +14,7 @@
 
 #include "rgw_dedup_utils.h"
 #include "common/ceph_crypto.h"
-#include "common/buffer_cursor.h"
+#include "rgw/datum/adapters/ceph/buffer_cursor.h"
 #include "include/container_ios.h"
 
 namespace rgw::dedup {

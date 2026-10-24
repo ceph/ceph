@@ -1,6 +1,6 @@
 // RGW CLS: Native reshard wire compatibility with independent records/containers.
 #include "test/cls_rgw/wire_test.h"
-#include "cls/rgw/cls_rgw_reshard_datum.h"
+#include "rgw/datum/adapters/cls/reshard.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include <catch2/catch_test_macros.hpp>

@@ -1,6 +1,6 @@
 // Independent user records must accept the same concrete native encoding.
 #include "datum_test.h"
-#include "cls/user/cls_user_datum.h"
+#include "rgw/datum/adapters/cls/user.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <limits>

@@ -1,6 +1,6 @@
 // RGW CLS: Independent object records checked against the C++23 native codec.
 #include "test/cls_rgw/wire_test.h"
-#include "cls/rgw/cls_rgw_object_datum.h"
+#include "rgw/datum/adapters/cls/object.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include <catch2/catch_test_macros.hpp>

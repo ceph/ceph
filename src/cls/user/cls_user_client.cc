@@ -5,7 +5,7 @@
 #include <utility>
 
 #include "cls/user/cls_user_client.h"
-#include "cls/user/cls_user_datum.h"
+#include "rgw/datum/adapters/cls/user.h"
 #include "include/rados/librados.hpp"
 
 using std::list;

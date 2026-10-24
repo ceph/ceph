@@ -9,7 +9,7 @@
 #include "objclass/objclass.h"
 
 #include "cls_user_ops.h"
-#include "cls_user_datum.h"
+#include "rgw/datum/adapters/cls/user.h"
 #include "rgw/rgw_string.h"
 
 using std::map;

@@ -1,6 +1,6 @@
 // RGW CLS: Independent lifecycle records and borrowed legacy association keys.
 #include "test/cls_rgw/wire_test.h"
-#include "cls/rgw/cls_rgw_lc_datum.h"
+#include "rgw/datum/adapters/cls/lc.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include <catch2/catch_test_macros.hpp>

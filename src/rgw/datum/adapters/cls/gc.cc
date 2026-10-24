@@ -1,7 +1,7 @@
 // GC wire implementation shared only by the two RGW-owned CLS classes.
-#include "cls_rgw_gc_datum.h"
-#include "common/datum_wire.h"
-#include "cls/rgw_gc/cls_rgw_gc_datum.h"
+#include "gc.h"
+#include "rgw/datum/adapters/ceph/wire.h"
+#include "queued_gc.h"
 
 namespace cls::rgw::gc_datum {
 

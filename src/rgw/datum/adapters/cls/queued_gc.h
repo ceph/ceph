@@ -2,7 +2,7 @@
 #ifndef CEPH_CLS_RGW_QUEUED_GC_DATUM_H
  #define CEPH_CLS_RGW_QUEUED_GC_DATUM_H
 
-#include "cls/rgw/cls_rgw_gc_datum.h"
+#include "gc.h"
 
 namespace cls::rgw::queued_gc_datum {
 

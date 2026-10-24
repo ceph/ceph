@@ -1,6 +1,6 @@
 // RGW CLS: Independent legacy GC requests/replies checked by native C++23 codecs.
 #include "test/cls_rgw/wire_test.h"
-#include "cls/rgw/cls_rgw_gc_datum.h"
+#include "rgw/datum/adapters/cls/gc.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include <catch2/catch_test_macros.hpp>

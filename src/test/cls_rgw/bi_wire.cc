@@ -1,9 +1,9 @@
 // RGW CLS: Native compatibility and independent Datum/zpp representations.
-#include "common/datum_wire.h"
+#include "rgw/datum/adapters/ceph/wire.h"
 #include "test/cls_rgw/wire_test.h"
 #include "bi_native_oracle.h"
-#include "cls/rgw/cls_rgw_bi_datum.h"
-#include "cls/rgw/cls_rgw_bi_wire.h"
+#include "rgw/datum/adapters/cls/bi.h"
+#include "rgw/datum/adapters/cls/bi_wire.h"
 
 #include <catch2/catch_test_macros.hpp>
 

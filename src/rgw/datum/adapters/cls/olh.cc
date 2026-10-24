@@ -1,7 +1,7 @@
 // RGW CLS: Bind OLH wire fields to native maps or independent vector records.
-#include "cls_rgw_olh_datum.h"
-#include "cls_rgw_olh_wire.h"
-#include "cls_rgw_ops.h"
+#include "olh.h"
+#include "olh_wire.h"
+#include "cls/rgw/cls_rgw_ops.h"
 
 #include <algorithm>
 #include <cerrno>

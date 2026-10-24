@@ -14,7 +14,7 @@
 #include "cls/rgw_gc/cls_rgw_gc_const.h"
 #include "cls/queue/cls_queue_src.h"
 
-#include "cls_rgw_gc_datum.h"
+#include "rgw/datum/adapters/cls/queued_gc.h"
 
 #define GC_LIST_DEFAULT_MAX 128
 

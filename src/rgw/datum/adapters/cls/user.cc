@@ -1,6 +1,6 @@
 // RGW user CLS wire profiles over the existing Datum conversion hooks.
-#include "cls_user_datum.h"
-#include "common/datum_wire.h"
+#include "user.h"
+#include "rgw/datum/adapters/ceph/wire.h"
 
 namespace cls::rgw::user_datum {
 

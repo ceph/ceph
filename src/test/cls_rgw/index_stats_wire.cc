@@ -1,7 +1,7 @@
 // RGW CLS: Independent statistics records checked against native C++23 codecs.
 #include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_ops.h"
-#include "cls/rgw/cls_rgw_bucket_datum.h"
+#include "rgw/datum/adapters/cls/bucket.h"
 
 #include <catch2/catch_test_macros.hpp>
 

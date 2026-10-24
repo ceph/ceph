@@ -3,7 +3,7 @@
 #ifndef CEPH_COMMON_DATUM_WIRE_H
  #define CEPH_COMMON_DATUM_WIRE_H
 
-#include "common/buffer_cursor.h"
+#include "buffer_cursor.h"
 #include "common/container_concepts.h"
 #include "datum/codec/zpp.h"
 #include "include/encoding.h"

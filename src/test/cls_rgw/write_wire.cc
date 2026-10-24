@@ -1,7 +1,7 @@
 // RGW CLS: C++23 native codecs independently check private module bindings.
 #include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_ops.h"
-#include "cls/rgw/cls_rgw_write_datum.h"
+#include "rgw/datum/adapters/cls/write.h"
 
 #include <catch2/catch_test_macros.hpp>
 

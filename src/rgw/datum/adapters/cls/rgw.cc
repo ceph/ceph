@@ -1,16 +1,16 @@
 // RGW CLS: Bind independent client/module records to established wire profiles.
 // Opaque payloads retain native backing storage; only metadata uses zpp spans.
 // Native types and completion ownership never enter Datum's pure mechanisms.
-#include "cls_rgw_bi_datum.h"
-#include "cls_rgw_bi_wire.h"
-#include "cls_rgw_bilog_datum.h"
-#include "cls_rgw_bucket_datum.h"
-#include "cls_rgw_lc_datum.h"
-#include "cls_rgw_multipart_datum.h"
-#include "cls_rgw_object_datum.h"
-#include "cls_rgw_reshard_datum.h"
-#include "cls_rgw_usage_datum.h"
-#include "cls_rgw_write_datum.h"
+#include "bi.h"
+#include "bi_wire.h"
+#include "bilog.h"
+#include "bucket.h"
+#include "lc.h"
+#include "multipart.h"
+#include "object.h"
+#include "reshard.h"
+#include "usage.h"
+#include "write.h"
 
 #include <bit>
 #include <utility>

@@ -43,13 +43,16 @@ formatting targets add their own dependencies. `datum::fmt` uses Ceph's selected
 `FMT_LIB`, including its system/bundled and header-only choices. Header inclusion and
 record enrollment remain explicit; there is no umbrella that imports all layers.
 
-Ceph consumers can include `common/datum_wire.h` and use `ceph::datum_wire` for
-native versioned frames, selected metadata fields, bounded reads, and candidate
-publication. This C++26 adapter uses `datum::zpp`; Ceph buffers and wire policy
-remain outside Datum's pure headers. The RGW object-index key profile lives in
-`rgw/rgw_datum_wire.h`; operation profiles remain with their consumers.
-`common/buffer_cursor.h` supplies codec-independent contiguous reads using caller
-scratch storage and remains usable from C++23.
+Native integration lives under `adapters/`, separately from the generic headers
+in `include/datum/`. Ceph buffers and framing live in `adapters/ceph/wire.h`,
+using `ceph::datum_wire` and `datum::zpp`. The gateway object-index key profile
+lives in `adapters/rgw/key.h`, and the class-specific records, wire profiles,
+and compiled implementations live in `adapters/cls/`.
+
+`adapters/ceph/buffer_cursor.h` supplies codec-independent contiguous reads using
+caller scratch storage and remains usable from C++23. Class declaration headers
+also retain their C++23 boundary. The three private native object targets are
+registered by Ceph's class build; the standalone Datum build does not load them.
 
 The public surface has 16 entry headers. Shared reflection metadata lives in
 `detail/record.h`; consumers do not include it directly. Record views, ordered

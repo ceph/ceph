@@ -2,7 +2,7 @@
 #ifndef CEPH_TEST_CLS_RGW_OLH_NATIVE_ORACLE_H
  #define CEPH_TEST_CLS_RGW_OLH_NATIVE_ORACLE_H
 
-#include "cls/rgw/cls_rgw_olh_types.h"
+#include "rgw/datum/adapters/cls/olh_types.h"
 #include "include/buffer.h"
 
 #include <cstdint>

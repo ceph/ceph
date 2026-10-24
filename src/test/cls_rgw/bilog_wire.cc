@@ -1,7 +1,7 @@
 // RGW CLS: Native C++23 codecs check independent bilog messages and sequences.
 #include "test/cls_rgw/wire_test.h"
 #include "cls/rgw/cls_rgw_ops.h"
-#include "cls/rgw/cls_rgw_bilog_datum.h"
+#include "rgw/datum/adapters/cls/bilog.h"
 
 #include <catch2/catch_test_macros.hpp>
 

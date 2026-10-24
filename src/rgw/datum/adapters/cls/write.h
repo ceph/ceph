@@ -2,7 +2,7 @@
 #ifndef CEPH_CLS_RGW_WRITE_DATUM_H
  #define CEPH_CLS_RGW_WRITE_DATUM_H
 
-#include "cls_rgw_types.h"
+#include "cls/rgw/cls_rgw_types.h"
 
 #include <cstdint>
 

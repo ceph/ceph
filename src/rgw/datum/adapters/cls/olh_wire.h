@@ -2,7 +2,7 @@
 #ifndef CEPH_CLS_RGW_OLH_WIRE_H
  #define CEPH_CLS_RGW_OLH_WIRE_H
 
-#include "rgw/rgw_datum_wire.h"
+#include "rgw/datum/adapters/rgw/key.h"
 
 #include <cstdint>
 #include <utility>

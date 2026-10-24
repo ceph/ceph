@@ -2,7 +2,7 @@
 #ifndef CEPH_RGW_DATUM_WIRE_H
  #define CEPH_RGW_DATUM_WIRE_H
 
-#include "common/datum_wire.h"
+#include "rgw/datum/adapters/ceph/wire.h"
 
 #include <string>
 #include <string_view>

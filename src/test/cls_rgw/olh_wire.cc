@@ -1,8 +1,8 @@
 // RGW CLS: OLH native-wire compatibility with independent records/containers.
 #include "test/cls_rgw/wire_test.h"
 #include "olh_native_oracle.h"
-#include "cls/rgw/cls_rgw_olh_datum.h"
-#include "cls/rgw/cls_rgw_olh_wire.h"
+#include "rgw/datum/adapters/cls/olh.h"
+#include "rgw/datum/adapters/cls/olh_wire.h"
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include <catch2/catch_test_macros.hpp>

@@ -3,7 +3,7 @@
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 #include "cls/rgw_gc/cls_rgw_gc_ops.h"
 #include "cls/rgw/cls_rgw_ops.h"
-#include "cls/rgw_gc/cls_rgw_gc_datum.h"
+#include "rgw/datum/adapters/cls/queued_gc.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cerrno>
 #include <limits>

@@ -2,7 +2,7 @@
 #ifndef CEPH_CLS_USER_DATUM_H
  #define CEPH_CLS_USER_DATUM_H
 
-#include "cls_user_types.h"
+#include "cls/user/cls_user_types.h"
 
 #include <cstdint>
 #include <list>
