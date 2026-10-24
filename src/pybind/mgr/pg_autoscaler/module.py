@@ -241,7 +241,7 @@ class PgAutoscaler(MgrModule):
         report on pool pg_num sizing recommendation and intent
         """
         osdmap = self.get_osdmap()
-        pools = osdmap.get_pools_by_name()
+        pools = self.get_osdmap_pools_by_name(osdmap)
         ps, root_map = self._get_pool_status(osdmap, pools)
 
         if format in ('json', 'json-pretty'):
@@ -337,16 +337,30 @@ class PgAutoscaler(MgrModule):
             self.remote('progress', 'complete', ev.ev_id)
             del self._event[pool_id]
 
+    def get_osdmap_dump(self) -> Dict[str, Any]:
+        return self.get('osd_map')
+
+    def get_osdmap_flags(self) -> str:
+        return self.get_osdmap_dump().get('flags', '')
+
+    def get_osdmap_pools_by_name(self, osdmap: OSDMap) -> Dict[str, Dict[str, Any]]:
+        # the cache may already hold a newer osdmap
+        dump = self.get_osdmap_dump()
+        if dump.get('epoch') != osdmap.get_epoch():
+            dump = osdmap.dump()
+        return {p['pool_name']: p for p in dump.get('pools', [])}
+
+    def get_osdmap_require_osd_release(self) -> str:
+        return self.get_osdmap_dump().get('require_osd_release', '')
+
     def has_noautoscale_flag(self) -> bool:
-        flags = self.get_osdmap().dump().get('flags', '')
-        if 'noautoscale' in flags:
+        if 'noautoscale' in self.get_osdmap_flags():
             return True
         else:
             return False
 
     def has_norecover_flag(self) -> bool:
-        flags = self.get_osdmap().dump().get('flags', '')
-        if 'norecover' in flags:
+        if 'norecover' in self.get_osdmap_flags():
             return True
         else:
             return False
@@ -414,7 +428,7 @@ class PgAutoscaler(MgrModule):
         while not self._shutdown.is_set():
             if not self.has_noautoscale_flag() and not self.has_norecover_flag():
                 osdmap = self.get_osdmap()
-                pools = osdmap.get_pools_by_name()
+                pools = self.get_osdmap_pools_by_name(osdmap)
                 self._maybe_adjust(osdmap, pools)
                 self._update_progress_events(osdmap, pools)
             self._shutdown.wait(timeout=self.sleep_interval)
@@ -1012,7 +1026,7 @@ class PgAutoscaler(MgrModule):
         if self.has_noautoscale_flag():
             self.log.debug("noautoscale_flag is set.")
             return
-        if osdmap.get_require_osd_release() < 'nautilus':
+        if self.get_osdmap_require_osd_release() < 'nautilus':
             return
 
         self.log.debug("pool: {0}".format(json.dumps(pools, indent=4,
