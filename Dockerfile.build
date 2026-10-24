@@ -24,6 +24,7 @@ ARG CEPH_BASE_BRANCH=main
 ARG SCCACHE_VERSION=v0.15.0
 ARG SCCACHE_REPO=https://github.com/mozilla/sccache
 ARG WITH_CRIMSON=true
+ARG WITH_RADOSGW_CUOBJ=OFF
 ARG FOR_MAKE_CHECK=1
 # Non-empty: fail the image build if the ceph-libboost packages can't be
 # installed, instead of leaving boost to the submodule (see install-deps.sh).
@@ -38,6 +39,7 @@ RUN DISTRO=$DISTRO \
     CLEAN_DNF=$CLEAN_DNF \
     CEPH_CTR_SRC=${CEPH_CTR_SRC} \
     WITH_CRIMSON=${WITH_CRIMSON} \
+    WITH_RADOSGW_CUOBJ=${WITH_RADOSGW_CUOBJ} \
     FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \
     REQUIRE_BOOST_PKGS=${REQUIRE_BOOST_PKGS} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh

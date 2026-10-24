@@ -69,6 +69,85 @@ Build RPM packages on Centos 9:
 ./src/script/build-with-container.py -d centos9 -e packages
 ```
 
+Build RPM packages with RGW cuObject support on Rocky Linux 10:
+```
+./src/script/build-with-container.py -d rocky10 --with-cuobj -e source-rpm -e rpm
+```
+
+Use `-d rocky9` for Rocky Linux 9:
+```
+./src/script/build-with-container.py -d rocky9 --with-cuobj -e source-rpm -e rpm
+```
+
+cuObject is disabled by default. `--with-cuobj` enables the spec's `--with
+cuobj` conditional, which sets `WITH_RADOSGW_CUOBJ=ON`. It also enables NVIDIA's
+matching RHEL 9 or RHEL 10 repository inside the build image and installs
+`libcuobjserver-devel >= 2.0.0` and its server runtime dependency. The CUDA
+toolkit, GPUDirect Storage and cuObject client packages are not needed for
+this server build. Packages installed on the host are not automatically
+available inside the container.
+
+The container setup delegates NVIDIA repository configuration to
+`install-deps.sh` with `WITH_RADOSGW_CUOBJ=ON`. To install the same build
+dependencies directly on a supported host, run:
+```
+env WITH_RADOSGW_CUOBJ=ON ./install-deps.sh
+```
+Without this opt-in, `install-deps.sh` does not add NVIDIA's repository or
+request the cuObject server packages.
+
+Automatic repository setup supports Rocky Linux, CentOS Stream, AlmaLinux and
+RHEL 9/10 images on x86_64 and aarch64. It reads the version from the container's
+`/etc/os-release`, independently of the host distribution.
+
+Fedora is not supported for these cuObject builds: NVIDIA's Fedora 44
+repository provides CUDA and cuObject client packages but lacks
+`libcuobjserver-devel`, the server SDK required by RGW. Enabling
+`WITH_RADOSGW_CUOBJ=ON` or `--with-cuobj` fails with an error when dependency
+setup runs on Fedora, before adding any NVIDIA repository.
+
+The same Rocky container commands can be run on AlmaLinux or RHEL hosts.
+To select an AlmaLinux container instead, use the matching EL major version
+and override the base image, for example:
+```
+./src/script/build-with-container.py -d rocky9 --with-cuobj \
+  --base-image=docker.io/library/almalinux:9 --tag=+alma \
+  -e source-rpm -e rpm
+```
+Use `rocky10` and `almalinux:10` together for EL10. For a RHEL 10 container
+on a subscribed RHEL host using Red Hat's Podman, run:
+```
+./src/script/build-with-container.py --container-engine=podman \
+  -d rocky10 --base-image=registry.access.redhat.com/ubi10/ubi:latest \
+  --tag=+rhel10 --with-cuobj -e source-rpm -e rpm
+```
+For RHEL 9, use `rocky9`, `ubi9/ubi:latest` and `--tag=+rhel9` together.
+The RHEL setup enables the full BaseOS, AppStream and CodeReady Builder
+repositories and installs EPEL. EL10 also uses Ceph's lab-extras repository.
+The full RHEL repositories must be available through the host subscription;
+the public UBI repositories alone do not contain all Ceph build dependencies.
+NVIDIA's repository provides the additional cuObject packages. See Red Hat's
+[container repository documentation](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/building_running_and_managing_containers/assembly_adding-software-to-a-ubi-container_building-running-and-managing-containers).
+There are no separate `alma9`/`rhel9` distro selectors in this script.
+
+The explicit `source-rpm` step regenerates the SRPM with the updated spec;
+`-e rpm` alone may reuse an existing SRPM. Once the SRPM contains these changes,
+`./src/script/build-with-container.py -d rocky10 --with-cuobj -e rpm` is enough.
+For direct `rpmbuild` use, enable the same feature with `rpmbuild --rebuild
+--with cuobj ceph-<version>.src.rpm` after configuring the NVIDIA repository and
+installing the build dependencies.
+
+cuObject build images have a `.cuobj` suffix in their automatically generated
+tags, and the image cache check also compares the cuObject setting when using
+an explicit tag. `--with-cuobj` additionally enables cuObject when configuring
+a new source build with `-e build` or `-e configure`. As with other configuration
+options, use a new build directory or reconfigure an existing one with CMake.
+
+`CONFIGURE_ARGS` applies to source builds, not RPM builds. To pass it from the
+host into a source build container, use `--extra=-eCONFIGURE_ARGS` (or put it in
+an `--env-file`). For RPM builds, use `--with-cuobj` as above; setting
+`CONFIGURE_ARGS=-DWITH_RADOSGW_CUOBJ=ON` does not enable the RPM feature.
+
 Build Debian packages on Ubuntu 22.04 (Jammy):
 ```
 ./src/script/build-with-container.py -d ubuntu22.04 -e packages
@@ -177,6 +256,18 @@ The overlay can also be temporary, with no files persisted after the container
 has exited. Pass `--overlay-dir=-` to enable this option. Note that invoking
 `build-with-container.py` default targets may use multiple container instances
 and passing this option will break those targets.
+
+By default, the source bind mount uses `:Z` to let the container engine relabel
+the tree for SELinux. If the tree contains files that cannot be relabeled,
+such as admin sockets owned by another user under `build/asok`, Podman can fail
+before running the build with an `lsetxattr ... operation not permitted` error.
+Use `--no-selinux-label` to disable SELinux separation for the runtime build
+containers and omit relabeling of the source and npm cache bind mounts:
+
+```
+./src/script/build-with-container.py -d rocky10 --with-cuobj \
+  --no-selinux-label -e source-rpm -e rpm
+```
 
 
 ### Authenticating GitHub dependency fetches
