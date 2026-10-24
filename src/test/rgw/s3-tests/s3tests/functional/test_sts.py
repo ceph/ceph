@@ -35,6 +35,7 @@ from . import(
     setup_teardown,
     get_iam_root_client,
     get_iam_root_account_id,
+    get_iam_s3client,
     get_iam_client,
     get_sts_client,
     get_client,
@@ -61,6 +62,7 @@ from . import(
     make_iam_name
     )
 from .iam import iam_root, iam_alt_root
+from .test_s3 import _exercise_bucket_policy_principal_type
 from .utils import assert_raises, _get_status_and_error_code
 
 log = logging.getLogger(__name__)
@@ -191,6 +193,110 @@ def test_get_session_token():
         finish=s3_client.delete_bucket(Bucket=bucket_name)
     finally: # clean up user policy even if create_bucket/delete_bucket fails
         iam_client.delete_user_policy(UserName=sts_user_id,PolicyName=policy_name)
+
+@pytest.mark.test_of_sts
+@pytest.mark.iam_account
+@pytest.mark.fails_on_dbstore
+@pytest.mark.parametrize('principal_type', ['User', 'Account'])
+def test_get_session_token_principal_type(iam_root, principal_type):
+    # GetSessionToken preserves the caller's identity rather than assuming a role:
+    # https://docs.aws.amazon.com/STS/latest/APIReference/API_GetSessionToken.html
+    if principal_type == 'Account':
+        sts = get_iam_root_client(service_name='sts')
+    else:
+        user_name = make_iam_name('PrincipalTypeUser')
+        iam_root.create_user(UserName=user_name, Path=get_iam_path_prefix())
+        iam_root.put_user_policy(
+            UserName=user_name, PolicyName='AllowSessionAndS3', PolicyDocument=json.dumps({
+                'Version': '2012-10-17',
+                'Statement': [{
+                    'Effect': 'Allow',
+                    'Action': ['sts:GetSessionToken', 's3:*'],
+                    'Resource': '*',
+                }],
+            }))
+        key = iam_root.create_access_key(UserName=user_name)['AccessKey']
+        sts = get_sts_client(
+            aws_access_key_id=key['AccessKeyId'], aws_secret_access_key=key['SecretAccessKey'])
+
+    credentials = sts.get_session_token()['Credentials']
+    client = get_iam_s3client(
+        aws_access_key_id=credentials['AccessKeyId'],
+        aws_secret_access_key=credentials['SecretAccessKey'],
+        aws_session_token=credentials['SessionToken'])
+    _exercise_bucket_policy_principal_type(client, principal_type)
+
+
+@pytest.mark.test_of_sts
+@pytest.mark.iam_account
+@pytest.mark.fails_on_dbstore
+def test_assume_role_principal_type(iam_root):
+    role_name = make_iam_name('PrincipalTypeRole')
+    root_arn = iam_root.get_user()['User']['Arn']
+    role = iam_root.create_role(
+        RoleName=role_name, Path=get_iam_path_prefix(),
+        AssumeRolePolicyDocument=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': root_arn},
+                'Action': 'sts:AssumeRole',
+                'Condition': {'StringEquals': {'aws:PrincipalType': 'Account'}},
+            }],
+        }))['Role']
+    iam_root.put_role_policy(
+        RoleName=role_name, PolicyName='AllowS3', PolicyDocument=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{'Effect': 'Allow', 'Action': 's3:*', 'Resource': '*'}],
+        }))
+    sts = get_iam_root_client(service_name='sts')
+    credentials = sts.assume_role(
+        RoleArn=role['Arn'], RoleSessionName='principal-type-session')['Credentials']
+    client = get_iam_s3client(
+        aws_access_key_id=credentials['AccessKeyId'],
+        aws_secret_access_key=credentials['SecretAccessKey'],
+        aws_session_token=credentials['SessionToken'])
+    _exercise_bucket_policy_principal_type(client, 'AssumedRole')
+
+
+@pytest.mark.webidentity_test
+@pytest.mark.iam_account
+@pytest.mark.fails_on_dbstore
+def test_assume_role_with_web_identity_principal_type(iam_root):
+    check_webidentity()
+    idp_url = f'localhost:8080/auth/realms/{get_realm_name()}'
+    provider_arn = iam_root.create_open_id_connect_provider(
+        Url=f'http://{idp_url}', ClientIDList=[get_aud()],
+        ThumbprintList=[get_thumbprint()])['OpenIDConnectProviderArn']
+    try:
+        role_name = make_iam_name('PrincipalTypeWebRole')
+        role = iam_root.create_role(
+            RoleName=role_name, Path=get_iam_path_prefix(),
+            AssumeRolePolicyDocument=json.dumps({
+                'Version': '2012-10-17',
+                'Statement': [{
+                    'Effect': 'Allow',
+                    'Principal': {'Federated': provider_arn},
+                    'Action': 'sts:AssumeRoleWithWebIdentity',
+                    'Condition': {'StringEquals': {f'{idp_url}:sub': get_sub()}},
+                }],
+            }))['Role']
+        iam_root.put_role_policy(
+            RoleName=role_name, PolicyName='AllowS3', PolicyDocument=json.dumps({
+                'Version': '2012-10-17',
+                'Statement': [{'Effect': 'Allow', 'Action': 's3:*', 'Resource': '*'}],
+            }))
+        credentials = get_sts_client().assume_role_with_web_identity(
+            RoleArn=role['Arn'], RoleSessionName='principal-type-session',
+            WebIdentityToken=get_token())['Credentials']
+        client = get_iam_s3client(
+            aws_access_key_id=credentials['AccessKeyId'],
+            aws_secret_access_key=credentials['SecretAccessKey'],
+            aws_session_token=credentials['SessionToken'])
+        _exercise_bucket_policy_principal_type(client, 'AssumedRole')
+    finally:
+        iam_root.delete_open_id_connect_provider(OpenIDConnectProviderArn=provider_arn)
+
 
 @pytest.mark.test_of_sts
 @pytest.mark.fails_on_dbstore
