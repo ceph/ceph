@@ -410,7 +410,17 @@ public:
       return opref.template enter_stage<>(
 	opref.get_connection_pipeline().get_pg_mapping);
     }).then([this, &opref] {
-      return get_pg_to_shard_mapping().get_or_create_pg_mapping(opref.get_pgid());
+      const auto pgid = opref.get_pgid();
+      const auto &local_state = get_shard_services().local_state;
+      const auto &osdmap = local_state.get_osdmap();
+      bool is_primary = false;
+      if (osdmap->have_pg_pool(pgid.pool())) {
+        int acting_primary = -1;
+        osdmap->pg_to_acting_osds(pgid.pgid, nullptr, &acting_primary);
+        is_primary = acting_primary == local_state.whoami;
+      }
+      return get_pg_to_shard_mapping().get_or_create_pg_mapping(
+        pgid, NULL_CORE, NULL_STORE_INDEX, is_primary);
     }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
       if (unlikely(fut.failed())) {
         logger.error("{}: failed before with_pg", *op);

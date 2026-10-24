@@ -1266,6 +1266,8 @@ private:
   // mon notifies in ShardServices. Gate them here so failures are logged and
   // PG::stop() waits for them to drain.
   crimson::common::Gated merge_notify_gate;
+  // Likewise for on_change()'s update of the per-core primary counts.
+  crimson::common::Gated pg_mapping_notify_gate;
 
   PGActivationBlocker wait_for_active_blocker;
   PglogBasedRecovery* pglog_based_recovery_op = nullptr;
