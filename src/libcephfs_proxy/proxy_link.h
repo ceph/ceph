@@ -4,7 +4,6 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <endian.h>
 
 #include "proxy.h"
 
