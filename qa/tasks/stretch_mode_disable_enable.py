@@ -1,3 +1,4 @@
+import json
 import logging
 from tasks.mgr.mgr_test_case import MgrTestCase
 
@@ -190,6 +191,29 @@ class TestStretchMode(MgrTestCase):
         for mon in mons:
             self._bring_back_mon(mon)
         super(TestStretchMode, self).tearDown()
+    
+    def _pg_active_or_stale_correctly(self):
+            pgs = self.mgr_cluster.mon_manager.get_pg_stats()
+            for pg in pgs:
+                pgid = pg['pgid']
+                state = pg['state']
+                is_active = 'active' in state and 'stale' not in state
+                is_stale = 'stale' in state
+                map_out = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'pg', 'map', pgid, '--format=json')
+                pg_map = json.loads(map_out)
+                acting = pg_map['acting']
+                has_acting_primary = len(acting) > 0
+                if has_acting_primary and not is_active:
+                    log.debug('PG %s acting=%s but not active (state=%s)',
+                              pgid, acting, state)
+                    return False
+                if not has_acting_primary and not is_stale:
+                    log.debug('PG %s acting=[] but not stale (state=%s)',
+                              pgid, state)
+                    return False
+            log.debug('All PGs correclty active or stale')
+            return True
 
     def _kill_osd(self, osd):
         """
@@ -557,9 +581,9 @@ class TestStretchMode(MgrTestCase):
             ))
         # Check if stretch mode is disabled correctly
         self._stretch_mode_disabled_correctly()
-        # all PGs are active
+        # only PGs with empty acting set are stale and rest are active
         self.wait_until_true_and_hold(
-            lambda: self.mgr_cluster.mon_manager.pg_all_active(),
+            lambda: self._pg_active_or_stale_correctly(),
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
