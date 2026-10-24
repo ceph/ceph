@@ -10,7 +10,8 @@ Given('I am logged in', () => {
 
 Given('I am on the {string} page', (page: string) => {
   cy.visit(urlsCollection.pages[page].url);
-  cy.get(urlsCollection.pages[page].id).should('exist');
+  // Route guards (orchestrator/permissions) resolve asynchronously; wait for the page.
+  cy.get(urlsCollection.pages[page].id, { timeout: 120000 }).should('exist');
 });
 
 Then('I should be on the {string} page', (page: string) => {
@@ -32,7 +33,10 @@ Then('I should see the modal', () => {
 // @TODO: Replace with the existing (above one)
 // once carbon migration is completed
 Then('I should see the carbon modal', () => {
-  cy.get('cds-modal').should('exist');
+  // Tearsheet is also cds-modal; assert a form/confirm dialog is open by content.
+  cy.get(
+    'cds-modal form[name=deletionForm], cds-modal form[name=hostForm], cds-modal input#resource_name, cds-modal input#hostname'
+  ).should('be.visible');
 });
 
 Then('I should not see the modal', () => {
@@ -40,7 +44,9 @@ Then('I should not see the modal', () => {
 });
 
 Then('I should not see the carbon modal', () => {
-  cy.get('cds-modal').should('not.exist');
+  cy.get(
+    'cds-modal form[name=deletionForm], cds-modal form[name=hostForm], cds-modal input#resource_name, cds-modal input#hostname'
+  ).should('not.exist');
 });
 
 And('I go to the {string} tab', (names: string) => {

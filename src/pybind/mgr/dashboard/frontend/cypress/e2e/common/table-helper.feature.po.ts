@@ -32,7 +32,7 @@ When('I expand the row {string}', (row: string) => {
  * Selects any row on the datatable if it matches the given name
  */
 When('I select a row {string}', (row: string) => {
-  cy.get('.cds--search-input').first().clear().type(row);
+  cy.get('.cds--search-input').first().clear({ force: true }).type(row, { force: true });
   cy.contains('[cdstablerow] [cdstabledata]', row)
     .parent('[cdstablerow]')
     .find('[data-testid="table-action-btn"]')
@@ -58,12 +58,12 @@ And('the table in the expanded row is ready', () => {
 });
 
 Then('I should see a row with {string}', (row: string) => {
-  cy.get('.cds--search-input').first().clear().type(row);
+  cy.get('.cds--search-input').first().clear({ force: true }).type(row, { force: true });
   cy.contains(`[cdstablerow]`, row).should('exist');
 });
 
 Then('I should not see a row with {string}', (row: string) => {
-  cy.get('.cds--search-input').first().clear().type(row);
+  cy.get('.cds--search-input').first().clear({ force: true }).type(row, { force: true });
   cy.contains(`[cdstablerow]`, row).should('not.exist');
 });
 
