@@ -218,6 +218,7 @@ class NFSCluster:
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
             ingress_placement: Optional[str] = None,
+            networks: Optional[List[str]] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -249,6 +250,9 @@ class NFSCluster:
                 ganesha_port = port
                 frontend_port = None
 
+            # NFSServiceSpec forbids virtual_ip together with networks/ip_addrs
+            nfs_networks = None if virtual_ip_for_ganesha else networks
+            nfs_ip_addrs = None if virtual_ip_for_ganesha else ip_addrs
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
                                   placement=pspec,
                                   # use non-default port so we don't conflict with ingress
@@ -266,11 +270,12 @@ class NFSCluster:
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
                                   tls_ciphers=tls_ciphers,
-                                  ip_addrs=ip_addrs,
+                                  ip_addrs=nfs_ip_addrs,
                                   monitoring_ip_addrs=monitoring_ip_addrs,
                                   monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
-                                  rdma_port=rdma_port)
+                                  rdma_port=rdma_port,
+                                  networks=nfs_networks)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
@@ -304,7 +309,8 @@ class NFSCluster:
                                   monitoring_ip_addrs=monitoring_ip_addrs,
                                   monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
-                                  rdma_port=rdma_port)
+                                  rdma_port=rdma_port,
+                                  networks=networks)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
@@ -345,6 +351,7 @@ class NFSCluster:
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
             ingress_placement: Optional[str] = None,
+            networks: Optional[List[str]] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -368,30 +375,40 @@ class NFSCluster:
             self.create_empty_rados_obj(cluster_id)
 
             if cluster_id not in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(
-                    cluster_id,
-                    placement,
-                    virtual_ip,
-                    ingress_mode,
-                    port,
-                    cluster_qos_config=cluster_qos_config,
-                    enable_nfsv3=enable_nfsv3,
-                    enable_nfs_metrics=enable_nfs_metrics,
-                    ssl=ssl,
-                    ssl_cert=ssl_cert,
-                    ssl_key=ssl_key,
-                    ssl_ca_cert=ssl_ca_cert,
-                    tls_ktls=tls_ktls,
-                    tls_debug=tls_debug,
-                    tls_min_version=tls_min_version,
-                    tls_ciphers=tls_ciphers,
-                    ip_addrs=ip_addrs,
-                    monitoring_ip_addrs=monitoring_ip_addrs,
-                    monitoring_port=monitoring_port,
-                    enable_rdma=enable_rdma,
-                    rdma_port=rdma_port,
-                    ingress_placement=ingress_placement
-                )
+                try:
+                    self._call_orch_apply_nfs(
+                        cluster_id,
+                        placement,
+                        virtual_ip,
+                        ingress_mode,
+                        port,
+                        cluster_qos_config=cluster_qos_config,
+                        enable_nfsv3=enable_nfsv3,
+                        enable_nfs_metrics=enable_nfs_metrics,
+                        ssl=ssl,
+                        ssl_cert=ssl_cert,
+                        ssl_key=ssl_key,
+                        ssl_ca_cert=ssl_ca_cert,
+                        tls_ktls=tls_ktls,
+                        tls_debug=tls_debug,
+                        tls_min_version=tls_min_version,
+                        tls_ciphers=tls_ciphers,
+                        ip_addrs=ip_addrs,
+                        monitoring_ip_addrs=monitoring_ip_addrs,
+                        monitoring_port=monitoring_port,
+                        enable_rdma=enable_rdma,
+                        rdma_port=rdma_port,
+                        ingress_placement=ingress_placement,
+                        networks=networks
+                    )
+                except Exception:
+                    try:
+                        self.delete_config_obj(cluster_id)
+                    except Exception:
+                        log.exception(
+                            "Failed to clean up rados objects after NFS cluster "
+                            "create failure for %s", cluster_id)
+                    raise
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:
@@ -597,11 +614,13 @@ class NFSCluster:
         placement, and ingress configuration.
         """
         # Get all NFS daemons
-        completion = self.mgr.list_daemons(daemon_type='nfs')
-        all_nfs_daemons = orchestrator.raise_if_exception(completion)
-
-        # Filter daemons for this cluster
-        cluster_daemons = [d for d in all_nfs_daemons if d.service_id() == cluster_id]
+        cluster_daemons = []
+        try:
+            completion = self.mgr.list_daemons(daemon_type='nfs')
+            all_nfs_daemons = orchestrator.raise_if_exception(completion) or []
+            cluster_daemons = [d for d in all_nfs_daemons if d.service_id() == cluster_id]
+        except orchestrator.OrchestratorError:
+            log.debug("Failed to list NFS daemons for cluster %s", cluster_id)
 
         # Cache hosts data to avoid O(n) orchestrator calls
         hosts_map = {}
@@ -674,12 +693,44 @@ class NFSCluster:
         deployment_type = "standalone"
         placement = None
         enable_rdma = False
+        nfs_networks: List[str] = []
+        nfs_ip_addrs: Dict[str, str] = {}
 
-        # Use the same spec lookup as export creation so enable_rdma is consistent.
-        nfs_spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
-        if nfs_spec:
-            placement = nfs_spec.placement
-            enable_rdma = bool(getattr(nfs_spec, 'enable_rdma', False))
+        try:
+            nfs_sc = self.mgr.describe_service(
+                service_type='nfs',
+                service_name=f'nfs.{cluster_id}'
+            )
+            nfs_services = orchestrator.raise_if_exception(nfs_sc)
+            for svc in nfs_services or []:
+                if svc.spec.service_id == cluster_id:
+                    placement = svc.spec.placement
+                    enable_rdma = bool(getattr(svc.spec, 'enable_rdma', False))
+                    nfs_networks = list(getattr(svc.spec, 'networks', []) or [])
+                    nfs_ip_addrs = dict(getattr(svc.spec, 'ip_addrs', {}) or {})
+                    break
+        except orchestrator.OrchestratorError:
+            log.debug("Failed to get NFS service spec for cluster %s", cluster_id)
+
+        if not backends and placement:
+            hosts = getattr(placement, 'hosts', None) or []
+            for host in hosts:
+                hostname = getattr(host, 'hostname', None) or str(host)
+                ip = ''
+                try:
+                    if hostname in hosts_map:
+                        ip = resolve_ip(hosts_map[hostname].addr)
+                    else:
+                        ip = resolve_ip(hostname)
+                except Exception:
+                    pass
+                backends.append({
+                    "hostname": hostname,
+                    "ip": ip,
+                    "port": None,
+                    "status": "unknown"
+                })
+            backends.sort(key=lambda x: x["hostname"])
 
         if ingress_mode:
             if placement and placement.count and placement.count > 1:
@@ -689,13 +740,21 @@ class NFSCluster:
             else:
                 deployment_type = "active-passive"
 
+        bind_addrs = [{'hostname': h, 'ip': ip} for h, ip in nfs_ip_addrs.items() if h and ip]
+
         r: Dict[str, Any] = {
             'deployment_type': deployment_type,
+            'ingress': virtual_ip is not None,
             'virtual_ip': virtual_ip,
             'backend': backends,
             'placement': placement.to_json() if placement else {},
             'enable_rdma': enable_rdma,
         }
+
+        if nfs_networks:
+            r['networks'] = nfs_networks
+        if bind_addrs:
+            r['bind_addrs'] = bind_addrs
 
         if ingress_mode:
             r['ingress_mode'] = ingress_mode.value
@@ -717,10 +776,20 @@ class NFSCluster:
             else:
                 cluster_ls = available_clusters(self.mgr)
 
-            for cluster_id in cluster_ls:
-                res = self._show_nfs_cluster_info(cluster_id)
-                if res:
-                    info_res[cluster_id] = res
+            for cid in cluster_ls:
+                try:
+                    res = self._show_nfs_cluster_info(cid)
+                    if res:
+                        info_res[cid] = res
+                except Exception:
+                    log.exception("Failed to show info for NFS cluster %s", cid)
+                    # Still surface the cluster in listings even if details fail
+                    info_res[cid] = {
+                        'deployment_type': 'standalone',
+                        'virtual_ip': None,
+                        'backend': [],
+                        'placement': {},
+                    }
             return info_res
         except Exception as e:
             log.exception("Failed to show info for cluster")

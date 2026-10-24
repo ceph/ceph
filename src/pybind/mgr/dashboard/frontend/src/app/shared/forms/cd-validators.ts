@@ -62,6 +62,28 @@ export class CdValidators {
     }
   }
 
+
+  static ipv4Cidr(): ValidatorFn {
+    // prettier-ignore
+    const cidrRgx =
+      /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(([0-9]|[12][0-9]|3[0-2]))$/;
+    return (control: AbstractControl): ValidationErrors | null => {
+      if (!control.value) {
+        return null;
+      }
+      if (!cidrRgx.test(control.value)) {
+        return { pattern: true };
+      }
+      // Verify no host bits are set (e.g. 192.168.1.1/24 is invalid; must be 192.168.1.0/24)
+      const [addr, prefixStr] = control.value.split('/');
+      const prefix = parseInt(prefixStr, 10);
+      const parts = addr.split('.').map(Number);
+      const addrInt = (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
+      const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+      return (addrInt & ~mask) === 0 ? null : { hostBitsSet: true };
+    };
+  }
+
   /**
    * Validator function in order to validate numbers.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`

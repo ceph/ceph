@@ -3,14 +3,26 @@ import { PageHelper } from '../../../page-helper.po';
 /* tslint:enable*/
 
 const pages = {
-  cephfs_index: { url: '#cephfs/nfs', id: 'cd-nfs-list' },
+  cephfs_index: { url: '#cephfs/nfs', id: 'cd-nfs-cluster' },
   cephfs_create: { url: '#cephfs/nfs/create', id: 'cd-nfs-form' },
-  rgw_index: { url: '#rgw/nfs', id: 'cd-nfs-list' },
+  cephfs_cluster_create: { url: '#cephfs/nfs/cluster/create', id: 'cd-nfs-cluster-form' },
+  rgw_index: { url: '#rgw/nfs', id: 'cd-nfs-cluster' },
   rgw_create: { url: '#rgw/nfs/create', id: 'cd-nfs-form' }
 };
 
 export class NFSPageHelper extends PageHelper {
   pages = pages;
+
+  createCluster(clusterId: string, host?: string) {
+    cy.get('#cluster_id').clear().type(clusterId);
+    cy.contains('button', 'Show service deployment settings').click({ force: true });
+    if (host) {
+      this.selectOption('placement', 'Hosts');
+      // Host combo-box selection is environment-specific; leave default when omitted.
+    }
+    cy.get('cd-submit-button').click();
+  }
+
   create(backend: string, squash: string, client: object, pseudo: string, rgwPath?: string) {
     this.selectOption('cluster_id', 'testnfs');
     if (backend === 'CephFS') {

@@ -1,7 +1,8 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, throwError } from 'rxjs';
+import { Observable, of as observableOf, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { NFSCluster } from '~/app/ceph/nfs/models/nfs-cluster-config';
 
 import { NfsFSAbstractionLayer, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
@@ -94,6 +95,13 @@ export class NfsService extends ApiClient {
     });
   }
 
+  exists(clusterId: string): Observable<boolean> {
+    return this.listClusters(false).pipe(
+      map((names: any) => (names as string[]).includes(clusterId)),
+      catchError(() => observableOf(false))
+    );
+  }
+
   lsDir(fs_name: string, root_dir: string): Observable<Directory> {
     if (!fs_name) {
       return throwError($localize`Please specify a filesystem volume.`);
@@ -107,5 +115,32 @@ export class NfsService extends ApiClient {
 
   filesystems() {
     return this.http.get(`${this.uiApiPath}/cephfs/filesystems`);
+  }
+
+  getCluster(clusterId: string): Observable<NFSCluster> {
+    return this.listClusters(true).pipe(
+      map((clusters) => clusters.find((c) => c.name === clusterId) ?? null)
+    );
+  }
+
+  createCluster(requestModel: any): Observable<HttpResponse<any>> {
+    return this.http.post<any>(`${this.apiPath}/cluster`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  updateCluster(clusterId: string, requestModel: any): Observable<HttpResponse<any>> {
+    return this.http.put<any>(`${this.apiPath}/cluster/${clusterId}`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  deleteCluster(clusterId: string): Observable<HttpResponse<any>> {
+    return this.http.delete<any>(`${this.apiPath}/cluster/${clusterId}`, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
   }
 }

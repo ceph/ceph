@@ -1,27 +1,32 @@
-@if (orchStatus?.available && clusters$ | async; as clusters) {
-  <cd-table
-    [autoReload]="true"
-    [data]="clusters"
-    columnMode="flex"
-    [columns]="columns"
-    selectionType="single"
-    [hasDetails]="true"
-    (setExpandedRow)="setExpandedRow($event)"
-    (fetchData)="loadData()"
-    (updateSelection)="updateSelection($event)"
-  >
-    <cd-table-actions
-      class="table-actions"
-      [selection]="selection"
-      [permission]="permission"
-      [tableActions]="tableActions"
-    ></cd-table-actions>
-    <cd-nfs-cluster-details
-      *cdTableDetail
-      [selection]="expandedRow"
-    ></cd-nfs-cluster-details>
-  </cd-table>
+@if (orchStatus && !orchStatus.available) {
+  <cd-alert-panel
+    type="warning"
+    i18n
+  >Orchestrator is not available — cluster management actions are disabled.</cd-alert-panel>
 }
+
+<cd-table
+  [autoReload]="5000"
+  [data]="clusters$ | async"
+  columnMode="flex"
+  [columns]="columns"
+  selectionType="single"
+  [hasDetails]="true"
+  (setExpandedRow)="setExpandedRow($event)"
+  (fetchData)="loadData()"
+  (updateSelection)="updateSelection($event)"
+>
+  <cd-table-actions
+    class="table-actions"
+    [selection]="selection"
+    [permission]="permission"
+    [tableActions]="tableActions"
+  ></cd-table-actions>
+  <cd-nfs-cluster-details
+    *cdTableDetail
+    [selection]="expandedRow"
+  ></cd-nfs-cluster-details>
+</cd-table>
 
 <ng-template
   #virtualIpTpl
