@@ -1237,8 +1237,8 @@ public:
 
   int add_indep_multi_osd_per_failure_domain_rule(
     std::string name, std::string root_name, std::string failure_domain_type,
-    int osds_per_failure_domain,
     int num_failure_domains,
+    int osds_per_failure_domain,
     std::string device_class,
     std::ostream *err = 0);
 
@@ -1263,8 +1263,8 @@ public:
 
   int add_multi_osd_per_failure_domain_rule_at(
     std::string name, std::string root_name, std::string failure_domain_type,
-    int osds_per_failure_domain,
     int num_failure_domains,
+    int osds_per_failure_domain,
     std::string device_class,
     crush_rule_type rule_type,
     int rno,
