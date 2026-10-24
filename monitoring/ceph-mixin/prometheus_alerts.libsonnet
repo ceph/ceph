@@ -268,6 +268,17 @@
           },
         },
         {
+          alert: 'CephOSDFreeSpaceFragmentation',
+          'for': '10m',
+          expr: 'ceph_bluestore_fragmentation_micros / 1e6 > 0.8',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-fragmentation',
+            summary: 'BlueStore free space fragmentation is high on OSD {{ $labels.ceph_daemon }}%(cluster)s' % $.MultiClusterSummary(),
+            description: "OSD {{ $labels.ceph_daemon }} has a BlueStore free space fragmentation score of {{ $value | humanizePercentage }}. High free-space fragmentation can degrade write performance. To inspect fragmentation run: 'ceph tell {{ $labels.ceph_daemon }} bluestore allocator score block'.",
+          },
+        },
+        {
           alert: 'CephPGImbalance',
           'for': '5m',
           expr: |||
