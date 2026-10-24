@@ -1197,7 +1197,13 @@ Usage::
 
     ceph osd pause
 
-Subcommand ``perf`` prints dump of OSD perf summary stats.
+Subcommand ``perf`` prints recent per-OSD latencies in milliseconds, computed
+from the perf counter samples the Manager holds for each OSD:
+``op_latency``, ``op_r_latency`` and ``op_w_latency`` (client operations),
+``bluestore_w_latency`` and ``bluestore_r_latency`` (BlueStore writes and
+reads) and ``kv_sync_latency`` (RocksDB commit). The table omits a column
+when no OSD has data for it; the JSON output omits the key for an OSD that has
+no data.
 
 Usage::
 
