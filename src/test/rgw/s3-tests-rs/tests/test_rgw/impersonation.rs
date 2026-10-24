@@ -9,10 +9,10 @@
 //! (70010), `rgwalice` (70101) in it, `rgwbob` (70102) not.
 
 use s3_tests_rs::access_model::{Access, Class};
-use s3_tests_rs::admin::{nsfs_delete_identity, nsfs_put_identity};
+use s3_tests_rs::admin::{driver_hint_results, nsfs_delete_identity, nsfs_put_identity};
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::get_config;
-use s3_tests_rs::features::features;
+use s3_tests_rs::features::{cross_account_data, features};
 use s3_tests_rs::fixtures::{get_new_bucket, PrivateUser, TestGuard};
 use s3_tests_rs::hints::{clear_hint, with_hint};
 use s3_tests_rs::policy::{make_arn_resource, make_json_policy};
@@ -1031,4 +1031,186 @@ async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
                 RGWPutObj wrote -- \
                 the two agreeing means this test cannot fail:  PUT said \
                 {bad_put}, HEAD says {bad_head}");
+}
+
+/* DeleteBucket under impersonation:  who acts at each layer follows
+ * who had to be able to create it (DECISIONS.md 2026-10-24).  The
+ * bucket directory is checked as the requester;  what is below it is
+ * removed as the requester;  its entry in a parent the account owns is
+ * removed as the requester, and in the base path by the gateway.  Under
+ * `posix-strict` a refusal at any of the requester's layers is 403, as
+ * NooBaa's `delete_uls()`;  under `s3-native` the gateway performs it. */
+
+async fn bucket_exists(client: &aws_sdk_s3::Client, bucket: &str) -> bool {
+    client.head_bucket().bucket(bucket).send().await.is_ok()
+}
+
+/// bob, granted `s3:DeleteBucket` by alice's policy, deletes her empty
+/// bucket.  Her bucket directory is hers at 0770 and bob is not in her
+/// group, so the filesystem refuses him at the bucket directory:  403
+/// under `posix-strict`, and deleted under `s3-native`.
+///
+/// The policy is what makes the refusal the filesystem's:  without it
+/// RGW denies bob before the driver is reached, under every model.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_delete_bucket_by_another_identity_follows_the_access_model() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some((alice_u, bob_u)) = alice_and_bob("dbx", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let (alice, bob) = (&alice_u.client, &bob_u.client);
+    let bucket = get_new_bucket(Some(alice)).await;
+
+    let doc = make_json_policy(
+        "s3:DeleteBucket", &make_arn_resource(&bucket),
+        Some(serde_json::json!({"AWS": [format!("arn:aws:iam:::user/{}",
+                                                bob_u.id)]})),
+        None, None);
+    alice.put_bucket_policy().bucket(&bucket).policy(&doc).send().await
+        .expect("could not grant bob s3:DeleteBucket");
+
+    /* the request-time check:  write and search on the bucket
+     * directory, as bob */
+    let access = Access::ask(Class::Data, &bucket, "k", &bob_u.id, "c").await;
+    assert!(access.denied(),
+        "the filesystem permits bob to write alice's bucket directory;  \
+         it is not hers at 0770");
+    let deleted = access.expect(bob.delete_bucket().bucket(&bucket).send().await)
+        .is_some();
+
+    let survives = bucket_exists(alice, &bucket).await;
+    if access.served() == Some(true) {
+        assert!(deleted && !survives, "the model performs the delete, and \
+                the bucket is still there");
+    } else if access.served() == Some(false) {
+        assert!(survives, "bob's delete was refused, and the bucket is gone");
+    }
+    if survives {
+        alice.delete_bucket().bucket(&bucket).send().await
+            .expect("alice could not delete her own bucket");
+    }
+}
+
+/// alice's bucket under a location of her own, whose write she then
+/// loses.  She may still use the bucket directory, which is hers, but
+/// removing its entry needs write on the location, which NooBaa's
+/// `rmdir` as the account asks:  403 under `posix-strict`, deleted
+/// under `s3-native`.
+///
+/// The location is the `unplaced-directory` hint's `as=` directory,
+/// made for her and changed as her, so the test takes no privilege.
+/// The control is the same delete after write is restored.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_delete_bucket_needs_write_on_the_accounts_location() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some((alice_u, _bob_u)) = alice_and_bob("dbl", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let alice = &alice_u.client;
+    let loc = s3_tests_rs::fixtures::get_new_bucket_name();
+    let made = driver_hint_results("unplaced-directory", &[
+        ("op", "create"), ("name", &loc), ("as", &alice_u.id),
+        ("mode", "0770")]).await
+        .expect("could not make alice a location");
+    let path = made.get("path").cloned().expect("the location's path");
+    let r = nsfs_put_identity(&[
+        ("identity", alice_u.id.as_str()),
+        ("uid", UID_ALICE), ("gid", UID_ALICE),
+        ("new_buckets_path", path.as_str()),
+    ]).await;
+    assert_eq!(r.status, 200, "binding alice's location failed: {}", r.body);
+
+    let bucket = s3_tests_rs::fixtures::get_new_bucket_name();
+    alice.create_bucket().bucket(&bucket).send().await
+        .expect("alice could not create a bucket in her own location");
+
+    /* she loses write on the location, and keeps the bucket */
+    driver_hint_results("unplaced-directory", &[
+        ("op", "mode"), ("name", &loc), ("as", &alice_u.id),
+        ("mode", "0550")]).await
+        .expect("could not take write from alice's location");
+    let r = alice.delete_bucket().bucket(&bucket).send().await;
+    let model = cross_account_data().await;
+    match model {
+        Some(false) => {
+            s3_tests_rs::assert_s3_err!(r, 403, "AccessDenied");
+            assert!(bucket_exists(alice, &bucket).await,
+                "the delete was refused, and the bucket is gone");
+        }
+        Some(true) => {
+            assert!(r.is_ok(), "the model performs the delete: {r:?}");
+            assert!(!bucket_exists(alice, &bucket).await,
+                "the delete succeeded, and the bucket is still there");
+        }
+        None => {}
+    }
+
+    /* the control, and the cleanup:  write restored, the delete goes */
+    driver_hint_results("unplaced-directory", &[
+        ("op", "mode"), ("name", &loc), ("as", &alice_u.id),
+        ("mode", "0770")]).await
+        .expect("could not restore alice's location");
+    if bucket_exists(alice, &bucket).await {
+        alice.delete_bucket().bucket(&bucket).send().await
+            .expect("alice could not delete her bucket with write restored");
+    }
+    let _ = driver_hint_results("unplaced-directory", &[
+        ("op", "remove"), ("name", &loc), ("as", &alice_u.id)]).await;
+}
+
+/// The base path is the gateway's, and the gateway made alice's bucket
+/// directory there for her, so the gateway removes its entry:  her
+/// delete of her own empty bucket succeeds under every model, the same
+/// as at creation.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_the_gateway_unlinks_a_base_path_bucket() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some((alice_u, _bob_u)) = alice_and_bob("dbb", None).await else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let alice = &alice_u.client;
+    let bucket = get_new_bucket(Some(alice)).await;
+    alice.put_object().bucket(&bucket).key("k")
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"x"))
+        .send().await.expect("alice could not write her own bucket");
+    alice.delete_object().bucket(&bucket).key("k").send().await
+        .expect("alice could not delete her own object");
+
+    alice.delete_bucket().bucket(&bucket).send().await
+        .expect("alice could not delete her own empty bucket");
+    assert!(!bucket_exists(alice, &bucket).await,
+        "the delete succeeded, and the bucket is still there");
 }

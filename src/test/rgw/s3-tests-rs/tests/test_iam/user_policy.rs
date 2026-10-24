@@ -427,7 +427,17 @@ async fn test_allow_bucket_actions_in_user_policy() {
         .await
         .unwrap();
 
-    s3_client_alt.delete_bucket().bucket(&bucket).send().await.unwrap();
+    /* posix-strict asks the filesystem whether alt may remove what is
+     * in the bucket's directory;  where it is denied, the creator
+     * cleans up */
+    let delete = Access::ask(Class::Data, &bucket, "k", &cfg.alt_user_id, "c")
+        .await;
+    if delete
+        .expect(s3_client_alt.delete_bucket().bucket(&bucket).send().await)
+        .is_none()
+    {
+        s3_client_iam.delete_bucket().bucket(&bucket).send().await.unwrap();
+    }
 
     iam_client
         .delete_user_policy()
