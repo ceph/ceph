@@ -264,6 +264,21 @@ void ReplicatedBackend::clear_recovery_state()
   pull_from_peer.clear();
 }
 
+void ReplicatedBackend::cancel_recovery_op(const hobject_t &soid)
+{
+  auto pull_it = pulling.find(soid);
+  if (pull_it != pulling.end()) {
+    clear_pull(pull_it);
+  }
+  auto push_it = pushing.find(soid);
+  if (push_it != pushing.end()) {
+    for (auto &&j : push_it->second) {
+      get_parent()->release_locks(j.second.lock_manager);
+    }
+    pushing.erase(push_it);
+  }
+}
+
 void ReplicatedBackend::on_change()
 {
   dout(10) << __func__ << dendl;
@@ -612,6 +627,14 @@ void ReplicatedBackend::submit_transaction(
   ObjectStore::Transaction op_t{get_parent()->min_peer_features()};
   PGTransactionUPtr t(std::move(_t));
   set<hobject_t> added, removed;
+  std::set<hobject_t> deleted;
+  for (auto &[hoid, op] : t.get()->op_map) {
+    if (op.is_delete()) {
+      deleted.insert(hoid);
+    }
+  }
+  std::optional<hobject_t> migration_watermark =
+    parent->consider_updating_migration_watermark(deleted);
   generate_transaction(
     t,
     coll,
@@ -650,11 +673,15 @@ void ReplicatedBackend::submit_transaction(
     removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
     hset_history,
+    migration_watermark,
     &op,
     op_t);
 
   add_temp_objs(added);
   clear_temp_objs(removed);
+  if (migration_watermark) {
+    get_parent()->update_migration_watermark(*migration_watermark);
+  }
 
   parent->log_operation(
     std::move(log_entries),
@@ -1159,6 +1186,7 @@ Message * ReplicatedBackend::generate_subop(
   hobject_t discard_temp_oid,
   const bufferlist &log_entries,
   std::optional<pg_hit_set_history_t> &hset_hist,
+  std::optional<hobject_t> &migration_watermark,
   ObjectStore::Transaction &op_t,
   pg_shard_t peer,
   const pg_info_t &pinfo)
@@ -1205,6 +1233,7 @@ Message * ReplicatedBackend::generate_subop(
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
   wr->updated_hit_set_history = hset_hist;
+  wr->migration_watermark = migration_watermark;
   return wr;
 }
 
@@ -1219,6 +1248,7 @@ void ReplicatedBackend::issue_op(
   hobject_t discard_temp_oid,
   const vector<pg_log_entry_t> &log_entries,
   std::optional<pg_hit_set_history_t> &hset_hist,
+  std::optional<hobject_t> &migration_watermark,
   InProgressOp *op,
   ObjectStore::Transaction &op_t)
 {
@@ -1252,6 +1282,7 @@ void ReplicatedBackend::issue_op(
 	  discard_temp_oid,
 	  logs,
 	  hset_hist,
+	  migration_watermark,
 	  op_t,
 	  shard,
 	  pinfo);
@@ -1316,6 +1347,9 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
       rm->localt.remove(coll, ghobject_t(m->discard_temp_oid));
     }
     clear_temp_obj(m->discard_temp_oid);
+  }
+  if (m->migration_watermark) {
+    get_parent()->update_migration_watermark(*m->migration_watermark);
   }
 
   p = const_cast<bufferlist&>(m->logbl).begin();
@@ -1443,6 +1477,7 @@ void ReplicatedBackend::calc_head_subsets(
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
     if (!missing.is_missing(c) &&
 	c < last_backfill &&
+	objects_get_attr(c, OI_ATTR, nullptr) >= 0 &&
 	get_parent()->try_lock_for_read(c, manager)) {
       dout(10) << "calc_head_subsets " << head << " has prev " << c
 	       << " overlap " << prev << dendl;
@@ -1517,6 +1552,7 @@ void ReplicatedBackend::calc_clone_subsets(
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
     if (!missing.is_missing(c) &&
 	c < last_backfill &&
+	objects_get_attr(c, OI_ATTR, nullptr) >= 0 &&
 	get_parent()->try_lock_for_read(c, manager)) {
       dout(10) << "calc_clone_subsets " << soid << " has prev " << c
 	       << " overlap " << prev << dendl;
@@ -1538,6 +1574,7 @@ void ReplicatedBackend::calc_clone_subsets(
     next.intersection_of(snapset.clone_overlap[snapset.clones[j-1]]);
     if (!missing.is_missing(c) &&
 	c < last_backfill &&
+	objects_get_attr(c, OI_ATTR, nullptr) >= 0 &&
 	get_parent()->try_lock_for_read(c, manager)) {
       dout(10) << "calc_clone_subsets " << soid << " has next " << c
 	       << " overlap " << next << dendl;
