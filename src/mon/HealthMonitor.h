@@ -23,6 +23,21 @@
 #include "mon/PaxosMap.h"
 #include "mon/health_check.h"
 
+class MonMap;
+
+namespace health_monitor_detail {
+void rebuild_health_checks(
+  health_check_map_t& pending_health,
+  const std::map<int, health_check_map_t>& quorum_checks,
+  const health_check_map_t& leader_checks,
+  const MonMap& monmap);
+bool health_checks_are_current(
+  const health_check_map_t& current_health,
+  const std::map<int, health_check_map_t>& quorum_checks,
+  const health_check_map_t& leader_checks,
+  const MonMap& monmap);
+}
+
 class HealthMonitor : public PaxosService
 {
   version_t version = 0;
