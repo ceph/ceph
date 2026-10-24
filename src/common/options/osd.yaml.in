@@ -852,8 +852,12 @@ options:
   desc: Maximum memory for in-flight client request messages.
   long_desc: The maximum total memory devoted to in-flight client request messages.
     When the in-flight total exceeds this value, the OSD stops reading new client data
-    from the network until memory is freed.
+    from the network until memory is freed. Below an osd_memory_target of 4 GiB the
+    default is scaled down by osd_memory_target / 4 GiB; a value set explicitly is used
+    as is.
   default: 500_M
+  flags:
+  - runtime
   with_legacy: true
 - name: osd_client_message_cap
   type: uint

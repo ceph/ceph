@@ -3178,6 +3178,8 @@ options:
   see_also:
   - osd_max_pg_log_entries
   - osd_min_pg_log_entries
+  flags:
+  - runtime
   with_legacy: true
 - name: osd_min_pg_log_entries
   type: uint
@@ -3219,6 +3221,8 @@ options:
   see_also:
   - osd_min_pg_log_entries
   - osd_max_pg_log_entries
+  flags:
+  - runtime
   with_legacy: true
 - name: osd_object_clean_region_max_num_intervals
   type: int
@@ -4014,6 +4018,11 @@ options:
     guaranteed to reclaim unmapped memory. Some kernels have been observed to let the OSD's
     RSS exceed the mapped memory by up to 20%, though kernels may reclaim more aggressively
     under memory pressure. Your mileage may vary.
+    Below 4 GiB, some limits on memory that the autotuner cannot shrink are scaled down by
+    osd_memory_target / 4 GiB while they are at their defaults: osd_client_message_size_cap,
+    osd_target_pg_log_entries_per_osd and osd_pg_log_dups_tracked, and, by the square root of
+    that ratio and when the OSD starts, the RocksDB max_total_wal_size. A value set
+    explicitly is used as is.
   fmt_desc: >-
     When TCMalloc is available and cache autotuning is enabled, the OSD tries to keep this
     many bytes mapped in memory. The value must be at least ``osd_memory_base`` +
@@ -4022,12 +4031,21 @@ options:
     guaranteed to reclaim unmapped memory. Some kernels have been observed to let the OSD's
     RSS exceed the mapped memory by up to 20%, though kernels may reclaim more aggressively
     under memory pressure. Your mileage may vary.
+    Below 4 GiB, some limits on memory that the autotuner cannot shrink are scaled down by
+    ``osd_memory_target`` / 4 GiB while they are at their defaults:
+    ``osd_client_message_size_cap``, ``osd_target_pg_log_entries_per_osd`` and
+    ``osd_pg_log_dups_tracked``, and, by the square root of that ratio and when the OSD
+    starts, the RocksDB ``max_total_wal_size``. A value set explicitly is used as is.
   default: 4_G
   see_also:
   - bluestore_cache_autotune
   - osd_memory_cache_min
   - osd_memory_base
   - osd_memory_target_autotune
+  - osd_client_message_size_cap
+  - osd_target_pg_log_entries_per_osd
+  - osd_pg_log_dups_tracked
+  - bluestore_rocksdb_options
   min: 896_M
   flags:
   - runtime

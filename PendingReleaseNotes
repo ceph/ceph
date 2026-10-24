@@ -1,5 +1,19 @@
 >=22.0.0
 
+* OSD: When ``osd_memory_target`` is below its 4 GiB default, OSDs now scale
+  down limits on memory that the cache autotuner cannot shrink, by
+  ``osd_memory_target`` / 4 GiB, as long as each is still at its default:
+  ``osd_client_message_size_cap``, ``osd_target_pg_log_entries_per_osd`` and
+  ``osd_pg_log_dups_tracked``, and, by the square root of that ratio, the
+  RocksDB ``max_total_wal_size`` in ``bluestore_rocksdb_options`` (when the
+  OSD starts, and only while that option is at its default). This lets small
+  targets such as 1 GiB hold. Clusters whose OSDs run below 4 GiB, including
+  those sized by ``osd_memory_target_autotune``, therefore keep shorter PG
+  logs (a short outage under writes is more likely to need backfill rather
+  than log-based recovery), detect duplicate client ops over a shorter window
+  and throttle client data sooner. To keep the previous behaviour for a limit,
+  set it explicitly; explicitly set values are used as is.
+
 * RBD: The ``schedule_time`` field in the output of
   ``rbd mirror snapshot schedule status`` and
   ``rbd trash purge schedule status`` has been renamed to

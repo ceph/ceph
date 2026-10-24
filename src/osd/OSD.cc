@@ -56,6 +56,7 @@
 #include "osdc/Objecter.h"
 
 #include "common/errno.h"
+#include "common/strtol.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
@@ -9789,6 +9790,56 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
   return true;
 }
 
+void OSD::scale_memory_target_defaults(CephContext *cct, bool startup)
+{
+  // These limits bound memory the cache autotuner cannot shrink and are
+  // sized for the default osd_memory_target (4 GiB): lower their defaults
+  // with a smaller target.  set_val_default() has no effect on an option
+  // that is set at a higher level, so a value set explicitly is used as is.
+  // It updates the config fields in place; no apply_changes() here, as this
+  // also runs from handle_conf_change(), which must not re-enter itself.
+  auto& conf = cct->_conf;
+  const double scale = std::min(1.0,
+    double(conf.get_val<Option::size_t>("osd_memory_target")) / (4ull << 30));
+  if (startup && scale >= 1.0) {
+    return;
+  }
+  std::string err;
+  for (const auto key : {"osd_client_message_size_cap",
+                         "osd_target_pg_log_entries_per_osd",
+                         "osd_pg_log_dups_tracked"}) {
+    const uint64_t def = strict_iecstrtoll(*conf.get_val_default(key), &err);
+    ceph_assert(err.empty());
+    conf.set_val_default(key, std::to_string(uint64_t(def * scale)));
+  }
+  if (startup) {
+    // The WAL bounds the memtables.  Scale it by the square root only: a
+    // smaller WAL flushes memtables more often, which shows in the write
+    // tail latency (p99.9 +25% with the WAL at a quarter).  BlueStore reads
+    // the option at mount, so this is done at startup only.
+    std::string opts = *conf.get_val_default("bluestore_rocksdb_options");
+    const std::string_view key = "max_total_wal_size=";
+    if (auto pos = opts.find(key); pos != std::string::npos) {
+      pos += key.size();
+      const auto end = opts.find(',', pos);
+      const auto len = end == std::string::npos ? std::string::npos : end - pos;
+      const uint64_t wal = strict_iecstrtoll(opts.substr(pos, len), &err);
+      ceph_assert(err.empty());
+      opts.replace(pos, len, std::to_string(uint64_t(wal * std::sqrt(scale))));
+      conf.set_val_default("bluestore_rocksdb_options", opts);
+    }
+  }
+  lgeneric_subdout(cct, osd, 1)
+    << "osd " << __func__ << " osd_memory_target "
+    << conf.get_val<Option::size_t>("osd_memory_target")
+    << ": osd_client_message_size_cap " << conf->osd_client_message_size_cap
+    << " osd_target_pg_log_entries_per_osd "
+    << conf->osd_target_pg_log_entries_per_osd
+    << " osd_pg_log_dups_tracked " << conf->osd_pg_log_dups_tracked
+    << " bluestore_rocksdb_options " << conf->bluestore_rocksdb_options
+    << dendl;
+}
+
 unsigned OSDService::get_target_pg_log_entries() const
 {
   auto num_pgs = osd->get_num_pgs();
@@ -10163,6 +10214,7 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "fsid"s,
     "osd_recovery_delay_start"s,
     "osd_client_message_size_cap"s,
+    "osd_memory_target"s,
     "osd_client_message_cap"s,
     "osd_heartbeat_min_size"s,
     "osd_heartbeat_interval"s,
@@ -10286,7 +10338,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       pol.throttler_messages->reset_max(newval);
     }
   }
-  if (changed.count("osd_client_message_size_cap")) {
+  if (changed.count("osd_memory_target")) {
+    scale_memory_target_defaults(cct, false);
+  }
+  if (changed.count("osd_client_message_size_cap") ||
+      changed.count("osd_memory_target")) {
     uint64_t newval = cct->_conf->osd_client_message_size_cap;
     Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
     if (pol.throttler_bytes) {

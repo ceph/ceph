@@ -1261,6 +1261,11 @@ public:
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
   void update_log_config();
+  /// Lower the defaults of osd_client_message_size_cap,
+  /// osd_target_pg_log_entries_per_osd, osd_pg_log_dups_tracked and, at
+  /// startup, the WAL size in bluestore_rocksdb_options for an
+  /// osd_memory_target below 4 GiB; a value set explicitly is kept.
+  static void scale_memory_target_defaults(CephContext *cct, bool startup);
   void check_config();
 
 protected:
