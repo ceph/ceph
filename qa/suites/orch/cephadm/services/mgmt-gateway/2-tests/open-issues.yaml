@@ -1,0 +1,12 @@
+# Reproducers for behaviour main does not implement yet: these are expected
+# to fail until the fixes land (see test_open_issues.py).
+tasks:
+- vip:
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+- cephfs_test_runner:
+    # the reproducers are independent: report every one, not just the first
+    failfast: false
+    modules:
+      - tasks.cephadm_cases.services.mgmt_gateway.test_open_issues.TestMgmtGatewayOpenIssues
