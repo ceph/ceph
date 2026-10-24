@@ -424,7 +424,7 @@ public:
 
   bool is_out_queued() const {
     return (!out_pending_msgs.empty() ||
-            ack_left > 0 ||
+            ack_left >= ACK_BATCH ||
             need_keepalive ||
             next_keepalive_ack.has_value());
   }
@@ -523,6 +523,9 @@ private:
 
   std::optional<utime_t> next_keepalive_ack = std::nullopt;
 
+  // every outgoing message carries the ack in its header, so a standalone
+  // ack frame is written only once this many messages are unacked
+  static constexpr uint64_t ACK_BATCH = 64;
   uint64_t ack_left = 0;
 
   bool need_notify_out = false;

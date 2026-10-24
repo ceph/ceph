@@ -269,6 +269,24 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
   return conn->get_local_shared_foreign_from_this();
 }
 
+seastar::future<> SocketMessenger::mark_down_all_ports(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> found;
+  for (auto& [addr, conn] : connections) {
+    if (addr.get_type() == a.get_type() &&
+        addr.is_same_host(a) &&
+        addr.get_nonce() == a.get_nonce()) {
+      found.push_back(conn);
+    }
+  }
+  return seastar::parallel_for_each(std::move(found), [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c=conn.get()] {
+      c->mark_down();
+    }).then([conn] {});
+  });
+}
+
 seastar::future<> SocketMessenger::shutdown()
 {
   assert(seastar::this_shard_id() == sid);
