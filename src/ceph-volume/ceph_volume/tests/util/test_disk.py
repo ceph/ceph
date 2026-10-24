@@ -1184,3 +1184,81 @@ V:1"""
     @patch('ceph_volume.util.disk.os.major', Mock(return_value=999))
     def test_dashed_path_with_bare_device(self) -> None:
         assert disk.UdevData(self.fake_device).dashed_path == '/dev/cephtest'
+
+
+class TestLsblkAllExcludeNames(object):
+    """Tests for the exclude_names parameter added to lsblk_all().
+
+    The exclude_names parameter lets callers filter out device-name prefixes
+    (e.g. 'rbd', 'nbd', 'drbd', 'zram') that, when opened for LUKS2
+    inspection, can wedge the calling process in D-state if their backing
+    storage is unavailable.
+    """
+
+    def _stub_lsblk_output(self, lines):
+        """Helper: turn lsblk -P output lines into the (out, err, rc) tuple."""
+        return (lines, '', 0)
+
+    def test_no_exclude_names_returns_all_devices(self, stub_call):
+        """When exclude_names is None (default), every lsblk row passes through."""
+        out = [
+            'NAME="sda" KNAME="sda" MAJ:MIN="8:0"',
+            'NAME="rbd0" KNAME="rbd0" MAJ:MIN="251:0"',
+            'NAME="nbd0" KNAME="nbd0" MAJ:MIN="43:0"',
+        ]
+        stub_call(self._stub_lsblk_output(out))
+        result = disk.lsblk_all()
+        names = sorted(d['NAME'] for d in result)
+        assert names == ['nbd0', 'rbd0', 'sda']
+
+    def test_exclude_names_filters_abspath_prefix(self, stub_call):
+        """With abspath=True, NAME values start with /dev/ and exclude_names matches the basename."""
+        out = [
+            'NAME="/dev/sda" KNAME="sda" MAJ:MIN="8:0"',
+            'NAME="/dev/rbd0" KNAME="rbd0" MAJ:MIN="251:0"',
+            'NAME="/dev/nbd0" KNAME="nbd0" MAJ:MIN="43:0"',
+        ]
+        stub_call(self._stub_lsblk_output(out))
+        result = disk.lsblk_all(abspath=True, exclude_names=['rbd', 'nbd', 'drbd', 'zram'])
+        names = sorted(d['NAME'] for d in result)
+        assert names == ['/dev/sda']
+
+    def test_exclude_names_filters_bare_prefix(self, stub_call):
+        """Without abspath=True, NAME values are bare and exclude_names still matches them."""
+        out = [
+            'NAME="sda" KNAME="sda" MAJ:MIN="8:0"',
+            'NAME="rbd0" KNAME="rbd0" MAJ:MIN="251:0"',
+            'NAME="rbd1234" KNAME="rbd1234" MAJ:MIN="251:1234"',
+        ]
+        stub_call(self._stub_lsblk_output(out))
+        result = disk.lsblk_all(exclude_names=['rbd'])
+        names = sorted(d['NAME'] for d in result)
+        assert names == ['sda']
+
+    def test_exclude_names_partial_match_excluded(self, stub_call):
+        """Device names that only contain 'rbd' as a substring (not prefix) are NOT excluded."""
+        out = [
+            'NAME="sda" KNAME="sda" MAJ:MIN="8:0"',
+            'NAME="my_rbd_dev" KNAME="my_rbd_dev" MAJ:MIN="8:1"',
+        ]
+        stub_call(self._stub_lsblk_output(out))
+        result = disk.lsblk_all(exclude_names=['rbd'])
+        names = sorted(d['NAME'] for d in result)
+        assert names == ['my_rbd_dev', 'sda']
+
+    def test_exclude_names_empty_list_returns_all_devices(self, stub_call):
+        """An empty exclude_names list is treated as no filter."""
+        out = [
+            'NAME="sda" KNAME="sda" MAJ:MIN="8:0"',
+            'NAME="rbd0" KNAME="rbd0" MAJ:MIN="251:0"',
+        ]
+        stub_call(self._stub_lsblk_output(out))
+        result = disk.lsblk_all(exclude_names=[])
+        names = sorted(d['NAME'] for d in result)
+        assert names == ['rbd0', 'sda']
+
+    def test_default_exclude_names_is_none(self):
+        """The exclude_names parameter defaults to None for backward compatibility."""
+        import inspect
+        sig = inspect.signature(disk.lsblk_all)
+        assert sig.parameters['exclude_names'].default is None
