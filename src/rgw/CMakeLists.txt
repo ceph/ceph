@@ -173,6 +173,12 @@ if(WITH_RADOSGW_LANCEDB)
     rgw_s3vector_background.cc)
 endif()
 
+# arrow::io::RandomAccessFile / OutputStream over SAL objects, for in-process
+# parquet reads and writes
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  list(APPEND librgw_common_srcs rgw_random_access_file.cc rgw_output_stream.cc)
+endif()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()

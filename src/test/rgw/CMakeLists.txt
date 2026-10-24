@@ -574,6 +574,22 @@ if(WITH_RADOSGW_FDB)
  add_catch2_test_rgw(fdb_content)
 endif()
 
+# RGWRandomAccessFile / RGWOutputStream (arrow::io streams over SAL) against
+# a live cluster; needs the arrow/parquet libraries rgw_common was built with
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+add_executable(ceph_test_rgw_random_access_file test_rgw_random_access_file.cc)
+target_link_libraries(ceph_test_rgw_random_access_file
+  rgw_common
+  ${rgw_libs}
+  ${UNITTEST_LIBS})
+if(WITH_SYSTEM_ARROW)
+  target_include_directories(ceph_test_rgw_random_access_file PRIVATE ${ARROW_INCLUDE_DIR})
+else()
+  target_include_directories(ceph_test_rgw_random_access_file PRIVATE ${CMAKE_BINARY_DIR}/src/arrow/include)
+endif()
+install(TARGETS ceph_test_rgw_random_access_file DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 if(WITH_RADOSGW_LANCEDB)
 add_executable(unittest_rgw_s3vector test_rgw_s3vector.cc)
 add_ceph_unittest(unittest_rgw_s3vector)
