@@ -63,7 +63,7 @@ namespace rgw { namespace cksum {
   typedef TDigest<ceph::crypto::SHA256> SHA256;
   typedef TDigest<ceph::crypto::SHA512> SHA512;
   typedef TDigest<rgw::digest::Crc64Nvme> Crc64Nvme;
-  typedef TDigest<ceph::crypto::MD5> MD5;
+  typedef TDigest<ceph::crypto::MD5NonCrypto> MD5;
   typedef TDigest<rgw::digest::XXHash64> XXHash64;
   typedef TDigest<rgw::digest::XXHash128> XXHash128;
 

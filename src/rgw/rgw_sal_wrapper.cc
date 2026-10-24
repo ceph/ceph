@@ -246,8 +246,7 @@ int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   }
 
   unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  ceph::crypto::MD5 md5_hash;
-  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  ceph::crypto::MD5NonCrypto md5_hash;
   md5_hash.Update(data, len);
   md5_hash.Final(md5_digest);
 
@@ -354,8 +353,7 @@ int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
   }
 
   unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  ceph::crypto::MD5 md5_hash;
-  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  ceph::crypto::MD5NonCrypto md5_hash;
   md5_hash.Update(data, len);
   md5_hash.Final(md5_digest);
 
@@ -1250,8 +1248,7 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
 
   // compute etag before complete() so the backend stores the correct value
   unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  ceph::crypto::MD5 md5_hash;
-  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  ceph::crypto::MD5NonCrypto md5_hash;
   md5_hash.Update(data, len);
   md5_hash.Final(md5_digest);
 
