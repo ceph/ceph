@@ -2535,27 +2535,27 @@ static const char* removal_log_prefix(int err)
 
 static int delete_directory(int parent_fd, const char* dname, bool delete_children,
 		     const DoutPrefixProvider* dpp,
-		     const nsfs::ReservedNames& rn)
+		     const nsfs::ReservedNames& rn);
+
+/* Everything in the directory open on `dir_fd`, which this takes, and
+ * not the directory itself:  delete_directory() is this and the
+ * directory's removal from its parent.  Apart because a bucket in the
+ * base path has its contents removed by the requester and its entry by
+ * the gateway (NSFSBucket::remove()). */
+static int delete_directory_entries(int dir_fd, const char* dname,
+				    bool delete_children,
+				    const DoutPrefixProvider* dpp,
+				    const nsfs::ReservedNames& rn)
 {
   int ret;
-  int dir_fd = -1;
   DIR *dir;
   struct dirent *entry;
-
-  dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-  if (dir_fd < 0) {
-    dir_fd = errno;
-    ldpp_dout(dpp, removal_log_level(dir_fd)) << removal_log_prefix(dir_fd)
-                      << "could not open subdir " << dname << ": "
-                      << cpp_strerror(dir_fd) << dendl;
-    return -dir_fd;
-  }
 
   dir = fdopendir(dir_fd);
   if (dir == NULL) {
     ret = errno;
     ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
-                      << "could not open bucket " << dname
+                      << "could not open directory " << dname
                       << " for listing: " << cpp_strerror(ret) << dendl;
     ::close(dir_fd);
     return -ret;
@@ -2614,13 +2614,33 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     }
   }
   closedir(dir);
+  return 0;
+}
+
+static int delete_directory(int parent_fd, const char* dname, bool delete_children,
+		     const DoutPrefixProvider* dpp,
+		     const nsfs::ReservedNames& rn)
+{
+  int ret;
+  int dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (dir_fd < 0) {
+    dir_fd = errno;
+    ldpp_dout(dpp, removal_log_level(dir_fd)) << removal_log_prefix(dir_fd)
+                      << "could not open subdir " << dname << ": "
+                      << cpp_strerror(dir_fd) << dendl;
+    return -dir_fd;
+  }
+  ret = delete_directory_entries(dir_fd, dname, delete_children, dpp, rn);
+  if (ret < 0) {
+    return ret;
+  }
 
   ret = unlinkat(parent_fd, dname, AT_REMOVEDIR);
   if (ret < 0) {
     ret = errno;
     if (errno != ENOENT) {
       ldpp_dout(dpp, removal_log_level(ret)) << removal_log_prefix(ret)
-	<< "could not remove bucket " << dname << ": "
+	<< "could not remove directory " << dname << ": "
 	<< cpp_strerror(ret) << dendl;
       return -ret;
     }
@@ -7518,6 +7538,25 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 static constexpr uint64_t BUCKET_DELETE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
+/* Whether a bucket directory's parent is the base path, the gateway's
+ * own directory.  Who acts on the bucket directory's entry follows who
+ * had to be able to make it (DECISIONS.md 2026-10-24):  in the base
+ * path the gateway, which makes the directory for its creator (raise
+ * site 4);  under a location the account owns -- its
+ * new_buckets_path, or a custom path -- the requester, as NooBaa makes
+ * and removes it as the account. */
+static bool parent_is_base_path(const std::string& base,
+				const std::string& dir_path)
+{
+  auto trimmed = [](std::string p) {
+    while ((p.size() > 1) && (p.back() == '/')) {
+      p.pop_back();
+    }
+    return std::filesystem::path(p).lexically_normal();
+  };
+  return trimmed(dir_path).parent_path() == trimmed(base);
+}
+
 /* What a bucket-state write raises, and nothing else raises (raise
  * site 1):  `CAP_DAC_OVERRIDE` for an attribute on a bucket directory
  * the gateway does not own, and `CAP_FOWNER` for put_info()'s explicit
@@ -7539,6 +7578,66 @@ static int write_bucket_state(const DoutPrefixProvider* dpp,
     return ret;
   }
   return nsfs::with_capabilities(dpp, BUCKET_STATE_CAPS, fn);
+}
+
+int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
+			      const nsfs::FSIdentity& id,
+			      const nsfs::AccessStrategy* model,
+			      bool delete_children)
+{
+  const std::filesystem::path path(dir->get_name());
+  const std::string leaf = path.filename().string();
+  const auto& rn = driver->get_reserved_names();
+
+  /* the parent as the gateway, O_PATH:  the requester acts below it and
+   * never resolves the path above, which may not be theirs to search */
+  const int pfd = ::open(path.parent_path().c_str(),
+			 O_PATH | O_DIRECTORY | O_CLOEXEC);
+  if (pfd < 0) {
+    return -errno;
+  }
+  auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
+
+  int ret;
+  if (parent_is_base_path(driver->default_bucket_location(),
+			  dir->get_name())) {
+    /* what is in it, as the requester, on a descriptor of its own:  a
+     * dup of the bucket's would share the offset check_empty() has
+     * already read to the end */
+    ret = nsfs::with_identity_or_raise(dpp, id, model,
+				       nsfs::AccessClass::data,
+				       BUCKET_DELETE_CAPS, [&]() -> int {
+      const int efd = ::openat(pfd, leaf.c_str(),
+			       O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+      if (efd < 0) {
+	return -errno;
+      }
+      return delete_directory_entries(efd, leaf.c_str(), delete_children,
+				      dpp, rn);
+    }, y);
+    if (ret < 0) {
+      return ret;
+    }
+    /* its entry, as the gateway, whose directory the base path is:
+     * raise site 3, CAP_FOWNER where the base path is sticky */
+    auto rm = [&]() -> int {
+      return ((::unlinkat(pfd, leaf.c_str(), AT_REMOVEDIR) < 0) &&
+	      (errno != ENOENT)) ? -errno : 0;
+    };
+    ret = rm();
+    if ((ret == -EACCES) || (ret == -EPERM)) {
+      ret = nsfs::with_capabilities(dpp, nsfs::cap_bit(CAP_FOWNER), rm);
+    }
+    return ret;
+  }
+
+  /* a location the account owns:  all of it as the requester, as
+   * NooBaa's folder_delete() as the account */
+  return nsfs::with_identity_or_raise(dpp, id, model,
+				      nsfs::AccessClass::data,
+				      BUCKET_DELETE_CAPS, [&]() -> int {
+    return delete_directory(pfd, leaf.c_str(), delete_children, dpp, rn);
+  }, y);
 }
 
 int NSFSBucket::remove(const DoutPrefixProvider* dpp,
@@ -7565,6 +7664,48 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
    * here, before the directory.  A bucket that does not own its storage
    * keeps it, with the directory. */
   const bool owns = owns_storage(dpp);
+
+  /* Who acts at each layer follows who had to be able to create it
+   * (DECISIONS.md 2026-10-24).  The requester, where a request names
+   * one under impersonation, is checked at the bucket directory,
+   * removes what is below it, and removes its entry from a location the
+   * account owns;  the gateway removes its entry from the base path.
+   * Each of the requester's refusals stands under `posix-strict` and is
+   * a model's raise under `s3-native`.  No requester -- the switch off,
+   * or a caller with no request -- is the gateway throughout, raised
+   * after a denial as before. */
+  nsfs::FSIdentity id;
+  if (!is_internal() && !authenticated_user.empty()) {
+    const int pret = pin_personality_for(dpp, driver, authenticated_user,
+					 &id);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
+  const nsfs::AccessStrategy* model = driver->get_access_strategy();
+  if ((dir->get_fd() < 0) && (dir->open(dpp) < 0)) {
+    return -ENOENT;
+  }
+  const int dir_fd = dir->get_fd();
+
+  /* the request-time check on the bucket directory (DECISIONS.md
+   * 2026-10-15):  write and search to remove what is in it, read and
+   * search to list one that keeps its directory.  Under a model that
+   * hands data to S3 the check's refusal is S3's to override. */
+  if (id.active() && !model->permits(nsfs::AccessClass::data)) {
+    const int amode = owns ? (W_OK | X_OK) : (R_OK | X_OK);
+    const int r = nsfs::with_identity(dpp, id, [dir_fd, amode]() -> int {
+      return (::faccessat(dir_fd, "", amode, AT_EMPTY_PATH | AT_EACCESS) < 0)
+	  ? -errno : 0;
+    }, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 10) << "nsfs: bucket " << get_name() << ":  uid "
+	<< id.cred.uid << " may not delete it:  " << cpp_strerror(-r)
+	<< dendl;
+      return r;
+    }
+  }
+
   if (!delete_children) {
     int r = check_empty(dpp, y);
     if (r < 0) {
@@ -7574,7 +7715,7 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   /* uploads in progress end with the bucket, as RadosBucket::remove()
    * ends them */
   if (!is_internal()) {
-    int r = abort_multiparts(dpp, driver->ctx(), y);
+    int r = abort_multiparts_as(dpp, driver->ctx(), y, authenticated_user);
     if (r < 0) {
       return r;
     }
@@ -7583,26 +7724,32 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
     int r = 0;
     if (const auto* ps = path_strategy(); ps) {
       const std::string root_folder = ps->folder_object_name();
-      /* raised as the removal below is, after a denial:  the bucket
-       * directory is its owner's (raise site 4) */
       auto unlink_root = [&]() -> int {
-	return ((::unlinkat(dir->get_fd(), root_folder.c_str(), 0) < 0) &&
+	return ((::unlinkat(dir_fd, root_folder.c_str(), 0) < 0) &&
 		(errno != ENOENT)) ? -errno : 0;
       };
-      r = unlink_root();
-      if ((r == -EACCES) || (r == -EPERM)) {
-	r = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, unlink_root);
+      if (id.active()) {
+	r = nsfs::with_identity_or_raise(dpp, id, model,
+					 nsfs::AccessClass::data,
+					 RAISED_KEYDIR_CAPS, unlink_root, y);
+      } else {
+	r = unlink_root();
+	if ((r == -EACCES) || (r == -EPERM)) {
+	  r = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, unlink_root);
+	}
       }
       if (r < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: removing " << root_folder
-	  << " from bucket " << get_name() << ": " << cpp_strerror(-r)
-	  << dendl;
+	ldpp_dout(dpp, removal_log_level(-r)) << removal_log_prefix(-r)
+	  << "removing " << root_folder << " from bucket " << get_name()
+	  << ": " << cpp_strerror(-r) << dendl;
 	return r;
       }
     }
   }
   int ret = 0;
-  if (owns) {
+  if (owns && id.active()) {
+    ret = remove_dir_as(dpp, y, id, model, delete_children);
+  } else if (owns) {
     ret = dir->remove(dpp, y, delete_children);
     if ((ret == -EACCES) || (ret == -EPERM)) {
       ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, [&]() -> int {
@@ -10556,6 +10703,13 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
  * this is the bucket delete's scaffolding (raise site 3). */
 int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y)
 {
+  return abort_multiparts_as(dpp, cct, y, rgw::sal::no_authenticated_user);
+}
+
+int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
+				    CephContext* cct, optional_yield y,
+				    const rgw_user& requester)
+{
   constexpr int max = 1000;
   std::vector<std::unique_ptr<MultipartUpload>> uploads;
   std::string marker;
@@ -10566,17 +10720,18 @@ int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct
   do {
     uploads.clear();
     int ret = list_multiparts(dpp, empty, marker, empty, max, uploads,
-			      nullptr, &is_truncated, y,
-			      rgw::sal::no_authenticated_user);
+			      nullptr, &is_truncated, y, requester);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: listing the uploads of bucket "
 	<< get_name() << " to abort them: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     for (const auto& upload : uploads) {
+      /* a requester's abort goes through the access model itself
+       * (remove_staging());  the gateway's is raised after a denial */
       auto abort = [&]() -> int { return upload->abort(dpp, cct, y); };
       ret = abort();
-      if ((ret == -EACCES) || (ret == -EPERM)) {
+      if (requester.empty() && ((ret == -EACCES) || (ret == -EPERM))) {
 	ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, abort);
       }
       if ((ret < 0) && (ret != -ENOENT) && (ret != -ERR_NO_SUCH_UPLOAD)) {
@@ -10596,10 +10751,66 @@ int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct
   return 0;
 }
 
+int NSFSBucket::make_dir(const DoutPrefixProvider* dpp, optional_yield y,
+			 bool* existed, const rgw_user& creator)
+{
+  if (is_internal() || creator.empty() ||
+      parent_is_base_path(driver->default_bucket_location(),
+			  dir->get_name())) {
+    return dir->create(dpp, y, existed);
+  }
+  nsfs::FSIdentity id;
+  const int pret = pin_personality_for(dpp, driver, creator, &id);
+  if ((pret < 0) && (pret != -ENODATA)) {
+    return pret;
+  }
+  if (!id.active()) {
+    return dir->create(dpp, y, existed);
+  }
+
+  /* As the creator, below the parent the gateway opens O_PATH, as
+   * NooBaa's mkdir as the account (bucketspace_fs.js:1062);  the path
+   * above is never resolved as them.  Directory::create()'s identity
+   * branch, at the bucket's own parent. */
+  const std::filesystem::path path(dir->get_name());
+  const std::string leaf = path.filename().string();
+  const int pfd = ::open(path.parent_path().c_str(),
+			 O_PATH | O_DIRECTORY | O_CLOEXEC);
+  if (pfd < 0) {
+    return -errno;
+  }
+  auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
+  const mode_t mode = nsfs::dir_create_mode();
+  bool raised = false;
+  const int ret = nsfs::with_identity_or_raise(dpp, id,
+					       driver->get_access_strategy(),
+					       nsfs::AccessClass::data,
+					       RAISED_CREATE_CAPS,
+					       [&]() -> int {
+    if (::mkdirat(pfd, leaf.c_str(), mode) < 0) {
+      return -errno;
+    }
+    return nsfs::apply_create_mode_at(dpp, pfd, leaf.c_str(), mode);
+  }, y, &raised);
+  if (ret == -EEXIST) {
+    if (existed != nullptr) {
+      *existed = true;
+    }
+    return 0;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, removal_log_level(-ret)) << removal_log_prefix(-ret)
+      << "could not create bucket " << dir->get_name() << " as uid "
+      << id.cred.uid << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  return raised ? chown_raised_dir(dpp, pfd, leaf.c_str()) : 0;
+}
+
 int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* existed,
 		       const rgw_user& creator)
 {
-  int ret = dir->create(dpp, y, existed);
+  int ret = make_dir(dpp, y, existed, creator);
   if (ret < 0) {
     return ret;
   }
@@ -10669,7 +10880,17 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
    * Left in place it would hold the name, since creation rejects a
    * directory that already exists. */
   if ((ret < 0) && made && !is_internal()) {
-    int r = dir->remove(dpp, y, true);
+    /* by whoever made it:  under a location the account owns the
+     * gateway cannot remove its entry (make_dir()) */
+    nsfs::FSIdentity id;
+    if (!creator.empty() &&
+	!parent_is_base_path(driver->default_bucket_location(),
+			     dir->get_name())) {
+      (void) pin_personality_for(dpp, driver, creator, &id);
+    }
+    const int r = id.active()
+      ? remove_dir_as(dpp, y, id, driver->get_access_strategy(), true)
+      : dir->remove(dpp, y, true);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " failed, and "
 	<< "the directory it made, " << dir->get_name() << ", could not be "

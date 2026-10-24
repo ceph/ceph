@@ -2329,6 +2329,23 @@ public:
 			       CephContext* cct, optional_yield y) override;
 
   /* Internal APIs */
+  /* abort_multiparts() as `requester`, each abort through the access
+   * model;  no_authenticated_user is the gateway, raised after a
+   * denial, as abort_multiparts() is */
+  int abort_multiparts_as(const DoutPrefixProvider* dpp, CephContext* cct,
+			  optional_yield y, const rgw_user& requester);
+  /* The bucket directory made by whoever had to be able to make it
+   * (DECISIONS.md 2026-10-24):  the gateway in the base path, `creator`
+   * under a location the account owns. */
+  int make_dir(const DoutPrefixProvider* dpp, optional_yield y,
+	       bool* existed, const rgw_user& creator);
+  /* An owned bucket directory removed with `id` acting where the
+   * requester acts (remove()):  everything in it, and its entry in a
+   * location the account owns;  the gateway removes its entry from the
+   * base path. */
+  int remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
+		    const nsfs::FSIdentity& id,
+		    const nsfs::AccessStrategy* model, bool delete_children);
   /* `creator` is who the directory is given to (raise site 4), or
    * no_authenticated_user where no request made it */
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed,
