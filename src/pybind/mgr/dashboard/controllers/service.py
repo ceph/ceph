@@ -79,7 +79,13 @@ class Service(RESTController):
         :return: None
         """
 
-        if service_spec.get('service_type') not in ServiceSpec.REQUIRES_SERVICE_ID:
+        service_type = service_spec.get('service_type')
+        # Drop service_id for types that cannot have one (e.g. snmp-gateway).
+        # cephfs-mirror allows an optional id so a user-provided name is kept.
+        if (
+            service_type not in ServiceSpec.REQUIRES_SERVICE_ID
+            and service_type != 'cephfs-mirror'
+        ):
             service_spec.pop('service_id', None)
         OrchClient.instance().services.apply(service_spec, no_overwrite=True)
 
