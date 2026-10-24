@@ -2103,6 +2103,42 @@ def test_post_object_authenticated_request():
     body = _get_body(response)
     assert body == 'bar'
 
+@pytest.mark.bucket_policy
+@pytest.mark.parametrize('signature_version', ['s3', 's3v4'])
+@pytest.mark.parametrize('condition_type, expected_status', [
+    ('User', 403), ('Anonymous', 204),
+])
+def test_post_object_authenticated_principal_type(signature_version, condition_type, expected_status):
+    client = get_v2_client() if signature_version == 's3' else get_client()
+    bucket_name = get_new_bucket(client)
+    key = 'test.txt'
+    post = client.generate_presigned_post(Bucket=bucket_name, Key=key, ExpiresIn=60)
+    original_body = b'before conditional deny'
+
+    # Establish that the form authenticates before adding the conditional Deny.
+    response = requests.post(
+        post['url'], data=post['fields'], files={'file': (key, original_body)},
+        verify=get_config_ssl_verify())
+    assert response.status_code == 204
+
+    client.put_bucket_policy(Bucket=bucket_name, Policy=make_json_policy(
+        's3:PutObject', f'arn:aws:s3:::{bucket_name}/*', effect='Deny',
+        conditions={'StringEquals': {'aws:PrincipalType': condition_type}}))
+
+    body = b'after conditional deny'
+    response = requests.post(
+        post['url'], data=post['fields'], files={'file': (key, body)},
+        verify=get_config_ssl_verify())
+    assert response.status_code == expected_status
+    if expected_status == 403:
+        assert ET.fromstring(response.content).findtext('Code') == 'AccessDenied'
+        expected_body = original_body
+    else:
+        expected_body = body
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert response['Body'].read() == expected_body
+
+
 def test_post_object_authenticated_no_content_type():
     bucket_name = get_new_bucket_name()
     client = get_client()

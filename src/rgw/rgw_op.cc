@@ -988,6 +988,35 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, req_state
   }
 }
 
+void rgw_update_iam_principal_type(req_state* s)
+{
+  // PrincipalType is single-valued and can change after POST authentication.
+  s->env.erase("aws:PrincipalType");
+  if (s->auth.identity) {
+    const auto& identity = *s->auth.identity;
+    const char* principal_type;
+    if (identity.is_anonymous()) {
+      principal_type = "Anonymous";
+    } else {
+      switch (identity.get_identity_type()) {
+      case TYPE_ROOT:
+        principal_type = "Account";
+        break;
+      case TYPE_ROLE:
+        principal_type = "AssumedRole";
+        break;
+      default:
+        // Authentication has already established this identity. TYPE_NONE
+        // (legacy), TYPE_RGW, TYPE_KEYSTONE, TYPE_LDAP and TYPE_WEB describe
+        // users, not role sessions. Other authenticated types retain User.
+        principal_type = "User";
+        break;
+      }
+    }
+    s->env.emplace("aws:PrincipalType", principal_type);
+  }
+}
+
 void rgw_build_iam_environment(req_state* s)
 {
   const auto& m = s->info.env->get_map();
@@ -1035,32 +1064,9 @@ void rgw_build_iam_environment(req_state* s)
     s->env.emplace("aws:username", s->user->get_id().id);
   }
 
-  // Website error documents can rebuild the environment on the same request.
-  // PrincipalType is single-valued, so replace any previous value.
-  s->env.erase("aws:PrincipalType");
+  rgw_update_iam_principal_type(s);
   if (s->auth.identity) {
-    const auto& identity = *s->auth.identity;
-    const char* principal_type;
-    if (identity.is_anonymous()) {
-      principal_type = "Anonymous";
-    } else {
-      switch (identity.get_identity_type()) {
-      case TYPE_ROOT:
-        principal_type = "Account";
-        break;
-      case TYPE_ROLE:
-        principal_type = "AssumedRole";
-        break;
-      default:
-        // Authentication has already established this identity. TYPE_NONE
-        // (legacy), TYPE_RGW, TYPE_KEYSTONE, TYPE_LDAP and TYPE_WEB describe
-        // users, not role sessions. Other authenticated types retain User.
-        principal_type = "User";
-        break;
-      }
-    }
-    s->env.emplace("aws:PrincipalType", principal_type);
-    s->env.emplace("rgw:subuser", identity.get_subuser());
+    s->env.emplace("rgw:subuser", s->auth.identity->get_subuser());
   }
 
   i = m.find("HTTP_X_AMZ_SECURITY_TOKEN");
