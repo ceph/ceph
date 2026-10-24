@@ -578,7 +578,7 @@ int log_record(rgw::sal::Driver* driver,
   RGWObjVersionTracker objv_tracker;
   ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, &objv_tracker);
   if (ret == 0) {
-    const auto time_to_commit = time_from_name(obj_name, dpp) + std::chrono::seconds(conf.obj_roll_time);
+    const auto time_to_commit = time_from_name(obj_name, dpp) + ceph::timespan{std::chrono::seconds{conf.obj_roll_time}};
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to logging bucket '" <<
         target_bucket_id << "'" << dendl;

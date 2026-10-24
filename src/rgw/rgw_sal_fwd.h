@@ -40,6 +40,8 @@ using Attrs = std::map<std::string, ceph::buffer::list>;
   class User;
   struct UserList;
   class Bucket;
+  // Vector buckets use a separate entrypoint namespace and the same object API.
+  using VectorBucket = Bucket;
   struct BucketList;
   class Object;
   class MultipartUpload;

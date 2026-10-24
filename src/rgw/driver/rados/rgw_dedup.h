@@ -227,7 +227,8 @@ namespace rgw::dedup {
                             remapper_t      *remapper);
     int inc_ref_count_by_manifest(const std::string    &ref_tag,
                                   const std::string    &oid,
-                                  const RGWObjManifest &manifest);
+                                  const RGWObjManifest &manifest,
+                                  const std::string    &src_tag);
     int rollback_ref_by_manifest(const std::string    &ref_tag,
                                  const std::string    &oid,
                                  const RGWObjManifest &tgt_manifest);

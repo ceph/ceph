@@ -88,7 +88,7 @@ TEST(ecomapjournal, add_entry)
 
   // The journal should contain the added entry
   ASSERT_EQ(1u, journal.entries_size(test_hoid));
-  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
+  ASSERT_TRUE(journal.snapshot_entries(test_hoid).front().version == entry1.version);
 }
 
 TEST(ecomapjournal, remove_entry)
@@ -108,8 +108,9 @@ TEST(ecomapjournal, remove_entry)
 
   // The journal should have 2 entries in it after removal
   ASSERT_EQ(2u, journal.entries_size(test_hoid));
-  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry2.version);
-  ASSERT_TRUE((++journal.begin_entries(test_hoid))->version == entry3.version);
+  const auto snapped = journal.snapshot_entries(test_hoid);
+  ASSERT_TRUE(snapped.front().version == entry2.version);
+  ASSERT_TRUE(snapped.back().version == entry3.version);
 }
 
 TEST(ecomapjournal, remove_entry_by_version)
@@ -129,8 +130,9 @@ TEST(ecomapjournal, remove_entry_by_version)
 
   // The journal should have 2 entries in it after removal
   ASSERT_EQ(2u, journal.entries_size(test_hoid));
-  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
-  ASSERT_TRUE((++journal.begin_entries(test_hoid))->version == entry3.version);
+  const auto snapped = journal.snapshot_entries(test_hoid);
+  ASSERT_TRUE(snapped.front().version == entry1.version);
+  ASSERT_TRUE(snapped.back().version == entry3.version);
 }
 
 TEST(ecomapjournal, clear_one_journal)
@@ -183,7 +185,7 @@ TEST(ecomapjournal, remove_bad_entry)
 
   // The journal should still have 1 entry in it after failed removal
   ASSERT_EQ(1u, journal.entries_size(test_hoid));
-  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
+  ASSERT_TRUE(journal.snapshot_entries(test_hoid).front().version == entry1.version);
 }
 
 TEST(ecomapjournal, remove_bad_entry_by_version)
@@ -202,7 +204,7 @@ TEST(ecomapjournal, remove_bad_entry_by_version)
 
   // The journal should still have 1 entry in it after failed removal
   ASSERT_EQ(1u, journal.entries_size(test_hoid));
-  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
+  ASSERT_TRUE(journal.snapshot_entries(test_hoid).front().version == entry1.version);
 }
 
 TEST(ecomapjournal, get_value_updates_no_updates)
@@ -1243,55 +1245,6 @@ TEST(ecomapjournal, multiple_objects_interleaved_operations)
   ASSERT_EQ(5u, gen3);
 }
 
-TEST(ecomapjournal, iterator_over_empty_entries)
-{
-  MockDoutPrefixProvider dpp;
-  ECOmapJournal journal(dpp);
-  const hobject_t test_hoid("test_iter_empty", CEPH_NOSNAP, 1, 0, "test_namespace");
-  
-  // Check that hoid doesn't have unprocessed entries in the journal
-  ASSERT_FALSE(journal.has_unprocessed_entries(test_hoid));
-}
-
-TEST(ecomapjournal, iterator_over_single_entry)
-{
-  MockDoutPrefixProvider dpp;
-  ECOmapJournal journal(dpp);
-  const hobject_t test_hoid("test_iter_single", CEPH_NOSNAP, 1, 0, "test_namespace");
-  
-  ECOmapJournalEntry entry(eversion_t(1, 1), false, std::nullopt, {});
-  journal.add_entry(test_hoid, entry);
-  
-  auto begin = journal.begin_entries(test_hoid);
-  auto end = journal.end_entries(test_hoid);
-  
-  ASSERT_NE(begin, end);
-  ASSERT_EQ(entry.version, begin->version);
-  ASSERT_EQ(end, ++begin);
-}
-
-TEST(ecomapjournal, iterator_over_multiple_entries)
-{
-  MockDoutPrefixProvider dpp;
-  ECOmapJournal journal(dpp);
-  const hobject_t test_hoid("test_iter_multiple", CEPH_NOSNAP, 1, 0, "test_namespace");
-  
-  ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
-  ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
-  ECOmapJournalEntry entry3(eversion_t(1, 3), false, std::nullopt, {});
-  
-  journal.add_entry(test_hoid, entry1);
-  journal.add_entry(test_hoid, entry2);
-  journal.add_entry(test_hoid, entry3);
-  
-  int count = 0;
-  for (auto it = journal.begin_entries(test_hoid); it != journal.end_entries(test_hoid); ++it) {
-    count++;
-  }
-  
-  ASSERT_EQ(3, count);
-}
-
 TEST(ecomapjournal, has_omap_updates_empty_journal)
 {
   MockDoutPrefixProvider dpp;
@@ -1532,4 +1485,184 @@ TEST(ecomapjournal, replace_preserves_header_after_stale_prior_header)
   ASSERT_TRUE(result.has_value());
   ASSERT_EQ(73u, result->length());
   ASSERT_TRUE(result->contents_equal(new_header_bl));
+}
+
+TEST(ecomapjournal, remove_last_entry_cleans_up_unprocessed_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_1", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ECOmapJournalEntry entry(eversion_t(1, 1), false, std::nullopt, {});
+  journal.add_entry(hoid, entry);
+  ASSERT_TRUE(journal.has_unprocessed_entries(hoid));
+
+  journal.remove_entry(hoid, entry);
+
+  // The outer map node must have been erased together with the last entry.
+  EXPECT_FALSE(journal.has_unprocessed_entries(hoid));
+}
+
+TEST(ecomapjournal, remove_last_entry_by_version_cleans_up_unprocessed_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_2", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ECOmapJournalEntry entry(eversion_t(1, 1), false, std::nullopt, {});
+  journal.add_entry(hoid, entry);
+  ASSERT_TRUE(journal.has_unprocessed_entries(hoid));
+
+  journal.remove_entry_by_version(hoid, entry.version);
+
+  EXPECT_FALSE(journal.has_unprocessed_entries(hoid));
+}
+
+TEST(ecomapjournal, remove_non_last_entry_keeps_unprocessed_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_3", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
+  ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
+  journal.add_entry(hoid, entry1);
+  journal.add_entry(hoid, entry2);
+
+  journal.remove_entry(hoid, entry1);
+
+  // One entry still remains; the node must still be present.
+  EXPECT_TRUE(journal.has_unprocessed_entries(hoid));
+  EXPECT_EQ(1u, journal.entries_size(hoid));
+}
+
+TEST(ecomapjournal, remove_processed_insert_cleans_up_key_map_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_4", CEPH_NOSNAP, 1, 0, "test_namespace");
+  const hobject_t other("empty_node_4b", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  // Add a sibling object so we can verify isolation.
+  journal.add_entry(other, create_insert_entry(eversion_t(1, 1), 1, 1));
+
+  ECOmapJournalEntry entry = create_insert_entry(eversion_t(2, 1), 10, 12);
+  journal.add_entry(hoid, entry);
+
+  // Process: moves data from entries into key_map.
+  auto [updates, ranges] = journal.get_value_updates(hoid);
+  ASSERT_FALSE(updates.empty());
+
+  // Roll forward: remove the (now processed) entry.
+  journal.remove_entry(hoid, entry);
+
+  // The outer key_map node must have been erased.
+  EXPECT_FALSE(journal.has_omap_updates(hoid));
+
+  // The sibling object must be unaffected.
+  EXPECT_TRUE(journal.has_omap_updates(other));
+}
+
+TEST(ecomapjournal, remove_processed_remove_keys_cleans_up_key_map_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_5", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  // Build a Remove-keys entry.
+  std::set<std::string> keys_to_remove = {make_key(1), make_key(2)};
+  ceph::buffer::list remove_bl;
+  encode(keys_to_remove, remove_bl);
+  ECOmapJournalEntry entry(
+    eversion_t(1, 1), false, std::nullopt,
+    {std::pair(OmapUpdateType::Remove, remove_bl)});
+  journal.add_entry(hoid, entry);
+
+  auto [updates, ranges] = journal.get_value_updates(hoid);
+  ASSERT_FALSE(updates.empty());
+
+  journal.remove_entry(hoid, entry);
+
+  EXPECT_FALSE(journal.has_omap_updates(hoid));
+}
+
+TEST(ecomapjournal, remove_processed_entry_by_version_cleans_up_key_map_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_6", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ECOmapJournalEntry entry = create_insert_entry(eversion_t(1, 1), 1, 3);
+  journal.add_entry(hoid, entry);
+
+  auto [updates, ranges] = journal.get_value_updates(hoid);
+  ASSERT_FALSE(updates.empty());
+
+  journal.remove_entry_by_version(hoid, entry.version);
+
+  EXPECT_FALSE(journal.has_omap_updates(hoid));
+}
+
+TEST(ecomapjournal, remove_processed_range_cleans_up_removed_ranges_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_7", CEPH_NOSNAP, 1, 0, "test_namespace");
+  const hobject_t other("empty_node_7b", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  // Add a sibling to verify isolation.
+  journal.add_entry(other, create_insert_entry(eversion_t(1, 1), 1, 1));
+
+  ECOmapJournalEntry entry(
+    eversion_t(2, 1), false, std::nullopt,
+    {std::pair(OmapUpdateType::RemoveRange, encode_range(make_key(10), make_key(20)))});
+  journal.add_entry(hoid, entry);
+
+  auto [updates, ranges] = journal.get_value_updates(hoid);
+  ASSERT_FALSE(ranges.empty());
+
+  journal.remove_entry(hoid, entry);
+
+  // The outer removed_ranges_map node must have been erased.
+  EXPECT_FALSE(journal.has_omap_updates(hoid));
+
+  // Sibling unaffected.
+  EXPECT_TRUE(journal.has_omap_updates(other));
+}
+
+TEST(ecomapjournal, remove_processed_clear_omap_cleans_up_removed_ranges_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_8", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ECOmapJournalEntry entry(eversion_t(1, 1), true /*clear_omap*/, std::nullopt, {});
+  journal.add_entry(hoid, entry);
+
+  auto [updates, ranges] = journal.get_value_updates(hoid);
+  // clear_omap always inserts a ["", nullopt] catch-all range.
+  ASSERT_FALSE(ranges.empty());
+
+  journal.remove_entry(hoid, entry);
+
+  EXPECT_FALSE(journal.has_omap_updates(hoid));
+}
+
+TEST(ecomapjournal, remove_processed_range_by_version_cleans_up_removed_ranges_node)
+{
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("empty_node_9", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ECOmapJournalEntry entry(
+    eversion_t(1, 1), false, std::nullopt,
+    {std::pair(OmapUpdateType::RemoveRange, encode_range(make_key(5), make_key(15)))});
+  journal.add_entry(hoid, entry);
+
+  auto [updates, ranges] = journal.get_value_updates(hoid);
+  ASSERT_FALSE(ranges.empty());
+
+  journal.remove_entry_by_version(hoid, entry.version);
+
+  EXPECT_FALSE(journal.has_omap_updates(hoid));
 }

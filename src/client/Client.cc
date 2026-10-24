@@ -1347,6 +1347,10 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
   ceph_assert(dname.size() > 0);
   alternate_name = "";
 
+  if (dname.size() > NAME_MAX) {
+    return -ENAMETOOLONG;
+  }
+
   if (dname == cct->_conf->client_snapdir) {
     ldout(cct, 25) << __func__ << ": is special name" << dendl;
     return true;
@@ -1450,6 +1454,10 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
     }
   }
 #endif
+
+  if (dname.size() > NAME_MAX) {
+    return -ENAMETOOLONG;
+  }
 
   return true;
 }
@@ -8076,11 +8084,6 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
       caps = CEPH_CAP_AUTH_SHARED;
     }
 
-    if (dname.size() > NAME_MAX) {
-      rc = -ENAMETOOLONG;
-      goto out;
-    }
-
     // N.B.: we don't validate alternate_name we generate during wrapping
     // matches the dentry. We probably should!
     if (!_wrap_name(*diri, dname, alternate_name)) {
@@ -13923,8 +13926,6 @@ void Client::_release_filelocks(Fh *fh)
   Inode *in = fh->inode.get();
   ldout(cct, 10) << __func__ << " " << fh << " ino " << in->ino << dendl;
 
-  list<ceph_filelock> activated_locks;
-
   list<pair<int, ceph_filelock> > to_release;
 
   if (fh->fcntl_locks) {
@@ -13932,7 +13933,7 @@ void Client::_release_filelocks(Fh *fh)
     for(auto p = lock_state->held_locks.begin(); p != lock_state->held_locks.end(); ) {
       auto q = p++;
       if (in->flags & I_ERROR_FILELOCK) {
-	lock_state->remove_lock(q->second, activated_locks);
+	lock_state->remove_lock(q->second);
       } else {
 	to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FCNTL, q->second));
       }
@@ -13944,7 +13945,7 @@ void Client::_release_filelocks(Fh *fh)
     for(auto p = lock_state->held_locks.begin(); p != lock_state->held_locks.end(); ) {
       auto q = p++;
       if (in->flags & I_ERROR_FILELOCK) {
-	lock_state->remove_lock(q->second, activated_locks);
+	lock_state->remove_lock(q->second);
       } else {
 	to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FLOCK, q->second));
       }
@@ -13995,8 +13996,7 @@ void Client::_update_lock_state(struct flock *fl, uint64_t owner,
   filelock.type = lock_cmd;
 
   if (filelock.type == CEPH_LOCK_UNLOCK) {
-    list<ceph_filelock> activated_locks;
-    lock_state->remove_lock(filelock, activated_locks);
+    lock_state->remove_lock(filelock);
   } else {
     bool r = lock_state->add_lock(filelock, false, false, NULL);
     ceph_assert(r);

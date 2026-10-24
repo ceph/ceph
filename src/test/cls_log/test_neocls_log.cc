@@ -80,7 +80,7 @@ auto decode(const buffer::list& bl)
 
 auto get_time(real_time start_time, chrono::seconds i, bool modify_time)
 {
-  return modify_time ? start_time + i : start_time;
+  return modify_time ? start_time + real_clock::duration{i} : start_time;
 }
 
 auto get_name(int i)

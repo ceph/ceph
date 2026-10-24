@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # known issue: the per-host reference certificate is looked up by FQDN,
+      # not found, and grafana fails without one. Drop this together with the
+      # test's expectedFailure once that is fixed.
+      - CEPHADM_FAILED_DAEMON
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.certmgr.test_host_scope.TestCertMgrHostScopeReference

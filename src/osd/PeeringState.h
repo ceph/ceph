@@ -1495,6 +1495,11 @@ public:
   bool dirty_info = false;          ///< small info structu on disk out of date
   bool dirty_big_info = false;      ///< big info structure on disk out of date
 
+  /// true while handle_event() is dispatching a peering event from
+  /// do_peering_event()/advance_map()/activate_map(), each of which already
+  /// calls write_if_dirty(rctx.transaction) right after the dispatch
+  bool dispatching_peering_event = false;
+
   pg_info_t info;                   ///< current pg info
   pg_info_t last_written_info;      ///< last written info
   PastIntervals past_intervals;     ///< information about prior pg mappings
@@ -1594,21 +1599,6 @@ public:
   bool backfill_reserved = false;
   bool backfill_reserving = false;
 
-  /**
-   * Per-PG latch state for rebuild time tracking. Cleared after each
-   * completed rebuild event is recorded in the perf counters.
-   * The state is also cleared in start_peering_interval() when the
-   * primary role actually changes across the transition, so that a
-   * role change (primary -> replica, or vice versa) does not carry a
-   * stale start time or baseline recovered count into a future primary
-   * stint. Peering-interval restarts that leave this OSD as primary
-   * throughout preserve the latch so an in-progress rebuild keeps
-   * accruing across them.
-   */
-  utime_t rebuild_start_time;
-  int64_t rebuild_base_recovered = 0;
-  bool rebuild_had_redundancy_loss = false;
-
   PeeringMachine machine;
 
   void update_osdmap_ref(OSDMapRef newmap) {
@@ -1657,17 +1647,6 @@ public:
   void on_new_interval();
   void clear_recovery_state();
   void clear_primary_state();
-  /**
-   * This is used by:
-   * a) start_peering_interval(): If this OSD is losing the primary role
-   *    while rebuild_start_time is still armed -- close out and record this
-   *    OSD's own segment of the vulnerability window instead of discarding it.
-   * b) prepare_stats_for_publish(): The case where this OSD is the primary
-   *   and completes a rebuild and records the OSD's vulnerability window.
-   *
-   * So both paths use identical filter/record/log logic.
-   */
-  void try_record_rebuild_segment(utime_t end_time, std::string_view reason);
   void check_past_interval_bounds() const;
   bool set_force_recovery(bool b);
   bool set_force_backfill(bool b);
@@ -1719,17 +1698,6 @@ public:
       pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
       return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
     }
-  }
-
-  // Accessors for the per-PG rebuild latch state.
-  utime_t get_rebuild_start_time() const {
-    return rebuild_start_time;
-  }
-  int64_t get_rebuild_base_recovered() const {
-    return rebuild_base_recovered;
-  }
-  bool get_rebuild_had_redundancy_loss() const {
-    return rebuild_had_redundancy_loss;
   }
 
 private:
@@ -2411,6 +2379,51 @@ public:
   void state_set(uint64_t m) { state |= m; }
   void state_clear(uint64_t m) { state &= ~m; }
 
+  /**
+   * Arm the active-rebuild latch (rs_pg_rebuild_duration) unless a span
+   * is already in progress: latches info.history.last_rebuild_active_
+   * start to now. Called from Recovering::Recovering()/Backfilling::
+   * Backfilling() on every entry.
+   */
+  void arm_rebuild_span();
+
+  /**
+   * Fold the elapsed time of a currently-armed active-rebuild span (if
+   * any) into info.history.rebuild_active_accum and disarm it, WITHOUT
+   * recording -- called when the rebuild is paused (defer/toofull/
+   * unfound) rather than finished, so the pause itself doesn't end the
+   * episode. A later retry re-arms a fresh span via arm_rebuild_span(),
+   * which also accrues into the same rebuild_active_accum once it, too,
+   * is paused or closed. See info.history.last_rebuild_active_start's
+   * comment in osd_types.h for how the onset itself is tracked and
+   * merged across peers.
+   */
+  void pause_rebuild_span();
+
+  /**
+   * Close the active-rebuild latch: fold any still-armed span into
+   * info.history.rebuild_active_accum (via pause_rebuild_span()), then
+   * record the whole accumulated total as one rs_pg_rebuild_duration/
+   * rs_pg_rebuild_duration_min sample and reset it. No-op if no active
+   * rebuild time was ever accrued. Called from NotBackfilling/
+   * NotRecovering (pause only, via pause_rebuild_span() -- see above)
+   * and Recovered (the true close).
+   */
+  void close_rebuild_span();
+
+  /**
+   * Set when either rebuild-stats counter -- pg_vulnerability_duration
+   * (prepare_stats_for_publish()) or pg_rebuild_duration
+   * (close_rebuild_span()) -- records a close; cleared by share_pg_info(),
+   * which sends info.history (and so both counters' "reported" markers)
+   * wholesale. Replicas only learn of a close through that share, and one
+   * left holding the pre-close history would, if promoted, treat the
+   * already-recorded episode as still open and record it again.
+   * Active::react(AdvMap) retries share_pg_info() while this is set, the
+   * same way it already does for dirty_big_info.
+   */
+  bool rebuild_stats_close_unshared = false;
+
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
@@ -2565,6 +2578,16 @@ public:
 
   bool debug_has_dirty_state() const {
     return dirty_info || dirty_big_info;
+  }
+
+  /// true while a peering-event dispatch (do_peering_event()/advance_map()/
+  /// activate_map()) is in progress and will flush dirty state itself
+  bool is_dispatching_peering_event() const {
+    return dispatching_peering_event;
+  }
+
+  void set_dispatching_peering_event(bool b) {
+    dispatching_peering_event = b;
   }
 
   std::string get_pg_state_string() const {

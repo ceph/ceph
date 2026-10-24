@@ -3,7 +3,7 @@
 from typing import Dict, List
 from unittest.mock import MagicMock
 
-from cephadm.services.cephadmservice import MonService
+from cephadm.services.mon import MonService
 from cephadm.module import CephadmOrchestrator
 from orchestrator._interface import DaemonDescription
 from ceph.deployment.service_spec import ServiceSpec

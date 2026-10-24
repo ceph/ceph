@@ -27,8 +27,8 @@ The systemd unit also sets ``Restart=always``, which means systemd will restart
 the service whenever the tracked process exits for any reason.
 
 This differs from Podman, where cephadm uses ``Restart=on-failure`` (restarting
-only on non-zero exit) and cleans up both a PID file and a CID file on each
-stop.
+after a non-zero exit code, termination by a signal, or a timeout) and cleans
+up both a PID file and a CID file on each stop.
 
 
 Behavior With Live Restore Enabled
@@ -45,8 +45,10 @@ the command:
 
 The PID tracked by systemd remains valid throughout the daemon restart, so 
 systemd does not trigger a service restart.
-Ceph daemons stay online across Docker Engine upgrades or unplanned daemon
-restarts with no disruption.
+Ceph daemons stay online while the Docker Engine restarts. Docker supports
+Live Restore across Engine updates only between patch releases (``YY.MM.x``),
+not across major (``YY.MM``) upgrades, and only if daemon options such as
+bridge IP addresses and the graph driver are unchanged.
 
 This is the **recommended configuration** for production deployments that use
 Docker as the container engine.
@@ -57,7 +59,8 @@ Behavior With Live Restore Disabled
 
 When Live Restore is disabled (the Docker default), a Docker Engine restart
 stops all running containers. Systemd detects that the tracked PID has exited
-and, because ``Restart=always`` is set, immediately restarts the service unit.
+and, because ``Restart=always`` is set, restarts the service unit after 10
+seconds (``RestartSec=10s``).
 This brings the container back up, but there is a brief window during which the
 Ceph daemon is unavailable.
 

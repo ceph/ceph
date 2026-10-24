@@ -5,6 +5,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 describe('SmbClusterListComponent', () => {
   let component: SmbClusterListComponent;
@@ -18,7 +19,8 @@ describe('SmbClusterListComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule
       ],
-      declarations: [SmbClusterListComponent]
+      declarations: [SmbClusterListComponent],
+      providers: [{ provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbClusterListComponent);

@@ -29,6 +29,7 @@ from object_format import ErrorResponseBase
 from . import resourcelib, validation
 from .enums import (
     AuthMode,
+    CaseInsensitiveCheckPolicy,
     CephFSStorageProvider,
     ClientSupportMode,
     HostAccess,
@@ -270,6 +271,9 @@ class CephFSStorage(_RBase):
     # fscrypt_key is used to identify and obtain fscrypt key material
     # from the keybridge.
     fscrypt_key: Optional[FSCryptKeySelector] = None
+    # case_insensitive specifies a policy that is used to inform or enforce
+    # that the underlying subvolume is configured for case insensitive mode
+    case_insensitive: Optional[CaseInsensitiveCheckPolicy] = None
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -411,6 +415,10 @@ class RGWStorage(_RBase):
     def validate(self) -> None:
         if not self.bucket:
             raise ValueError('bucket requires a value')
+        if '/' in self.bucket:
+            raise ValueError(
+                f"Invalid bucket name '{self.bucket}': bucket name should not contain /."
+            )
 
     def convert(self, operation: ConversionOp) -> Self:
         """Convert password fields based on the operation."""

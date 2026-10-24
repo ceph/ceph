@@ -3,6 +3,7 @@ import {
   ChangeDetectorRef,
   Component,
   inject,
+  input,
   Input,
   ViewEncapsulation
 } from '@angular/core';
@@ -12,17 +13,27 @@ import {
   SkeletonModule,
   LayoutModule,
   TagModule,
-  ButtonModule
+  ButtonModule,
+  TabsModule
 } from 'carbon-components-angular';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { MeterChartComponent, MeterChartOptions } from '@carbon/charts-angular';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
-import { BreakdownChartData, CapacityThreshold, TrendPoint } from '~/app/shared/models/overview';
+import {
+  BreakdownChartData,
+  CapacityThreshold,
+  OverviewStat,
+  SavingsCardVM,
+  TrendPoint
+} from '~/app/shared/models/overview';
 import { EmptyStateComponent } from '~/app/shared/components/empty-state/empty-state.component';
 import { RouterModule } from '@angular/router';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NgTemplateOutlet } from '@angular/common';
+import { OverviewStatsComponent } from '~/app/shared/components/overview-stats/overview-stats.component';
+import { OverviewStorageSavingsComponent } from '../storage-savings/overview-storage-savings.component';
 
 const CHART_HEIGHT = '45px';
 
@@ -40,7 +51,11 @@ const CHART_HEIGHT = '45px';
     TagModule,
     EmptyStateComponent,
     ButtonModule,
-    RouterModule
+    RouterModule,
+    TabsModule,
+    OverviewStorageSavingsComponent,
+    OverviewStatsComponent,
+    NgTemplateOutlet
   ],
   standalone: true,
   templateUrl: './overview-storage-card.component.html',
@@ -75,11 +90,13 @@ export class OverviewStorageCardComponent {
   }
 
   @Input() consumptionTrendData: TrendPoint[] = [];
-  @Input() averageDailyConsumption = '';
-  @Input() estimatedTimeUntilFull = '';
   @Input() breakdownData: BreakdownChartData[] = [];
   @Input() isBreakdownLoaded = false;
   @Input() threshold: CapacityThreshold;
+
+  readonly consumptionStats = input<OverviewStat[]>([]);
+  readonly savings = input<SavingsCardVM | null>(null);
+  readonly isSavingsLoaded = input(false);
 
   totalRaw: number | null = null;
   usedRaw: number | null = null;

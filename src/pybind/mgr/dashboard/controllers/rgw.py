@@ -51,8 +51,8 @@ RGW_USER_SCHEMA = {
 }
 
 
-def _get_owner(owner):
-    accounts = RgwAccounts().get_accounts()
+def _get_owner(owner, daemon_name=None):
+    accounts = RgwAccounts().get_accounts(daemon_name)
 
     # if the owner is present in the accounts list,
     # then the bucket is owned by an account.
@@ -536,9 +536,11 @@ class RgwBucket(RgwRESTController):
         if replication:
             zonegroup_name = RgwClient.admin_instance(
                 daemon_name=daemon_name).get_default_zonegroup()
-            policy_exists = multisite.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name)
+            policy_exists = multisite.policy_group_exists(
+                _SYNC_GROUP_ID, zonegroup_name, daemon_name=daemon_name)
             if not policy_exists:
-                multisite.create_dashboard_admin_sync_group(zonegroup_name=zonegroup_name)
+                multisite.create_dashboard_admin_sync_group(
+                    zonegroup_name=zonegroup_name, daemon_name=daemon_name)
             return rgw_client.set_bucket_replication(bucket_name)
 
         return rgw_client.delete_bucket_replication(bucket_name)
@@ -554,7 +556,8 @@ class RgwBucket(RgwRESTController):
         # Check for sync policies
         sync_policy_active = False
         try:
-            sync_policy = multisite.get_sync_policy(bucket_name=bucket_name)
+            sync_policy = multisite.get_sync_policy(
+                bucket_name=bucket_name, daemon_name=daemon_name)
             # Check if there are sync policy groups with 'enabled' status
             groups = sync_policy.get('groups', [])
             sync_policy_active = any(g.get('status', '').lower() == 'enabled' for g in groups)
@@ -607,7 +610,7 @@ class RgwBucket(RgwRESTController):
         owner_ids = {bucket['owner'] for bucket in result}
 
         # Get available account IDs
-        valid_accounts = set(RgwAccounts().get_accounts())
+        valid_accounts = set(RgwAccounts().get_accounts(daemon_name))
 
         # Determine which owner IDs are valid and need querying
         query_ids = owner_ids & valid_accounts
@@ -649,7 +652,7 @@ class RgwBucket(RgwRESTController):
         bucket_name = RgwBucket.get_s3_bucket_name(result['bucket'],
                                                    result['tenant'])
 
-        owner = _get_owner(result['owner'])
+        owner = _get_owner(result['owner'], daemon_name)
         # Append the versioning configuration.
         versioning = self._get_versioning(owner, daemon_name, bucket_name)
         encryption = self._get_encryption(bucket_name, daemon_name, owner)
@@ -731,7 +734,7 @@ class RgwBucket(RgwRESTController):
                 'bucket-id': bucket_id,
             }
 
-            accounts = RgwAccounts().get_accounts()
+            accounts = RgwAccounts().get_accounts(daemon_name)
             if uid in accounts:
                 # If the bucket is owned by an account, we need to use the account-id
                 # instead of uid.
@@ -745,7 +748,7 @@ class RgwBucket(RgwRESTController):
 
         uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
         bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
-        uid = _get_owner(uid)
+        uid = _get_owner(uid, daemon_name)
 
         locking = self._get_locking(uid, daemon_name, bucket_name)
         if versioning_state:
@@ -880,27 +883,29 @@ class RgwBucket(RgwRESTController):
     @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the bucket global rate limit")
     @ReadPermission
-    def get_global_rate_limit(self):
+    def get_global_rate_limit(self, daemon_name: Optional[str] = None):
         rgwBucketRateLimit_instance = RgwRateLimit()
-        return rgwBucketRateLimit_instance.get_global_rateLimit()
+        return rgwBucketRateLimit_instance.get_global_rateLimit(daemon_name=daemon_name)
 
     @Endpoint(method='GET', path='{uid}/ratelimit')
     @EndpointDoc("Get the bucket rate limit")
     @ReadPermission
-    def get_rate_limit(self, uid: str):
+    def get_rate_limit(self, uid: str, daemon_name: Optional[str] = None):
         rgwBucketRateLimit_instance = RgwRateLimit()
-        return rgwBucketRateLimit_instance.get_rateLimit('bucket', uid)
+        return rgwBucketRateLimit_instance.get_rateLimit('bucket', uid, daemon_name=daemon_name)
 
     @Endpoint(method='PUT', path='{uid}/ratelimit')
     @UpdatePermission
     @allow_empty_body
     @EndpointDoc("Update the bucket rate limit")
     def set_rate_limit(self, enabled: bool, uid: str, max_read_ops: int,
-                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int):
+                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int,
+                       daemon_name: Optional[str] = None):
         rgwBucketRateLimit_instance = RgwRateLimit()
         return rgwBucketRateLimit_instance.set_rateLimit('bucket', enabled, uid,
                                                          max_read_ops, max_write_ops,
-                                                         max_read_bytes, max_write_bytes)
+                                                         max_read_bytes, max_write_bytes,
+                                                         daemon_name=daemon_name)
 
 
 @UIRouter('/rgw/bucket', Scope.RGW)
@@ -911,27 +916,41 @@ class RgwBucketUi(RgwBucket):
     def buckets_and_users_count(self, daemon_name=None):
         buckets_count = 0
         users_count = 0
+        objects_count = 0
+        objects_size = 0
         daemon_object = RgwDaemon()
         daemons = json.loads(daemon_object.list())
         unique_realms = set()
+
+        def _accumulate(daemon_id):
+            nonlocal buckets_count, users_count, objects_count, objects_size
+            # Use proxy directly to avoid owner-mapping overhead when only
+            # aggregating counts/stats for the UI.
+            buckets = self.proxy(daemon_id, 'GET', 'bucket?stats=true')
+            users = json.loads(RgwUser.list(self, daemon_name=daemon_id))
+            buckets_count += len(buckets)
+            users_count += len(users)
+            for bucket in buckets:
+                usage = bucket.get('usage', {}).get('rgw.main', {})
+                objects_count += usage.get('num_objects', 0) or 0
+                objects_size += usage.get('size_actual', 0) or 0
+
         for daemon in daemons:
             realm_name = daemon.get('realm_name', None)
             if realm_name:
                 if realm_name not in unique_realms:
                     unique_realms.add(realm_name)
-                    buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
-                    users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
-                    users_count += len(users)
-                    buckets_count += len(buckets)
+                    _accumulate(daemon['id'])
             else:
-                buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
-                users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
-                users_count = len(users)
-                buckets_count = len(buckets)
+                # Single-site: all daemons share the same metadata — overwrite.
+                buckets_count = users_count = objects_count = objects_size = 0
+                _accumulate(daemon['id'])
 
         return {
             'buckets_count': buckets_count,
-            'users_count': users_count
+            'users_count': users_count,
+            'objects_count': objects_count,
+            'objects_size': objects_size,
         }
 
 
@@ -1241,27 +1260,29 @@ class RgwUser(RgwRESTController):
     @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the user global rate limit")
     @ReadPermission
-    def get_global_rate_limit(self):
+    def get_global_rate_limit(self, daemon_name: Optional[str] = None):
         rgwUserRateLimit_instance = RgwRateLimit()
-        return rgwUserRateLimit_instance.get_global_rateLimit()
+        return rgwUserRateLimit_instance.get_global_rateLimit(daemon_name=daemon_name)
 
     @Endpoint(method='GET', path='{uid}/ratelimit')
     @EndpointDoc("Get the user rate limit")
     @ReadPermission
-    def get_rate_limit(self, uid: str):
+    def get_rate_limit(self, uid: str, daemon_name: Optional[str] = None):
         rgwUserRateLimit_instance = RgwRateLimit()
-        return rgwUserRateLimit_instance.get_rateLimit('user', uid)
+        return rgwUserRateLimit_instance.get_rateLimit('user', uid, daemon_name=daemon_name)
 
     @Endpoint(method='PUT', path='{uid}/ratelimit')
     @UpdatePermission
     @allow_empty_body
     @EndpointDoc("Update the user rate limit")
     def set_rate_limit(self, uid: str, enabled: bool = False, max_read_ops: int = 0,
-                       max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0):
+                       max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0,
+                       daemon_name: Optional[str] = None):
         rgwUserRateLimit_instance = RgwRateLimit()
         return rgwUserRateLimit_instance.set_rateLimit('user', enabled,
                                                        uid, max_read_ops, max_write_ops,
-                                                       max_read_bytes, max_write_bytes)
+                                                       max_read_bytes, max_write_bytes,
+                                                       daemon_name=daemon_name)
 
 
 class RGWRoleEndpoints:

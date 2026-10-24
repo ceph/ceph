@@ -84,7 +84,7 @@ steps below:
      ceph orch apply grafana
 
 Enabling Security for the Monitoring Stack
-------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 By default, in a cephadm-managed cluster, the monitoring components are set up and configured without enabling security measures.
 While this suffices for certain deployments, others with strict security needs may find it necessary to protect the
@@ -160,14 +160,24 @@ Centralized logging in Ceph is implemented using two services: ``loki`` and ``al
 * Loki is a log aggregation system and is used to query logs. It can be configured as a ``datasource`` in Grafana.
 * Alloy acts as an agent that gathers logs from each node and forwards them to Loki.
 
-These two services are not deployed by default in a Ceph cluster. To enable centralized logging you can follow the steps mentioned here :ref:`centralized-logging`.
+These two services are not deployed by default in a Ceph cluster. To deploy
+them on an existing cluster, run ``ceph orch apply loki`` and
+``ceph orch apply alloy``. Then enable logging to files and follow the
+remaining steps in :ref:`centralized-logging`. In Squid and Tentacle the agent
+is Promtail and Alloy is not available: run ``ceph orch apply promtail`` in
+place of ``ceph orch apply alloy``.
 
 .. _cephadm-monitoring-networks-ports:
 
 Networks and Ports
 ~~~~~~~~~~~~~~~~~~
 
-All monitoring services can have the network and port they bind to configured with a YAML service specification. By default
+The ``networks`` and ``port`` fields of a service specification set the
+address and port that Prometheus, Alertmanager and Grafana listen on. They do
+not change where Loki, Promtail or Alloy listen: the Loki and Promtail
+configuration templates fix ports 3100 and 9080. Since Tentacle they do not
+change where node-exporter listens either, because cephadm starts it without a
+``--web.listen-address`` argument. By default
 cephadm will use ``https`` protocol when configuring Grafana daemons unless the user explicitly sets the protocol to ``http``.
 
 example spec file:
@@ -195,9 +205,9 @@ Default Images
 the [ceph-users] mailing list in April of 2024. The thread can be viewed here:
 https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/thread/QGC66QIFBKRTPZAQMQEYFXOGZJ7RLWBN/*
 
-``cephadm`` stores a local copy of the ``cephadm`` binary in
-``var/lib/ceph/{FSID}/cephadm.{DIGEST}``, where ``{DIGEST}`` is an alphanumeric
-string representing the currently-running version of Ceph.
+The cephadm Manager module copies the ``cephadm`` binary to each managed host
+as ``/var/lib/ceph/{FSID}/cephadm.{DIGEST}``. ``{DIGEST}`` is the SHA-256 hash
+of that binary, written in hexadecimal.
 
 To see the default container images, run the below command:
 
@@ -247,7 +257,7 @@ For example:
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/cephadm/container_image_prometheus prom/prometheus:v1.4.1
+   ceph config set mgr mgr/cephadm/container_image_prometheus quay.io/prometheus/prometheus:v3.6.0
 
 If you were already running monitoring stack daemon(s) of the same image type
 that you changed, then you must redeploy the daemon(s) in order to make them
@@ -296,22 +306,28 @@ By overriding cephadm templates, it is possible to completely customize the
 configuration files for monitoring services.
 
 Internally, cephadm already uses `Jinja2
-<https://jinja.palletsprojects.com/en/2.11.x/>`_ templates to generate the
-configuration files for all monitoring components. Starting from version 17.2.3,
-cephadm supports Prometheus HTTP service discovery, and uses this endpoint for the
-definition and management of the embedded Prometheus service. The endpoint listens on
-``https://<mgr-ip>:8765/sd/`` (the port is
-configurable through the variable ``service_discovery_port``) and returns scrape target
+<https://jinja.palletsprojects.com/en/stable/>`_ templates to generate the
+configuration files for all monitoring components. Cephadm provides a
+Prometheus HTTP service discovery endpoint and uses it to configure the
+Prometheus daemons that it deploys. The endpoint listens on
+``http://<mgr-ip>:8765/sd/`` and returns scrape target
 information in `http_sd_config format
 <https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config>`_.
+If ``mgr/cephadm/secure_monitoring_stack`` is ``true``, or if a
+``mgmt-gateway`` service is deployed, the endpoint listens on
+``https://<mgr-ip>:8765/sd/`` and requires basic authentication. The port is
+set by the ``mgr/cephadm/service_discovery_port`` option.
 
-Customers with external monitoring stack can use `ceph-mgr` service discovery endpoint
-to get scraping configuration. Root certificate of the server can be obtained by the
-following command:
+Users with an external monitoring stack can use the ``ceph-mgr`` service
+discovery endpoint to get the scrape configuration. When security is enabled,
+the endpoint uses a certificate signed by the cephadm root CA. To get the root
+CA certificate, run the following command:
 
 .. prompt:: bash #
 
-     ceph orch sd dump cert
+     ceph orch certmgr cert get cephadm_root_ca_cert
+
+In Squid, run ``ceph orch sd dump cert`` instead.
 
 The configuration of Prometheus, Grafana, or Alertmanager may be customized by storing
 a Jinja2 template for each service. This template will be evaluated every time a service
@@ -388,8 +404,8 @@ To set contents of files as template use the ``-i`` argument:
 
 .. note::
 
-  When using files as input to ``config-key`` an absolute path to the file must
-  be used.
+  The ``ceph`` command opens the file at the path given with ``-i``. A relative
+  path is resolved against the directory in which you run the command.
 
 
 Then the configuration file for the service needs to be recreated.
@@ -433,12 +449,22 @@ cluster.
   running a ceph-mgr daemon.  Configure Prometheus to scrape these.
 
 To make this integration easier, cephadm provides a service discovery endpoint at
-``https://<mgr-ip>:8765/sd/``. This endpoint can be used by an external
+``http://<mgr-ip>:8765/sd/``. This endpoint can be used by an external
 Prometheus server to retrieve target information for a specific service. Information returned
 by this endpoint uses the format specified by the Prometheus `http_sd_config option
-<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config/>`_.
+<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config>`_.
 
 Here's an example Prometheus job definition that uses the cephadm service discovery endpoint:
+
+.. code-block:: yaml
+
+     - job_name: 'ceph-exporter'
+       http_sd_configs:
+       - url: http://<mgr-ip>:8765/sd/prometheus/sd-config?service=ceph-exporter
+
+If ``mgr/cephadm/secure_monitoring_stack`` is ``true``, or if a
+``mgmt-gateway`` service is deployed, the endpoint uses ``https`` and requires
+basic authentication. Use a job definition of the following form:
 
 .. code-block:: yaml
 
@@ -457,6 +483,13 @@ Here's an example Prometheus job definition that uses the cephadm service discov
 
 Disabling Monitoring
 --------------------
+
+.. warning::
+
+   These commands remove the monitoring daemons from all hosts. Removing
+   ``grafana`` also deletes the Grafana database on each Grafana host. If you
+   add ``--force-delete-data`` as described below, the stored Prometheus
+   metrics are deleted too.
 
 To disable monitoring and remove the software that supports it, run the following commands:
 
@@ -535,25 +568,19 @@ issue the following command:
      ceph dashboard set-grafana-frontend-api-url <grafana-server-api>
 
 It might take a minute or two for services to be deployed. After the
-services have been deployed, you should see something like this when you issue the command ``ceph orch ls``:
+services have been deployed, ``ceph orch ls`` lists them:
 
 .. prompt:: bash #
 
   ceph orch ls
 
-.. code-block:: console
-
-  NAME           RUNNING  REFRESHED  IMAGE NAME                                      IMAGE ID        SPEC
-  alertmanager       1/1  6s ago     docker.io/prom/alertmanager:latest              0881eb8f169f  present
-  crash              2/2  6s ago     docker.io/ceph/daemon-base:latest-master-devel  mix           present
-  grafana            1/1  0s ago     docker.io/pcuzner/ceph-grafana-el8:latest       f77afcf0bcf6   absent
-  node-exporter      2/2  6s ago     docker.io/prom/node-exporter:latest             e5a616e4b9cf  present
-  prometheus         1/1  6s ago     docker.io/prom/prometheus:latest                e935122ab143  present
+The columns are ``NAME``, ``PORTS``, ``RUNNING``, ``REFRESHED``, ``AGE`` and
+``PLACEMENT``.
 
 Configuring SSL/TLS for Grafana
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. versionadded:: Tentacle
+.. versionadded:: Umbrella
 
 ``cephadm`` deploys Grafana using a certificate managed by the cephadm
 Certificate Manager (certmgr). Certificates for Grafana are **per host**:
@@ -575,12 +602,17 @@ A Grafana service spec with a user-provided certificate looks like:
      ssl: true
      certificate_source: reference
 
-To register a custom certificate and key with certmgr for host ``<ceph-node-hostname>``:
+To register a custom certificate and key with certmgr, put the private key and
+the certificate in one PEM file and pass the fully qualified domain name (FQDN)
+of the host with ``--hostname``:
 
 .. prompt:: bash #
 
-   ceph orch certmgr cert set --cert-name grafana_ssl_cert --hostname <ceph-node-hostname> -i $PWD/certificate.pem
-   ceph orch certmgr key set --key-name grafana_ssl_key --hostname <ceph-node-hostname> -i  $PWD/key.pem
+   ceph orch certmgr cert-key set grafana --hostname <host-fqdn> -i $PWD/key-and-certificate.pem
+
+Cephadm looks up a per-host certificate under the FQDN that the host reports.
+That name can differ from the host name shown by ``ceph orch host ls``. To see
+it, run ``cephadm gather-facts`` on the host and read the ``fqdn`` value.
 
 If Grafana is already deployed, run ``reconfig`` on the service to
 apply the updated certificate:
@@ -589,9 +621,9 @@ apply the updated certificate:
 
    ceph orch reconfig grafana
 
-The ``reconfig`` command also ensures that the Ceph Dashboard URL
-is updated to use the correct certificate. The ``reconfig`` command
-also sets the proper URL for the Ceph Dashboard.
+The ``reconfig`` command also sets the Grafana URL in the Ceph Dashboard. Each
+time cephadm generates the Grafana configuration while the dashboard module is
+enabled, it runs ``ceph dashboard set-grafana-api-ssl-verify false``.
 
 Setting the Initial admin Password
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -657,8 +689,13 @@ webhook URLs like so:
         - "https://foo"
         - "https://bar"
 
-Where ``webhook_urls`` is a list of additional URLs that are
-added to the default receivers' ``<webhook_configs>`` configuration.
+``webhook_urls`` is a list of additional URLs. Cephadm writes them to the
+``webhook_configs`` of a receiver named ``custom-receiver`` and adds a route to
+that receiver, so alerts go to the Ceph Dashboard and to these URLs. The older
+key ``default_webhook_urls`` is still accepted.
+
+Squid (v19.2.*) and Tentacle up to v20.2.4 read only ``default_webhook_urls``
+and add the URLs to the ``default`` receiver.
 
 Run ``reconfig`` on the service to update its configuration:
 

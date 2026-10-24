@@ -1,0 +1,24 @@
+# Bound client-side hangs. Without a deadline, a cluster that has stopped
+# serving I/O (all OSDs killed by the watchdog, a PG stuck inactive, ...)
+# leaves the workload blocked in librados until teuthology's max_job_time
+# kills the job hours later, with no useful attribution. With a deadline the
+# op fails -ETIMEDOUT, the workload task exits non-zero, and the job fails
+# where it broke.
+#
+# Only include this in suites where nothing can render a pool unavailable for
+# longer than the deadline. That rules out any suite running thrashosds: the
+# Thrasher's in/out walk is a random walk with no bounded recovery time, and
+# with min_in below a pool's min_size it can park the pool unavailable
+# indefinitely (see https://tracker.ceph.com/issues/81135). It also rules out
+# suites that partition the network on purpose, such as netsplit.
+#
+# Note that Objecter arms the deadline once, at first submission, and does not
+# re-arm it when an op is resent after a map change - the deadline covers the
+# whole lifetime of the op, not a single attempt.
+#
+# 900s is the value already used by the fs suites (qa/cephfs/conf/client.yaml).
+overrides:
+  ceph:
+    conf:
+      client:
+        rados osd op timeout: 900

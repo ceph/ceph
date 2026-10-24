@@ -2655,6 +2655,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             const rgw_bucket& bucket,
                             const rgw_owner& owner,
                             const std::string& zonegroup_id,
+                            const RGWZonePlacementInfo* zone_placement,
                             const rgw_placement_rule& placement_rule,
                             const std::map<std::string, bufferlist>& attrs,
                             const std::optional<RGWQuotaInfo>& quota,
@@ -2664,7 +2665,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             obj_version* pep_objv,
                             RGWBucketInfo& info)
 {
-  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucke called" << dendl;
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucket called" << dendl;
   int ret = 0;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
@@ -2683,11 +2684,23 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     info.zonegroup = zonegroup_id;
     info.placement_rule = placement_rule;
 
-    // vector buckets have no bucket index, so no index is initialized here.
-    // the layout still needs to be filled in, otherwise it defaults to a
-    // Normal index layout that does not exist
+    if (zone_placement) {
+      if (!index_type) {
+        index_type = zone_placement->index_type;
+      }
+    } else {
+      index_type = rgw::BucketIndexType::Indexless;
+    }
     init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
                                index_type, index_shards);
+    info.flags |= BUCKET_VECTOR | BUCKET_DATASYNC_DISABLED;
+
+    if (zone_placement) {
+      ret = svc.bi->init_index(dpp, y, info, info.layout.current_index);
+      if (ret < 0) {
+        return ret;
+      }
+    }
 
     if (creation_time) {
       info.creation_time = *creation_time;
@@ -2716,7 +2729,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
       }
 
       /* only remove it if it's a different bucket instance */
-      if (orig_info.bucket.bucket_id != bucket.bucket_id) {
+      if (orig_info.bucket.bucket_id != info.bucket.bucket_id) {
         r = ctl.vector_bucket->remove_bucket_instance_info(info.bucket, info, y, dpp);
         if (r < 0) {
           ldpp_dout(dpp, 0) << "WARNING: " << __func__ << "(): failed to remove s3vector bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;
@@ -2724,6 +2737,9 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
         }
       }
 
+      if (orig_info.bucket.bucket_id != info.bucket.bucket_id && zone_placement) {
+        std::ignore = svc.bi->clean_index(dpp, y, info, info.layout.current_index);
+      }
       info = std::move(orig_info);
       /* ret == -EEXIST here */
     }
@@ -3453,7 +3469,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->state = state;
   RGWObjState* current_state = target->state;
   RGWObjState no_current_version;
-  if (!target->obj.key.instance.empty() || is_olh) {
+  if ((!target->obj.key.instance.empty() || is_olh) &&
+      (meta.if_match || meta.if_nomatch)) {
     r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
     if (r == -ENOENT) {
       current_state = &no_current_version;
@@ -5019,6 +5036,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   if (!keep_tags) {
     attrs.erase(RGW_ATTR_TAGS);
   }
+  attrs.erase(RGW_ATTR_TAIL_TAG);
   attrs.erase(RGW_ATTR_SHARE_MANIFEST);
   attrs.erase(RGW_ATTR_BLAKE3);
 
@@ -5422,6 +5440,12 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     copy_data = true;
   }
 
+  // no tail tag means no owner, and an appendable copy would append under the source's prefix
+  if (dest_obj != src_obj && (!astate->tail_tag.length() ||
+                              astate->attrset.count(RGW_ATTR_APPEND_PART_NUM))) {
+    copy_data = true;
+  }
+
   if (petag) {
     const auto iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
@@ -5482,10 +5506,11 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
       manifest.set_tail_placement(tail_placement.placement_rule, src_obj.bucket);
     }
     string ref_tag;
+    const string src_tag = astate->tail_tag.to_str();
     for (; miter != amanifest->obj_end(dpp); ++miter) {
       ObjectWriteOperation op;
       ref_tag = tag + '\0';
-      cls_refcount_get(op, ref_tag, true);
+      cls_refcount_get(op, ref_tag, true, src_tag);
 
       rgw_rados_ref obj;
       ret = rgw_get_rados_ref(dpp, driver->getRados()->get_rados_handle(),
@@ -6126,6 +6151,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_RESTORE_VERSIONED_EPOCH] = std::move(bl);
     }
   }
+  attrs.erase(RGW_ATTR_TAIL_TAG);
 
   {
     bufferlist bl;
@@ -6599,6 +6625,10 @@ int RGWRados::delete_vector_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTrac
     return r;
   }
 
+  if (bucket_info.layout.current_index.layout.type != rgw::BucketIndexType::Indexless) {
+    std::ignore = svc.bi->clean_index(dpp, y, bucket_info, bucket_info.layout.current_index);
+  }
+
   return 0;
 }
 
@@ -7042,7 +7072,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       if (r < 0)
         return r;
       RGWObjState* current_state = target->state;
-      r = target->get_current_version_state(dpp, current_state, y);
+      if (params.if_match || params.size_match ||
+          !real_clock::is_zero(params.last_mod_time_match)) {
+        r = target->get_current_version_state(dpp, current_state, y);
+      }
       if (r == -ENOENT) {
         current_state = target->state;
       } else if (r < 0) {
@@ -7625,13 +7658,14 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                             optional_yield y, bool assume_noent)
 {
   int ret;
+  unsigned attempts = 0;
 
   do {
     ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
                              follow_olh, y, assume_noent);
-  } while (ret == -EAGAIN);
+  } while (ret == -EAGAIN && ++attempts < 5);
 
-  return ret;
+  return ret == -EAGAIN ? -ERR_SERVICE_UNAVAILABLE : ret;
 }
 
 int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
@@ -10054,12 +10088,12 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 
   const rgw_bucket& bucket = obj.bucket;
 
+  bufferlist bl;
   if (need_to_link) {
     rgw_obj target(bucket, key);
     RGWOLHInfo info;
     info.target = target;
     info.removed = delete_marker;
-    bufferlist bl;
     encode(info, bl);
     op.setxattr(RGW_ATTR_OLH_INFO, bl);
   }
@@ -10085,6 +10119,17 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not apply olh update to oid \"" << ref.obj.oid << "\", r=" << r << dendl;
     }
     return r;
+  }
+
+  // apply the same changes to the cached olh state
+  state.attrset[RGW_ATTR_OLH_VER] = ver_bl;
+  if (need_to_link) {
+    state.attrset[RGW_ATTR_OLH_INFO] = bl;
+  }
+  for (const auto& [epoch, entries] : log) {
+    for (const auto& entry : entries) {
+      state.attrset.erase(RGW_ATTR_OLH_PENDING_PREFIX + entry.op_tag);
+    }
   }
 
   if (need_to_remove) {
@@ -10162,6 +10207,9 @@ int RGWRados::clear_olh(const DoutPrefixProvider *dpp,
   if (r == -ECANCELED) {
     return r; /* someone else made a modification in the meantime */
   }
+  // apply the same change to the cached olh state
+  s->exists = false;
+  s->is_olh = false;
   /* 
    * only clear if was successful, otherwise we might clobber pending operations on this object
    */
@@ -10525,14 +10573,28 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     ldpp_dout(dpp, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
 
     int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y);
-    if (ret < 0) {
-      if (ret == -ECANCELED) {
-        // In this context, ECANCELED means that the OLH tag changed in either the bucket index entry or the OLH object.
-        // If the OLH tag changed, it indicates that a previous OLH entry was removed since this request started. We
-        // return ENOENT to indicate that the OLH object was removed.
-        ret = -ENOENT;
+    if (ret == -ECANCELED) {
+      // ECANCELED can mean the olh tag changed in the bucket index or object,
+      // or another replay advanced the olh version. If a version was linked,
+      // reread the olh head and replay again instead of treating it as removed.
+      if (state->attrset.find(RGW_ATTR_OLH_INFO) == state->attrset.end()) {
+        return -ENOENT; // no version was ever linked
       }
+      // callers hold pointers to this state, so reset it in place rather than invalidate()
+      RGWObjState fresh;
+      fresh.is_atomic = state->is_atomic;
+      fresh.prefetch_data = state->prefetch_data;
+      fresh.compressed = state->compressed;
+      *state = fresh;
+      obj_ctx.get_state(olh_obj)->manifest.reset();
+      return -EAGAIN;
+    }
+    if (ret < 0) {
       return ret;
+    }
+    // later follows in this request resolve the same version
+    for (const auto& [name, bl] : pending_entries) {
+      state->attrset.erase(name);
     }
   }
 
@@ -10541,8 +10603,8 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     return -EINVAL;
   }
   iter = state->attrset.find(RGW_ATTR_OLH_INFO);
-  if (iter == state->attrset.end()) {
-    return -ENOENT;
+  if (!state->exists || iter == state->attrset.end()) {
+    return -ENOENT; // the replay removed the olh head, or no version was linked
   }
 
   RGWOLHInfo olh;
@@ -12428,6 +12490,10 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
 				  uint64_t num_objs,
                                   const DoutPrefixProvider* dpp, optional_yield y)
 {
+  // The reshard queue resolves names through the S3 entrypoint namespace.
+  if (bucket_info.is_vector()) {
+    return 0;
+  }
   if (! cct->_conf.get_val<bool>("rgw_dynamic_resharding")) {
     return 0;
   }

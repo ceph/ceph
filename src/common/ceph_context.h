@@ -89,9 +89,6 @@ public:
     // everything crimson is experimental...
     return true;
   }
-  ceph::PluginRegistry* get_plugin_registry() {
-    return _plugin_registry;
-  }
   CryptoRandom* random() const;
   PerfCountersCollectionImpl* get_perfcounters_collection();
   crimson::common::ConfigProxy& _conf;
@@ -101,7 +98,6 @@ public:
 private:
   std::unique_ptr<CryptoRandom> _crypto_random;
   unsigned nref = 1;
-  ceph::PluginRegistry* _plugin_registry;
 };
 }
 #else

@@ -12,10 +12,9 @@
 }
 
 .multisite-sync {
-  &__loading {
-    display: flex;
-    justify-content: center;
-    padding: var(--cds-spacing-05);
+  // Keep header content full-width inside productive-card's flex header.
+  &__header {
+    width: 100%;
   }
 
   &__layout {
@@ -43,7 +42,17 @@
 
   &__source-zones {
     flex: 1;
+    min-width: 0;
     padding-inline-start: var(--cds-spacing-05);
+  }
+
+  &__source-skeleton {
+    width: 100%;
+
+    cds-skeleton-text {
+      display: block;
+      width: 100%;
+    }
   }
 
   &__zones-grid {

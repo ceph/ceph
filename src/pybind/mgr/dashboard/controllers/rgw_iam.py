@@ -62,7 +62,7 @@ class RgwUserAccountsController(RgwRESTController):
         - If detailed=False, returns only account ids.
         """
         detailed = str_to_bool(detailed)
-        account_list = RgwAccounts.get_accounts()
+        account_list = RgwAccounts.get_accounts(daemon_name)
         detailed_account_list = []
         if detailed:
             for account in account_list:

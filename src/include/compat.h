@@ -134,9 +134,15 @@ struct cpu_set_t;
 #endif
 #endif /* HOST_NAME_MAX */
 
-/* O_LARGEFILE is not defined/required on OSX/FreeBSD */
+/* O_LARGEFILE and O_RSYNC are not defined/required on OSX/FreeBSD */
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
+#endif
+#ifndef O_SYNC
+#define O_SYNC 0
+#endif
+#ifndef O_RSYNC
+#define O_RSYNC O_SYNC
 #endif
 
 /* Could be relevant for other platforms */

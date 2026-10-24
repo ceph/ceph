@@ -26,6 +26,9 @@ prometheus_connection_list_cache_expiration = {{ spec.prometheus_connection_list
 verify_nqns = {{ spec.verify_nqns }}
 verify_keys = {{ spec.verify_keys }}
 verify_listener_ip = {{ spec.verify_listener_ip }}
+{% if spec.listener_network_masks %}
+listener_network_masks = {{ spec.listener_network_masks | join(',') }}
+{% endif %}
 # This is a development flag, do not change it
 abort_on_errors = {{ spec.abort_on_errors }}
 # This is a development flag, do not change it
@@ -59,6 +62,10 @@ degrade_namespace_on_kmip_error = {{ spec.degrade_namespace_on_kmip_error }}
 fail_io_for_degraded_namespace = {{ spec.fail_io_for_degraded_namespace }}
 resize_degraded_namespace = {{ spec.resize_degraded_namespace }}
 verify_image_encryption_settings = {{ spec.verify_image_encryption_settings }}
+verify_pool_applications = {{ spec.verify_pool_applications }}
+{% if spec.allowed_pool_applications %}
+allowed_pool_applications = {{ spec.allowed_pool_applications | join(',') }}
+{% endif %}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}

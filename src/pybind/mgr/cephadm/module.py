@@ -84,7 +84,8 @@ from . import utils
 from . import ssh
 from .cli import CephadmCLICommand
 from .migrations import Migrations
-from .services.cephadmservice import MgrService, RgwService
+from .services.mgr import MgrService
+from .services.rgw import RgwService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.mgmt_gateway import MgmtGatewayService
@@ -2307,6 +2308,11 @@ Then run the following:
             # wrong address so future operations use a fresh connection.
             if addr_changed:
                 self.ssh.reset_con(spec.hostname)
+            # The SSH failure in _check_valid_addr may have added the hostname
+            # to offline_hosts. Only undo that for hosts we never registered.
+            # An existing inventory host that just failed SSH should stay offline.
+            if spec.hostname not in self.inventory:
+                self.offline_hosts_remove(spec.hostname)
             raise
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
@@ -4631,7 +4637,7 @@ Then run the following:
         return {
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
-            'add': [hs.hostname for hs in to_add],
+            'add': [f'{spec.service_name()}.{hs.hostname}' for hs in to_add],
             'remove': [d.name() for d in to_remove]
         }
 

@@ -3,6 +3,11 @@
 
 #include "rgw_data_sync.h"
 
+#include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"

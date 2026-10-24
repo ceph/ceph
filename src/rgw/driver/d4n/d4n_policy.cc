@@ -1,5 +1,7 @@
 #include "d4n_policy.h"
 
+#include <iomanip>  // for std::setprecision
+
 #include "../../../common/async/yield_context.h"
 #include "common/split.h"
 

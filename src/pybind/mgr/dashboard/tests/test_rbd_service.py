@@ -153,6 +153,7 @@ class RbdServiceTest(unittest.TestCase):
             ('15m', False),
             ('1h', False),
             ('5d', False),
+            ('2w', False),
             ('m', True),
             ('d', True),
             ('1s', True),

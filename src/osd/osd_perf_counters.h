@@ -263,7 +263,10 @@ enum {
   rs_update_stats_invalidated,
   rs_append_log_stats_invalidated,
   rs_merge_log_stats_invalidated,
+  rs_pg_vulnerability_duration,
+  rs_pg_vulnerability_duration_min,
   rs_pg_rebuild_duration,
+  rs_pg_rebuild_duration_min,
   rs_last,
 };
 

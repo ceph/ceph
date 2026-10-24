@@ -5229,8 +5229,11 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   __u32 numfiles = 0;
   bool start = !offset_hash && offset_str.empty();
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
-  dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
+  dentry_key_t skip_key(snapid, offset_str, offset_hash);
   auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  // Whether the client may hold dentry leases here at all depends only on
+  // the directory, and nothing below changes that, so ask once.
+  const bool dir_leasable = mds->locker->can_lease_dentries_in(diri, mdr);
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5254,7 +5257,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     }
 
     if (!start) {
-      dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
+      dentry_key_t offset_key(dn->last, offset_str, offset_hash);
       if (!(offset_key < dn->key()))
 	continue;
     }
@@ -5306,7 +5309,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     encode(dn->get_name(), dnbl);
-    mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);
+    mds->locker->issue_client_lease(dn, in, mdr, now, dnbl, dir_leasable);
 
     // inode
     dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
@@ -5479,7 +5482,6 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
 
   dout(10) << " state prior to lock change: " << *lock_state << dendl;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
-    list<ceph_filelock> activated_locks;
     MDSContext::vec waiters;
     bool changed = false;
     if (lock_state->is_waiting(set_lock)) {
@@ -5489,7 +5491,7 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
     }
     if (!interrupt) {
       dout(10) << " unlock attempt on " << set_lock << dendl;
-      lock_state->remove_lock(set_lock, activated_locks);
+      lock_state->remove_lock(set_lock);
       changed = true;
     }
     if (changed)
@@ -8877,18 +8879,43 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
   // bump pop
   mds->balancer->hit_dir(dn->get_dir(), META_POP_IWR);
 
-  // reply
-  respond_to_request(mdr, 0);
-  
-  // removing a new dn?
-  dn->get_dir()->try_remove_unlinked_dn(dn);
-
   // clean up ?
-  // respond_to_request() drops locks. So stray reintegration can race with us.
+  // evaluate stray before dropping locks to avoid racing with
+  // concurrent link/unlink requests that may modify nlink.
   if (straydn && !straydn->get_projected_linkage()->is_null()) {
     // Tip off the MDCache that this dentry is a stray that
     // might be elegible for purge.
     mdcache->notify_stray(straydn);
+  }
+
+  // reply
+  respond_to_request(mdr, 0);
+
+  // removing a new dn?
+  dn->get_dir()->try_remove_unlinked_dn(dn);
+
+  // Dev config injection point: crash the MDS after the unlink journal
+  // callback has committed nlink and moved the inode to the stray dir,
+  // but before CDir::commit has written the directory omap to RADOS.
+  // This reproduces the stale remote dentry crash in _eval_stray_remote
+  // on recovery (tracker 62663).
+  //
+  // Test procedure (hardlink scenario):
+  //   1. set mds_kill_after_unlink_finish = true
+  //   2. create a file with primary + remote hardlinks (nlink >= 2)
+  //   3. unlink the primary → nlink drops to 1, MDS crashes
+  //   4. restart MDS → journal replay restores nlink=1 + stray location,
+  //      stale type-'L' remote dentry on disk triggers eval_remote →
+  //      _eval_stray_remote(nlink=1) → reintegrates; FS is healthy
+  //   5. set mds_kill_after_unlink_finish = true again
+  //   6. unlink the remaining primary link → nlink drops to 0, MDS crashes
+  //   7. restart MDS → nlink=0 stray is purged; verify FS functional
+  if (unlikely(g_conf()->mds_kill_after_unlink_finish)) {
+    ceph_abort_msg(
+        "mds_kill_after_unlink_finish is set; "
+        "the nlink==0 commit was applied and the MDS will now crash. "
+        "On recovery, any stale remote dentries still on disk will "
+        "trigger the _eval_stray_remote path to verify the fix.");
   }
 }
 
@@ -9803,17 +9830,18 @@ void Server::_rename_finish(const MDRequestRef& mdr, CDentry *srcdn, CDentry *de
 
   ceph_assert(g_conf()->mds_kill_rename_at != 7);
 
+  // clean up?
+  // evaluate stray before dropping locks to avoid racing with
+  // concurrent link/unlink requests that may modify nlink.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
+    mdcache->notify_stray(straydn);
+  }
+
   // reply
   respond_to_request(mdr, 0);
 
   if (need_eval)
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
-
-  // clean up?
-  // respond_to_request() drops locks. So stray reintegration can race with us.
-  if (straydn && !straydn->get_projected_linkage()->is_null()) {
-    mdcache->notify_stray(straydn);
-  }
 }
 
 
@@ -12471,7 +12499,7 @@ void Server::_readdir_diff(
   }
   bool from_the_beginning = !offset_hash && offset_str.empty();
   // skip all dns <= dentry_key_t(*, offset_str, offset_hash)
-  dentry_key_t skip_key(CEPH_NOSNAP, offset_str.c_str(), offset_hash);
+  dentry_key_t skip_key(CEPH_NOSNAP, offset_str, offset_hash);
 
   // We need to rollback all the entries with the same name
   // when some entries with this name don't fit into the same fragment.
@@ -12494,13 +12522,11 @@ void Server::_readdir_diff(
     diff_mask,
     dnbl,
     [&](CDentry* dn, CInode* in, bool exists) {
-      string name;
       snapid_t effective_snapid;
-      const auto& dn_name = dn->get_name();
+      const auto name = dn->get_name();
       // provide the first snapid for removed entries and
       // the last one for existent ones
       effective_snapid = exists ? snapid : snapid_prev;
-      name.append(dn_name);
       if ((int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
 	dout(10) << " ran out of room for name, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
         if (name == last_name) {
@@ -12515,12 +12541,11 @@ void Server::_readdir_diff(
 	return false;
       }
 
-      auto diri = dir->get_inode();
-      auto hash = ceph_frag_value(diri->hash_dentry_name(dn_name));
       unsigned start_len = dnbl.length();
       dout(10) << "inc dn " << *dn << " as " << name
-               << std::hex << " hash 0x" << hash << std::dec
-               << " " << effective_snapid
+               << std::hex << " hash 0x"
+               << ceph_frag_value(dir->get_inode()->hash_dentry_name(name))
+               << std::dec << " " << effective_snapid
                << dendl;
       encode(name, dnbl);
       mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);

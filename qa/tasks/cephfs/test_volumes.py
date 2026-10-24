@@ -1373,7 +1373,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # tests the 'fs subvolumegroup info' command
 
         group_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
-                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "uid"]
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "pool_namespace", "uid"]
 
         # create group
         group = self._gen_subvol_grp_name()
@@ -1476,6 +1476,192 @@ class TestSubvolumeGroups(TestVolumesHelper):
             self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_with_namespace_isolation(self):
+        """
+        Create subvolume group with --namespace-isolated and verify
+        the pool_namespace xattr is set on the group directory.
+        """
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated")
+
+        # verify group has pool_namespace xattr
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertIn("pool_namespace", group_info)
+        self.assertEqual(group_info["pool_namespace"],
+                         f'fsvolumens__{group}')
+
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_namespace_inheritance_from_group(self):
+        """
+        Create subvolume group with --namespace-isolated, then create
+        a subvolume without --namespace-isolated in that group.
+        Verify the subvolume inherits namespace isolation and gets its
+        own unique namespace.
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg,
+                     "--namespace-isolated")
+
+        # create subvolume WITHOUT --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg)
+
+        # verify subvolume inherits namespace isolation
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        self.assertIn("pool_namespace", subvol_info)
+        expected_ns = f'fsvolumens__{svg}_{sv}'
+        self.assertEqual(subvol_info["pool_namespace"], expected_ns)
+
+        # cleanup
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_explicit_namespace_isolation_in_nonisolated_group(self):
+        """
+        Creating a subvolume with explicit --namespace-isolated should
+        still work in a group that was created without --namespace-isolated.
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        # group WITHOUT namespace-isolated
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg)
+
+        # subvolume WITH --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg,
+                     "--namespace-isolated")
+
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        expected_ns = f'fsvolumens__{svg}_{sv}'
+        self.assertEqual(subvol_info["pool_namespace"], expected_ns)
+
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_no_namespace_isolation_in_nonisolated_group(self):
+        """
+        A subvolume created without --namespace-isolated in a group that
+        was created without --namespace-isolated must not be namespace
+        isolated, even though the group directory has a pool layout.
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        # group WITHOUT namespace-isolated
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg)
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, svg))
+        self.assertEqual(group_info["pool_namespace"], "")
+
+        # subvolume WITHOUT --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg)
+
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        self.assertEqual(subvol_info["pool_namespace"], "",
+                         "expected pool namespace to be empty")
+
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_create_idempotence_namespace_isolation(self):
+        """
+        Re-running subvolumegroup create with --namespace-isolated on
+        an existing group (idempotent) should succeed and add the
+        pool_namespace xattr.
+        """
+        group = self._gen_subvol_grp_name()
+        # create without isolation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # re-create with --namespace-isolated (idempotent)
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated")
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"],
+                         f'fsvolumens__{group}')
+
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_with_custom_pool_namespace(self):
+        """
+        Create subvolume group with --namespace-isolated and
+        --pool-namespace to specify an explicit RADOS namespace.
+        Verify the custom namespace is used instead of the auto-generated one.
+        """
+        group = self._gen_subvol_grp_name()
+        custom_ns = "my-custom-namespace"
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated",
+                     "--pool-namespace", custom_ns)
+
+        # verify group has custom pool_namespace, not auto-generated
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"], custom_ns)
+
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_inherit_from_custom_pool_namespace_group(self):
+        """
+        Create subvolume group with --namespace-isolated and an explicit
+        --pool-namespace. Then create a subvolume in that group. Verify the
+        subvolume inherits namespace isolation (its own namespace is still
+        auto-generated based on group name).
+        """
+        sv = self._gen_subvol_name()
+        svg = self._gen_subvol_grp_name()
+        custom_ns = "my-custom-namespace"
+        self._fs_cmd("subvolumegroup", "create", self.volname, svg,
+                     "--namespace-isolated",
+                     "--pool-namespace", custom_ns)
+
+        # create subvolume WITHOUT --namespace-isolated
+        self._fs_cmd("subvolume", "create", self.volname, sv, svg)
+
+        # verify group has custom pool_namespace
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, svg))
+        self.assertEqual(group_info["pool_namespace"], custom_ns)
+
+        # verify subvolume inherits namespace isolation with auto-generated ns
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, sv, svg))
+        self.assertIn("pool_namespace", subvol_info)
+        expected_ns = f'fsvolumens__{svg}_{sv}'
+        self.assertEqual(subvol_info["pool_namespace"], expected_ns)
+
+        # cleanup
+        self._fs_cmd("subvolume", "rm", self.volname, sv, svg)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, svg)
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_create_idempotence_custom_pool_namespace(self):
+        """
+        Re-running subvolumegroup create with --pool-namespace on an
+        existing group that already has namespace isolation should
+        update the pool_namespace to the new custom value.
+        """
+        group = self._gen_subvol_grp_name()
+        # create with --namespace-isolated (auto-generated namespace)
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated")
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"],
+                         f'fsvolumens__{group}')
+
+        # re-create with --pool-namespace to override
+        custom_ns = "my-custom-namespace"
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--namespace-isolated",
+                     "--pool-namespace", custom_ns)
+
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["pool_namespace"], custom_ns)
+
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_subvolume_group_create_idempotence_resize(self):
@@ -5133,6 +5319,77 @@ class TestSubvolumes(TestVolumesHelper):
             retval=errno.ENAMETOOLONG,
             errmsgs='Error ENAMETOOLONG: use shorter group or subvol name, '
                     'combination of both should be less than 249 characters')
+
+    def _assert_fs_cmd_einval(self, *args):
+        with self.assertRaises(CommandFailedError) as cm:
+            self._fs_cmd(*args)
+        self.assertEqual(cm.exception.exitstatus, errno.EINVAL,
+                         f"expected EINVAL for 'ceph fs {' '.join(args)}'")
+
+    def test_subvolume_invalid_name_rejected(self):
+        """
+        Verify that '', '.', '..' and names containing '/' are rejected with
+        EINVAL, and fail early, across the subvolume commands.
+        """
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        v = self.volname
+        invalid_names = ['', '.', '..', 'sub/vol', '/sub', 'sub/']
+        cmds = [
+            ("create", v, "{n}"),
+            ("info", v, "{n}"),
+            ("getpath", v, "{n}"),
+            ("rm", v, "{n}"),
+            ("resize", v, "{n}", "inf"),
+            ("metadata", "set", v, "{n}", "key", "val"),
+            ("snapshot", "create", v, "{n}", "snap1"),
+            ("snapshot", "rm", v, "{n}", "snap1"),
+            ("authorize", v, "{n}", "client1"),
+        ]
+        for name in invalid_names:
+            for cmd in cmds:
+                args = [a.format(n=name) for a in cmd]
+                self._assert_fs_cmd_einval("subvolume", *args,
+                                           "--group_name", group)
+
+        self._fs_cmd("subvolumegroup", "rm", v, group)
+
+    def test_subvolume_invalid_name_does_not_mark_dirs(self):
+        """
+        Verify that 'fs subvolume info' with '', '.' or '..' does not set
+        'ceph.dir.subvolume=1' on the group directory or on its parent
+        (the volumes base directory), and that the group stays usable.
+        """
+        group = self._gen_subvol_grp_name()
+        subvol = self._gen_subvol_name()
+
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        group_path = self._get_subvolume_group_path(self.volname, group)
+        volumes_path = os.path.dirname(group_path)
+
+        for name in ('', '.', '..'):
+            self._assert_fs_cmd_einval("subvolume", "info", self.volname,
+                                       name, "--group_name", group)
+            for path in (group_path, volumes_path):
+                xattr_val = self.mount_a.getfattr(path, "ceph.dir.subvolume")
+                self.assertNotEqual(
+                    xattr_val, "1",
+                    f"'{path}' was incorrectly marked as a subvolume by "
+                    f"'subvolume info' on '{name}'")
+
+        # the group is still usable: creating a subvolume in it succeeds and
+        # the new subvolume has valid metadata (info reads the .meta file)
+        self._fs_cmd("subvolume", "create", self.volname, subvol,
+                     "--group_name", group)
+        self._fs_cmd("subvolume", "info", self.volname, subvol,
+                     "--group_name", group)
+
+        # Clean up
+        self._fs_cmd("subvolume", "rm", self.volname, subvol,
+                     "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        self._wait_for_trash_empty()
 
 class TestPausePurging(TestVolumesHelper):
     '''

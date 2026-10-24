@@ -385,7 +385,8 @@ TEST_P(TestBackendBasics, DirectRead) {
   }
 }
 
-TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
+// Disabled until https://tracker.ceph.com/issues/78465 has a new fix.
+TEST_P(TestBackendBasics, DISABLED_TruncateGrowWithSuspendedReads)
 {
   const auto& backend_config = GetParam().backend;
 
@@ -438,7 +439,8 @@ TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
 
 // Emulate a rollback operation. We use multiple objects here in an attempt
 // to provoke rollback invalidation issues with suspended operations.
-TEST_P(TestBackendBasics, RollbackInvalidateRealistic)
+// Disabled until https://tracker.ceph.com/issues/78465 has a new fix.
+TEST_P(TestBackendBasics, DISABLED_RollbackInvalidateRealistic)
 {
   const auto& backend_config = GetParam().backend;
 

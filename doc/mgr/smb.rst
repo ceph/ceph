@@ -327,7 +327,7 @@ Create Share
 
 .. prompt:: bash #
 
-   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly]
+   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly] [--case-insensitive=<case_insensitive>]
 
 Create a new SMB share, hosted by the named cluster, that maps to the given
 CephFS volume and path.
@@ -351,6 +351,12 @@ subvolume
     specified.
 readonly
     Creates a read-only share
+case_insensitive
+    Optional.  Configures behavior with regards to checking or enforcing that
+    the CephFS subvolume is configured for case insensitive operation. The
+    value may be one of ``warn`` (the default), ``ignore``, or ``require``.
+    See the description for the `case_insensitive`_ field of the share spec
+    for details.
 
 
 Examples
@@ -407,7 +413,7 @@ share_name
     the ``share_id`` will be used automatically
 user_id
     Optional. The RGW user ID that owns the bucket. If not provided, the system
-    will attempt to determine the bucket owner automatically
+    will attempt to determine the bucket owner automatically.
 readonly
     Creates a read-only share
 
@@ -426,6 +432,13 @@ Create a share with a custom name and a specific user:
 
     ceph smb share create rgw test1 photos my-photos-bucket \
         --share-name="Photo Archive" --user-id=s3user
+
+Create a tenant-aware RGW share (for multi-tenant RGW deployments):
+
+.. prompt:: bash #
+
+    ceph smb share create rgw test1 photos my-photos-bucket \
+        --share-name="Tenant Photos" --user-id='mytenant$s3user'
 
 
 .. _qos-parameters:
@@ -1181,6 +1194,29 @@ cephfs
         not set and this value contains exactly one ``/`` character, the
         subvolume field will automatically be split into
         ``<subvolumegroup>/<subvolume>`` parts for convenience.
+    _`case_insensitive`
+        Optional string. Configures behavior with regards to checking or
+        enforcing that the CephFS subvolume is configured for case insensitive
+        operation. The value may be one of ``warn``, ``ignore``, or ``require``.
+        If unspecified the behavior is the same as ``warn``.
+
+        When a Share is created using a subvolume that is case sensitive (case
+        insensitive behavior was not enabled):
+
+        ``warn``
+            The system will emit a warning message that is part of the
+            result object but allow the operation to continue.
+        ``ignore``
+            The system will ignore the case sensitivity setting and allow the
+            operation to continue. No warning is emitted.
+        ``require``
+            The system will enforce the need for case insensitivity and
+            fail the operation.
+
+        Older versions of the system, before the option existed, behaved as
+        if ``ignore`` was specified. The default of ``warn`` was chosen as
+        this allows shares created before this setting to continue working
+        while now informing of possible performance issues.
     provider
         Optional. Selects how CephFS storage should be provided to the share.
         The value may be one of ``samba-vfs``, ``samba-vfs/classic``,
@@ -1346,6 +1382,38 @@ Another example of an RGW-backed share with an explicit ``user_id``:
       bucket: my-bucket
       user_id: s3user
 
+Tenant-Aware RGW Shares
+^^^^^^^^^^^^^^^^^^^^^^^
+
+RGW supports multi-tenant deployments where user IDs and buckets can be isolated
+by tenant. Tenant-aware RGW user IDs must be of the form tenant$user, for example
+``ops$user1``.
+
+The SMB module automatically handles tenant extraction and passes the appropriate
+tenant information to RGW commands. Users should not need to manage tenant
+awareness separately, it is transparent to the share configuration.
+
+Example of a tenant-aware RGW share:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: tenant-s3share
+    name: "Tenant S3 Storage"
+    rgw:
+      bucket: tenant-bucket
+      user_id: mytenant$s3user
+
+In this example, the ``user_id`` is in the format ``mytenant$s3user``, where:
+
+- ``mytenant`` is the tenant name
+- ``s3user`` is the user name within that tenant
+
+The system will automatically extract the tenant information and use it when
+fetching credentials and validating the bucket. The returned ``credential_ref``
+will be set to the hash-based value derived from cluster_id and user_id.
+
 The following is an example of a CephFS share with QoS settings including burst
 multipliers and human-readable bandwidth limits:
 
@@ -1402,6 +1470,23 @@ Another example, this time of a share with QoS disabled:
         read_bw_limit: 0
         write_bw_limit: 0
         # Note: burst multipliers are ignored when limits are disabled
+
+The following example creates a share on a CephFS subvolume with
+case sensitivity enabled (the default for CephFS) and ignores
+that setting, suppressing warning messages:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: otc1
+    name: On the Case
+    cephfs:
+      volume: cephfs
+      subvolumegroup: smb
+      subvolume: case1
+      path: /
+      case_insensitive: ignore
 
 And finally, a share with an intent to be removed:
 
@@ -2056,6 +2141,10 @@ option. These commands include but are not limited to:
 * ``config-dump``: Dump configuration data
 * ``get-debug-level``: Get the current debug level of an smb subsystem
 * ``set-debug-level``: Set the debug level of an smb subsystem
+* ``clusterlevel-show``: Report the cluster's active Cluster Functional Level (CFL)
+* ``clusterlevel-showall``: Report the active CFL plus per-node supported ranges
+* ``clusterlevel-upgrade``: Report on (or, with ``--apply``, perform) a CFL upgrade
+* ``clusterlevel-features``: Report this node's own CFL support info
 
 For example:
 
@@ -2071,6 +2160,38 @@ Reports on the status of the smb services in a JSON representation.
 
 Demonstrates the use of ``ceph-smb-ctl`` to request ``smbd`` terminate any
 established connection it has to the client with IP address ``192.168.76.145``.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-show
+
+Reports the cluster's active Cluster Functional Level (CFL), with no
+per-node detail. Needs a clustered (CTDB) deployment.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-showall
+
+Reports the cluster's active CFL, the CFL ranges each node supports, and
+whether an upgrade to a higher CFL is currently possible. Needs a
+clustered (CTDB) deployment.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-upgrade
+
+Reports what a CFL upgrade would do, without making any change. Add
+``--apply`` to actually raise the cluster's active CFL to this node's
+highest supported level. All nodes must report identical supported ranges
+for an upgrade to proceed. This is a one-way change, so review the dry-run
+output first. Needs a clustered (CTDB) deployment.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-features
+
+Reports this node's own CFL support: whether it participates in a cluster,
+its CTDB socket and protocol version, and the CFL ranges it supports.
 
 In addition to operating on the local smb server instance, it can also
 use TCP & mTLS to connect to a remote sidecar server. Note that making

@@ -30,7 +30,7 @@ A corresponding :ref:`orchestrator-cli-service-spec` must look like:
       volume_mounts:
         CONFIG_DIR: /etc/foo
       bind_mounts:
-        - ['type=bind', 'source=lib/modules', 'destination=/lib/modules', 'ro=true']
+        - ['type=bind', 'source=/lib/modules', 'destination=/lib/modules', 'ro=true']
       dirs:
         - CONFIG_DIR
       files:
@@ -59,24 +59,26 @@ where the properties of a service specification are:
     A list of environment variables.
 * ``bind_mounts``
     When you use a bind mount, a file or directory on the host machine
-    is mounted into the container. Relative `source=...` paths will be
-    located below `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+    is mounted into the container. Relative ``source=...`` paths will be
+    located below ``/var/lib/ceph/<cluster-fsid>/<daemon-name>``.
 * ``volume_mounts``
-    When you use a volume mount, a new directory is created within
-    Docker’s storage directory on the host machine, and Docker manages
-    that directory’s contents. Relative source paths will be located below
-    `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+    A dictionary that maps a source path on the host to a path in the
+    container. Each entry is passed to the container engine as
+    ``-v <source>:<destination>``. Relative source paths will be located below
+    ``/var/lib/ceph/<cluster-fsid>/<daemon-name>``. Use the ``dirs`` property
+    to create a relative source directory.
 * ``dirs``
     A list of directories that are created below
-    `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+    ``/var/lib/ceph/<cluster-fsid>/<daemon-name>``.
 * ``files``
     A dictionary, where the key is the relative path of the file and the
-    value the file content. The content must be double quoted when using
-    a string. Use '\\n' for line breaks in that case. Otherwise define
-    multi-line content as list of strings. The given files will be created
-    below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
-    The absolute path of the directory where the file will be created must
-    exist. Use the `dirs` property to create them if necessary.
+    value the file content. The value is a string or a list of strings; a
+    list is joined with line breaks. In a double-quoted string, ``\n`` gives
+    a line break. A multi-line string can also be written as a YAML block
+    scalar (``|``). The given files will be created below the directory
+    ``/var/lib/ceph/<cluster-fsid>/<daemon-name>``. The absolute path of the
+    directory where the file will be created must exist. Use the ``dirs``
+    property to create them if necessary.
 * ``init_containers``
     A list of "init container" definitions. An init container exists to
     run preparatory steps before the primary container starts. Init containers
@@ -98,9 +100,10 @@ where the properties of a service specification are:
     * ``envs``
         A list of environment variables.
     * ``privileged``
-        A boolean indicating whether the container should run with privileges or not. If
-        left unspecified, the init container will inherit the primary container's
-        value.
+        A boolean indicating whether the init container should run with
+        privileges or not. If left unspecified, the init container runs
+        without privileges. The value is not inherited from the primary
+        container.
 
 
 Example with init containers:
@@ -146,7 +149,6 @@ Example with init containers:
             - FOO_CLEANUP=yes
 
 
-.. note:: Init containers are currently implemented as a step that runs
-   before the service is started and is subject to start-up timeouts.
-   The total run time of all init containers can not exceed 200 seconds
-   or the service will fail to start.
+.. note:: Init containers run in a separate systemd unit of ``Type=oneshot``,
+   ``ceph-<cluster-fsid>-init@<daemon-name>.service``, which is ordered before
+   the unit of the service. This unit does not set a start-up timeout.

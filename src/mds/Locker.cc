@@ -4165,6 +4165,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     for ( int i=0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
       decode(decoded_lock, bli);
+      decoded_lock.client = client.v;
       in->get_fcntl_lock_state()->held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
       ++in->get_fcntl_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
@@ -4173,6 +4174,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     for ( int i=0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
       decode(decoded_lock, bli);
+      decoded_lock.client = client.v;
       in->get_flock_lock_state()->held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
       ++in->get_flock_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
@@ -4539,18 +4541,29 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 }
 
 
+bool Locker::can_lease_dentries_in(CInode *diri, const MDRequestRef& mdr)
+{
+  client_t client = mdr->get_client();
+  return mdr->snapid == CEPH_NOSNAP &&
+	 !diri->is_stray() &&  // do not issue dn leases in stray dir!
+	 !diri->filelock.can_lease(client) &&
+	 !(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL));
+}
+
 void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr, utime_t now,
                                 bufferlist &bl)
+{
+  issue_client_lease(dn, in, mdr, now, bl,
+		     can_lease_dentries_in(dn->get_dir()->get_inode(), mdr));
+}
+
+void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr, utime_t now,
+                                bufferlist &bl, bool dir_leasable)
 {
   client_t client = mdr->get_client();
   Session *session = mdr->session;
 
-  CInode *diri = dn->get_dir()->get_inode();
-  if (mdr->snapid == CEPH_NOSNAP &&
-      dn->lock.can_lease(client) &&
-      !diri->is_stray() &&  // do not issue dn leases in stray dir!
-      !diri->filelock.can_lease(client) &&
-      !(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL))) {
+  if (dir_leasable && dn->lock.can_lease(client)) {
     int mask = 0;
     CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
     if (dnl->is_primary()) {
@@ -4612,9 +4625,9 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     dout(25) << "encode lease reply encoding: " << ls << dendl;
     ENCODE_START(2, 1, bl);
-    encode(ls.mask, bl);
-    encode(ls.duration_ms, bl);
-    encode(ls.seq, bl);
+    // The fixed-size fields in one append rather than three: readdir encodes
+    // a lease for every entry it returns.
+    encode(std::tuple{ls.mask, ls.duration_ms, ls.seq}, bl, 0);
     encode(ls.alternate_name, bl);
     ENCODE_FINISH(bl);
   }

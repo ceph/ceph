@@ -16,6 +16,7 @@ import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
+import { ContextComponent } from '~/app/core/context/context.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { RgwBucketFormComponent } from './rgw-bucket-form/rgw-bucket-form.component';
@@ -130,6 +131,8 @@ import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { SmbModule } from '../smb/smb.module';
+import { smbParentRoute } from '../smb/smb.routes';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicResourceSidebarComponent } from './rgw-topic-resource-sidebar/rgw-topic-resource-sidebar.component';
 import { RgwTopicResourcePageComponent } from './rgw-topic-resource-page/rgw-topic-resource-page.component';
@@ -189,7 +192,9 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     TimePickerComponent,
     AreaChartComponent,
     ComponentsModule,
-    ContentSwitcherModule
+    ContentSwitcherModule,
+    ContextComponent,
+    SmbModule
   ],
   exports: [
     RgwDaemonResourcePageComponent,
@@ -581,6 +586,7 @@ const routes: Routes = [
       }
     ]
   },
+  smbParentRoute(true, 'SMB'),
   {
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },

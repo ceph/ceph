@@ -1519,7 +1519,7 @@ access_key_id: AKIAIOSFODNN7EXAMPLE
 def test_rgw_credential_password_conversion():
     """Test RGWCredential password field conversion."""
     cred = smb.resources.RGWCredential(
-        rgw_credential_id='test_cred',
+        rgw_credential_id='testcred',
         user_id='testuser',
         access_key_id='AKIATEST',
         secret_access_key='secretkey123',

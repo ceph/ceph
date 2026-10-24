@@ -12750,6 +12750,10 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& 
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
+      // wake anyone waiting on this fragment (e.g. a log segment expiry
+      // gather), same as finish_uncommitted_fragment() does - dropping
+      // the waiters would wedge the expiry of uf.ls forever
+      mds->queue_waiters(uf.waiters);
       uncommitted_fragments.erase(it);
     }
   }
@@ -14728,17 +14732,23 @@ void MDCache::upkeep_main(void)
       lock.lock();
       if (upkeep_trim_shutdown.load())
         return;
-      check_memory_usage();
+      {
+        MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_cache_memory);
+        check_memory_usage();
+      }
       if (mds->is_cache_trimmable()) {
         dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;
         bool active_with_clients = mds->is_active() || mds->is_clientreplay() || mds->is_stopping();
         if (active_with_clients) {
+          MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_client_leases);
           trim_client_leases();
         }
         if (is_ready_to_trim_cache() || mds->is_standby_replay()) {
+          MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_cache_trim);
           trim();
         }
         if (active_with_clients) {
+          MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_client_recall);
           auto recall_flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
           if (cache_toofull()) {
             recall_flags = recall_flags|Server::RecallFlags::TRIM;
@@ -14757,7 +14767,13 @@ void MDCache::upkeep_main(void)
     if (since >= release_interval*.90) {
       /* XXX not necessary once MDCache uses PriorityCache */
       dout(10) << "releasing free memory" << dendl;
-      ceph_heap_release_free_memory();
+      /* NB: unlike the phases above this one runs without mds_lock, so it is
+       * excluded from the lock utilization but still worth accounting for --
+       * a slow tcmalloc release stalls all cache trimming behind it. */
+      {
+        MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_heap_release);
+        ceph_heap_release_free_memory();
+      }
       upkeep_last_release = clock::now();
     } else {
       release_interval -= since;
@@ -14864,9 +14880,22 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
     op.list_snaps(&ssc->snaps, &ssc->r);
     ssc->objectid = scan_idx;
 
-    mds->objecter->read(file_object_t(in1->ino(), scan_idx),
-			OSDMap::file_to_object_locator(in2->get_inode()->layout),
-			op, LIBRADOS_SNAP_DIR, NULL, 0, gather_ctx.new_sub());
+    auto *ssc_ptr = ssc.get();
+    auto *sub = gather_ctx.new_sub();
+
+    mds->objecter->read(
+        file_object_t(in1->ino(), scan_idx),
+        OSDMap::file_to_object_locator(in2->get_inode()->layout),
+        op, LIBRADOS_SNAP_DIR, NULL, 0,
+        new LambdaContext([ssc_ptr, sub](int r) {
+          // LIST_SNAPS on an absent object can fail the request with -ENOENT
+          // while its empty per-op payload leaves the decoder reporting -EIO.
+          // Preserve the request-level error when the request itself failed.
+          if (r < 0) {
+            ssc_ptr->r = r;
+          }
+          sub->complete(r);
+        }));
     on_finish->add_snap_set_context(std::move(ssc));
     ++scan_idx;
     --scans;

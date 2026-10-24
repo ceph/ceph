@@ -58,6 +58,26 @@ def name_to_json(names):
     return json.dumps(namedict, indent=4, sort_keys=True)
 
 
+def _normalize_volume_create_options(kwargs):
+    out = dict(kwargs)  # copy kwargs to avoid mutating input dict
+    if out.get('protocols') == 'smb':
+        # set defaults that are preferred for smb unless manually given.
+        # protocols itself just chooses better defaults for real attributes
+        casesensitive = out['casesensitive']
+        out['casesensitive'] = False if casesensitive is None else casesensitive
+        earmark = out['earmark']
+        out['earmark'] = 'smb' if earmark is None else earmark
+        mode = out['mode']
+        out['mode'] = '777' if mode is None else mode
+    # if not set, default to 755
+    out['mode'] = out.get('mode') or '755'
+    # if not set, default to empty string --> no earmark
+    out['earmark'] = out.get('earmark') or ''
+    # if not set, default to empty string --> no encryption tag
+    out['enctag'] = out.get('enctag') or ''
+    return out
+
+
 class VolumeClient(CephfsClient["Module"]):
     def __init__(self, mgr):
         super().__init__(mgr)
@@ -232,10 +252,25 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        earmark    = kwargs['earmark']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
-        enctag = kwargs['enctag'] or '' # if not set, default to empty string
+        enctag = kwargs['enctag']
+
+        # inherit namespace isolation from group if not explicitly specified.
+        # Every group directory has an explicit pool layout, so reading its
+        # pool_namespace succeeds with an empty value when the group is not
+        # namespace isolated. The default group directory does not exist
+        # until its first subvolume is created.
+        if not isolate_nspace:
+            try:
+                group_nspace = fs_handle.getxattr(group.path,
+                                                  'ceph.dir.layout.pool_namespace')
+                isolate_nspace = bool(group_nspace)
+            except (cephfs.NoData, cephfs.ObjectNotFound):
+                pass
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
 
         oct_mode = octal_str_to_decimal_int(mode)
 
@@ -249,6 +284,7 @@ class VolumeClient(CephfsClient["Module"]):
             raise ve
 
     def create_subvolume(self, **kwargs):
+        kwargs = _normalize_volume_create_options(kwargs)
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
@@ -259,10 +295,10 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        earmark    = kwargs['earmark']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
-        enctag    = kwargs['enctag'] or ''  # if not set, default to empty string --> no encryption tag
+        enctag    = kwargs['enctag']
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -1224,6 +1260,8 @@ class VolumeClient(CephfsClient["Module"]):
         mode      = kwargs['mode']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
+        namespace_isolated = kwargs.get('namespace_isolated', False)
+        pool_namespace = kwargs.get('pool_namespace', None)
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -1239,11 +1277,13 @@ class VolumeClient(CephfsClient["Module"]):
                             'normalization': normalization,
                             'casesensitive': casesensitive,
                         }
+                        if namespace_isolated:
+                            attrs['pool_namespace'] = pool_namespace or f'{self.volspec.fs_namespace}_{groupname}'
                         set_group_attrs(fs_handle, group.path, attrs)
                 except VolumeException as ve:
                     if ve.errno == -errno.ENOENT:
                         oct_mode = octal_str_to_decimal_int(mode)
-                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive)
+                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive, namespace_isolated, pool_namespace)
                     else:
                         raise
         except VolumeException as ve:

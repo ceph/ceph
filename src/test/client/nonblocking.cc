@@ -13,6 +13,7 @@
  *
  */
 
+#include "include/compat.h"
 #include <errno.h>
 
 #include <iostream>
@@ -779,9 +780,11 @@ TEST_F(TestClient, LlreadvLlwritevLargeBuffers) {
   bytes_written = writefinish.wait();
 
   int maxio_size = INT_MAX;
+#if defined(__linux__)
   if (fse.encrypted) {
     maxio_size = FSCRYPT_MAXIO_SIZE;
   }
+#endif
 
   // total write length is clamped to INT_MAX in write paths
   ASSERT_EQ(bytes_written, maxio_size);

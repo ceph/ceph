@@ -54,7 +54,15 @@ tasks:
         - nvmeof/add_delete_test.sh
         - nvmeof/cross_namespace_copy_test.sh
     env:
+      NVMEOF_POOL: mypool
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'
       RUNTIME: '120'
       NEW_NAMESPACES_COUNT: '5'
+
+- workunit:
+    no_coverage_and_limits: true
+    timeout: 30m
+    clients:
+      client.2:
+        - nvmeof/auto_listener_test.sh

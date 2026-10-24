@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbTabsComponent } from './smb-tabs.component';
 import { By } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 describe('SmbTabsComponent', () => {
   let component: SmbTabsComponent;
@@ -9,7 +11,8 @@ describe('SmbTabsComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [SmbTabsComponent]
+      declarations: [SmbTabsComponent],
+      providers: [provideRouter([]), { provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbTabsComponent);

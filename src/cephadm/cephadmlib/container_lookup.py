@@ -129,7 +129,10 @@ def infer_local_ceph_image(
     matching_daemons = [
         itemgetter(_cinfo_key, 'name')(_updater.expand(ctx, entry))
         for entry in daemons_matching(
-            ctx, fsid=ctx.fsid, daemon_type_predicate=lambda t: t in _daemons
+            ctx,
+            fsid=ctx.fsid,
+            daemon_type_predicate=lambda t: t in _daemons,
+            include_legacy=False,
         )
     ]
     # collect the running ceph daemon image ids

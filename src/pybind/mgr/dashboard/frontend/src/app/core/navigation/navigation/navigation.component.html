@@ -384,6 +384,16 @@
                 ><span i18n>NFS</span></cds-sidenav-item
               >
             }
+            @if (permissions?.smb?.read) {
+              <cds-sidenav-item
+                route="/rgw/smb"
+                [useRouter]="true"
+                title="SMB"
+                i18n-title
+                class="tc_submenuitem tc_submenuitem_rgw_smb"
+                ><span i18n>SMB</span></cds-sidenav-item
+              >
+            }
             <cds-sidenav-item
               route="/rgw/configuration"
               [useRouter]="true"

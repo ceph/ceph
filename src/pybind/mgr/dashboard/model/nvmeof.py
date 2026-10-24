@@ -104,6 +104,7 @@ class Subsystem(NamedTuple):
     allow_any_host: bool
     created_without_key: bool = False
     network_mask: Annotated[List[str], CliFieldTransformer(lambda v: "\n".join(v))] = []
+    use_group_config_network_masks: Annotated[bool, CliFlags.DROP] = False
 
 
 class SubsystemList(NamedTuple):
@@ -408,7 +409,7 @@ class RequestStatus(NamedTuple):
     error_message: str
 
 
-class GwRefreshNetworkStatus(NamedTuple):
+class NetworkMaskUpdateStatus(NamedTuple):
     status: int
     error_message: str
     added: List[str]

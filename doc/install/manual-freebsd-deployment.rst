@@ -4,535 +4,571 @@
  Manual Deployment on FreeBSD
 ==============================
 
-.. note:: cephadm is not available on FreeBSD, so manual deployment
-   is necessary on that platform. Note that FreeBSD is not supported
-   by the core Ceph effort. On Linux, the recommended method is
-   :ref:`cephadm <cephadm_deploying_new_cluster>` instead of the
-   procedures described here.
+.. note:: cephadm is not available on FreeBSD, so manual deployment is
+   necessary on that platform. Note that FreeBSD is not supported by the core
+   Ceph effort. On Linux, the recommended method is
+   :ref:`cephadm <cephadm_deploying_new_cluster>` instead of the procedures
+   described here.
 
-This a largely a copy of the regular Manual Deployment with FreeBSD specifics.
-The difference lies in two parts: the underlying disk format, and the way to use
-the tools.
+This page describes how to bring up a Ceph cluster on FreeBSD: a first
+monitor, a manager, and OSDs backed by ZFS. Daemons are started by the
+``rc.d`` scripts installed with the ``net/ceph21`` port, and OSD disks are
+prepared with :ref:`ceph-volume zfs <ceph-volume-zfs>`.
 
-All Ceph clusters require at least one monitor, and at least as many OSDs as
-copies of an object stored on the cluster.  Bootstrapping the initial monitor(s)
-is the first step in deploying a Ceph Storage Cluster. Monitor deployment also
-sets important criteria for the entire cluster, such as the number of replicas
-for pools, the number of :ref:`placement groups` per OSD, the heartbeat intervals,
-whether :ref:`authentication <user-management>` is required, etc. Most of these
-values are set by default, so it's useful to know about them when setting up
-your cluster for production.
+There is no ``cephadm``, no containers and no systemd on FreeBSD. Everything
+below is done with the plain Ceph tools and ``service(8)``.
 
-We will set up a cluster with ``node1`` as  the monitor node, and ``node2`` and
-``node3`` for OSD nodes.
+Overview
+========
 
+A running cluster consists of these pieces:
 
+* ``ceph_mon``: the monitors. Start these first, they form the quorum.
+* ``ceph_mgr``: the manager daemons.
+* ``ceph_osd``: the object storage daemons. Each OSD lives on its own ZFS
+  pool, created by ``ceph-volume zfs prepare``.
+* ``ceph_mds`` and ``ceph_radosgw``: optional, for CephFS and the S3/Swift
+  gateway.
 
-.. ditaa::
+Each daemon type has one ``rc.d`` script that manages any number of daemons
+(*instances*) of that type on the host. Instances are identified by the
+daemon id: ``service ceph_osd start 12`` starts ``osd.12`` only, while
+``service ceph_osd start`` starts all of them.
 
-           /------------------\         /----------------\
-           |    Admin Node    |         |     node1      |
-           |                  +-------->+                |
-           |                  |         | cCCC           |
-           \---------+--------/         \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node2      |
-                     +----------------->+                |
-                     |                  | cCCC           |
-                     |                  \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node3      |
-                     +----------------->|                |
-                                        | cCCC           |
-                                        \----------------/
+Requirements
+============
 
+* FreeBSD with ZFS, and ``zfs_enable="YES"`` in ``/etc/rc.conf``, so the OSD
+  pools are imported at boot.
+* The ``net/ceph21`` port (or package) installed.
+* Working time synchronisation, for example ``ntpd_enable="YES"`` and
+  ``ntpd_sync_on_start="YES"``. Monitors complain about clock skew.
+* Hostnames that resolve on every node. By convention the monitor id is the
+  short hostname.
+* The following ports open between the nodes: 3300 and 6789 (monitors) and
+  6800-7300 (managers, OSDs, MDS).
+* An empty disk for every OSD. ``ceph-volume zfs`` refuses to use a device
+  that has partitions, is mounted, is used as swap or belongs to a zpool.
 
+File locations
+==============
 
-Disk Layout on FreeBSD
-======================
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
 
-Current implementation works on ZFS pools.
+   * - Path
+     - Contents
+   * - ``/usr/local/etc/ceph/``
+     - ``ceph.conf`` and the admin keyring. Optionally symlink
+       ``/etc/ceph`` to it.
+   * - ``/var/lib/ceph/<type>/<cluster>-<id>/``
+     - Data directory of one daemon, for example
+       ``/var/lib/ceph/mon/ceph-node1``. OSD directories are tmpfs and are
+       rebuilt at every boot.
+   * - ``/var/lib/ceph/bootstrap-osd/``
+     - Keyring used to register new OSDs.
+   * - ``/var/run/ceph/``
+     - Pid files and admin sockets.
+   * - ``/var/log/ceph/``
+     - Ceph's own log files. The ``rc.d`` scripts also log to syslog.
 
-* All Ceph data is created in ``/var/lib/ceph``.
-* Log files go into ``/var/log/ceph``.
-* PID files go into ``/var/log/run``.
-* One ZFS pool is allocated per OSD, like:
+The ceph user
+=============
 
-  .. prompt:: bash #
+The daemons run as the unprivileged user ``ceph``. The package creates this
+user and the group ``ceph`` when it is installed, so there is nothing to
+create by hand.
 
-    gpart create -s GPT ada1
-    gpart add -t freebsd-zfs -l osd.1 ada1
-    zpool create -m /var/lib/ceph/osd/osd.1 osd.1 gpt/osd.1
+The package also creates the directory tree below ``/var/lib/ceph``
+(``mon``, ``mgr``, ``osd``, ``mds``, ``radosgw``, ``tmp`` and the
+``bootstrap-*`` directories) with the right ownership, so the daemons can
+create their own data directories there.
 
-* Some cache and log (ZIL) can be attached.
-  Please note that this is different from the Ceph journals. Cache and log are
-  totally transparent for Ceph, and help the file system to keep the system
-  consistent and help performance.
-  Assuming that ``ada2`` is an SSD:
+The ``rc.d`` scripts create ``/var/run/ceph`` and ``/var/log/ceph`` themselves.
 
-  .. prompt:: bash #
+Cluster configuration
+=====================
 
-    gpart create -s GPT ada2
-    gpart add -t freebsd-zfs -l osd.1-log -s 1G ada2
-    zpool add osd.1 log gpt/osd.1-log
-    gpart add -t freebsd-zfs -l osd.1-cache -s 10G ada2
-    zpool add osd.1 cache gpt/osd.1-cache
-
-.. note:: UFS2 does not allow large xattribs.
-
-
-Configuration
--------------
-
-As per FreeBSD default, parts of extra software go into ``/usr/local``. This
-means that for ``/etc/ceph.conf`` the default location is
-``/usr/local/etc/ceph/ceph.conf``. Smartest thing to do is to create a softlink
-from ``/etc/ceph`` to ``/usr/local/etc/ceph``:
+Generate a cluster id:
 
 .. prompt:: bash #
 
-  ln -s /usr/local/etc/ceph /etc/ceph
+   uuidgen
 
-A sample file is provided in ``/usr/local/share/doc/ceph/sample.ceph.conf``.
-Note that ``/usr/local/etc/ceph/ceph.conf`` will be found by most tools, and
-linking it to ``/etc/ceph/ceph.conf`` will help with any scripts that are found
-in extra tools, scripts, and/or discussion lists.
+Create ``/usr/local/etc/ceph/ceph.conf``, replacing ``<fsid>`` with the
+generated id, ``node1`` with the short hostname of the first monitor and the
+addresses with your own:
 
-Monitor Bootstrapping
-=====================
+.. code-block:: ini
 
-Bootstrapping a monitor (a Ceph Storage Cluster, in theory) requires
-a number of things:
+   [global]
+   fsid = <fsid>
+   mon_initial_members = node1
+   mon_host = 192.0.2.11
+   public_network = 192.0.2.0/24
+   auth_cluster_required = cephx
+   auth_service_required = cephx
+   auth_client_required = cephx
+   osd_objectstore = bluestore
 
-- **Unique Identifier:** The ``fsid`` is a unique identifier for the cluster,
-  and stands for File System ID from the days when the Ceph Storage Cluster was
-  principally for the Ceph File System. Ceph now supports native interfaces,
-  block devices, and object storage gateway interfaces too, so ``fsid`` is a
-  bit of a misnomer.
+.. note:: For a single-node test cluster add ``osd_pool_default_size = 1``
+   and ``osd_crush_chooseleaf_type = 0`` to the ``[global]`` section.
 
-- **Cluster Name:** Note that cluster *vanity names* are deprecated and may be
-  removed entirely from future releases. We *strongly urge* that new clusters be
-  provisioned only with the default name ``ceph``.
+Keyrings and monitor map
+========================
 
-- **Monitor Name:** Each monitor instance within a cluster has a unique name.
-  In common practice, the Ceph Monitor name is the host name (we recommend one
-  Ceph Monitor per host, and no comingling of Ceph OSD daemons with
-  Ceph Monitors). You may retrieve the short hostname with ``hostname -s``.
+Create the keyring of the monitors, the admin keyring and the keyring that is
+used to register new OSDs, and combine them:
 
-- **Monitor Map:** Bootstrapping the initial monitor(s) requires you to
-  generate a monitor map. The monitor map requires the ``fsid`` and at least
-  one host name and its IP address.
+.. prompt:: bash #
 
-- **Monitor Keyring**: Monitors communicate with each other via a
-  secret key. You must generate a keyring with a monitor secret and provide
-  it when bootstrapping the initial monitor(s).
+   ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+   ceph-authtool --create-keyring /usr/local/etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
+   ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd' --cap mgr 'allow r'
+   ceph-authtool /tmp/ceph.mon.keyring --import-keyring /usr/local/etc/ceph/ceph.client.admin.keyring
+   ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
 
-- **Administrator Keyring**: To use the ``ceph`` CLI tools, you must have
-  a ``client.admin`` user. So you must generate the admin user and keyring,
-  and you must also add the ``client.admin`` user to the monitor keyring.
+Create the initial monitor map, again with your own ``<fsid>``, hostname and
+address:
 
-The foregoing requirements do not imply the creation of a Ceph Configuration
-file. However, as a best practice, we recommend creating a Ceph configuration
-file and populating it with the ``fsid``, the ``mon initial members`` and the
-``mon host`` settings.
+.. prompt:: bash #
 
-You can get and set all of the monitor settings at runtime as well. However,
-a Ceph Configuration file may contain only those settings that override the
-default values. When you add settings to a Ceph configuration file, these
-settings override the default settings. Maintaining those settings in a
-Ceph configuration file makes it easier to maintain your cluster.
+   monmaptool --create --add node1 192.0.2.11 --fsid <fsid> /tmp/monmap
+   chown ceph:ceph /tmp/ceph.mon.keyring /tmp/monmap /var/lib/ceph/bootstrap-osd/ceph.keyring
 
-The procedure is as follows:
+First monitor
+=============
 
+Create the monitor's data store and start it:
 
-#. Log in to the initial monitor node(s)::
+.. prompt:: bash #
 
-    ssh {hostname}
+   ceph-mon --mkfs -i node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring --setuser ceph --setgroup ceph
+   sysrc ceph_mon_enable=YES
+   service ceph_mon start
 
-   For example::
+Check that it formed a quorum of one:
 
-    ssh node1
+.. prompt:: bash #
 
+   ceph -s
 
-#. Ensure you have a directory for the Ceph configuration file. By default,
-   Ceph uses ``/etc/ceph``. When you install ``ceph``, the installer will
-   create the ``/etc/ceph`` directory automatically. ::
+The cluster reports ``HEALTH_WARN`` until a manager and OSDs exist.
 
-    ls /etc/ceph
+Remove the temporary files once all monitors are created:
 
-#. Create a Ceph configuration file. By default, Ceph uses
-   ``ceph.conf``. ::
+.. prompt:: bash #
 
-    sudo vim /etc/ceph/ceph.conf
+   rm /tmp/ceph.mon.keyring /tmp/monmap
 
+.. _freebsd-copy-config:
 
-#. Generate a unique ID (i.e., ``fsid``) for your cluster. ::
+Copying the configuration to other nodes
+========================================
 
-    uuidgen
+Every node that runs a Ceph daemon, or that you use to run ``ceph`` commands,
+needs the cluster configuration. Copy it from the first node with ``scp``.
+Use ``-p`` to keep the file modes. The package has already created
+``/usr/local/etc/ceph`` on the new node.
 
+.. prompt:: bash #
 
-#. Add the unique ID to your Ceph configuration file. ::
+   scp -p /usr/local/etc/ceph/ceph.conf root@node2:/usr/local/etc/ceph/
+   scp -p /usr/local/etc/ceph/ceph.client.admin.keyring root@node2:/usr/local/etc/ceph/
 
-    fsid = {UUID}
+A node that prepares OSDs with ``ceph-volume zfs`` also needs the bootstrap-osd
+keyring:
 
-   For example::
+.. prompt:: bash #
 
-    fsid = a7f64266-0894-4f1e-a635-d0aeaca0e993
+   scp -p /var/lib/ceph/bootstrap-osd/ceph.keyring root@node2:/var/lib/ceph/bootstrap-osd/
 
+On the new node, give the bootstrap keyring to the ``ceph`` user, as on the
+first node:
 
-#. Add the initial monitor(s) to your Ceph configuration file. ::
+.. prompt:: bash #
 
-    mon initial members = {hostname}[,{hostname}]
+   chown ceph:ceph /var/lib/ceph/bootstrap-osd/ceph.keyring
 
-   For example::
+When you run ``scp`` as another user than ``root``, for example because
+``sshd`` does not allow root logins, copy the files to that user's home
+directory first and move them into place on the new node.
 
-    mon initial members = node1
+.. warning:: The admin keyring gives full control over the cluster, and the
+   bootstrap-osd keyring can register new OSDs. Only copy them to nodes that
+   need them, and keep them readable by ``root`` only, which is what
+   ``scp -p`` does when the source files are ``0600``. A node that only runs
+   OSDs needs ``ceph.conf`` and, to prepare OSDs, the bootstrap-osd keyring.
+   It does not need the admin keyring: the start-up quorum check then uses the
+   key of a local OSD (see :ref:`freebsd-osd-startup`).
 
+``ceph.conf`` is the same on every node. After you change it, for example when
+a monitor is added to ``mon_host``, copy it to all nodes again:
 
-#. Add the IP address(es) of the initial monitor(s) to your Ceph configuration
-   file and save the file. ::
+.. prompt:: bash #
 
-    mon host = {ip-address}[,{ip-address}]
+   scp -p /usr/local/etc/ceph/ceph.conf root@node2:/usr/local/etc/ceph/
+   scp -p /usr/local/etc/ceph/ceph.conf root@node3:/usr/local/etc/ceph/
 
-   For example::
+Adding more monitors
+====================
 
-    mon host = 192.168.0.1
+Run a production cluster with three monitors, because the monitors need a
+majority to form a quorum. On each additional node, with ``ceph.conf`` and the
+admin keyring in place (see :ref:`freebsd-copy-config`):
 
-   **Note:** You may use IPv6 addresses instead of IPv4 addresses, but
-   you must set ``ms bind ipv6`` to ``true``. See `Network Configuration
-   Reference`_ for details about network configuration.
+.. prompt:: bash #
 
-#. Create a keyring for your cluster and generate a monitor secret key. ::
+   ceph auth get mon. -o /tmp/ceph.mon.keyring
+   ceph mon getmap -o /tmp/monmap
+   chown ceph:ceph /tmp/ceph.mon.keyring /tmp/monmap
+   ceph-mon --mkfs -i node2 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring --setuser ceph --setgroup ceph
+   sysrc ceph_mon_enable=YES
+   service ceph_mon start
 
-    ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+Then list every monitor in ``mon_host`` in ``ceph.conf``, and copy that file
+to all nodes.
 
+Manager
+=======
 
-#. Generate an administrator keyring, generate a ``client.admin`` user and add
-   the user to the keyring. ::
+Create a key for the manager and start it:
 
-    sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
+.. prompt:: bash #
 
-
-#. Add the ``client.admin`` key to the ``ceph.mon.keyring``. ::
-
-    ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
-
-
-#. Generate a monitor map using the hostname(s), host IP address(es) and the FSID.
-   Save it as ``/tmp/monmap``::
-
-    monmaptool --create --add {hostname} {ip-address} --fsid {uuid} /tmp/monmap
-
-   For example::
-
-    monmaptool --create --add node1 192.168.0.1 --fsid a7f64266-0894-4f1e-a635-d0aeaca0e993 /tmp/monmap
-
-
-#. Create a default data directory (or directories) on the monitor host(s). ::
-
-    sudo mkdir /var/lib/ceph/mon/ceph-{hostname}
-
-   For example::
-
-    sudo mkdir /var/lib/ceph/mon/ceph-node1
-
-   See `Monitor Config Reference - Data`_ for details.
-
-#. Populate the monitor daemon(s) with the monitor map and keyring. ::
-
-    sudo -u ceph ceph-mon --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
-
-   For example::
-
-    sudo -u ceph ceph-mon --mkfs -i node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
-
-
-#. Consider settings for a Ceph configuration file. Common settings include
-   the following::
-
-    [global]
-    fsid = {cluster-id}
-    mon initial members = {hostname}[, {hostname}]
-    mon host = {ip-address}[, {ip-address}]
-    public network = {network}[, {network}]
-    cluster network = {network}[, {network}]
-    auth cluster required = cephx
-    auth service required = cephx
-    auth client required = cephx
-    osd journal size = {n}
-    osd pool default size = {n}  # Write an object n times.
-    osd pool default min size = {n} # Allow writing n copy in a degraded state.
-    osd pool default pg num = {n}
-    osd pool default pgp num = {n}
-    osd crush chooseleaf type = {n}
-
-   In the foregoing example, the ``[global]`` section of the configuration might
-   look like this::
-
-    [global]
-    fsid = a7f64266-0894-4f1e-a635-d0aeaca0e993
-    mon initial members = node1
-    mon host = 192.168.0.1
-    public network = 192.168.0.0/24
-    auth cluster required = cephx
-    auth service required = cephx
-    auth client required = cephx
-    osd journal size = 1024
-    osd pool default size = 3
-    osd pool default min size = 2
-    osd pool default pg num = 333
-    osd pool default pgp num = 333
-    osd crush chooseleaf type = 1
-
-#. Touch the ``done`` file.
-
-   Mark that the monitor is created and ready to be started::
-
-    sudo touch /var/lib/ceph/mon/ceph-node1/done
-
-#. And for FreeBSD an entry for every monitor needs to be added to the config
-   file. (The requirement will be removed in future releases.)
-
-   The entry should look like::
-
-     [mon]
-         [mon.node1]
-             host = node1    # this name can be resolved
-
-
-#. Start the monitor(s).
-
-   For FreeBSD we use the rc.d init scripts (called bsdrc in Ceph)::
-
-    sudo service ceph start start mon.node1
-
-   For this to work ``/etc/rc.conf`` also needs the entry to enable the
-   ``ceph`` services::
-
-    cat 'ceph_enable="YES"' >> /etc/rc.conf
-
-
-#. Verify that Ceph created the default pools. ::
-
-    ceph osd lspools
-
-   You should see output like this::
-
-    0 data
-    1 metadata
-    2 rbd
-
-#. Verify that the monitor is running. ::
-
-    ceph -s
-
-   You should see output that the monitor you started is up and running, and
-   you should see a health error indicating that placement groups are ``stuck
-   inactive``. It should look something like this::
-
-    cluster a7f64266-0894-4f1e-a635-d0aeaca0e993
-      health HEALTH_ERR 192 pgs stuck inactive; 192 pgs stuck unclean; no osds
-      monmap e1: 1 mons at {node1=192.168.0.1:6789/0}, election epoch 1, quorum 0 node1
-      osdmap e1: 0 osds: 0 up, 0 in
-      pgmap v2: 192 pgs, 3 pools, 0 bytes data, 0 objects
-         0 kB used, 0 kB / 0 kB avail
-         192 creating
-
-   .. note:: Once you add OSDs and start them, the placement group health errors
-             should disappear. See the next section for details.
+   mkdir -p /var/lib/ceph/mgr/ceph-node1
+   ceph auth get-or-create mgr.node1 mon 'allow profile mgr' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mgr/ceph-node1/keyring
+   chown -R ceph:ceph /var/lib/ceph/mgr
+   sysrc ceph_mgr_enable=YES
+   service ceph_mgr start
 
 .. _freebsd_adding_osds:
 
-Adding OSDs
-===========
-
-Once you have your initial monitor(s) running, you should add OSDs. Your cluster
-cannot reach an ``active + clean`` state until you have enough OSDs to handle the
-number of copies of an object (e.g., ``osd pool default size = 2`` requires at
-least two OSDs). After bootstrapping your monitor, your cluster has a default
-CRUSH map; however, the CRUSH map doesn't have any Ceph OSD daemons mapped to
-a Ceph Node.
-
-
-Long Form
----------
-
-Without the benefit of any helper utilities, create an OSD and add it to the
-cluster and CRUSH map with the following procedure. To create the first two
-OSDs with the long form procedure, execute the following on ``node2`` and
-``node3``:
-
-#. Connect to the OSD host. ::
-
-    ssh {node-name}
-
-#. Generate a UUID for the OSD. ::
-
-    uuidgen
-
-
-#. Create the OSD. If no UUID is given, it will be set automatically when the
-   OSD starts up. The following command will output the OSD number, which you
-   will need for subsequent steps. ::
-
-    ceph osd create [{uuid} [{id}]]
-
-
-#. Create the default directory on your new OSD. ::
-
-    ssh {new-osd-host}
-    sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
-
-   Above are the ZFS instructions to do this for FreeBSD.
-
-
-#. If the OSD is for a drive other than the OS drive, prepare it
-   for use with Ceph, and mount it to the directory you just created.
-
-
-#. Initialize the OSD data directory. ::
-
-    ssh {new-osd-host}
-    sudo ceph-osd -i {osd-num} --mkfs --mkkey --osd-uuid [{uuid}]
-
-   The directory must be empty before you can run ``ceph-osd`` with the
-   ``--mkkey`` option.
-
-
-#. Register the OSD authentication key. ::
-
-    sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
-
-
-#. Add your Ceph Node to the CRUSH map. ::
-
-    ceph osd crush add-bucket {hostname} host
-
-   For example::
-
-    ceph osd crush add-bucket node1 host
-
-
-#. Place the Ceph Node under the root ``default``. ::
-
-    ceph osd crush move node1 root=default
-
-
-#. Add the OSD to the CRUSH map so that it can begin receiving data. You may
-   also decompile the CRUSH map, add the OSD to the device list, add the host as a
-   bucket (if it's not already in the CRUSH map), add the device as an item in the
-   host, assign it a weight, recompile it and set it. ::
-
-    ceph osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
-
-   For example::
-
-    ceph osd crush add osd.0 1.0 host=node1
-
-
-#. After you add an OSD to Ceph, the OSD is in your configuration. However,
-   it is not yet running. The OSD is ``down`` and ``in``. You must start
-   your new OSD before it can begin receiving data.
-
-   For FreeBSD using rc.d init.
-
-   After adding the OSD to ``ceph.conf``::
-
-    sudo service ceph start osd.{osd-num}
-
-   For example::
-
-    sudo service ceph start osd.0
-    sudo service ceph start osd.1
-
-   In this case, to allow the start of the daemon at each reboot you
-   must create an empty file like this::
-
-    sudo touch /var/lib/ceph/osd/ceph-{osd-num}/bsdrc
-
-   For example::
-
-    sudo touch /var/lib/ceph/osd/ceph-0/bsdrc
-    sudo touch /var/lib/ceph/osd/ceph-1/bsdrc
-
-   Once you start your OSD, it is ``up`` and ``in``.
-
-
-
-Adding MDS
-==========
-
-In the below instructions, ``{id}`` is an arbitrary name, such as the hostname of the machine.
-
-#. Create the MDS data directory. ::
-
-    mkdir -p /var/lib/ceph/mds/ceph-{id}
-
-#. Create a keyring. ::
-
-    ceph-authtool --create-keyring /var/lib/ceph/mds/ceph-{id}/keyring --gen-key -n mds.{id}
-
-#. Import the keyring and set caps. ::
-
-    ceph auth add mds.{id} osd "allow rwx" mds "allow *" mon "allow profile mds" -i /var/lib/ceph/mds/ceph-{id}/keyring
-
-#. Add to ``ceph.conf``. ::
-
-    [mds.{id}]
-    host = {id}
-
-#. Start the :ref:`daemon <ceph_mds_man>` the manual way. ::
-
-    ceph-mds -i {id} -m {mon-hostname}:{mon-port} [-f]
-
-#. Start the daemon the right way (using ``ceph.conf`` entry). ::
-
-    service ceph start
-
-#. If starting the daemon fails with this error::
-
-    mds.-1.0 ERROR: failed to authenticate: (22) Invalid argument
-
-   Then make sure you do not have a keyring set in ``ceph.conf`` in the ``global``
-   section; move it to the ``client`` section; or add a keyring setting specific
-   to this MDS daemon. And verify that you see the same key in the MDS data
-   directory and ``ceph auth get mds.{id}`` output.
-
-#. Now you are ready to `create a Ceph file system`_.
-
-
-Summary
-=======
-
-Once you have your monitor and two OSDs up and running, you can watch the
-placement groups peer by executing the following:
+OSDs
+====
+
+OSDs are prepared with ``ceph-volume zfs``. For every disk it creates a zpool
+named ``ceph-osd-<id>`` (not mounted), a zvol named ``osd-block-<osd fsid>``
+inside it that serves as the raw block device for BlueStore, and tags both
+with ``ceph:*`` ZFS properties. These properties are how the OSD is found
+again after a reboot, without contacting a monitor.
+
+Inspect the disks
+-----------------
 
 .. prompt:: bash #
 
-    ceph -w
+   ceph-volume zfs inventory
 
-To view the tree, execute the following:
+Add ``--format json`` for machine readable output. A disk that is partitioned,
+mounted, used as swap or part of a zpool is not available. Clear it with
+``zap``, which only prints what it would do unless ``--force`` is given:
 
 .. prompt:: bash #
 
-    ceph osd tree
+   ceph-volume zfs zap /dev/ada1
+   ceph-volume zfs zap /dev/ada1 --force
 
-You should see output that looks something like this::
+``--destroy`` additionally destroys the zpool when it is a Ceph-managed one.
 
-    # id    weight  type name     up/down    reweight
-    -1      2       root default
-    -2      2           host node1
-    0       1               osd.0      up    1
-    -3      1           host node2
-    1       1               osd.1      up    1
+Prepare an OSD
+--------------
 
-To add (or remove) additional monitors, see :ref:`adding-and-removing-monitors`.
-To add (or remove) additional Ceph OSD daemons, see `Add/Remove OSDs`_.
+First look at the plan. ``--dry-run`` prints the OSD id, the pool and zvol
+names and every command that would run, without changing anything and without
+contacting a monitor:
 
+.. prompt:: bash #
 
-.. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
-.. _Network Configuration Reference: ../../rados/configuration/network-config-ref
-.. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
-.. _create a Ceph file system: ../../cephfs/createfs
+   ceph-volume zfs prepare --data /dev/ada1 --dry-run
+
+Then run it for real:
+
+.. prompt:: bash #
+
+   ceph-volume zfs prepare --data /dev/ada1
+
+This creates the zpool and zvol, registers a new OSD with the cluster
+(``ceph osd new``, using the bootstrap-osd keyring created above) and runs
+``ceph-osd --mkfs``. The OSD is not started by this command.
+
+Useful options:
+
+``--block.db <device>`` and ``--block.wal <device>``
+   Put the BlueStore RocksDB or write-ahead log on a separate device, for
+   example an NVMe disk. The device gets its own zpool. ``same-pool`` carves
+   it from the main pool, which is allowed but gains nothing.
+
+``--block-db-size`` and ``--block-wal-size``
+   Size of those zvols. Required with ``same-pool``, otherwise 95% of the
+   pool.
+
+``--zvol-size``
+   Size of the data zvol, for example ``1T``. Default is 95% of the pool.
+
+``--thin``
+   Create sparse zvols. By default zvols are space reserved, so the pool
+   cannot be oversubscribed. A full pool shows up as write errors in
+   BlueStore, so only use this if you monitor free space.
+
+``--osd-id`` and ``--osd-fsid``
+   Reuse an existing OSD id, or choose the OSD uuid.
+
+``--crush-device-class``
+   Set the CRUSH device class of the OSD.
+
+``--no-tmpfs``
+   Keep the OSD directory on disk instead of tmpfs. Set
+   ``ceph_osd_tmpfs="NO"`` in ``rc.conf`` as well when you use this.
+
+.. note:: ``--test`` creates the real zpool and zvol but skips everything that
+   needs a Ceph binary or a monitor. It does not produce a usable OSD and is
+   meant for testing the ZFS side only.
+
+List the prepared OSDs:
+
+.. prompt:: bash #
+
+   ceph-volume zfs list
+
+Start the OSDs
+--------------
+
+.. prompt:: bash #
+
+   sysrc ceph_osd_enable=YES rcshutdown_timeout=300
+   service ceph_osd start
+   service ceph_osd status
+   ceph osd tree
+
+``service ceph_osd start`` returns immediately. The OSDs are started in the
+background once the monitors have a quorum, see :ref:`freebsd-osd-startup`.
+
+Verify the cluster
+==================
+
+.. prompt:: bash #
+
+   ceph -s
+   ceph health detail
+   ceph osd tree
+
+Reboot the node at least once before relying on the setup, to see that the
+daemons come back on their own.
+
+The rc.d services
+=================
+
+The scripts are ``ceph_mon``, ``ceph_mgr``, ``ceph_osd``, ``ceph_mds`` and
+``ceph_radosgw``. All of them accept the usual ``start``, ``stop``,
+``restart`` and ``status``, plus ``reload``, which sends ``SIGHUP`` to the
+daemon so it reopens its log file. Add an id to act on one instance, for
+example ``service ceph_mon restart node1``.
+
+Every daemon runs under ``daemon(8)``, which restarts it ten seconds after it
+exits. There is no limit on the number of restarts, so a daemon that fails at
+once keeps being restarted, and keeps logging. Look at ``/var/log/messages``
+and ``/var/log/ceph/`` when a daemon does not stay up. Output of the
+supervisor goes to syslog with the tag ``<cluster>-<type>.<id>``.
+
+Configuration in ``/etc/rc.conf``
+---------------------------------
+
+Settings shared by all daemons; the values shown are the defaults.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - Variable
+     - Meaning
+   * - ``ceph_cluster="ceph"``
+     - Cluster name.
+   * - ``ceph_conf``
+     - Default ``/usr/local/etc/ceph/${ceph_cluster}.conf``.
+   * - ``ceph_datadir="/var/lib/ceph"``
+     - Base of the data directories.
+   * - ``ceph_rundir="/var/run/ceph"``
+     - Pid files and admin sockets.
+   * - ``ceph_logdir="/var/log/ceph"``
+     - Log directory.
+   * - ``ceph_user="ceph"``, ``ceph_group="ceph"``
+     - The daemons switch to this user and group.
+   * - ``ceph_restart_delay="10"``
+     - Seconds before an exited daemon is restarted.
+
+Settings per daemon type. ``<type>`` is ``mon``, ``mgr``, ``osd``, ``mds`` or
+``radosgw``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - Variable
+     - Meaning
+   * - ``ceph_<type>_enable="NO"``
+     - Enable the service at boot.
+   * - ``ceph_<type>_instances``
+     - Daemon ids to manage. Default: every directory
+       ``${ceph_datadir}/<type>/${ceph_cluster}-<id>`` that holds a keyring.
+   * - ``ceph_<type>_flags``
+     - Extra arguments for the Ceph daemon itself.
+   * - ``ceph_<type>_limits="-n 1048576"``
+     - ``limits(1)`` arguments, here the number of open files.
+
+.. _freebsd-osd-startup:
+
+OSD start-up
+------------
+
+An OSD can only work when the monitors have a quorum, and a node that boots
+with its monitors on other machines would otherwise start OSDs that fail
+and restart. For that reason ``service ceph_osd start`` works in two steps:
+
+#. It rebuilds the OSD directories. They live on tmpfs, so this is needed
+   after every boot. By default ``ceph-volume zfs activate --all`` does this,
+   using the ``ceph:*`` ZFS properties; no monitor is needed.
+#. It starts a background job that polls ``ceph quorum_status`` every ten
+   seconds and starts the OSDs as soon as a quorum exists.
+
+``service ceph_osd stop`` also cancels a start that is still waiting, and
+``service ceph_osd status`` reports it. Starting a single OSD by id,
+``service ceph_osd start 12``, does not wait.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - Variable
+     - Meaning
+   * - ``ceph_osd_activate="YES"``
+     - Rebuild the OSD directories before starting.
+   * - ``ceph_osd_activate_method="zfs"``
+     - ``zfs`` uses ``ceph-volume zfs activate``. ``label`` scans devices for
+       BlueStore labels, for OSDs that were not made with ``ceph-volume zfs``.
+       ``none`` does nothing.
+   * - ``ceph_osd_devices``
+     - Only for method ``label``: devices or globs to scan. Default: all
+       disks, their partitions and slices.
+   * - ``ceph_osd_tmpfs="YES"``
+     - Keep the OSD directories on tmpfs.
+   * - ``ceph_osd_wait_quorum="YES"``
+     - Start the OSDs in the background after the quorum is reached. ``NO``
+       starts them immediately.
+   * - ``ceph_osd_quorum_timeout="0"``
+     - Give up waiting after this many seconds and start anyway. ``0`` waits
+       forever.
+   * - ``ceph_osd_quorum_args``
+     - Identity used for the quorum check. Default: ``client.admin`` when its
+       keyring is readable, otherwise the key of the first local OSD.
+   * - ``ceph_osd_aio_unsafe="YES"``
+     - Set ``vfs.aio.enable_unsafe=1``, which BlueStore needs on FreeBSD.
+
+.. warning:: ``service ceph_osd activate`` re-primes the OSD directories. Do
+   not run it by hand while OSDs are running. ``service ceph_osd start`` skips
+   the activation by itself when an OSD is already running.
+
+Boot order
+----------
+
+``rcorder(8)`` starts the services in this order, and stops them in reverse
+at shutdown:
+
+.. code-block:: none
+
+   ceph_mon  ->  ceph_mgr
+             ->  ceph_osd  ->  ceph_mds, ceph_radosgw
+
+``ceph_osd`` returns right away, so the OSDs may come up later than the
+services behind it. MDS and gateway daemons retry on their own until the OSDs
+are there.
+
+Stopping many OSDs takes a while. Raise ``rcshutdown_timeout`` in
+``rc.conf``, 300 seconds is a reasonable start; the default of 90 is short.
+
+Example ``rc.conf``
+-------------------
+
+A node with a monitor, a manager and OSDs:
+
+.. code-block:: sh
+
+   zfs_enable="YES"
+   ntpd_enable="YES"
+   ntpd_sync_on_start="YES"
+   rcshutdown_timeout="300"
+
+   ceph_mon_enable="YES"
+   ceph_mgr_enable="YES"
+   ceph_osd_enable="YES"
+
+A node with OSDs only, while the monitors run elsewhere. The OSDs wait in
+the background until those monitors have a quorum:
+
+.. code-block:: sh
+
+   zfs_enable="YES"
+   ntpd_enable="YES"
+   ntpd_sync_on_start="YES"
+   rcshutdown_timeout="300"
+
+   ceph_osd_enable="YES"
+
+This node needs the same ``ceph.conf``, with ``mon_host`` set, and either the
+admin keyring or a readable OSD keyring for the quorum check.
+
+Metadata servers and gateways
+=============================
+
+Create a key and a data directory per daemon, enable the service, and start
+it. For an MDS with id ``node1``:
+
+.. prompt:: bash #
+
+   mkdir -p /var/lib/ceph/mds/ceph-node1
+   ceph auth get-or-create mds.node1 mon 'profile mds' mds 'allow *' osd 'allow *' -o /var/lib/ceph/mds/ceph-node1/keyring
+   chown -R ceph:ceph /var/lib/ceph/mds
+   sysrc ceph_mds_enable=YES
+   service ceph_mds start
+
+For a RADOS gateway with id ``rgw.node1``, which runs as ``client.rgw.node1``:
+
+.. prompt:: bash #
+
+   mkdir -p /var/lib/ceph/radosgw/ceph-rgw.node1
+   ceph auth get-or-create client.rgw.node1 mon 'allow rw' osd 'allow rwx' -o /var/lib/ceph/radosgw/ceph-rgw.node1/keyring
+   chown -R ceph:ceph /var/lib/ceph/radosgw
+   sysrc ceph_radosgw_enable=YES
+   service ceph_radosgw start
+
+Creating a CephFS file system or an object store zone is not specific to
+FreeBSD and is described in the general documentation.
+
+Troubleshooting
+===============
+
+An OSD is not started after a boot
+   Run ``service ceph_osd status``. If it says the start is waiting for a
+   quorum, check ``ceph -s`` from a node that does have one, and that this
+   node can reach the monitors listed in ``mon_host``. Set
+   ``ceph_osd_quorum_timeout`` if you want it to start anyway.
+
+``ceph-volume zfs list`` shows nothing after a boot
+   Check that ``zfs_enable="YES"`` is set and that ``zpool list`` shows the
+   ``ceph-osd-<id>`` pools.
+
+A daemon keeps restarting
+   Look in ``/var/log/messages`` and in ``/var/log/ceph/``. The usual causes
+   are a missing keyring in the data directory, a data directory that is not
+   owned by ``ceph``, and a ``ceph.conf`` that is not readable.
+
+Monitors report clock skew
+   Check that ``ntpd`` is running and synchronised with ``ntpq -p``.
+
+See also
+========
+
+* :ref:`ceph-volume-zfs`
+* :ref:`ceph-volume-zfs-inventory`
+* :doc:`/dev/freebsd`

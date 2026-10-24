@@ -35,13 +35,3 @@
     color: var(--cds-text-secondary);
   }
 }
-
-.consumption-stats-wrapper {
-  display: inline-flex;
-  width: fit-content;
-}
-
-.consumption-stats-wrapper cds-tooltip-definition {
-  display: inline-block;
-  width: auto;
-}

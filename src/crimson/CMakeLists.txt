@@ -1,3 +1,7 @@
+# crimson has no legacy performance baseline to protect: always build it
+# (and all its subdirectories) with frame pointers, for every build type.
+add_compile_options(${FRAME_POINTER_COMPILE_OPTIONS})
+
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
@@ -97,10 +101,8 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
-  ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
-  ${PROJECT_SOURCE_DIR}/src/compressor/Compressor.cc
   ${PROJECT_SOURCE_DIR}/src/crush/builder.c
   ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
   ${PROJECT_SOURCE_DIR}/src/crush/crush.c
@@ -152,6 +154,11 @@ target_compile_definitions(crimson-common PRIVATE
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
+# see src/common/CMakeLists.txt
+set_property(SOURCE ${PROJECT_SOURCE_DIR}/src/common/version.cc
+  APPEND PROPERTY COMPILE_DEFINITIONS
+  "CEPH_VENDOR_RELEASE=\"${CEPH_VENDOR_RELEASE}\"")
+
 target_link_libraries(crimson-common
   PUBLIC
     $<$<BOOL:${WITH_JAEGER}>:jaeger_base>
@@ -186,8 +193,8 @@ set(crimson_mon_srcs
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/crypto_onwire.cc
-  ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
+  net/compression_onwire_stub.cc
   net/Errors.cc
   net/FrameAssemblerV2.cc
   net/io_handler.cc

@@ -133,8 +133,9 @@ CBT
 Completed once ``src/ceph_release`` has been updated to X:
 - [ ] create CBT branch for new release at https://github.com/ceph/cbt/tree/main
 - [ ] add mapping X -> release name to `CBT_RELEASE_MAP` in `ceph/qa/tasks/cbt.py`
-- [ ] schedule teuthology run against ``main`` with ``perf-basic`` suite
-  If FAIL, identify issue and request fixes from CBT team
+- [ ] schedule teuthology runs against ``main`` with all suites using CBT 
+  `rados/perf` (12 workloads), `crimson-rados/perf` (12 workloads), `perf-basic` (3 workloads);
+  if FAIL, identify issue and request fixes from CBT team
 
 After dev freeze
 ================

@@ -1,8 +1,9 @@
 
+import json
 from unittest.mock import Mock, call, patch
 
 from .. import mgr
-from ..controllers.rgw import Rgw, RgwBucket, RgwDaemon, RgwTopic, RgwUser
+from ..controllers.rgw import Rgw, RgwBucket, RgwBucketUi, RgwDaemon, RgwTopic, RgwUser
 from ..rest_client import RequestException
 from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
@@ -488,6 +489,61 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody(mock_return_value)
 
+    @patch('dashboard.services.rgw_client.RgwMultisite.get_realm_from_daemon',
+           Mock(return_value='my-realm'))
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_rate_limit_with_daemon_name(self, mock_proxy, send_rgwadmin_command):
+        """get_rate_limit resolves the realm via daemon_name and passes --rgw-realm."""
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        expected = {
+            "user_ratelimit": {
+                "max_read_ops": 100,
+                "max_write_ops": 50
+            }
+        }
+        send_rgwadmin_command.return_value = (0, expected, "")
+
+        self._get('/test/api/rgw/user/testuser/ratelimit?daemon_name=rgw.0')
+        self.assertStatus(200)
+        self.assertInJsonBody('user_ratelimit')
+        send_rgwadmin_command.assert_called_once_with(
+            ['ratelimit', 'get', '--ratelimit-scope', 'user',
+             '--rgw-realm', 'my-realm', '--uid', 'testuser']
+        )
+
+    @patch('dashboard.services.rgw_client.RgwMultisite.get_realm_from_daemon',
+           Mock(return_value='my-realm'))
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_global_rate_limit_with_daemon_name(self, mock_proxy, send_rgwadmin_command):
+        """get_global_rate_limit resolves the realm via daemon_name and passes --rgw-realm."""
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        expected = {
+            "bucket_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                                 "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False},
+            "user_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                               "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False},
+            "anonymous_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                                    "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False}
+        }
+        send_rgwadmin_command.return_value = (0, expected, "")
+
+        self._get('/test/api/rgw/user/ratelimit?daemon_name=rgw.0')
+        self.assertStatus(200)
+        self.assertJsonBody(expected)
+        send_rgwadmin_command.assert_called_once_with(
+            ['global', 'ratelimit', 'get', '--rgw-realm', 'my-realm']
+        )
+
     @patch('dashboard.controllers.rgw.RgwAccounts.get_account_user_count')
     @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
     def test_create_user_account_limit_reached(self, mock_proxy, mock_count):
@@ -734,3 +790,80 @@ class RgwBucketControllerTestCase(ControllerTestCase):
 
         self._get('/test/api/rgw/bucket/i-do-not-exist')
         self.assertStatus(500)
+
+
+class RgwBucketUiControllerTestCase(ControllerTestCase):
+    URL = '/ui-api/rgw/bucket/buckets_and_users_count'
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([RgwBucketUi])
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_empty_buckets(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': ''}
+        ])
+        mock_proxy.return_value = []
+        mock_user_list.return_value = json.dumps(['user1'])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 0,
+            'users_count': 1,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_empty_usage(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': ''}
+        ])
+        mock_proxy.return_value = [
+            {'bucket': 'b1'},
+            {'bucket': 'b2', 'usage': {}},
+            {'bucket': 'b3', 'usage': {'rgw.main': {'num_objects': 0, 'size_actual': 0}}},
+        ]
+        mock_user_list.return_value = json.dumps(['user1', 'user2'])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 3,
+            'users_count': 2,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+
+    @patch('dashboard.controllers.rgw.RgwUser.list')
+    @patch('dashboard.controllers.rgw.RgwDaemon')
+    @patch.object(RgwBucketUi, 'proxy')
+    def test_buckets_and_users_count_zero_objects_with_realm(
+            self, mock_proxy, mock_daemon_cls, mock_user_list):
+        mock_daemon_cls.return_value.list.return_value = json.dumps([
+            {'id': 'daemon1', 'realm_name': 'realm1'},
+            {'id': 'daemon2', 'realm_name': 'realm1'},
+        ])
+        mock_proxy.return_value = [
+            {'bucket': 'b1', 'usage': {'rgw.main': {'num_objects': 0, 'size_actual': 0}}},
+        ]
+        mock_user_list.return_value = json.dumps([])
+
+        self._get(self.URL)
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'buckets_count': 1,
+            'users_count': 0,
+            'objects_count': 0,
+            'objects_size': 0,
+        })
+        # Same realm must only be accumulated once.
+        mock_proxy.assert_called_once_with('daemon1', 'GET', 'bucket?stats=true')

@@ -364,15 +364,11 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
     meta.bucket_instance = sync_module->alloc_bucket_instance_meta_handler(
         driver, svc.zone, svc.bucket, svc.bi, svc.datalog_rados);
     meta.vector_bucket = sync_module->alloc_vector_bucket_meta_handler(rados, svc.vector_bucket, vector_bucket.get());
-    meta.vector_bucket_instance = sync_module->alloc_vector_bucket_instance_meta_handler(
-        driver, svc.zone, svc.vector_bucket);
   } else {
     meta.bucket = create_bucket_metadata_handler(rados, svc.bucket, bucket.get());
     meta.bucket_instance = create_bucket_instance_metadata_handler(
         driver, svc.zone, svc.bucket, svc.bi, svc.datalog_rados);
     meta.vector_bucket = create_vector_bucket_metadata_handler(rados, svc.vector_bucket, vector_bucket.get());
-    meta.vector_bucket_instance = create_vector_bucket_instance_metadata_handler(
-        driver, svc.zone, svc.vector_bucket);
   }
 
   meta.otp = rgwrados::otp::create_metadata_handler(
@@ -419,7 +415,6 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
   meta.bucket = _ctl.meta.bucket.get();
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
   meta.vector_bucket = _ctl.meta.vector_bucket.get();
-  meta.vector_bucket_instance = _ctl.meta.vector_bucket_instance.get();
   meta.otp = _ctl.meta.otp.get();
   meta.role = _ctl.meta.role.get();
   meta.topic = _ctl.meta.topic.get();
@@ -450,12 +445,6 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
   r = meta.vector_bucket->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init meta.vector_bucket ctl (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
-  r = meta.vector_bucket_instance->attach(meta.mgr);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start init meta.vector_bucket_instance ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 

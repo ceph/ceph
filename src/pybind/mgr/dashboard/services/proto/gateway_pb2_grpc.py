@@ -49,6 +49,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.FromString,
                 )
+        self.set_subsystem_use_group_config_network_masks = channel.unary_unary(
+                '/Gateway/set_subsystem_use_group_config_network_masks',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_status.FromString,
+                )
         self.add_kmip_server_endpoints = channel.unary_unary(
                 '/Gateway/add_kmip_server_endpoints',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_kmip_server_endpoints_req.SerializeToString,
@@ -303,6 +308,13 @@ class GatewayServicer(object):
 
     def gw_refresh_network(self, request, context):
         """Refresh auto-listeners for all network masks configured on the given subsystem on this gateway
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def set_subsystem_use_group_config_network_masks(self, request, context):
+        """Enable or disable the group config network mask for the subsystem
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -632,6 +644,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.gw_refresh_network,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.SerializeToString,
+            ),
+            'set_subsystem_use_group_config_network_masks': grpc.unary_unary_rpc_method_handler(
+                    servicer.set_subsystem_use_group_config_network_masks,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_status.SerializeToString,
             ),
             'add_kmip_server_endpoints': grpc.unary_unary_rpc_method_handler(
                     servicer.add_kmip_server_endpoints,
@@ -964,6 +981,23 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/gw_refresh_network',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.gw_refresh_network_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def set_subsystem_use_group_config_network_masks(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/set_subsystem_use_group_config_network_masks',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.set_subsystem_use_group_config_network_masks_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
