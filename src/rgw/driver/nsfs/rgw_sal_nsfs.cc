@@ -862,6 +862,24 @@ static int unlinkat_as(const DoutPrefixProvider* dpp,
   }, null_yield);
 }
 
+/* Whether `name` is in `dirfd`, looked for as `id`:  1 or 0, or -errno.
+ * A denial is not absence -- read as absence, a create would publish
+ * over the object it could not see. */
+static int exists_as(const DoutPrefixProvider* dpp, const nsfs::FSIdentity& id,
+		     const nsfs::AccessStrategy* model,
+		     int dirfd, const char* name)
+{
+  return nsfs::with_identity_or_raise(dpp, id, model,
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS,
+				      [&]() -> int {
+    if (::faccessat(dirfd, name, F_OK, AT_EACCESS) == 0) {
+      return 1;
+    }
+    return (errno == ENOENT) ? 0 : -errno;
+  }, null_yield);
+}
+
 /* A symbolic link is not an object (n-plan, "One rule:  a link is an
  * object only beneath the bucket"), so a write or a delete that lands on
  * a name a link holds unlinks the link, never its target.  Returns 0
@@ -1972,9 +1990,34 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-static int ensure_shadow_dir(int parent_fd)
+/* `.shadow` beside `parent_fd`, made as `.versions` is (n plan D4a):
+ * as `id` at NooBaa's mode where it is active, raised and given to the
+ * key directory's owner where the model permits;  the gateway's
+ * otherwise.  `dpp` may be null only when `id` is inactive. */
+static int ensure_shadow_dir(const DoutPrefixProvider* dpp, int parent_fd,
+			     const nsfs::FSIdentity& id,
+			     const nsfs::AccessStrategy* model)
 {
   const mode_t mode = nsfs::dir_create_mode();
+  if (id.active()) {
+    bool raised = false;
+    bool made = false;
+    const int ret = nsfs::with_identity_or_raise(dpp, id, model,
+						 nsfs::AccessClass::data,
+						 RAISED_CREATE_CAPS,
+						 [&]() -> int {
+      if (::mkdirat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), mode) < 0) {
+	return (errno == EEXIST) ? 0 : -errno;
+      }
+      made = true;
+      return nsfs::apply_create_mode_at(dpp, parent_fd,
+					HIDDEN_SHADOW_PATH.c_str(), mode);
+    }, null_yield, &raised);
+    if ((ret < 0) || !(raised && made)) {
+      return ret;
+    }
+    return chown_raised_dir(dpp, parent_fd, HIDDEN_SHADOW_PATH.c_str());
+  }
   int ret = ::mkdirat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), mode);
   if (ret < 0) {
     return (errno == EEXIST) ? 0 : -errno;
@@ -1983,18 +2026,24 @@ static int ensure_shadow_dir(int parent_fd)
 				    HIDDEN_SHADOW_PATH.c_str(), mode);
 }
 
-static int open_shadow_dir(int parent_fd)
+static int open_shadow_dir(const DoutPrefixProvider* dpp, int parent_fd,
+			   const nsfs::FSIdentity& id,
+			   const nsfs::AccessStrategy* model)
 {
-  int ret = ensure_shadow_dir(parent_fd);
+  int ret = ensure_shadow_dir(dpp, parent_fd, id, model);
   if (ret < 0) {
     return ret;
   }
-  int sfd = ::openat(parent_fd, HIDDEN_SHADOW_PATH.c_str(),
-		     O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
-  if (sfd < 0) {
-    return -errno;
-  }
-  return sfd;
+  return openat_as(dpp, id, model, parent_fd, HIDDEN_SHADOW_PATH.c_str(),
+		   O_RDONLY | O_DIRECTORY);
+}
+
+/* An object FSIO made raised is the identity's, as a raised copy's
+ * destination is (clone_file_by_copy()). */
+static int chown_raised_object(const DoutPrefixProvider* dpp, int fd,
+			       const nsfs::FSIdentity& id)
+{
+  return chown_raised(dpp, fd, "", id.cred.uid, id.cred.gid);
 }
 
 static int copy_xattrs_fd(const DoutPrefixProvider* dpp, int src_fd, int dst_fd)
@@ -12138,6 +12187,24 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     return FSIOResult{aret, nullptr};
   }
 
+  /* Who the handle is for (n plan D4a):  librgw's mount user, pinned
+   * here and held for the handle's life.  Denied where it cannot be
+   * applied, as the writers deny it. */
+  nsfs::FSIdentity identity;
+  {
+    const int pret = pin_personality_for(dpp, driver, authenticated_user,
+					 &identity);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return FSIOResult{pret, nullptr};
+    }
+  }
+  const nsfs::AccessStrategy* model = driver->get_access_strategy();
+  /* the source read and the destination create are on the access-model
+   * axis, as for a copy (copy_source_as_gateway()) */
+  const bool as_gateway =
+    identity.active() && model->permits(nsfs::AccessClass::data);
+  set_access(identity, /*ro=*/false);
+
   /* Opening to write is the mutation.
    *
    * An FSIO handle is not a request:  it is opened once and written
@@ -12182,11 +12249,16 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     return FSIOResult{-EBADF, nullptr};
   }
 
-  int sdir_fd = open_shadow_dir(parent_fd);
+  int sdir_fd = open_shadow_dir(dpp, parent_fd, identity, model);
   if (sdir_fd < 0) {
     return FSIOResult{sdir_fd, nullptr};
   }
-  bool shadow_exists = (::faccessat(sdir_fd, leaf.c_str(), F_OK, AT_EACCESS) == 0);
+  const int shadow_found = exists_as(dpp, identity, model, sdir_fd, leaf.c_str());
+  if (shadow_found < 0) {
+    ::close(sdir_fd);
+    return FSIOResult{shadow_found, nullptr};
+  }
+  bool shadow_exists = (shadow_found == 1);
   bool ephemeral = (flags & FSIOObject::OPEN_FLAG_EPHEMERAL) != 0;
   bool for_write = (flags & FSIOObject::OPEN_FLAG_WRITE) != 0;
 
@@ -12195,6 +12267,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   hdl->parent_fd = parent_fd;
   hdl->leaf_name = leaf;
   hdl->dir_chain = std::move(resolved_dirs);
+  hdl->identity = identity;
 
   /* sdir_fd stays this function's until a success path hands it over.
    *
@@ -12222,10 +12295,12 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 
   if (shadow_exists) {
     /* rendezvous: reuse existing shadow */
-    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR | O_NOFOLLOW);
-    if (hdl->shadow_fd < 0) {
-      return FSIOResult{-errno, nullptr};
+    const int fd = openat_as(dpp, identity, model, sdir_fd, leaf.c_str(),
+			     O_RDWR);
+    if (fd < 0) {
+      return FSIOResult{fd, nullptr};
     }
+    hdl->shadow_fd = fd;
     /* before anything which can fail:  this shadow is not this call's to
      * remove, and the destructor decides that from resumed_existing */
     hdl->resumed_existing = true;
@@ -12244,7 +12319,11 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   /* Ask the resolved parent directly rather than going through ent,
    * which is null for a hierarchical key even when the object is on
    * disk.  reclone() already tests it this way. */
-  bool src_exists = (::faccessat(parent_fd, leaf.c_str(), F_OK, AT_EACCESS) == 0);
+  const int src_found = exists_as(dpp, identity, model, parent_fd, leaf.c_str());
+  if (src_found < 0) {
+    return FSIOResult{src_found, nullptr};
+  }
+  bool src_exists = (src_found == 1);
 
   if (!src_exists && !(flags & FSIOObject::OPEN_FLAG_CREATE)) {
     ::close(sdir_fd);
@@ -12260,10 +12339,12 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
      * published object.  readers never construct a shadow--if a
      * writer creates one, reclone() dup2()s it onto this fd and the
      * reader follows it */
-    hdl->shadow_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY | O_NOFOLLOW);
-    if (hdl->shadow_fd < 0) {
-      return FSIOResult{-errno, nullptr};
+    const int fd = openat_as(dpp, identity, model, parent_fd, leaf.c_str(),
+			     O_RDONLY);
+    if (fd < 0) {
+      return FSIOResult{fd, nullptr};
     }
+    hdl->shadow_fd = fd;
     hdl->binding = FSIOObject::Binding::PUBLISHED;
     commit_sdir();
     return FSIOResult{0, std::move(hdl)};
@@ -12305,41 +12386,65 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
       "_" + std::to_string(fsio_build_seq.fetch_add(1));
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield, true /* excl */);
+      dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield, true /* excl */,
+      identity, as_gateway);
     if (ret < 0) {
       return FSIOResult{ret, nullptr};
     }
-    build_fd = ::openat(sdir_fd, tmp_name.c_str(), O_RDWR | O_NOFOLLOW);
+    build_fd = openat_as(dpp, identity, model, sdir_fd, tmp_name.c_str(),
+			 O_RDWR);
     if (build_fd < 0) {
-      int err = -errno;
-      ::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+      int err = build_fd;
+      (void) unlinkat_as(dpp, identity, model, sdir_fd, tmp_name.c_str());
       return FSIOResult{err, nullptr};
     }
     /* carry the source's attributes onto the clone */
-    int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY | O_NOFOLLOW);
+    int src_fd = openat_as(dpp, identity, model, parent_fd, leaf.c_str(),
+			   O_RDONLY);
     if (src_fd >= 0) {
-      copy_xattrs_fd(dpp, src_fd, build_fd);
+      (void) nsfs::with_identity_or_raise(dpp, identity, model,
+					  nsfs::AccessClass::data,
+					  RAISED_KEYDIR_CAPS, [&]() -> int {
+	return copy_xattrs_fd(dpp, src_fd, build_fd);
+      }, null_yield);
       ::close(src_fd);
     }
   } else {
     /* New object.  O_TMPFILE keeps it nameless until the link, so a
      * failure or a crash leaves nothing at all behind -- the inode is
      * reclaimed when the descriptor closes. */
-    build_fd = ::openat(sdir_fd, ".", O_TMPFILE | O_RDWR,
-			nsfs::file_create_mode());
-    if ((build_fd < 0) &&
-	((errno == EOPNOTSUPP) || (errno == EISDIR) || (errno == EINVAL))) {
+    bool raised = false;
+    build_fd = nsfs::open_as_or_raise(dpp, identity, model,
+				      nsfs::AccessClass::data,
+				      RAISED_CREATE_CAPS, sdir_fd, ".",
+				      O_TMPFILE | O_RDWR,
+				      nsfs::file_create_mode(), &raised);
+    if ((build_fd == -EOPNOTSUPP) || (build_fd == -EISDIR) ||
+	(build_fd == -EINVAL)) {
       /* filesystem without O_TMPFILE:  fall back to a named temp */
       tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
 	"_" + std::to_string(fsio_build_seq.fetch_add(1));
-      build_fd = ::openat(sdir_fd, tmp_name.c_str(),
-			  O_RDWR | O_CREAT | O_EXCL, nsfs::file_create_mode());
+      build_fd = nsfs::open_as_or_raise(dpp, identity, model,
+					nsfs::AccessClass::data,
+					RAISED_CREATE_CAPS, sdir_fd,
+					tmp_name.c_str(),
+					O_RDWR | O_CREAT | O_EXCL,
+					nsfs::file_create_mode(), &raised);
     }
     if (build_fd < 0) {
-      return FSIOResult{-errno, nullptr};
+      return FSIOResult{build_fd, nullptr};
+    }
+    if (raised) {
+      /* the gateway made it:  the identity's, before anything else is
+       * done to it as the identity */
+      if (int cret = chown_raised_object(dpp, build_fd, identity); cret < 0) {
+	::close(build_fd);
+	return FSIOResult{cret, nullptr};
+      }
     }
     if (int mret = nsfs::apply_create_mode(dpp, build_fd,
-					   nsfs::file_create_mode(), null_yield);
+					   nsfs::file_create_mode(), null_yield,
+					   identity);
 	mret < 0) {
       ::close(build_fd);
       return FSIOResult{mret, nullptr};
@@ -12356,13 +12461,18 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     std::string xname = xattr_strategy()->disk_name(RGW_ATTR_ACL);
     std::string xval = attr_on_disk(xattr_strategy(),
 				    RGW_ATTR_ACL, acl_bl);
-    if (::fsetxattr(build_fd, xname.c_str(),
-		    xval.data(), xval.size(), 0) < 0) {
-      int err = -errno;
+    if (int err = nsfs::with_identity_or_raise(dpp, identity, model,
+					       nsfs::AccessClass::data,
+					       RAISED_KEYDIR_CAPS,
+					       [&]() -> int {
+	  return (::fsetxattr(build_fd, xname.c_str(),
+			      xval.data(), xval.size(), 0) < 0) ? -errno : 0;
+	}, null_yield);
+	err < 0) {
       ::close(build_fd);
       if ((! tmp_name.empty()) &&
 	  (! driver->fsio_skip_cleanup_injected())) {
-	::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+	(void) unlinkat_as(dpp, identity, model, sdir_fd, tmp_name.c_str());
       }
       return FSIOResult{err, nullptr};
     }
@@ -12371,13 +12481,16 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   /* whatever the caller wants set at create, applied before the name
    * exists rather than by a second call afterwards */
   {
-    int ret = apply_create_spec(xattr_strategy(), dpp, driver,
-				build_fd, spec);
+    int ret = nsfs::with_identity_or_raise(dpp, identity, model,
+					   nsfs::AccessClass::data,
+					   RAISED_KEYDIR_CAPS, [&]() -> int {
+      return apply_create_spec(xattr_strategy(), dpp, driver, build_fd, spec);
+    }, null_yield);
     if (ret < 0) {
       ::close(build_fd);
       if ((! tmp_name.empty()) &&
 	  (! driver->fsio_skip_cleanup_injected())) {
-	::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+	(void) unlinkat_as(dpp, identity, model, sdir_fd, tmp_name.c_str());
       }
       return FSIOResult{ret, nullptr};
     }
@@ -12387,33 +12500,37 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   int link_rc = 0;
   if (unlikely(driver->fsio_link_fail_injected())) {
     link_rc = -EIO;
-  } else if (tmp_name.empty()) {
-    char proc_path[PATH_MAX];
-    snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", build_fd);
-    if (::linkat(AT_FDCWD, proc_path, sdir_fd, leaf.c_str(),
-		 AT_SYMLINK_FOLLOW) < 0) {
-      link_rc = -errno;
-    }
   } else {
-    if (::linkat(sdir_fd, tmp_name.c_str(), sdir_fd, leaf.c_str(), 0) < 0) {
-      link_rc = -errno;
-    }
+    link_rc = nsfs::with_identity_or_raise(dpp, identity, model,
+					   nsfs::AccessClass::data,
+					   RAISED_KEYDIR_CAPS, [&]() -> int {
+      if (tmp_name.empty()) {
+	char proc_path[PATH_MAX];
+	snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", build_fd);
+	return (::linkat(AT_FDCWD, proc_path, sdir_fd, leaf.c_str(),
+			 AT_SYMLINK_FOLLOW) < 0) ? -errno : 0;
+      }
+      return (::linkat(sdir_fd, tmp_name.c_str(), sdir_fd, leaf.c_str(),
+		       0) < 0) ? -errno : 0;
+    }, null_yield);
   }
 
   /* the temp has served its purpose on every outcome -- including an
    * injected failure, which short-circuits the link above */
   if ((! tmp_name.empty()) && (! driver->fsio_skip_cleanup_injected())) {
-    ::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+    (void) unlinkat_as(dpp, identity, model, sdir_fd, tmp_name.c_str());
   }
 
   if (link_rc == -EEXIST) {
     /* another instance forked the same shadow first.  Join the winner
      * rather than clobbering it;  this one is discarded unnamed. */
     ::close(build_fd);
-    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR | O_NOFOLLOW);
-    if (hdl->shadow_fd < 0) {
-      return FSIOResult{-errno, nullptr};
+    const int fd = openat_as(dpp, identity, model, sdir_fd, leaf.c_str(),
+			     O_RDWR);
+    if (fd < 0) {
+      return FSIOResult{fd, nullptr};
     }
+    hdl->shadow_fd = fd;
     hdl->resumed_existing = true;
     hdl->binding = FSIOObject::Binding::SHADOW;
     commit_sdir();
@@ -12552,26 +12669,25 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
     auto vlock = version_lock_recovering(dpp, driver,
 					src_obj->xattr_strategy(),
 					bucket->get_name(), parent_fd,
-					nsfs::FSIdentity::none());
+					identity);
 
-    /* No requester:  FSIO is the gateway's throughout, because
-     * librgw is not configured with rgw_nsfs_impersonate (deferred,
-     * not exempt -- inflight/n-plan.md §9.5).  So this
-     * demote links as the gateway, and it links objects the gateway
-     * wrote. */
+    /* as the handle's identity, which links the current object as an
+     * S3 overwrite's demote does (n plan D4a) */
     demote_current_version(dpp, driver->get_fs_strategy(),
 			   src_obj->xattr_strategy(),
 			   parent_fd, leaf_name,
-			   binfo.versioning_enabled(), demote, {}, nullptr,
+			   binfo.versioning_enabled(), demote, identity,
+			   driver->get_access_strategy(),
 			   null_yield,
 			   src_obj->xattr_fallback());
   }
   {
 
-  int ret = ::renameat(shadow_dir_fd, shadow_name.c_str(),
-		       parent_fd, leaf_name.c_str());
+  int ret = renameat_as(dpp, identity, driver->get_access_strategy(),
+			shadow_dir_fd, shadow_name.c_str(),
+			parent_fd, leaf_name.c_str());
   if (ret < 0) {
-    return -errno;
+    return ret;
   }
 
   /* Stamp the version id, as the S3 write path does in link_temp_file().
@@ -12595,7 +12711,13 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
       ver_id = nsfs_version_id_from_statx(vstx);
     }
     std::string vid_x = src_obj->xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-    ::fsetxattr(shadow_fd, vid_x.c_str(), ver_id.c_str(), ver_id.size(), 0);
+    (void) nsfs::with_identity_or_raise(dpp, identity,
+					driver->get_access_strategy(),
+					nsfs::AccessClass::data,
+					RAISED_KEYDIR_CAPS, [&]() -> int {
+      return (::fsetxattr(shadow_fd, vid_x.c_str(), ver_id.c_str(),
+			  ver_id.size(), 0) < 0) ? -errno : 0;
+    }, null_yield);
     src_obj->set_instance(ver_id);
   }
 
@@ -12689,8 +12811,12 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
     return 0; /* inject-skip-reclone */
   }
 
+  const nsfs::AccessStrategy* model = driver->get_access_strategy();
+  const bool as_gateway =
+    identity.active() && model->permits(nsfs::AccessClass::data);
+
   if (shadow_dir_fd < 0) {
-    shadow_dir_fd = open_shadow_dir(parent_fd);
+    shadow_dir_fd = open_shadow_dir(dpp, parent_fd, identity, model);
     if (shadow_dir_fd < 0) {
       return shadow_dir_fd;
     }
@@ -12698,27 +12824,42 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
 
   int new_fd{-1};
   bool joined{false};
-  bool src_exists =
-    (::faccessat(parent_fd, leaf_name.c_str(), F_OK, AT_EACCESS) == 0);
+  const int src_found = exists_as(dpp, identity,
+				  driver->get_access_strategy(),
+				  parent_fd, leaf_name.c_str());
+  if (src_found < 0) {
+    return src_found;
+  }
+  bool src_exists = (src_found == 1);
 
   if (src_exists) {
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, null_yield, true /* excl */);
+      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, null_yield,
+      true /* excl */, identity, as_gateway);
     if (ret == -EEXIST) {
       joined = true;
     } else if (ret < 0) {
       return ret;
     } else {
-      new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR | O_NOFOLLOW);
+      new_fd = openat_as(dpp, identity, model, shadow_dir_fd,
+			 leaf_name.c_str(), O_RDWR);
     }
   } else {
-    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(),
-		      O_RDWR | O_CREAT | O_EXCL, nsfs::file_create_mode());
-    if ((new_fd < 0) && (errno == EEXIST)) {
+    bool raised = false;
+    new_fd = nsfs::open_as_or_raise(dpp, identity, model,
+				    nsfs::AccessClass::data,
+				    RAISED_CREATE_CAPS, shadow_dir_fd,
+				    leaf_name.c_str(),
+				    O_RDWR | O_CREAT | O_EXCL,
+				    nsfs::file_create_mode(), &raised);
+    if (new_fd == -EEXIST) {
       joined = true;
     } else if (new_fd >= 0) {
-      int mret = nsfs::apply_create_mode(dpp, new_fd,
-					 nsfs::file_create_mode(), null_yield);
+      int mret = raised ? chown_raised_object(dpp, new_fd, identity) : 0;
+      if (mret == 0) {
+	mret = nsfs::apply_create_mode(dpp, new_fd, nsfs::file_create_mode(),
+				       null_yield, identity);
+      }
       if (mret < 0) {
 	::close(new_fd);
 	return mret;
@@ -12728,17 +12869,23 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
 
   if (joined) {
     /* another instance re-forked first;  adopt its shadow */
-    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR | O_NOFOLLOW);
+    new_fd = openat_as(dpp, identity, model, shadow_dir_fd,
+		       leaf_name.c_str(), O_RDWR);
   }
   if (new_fd < 0) {
-    return -errno;
+    return new_fd;
   }
 
   if (src_exists && ! joined) {
     /* copy xattrs from published object to new shadow */
-    int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY | O_NOFOLLOW);
+    int src_fd = openat_as(dpp, identity, model, parent_fd,
+			   leaf_name.c_str(), O_RDONLY);
     if (src_fd >= 0) {
-      copy_xattrs_fd(dpp, src_fd, new_fd);
+      (void) nsfs::with_identity_or_raise(dpp, identity, model,
+					  nsfs::AccessClass::data,
+					  RAISED_KEYDIR_CAPS, [&]() -> int {
+	return copy_xattrs_fd(dpp, src_fd, new_fd);
+      }, null_yield);
       ::close(src_fd);
     }
   }
@@ -12747,7 +12894,8 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
   if (::dup2(new_fd, shadow_fd) < 0) {
     int err = -errno;
     ::close(new_fd);
-    ::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0);
+    (void) unlinkat_as(dpp, identity, model, shadow_dir_fd,
+		       shadow_name.c_str());
     return err;
   }
   ::close(new_fd);
@@ -12774,22 +12922,27 @@ int NSFSObject::NSFSFSIOObject::fgetattr(const DoutPrefixProvider* dpp, const st
     return -EBADF;
   }
   std::string xname = src_obj->xattr_strategy()->disk_name(name);
-  ssize_t len = nsfs::fgetxattr(shadow_fd, xname.c_str(), nullptr, 0);
-  if (len < 0) {
-    return -errno;
-  }
-  if (len == 0) {
-    dest.clear();
+  return nsfs::with_identity_or_raise(dpp, identity,
+				      driver->get_access_strategy(),
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS, [&]() -> int {
+    ssize_t len = ::fgetxattr(shadow_fd, xname.c_str(), nullptr, 0);
+    if (len < 0) {
+      return -errno;
+    }
+    if (len == 0) {
+      dest.clear();
+      return 0;
+    }
+    bufferptr bp(len);
+    len = ::fgetxattr(shadow_fd, xname.c_str(), bp.c_str(), len);
+    if (len < 0) {
+      return -errno;
+    }
+    bp.set_length(len);
+    dest.push_back(std::move(bp));
     return 0;
-  }
-  bufferptr bp(len);
-  len = nsfs::fgetxattr(shadow_fd, xname.c_str(), bp.c_str(), len);
-  if (len < 0) {
-    return -errno;
-  }
-  bp.set_length(len);
-  dest.push_back(std::move(bp));
-  return 0;
+  }, null_yield);
 }
 
 int NSFSObject::NSFSFSIOObject::fsetattr(const DoutPrefixProvider* dpp, const std::string& name,
@@ -12808,11 +12961,13 @@ int NSFSObject::NSFSFSIOObject::fsetattr(const DoutPrefixProvider* dpp, const st
   }
   std::string xname = src_obj->xattr_strategy()->disk_name(name);
   std::string sval = attr_on_disk(src_obj->xattr_strategy(), name, val);
-  if (::fsetxattr(shadow_fd, xname.c_str(),
-		   sval.data(), sval.size(), 0) < 0) {
-    return -errno;
-  }
-  return 0;
+  return nsfs::with_identity_or_raise(dpp, identity,
+				      driver->get_access_strategy(),
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS, [&]() -> int {
+    return (::fsetxattr(shadow_fd, xname.c_str(),
+			sval.data(), sval.size(), 0) < 0) ? -errno : 0;
+  }, null_yield);
 }
 
 int NSFSObject::NSFSFSIOObject::fgetattrs(const DoutPrefixProvider* dpp, Attrs& attrs, uint32_t flags)
@@ -12820,7 +12975,13 @@ int NSFSObject::NSFSFSIOObject::fgetattrs(const DoutPrefixProvider* dpp, Attrs& 
   if (shadow_fd < 0) {
     return -EBADF;
   }
-  return get_x_attrs(null_yield, dpp, shadow_fd, attrs, shadow_name, src_obj->xattr_strategy());
+  return nsfs::with_identity_or_raise(dpp, identity,
+				      driver->get_access_strategy(),
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS, [&]() -> int {
+    return get_x_attrs(null_yield, dpp, shadow_fd, attrs, shadow_name,
+		       src_obj->xattr_strategy());
+  }, null_yield);
 }
 
 int NSFSObject::NSFSFSIOObject::fsetattrs(const DoutPrefixProvider* dpp, Attrs& attrs, uint32_t flags)
@@ -12828,18 +12989,23 @@ int NSFSObject::NSFSFSIOObject::fsetattrs(const DoutPrefixProvider* dpp, Attrs& 
   if (shadow_fd < 0) {
     return -EBADF;
   }
-  for (auto& [key, bl] : attrs) {
-    if (!bl.length()) {
-      continue; /* empty value means "leave this attr alone" */
+  return nsfs::with_identity_or_raise(dpp, identity,
+				      driver->get_access_strategy(),
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS, [&]() -> int {
+    for (auto& [key, bl] : attrs) {
+      if (!bl.length()) {
+	continue; /* empty value means "leave this attr alone" */
+      }
+      std::string xname = src_obj->xattr_strategy()->disk_name(key);
+      std::string xval = attr_on_disk(src_obj->xattr_strategy(), key, bl);
+      if (::fsetxattr(shadow_fd, xname.c_str(),
+		      xval.data(), xval.size(), 0) < 0) {
+	return -errno;
+      }
     }
-    std::string xname = src_obj->xattr_strategy()->disk_name(key);
-    std::string xval = attr_on_disk(src_obj->xattr_strategy(), key, bl);
-    if (::fsetxattr(shadow_fd, xname.c_str(),
-		     xval.data(), xval.size(), 0) < 0) {
-      return -errno;
-    }
-  }
-  return 0;
+    return 0;
+  }, null_yield);
 }
 
 int NSFSObject::NSFSFSIOObject::fremovexattr(const DoutPrefixProvider* dpp, const std::string& name,
@@ -12849,10 +13015,12 @@ int NSFSObject::NSFSFSIOObject::fremovexattr(const DoutPrefixProvider* dpp, cons
     return -EBADF;
   }
   std::string xname = src_obj->xattr_strategy()->disk_name(name);
-  if (::fremovexattr(shadow_fd, xname.c_str()) < 0) {
-    return -errno;
-  }
-  return 0;
+  return nsfs::with_identity_or_raise(dpp, identity,
+				      driver->get_access_strategy(),
+				      nsfs::AccessClass::data,
+				      RAISED_KEYDIR_CAPS, [&]() -> int {
+    return (::fremovexattr(shadow_fd, xname.c_str()) < 0) ? -errno : 0;
+  }, null_yield);
 }
 
 int NSFSObject::NSFSFSIOObject::ftruncate(const DoutPrefixProvider* dpp,
@@ -12882,9 +13050,11 @@ int NSFSObject::NSFSFSIOObject::discard(const DoutPrefixProvider* dpp,
    * a new one rather than rendezvousing with this (doomed) view */
   if (binding != Binding::PUBLISHED &&
       shadow_dir_fd >= 0 && !shadow_name.empty()) {
-    if ((::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0) < 0) &&
-	(errno != ENOENT)) {
-      return -errno;
+    const int ret = unlinkat_as(dpp, identity,
+				driver->get_access_strategy(),
+				shadow_dir_fd, shadow_name.c_str());
+    if ((ret < 0) && (ret != -ENOENT)) {
+      return ret;
     }
   }
 
@@ -12900,7 +13070,8 @@ int NSFSObject::NSFSFSIOObject::close(const DoutPrefixProvider* dpp, uint32_t fl
 
   if (!doomed && binding == Binding::SHADOW && ephemeral &&
       !resumed_existing && shadow_dir_fd >= 0 && !shadow_name.empty()) {
-    ::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0);
+    (void) unlinkat_as(dpp, identity, driver->get_access_strategy(),
+		       shadow_dir_fd, shadow_name.c_str());
   }
 
   if (shadow_fd >= 0) {
@@ -12918,7 +13089,7 @@ int NSFSObject::NSFSFSIOObject::close(const DoutPrefixProvider* dpp, uint32_t fl
 
 NSFSObject::NSFSFSIOObject::~NSFSFSIOObject()
 {
-  close(nullptr, CLOSE_FLAG_DETACH);
+  close(driver->get_dpp(), CLOSE_FLAG_DETACH);
 }
 
 bool NSFSObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,

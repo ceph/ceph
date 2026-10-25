@@ -5185,6 +5185,64 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysRenameIsRaised)
       << "the history did not follow the leaf";
 }
 
+/* FSIO in a key directory an identity made (n plan D4a).  Under
+ * impersonation the directory is its owner's at 0770, so a handle
+ * opened as the gateway cannot make `.shadow` in it, and FSIO fails on
+ * every key directory an identity made.  D4a carries librgw's mount
+ * user -- here the owner -- through the handle, and `.shadow` is made
+ * as `.versions` is:  the owner's at 0770. */
+TEST_F(NSFSImpersonatedRenameTest, FSIOWritesInTheOwnersKeyDirectory)
+{
+  /* on a thread of its own, as put_as():  the profile change takes
+   * read-search for the thread it runs on, which would spoil the
+   * control below */
+  int hret = 0, lret = 0;
+  std::thread raiser([&] {
+    std::map<std::string, std::string> out;
+    hret = driver->driver_hint(env->dpp, "bucket-profile",
+			       {{"bucket", testname}, {"profile", "strong"}},
+			       &out);
+    lret = driver->load_bucket(env->dpp, rgw_bucket{"", testname}, &bucket,
+			       null_yield);
+  });
+  raiser.join();
+  ASSERT_EQ(hret, 0);
+  ASSERT_EQ(lret, 0);
+  ASSERT_TRUE(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+		  ->has_extension(nsfs::EXT_SHADOW));
+
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_EQ(owned("src").uid, owner_uid);
+  ASSERT_EQ(gateway_open_on_a_fresh_thread("src"), -EACCES)
+      << "the gateway could walk the owner's key directory itself, so "
+	 "this does not show whose credentials FSIO ran with";
+
+  int rc = 0, crc = 0, prc = 0;
+  std::thread fsio([&] {
+    auto obj = bucket->get_object(rgw_obj_key("src/k"));
+    auto [r, hdl] = obj->get_fsio_handle(
+	env->dpp, alice, rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    rc = r;
+    if (r == 0) {
+      crc = hdl->commit(env->dpp,
+			rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE);
+      prc = hdl->publish(env->dpp,
+			 rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+      hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+    }
+  });
+  fsio.join();
+
+  ASSERT_EQ(rc, 0) << "FSIO could not open the owner's object to write: "
+		   << cpp_strerror(-rc);
+  EXPECT_EQ(crc, 0) << "commit";
+  EXPECT_EQ(prc, 0) << "publish";
+  const Owned shadow = owned("src/.shadow");
+  ASSERT_EQ(shadow.err, 0) << "no .shadow in the owner's key directory";
+  EXPECT_EQ(shadow.uid, owner_uid) << ".shadow is not the owner's";
+  EXPECT_EQ(shadow.mode, 0770u) << ".shadow is not made as .versions is";
+}
+
 /* Recovery is the gateway's (raise site 5):  it moves version entries
  * another identity wrote, under whichever request takes the version
  * lock next.  Here the owner's own move is interrupted after one

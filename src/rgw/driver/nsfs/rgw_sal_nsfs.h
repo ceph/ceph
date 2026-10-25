@@ -811,6 +811,20 @@ class NSFSDriver : public StoreDriver {
 
 protected:
   CephContext *cct;
+  /* The prefix for work that belongs to no request:  an FSIO handle is
+   * shared, and its destructor runs wherever the last reference drops,
+   * as late as an RGWFileHandle's reclaim.  It reads `cct` at each
+   * call, so it follows set_context(). */
+  class DriverPrefix : public DoutPrefixProvider {
+    const NSFSDriver& driver;
+  public:
+    explicit DriverPrefix(const NSFSDriver& driver) : driver(driver) {}
+    CephContext* get_cct() const override { return driver.cct; }
+    unsigned get_subsys() const override { return ceph_subsys_rgw; }
+    std::ostream& gen_prefix(std::ostream& out) const override {
+      return out << "nsfs driver: ";
+    }
+  } driver_prefix{*this};
   /* the driver's database.  An IdentityDB rather than a plain
    * POSIXUserDB:  same file, same connection, one extra table for the
    * Scale data an identity carries. */
@@ -1064,6 +1078,8 @@ public:
       ::close(base_fd);
     }
   }
+
+  const DoutPrefixProvider* get_dpp() const { return &driver_prefix; }
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -2725,6 +2741,10 @@ public:
     * destruction, and a bucket drains as its write handles are
     * released.  Empty on a read handle, which mutates nothing. */
    std::optional<NSFSMutationGuard> gate;
+   /* who the handle is for (n plan D4a):  librgw's mount user, pinned
+    * at get_fsio_handle() and held for the handle's life;  every call
+    * on the tree runs as it, and as the gateway where it is inactive */
+   nsfs::FSIdentity identity;
 
    friend class NSFSObject;
 
