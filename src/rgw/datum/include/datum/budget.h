@@ -100,15 +100,25 @@ public:
     }
 
 public:
-    constexpr void charge(const resource kind, const std::size_t amount)
+    // Refusal preserves usage. A valid resource is required even for a zero charge.
+    [[nodiscard]] constexpr bool try_charge(const resource kind, const std::size_t amount)
     {
         const auto maximum = limits.maximum(kind);
         auto& current = usage[static_cast<std::size_t>(kind)];
         if (amount > std::numeric_limits<std::size_t>::max() - current ||
-            (maximum && (current > *maximum || amount > *maximum - current))) {
-            throw std::length_error {"data resource budget exceeded"};
+            (maximum && amount > *maximum - current)) {
+            return false;
         }
         current += amount;
+
+        return true;
+    }
+
+    constexpr void charge(const resource kind, const std::size_t amount)
+    {
+        if (!try_charge(kind, amount)) {
+            throw std::length_error {"data resource budget exceeded"};
+        }
     }
 
 public:
@@ -127,6 +137,7 @@ struct unlimited_budget final
     };
 
 public:
+    [[nodiscard]] constexpr bool try_charge(resource, std::size_t) const noexcept { return true; }
     constexpr void charge(resource, std::size_t) const noexcept {}
 
 public:

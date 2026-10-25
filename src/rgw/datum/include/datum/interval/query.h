@@ -1684,7 +1684,7 @@ constexpr void evaluate_to(const ExprT& source, workspace<expression_domain_t<Ex
 }
 
 // Only admitted sequences and native intervals certify stable endpoint storage.
-// Foreign interval getters keep their existing observation/materialization path.
+// Foreign interval accessors keep their existing observation/materialization path.
 template <expression ExprT>
 consteval bool streamable_expression()
 {
@@ -1744,7 +1744,7 @@ public:
     class iterator final
     {
         // Postincrement must snapshot descriptors before advancing child caches.
-        // Value-returning getters keep bounds_of(*cursor++) independent of this proxy.
+        // Value-returning accessors keep bounds_of(*cursor++) independent of this proxy.
         struct post_increment final
         {
             using domain_type = domain;

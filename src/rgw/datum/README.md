@@ -152,7 +152,7 @@ intermediate bounds from the original leaf storage. A bound sink receives them
 without intermediate allocation or endpoint copies; an ordinary callable still
 receives canonical interval values. The internal cursors are input ranges, with
 operation selection and composition resolved at compile time. Foreign interval
-getters keep their observation and materialization path. Explicit `evaluate()`
+accessors keep their observation and materialization path. Explicit `evaluate()`
 with a workspace retains intermediate values and enforces its work and entry
 limits before publication. Default streaming traversal has no workspace or
 work-budget bookkeeping.
@@ -312,6 +312,10 @@ const auto scan = datum::traversal::scan_range(
 `resource_budget` charges cumulative input/payload bytes, elements, requested
 allocation bytes and work; `enter_depth()` checks and unwinds current nesting.
 Failed charges preserve that counter and throw before the corresponding work.
+For ordinary admission, `try_charge(resource, amount)` returns whether the charge was applied.
+Refusal leaves usage unchanged, including when the total would exceed its representable range.
+Use `charge()` when refusal must abort the operation; changing its return type would let
+unchecked guards continue after refusal. The bounded budget rejects invalid resource identifiers.
 Codecs and allocators must cooperate: the counters do not observe arbitrary heap
 allocations. The accounting model is cumulative requested bytes, not live memory.
 Templated operations can accept `unlimited_budget` to elide charges entirely.
@@ -320,11 +324,17 @@ Byte cursor reads preflight the requested length, then copy and advance in one
 fragment traversal. No flattening or allocation is introduced. If observing a
 later fragment throws, already copied bytes and the cursor's consumed prefix
 remain; a bookmark can restore the position when the binding permits replay.
-Scalar diagnostic redaction skips getters when no size is needed.
+Scalar diagnostic redaction skips field access when no size is needed.
 
 `traversal::for_each_page()` separately handles explicit cursor progress,
 cancellation, limits, throwing readers and `std::expected` failures. Readers and
 visitors own their effects; traversal does not establish a durable commit.
+Completion, stopping, cancellation, and page limits are ordinary result states.
+An expected reader failure carries its error, resume state, and prior page count;
+exceptions from a visitor still propagate without inventing a safe replay position.
+Use an optional for ordinary absence, a Boolean for admission, and an expected when
+the caller must distinguish a useful value from a handled failure. These mechanisms
+do not imply rollback, and allocation or consumer callbacks can still throw.
 
 ## Canonical operands and evaluation
 
@@ -348,7 +358,7 @@ Lvalue canonical expression operands are borrowed; temporaries are retained.
 Default observation of `difference(source, source)` for the same admitted object
 returns an empty result without visiting endpoints, including noncontiguous ranges
 and nested expressions. Explicit workspace evaluation keeps its preparation and
-accounting, and unadmitted foreign getters retain their ordinary error behavior.
+accounting, and unadmitted foreign accessors retain their ordinary error behavior.
 Canonical sweeps are linear, and a connected union tree sorts at most once. Boundary sinks
 borrow endpoints during each call; callable interval sinks receive point values.
 Prepared relations do not normalize again. `visit_intervals` infers the range's
@@ -464,7 +474,10 @@ enrollment remain in SALAD headers.
 
 `render::to_bytes()` and `from_bytes()` retain the existing contiguous-buffer
 convenience API, including aggregate envelopes and explicit codecs. Decode errors
-and trailing bytes throw `std::runtime_error`. Decoding establishes representation,
+retain `std::system_error` and its error code; trailing bytes report `std::errc::bad_message`.
+These exceptions remain catchable as `std::runtime_error`. Callers that inspect codec status
+directly can use the existing archive/`serialize_schema()` hooks without an exception conversion.
+Decoding establishes representation,
 not semantic admission; decoding into an existing value can partly mutate it on
 failure. Fixed-span output returns the written subspan and avoids resizing.
 Fragmented byte ranges use explicit caller-provided contiguous staging for zpp;
@@ -473,6 +486,9 @@ overflow may leave a written prefix. Sources and destinations must not overlap.
 `decode_bounded<T, MaximumContainerBytes>(bytes, maximum_input_bytes)` returns a
 candidate only after full decoding; the codec allocation limit is per container,
 not an aggregate memory/admission budget. Its wire enrollment/order is unchanged.
+An exceeded input-byte limit still throws `std::length_error`. A malformed representation is
+an error even when checking candidate input is routine; the binding chooses how to expose
+that failure. Missing records, rejected admission, and end-of-traversal are separate outcomes.
 
 `view_of<Record>` uses C++26 aggregate generation for named member projections and
 an ordinary lvalue-only constructor. The default member profile is `const T&`;
@@ -499,7 +515,7 @@ approved source member to the generated member during constant evaluation;
 unrelated records with matching field names and temporary sources are rejected.
 Generated members are initialized directly from their projections, without moving
 an intermediate aggregate. Immovable value projections are usable too. Construction
-is conditionally `noexcept` according to the getters; explicitly moving an existing
+is conditionally `noexcept` according to the accessors; explicitly moving an existing
 view still moves its chosen representation. Throwing consumer projections remain usable.
 
 For local conversions between known record types, prefer ordinary aggregate

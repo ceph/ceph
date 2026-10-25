@@ -894,7 +894,7 @@ TEST_CASE("interval counting observes bounds without retaining point values", "[
         {
             ++observations;
             if (fail) {
-                throw std::runtime_error {"getter failure"};
+                throw std::runtime_error {"accessor failure"};
             }
 
             return value.lower();
@@ -1058,7 +1058,7 @@ TEST_CASE("canonical self subtraction needs no endpoint observation", "[datum][c
         {
             ++calls;
             if (fail) {
-                throw std::runtime_error {"getter failure"};
+                throw std::runtime_error {"accessor failure"};
             }
 
             return value.lower();
@@ -1536,7 +1536,7 @@ TEST_CASE("copy-only retention copies each endpoint once before collection")
     CHECK(iv::contains(collected[0], copy_only_point {4}));
 }
 
-TEST_CASE("materialization preserves the foreign getter observation order")
+TEST_CASE("materialization preserves the foreign accessor observation order")
 {
     struct traced_bound final
     {

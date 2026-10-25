@@ -152,6 +152,17 @@ struct schema_value<SchemaT>
 template <typename T>
 using schema_value_t = typename schema_value<T>::type;
 
+// Complete-message endpoints share the codec's error code and reject trailing bytes.
+template <typename ArchiveT, typename ValueT>
+constexpr void decode_complete(ArchiveT& archive, ValueT& value, const std::size_t size)
+{
+    archive(value).or_throw();
+    if (size != archive.position()) [[unlikely]] {
+        throw std::system_error {std::make_error_code(std::errc::bad_message),
+                                 "binary input contains trailing data"};
+    }
+}
+
 } // ceph::salad::datum::serialization_detail
 
 namespace ceph::salad::datum::render {
@@ -180,13 +191,11 @@ concept serializable = requires(const std::remove_cvref_t<T>& value) { serialize
 
 template <typename T, binary_output_buffer BufferT>
 constexpr void to_bytes(const T& value, BufferT& out_data)
-try {
+{
     out_data.clear();
 
     zpp::bits::out out(out_data);
     out(value).or_throw();
-} catch (const std::system_error& e) {
-    throw std::runtime_error {e.what()};
 }
 
 // Fixed initialized storage avoids resize/zero-fill. Overflow throws and may
@@ -194,13 +203,11 @@ try {
 template <typename T, byte_value ByteT, std::size_t Extent>
 requires (!std::is_const_v<ByteT>) && zpp::bits::concepts::byte_type<ByteT>
 constexpr std::span<ByteT> to_bytes(const T& value, std::span<ByteT, Extent> storage)
-try {
+{
     zpp::bits::out out(storage);
     out(value).or_throw();
 
     return storage.first(out.position());
-} catch (const std::system_error& e) {
-    throw std::runtime_error {e.what()};
 }
 
 // zpp requires contiguous storage. Fragment adaptation deliberately exposes
@@ -259,15 +266,9 @@ constexpr binary_buffer to_bytes(const typename SchemaT::record_type& value)
 
 template <typename T, zpp::bits::concepts::byte_type ByteT, std::size_t Extent>
 constexpr void from_bytes(const std::span<ByteT, Extent> bytes, T& value)
-try {
+{
     zpp::bits::in in(bytes);
-    in(value).or_throw();
-
-    if (std::size(bytes) != in.position()) [[unlikely]] {
-        throw std::runtime_error {"binary input contains trailing data"};
-    }
-} catch (const std::system_error& e) {
-    throw std::runtime_error {e.what()};
+    serialization_detail::decode_complete(in, value, std::size(bytes));
 }
 
 template <typename T>
@@ -312,7 +313,7 @@ template <typename T, std::size_t MaximumContainerBytes, zpp::bits::concepts::by
 requires candidate_value<serialization_detail::schema_value_t<T>>
 constexpr serialization_detail::schema_value_t<T> decode_bounded(std::span<ByteT, Extent> bytes,
                                                                  std::size_t maximum_input_bytes)
-try {
+{
     if (std::size(bytes) > maximum_input_bytes) {
         throw std::length_error {"binary input exceeds its byte limit"};
     }
@@ -320,19 +321,14 @@ try {
     zpp::bits::in in(bytes, zpp::bits::alloc_limit<MaximumContainerBytes> {});
     if constexpr (binary_schema_type<T>) {
         auto selected = serialization_detail::bind_schema<T>(candidate);
-        in(selected).or_throw();
+        serialization_detail::decode_complete(in, selected, std::size(bytes));
     }
 
     if constexpr (!binary_schema_type<T>) {
-        in(candidate).or_throw();
-    }
-    if (std::size(bytes) != in.position()) {
-        throw std::runtime_error {"binary input contains trailing data"};
+        serialization_detail::decode_complete(in, candidate, std::size(bytes));
     }
 
     return candidate;
-} catch (const std::system_error& e) {
-    throw std::runtime_error {e.what()};
 }
 
 template <typename T, std::size_t MaximumContainerBytes>

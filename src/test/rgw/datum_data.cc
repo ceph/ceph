@@ -28,6 +28,7 @@
 #include <expected>
 #include <optional>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 #include <array>
@@ -431,6 +432,51 @@ TEST_CASE("aggregate charges reject before work and unwind nesting")
     unbounded.charge(datum::resource::work, std::numeric_limits<std::size_t>::max());
     CHECK_THROWS_AS(unbounded.charge(datum::resource::work, 1), std::length_error);
     CHECK_THROWS_AS(unbounded.charge(static_cast<datum::resource>(99), 0), std::invalid_argument);
+}
+
+TEST_CASE("budget admission distinguishes refusal from strict guard failure", "[datum][budget]")
+{
+    for (const auto resource : {datum::resource::input_bytes, datum::resource::payload_bytes,
+                                datum::resource::elements, datum::resource::allocation_bytes,
+                                datum::resource::work, datum::resource::depth}) {
+        datum::resource_budget budget {{.input_bytes = 3, .payload_bytes = 3, .elements = 3,
+                                       .allocation_bytes = 3, .work = 3, .depth = 3}};
+        CHECK(budget.try_charge(resource, 2));
+        CHECK_FALSE(budget.try_charge(resource, 2));
+        CHECK(budget.used(resource) == 2);
+        CHECK(budget.try_charge(resource, 1));
+        CHECK(budget.try_charge(resource, 0));
+        CHECK_FALSE(budget.try_charge(resource, 1));
+        CHECK_THROWS_AS(budget.charge(resource, 1), std::length_error);
+        CHECK(budget.used(resource) == 3);
+    }
+
+    datum::resource_budget zero {{.elements = 0}};
+    CHECK(zero.try_charge(datum::resource::elements, 0));
+    CHECK_FALSE(zero.try_charge(datum::resource::elements, 1));
+    CHECK(zero.used(datum::resource::elements) == 0);
+    CHECK_THROWS_AS(zero.try_charge(static_cast<datum::resource>(99), 0), std::invalid_argument);
+
+    datum::resource_budget unbounded;
+    CHECK(unbounded.try_charge(datum::resource::work, 1));
+    CHECK_FALSE(unbounded.try_charge(datum::resource::work,
+                                     std::numeric_limits<std::size_t>::max()));
+    CHECK(unbounded.used(datum::resource::work) == 1);
+    CHECK(unbounded.try_charge(datum::resource::work, std::numeric_limits<std::size_t>::max() - 1));
+    CHECK_FALSE(unbounded.try_charge(datum::resource::work, 1));
+    CHECK_THROWS_AS(unbounded.charge(datum::resource::work, 1), std::length_error);
+    CHECK(unbounded.used(datum::resource::work) == std::numeric_limits<std::size_t>::max());
+
+    constexpr auto admit = [](auto& budget) {
+        return budget.try_charge(datum::resource::elements, 1);
+    };
+    static_assert([&] {
+        datum::resource_budget budget {{.elements = 1}};
+        return admit(budget) && !admit(budget);
+    }());
+    constexpr datum::unlimited_budget unlimited;
+    static_assert(admit(unlimited));
+    static_assert(noexcept(unlimited.try_charge(datum::resource::elements, 1)));
 }
 
 TEST_CASE("scan distinguishes skipped consumed and rejected rows")
@@ -1641,12 +1687,12 @@ template <>
 struct display_schema<datum_fmt_test::hidden_scalar>
 {
     static constexpr std::string_view name = "hidden";
-    static constexpr auto getter = [](const auto& value) -> int {
+    static constexpr auto accessor = [](const auto& value) -> int {
         ++*value.observations;
         throw std::runtime_error {"unnecessary observation"};
     };
     static constexpr auto fields =
-        std::tuple {display_field<getter, display_field_policy::redacted> {"value"}};
+        std::tuple {display_field<accessor, display_field_policy::redacted> {"value"}};
 };
 template <>
 struct display_schema<datum_fmt_test::enrolled_range>
@@ -1903,7 +1949,7 @@ TEST_CASE("reflected diagnostics observe bit fields as values", "[datum][fmt]")
     CHECK(fmt::format("{}", datum_fmt_test::flags {1, 5}) == "flags{ready=1, mode=5}");
 }
 
-TEST_CASE("redacting a scalar skips its unneeded getter", "[datum][fmt]")
+TEST_CASE("redacting a scalar skips its unneeded accessor", "[datum][fmt]")
 {
     std::size_t observations = 0;
     CHECK(fmt::format("{}", datum_fmt_test::hidden_scalar {&observations}) ==
@@ -3557,6 +3603,10 @@ struct ticks
 {
     std::int64_t count;
 };
+struct failing_field final
+{
+    int value = 0;
+};
 struct clock_record
 {
     ticks value;
@@ -3795,6 +3845,16 @@ struct binary_schema<datum_test::record>
      static constexpr auto apply(auto& archive, auto& value) { return archive(value.count); }
 
  };
+ template <>
+ struct binary_field_codec<datum_test::failing_field>
+ {
+     static zpp::bits::errc apply(auto&, auto&)
+     {
+         throw std::system_error {std::make_error_code(std::errc::permission_denied),
+                                  "custom field representation"};
+     }
+
+ };
 #endif
 template <>
 struct binary_schema<datum_test::clock_record>
@@ -3956,8 +4016,8 @@ TEST_CASE("generated views construct projections directly without intermediate m
     static_assert(std::is_nothrow_constructible_v<datum::view_of<R>, const R&>);
     static_assert(!std::is_nothrow_constructible_v<datum::view_of<F>, const F&>);
     static_assert(std::is_nothrow_constructible_v<datum::view_of<M>, const M&>);
-    const F failing_getter {{7, true}};
-    CHECK_THROWS_AS(datum::view_of {failing_getter}, std::runtime_error);
+    const F failing_accessor {{7, true}};
+    CHECK_THROWS_AS(datum::view_of {failing_accessor}, std::runtime_error);
     const M valid {{7, true}};
     datum::view_of view {valid};
     CHECK(view.value.value == 7);
@@ -4123,6 +4183,43 @@ TEST_CASE("Datum consumer schemas display and round-trip unrelated owning record
 }
 
 #ifdef DATUM_HAVE_ZPP
+ TEST_CASE("codec failures retain structured errors and complete-input checks", "[datum][codec]")
+ {
+     const auto check_error = [](auto&& operation, const std::errc expected) {
+         bool caught = false;
+         try {
+             operation();
+         } catch (const std::system_error& error) {
+             caught = true;
+             CHECK(error.code() == std::make_error_code(expected));
+         }
+         CHECK(caught);
+     };
+     const datum_test::record source {"structured errors", 7};
+     const auto bytes = datum::render::to_bytes(source);
+     const auto incomplete = std::span {bytes}.first(1);
+     check_error([&] { datum::render::from_bytes<datum_test::record>(incomplete); },
+                 std::errc::result_out_of_range);
+     check_error([&] { datum::render::decode_bounded<datum_test::record, 4>(bytes, bytes.size()); },
+                 std::errc::message_size);
+     std::array<std::uint8_t, 1> storage;
+     check_error([&] { datum::render::to_bytes(source, std::span {storage}); },
+                 std::errc::result_out_of_range);
+     auto trailing = bytes;
+     trailing.push_back(0);
+     check_error([&] { datum::render::from_bytes<datum_test::record>(trailing); },
+                 std::errc::bad_message);
+     check_error([&] { datum::render::decode_bounded<datum_test::record, 128>(trailing, 512); },
+                 std::errc::bad_message);
+
+     struct custom_record final { datum_test::failing_field field; };
+     using wire = datum::binary_fields<&custom_record::field>;
+     datum::render::binary_buffer output;
+     check_error([&] { datum::render::to_bytes<wire>(custom_record {}, output); },
+                 std::errc::permission_denied);
+     check_error([&] { datum::render::from_bytes<wire>(bytes); }, std::errc::permission_denied);
+ }
+
  TEST_CASE("Datum field representations are selected by consumer profiles", "[datum][codec]")
  {
      const datum_test::clock_record value {{123}};
