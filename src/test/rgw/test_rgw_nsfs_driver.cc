@@ -12193,6 +12193,78 @@ TEST_F(NooBaaStoreTest, AStoreOnDiskReadsWithoutComplaint)
   }
 }
 
+/* A store root owns, at NooBaa's modes -- 0700 directories, 0600 files,
+ * config.js `BASE_MODE_CONFIG_*` -- reads whole:  raise site 7.  The
+ * premise is that the gateway, unraised, cannot open one record of it.
+ * Each on a thread of its own, as every read-search case is. */
+TEST_F(NooBaaStoreTest, AStoreRootOwnsReadsWhole)
+{
+  const std::string id = "6ac7cb27fd4af356919110a3";
+  add_identity(id, NB_ACCOUNT_PLAIN);
+  add_bucket("a-bucket", R"({"_id":"1","name":"a-bucket","versioning":"ENABLED"})");
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+  const std::vector<std::string> dirs = {
+    store, store + "/identities", store + "/identities/" + id,
+    store + "/buckets"};
+  const std::vector<std::string> files = {
+    store + "/master_keys.json", store + "/buckets/a-bucket.json",
+    store + "/identities/" + id + "/identity.json"};
+  /* NooBaa's directory mode while the directories are still ours */
+  for (const auto& d : dirs) {
+    ASSERT_EQ(::chmod(d.c_str(), 0700), 0) << d;
+  }
+  /* files before their directories:  once a directory is root's at
+   * 0700, what is in it is reached only with read-search */
+  auto give = [&](uid_t u, gid_t g) {
+    return with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  for (const auto* list : {&files, &dirs}) {
+	    for (auto it = list->rbegin(); it != list->rend(); ++it) {
+	      if (::lchown(it->c_str(), u, g) < 0) {
+		return -errno;
+	      }
+	    }
+	  }
+	  return 0;
+	});
+  };
+  const int given = give(0, 0);
+  if (given == -EPERM) {
+    GTEST_SKIP() << "CAP_CHOWN is not permitted, so the store cannot be "
+		    "made root's;  setcap the unit binary";
+  }
+  ASSERT_EQ(given, 0);
+  auto restore = make_scope_guard([&] { (void) give(::getuid(), ::getgid()); });
+
+  int premise = 0;
+  std::thread([&] {
+    const int fd = ::open(files[0].c_str(), O_RDONLY | O_CLOEXEC);
+    premise = (fd < 0) ? errno : 0;
+    if (fd >= 0) {
+      ::close(fd);
+    }
+  }).join();
+  ASSERT_EQ(premise, EACCES)
+      << "the root-owned store opened unraised, so nothing here is tested";
+
+  nsfs::NooBaaStoreContents c;
+  int ret = -1;
+  std::thread([&] {
+    nsfs::NooBaaConfigStore cs(store);
+    ret = cs.read(env->dpp, c);
+  }).join();
+  ASSERT_EQ(ret, 0);
+  std::string complaints;
+  for (const auto& u : c.unreadable) {
+    complaints += "\n  " + u.path + ": " + u.why;
+  }
+  EXPECT_TRUE(c.unreadable.empty()) << complaints;
+  EXPECT_EQ(c.identities.size(), 1u);
+  EXPECT_EQ(c.buckets.size(), 1u);
+  EXPECT_TRUE(c.master_keys_present);
+}
+
 /* Nothing in the store is written, which is the whole of I1's
  * contract.
  *
