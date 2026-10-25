@@ -5244,6 +5244,140 @@ TEST_F(NSFSImpersonatedRenameTest, FSIOWritesInTheOwnersKeyDirectory)
   EXPECT_EQ(shadow.mode, 0770u) << ".shadow is not made as .versions is";
 }
 
+/* Lifecycle (n plan Phase F):  work no request asked for carries no
+ * authenticated user, and names whom it is done for -- the bucket's
+ * owner -- in `on_behalf_of`.  These build the operations as
+ * rgw_lc.cc does, with the identity under test named directly. */
+static const rgw_user lifecycle_nobody{"", "lc-nobody-has-a-row"};
+
+/* A lifecycle delete runs as whom it is for, and refuses one with no
+ * row rather than running as the gateway. */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleDeleteRunsAsWhomItIsFor)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  auto lc_delete = [this](const rgw_user& for_whom) {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k"));
+      auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+      del->params.versioning_status = bucket->get_info().versioning_status();
+      del->params.bucket_owner = rgw_owner{for_whom};
+      del->params.on_behalf_of = rgw_owner{for_whom};
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    t.join();
+    return ret;
+  };
+
+  const int nret = lc_delete(lifecycle_nobody);
+  EXPECT_EQ(nret, -EACCES) << "work for an owner with no row was not "
+      "refused: " << cpp_strerror(-nret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the refused delete removed the object";
+
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "ran-as",
+				{{"select", alice.to_str()}}, &out), 0);
+  const int ret = lc_delete(alice);
+  ASSERT_EQ(ret, 0) << "the delete failed: " << cpp_strerror(-ret);
+  out.clear();
+  EXPECT_EQ(driver->driver_hint(env->dpp, "ran-as", {}, &out), 0);
+  EXPECT_EQ(out["ran_as_delete"], std::to_string(owner_uid))
+      << "the delete did not run as whom it was for";
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+}
+
+/* A lifecycle abort runs as whom it is for:  one with no row is
+ * refused and the upload stays, where an abort for nobody would run
+ * as the gateway (the bucket-delete path's). */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleAbortRunsAsWhomItIsFor)
+{
+  const std::string objname = "mpk";
+  rgw_placement_rule placement;
+  {
+    auto upload = bucket->get_multipart_upload(objname, alice, "abcdef");
+    std::thread t([&] {
+      Attrs attrs;
+      ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement,
+			     attrs), 0);
+      auto w = upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+				  &placement, 1, "1", alice);
+      ASSERT_EQ(w->prepare(null_yield), 0);
+      bufferlist bl;
+      bl.append("part one");
+      const size_t len = bl.length();
+      ASSERT_EQ(w->process(std::move(bl), 0), 0);
+      ASSERT_EQ(w->process({}, len), 0);
+      ceph::real_time mtime;
+      Attrs pa;
+      req_context rctx{env->dpp, null_yield, nullptr};
+      std::string etag = "1";
+      ASSERT_EQ(w->complete(len, etag, &mtime, real_time(), pa, std::nullopt,
+			    real_time(), nullptr, nullptr, nullptr, nullptr,
+			    nullptr, rctx, 0), 0);
+    });
+    t.join();
+    ASSERT_FALSE(HasFatalFailure());
+  }
+  const std::string staging = ".multipart_" + objname + ".abcdef";
+  ASSERT_EQ(owned(staging).err, 0) << "the upload was not staged";
+
+  auto lc_abort = [&](const rgw_user& for_whom) {
+    int ret = 0;
+    std::thread t([&] {
+      auto u = bucket->get_multipart_upload(objname,
+					    rgw::sal::no_authenticated_user,
+					    "abcdef");
+      u->set_on_behalf_of(rgw_owner{for_whom});
+      ret = u->abort(env->dpp, env->cct.get(), null_yield);
+    });
+    t.join();
+    return ret;
+  };
+
+  const int nret = lc_abort(lifecycle_nobody);
+  EXPECT_EQ(nret, -EACCES) << "work for an owner with no row was not "
+      "refused: " << cpp_strerror(-nret);
+  EXPECT_EQ(owned(staging).err, 0) << "the refused abort removed the upload";
+
+  const int ret = lc_abort(alice);
+  ASSERT_EQ(ret, 0) << "the abort failed: " << cpp_strerror(-ret);
+  EXPECT_EQ(owned(staging).err, -ENOENT) << "the upload stayed";
+}
+
+/* Lifecycle's tag read calls get_attr() with no prepare():  it reads as
+ * whom it is for, so posix-strict denies it an object the filesystem
+ * denies that identity, and one with no row is refused -- where the
+ * read used to run as the gateway, which reads everything. */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleTagReadRunsAsWhomItIsFor)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  auto lc_read = [this](const rgw_user& for_whom) {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k"));
+      auto rop = obj->get_read_op(rgw::sal::no_authenticated_user);
+      rop->params.on_behalf_of = rgw_owner{for_whom};
+      bufferlist bl;
+      ret = rop->get_attr(env->dpp, RGW_ATTR_ETAG, bl, null_yield);
+    });
+    t.join();
+    return ret;
+  };
+
+  const int aret = lc_read(alice);
+  EXPECT_EQ(aret, 0) << "the owner could not read its own object's "
+      "attributes: " << cpp_strerror(-aret);
+
+  const int nret = lc_read(lifecycle_nobody);
+  EXPECT_EQ(nret, -EACCES) << "work for an owner with no row was not "
+      "refused: " << cpp_strerror(-nret);
+
+  const int bret = lc_read(bob);
+  EXPECT_NE(bret, 0) << "posix-strict read another identity's object's "
+      "attributes, as the gateway would";
+}
+
 /* Recovery is the gateway's (raise site 5):  it moves version entries
  * another identity wrote, under whichever request takes the version
  * lock next.  Here the owner's own move is interrupted after one

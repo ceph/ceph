@@ -14231,7 +14231,10 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
    * would actually be the escalation. */
   if (!reads_staging(source)) {
     const int pret = pin_personality(dpp, true);
-    if ((pret < 0) && (pret != -ENODATA) && (pret != -EACCES)) {
+    /* the authorisation pass has nobody and proceeds;  work done for
+     * someone whose row is missing is refused, not read as the gateway */
+    if ((pret < 0) && (pret != -ENODATA) &&
+	((pret != -EACCES) || !nsfs::owner_empty(params.on_behalf_of))) {
       return pret;
     }
     /* The identity this read will run as, and whether one was
@@ -14535,10 +14538,21 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   return ret2;
 }
 
+/* Who an operation is for:  the user it authenticated as, else whom
+ * work no request asked for is done for (lifecycle's bucket owner;
+ * see rgw::sal::no_authenticated_user).  Empty when it is neither. */
+static const rgw_owner& acting_for(const rgw_owner& authenticated_user,
+				   const rgw_owner& on_behalf_of)
+{
+  return nsfs::owner_empty(authenticated_user) ? on_behalf_of
+					       : authenticated_user;
+}
+
 int NSFSObject::NSFSReadOp::pin_personality(const DoutPrefixProvider* dpp,
 					    bool tolerate_absent)
 {
-  return pin_personality_for(dpp, source->driver, auth_user,
+  return pin_personality_for(dpp, source->driver,
+			     acting_for(auth_user, params.on_behalf_of),
 			     &identity, tolerate_absent);
 }
 
@@ -14682,6 +14696,15 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 
 int NSFSObject::NSFSReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
 {
+  /* a caller that skips prepare() -- lifecycle's tag read -- still reads
+   * as whom it is for */
+  if (!nsfs::owner_empty(params.on_behalf_of) && !identity.active()) {
+    const int pret = pin_personality(dpp, false);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+    source->set_access(identity, /*read_only=*/true);
+  }
   if (!source->check_exists(dpp)) {
     return -ENOENT;
   }
@@ -14846,16 +14869,17 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * identity stays inactive and every call below runs exactly as it
    * did before.  Any other error fails the delete rather than
    * falling back to the gateway. */
+  const rgw_owner& who = acting_for(auth_user, params.on_behalf_of);
   nsfs::FSIdentity identity;
   {
-    const int pret = pin_personality_for(dpp, source->driver, auth_user,
+    const int pret = pin_personality_for(dpp, source->driver, who,
 					 &identity, /*tolerate_absent=*/false);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
   }
   /* what this delete chose, for the `ran-as` hint */
-  source->driver->note_ran_as("delete", to_string(auth_user), identity);
+  source->driver->note_ran_as("delete", to_string(who), identity);
   /* and the object's walk and removals with it.  Read-only:  a delete
    * reads the entry, and its unlink is the directory's */
   if (identity.active()) {
@@ -16105,8 +16129,9 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
 
   /* Nobody asked when the bucket's deletion aborts it
    * (NSFSBucket::abort_multiparts()), which raises for it itself. */
-  if (!nsfs::owner_empty(auth_user)) {
-    const int pret = pin_personality_for(dpp, driver, auth_user, &identity);
+  const rgw_owner& who = acting_for(auth_user, on_behalf_of);
+  if (!nsfs::owner_empty(who)) {
+    const int pret = pin_personality_for(dpp, driver, who, &identity);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }

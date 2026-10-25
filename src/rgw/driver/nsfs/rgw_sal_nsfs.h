@@ -2860,6 +2860,8 @@ protected:
   std::unique_ptr<rgw::sal::NSFSBucket> shadow;
   /* who the upload's operations are for, from get_multipart_upload() */
   rgw_owner auth_user;
+  /* whom work no request asked for is done for:  lifecycle's abort */
+  rgw_owner on_behalf_of;
   nsfs::FSIdentity identity;
 
 public:
@@ -2870,6 +2872,10 @@ public:
     mp_obj(driver, _oid, _upload_id, _owner), mtime(_mtime),
     auth_user(_auth_user) {}
   virtual ~NSFSMultipartUpload() = default;
+
+  virtual void set_on_behalf_of(const rgw_owner& owner) override {
+    on_behalf_of = owner;
+  }
 
   /* complete() resolves the requester and makes the object as it:  the
    * assembled file is created, or a data file linked in, and its
