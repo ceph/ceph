@@ -820,6 +820,78 @@ async fn test_impersonation_denies_metadata_to_unresolved_credentials() {
     }
 }
 
+/// A user whose credentials do not resolve is denied a bucket, not
+/// given one the gateway owns (n-plan §6.1).
+///
+/// The gateway makes a client's bucket directory in the base path and
+/// then gives it to its creator (raise site 4).  A creator whose
+/// credentials did not resolve was left a bucket the gateway owned,
+/// holding the name though every operation in it is denied.  The
+/// control is the same create with the identity row in place;  the
+/// injected arm, `inject-unresolved-as-gateway` for this user, must see
+/// the old creation;  and the denied name must be free afterwards, so
+/// the denial took back the directory and the placement row.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_impersonation_denies_a_bucket_to_unresolved_credentials() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    if !impersonating().await {
+        eprintln!("impersonation is not enabled;  start with \
+                   --with-impersonation");
+        return;
+    }
+    let Some((alice_u, _bob_u)) = alice_and_bob("unresbkt", None).await
+    else {
+        eprintln!("could not make this module's own users");
+        return;
+    };
+    let alice = &alice_u.client;
+    let status = |r: Result<_, aws_sdk_s3::error::SdkError<
+        aws_sdk_s3::operation::create_bucket::CreateBucketError>>| match r {
+        Ok(_) => 200,
+        Err(e) => e.raw_response().map_or(0, |r| r.status().as_u16()),
+    };
+
+    /* the control */
+    let b0 = s3_tests_rs::fixtures::get_new_bucket_name();
+    assert_eq!(status(alice.create_bucket().bucket(&b0).send().await), 200,
+               "a user whose credentials resolve could not create a bucket");
+    let _ = alice.delete_bucket().bucket(&b0).send().await;
+
+    let _ = nsfs_delete_identity(&alice_u.id).await;
+    let b1 = s3_tests_rs::fixtures::get_new_bucket_name();
+    let denied = status(alice.create_bucket().bucket(&b1).send().await);
+
+    /* the injected arm:  the old reading, a bucket the gateway owns */
+    let b2 = s3_tests_rs::fixtures::get_new_bucket_name();
+    let injected = with_hint("inject-unresolved-as-gateway",
+                             &[("enable", "true"), ("user", &alice_u.id)],
+                             alice.create_bucket().bucket(&b2).send()).await;
+    let injected = status(injected);
+
+    /* the row restored:  the denied name is free, and both go */
+    assert!(alice_u.bind(UID_ALICE, UID_ALICE, None).await,
+            "restoring alice's identity row failed");
+    let again = status(alice.create_bucket().bucket(&b1).send().await);
+    for b in [&b1, &b2] {
+        let _ = alice.delete_bucket().bucket(b).send().await;
+    }
+
+    assert_eq!(denied, 403,
+               "a user whose credentials do not resolve was given a bucket \
+                the gateway owns");
+    assert_eq!(injected, 200,
+               "inject-unresolved-as-gateway did not create the bucket;  the \
+                arm does not reproduce the defect");
+    assert_eq!(again, 200,
+               "the denied bucket's name was still held:  the denial left its \
+                directory or its placement row behind");
+}
+
 /// NooBaa's guard on where an account's buckets go, enacted
 /// (DECISIONS.md 2026-10-14):  NooBaa makes a bucket's directory as the
 /// account, so an account that cannot write its `new_buckets_path`
