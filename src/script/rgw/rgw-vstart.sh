@@ -40,6 +40,10 @@
 #                       unplaced, account-owned directories for
 #                       placement tests, afresh on every start.
 #                       Exits with an error if run as root.
+#   --no-fixture        With --with-impersonation:  the users, groups and
+#                       capabilities only -- no seeded bucket, no
+#                       unplaced directories.  For a --data-root another
+#                       gateway wrote, which the fixture would write into.
 #   --with-inotify      Enable inotify watcher on bucket directories
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
@@ -91,6 +95,7 @@ LIFECYCLE=false
 NON_MD5_ETAG=false
 IMPERSONATE=false
 IMPERSONATE_CLEAN=false
+NO_FIXTURE=false
 INOTIFY=false
 RAMDISK=false
 DATA_ROOT=""
@@ -118,6 +123,7 @@ while [[ $# -gt 0 ]]; do
 		--with-lifecycle) LIFECYCLE=true; shift ;;
 		--with-non-md5-etag) NON_MD5_ETAG=true; shift ;;
 		--with-impersonation) IMPERSONATE=true; shift ;;
+		--no-fixture) NO_FIXTURE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
 		--ramdisk) RAMDISK=true; shift ;;
 		--data-root) DATA_ROOT="$2"; shift 2 ;;
@@ -727,7 +733,7 @@ export S3TEST_CONF="$S3CONF"
 # that can grant a read -- credprobe's shape, and what makes a
 # denial a control rather than an absence.
 
-if $IMPERSONATE; then
+if $IMPERSONATE && ! $NO_FIXTURE; then
 	# vstart's own user.  Taken from the pair radosgw creates at
 	# first start (driver/posix/posixDB.cc) rather than from
 	# s3tests.conf, which is not generated in every tree.
