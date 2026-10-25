@@ -1665,15 +1665,28 @@ function test_wait_osd_id_used_by_pgs() {
 # as reported by ceph pg dump pgs. Note that a repair also sets this
 # date.
 #
+# 'pg dump pgs' is mgr-mediated, and lags behind the OSD. With **source**
+# set to 'query', the stamp is instead taken from the PG's history, as
+# reported by its primary OSD ('pg query'). That is also the stamp the OSD
+# bases the scrub scheduling on.
+#
 # @param pgid the id of the PG
+# @param sname the stamp name (default: last_scrub_stamp)
+# @param source either 'dump' (the default) or 'query'
 # @param STDOUT the date and time of the last scrub
 # @return 0 on success, 1 on error
 #
 function get_last_scrub_stamp() {
     local pgid=$1
     local sname=${2:-last_scrub_stamp}
-    ceph --format json pg dump pgs 2>/dev/null | \
-        jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
+    local source=${3:-dump}
+    if [ "$source" = query ]; then
+        ceph pg $pgid query -f json 2>/dev/null | \
+            jq -r ".info.history.$sname // empty"
+    else
+        ceph --format json pg dump pgs 2>/dev/null | \
+            jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
+    fi
 }
 
 function test_get_last_scrub_stamp() {
@@ -1686,6 +1699,8 @@ function test_get_last_scrub_stamp() {
     create_rbd_pool || return 1
     wait_for_clean || return 1
     stamp=$(get_last_scrub_stamp 1.0)
+    test -n "$stamp" || return 1
+    stamp=$(get_last_scrub_stamp 1.0 last_scrub_stamp query)
     test -n "$stamp" || return 1
     teardown $dir || return 1
 }
