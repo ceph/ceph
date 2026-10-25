@@ -5988,9 +5988,15 @@ int NSFSDriver::check_owner_access(const DoutPrefixProvider* dpp,
   }
   nsfs::Credentials cred;
   int ret = nsfs::resolve_credentials(dpp, *userDB, owner, cred);
-  if (ret == -ENOENT) {
-    /* no Scale identity:  nothing is written as anybody but the gateway */
+  if ((ret == -ENOENT) && unresolved_as_gateway_injected(owner)) {
     return 0;
+  }
+  if (ret == -ENOENT) {
+    /* credentials that do not resolve are denied, not checked as the
+     * gateway (n-plan §6.1) */
+    ldpp_dout(dpp, 1) << "nsfs: " << to_string(owner) << " may not access "
+      << path << ":  no credentials resolve for it" << dendl;
+    return -EACCES;
   }
   if (ret < 0) {
     return ret;
@@ -19299,9 +19305,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   }
 
   if (hint == "inject-unresolved-as-gateway") {
-    /* reproduce the metadata read defect (n-plan §6.1):  prepare()
-     * passed over a user whose credentials do not resolve, so HEAD and
-     * the attribute reads were served as the gateway.  Arming takes
+    /* reproduce the defects n-plan §6.1 names:  prepare() passed over
+     * a user whose credentials do not resolve, so HEAD and the
+     * attribute reads were served as the gateway, and
+     * check_owner_access() allowed one, so a bucket was placed at a
+     * path its owner was never checked against.  Arming takes
      * `user=`, since the suite runs in parallel;  one user at a time */
     auto en = params.find("enable");
     if (en == params.end()) {

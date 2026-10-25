@@ -973,10 +973,10 @@ protected:
    * -EINVAL, rather than deleting the fix to prove it can fail.
    * Atomic:  a test thread arms it while another deletes */
   std::atomic<bool> inject_denial_as_absence{false};
-  /* the user whose credentials not resolving NSFSReadOp::prepare() and
-   * get_attr() pass over, reading as the gateway as they did before
-   * n-plan F2, so a test can watch a metadata read served rather than
-   * deleting the fix.  By user, since the suite runs in parallel;
+  /* the user whose credentials not resolving NSFSReadOp::prepare(),
+   * get_attr() and check_owner_access() pass over, as they did before
+   * n-plan F2, so a test can watch a metadata read served, or a
+   * bucket placed, rather than deleting the fix.  By user, since the suite runs in parallel;
    * empty is off */
   ceph::mutex unresolved_as_gateway_lock =
     ceph::make_mutex("NSFSDriver::unresolved_as_gateway_lock");
@@ -1348,10 +1348,10 @@ public:
    * cannot write the parent cannot create there.  nsfs makes it as the
    * gateway (NSFS_IMPERSONATION.md §8a), so the account's access is
    * checked as the account, the kernel deciding, ACLs included.  Under
-   * impersonation only, for an owner with credentials, and for a path the
-   * account chose -- its new_buckets_path or a custom path -- never the
-   * base path, which is the gateway's own default and was never the
-   * account's to write.  -EACCES when the account may not write
+   * impersonation only, and for a path the account chose -- its
+   * new_buckets_path or a custom path -- never the base path, which
+   * is the gateway's own default and was never the account's to
+   * write.  -EACCES when the account may not write
    * `path`'s parent, the parent itself and not the path to it
    * (DECISIONS.md 2026-10-14, 2026-10-15). */
   int check_owner_can_create_at(const DoutPrefixProvider* dpp,
@@ -1359,7 +1359,7 @@ public:
 				optional_yield y);
   /* `mode` on the directory `path` itself as the owner, the directories
    * above it not consulted;  under impersonation only.  -EACCES when
-   * denied */
+   * denied, and when the owner's credentials do not resolve */
   int check_owner_access(const DoutPrefixProvider* dpp,
 			 const rgw_owner& owner, const std::string& path,
 			 int mode, optional_yield y);
