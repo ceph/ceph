@@ -135,6 +135,12 @@ These BI and OLH interfaces decode complete candidates before publishing
 outputs; decode failures preserve the caller's previous result. Completion errors
 map allocation failures to ``-ENOMEM`` and malformed responses to ``-EIO``.
 
+RGW's OLH read and replay path carries the independent page directly. The read
+helper publishes the page and its truncation flag together after successful
+completion; replay borrows its ordered epoch groups and converts keys only at
+native storage-effect boundaries. The admin log command renders the same page
+using the established field names and action strings, without rebuilding a map.
+
 Compact bucket-index list replies
 ---------------------------------
 
