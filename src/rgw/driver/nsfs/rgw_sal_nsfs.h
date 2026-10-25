@@ -973,6 +973,14 @@ protected:
    * -EINVAL, rather than deleting the fix to prove it can fail.
    * Atomic:  a test thread arms it while another deletes */
   std::atomic<bool> inject_denial_as_absence{false};
+  /* the user whose credentials not resolving NSFSReadOp::prepare() and
+   * get_attr() pass over, reading as the gateway as they did before
+   * n-plan F2, so a test can watch a metadata read served rather than
+   * deleting the fix.  By user, since the suite runs in parallel;
+   * empty is off */
+  ceph::mutex unresolved_as_gateway_lock =
+    ceph::make_mutex("NSFSDriver::unresolved_as_gateway_lock");
+  std::string unresolved_as_gateway_user;
   /* -1 disables;  otherwise fail a rename after this many version entries
    * have moved, so the rollback path is exercised rather than assumed */
   int inject_rename_fail_after{-1};
@@ -1699,6 +1707,11 @@ public:
   bool skip_reclone_injected() const { return inject_skip_reclone; }
   bool etag_as_gateway_injected() const { return inject_etag_as_gateway; }
   bool denial_as_absence_injected() const { return inject_denial_as_absence; }
+  bool unresolved_as_gateway_injected(const rgw_owner& who) {
+    std::lock_guard l{unresolved_as_gateway_lock};
+    return !unresolved_as_gateway_user.empty() &&
+	   (unresolved_as_gateway_user == to_string(who));
+  }
   bool no_chown_injected() const { return inject_no_chown; }
   bool create_failure_injected() const { return inject_create_failure; }
   bool attr_read_fail_injected(const std::string& bucket) {
@@ -2510,13 +2523,8 @@ public:
     nsfs::FSIdentity identity;
     /* resolve who this op runs as, into `identity`.  0 or -errno;
      * -ENODATA means impersonation is off and the caller proceeds as
-     * before.
-     *
-     * tolerate_absent:  the caller is a site that legitimately has
-     * no identity -- the authorisation pass -- so an absent one is
-     * still -EACCES but is not reported as an error. */
-    int pin_personality(const DoutPrefixProvider* dpp,
-			bool tolerate_absent = false);
+     * before. */
+    int pin_personality(const DoutPrefixProvider* dpp);
   };
 
   struct NSFSDeleteOp : DeleteOp {

@@ -6516,8 +6516,9 @@ static int resolve_credentials_for(const DoutPrefixProvider* dpp,
 /* Defined below, beside the operations that use it most. */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
 			       NSFSDriver* driver, const rgw_owner& who,
-			       nsfs::FSIdentity* ident,
-			       bool tolerate_absent = false);
+			       nsfs::FSIdentity* ident);
+static const rgw_owner& acting_for(const rgw_owner& authenticated_user,
+				   const rgw_owner& on_behalf_of);
 
 int NSFSBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
@@ -14222,30 +14223,22 @@ static bool reads_staging(rgw::sal::Object* obj)
 
 int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  /* Pin here if an identity was specified, but do not deny here
-   * if one was not.
-   *
-   * Not every read op is a request reading data.  The
-   * authorisation path builds one to read an object's ACL
-   * attribute -- and must, since that attribute is what decides
-   * whether the authenticated user may read anything at all.  Denying it
-   * for having no identity would make authorisation impossible.
-   *
-   * The denial therefore sits on the data entry points, iterate()
-   * and read(), which is where serving an object as the gateway
-   * would actually be the escalation. */
+  /* Deny here, before anything is opened, wherever the identity
+   * cannot be pinned:  credentials that do not resolve, and no
+   * authenticated user.  A metadata request -- HEAD, the tag, ACL
+   * and attribute reads -- reaches neither iterate() nor read(), so
+   * a denial deferred to them served it as the gateway.  The
+   * authorisation read carries the authenticated user, so it is
+   * denied here too, which is the earlier 403 rgw_op.cc expects. */
   if (!reads_staging(source)) {
-    const int pret = pin_personality(dpp, true);
-    /* the authorisation pass has nobody and proceeds;  work done for
-     * someone whose row is missing is refused, not read as the gateway */
+    const int pret = pin_personality(dpp);
     if ((pret < 0) && (pret != -ENODATA) &&
-	((pret != -EACCES) || !nsfs::owner_empty(params.on_behalf_of))) {
+	!((pret == -EACCES) && source->driver->unresolved_as_gateway_injected(
+	    acting_for(auth_user, params.on_behalf_of)))) {
       return pret;
     }
-    /* The identity this read will run as, and whether one was
-     * obtained.  An empty user is the authorisation pass or an
-     * unauthenticated caller;  resolved=0 with a non-empty user means
-     * the request will be denied at iterate(). */
+    /* the identity this read will run as;  inactive only when
+     * impersonation is off, or under inject-unresolved-as-gateway */
     ldpp_dout(dpp, 20) << "nsfs: read " << source->get_name()
       << " as '" << auth_user << "' resolved=" << identity.active()
       << dendl;
@@ -14387,13 +14380,11 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 				     optional_yield y, const DoutPrefixProvider* dpp)
 {
-  /* see iterate():  the denial deferred in prepare() lands on the
-   * data entry points */
+  /* see iterate() */
   if (nsfs::impersonation_enabled() && !identity.active() &&
       !reads_staging(source)) {
     ldpp_dout(dpp, 0) << "ERROR: not reading " << source->get_name()
-      << " as the gateway;  no POSIX identity resolved for this request"
-      << dendl;
+      << " as the gateway;  this read pinned no identity" << dendl;
     return -EACCES;
   }
 
@@ -14476,8 +14467,7 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
  */
 static int pin_personality_for(const DoutPrefixProvider* dpp,
 			       NSFSDriver* driver, const rgw_owner& who,
-			       nsfs::FSIdentity* ident,
-			       bool tolerate_absent)
+			       nsfs::FSIdentity* ident)
 {
   if (! nsfs::impersonation_enabled()) {
     return -ENODATA;
@@ -14488,15 +14478,9 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   if (nsfs::owner_empty(who)) {
     /* This request specified no identity.  Under the switch that
      * is a gap in the call site rather than an anonymous request,
-     * and serving it as the daemon is the thing to avoid.
-     *
-     * The authorisation pass is the one site where it is expected,
-     * and it runs on every request, so it passes `tolerate_absent`
-     * rather than filling the log with its own normal operation. */
-    if (! tolerate_absent) {
-      ldpp_dout(dpp, 0) << "ERROR: impersonation is on but this operation"
-	" carries no authenticated identity" << dendl;
-    }
+     * and serving it as the daemon is the thing to avoid. */
+    ldpp_dout(dpp, 0) << "ERROR: impersonation is on but this operation"
+      " carries no authenticated identity" << dendl;
     return -EACCES;
   }
 
@@ -14520,10 +14504,11 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   if (ret == -ENOENT) {
     /* A valid account always has an identity record;  one without
      * is a provisioning fault, reported rather than repaired. */
-    ldpp_dout(dpp, 0) << "ERROR: no POSIX identity recorded for " << who
+    ldpp_dout(dpp, 0) << "ERROR: no credentials resolve for " << who
       << (account.empty() ? "" : " or its account ") << account
-      << ";  impersonation is enabled, so the request is denied rather"
-      " than served as the gateway" << dendl;
+      << ":  no identity row under it carries a uid;  impersonation is"
+      " enabled, so the request is denied rather than served as the"
+      " gateway" << dendl;
     return -EACCES;
   }
   if (ret < 0) {
@@ -14553,12 +14538,11 @@ static const rgw_owner& acting_for(const rgw_owner& authenticated_user,
 					       : authenticated_user;
 }
 
-int NSFSObject::NSFSReadOp::pin_personality(const DoutPrefixProvider* dpp,
-					    bool tolerate_absent)
+int NSFSObject::NSFSReadOp::pin_personality(const DoutPrefixProvider* dpp)
 {
   return pin_personality_for(dpp, source->driver,
 			     acting_for(auth_user, params.on_behalf_of),
-			     &identity, tolerate_absent);
+			     &identity);
 }
 
 int NSFSAtomicWriter::pin_personality(const DoutPrefixProvider* dpp)
@@ -14574,14 +14558,13 @@ int NSFSMultipartWriter::pin_personality(const DoutPrefixProvider* dpp)
 int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
-  /* Serving object data as the gateway is the escalation this
-   * exists to prevent, so the denial deferred in prepare() lands
-   * here.  A metadata-only read op never reaches this. */
+  /* prepare() denies an identity it cannot pin, so this holds only
+   * for a caller that skipped it:  serving object data as the
+   * gateway is the escalation impersonation exists to prevent */
   if (nsfs::impersonation_enabled() && !identity.active() &&
       !reads_staging(source)) {
     ldpp_dout(dpp, 0) << "ERROR: not reading " << source->get_name()
-      << " as the gateway;  no POSIX identity resolved for this request"
-      << dendl;
+      << " as the gateway;  this read pinned no identity" << dendl;
     return -EACCES;
   }
 
@@ -14703,9 +14686,11 @@ int NSFSObject::NSFSReadOp::get_attr(const DoutPrefixProvider* dpp, const char* 
 {
   /* a caller that skips prepare() -- lifecycle's tag read -- still reads
    * as whom it is for */
-  if (!nsfs::owner_empty(params.on_behalf_of) && !identity.active()) {
-    const int pret = pin_personality(dpp, false);
-    if ((pret < 0) && (pret != -ENODATA)) {
+  if (nsfs::impersonation_enabled() && !identity.active()) {
+    const int pret = pin_personality(dpp);
+    if ((pret < 0) && (pret != -ENODATA) &&
+	!((pret == -EACCES) && source->driver->unresolved_as_gateway_injected(
+	    acting_for(auth_user, params.on_behalf_of)))) {
       return pret;
     }
     source->set_access(identity, /*read_only=*/true);
@@ -14878,7 +14863,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   nsfs::FSIdentity identity;
   {
     const int pret = pin_personality_for(dpp, source->driver, who,
-					 &identity, /*tolerate_absent=*/false);
+					 &identity);
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
@@ -19309,6 +19294,33 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_denial_as_absence = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_denial_as_absence ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-unresolved-as-gateway") {
+    /* reproduce the metadata read defect (n-plan §6.1):  prepare()
+     * passed over a user whose credentials do not resolve, so HEAD and
+     * the attribute reads were served as the gateway.  Arming takes
+     * `user=`, since the suite runs in parallel;  one user at a time */
+    auto en = params.find("enable");
+    if (en == params.end()) {
+      return -EINVAL;
+    }
+    auto u = params.find("user");
+    const bool arm = (en->second == "true");
+    if (arm && ((u == params.end()) || u->second.empty())) {
+      return -EINVAL;
+    }
+    std::lock_guard l{unresolved_as_gateway_lock};
+    if (arm) {
+      unresolved_as_gateway_user = u->second;
+    } else {
+      unresolved_as_gateway_user.clear();
+    }
+    if (out) {
+      (*out)["enabled"] = arm ? "true" : "false";
+      (*out)["user"] = unresolved_as_gateway_user;
     }
     return 0;
   }
