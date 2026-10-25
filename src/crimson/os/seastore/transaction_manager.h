@@ -386,7 +386,8 @@ public:
 	assert(is_aligned(pin.partial_off, get_block_size()));
 	assert(is_aligned(pin.partial_len, get_block_size()));
 	// must be user-oriented required by maybe_init
-	assert(is_user_transaction(t.get_src()));
+	assert(is_user_transaction(t.get_src()) ||
+	  t.get_src() == Transaction::src_t::TRIM_LOG);
 	if (pin.mapping.is_zero_reserved()) {
 	  co_return;
 	}
@@ -458,7 +459,8 @@ public:
     assert(is_aligned(partial_off, get_block_size()));
     assert(is_aligned(partial_len, get_block_size()));
     // must be user-oriented required by maybe_init
-    assert(is_user_transaction(t.get_src()));
+    assert(is_user_transaction(t.get_src()) ||
+      t.get_src() == Transaction::src_t::TRIM_LOG);
 
     co_await pin.co_refresh();
 
@@ -591,7 +593,8 @@ public:
       }
     }
     // user must initialize the logical extent themselves.
-    assert(is_user_transaction(t.get_src()));
+    assert(is_user_transaction(t.get_src()) ||
+      t.get_src() == Transaction::src_t::TRIM_LOG);
     ext->set_seen_by_users();
     co_await lba_manager->alloc_extent(
       t,
@@ -1914,7 +1917,8 @@ private:
               t, pin, direct_partial_off, partial_len);
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
-    assert(is_user_transaction(t.get_src()));
+    assert(is_user_transaction(t.get_src()) ||
+      t.get_src() == Transaction::src_t::TRIM_LOG);
     assert(pin.is_viewable());
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
