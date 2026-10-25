@@ -188,6 +188,11 @@ LogManager::omap_set_keys(
   LOG_PREFIX(LogManager::omap_set_keys);
   DEBUGT("enter kv size {}", t, kvs.size());
   assert(log_root.get_type() == omap_type_t::LOG);
+  // for test
+  if (!log_root.associated_oid) {
+    co_await _omap_set_keys(log_root, t, std::move(kvs));
+    co_return;
+  }
   auto pending = tm.get_pending_lognode_delta_by_oid(*log_root.associated_oid, t.get_trans_id());
   size_t last_idx_to_delete = 0;
   // When pending deltas are flushed during omap_set_keys(),
@@ -1054,6 +1059,26 @@ LogManager::omap_rm_keys(
       co_return;
 
     bool continuous = is_continuous_fixed_width(key_set);
+    // for test
+    if (!log_root.associated_oid) {
+      if (continuous) {
+	co_await remove_kvs(
+	  t, addr, *key_set.begin(), *key_set.rbegin(), nullptr);
+      } else {
+	pending_keys_t pending(
+	  std::vector<std::string_view>(key_set.begin(), key_set.end()));
+	std::vector<std::string> multi_block_keys;
+
+	co_await remove_kv_set(
+	  t, addr, pending, multi_block_keys, nullptr);
+
+	for (auto& key : multi_block_keys) {
+	  co_await remove_kv(t, addr, key, nullptr);
+	}
+      }
+      co_return;
+    }
+
     if (continuous) {
       lognode_delta_t delta;
       assert(log_root.associated_oid);
@@ -1097,6 +1122,11 @@ LogManager::omap_rm_key_range(
 {
   LOG_PREFIX(LogManager::omap_rm_key_range);
   DEBUGT("first={}, last={}", t, first, last);
+  // for test
+  if (!log_root.associated_oid) {
+    co_await _omap_rm_key_range(log_root, t, first, last);
+    co_return;
+  }
   assert(log_root.get_type() == omap_type_t::LOG);
 
   lognode_delta_t delta;
