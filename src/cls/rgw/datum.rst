@@ -357,24 +357,25 @@ Native buffer handling
 zpp archives require contiguous storage. RGW's shared adapter writes metadata
 directly into Ceph append space, retains opaque BI payload fragments and gathers
 only fixed metadata when an input field crosses fragments. It does not flatten
-an entire native message. OLH encoding borrows the selected stored epoch range
-for the duration of the synchronous encode, avoiding a second map of strings.
-The selected range carries its epoch count; when get-stales is true, encoding
-uses that count and each event vector's size without extra counting passes.
+an entire native message. When the stored OLH record is decoded, reply encoding
+borrows the selected range of decoded epochs for the duration of the synchronous
+encode, avoiding a second map of strings. The selected range carries its epoch
+count; when ``get_stales`` is true, encoding uses that count and each event
+vector's size without extra counting passes.
 
-For true-stales reads, the module can project a canonical stored OLH log directly
-from its encoded field. A bounded scan validates the complete record, including
-events outside the selected page, and checks the tag before producing output.
+When ``get_stales`` is true, the module can also build the encoded reply directly
+from canonical stored bytes. A bounded scan validates the complete record,
+including events outside the selected page, and checks the tag before producing output.
 It forwards the selected encoded range and rebuilds only the reply framing,
 count and truncation flag. It does not construct a stored map or owning events.
 
 This path requires canonical version/compatibility bytes, strictly ordered unique
 epochs and normalized event booleans. Compatible extensions, noncanonical
 booleans, duplicate or unsorted groups use the existing owning decoder and reply
-encoder. False-stales reads retain that filtering path. The fallback decodes the
-already-fetched value, so there is still one exact OMAP lookup. Native buffers
-and this encoded-field projection remain RGW adapter concerns; no Datum-core
-facility or native type enrollment is added.
+encoder. When ``get_stales`` is false, replies use that filtering path. The
+fallback decodes the already-fetched value without another OMAP lookup. Native
+buffers and this encoded-field projection remain RGW adapter concerns; no
+Datum-core facility or native type enrollment is added.
 
 Records whose buffer-owner metadata exceeds their encoded size also use the
 native fallback: its single pass handles dense fragment chains more efficiently.

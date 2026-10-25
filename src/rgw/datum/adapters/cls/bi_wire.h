@@ -170,7 +170,7 @@ void decode_entry(datum::binary_fields<Kind, Key, Payload>, reader& archive, Ent
 } // detail
 
 // Fill unpublished candidates; the binding commits them after decoding succeeds.
-// Selected payload fields retain native owners beyond the input envelope.
+// Payload fields own copied bytes or retain the input's buffer owners.
 template <typename EntryT, auto ...Member>
 void decode_entry(datum::binary_fields<Member...> selected,
                   byte_buffer::const_iterator& input, EntryT& value)

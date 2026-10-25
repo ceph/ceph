@@ -47,8 +47,10 @@ using log_page = std::ranges::subrange<stored_log::const_iterator, stored_log::c
                                     std::string_view tag, bool stales);
 void decode(request& value, ::ceph::buffer::list::const_iterator& input);
 void encode_reply(log_page groups, bool stales, bool truncated, ::ceph::buffer::list& output);
-// For get_stales reads: nullopt requests native decoding, 0 publishes the reply,
-// and -ECANCELED reports a tag mismatch. Fallback and mismatch leave output unchanged.
+// For get_stales reads, construct the reply from validated encoded log entries.
+// nullopt requests decoding the stored record before encoding the selected entries;
+// 0 publishes the reply, and -ECANCELED reports a tag mismatch.
+// Fallback and mismatch leave output unchanged.
 std::optional<int> try_encode_stored_reply(const ::ceph::buffer::list& input, std::uint64_t marker,
                                            std::string_view tag, ::ceph::buffer::list& output);
 void decode_reply(const ::ceph::buffer::list& input, ::rgw_cls_read_olh_log_ret& value);

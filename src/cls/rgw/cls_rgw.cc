@@ -2362,13 +2362,15 @@ try {
   int ret = cls_cxx_map_get_val(hctx, olh_data_key, &encoded);
   if (0 == ret) {
     if (op.get_stales) {
+      // Validate the stored encoding and build the reply directly from
+      // the selected encoded log entries.
       if (const auto status = ::cls::rgw::olh_datum::try_encode_stored_reply(
             encoded, op.ver_marker, tag, *out); status.has_value()) {
         return *status;
       }
     }
     ret = decode_omap_entry(encoded, olh_data_entry);
-    // Match the native input lifetime before encoding the owning fallback.
+    // Release the stored buffer before building the reply from the decoded record.
     encoded.clear();
     if (0 == ret) {
       log_entry("read_index_entry", "existing entry", &olh_data_entry);

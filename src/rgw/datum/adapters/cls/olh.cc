@@ -188,6 +188,7 @@ std::optional<int> try_encode_stored_reply(
         return -ECANCELED;
     }
 
+    // Rebuild the reply envelope around the selected encoded epoch groups.
     ::ceph::buffer::list candidate;
     ::ceph::datum_wire::writer writer {candidate};
     writer.frame(1, [&] {
