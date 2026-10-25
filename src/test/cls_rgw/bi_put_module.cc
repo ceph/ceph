@@ -943,6 +943,7 @@ TEST_CASE("OLH unlink and clear retain last-version removal behavior", "[rgw][cl
     CHECK(olh_entry(state).tag == link.olh_tag);
     CHECK_FALSE(olh_entry(state).exists);
     CHECK(olh_entry(state).pending_removal);
+    CHECK(olh_entry(state).key.name == link.key.name);
     CHECK(olh_entry(state).key.instance.empty());
     ::rgw_cls_bucket_clear_olh_op clear;
     clear.key.name = "object";
@@ -972,6 +973,53 @@ TEST_CASE("OLH unlink promotes the next version and keeps the stored head tag", 
     CHECK(olh_entry(state).exists);
     CHECK(olh_entry(state).delete_marker);
     CHECK(olh_entry(state).tag == link.olh_tag);
+}
+
+TEST_CASE("OLH successor lookup distinguishes another object from invalid stored data",
+          "[rgw][cls][write]")
+{
+    for (const bool malformed : {false, true}) {
+        INFO("malformed=" << malformed);
+        storage state;
+        auto link = link_request();
+        REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+        link.key.instance = "v2";
+        ++link.olh_epoch;
+        REQUIRE(invoke_write(state, link, "bucket_link_olh") == 0);
+        const auto previous = std::ranges::find_if(state.values, [](const auto& item) {
+            if (!item.first.starts_with("object")) {
+                return false;
+            }
+            ::rgw_bucket_dir_entry entry;
+            auto cursor = item.second.cbegin();
+            ::decode(entry, cursor);
+            return entry.key.instance == "v1";
+        });
+        REQUIRE(previous != state.values.end());
+        previous->second.clear();
+        if (!malformed) {
+            ::rgw_bucket_dir_entry other;
+            other.key = {"object-other", "v1"};
+            ::encode(other, previous->second);
+        }
+        const auto stored_head = state.values.at(olh_key());
+        const auto stored_header = state.header;
+        ::rgw_cls_unlink_instance_op request;
+        request.key = link.key;
+        request.op_tag = "unlink";
+        request.olh_epoch = 7;
+        if (malformed) {
+            CHECK(invoke_write(state, request, "bucket_unlink_instance") == -EIO);
+            CHECK(state.values.at(olh_key()).contents_equal(stored_head));
+            CHECK(state.header.contents_equal(stored_header));
+            continue;
+        }
+        REQUIRE(invoke_write(state, request, "bucket_unlink_instance") == 0);
+        CHECK_FALSE(olh_entry(state).exists);
+        CHECK(olh_entry(state).pending_removal);
+        CHECK(olh_entry(state).key.name == link.key.name);
+        CHECK(olh_entry(state).key.instance.empty());
+    }
 }
 
 TEST_CASE("Remaining OLH request rejection and unlink failures preserve native stages", "[rgw][cls][write]")

@@ -6,8 +6,10 @@
 #include <cerrno>
 #include <cstddef>
 #include <exception>
+#include <expected>
 #include <limits>
 #include <new>
+#include <optional>
 #include <type_traits>
 #include <map>
 #include <string>
@@ -1425,7 +1427,7 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
 }
 
 static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
-                           cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
+                           const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
   CLS_LOG(20, "%s: op=%d op_tag=%s key=%s epoch=%lu", __func__,
           op, op_tag.c_str(), key.to_string().c_str(), epoch);
@@ -1599,23 +1601,19 @@ public:
     return instance_entry.is_delete_marker();
   }
 
-  int find_next_key(cls_rgw_obj_key *next_key, bool *found) {
+  [[nodiscard]] std::expected<std::optional<cls_rgw_obj_key>, int> find_next_key() {
     string list_idx;
-    /* this instance has a previous list entry, remove that entry */
+    // Start after this version's listing entry and stay in its object namespace.
     get_list_index_key(instance_entry, &list_idx);
-    /* this is the current head, need to update! */
     map<string, bufferlist> keys;
     bool more;
-    string filter = key.name; /* list key starts with key name, filter it to avoid a case where we cross to
-                                 different namespace */
-    int ret = cls_cxx_map_get_vals(hctx, list_idx, filter, 1, &keys, &more);
+    int ret = cls_cxx_map_get_vals(hctx, list_idx, key.name, 1, &keys, &more);
     if (ret < 0) {
-      return ret;
+      return std::unexpected(ret);
     }
 
-    if (keys.size() < 1) {
-      *found = false;
-      return 0;
+    if (keys.empty()) {
+      return std::nullopt;
     }
 
     rgw_bucket_dir_entry next_entry;
@@ -1626,15 +1624,14 @@ public:
       decode(next_entry, iter);
     } catch (ceph::buffer::error& err) {
       CLS_LOG(0, "ERROR; failed to decode entry: %s", last->first.c_str());
-      return -EIO;
+      return std::unexpected(-EIO);
     }
 
-    *found = (key.name == next_entry.key.name);
-    if (*found) {
-      *next_key = next_entry.key;
+    if (key.name != next_entry.key.name) {
+      return std::nullopt;
     }
 
-    return 0;
+    return std::move(next_entry.key);
   }
 
   real_time mtime() {
@@ -1697,7 +1694,7 @@ public:
     return olh_data_entry;
   }
 
-  void update(cls_rgw_obj_key& key, bool delete_marker) {
+  void update(const cls_rgw_obj_key& key, bool delete_marker) {
     olh_data_entry.delete_marker = delete_marker;
     olh_data_entry.key = key;
   }
@@ -1713,7 +1710,8 @@ public:
     return 0;
   }
 
-  void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
+  void update_log(OLHLogOp op, const string& op_tag, const cls_rgw_obj_key& key,
+                  bool delete_marker, uint64_t epoch = 0) {
     if (epoch == 0) {
       epoch = olh_data_entry.epoch;
     }
@@ -2226,16 +2224,14 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
     if (olh_key == dest_key) {
       /* this is the current head, need to update the OLH! */
-      cls_rgw_obj_key next_key;
-      bool found = false;
-      ret = obj.find_next_key(&next_key, &found);
-      if (ret < 0) {
-        CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
-        return ret;
+      const auto next_result = obj.find_next_key();
+      if (!next_result) {
+        CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", next_result.error());
+        return next_result.error();
       }
 
-      if (found) {
-        BIVerObjEntry next(hctx, next_key);
+      if (const auto& next_key = *next_result; next_key) {
+        BIVerObjEntry next(hctx, *next_key);
         ret = next.init();
         if (ret < 0) {
           CLS_LOG(0, "ERROR: next.init() returned ret=%d", ret);
@@ -2250,21 +2246,21 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
         }
 
         CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
-                next_key.name.c_str(), next_key.instance.c_str(), (int) next.is_delete_marker());
+                next_key->name.c_str(), next_key->instance.c_str(), (int) next.is_delete_marker());
 
-        olh.update(next_key, next.is_delete_marker());
-        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker(), now_epoch);
+        olh.update(*next_key, next.is_delete_marker());
+        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, *next_key,
+                        next.is_delete_marker(), now_epoch);
         // use the next entry's versioned_epoch in the olh entry since it's the new head now
         olh.set_epoch(next_epoch);
       } else {
-        // next_key is empty, but we need to preserve its name in case this entry
-        // gets resharded, because this key is used for hash placement
-        next_key.name = dest_key.name;
-        olh.update(next_key, false);
+        // Preserve the name for hash placement even when no successor exists.
+        const cls_rgw_obj_key absent_key {dest_key.name};
+        olh.update(absent_key, false);
         if (olh.get_epoch() == 0) {
           olh.set_epoch(candidate_epoch);
         }
-        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false, now_epoch);
+        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, absent_key, false, now_epoch);
         olh.set_exists(false);
         olh.set_pending_removal(true);
       }
