@@ -517,8 +517,8 @@ public:
         return std::invoke(std::forward<BodyT>(body), *this, version);
     }
 
-    // Encoded forwarding requires exactly the representation an owning
-    // decoder would emit. Compatible extensions use the ordinary decode path:
+    // Reuse encoded bytes only when decoding and re-encoding would preserve them.
+    // Compatible extensions use the ordinary decode path:
     template <typename BodyT>
     bool canonical_frame(const std::uint8_t version, BodyT&& body)
     {
@@ -537,7 +537,7 @@ public:
 
 using reader = basic_reader<byte_buffer::const_iterator>;
 
-// Publish an owning request and its native cursor only after decoding succeeds.
+// Publish the decoded record and its advanced input cursor only after decoding succeeds.
 template <typename T, typename DecodeT>
 [[gnu::always_inline]] inline void decode_record(T& value, byte_buffer::const_iterator& input,
                                                  DecodeT&& decode)
