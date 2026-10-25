@@ -10994,10 +10994,12 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
    * NooBaa's mkdir as the performing account makes it
    * (bucketspace_fs.js:1055-1062, DECISIONS.md 2026-10-23);  the owner's
    * where no request made it.  Given last, so the gateway writes the
-   * state above on a directory it still owns.  One with no identity
-   * leaves it the gateway's:  nothing is written as them. */
+   * state above on a directory it still owns.  Credentials that do not
+   * resolve deny the bucket rather than leave the directory the
+   * gateway's (n-plan §6.1). */
   if ((ret == 0) && made && !is_internal() &&
       nsfs::impersonation_enabled()) {
+    const rgw_owner& who = nsfs::owner_empty(creator) ? info.owner : creator;
     nsfs::Credentials cred;
     if (!nsfs::owner_empty(creator)) {
       ret = resolve_credentials_for(dpp, driver, creator, y, nullptr, cred);
@@ -11007,8 +11009,13 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
     }
     if (ret == 0) {
       ret = chown_raised(dpp, dir->get_fd(), "", cred.uid, cred.gid);
-    } else if (ret == -ENOENT) {
+    } else if ((ret == -ENOENT) &&
+	       driver->unresolved_as_gateway_injected(who)) {
       ret = 0;
+    } else if (ret == -ENOENT) {
+      ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " denied:  no "
+	"credentials resolve for " << who << dendl;
+      ret = -EACCES;
     }
   }
 
@@ -19309,7 +19316,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * a user whose credentials do not resolve, so HEAD and the
      * attribute reads were served as the gateway, and
      * check_owner_access() allowed one, so a bucket was placed at a
-     * path its owner was never checked against.  Arming takes
+     * path its owner was never checked against, and create() kept one's
+     * bucket directory the gateway's.  Arming takes
      * `user=`, since the suite runs in parallel;  one user at a time */
     auto en = params.find("enable");
     if (en == params.end()) {

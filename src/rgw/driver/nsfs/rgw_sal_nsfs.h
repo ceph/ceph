@@ -974,10 +974,10 @@ protected:
    * Atomic:  a test thread arms it while another deletes */
   std::atomic<bool> inject_denial_as_absence{false};
   /* the user whose credentials not resolving NSFSReadOp::prepare(),
-   * get_attr() and check_owner_access() pass over, as they did before
-   * n-plan F2, so a test can watch a metadata read served, or a
-   * bucket placed, rather than deleting the fix.  By user, since the suite runs in parallel;
-   * empty is off */
+   * get_attr(), check_owner_access() and create() pass over, as they
+   * did before n-plan F2, so a test can watch a metadata read served,
+   * or a bucket placed or created, rather than deleting the fix.  By
+   * user, since the suite runs in parallel;  empty is off */
   ceph::mutex unresolved_as_gateway_lock =
     ceph::make_mutex("NSFSDriver::unresolved_as_gateway_lock");
   std::string unresolved_as_gateway_user;
