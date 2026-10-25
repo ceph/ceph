@@ -9783,6 +9783,7 @@ int RGWRados::bucket_index_read_olh_log(const DoutPrefixProvider *dpp,
                                         const rgw_obj& obj_instance, uint64_t ver_marker,
                                         ::cls::rgw::olh::reply& page, optional_yield y)
 {
+  // Keep eager data-pool creation and its errors ahead of the index read.
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, obj_instance, &ref);
   if (r < 0) {
@@ -9882,6 +9883,7 @@ int RGWRados::bucket_index_trim_olh_log(const DoutPrefixProvider *dpp,
                                         RGWObjState& state,
                                         const rgw_obj& obj_instance, uint64_t ver, optional_yield y)
 {
+  // Keep eager data-pool creation and its errors ahead of the index trim.
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, obj_instance, &ref);
   if (r < 0) {
@@ -9921,6 +9923,7 @@ int RGWRados::bucket_index_clear_olh(const DoutPrefixProvider *dpp,
                                      const std::string& olh_tag,
                                      const rgw_obj& obj_instance, optional_yield y)
 {
+  // Keep eager data-pool creation and its errors ahead of clearing the index.
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, obj_instance, &ref);
   if (r < 0) {
