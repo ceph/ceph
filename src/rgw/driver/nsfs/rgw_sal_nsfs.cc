@@ -8903,11 +8903,17 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
   /* NooBaa's object mode, as every object nsfs creates carries
    * (DECISIONS.md 2026-10-11).  Restored straight after the open,
    * while the gateway still owns the file, because the ids are
-   * taken from the directory below. */
-  int sfd = ::openat(dir_fd, sname.c_str(),
-		     O_RDONLY | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
-  if (sfd < 0) {
-    ret = -errno;
+   * taken from the directory below.
+   *
+   * Raised, as the directory's other writes below are:  in an adopted
+   * tree the directory is whoever NooBaa ran as, at `0770`. */
+  int sfd = -1;
+  ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+    sfd = ::openat(dir_fd, sname.c_str(),
+		   O_RDONLY | O_NOFOLLOW | O_CREAT, nsfs::file_create_mode());
+    return (sfd < 0) ? -errno : 0;
+  });
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
 		      << key << ": " << cpp_strerror(-ret)
 		      << dendl;
@@ -8949,10 +8955,14 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
      * not to leave a file whose owner is wrong.  Take it back out --
      * the directory object is still in NooBaa's format and still readable
      * through the fallback, which is where a stopped conversion
-     * leaves everything else. */
-    if (::unlinkat(dir_fd, sname.c_str(), 0) < 0) {
+     * leaves everything else.  Raised, as its creation was. */
+    const int uret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS,
+					     [&]() -> int {
+      return (::unlinkat(dir_fd, sname.c_str(), 0) < 0) ? -errno : 0;
+    });
+    if (uret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
-	<< " after its creation failed: " << cpp_strerror(errno)
+	<< " after its creation failed: " << cpp_strerror(-uret)
 	<< dendl;
     }
     return ret;
@@ -9050,13 +9060,18 @@ static int convert_directory_object(const DoutPrefixProvider* dpp,
     }
   }
   if (!gone.empty()) {
-    /* upgrade command;  see convert_attrs */
-    ret = fs->remove_xattrs(dpp, dir_fd, gone, y);
+    /* upgrade command;  see convert_attrs, whose raise this needs as
+     * well:  the directory is whoever NooBaa ran as */
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      return fs->remove_xattrs(dpp, dir_fd, gone, y);
+    });
     if (ret < 0) {
       return ret;
     }
   }
-  ret = path_fallback->clear_directory_object(dpp, dir_fd);
+  ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+    return path_fallback->clear_directory_object(dpp, dir_fd);
+  });
   if (ret < 0) {
     return ret;
   }
@@ -9386,7 +9401,12 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     nsfs::Directory staging_dir(mpu->staging_dir_name(meta), dir.get(),
 			   driver->ctx());
     bool existed = false;
-    ret = staging_dir.create(dpp, y, &existed);
+    /* in the bucket directory, which in an adopted tree is whoever
+     * NooBaa ran as;  the gateway's own until its ownership moves below.
+     * null_yield:  a raise never spans a yield */
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      return staging_dir.create(dpp, null_yield, &existed);
+    });
     if (ret < 0) {
       return ret;
     }
@@ -9705,8 +9725,12 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       return ret;
     }
     fallback_dir.close();
-    ret = delete_directory(root.get_fd(), dname.c_str(), true, dpp,
-			   driver->get_reserved_names());
+    /* theirs, and in an adopted tree its uploader's, in a root its
+     * account owns */
+    ret = nsfs::with_capabilities(dpp, CONVERT_REWRITE_CAPS, [&]() -> int {
+      return delete_directory(root.get_fd(), dname.c_str(), true, dpp,
+			      driver->get_reserved_names());
+    });
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: removing their staging for " << meta
 			<< ": " << cpp_strerror(-ret) << dendl;

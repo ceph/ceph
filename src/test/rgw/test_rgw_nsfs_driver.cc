@@ -7944,6 +7944,79 @@ TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelTheDirectorysGroup)
       "directory's";
 }
 
+/* A directory object in a tree the gateway does not own converts:  the
+ * sentinel's creation, the removal of NooBaa's attributes and the
+ * clearing of `dir_content` are each raised, as conversion's other
+ * writes are (raise site 2).  An adopted tree's directories are
+ * whoever NooBaa ran as;  here another uid's, at a mode the gateway
+ * can read through its group and not write, which is what read-search
+ * leaves it under impersonation.  The premise:  unraised, the gateway
+ * can neither remove one of the attributes nor make the sentinel.
+ * Both shapes:  an empty object, which conversion gives a sentinel,
+ * and one with a body, which has one already. */
+TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectAnotherUidOwnsConverts)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+  const sf::path e = bucket_path() / "e", c = bucket_path() / "c";
+  constexpr uid_t other = 65534;
+  const gid_t mine = ::getgid();
+
+  /* what is the other uid's, afterwards as before */
+  auto give = [&](uid_t u) {
+    return with_capabilities_elsewhere(
+	nsfs::cap_bit(CAP_CHOWN) | nsfs::cap_bit(CAP_DAC_READ_SEARCH),
+	[&]() -> int {
+	  for (const auto& p : {c / ".folder", e / ".folder", e, c}) {
+	    if ((::lchown(p.c_str(), u, mine) < 0) && (errno != ENOENT)) {
+	      return -errno;
+	    }
+	  }
+	  return 0;
+	});
+  };
+  for (const auto& d : {e, c}) {
+    ASSERT_EQ(::chmod(d.c_str(), 0750), 0) << d;
+  }
+  /* NooBaa's object mode;  write_file() makes 0600 */
+  ASSERT_EQ(::chmod((c / ".folder").c_str(), 0660), 0);
+  const int given = give(other);
+  if (given == -EPERM) {
+    GTEST_SKIP() << "CAP_CHOWN is not permitted, so the tree cannot be made "
+		    "another uid's;  setcap the unit binary";
+  }
+  ASSERT_EQ(given, 0);
+  auto restore = make_scope_guard([&] { (void) give(::getuid()); });
+
+  int removed = 0, made = 0;
+  std::thread([&] {
+    removed = (::removexattr(c.c_str(), "user.noobaa.content_type") < 0) ? errno : 0;
+    const int fd = ::open((e / ".folder").c_str(), O_RDONLY | O_CREAT, 0660);
+    made = (fd < 0) ? errno : 0;
+    if (fd >= 0) {
+      ::close(fd);
+    }
+  }).join();
+  ASSERT_EQ(removed, EACCES) << "the gateway removed an attribute unraised";
+  ASSERT_EQ(made, EACCES) << "the gateway made a sentinel unraised";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  int ret = -1;
+  std::thread([&] {
+    ret = b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED);
+  }).join();
+  ASSERT_EQ(ret, 0);
+
+  for (const auto& d : {e, c}) {
+    for (const char* n : {"user.noobaa.content_type", "user.noobaa.dir_content"}) {
+      EXPECT_LT(::getxattr(d.c_str(), n, nullptr, 0), 0)
+	  << d << " still carries " << n;
+    }
+  }
+  EXPECT_TRUE(sf::exists(e / ".folder")) << "the empty object got no sentinel";
+  EXPECT_EQ(client_view(bucket.get(), env->dpp, "c/").body, "dir bytes");
+}
+
 /* Without the capability, conversion fails and leaves nothing behind.
  *
  * `CAP_CHOWN` cannot be dropped in a test process -- a thread that
