@@ -416,7 +416,7 @@ async fn test_impersonation_owns_a_nested_key() {
      * grant on bob's object, so a GET of it is denied by RGW's own
      * authorization before any file is opened -- which would pass with
      * impersonation off and prove nothing.  So ask the kernel and do
-     * not read:  there is no S3-authorised operation here to judge. */
+     * not read:  there is no S3-authorised operation here for `expect()`. */
     if wrote {
         let his_to_alice = Access::ask(Class::Data, &bucket, his,
                                        &alice_u.id, "r").await;

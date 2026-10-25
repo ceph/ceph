@@ -274,7 +274,7 @@ pub struct Difference {
 
 /// What became of a difference.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Verdict {
+pub enum Outcome {
     /// a row accounts for it
     Expected { row: usize },
     /// a row matched and its class does not allow this difference
@@ -325,7 +325,7 @@ pub fn differences(left: &Capture, right: &Capture) -> Vec<Difference> {
 
 /// The row that accounts for a difference, first match wins, and what
 /// its class makes of it.
-pub fn judge(d: &Difference, rows: &[Row], pair: &str, modality: &str) -> Verdict {
+pub fn evaluate(d: &Difference, rows: &[Row], pair: &str, modality: &str) -> Outcome {
     let Some(row) = rows.iter().find(|r| {
         r.pair == pair
             && (r.when.is_empty() || r.when == modality)
@@ -333,28 +333,28 @@ pub fn judge(d: &Difference, rows: &[Row], pair: &str, modality: &str) -> Verdic
             && (r.subject.is_empty() || glob(&r.subject, &d.subject))
             && glob(&r.key, &d.field)
     }) else {
-        return Verdict::Unexpected;
+        return Outcome::Unexpected;
     };
-    let violates = |why: &str| Verdict::Violates { row: row.line, why: why.to_string() };
+    let violates = |why: &str| Outcome::Violates { row: row.line, why: why.to_string() };
     match (&row.class, &d.left, &d.right) {
-        (Class::Known, _, _) => Verdict::Known { row: row.line },
+        (Class::Known, _, _) => Outcome::Known { row: row.line },
         (Class::Equal, _, _) => violates("must be identical"),
         (Class::Filtered, _, _) => violates("should have been dropped by the writer"),
-        (Class::Differs, Some(_), Some(_)) => Verdict::Expected { row: row.line },
+        (Class::Differs, Some(_), Some(_)) => Outcome::Expected { row: row.line },
         (Class::Differs, _, _) => violates("may differ, but must be present on both sides"),
-        (Class::Vanishes, Some(_), None) => Verdict::Expected { row: row.line },
+        (Class::Vanishes, Some(_), None) => Outcome::Expected { row: row.line },
         (Class::Vanishes, _, _) => violates("must be present on the left and absent on the right"),
-        (Class::Appears, None, Some(_)) => Verdict::Expected { row: row.line },
+        (Class::Appears, None, Some(_)) => Outcome::Expected { row: row.line },
         (Class::Appears, _, _) => violates("must be absent on the left and present on the right"),
         (Class::Absent, Some(_), None) | (Class::Absent, None, Some(_)) => {
-            Verdict::Expected { row: row.line }
+            Outcome::Expected { row: row.line }
         }
         (Class::Absent, _, _) => violates("must be present on one side only"),
         (Class::Recognize(r), Some(l), Some(rt)) => {
             let n = normalizer(r).expect("checked when the row was read");
             let norm = |s: &BTreeSet<String>| s.iter().map(|v| n(v)).collect::<BTreeSet<_>>();
             if norm(l) == norm(rt) {
-                Verdict::Expected { row: row.line }
+                Outcome::Expected { row: row.line }
             } else {
                 violates("differs after normalizing")
             }
@@ -429,9 +429,9 @@ mod tests {
     #[test]
     fn each_class_accepts_and_rejects() {
         let p = "a:b";
-        let j = |c: Class, d: Difference| judge(&d, &[row(p, "manifest", "f", c)], p, "md5-off");
-        let exp = |v: Verdict| matches!(v, Verdict::Expected { .. });
-        let bad = |v: Verdict| matches!(v, Verdict::Violates { .. });
+        let j = |c: Class, d: Difference| evaluate(&d, &[row(p, "manifest", "f", c)], p, "md5-off");
+        let exp = |v: Outcome| matches!(v, Outcome::Expected { .. });
+        let bad = |v: Outcome| matches!(v, Outcome::Violates { .. });
 
         assert!(bad(j(Class::Equal, diff("manifest", "f", Some("1"), Some("2")))));
         assert!(bad(j(Class::Filtered, diff("manifest", "f", Some("1"), None))));
@@ -443,7 +443,7 @@ mod tests {
         assert!(bad(j(Class::Vanishes, diff("manifest", "f", None, Some("1")))));
         assert!(bad(j(Class::Vanishes, diff("manifest", "f", Some("1"), Some("2")))));
 
-        let known = |v: Verdict| matches!(v, Verdict::Known { .. });
+        let known = |v: Outcome| matches!(v, Outcome::Known { .. });
         assert!(known(j(Class::Known, diff("manifest", "f", Some("1"), None))));
         assert!(known(j(Class::Known, diff("manifest", "f", Some("1"), Some("2")))));
 
@@ -470,22 +470,22 @@ mod tests {
         r.subject = "object .noobaa-nsfs-*".into();
         let mut d = diff("manifest", "listed", None, Some("yes"));
         d.subject = "object .noobaa-nsfs-k-under-temp".into();
-        assert!(matches!(judge(&d, &[r.clone()], "a:b", "md5-off"),
-                         Verdict::Expected { .. }));
+        assert!(matches!(evaluate(&d, &[r.clone()], "a:b", "md5-off"),
+                         Outcome::Expected { .. }));
         d.subject = "object k-plain".into();
-        assert_eq!(judge(&d, &[r], "a:b", "md5-off"), Verdict::Unexpected);
+        assert_eq!(evaluate(&d, &[r], "a:b", "md5-off"), Outcome::Unexpected);
     }
 
     #[test]
     fn rows_are_scoped_to_pair_modality_and_artifact() {
         let mut r = row("a:b", "manifest", "f", Class::Differs);
         let d = diff("manifest", "f", Some("1"), Some("2"));
-        assert_eq!(judge(&d, &[r.clone()], "b:c", "md5-off"), Verdict::Unexpected);
-        assert_eq!(judge(&diff("inventory", "f", Some("1"), Some("2")),
-                         &[r.clone()], "a:b", "md5-off"), Verdict::Unexpected);
+        assert_eq!(evaluate(&d, &[r.clone()], "b:c", "md5-off"), Outcome::Unexpected);
+        assert_eq!(evaluate(&diff("inventory", "f", Some("1"), Some("2")),
+                         &[r.clone()], "a:b", "md5-off"), Outcome::Unexpected);
         r.when = "md5-on".into();
-        assert_eq!(judge(&d, &[r.clone()], "a:b", "md5-off"), Verdict::Unexpected);
-        assert!(matches!(judge(&d, &[r], "a:b", "md5-on"), Verdict::Expected { .. }));
+        assert_eq!(evaluate(&d, &[r.clone()], "a:b", "md5-off"), Outcome::Unexpected);
+        assert!(matches!(evaluate(&d, &[r], "a:b", "md5-on"), Outcome::Expected { .. }));
     }
 
     #[test]

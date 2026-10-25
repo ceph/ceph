@@ -19,8 +19,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::ExitCode;
 
-use s3_tests_rs::corpus::compare::{differences, judge, parse_rows, Capture, Class,
-                                   Difference, Verdict};
+use s3_tests_rs::corpus::compare::{differences, evaluate, parse_rows, Capture, Class,
+                                   Difference, Outcome};
 
 const PAIRS: [(&str, &str, &str, &str); 2] = [
     ("noobaa:unadopted", "adoption", "noobaa", "rgw-unadopted"),
@@ -74,17 +74,17 @@ fn main() -> ExitCode {
         let mut known: BTreeMap<usize, Vec<String>> = BTreeMap::new();
         let mut expected = 0usize;
         for d in &diffs {
-            match judge(d, &rows, pair, modality) {
-                Verdict::Expected { row } => {
+            match evaluate(d, &rows, pair, modality) {
+                Outcome::Expected { row } => {
                     expected += 1;
                     *used.entry(row).or_default() += 1;
                 }
-                Verdict::Violates { row, why } => {
+                Outcome::Violates { row, why } => {
                     *used.entry(row).or_default() += 1;
                     violations.push(format!("line {row}, {why}:  {}", describe(d)));
                 }
-                Verdict::Unexpected => unexpected.push(describe(d)),
-                Verdict::Known { row } => {
+                Outcome::Unexpected => unexpected.push(describe(d)),
+                Outcome::Known { row } => {
                     *used.entry(row).or_default() += 1;
                     known.entry(row).or_default().push(describe(d));
                 }

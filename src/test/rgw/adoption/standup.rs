@@ -296,7 +296,7 @@ const STEPS: &[(&str, &str)] = &[
     ("damage",   "damage one bucket record, so adoption meets a record it cannot carry"),
     ("import",   "RGW over the same tree;  import the identities, buckets left in NooBaa's format"),
     ("adopt",    "adopt every bucket:  import its record and convert its tree"),
-    ("compare",  "judge the three captures against the expected-difference list"),
+    ("compare",  "evaluate the three captures against the expected-difference list"),
     ("conversion", "the conversion profile:  every step above, in order, on a fresh work directory"),
 ];
 
@@ -1563,7 +1563,7 @@ fn store_tests(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
-/// Judge the three captures against the expected-difference list.
+/// Evaluate the three captures against the expected-difference list.
 ///
 /// `corpus-compare` (s3-tests-rs, `src/bin/corpus-compare.rs`) over
 /// `capture/`, with `expected-differences.tsv` beside this driver and the
@@ -1607,7 +1607,7 @@ fn compare(env: &Env) -> Result<(), String> {
 ///
 /// Stand NooBaa up, write a tree through it and capture it, hand the
 /// tree to RGW, capture it after import and again after adoption, and
-/// judge the three captures.  `store-tests` runs inside it, and fails if
+/// evaluate the three captures.  `store-tests` runs inside it, and fails if
 /// the store tests skip, so under this profile they always run.
 ///
 /// **A fresh work directory only.**  The steps are run one at a time

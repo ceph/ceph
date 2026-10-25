@@ -30,7 +30,7 @@
 #             inventory: xattr:<name>, type, mode, owner, or size
 #             run:       the stem whose artifact is absent entirely
 #             `*` matches any run of characters, anywhere.  The first
-#             row that matches a difference is the one that judges it.
+#             row that matches a difference is the one that accounts for it.
 #   class     each a statement about the one pair the row names:
 #             equal      values must be identical
 #             recognize:<r>  both values pass through normalizer <r>,
@@ -59,7 +59,7 @@
 # nothing after each run;  a row that is not a guard and turns up there
 # is stale.
 
-# ---- named objects, first because the first matching row judges -----
+# ---- named objects, first:  the first matching row accounts for one --
 # `.noobaa-nsfs-k-under-temp` is a client's object whose name starts
 # with NooBaa's temp prefix.  NooBaa stores it and its listing hides it
 # -- the prefix it hides is wider than its temp directory,
@@ -110,10 +110,10 @@ noobaa:unadopted		manifest		body-len	equal	same, and it localises a truncation t
 # digest and we forward it.
 
 # The observing pass makes no copy, so it has no CopyObject result.  Ahead
-# of the md5-off recognize rows below, which would otherwise judge it first.
+# of the md5-off recognize rows below, which would otherwise account for it first.
 noobaa:unadopted		manifest		copy.reported-etag	absent	what CopyObject's own response said.  An observing pass makes no copy;  what the destination holds is in head-etag, which does compare
 noobaa:unadopted		manifest		copy.reported-version-id	absent	same
-noobaa:unadopted	md5-off	manifest	object k-dirobj/	etag	differs	a directory object with content:  NooBaa's listing reports the directory's stat (namespace_fs.js:762, their own "GAP" comment) where its HEAD reports .folder's (:1008), so the ETag its listing gives -- the keys axis records the listing's ETag as `etag` -- carries the directory's inode;  RGW reports .folder's from both, as S3 requires one ETag per object.  NooBaa's defect, before the general row so it judges only this object (NOOBAA_WRITE_SURFACE.md)
+noobaa:unadopted	md5-off	manifest	object k-dirobj/	etag	differs	a directory object with content:  NooBaa's listing reports the directory's stat (namespace_fs.js:762, their own "GAP" comment) where its HEAD reports .folder's (:1008), so the ETag its listing gives -- the keys axis records the listing's ETag as `etag` -- carries the directory's inode;  RGW reports .folder's from both, as S3 requires one ETag per object.  NooBaa's defect, before the general row so it accounts for only this object (NOOBAA_WRITE_SURFACE.md)
 noobaa:unadopted	md5-off	manifest		etag	recognize:synthetic-identity	both report a file-instance token, and the values differ:  their mtime component loses its low 8 bits to a double in fs_napi.cpp:360, which we do not reproduce.  Recognized rather than tolerated, so a side that started reporting a digest fails
 noobaa:unadopted	md5-off	manifest		listed-etag	recognize:synthetic-identity	same value by the same path, through ListObjects
 noobaa:unadopted	md5-off	manifest		head-etag	recognize:synthetic-identity	same value by the same path, through HeadObject
