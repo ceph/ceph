@@ -329,7 +329,7 @@ async fn test_data_follows_the_access_model() {
 /// A nested key:  its directories belong to the identity that made
 /// them, and writing beside another is the access model's.
 ///
-/// A key's directories are made by the requester at NooBaa's mode,
+/// A key's directories are made by their writer at NooBaa's mode,
 /// `0770` (DECISIONS 2026-10-20), so alice's PUT makes `a/b/` hers.
 /// bob, granted the write by bucket policy, then writes beside her, and
 /// the filesystem denies him creating there whatever the model, because
@@ -498,8 +498,8 @@ async fn test_impersonation_owns_a_completed_upload() {
 
 }
 
-/// A copy is the requester's:  it reads the source as them, and it
-/// belongs to them.
+/// A copy is the authenticated user's:  it reads the source as them,
+/// and it belongs to them.
 ///
 /// The read half is the one with teeth.  Bucket policy grants bob
 /// `s3:GetObject` on alice's object and the filesystem denies his read
@@ -510,7 +510,7 @@ async fn test_impersonation_owns_a_completed_upload() {
 /// filesystem denies bob's read of the copy, which policy grants.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_impersonation_copies_as_the_requester() {
+async fn test_impersonation_copies_as_the_authenticated_user() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -964,7 +964,7 @@ async fn test_nested_run_as_rejects_a_different_identity() {
 /// synthesizing them at all.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
+async fn test_the_non_md5_etag_is_recorded_as_the_authenticated_user() {
     const INJECT: &str = "inject-etag-as-gateway";
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
@@ -1037,10 +1037,10 @@ async fn test_the_non_md5_etag_is_recorded_as_the_requester() {
 
 /* DeleteBucket under impersonation:  who acts at each layer follows
  * who had to be able to create it (DECISIONS.md 2026-10-24).  The
- * bucket directory is checked as the requester;  what is below it is
- * removed as the requester;  its entry in a parent the account owns is
- * removed as the requester, and in the base path by the gateway.  Under
- * `posix-strict` a refusal at any of the requester's layers is 403, as
+ * bucket directory is checked as the authenticated user;  what is below
+ * it is removed as that user;  its entry in a parent the account owns
+ * is removed as that user, and in the base path by the gateway.  Under
+ * `posix-strict` a refusal at any of that user's layers is 403, as
  * NooBaa's `delete_uls()`;  under `s3-native` the gateway performs it. */
 
 async fn bucket_exists(client: &aws_sdk_s3::Client, bucket: &str) -> bool {
@@ -1226,7 +1226,7 @@ async fn test_the_gateway_unlinks_a_base_path_bucket() {
 ///
 /// Under every model the key still has its current entry on disk, and
 /// whose it is follows who acted:  bob's where his copy was served, as
-/// the gateway gives a raised create to its requester, and alice's
+/// the gateway gives a raised create to its authenticated user, and alice's
 /// where it was refused.  The current entry is checked because the
 /// demote runs before the clone, so a clone that fails must not leave
 /// the key without one.

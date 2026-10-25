@@ -845,7 +845,7 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
         .send().await.expect("the user could not write its object");
 
     /* from here on, record what each consumer chooses for the
-     * user's requests.  By requester and not by object:  the
+     * user's requests.  By user and not by object:  the
      * question is whether its operations ran as itself,
      * which no object names. */
     let selecting = driver_hint_results(
@@ -870,15 +870,15 @@ async fn test_attrs_and_delete_run_as_the_account_user() {
         .expect("reading ran-as failed");
 
     /* Nothing recorded is its own failure, and a distinct one:  it
-     * means neither consumer saw that user as its requester, so the
-     * user was collapsed onto its account before these sites were
-     * reached rather than at them. */
+     * means neither consumer saw that user itself, so the user was
+     * collapsed onto its account before these sites were reached
+     * rather than at them. */
     let count: usize = seen.get("count").and_then(|c| c.parse().ok())
         .unwrap_or(0);
     assert!(count >= 2,
         "ran-as recorded {count} choices for the user;  expected the \
-         attribute write and the delete.  Neither site saw {acct_user} as \
-         its requester");
+         attribute write and the delete.  Neither site saw {acct_user} \
+         itself");
 
     let attrs = seen.get("ran_as_attrs").map(String::as_str);
     let del = seen.get("ran_as_delete").map(String::as_str);

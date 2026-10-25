@@ -226,7 +226,8 @@ pub async fn driver_hint_results(
 /// With impersonation on, nsfs serves each request as its POSIX identity,
 /// so an object's mode decides its content as well as S3:  a read S3
 /// permits is still denied to an identity the mode excludes, and a
-/// requester with no identity row is denied before any file is opened.
+/// user whose credentials do not resolve is denied before any file is
+/// opened.
 /// A test asserting S3's authorization asks for this first, and asserts
 /// the denial where the check denied it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -235,7 +236,8 @@ pub enum FsAccess {
     NotImpersonating,
     Permitted,
     Denied,
-    /// The requester has no identity row, and is denied before any file.
+    /// The user's credentials do not resolve, and it is denied before any
+    /// file.
     NoIdentity,
 }
 

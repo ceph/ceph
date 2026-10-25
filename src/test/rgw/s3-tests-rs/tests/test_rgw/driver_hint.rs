@@ -51,14 +51,14 @@ async fn test_driver_hint_results_round_trip() {
     }
 }
 
-/// The hint arms the buffered copy for one requester and reports how many
-/// bytes that requester's copies moved through it.
+/// The hint arms the buffered copy for one user and reports how many
+/// bytes that user's copies moved through it.
 ///
 /// Armed with `user=`, the hint forces and counts this test's user's
 /// copies alone, so other tests' copies -- the suite runs in parallel --
 /// neither take the fallback nor reach the count, and the count is exact.
 /// The main user's copy in between is the control for that:  it is
-/// another requester's, so it must add nothing.
+/// another user's, so it must add nothing.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_driver_hint_buffered_copy_accounts_bytes() {
@@ -111,7 +111,7 @@ async fn test_driver_hint_buffered_copy_accounts_bytes() {
     const SIZE: usize = 1 << 20;
     let body = vec![b'x'; SIZE];
 
-    /* another requester's copy, which the bundle must not see */
+    /* another user's copy, which the bundle must not see */
     let main = get_client();
     let other = get_new_bucket(Some(&main)).await;
     main.put_object()
@@ -128,7 +128,7 @@ async fn test_driver_hint_buffered_copy_accounts_bytes() {
         .expect("hint answered once and should answer again");
     assert_eq!(after_other.get("buffered_bytes").map(String::as_str),
         Some("0"),
-        "another requester's copy was counted:  the hint is not scoped to \
+        "another user's copy was counted:  the hint is not scoped to \
          its user");
 
     let client = &user.client;

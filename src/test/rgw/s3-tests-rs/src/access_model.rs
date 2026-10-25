@@ -152,7 +152,7 @@ pub async fn restore_access_model() {
 }
 
 /// How many operations the gateway has performed itself after the
-/// filesystem denied the requester, which the access model permits,
+/// filesystem denied the authenticated user, which the access model permits,
 /// as `(object_attrs, data)`.
 ///
 /// This is what makes a success attributable.  A test that sees a

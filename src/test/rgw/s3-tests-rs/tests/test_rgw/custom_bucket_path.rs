@@ -92,7 +92,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
                "a custom path was admitted with no allowlist");
 
     /* An allowlist admitting it, and deliberately no uid.  nsfs
-     * checks the requester's own access to the path before it makes
+     * checks the authenticated user's own access to the path before it makes
      * the directory as the gateway, so a row carrying a uid is
      * denied for any path that uid cannot write.  A row carrying
      * only an allowlist is served as the gateway, which is what makes
