@@ -629,6 +629,7 @@ void Cache::register_metrics(store_index_t store_index)
         continue;
       }
       if (is_background_transaction(src) &&
+	  src != src_t::TRIM_LOG &&
           (tree_label == onode_label ||
            tree_label == omap_label)) {
         // CLEANER transaction won't contain any onode/omap tree operations
@@ -1166,7 +1167,8 @@ void Cache::mark_transaction_conflicted(
     auto ool_record_bytes = (ool_stats.md_bytes + ool_stats.get_data_bytes());
     efforts.ool_record_bytes += ool_record_bytes;
 
-    if (is_background_transaction(t.get_src())) {
+    if (is_background_transaction(t.get_src()) &&
+	t.get_src() != Transaction::src_t::TRIM_LOG) {
       // CLEANER transaction won't contain any onode/omap tree operations
       assert(t.onode_tree_stats.is_clear());
       assert(t.omap_tree_stats.is_clear());
@@ -2111,7 +2113,8 @@ record_t Cache::prepare_record(
       record.size.get_raw_mdlength(),
       record.size.dlength,
       sea_time_point_printer_t{record.modify_time});
-  if (is_background_transaction(trans_src)) {
+  if (is_background_transaction(trans_src) &&
+      trans_src != Transaction::src_t::TRIM_LOG) {
     // background transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
     assert(t.omap_tree_stats.is_clear());
