@@ -22,10 +22,13 @@ edition = "2021"
 //!
 //!   scripts/validate.rs [--dry-run] [--no-build] [--no-unit] [--no-librgw]
 //!                       [--lifecycle] [--cells a,b] [--test EXPR]
-//!                       [--build DIR] [--conf FILE]
+//!                       [--build DIR] [--conf FILE] [--adoption-cache DIR]
 //!
 //! `--test` runs only the tests a nextest filter expression selects, in
-//! each cell, in place of its profiles;  `--cells` picks the cells.
+//! each cell, in place of its profiles;  `--cells` picks the cells.  The
+//! conversion cells -- the adoption corpus, `standup.rs conversion` --
+//! run only when named:  each takes a fresh work directory, with the
+//! NooBaa worktree already built in `--adoption-cache` linked into it.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, IsTerminal, Write};
@@ -46,12 +49,17 @@ const PARALLEL_LOG: &str = "/tmp/s3test-parallel.log";
 enum Suite {
     Profile(&'static str),
     Librgw,
+    /* `standup.rs conversion`, which starts its own gateway */
+    Conversion { impersonate: bool, access_model: &'static str },
 }
 
 struct Cell {
     name: &'static str,
+    /* empty:  the suite stands its own gateway up */
     vstart: &'static [&'static str],
     suites: &'static [Suite],
+    /* run when no --cells names any */
+    by_default: bool,
 }
 
 /* Adding a configuration is an edit here. */
@@ -59,15 +67,30 @@ const CELLS: &[Cell] = &[
     Cell { name: "posix-strict",
            vstart: &["--store", "nsfs", "--with-impersonation", "--clean"],
            suites: &[Suite::Profile("baseline"),
-                     Suite::Profile("access-model-switch")] },
+                     Suite::Profile("access-model-switch")],
+           by_default: true },
     Cell { name: "s3-native",
            vstart: &["--store", "nsfs", "--with-impersonation",
                      "--access-model", "s3-native", "--clean"],
            suites: &[Suite::Profile("baseline"),
-                     Suite::Profile("access-model-switch")] },
+                     Suite::Profile("access-model-switch")],
+           by_default: true },
     Cell { name: "plain",
            vstart: &["--store", "nsfs", "--bucket-profile", "strong", "--clean"],
-           suites: &[Suite::Profile("baseline"), Suite::Librgw] },
+           suites: &[Suite::Profile("baseline"), Suite::Librgw],
+           by_default: true },
+    /* the adoption corpus:  NooBaa writes a tree, RGW captures it before
+     * and after conversion, and the captures are compared -- as the
+     * gateway (C2b), and under (n) in each model (Phase G) */
+    Cell { name: "conversion", vstart: &[],
+           suites: &[Suite::Conversion { impersonate: false, access_model: "posix-strict" }],
+           by_default: false },
+    Cell { name: "conversion-posix-strict", vstart: &[],
+           suites: &[Suite::Conversion { impersonate: true, access_model: "posix-strict" }],
+           by_default: false },
+    Cell { name: "conversion-s3-native", vstart: &[],
+           suites: &[Suite::Conversion { impersonate: true, access_model: "s3-native" }],
+           by_default: false },
 ];
 
 struct Opts {
@@ -80,6 +103,7 @@ struct Opts {
     test: Option<String>,
     build_dir: PathBuf,
     conf: PathBuf,
+    adoption_cache: PathBuf,
 }
 
 /// One command, as it is run and as it is printed.
@@ -184,9 +208,10 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
         argv.extend(s(TARGETS));
         steps.push(step("build", "build", b, argv));
     }
+    let caps = vstart_caps(b);
     if o.unit {
         let unit = b.join("bin/unittest_rgw_nsfs_driver");
-        let caps = vstart_caps(b).unwrap_or_else(|e| die(&e));
+        let caps = caps.as_ref().unwrap_or_else(|e| die(e));
         steps.push(step("unit", "setcap", b,
             s(&["sudo", "-n", "setcap", &format!("{caps}+p"), &unit.to_string_lossy()])));
         steps.push(step("unit", "unittest", b, vec![unit.to_string_lossy().into()]));
@@ -194,19 +219,24 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
 
     let vstart = b.join("../src/script/rgw/rgw-vstart.sh");
     for c in CELLS {
-        if let Some(want) = &o.cells {
-            if !want.iter().any(|w| w == c.name) {
-                continue;
-            }
+        match &o.cells {
+            Some(want) if !want.iter().any(|w| w == c.name) => continue,
+            None if !c.by_default => continue,
+            _ => {}
         }
-        for lc in if o.lifecycle { &[false, true][..] } else { &[false][..] } {
+        /* a conversion's gateway is started with --with-lifecycle already */
+        let variants = if o.lifecycle && !c.vstart.is_empty() { &[false, true][..] }
+                       else { &[false][..] };
+        for lc in variants {
             let cell = if *lc { format!("{}+lifecycle", c.name) } else { c.name.into() };
             let mut argv = vec![vstart.to_string_lossy().into_owned()];
             argv.extend(s(c.vstart));
             if *lc {
                 argv.push("--with-lifecycle".into());
             }
-            steps.push(step(&cell, "vstart", b, argv));
+            if !c.vstart.is_empty() {
+                steps.push(step(&cell, "vstart", b, argv));
+            }
             if let Some(expr) = &o.test {
                 let mut st = step(&cell, "test", suite_dir, s(&["cargo", "nextest", "run",
                     "--no-fail-fast", "--features", FEATURES, "-E", expr]));
@@ -216,8 +246,35 @@ fn plan(o: &Opts, suite_dir: &Path, run_dir: &Path) -> Vec<Step> {
             }
             for suite in c.suites {
                 match suite {
-                    Suite::Profile(_) if o.test.is_some() => {}
+                    Suite::Profile(_) | Suite::Conversion { .. } if o.test.is_some() => {}
                     Suite::Librgw if !o.librgw => {}
+                    Suite::Conversion { impersonate, access_model } => {
+                        /* conversion raises CAP_DAC_OVERRIDE and CAP_CHOWN
+                         * whether or not it impersonates, and an unimpersonated
+                         * vstart sets no caps */
+                        let caps = caps.as_ref().unwrap_or_else(|e| die(e));
+                        steps.push(step(&cell, "setcap", b, s(&["sudo", "-n", "setcap",
+                            &format!("{caps}+p"), &b.join("bin/radosgw").to_string_lossy()])));
+                        /* and the unit binary, which `store-tests` runs against
+                         * NooBaa's store:  root's, under impersonation */
+                        steps.push(step(&cell, "setcap-unit", b, s(&["sudo", "-n", "setcap",
+                            &format!("{caps}+p"),
+                            &b.join("bin/unittest_rgw_nsfs_driver").to_string_lossy()])));
+                        let work = run_dir.join(&cell).join("work");
+                        steps.push(step(&cell, "work", b, s(&["sh", "-c",
+                            "mkdir -p \"$1\" && for w in \"$2\"/noobaa-*; do ln -s \"$w\" \"$1\"/; done",
+                            "sh", &work.to_string_lossy(), &o.adoption_cache.to_string_lossy()])));
+                        /* from its own directory, which is where it finds its
+                         * conf, patches, locks and expected differences */
+                        let adoption = suite_dir.join("../adoption");
+                        let mut st = step(&cell, "conversion", &adoption,
+                            s(&["./standup.rs", "conversion"]));
+                        st.env.push(("ADOPTION_WORK".into(), work.to_string_lossy().into()));
+                        st.env.push(("ADOPTION_CEPH_BUILD".into(), b.to_string_lossy().into()));
+                        st.env.push(("ADOPTION_IMPERSONATE".into(), impersonate.to_string()));
+                        st.env.push(("ADOPTION_ACCESS_MODEL".into(), access_model.to_string()));
+                        steps.push(st);
+                    }
                     Suite::Profile(p) => {
                         let mut st = step(&cell, p, suite_dir, s(&["cargo", "nextest", "run",
                             "-P", p, "--no-fail-fast", "--features", FEATURES]));
@@ -283,6 +340,10 @@ fn run(s: &Step, run_dir: &Path) -> (bool, String) {
         if t.starts_with("Summary [") || t.starts_with("[  PASSED  ] ")
             || ((t.starts_with("[  FAILED  ] ") || t.starts_with("[  SKIPPED ] "))
                 && counted && !t.contains(" (")) {
+            summary.push(t.to_string());
+        }
+        if t.starts_with("==> conversion:  every step passed")
+            || t.contains("the conversion profile stopped at") {
             summary.push(t.to_string());
         }
         if t.starts_with("FAIL [") || t.starts_with("error:") || t.starts_with("ERROR:") {
@@ -369,6 +430,7 @@ fn parse_args() -> Opts {
         lifecycle: false, cells: None, test: None,
         build_dir: PathBuf::from("/lv2tb/ceph-cp/build"),
         conf: PathBuf::from(format!("{home}/dev/rgw/s3tests.conf")),
+        adoption_cache: PathBuf::from("/lv2tb/nsfs-interchange"),
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -383,6 +445,7 @@ fn parse_args() -> Opts {
             "--cells" => o.cells = Some(val("--cells").split(',').map(str::to_string).collect()),
             "--build" => o.build_dir = PathBuf::from(val("--build")),
             "--conf" => o.conf = PathBuf::from(val("--conf")),
+            "--adoption-cache" => o.adoption_cache = PathBuf::from(val("--adoption-cache")),
             _ => die(&format!("unknown argument {a};  see the header of validate.rs")),
         }
     }
