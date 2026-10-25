@@ -968,6 +968,11 @@ protected:
    * the client is given diverge from the one recorded on disk, rather
    * than deleting the fix and rebuilding to prove the test can fail */
   bool inject_etag_as_gateway{false};
+  /* read a denial in a delete the way the defect did -- as an absent
+   * object -- so a test can watch a denied delete answer success, or
+   * -EINVAL, rather than deleting the fix to prove it can fail.
+   * Atomic:  a test thread arms it while another deletes */
+  std::atomic<bool> inject_denial_as_absence{false};
   /* -1 disables;  otherwise fail a rename after this many version entries
    * have moved, so the rollback path is exercised rather than assumed */
   int inject_rename_fail_after{-1};
@@ -1693,6 +1698,7 @@ public:
   }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
   bool etag_as_gateway_injected() const { return inject_etag_as_gateway; }
+  bool denial_as_absence_injected() const { return inject_denial_as_absence; }
   bool no_chown_injected() const { return inject_no_chown; }
   bool create_failure_injected() const { return inject_create_failure; }
   bool attr_read_fail_injected(const std::string& bucket) {

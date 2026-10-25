@@ -4602,6 +4602,12 @@ protected:
     return driver->driver_hint(env->dpp, "access-model", {{"set", m}}, &out);
   }
 
+  int inject_denial_as_absence(bool on) {
+    std::map<std::string, std::string> out;
+    return driver->driver_hint(env->dpp, "inject-denial-as-absence",
+			       {{"enable", on ? "true" : "false"}}, &out);
+  }
+
   /* how many operations the gateway performed for a denied requester */
   uint64_t raised() {
     std::map<std::string, std::string> out;
@@ -5284,6 +5290,104 @@ TEST_F(NSFSImpersonatedRenameTest, ALifecycleDeleteRunsAsWhomItIsFor)
   EXPECT_EQ(out["ran_as_delete"], std::to_string(owner_uid))
       << "the delete did not run as whom it was for";
   EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+}
+
+/* A lifecycle delete follows the access model:  for an identity the
+ * filesystem denies, posix-strict lets the denial stand and s3-native
+ * raises (DECISIONS.md 2026-10-24, lifecycle's raise). */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleDeleteFollowsTheAccessModel)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
+  auto lc_delete_for_bob = [this]() {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k"));
+      auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+      del->params.versioning_status = bucket->get_info().versioning_status();
+      del->params.bucket_owner = rgw_owner{bob};
+      del->params.on_behalf_of = rgw_owner{bob};
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    t.join();
+    return ret;
+  };
+
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  /* the control:  read as an absent object, the denial became -EINVAL */
+  ASSERT_EQ(inject_denial_as_absence(true), 0);
+  const int iret = lc_delete_for_bob();
+  ASSERT_EQ(inject_denial_as_absence(false), 0);
+  EXPECT_EQ(iret, -EINVAL) << "the injection did not reproduce the defect: "
+      << cpp_strerror(-iret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the denied delete removed the object";
+
+  const int sret = lc_delete_for_bob();
+  EXPECT_TRUE(sret == -EACCES || sret == -EPERM)
+      << "posix-strict let the delete through: " << cpp_strerror(-sret);
+  EXPECT_EQ(owned("src/k").err, 0) << "the denied delete removed the object";
+
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+  const int nret = lc_delete_for_bob();
+  ASSERT_EQ(nret, 0) << "s3-native did not raise: " << cpp_strerror(-nret);
+  EXPECT_GT(raised(), before);
+  EXPECT_EQ(owned("src/k").err, -ENOENT) << "the current version stayed";
+}
+
+/* A lifecycle version delete -- noncurrent and delete-marker
+ * expiration -- follows the access model too.  posix-strict's denial
+ * reaches the caller as a denial:  the version-specific branch read a
+ * denied stat as an absent object and answered success for a version
+ * it never touched. */
+TEST_F(NSFSImpersonatedRenameTest, ALifecycleVersionDeleteFollowsTheAccessModel)
+{
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "first"));
+  ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "second"));
+  const auto hist = versions_in("src");
+  ASSERT_EQ(hist.size(), 1u) << "the first version was not demoted";
+  const std::string entry = hist.front();
+  ASSERT_EQ(entry.rfind("k_", 0), 0u) << entry;
+  const std::string vid = entry.substr(2);
+
+  auto lc_version_delete_for_bob = [&]() {
+    int ret = 0;
+    std::thread t([&] {
+      auto obj = bucket->get_object(rgw_obj_key("src/k", vid));
+      auto del = obj->get_delete_op(rgw::sal::no_authenticated_user);
+      del->params.versioning_status = bucket->get_info().versioning_status();
+      del->params.bucket_owner = rgw_owner{bob};
+      del->params.on_behalf_of = rgw_owner{bob};
+      ret = del->delete_obj(env->dpp, null_yield, 0);
+    });
+    t.join();
+    return ret;
+  };
+
+  ASSERT_EQ(set_model("posix-strict"), 0);
+  /* the control:  read as an absent object, the denial answered
+   * success for a version it never touched */
+  ASSERT_EQ(inject_denial_as_absence(true), 0);
+  const int iret = lc_version_delete_for_bob();
+  ASSERT_EQ(inject_denial_as_absence(false), 0);
+  EXPECT_EQ(iret, 0) << "the injection did not reproduce the defect: "
+      << cpp_strerror(-iret);
+  EXPECT_EQ(owned("src/.versions/" + entry).err, 0)
+      << "the injected delete removed the version";
+
+  const int sret = lc_version_delete_for_bob();
+  EXPECT_TRUE(sret == -EACCES || sret == -EPERM)
+      << "posix-strict answered " << cpp_strerror(-sret)
+      << " for a version it was denied";
+  EXPECT_EQ(owned("src/.versions/" + entry).err, 0)
+      << "the denied delete removed the version";
+
+  ASSERT_EQ(set_model("s3-native"), 0);
+  const uint64_t before = raised();
+  const int nret = lc_version_delete_for_bob();
+  ASSERT_EQ(nret, 0) << "s3-native did not raise: " << cpp_strerror(-nret);
+  EXPECT_GT(raised(), before);
+  EXPECT_EQ(owned("src/.versions/" + entry).err, -ENOENT)
+      << "the version stayed";
 }
 
 /* A lifecycle abort runs as whom it is for:  one with no row is

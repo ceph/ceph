@@ -14886,6 +14886,11 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     source->set_access(identity, /*ro=*/true);
   }
   const nsfs::AccessStrategy* model = source->driver->get_access_strategy();
+  /* a denial is the delete's answer, never an absent object */
+  const bool denial_injected = source->driver->denial_as_absence_injected();
+  auto denied = [denial_injected](int r) {
+    return !denial_injected && ((r == -EACCES) || (r == -EPERM));
+  };
 
   bool has_cond = params.if_match ||
     !real_clock::is_zero(params.last_mod_time_match) ||
@@ -14952,6 +14957,12 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     source->clear_instance();
     source->ent.reset();
     int ret = source->stat(dpp);
+    /* a denial is the delete's answer:  read as absence, the branch
+     * finds no directory and answers success for a version it did not
+     * touch */
+    if (denied(ret)) {
+      return ret;
+    }
     nsfs::FSEnt* ent = source->get_fsent();
 
     /* acquire version lock — must use the object's parent dir,
@@ -14993,6 +15004,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     source->set_instance(saved_instance);
     source->ent.reset();
     ret = source->stat(dpp);
+    if (denied(ret)) {
+      return ret;
+    }
     ent = source->get_fsent();
 
     /* check if the requested version is the current */
@@ -15118,6 +15132,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           /*create_dirs=*/false, source->driver->ctx(),
           chain, leaf_dir, leaf_name,
           identity, source->driver->get_access_strategy());
+      if (denied(ret)) {
+        return ret;
+      }
       if (ret == 0 && leaf_dir) {
         parent_fd = leaf_dir->get_fd();
         if (parent_fd < 0) {
@@ -15130,11 +15147,18 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     if (parent_fd >= 0) {
       int vfd = openat_as(dpp, identity, model, parent_fd,
 			  HIDDEN_VERSIONS_PATH.c_str(), O_RDONLY | O_DIRECTORY);
+      if (denied(vfd)) {
+        return vfd;
+      }
       if (vfd >= 0) {
         std::string ver_name = nsfs_ver_entry(leaf_name, req_version_id);
         bool is_dm = false;
         int ver_fd = openat_as(dpp, identity, model, vfd, ver_name.c_str(),
                                O_RDONLY);
+        if (denied(ver_fd)) {
+          ::close(vfd);
+          return ver_fd;
+        }
         if (ver_fd < 0) {
           ldpp_dout(dpp, 10) << "delete_obj: " << ver_name
             << " not found in .versions/ (already deleted?)" << dendl;
@@ -15250,6 +15274,12 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   source->clear_instance();
   source->ent.reset();
   int ret = source->stat(dpp);
+  /* a denial is the delete's answer, not an absent object:  read as
+   * absence, the path looks for the key's directory, cannot open it
+   * either, and returns -EINVAL */
+  if (denied(ret)) {
+    return ret;
+  }
 
   if (has_cond) {
     if (ret == -ENOENT && source->dm_version_id.empty()) {
@@ -15313,6 +15343,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         /*create_dirs=*/true, source->driver->ctx(),
         dm_chain, leaf_dir, dm_leaf,
         identity, source->driver->get_access_strategy());
+    if (denied(r)) {
+      return r;
+    }
     if (r == 0 && leaf_dir) {
       parent_fd = leaf_dir->get_fd();
       if (parent_fd < 0) {
@@ -19253,6 +19286,22 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_skip_reclone = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_skip_reclone ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-denial-as-absence") {
+    /* reproduce the delete defect:  NSFSDeleteOp::delete_obj() reads a
+     * denied stat, walk or open as an absent object, so a denied
+     * version delete answers success and a denied plain delete
+     * -EINVAL.  A test asserts both polarities against one build */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_denial_as_absence = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_denial_as_absence ? "true" : "false";
     }
     return 0;
   }
