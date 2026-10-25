@@ -94,6 +94,14 @@ struct Env {
     /// `work/modality` and the later steps read that rather than this,
     /// so changing the setting cannot relabel an existing tree.
     md5: bool,
+    /// whether RGW serves the tree impersonating -- (n) Phase G.  NooBaa
+    /// then runs as root, as an installation's does, with its account
+    /// at vstart's fixture ids, so the tree is account-owned at
+    /// NooBaa's modes;  the corpus captures it as the account, and the
+    /// store, root's at `0600`, is not captured (see `capture`)
+    impersonate: bool,
+    /// the access model RGW is started with under `impersonate`
+    access_model: String,
 }
 
 /// Every setting, from `adoption.conf` and then the environment.
@@ -199,6 +207,9 @@ impl Env {
             tier: get("tier", "coverage"),
             md5: matches!(get("md5", "false").to_ascii_lowercase().as_str(),
                           "1" | "on" | "true" | "yes"),
+            impersonate: matches!(get("impersonate", "false").to_ascii_lowercase().as_str(),
+                                  "1" | "on" | "true" | "yes"),
+            access_model: get("access_model", "posix-strict"),
         })
     }
 
@@ -659,11 +670,13 @@ fn native(env: &Env) -> Result<(), String> {
 /// NooBaa's schema again, which is the thing this stage exists to stop
 /// relying on.
 ///
-/// **uid and gid are the running user's.**  The handoff is sequential
-/// against one tree -- NooBaa writes, stops, RGW opens the same
-/// directory -- so the files have to be owned by the identity RGW will
-/// run as, or the second half of the exercise fails on permissions
-/// rather than on anything interesting.
+/// **uid and gid are the running user's**, unless `impersonate`.  The
+/// handoff is sequential against one tree -- NooBaa writes, stops, RGW
+/// opens the same directory -- so unimpersonated, the files have to be
+/// owned by the identity RGW will run as, or the second half fails on
+/// permissions rather than on anything interesting.  Under
+/// `impersonate` they are vstart's fixture account's, NooBaa runs as
+/// root, and RGW acting as the account is the point.
 ///
 /// Idempotent:  a second run finds the records present and says so.
 /// NooBaa's CLI fails a duplicate `add`, which is correct of it and not
@@ -703,14 +716,15 @@ fn config(env: &Env) -> Result<(), String> {
     if !wt.join("node_modules").exists() {
         return Err("no dependency tree;  run `build` first".into());
     }
-    let (uid, gid) = running_ids()?;
+    let (uid, gid) = account_ids(env)?;
     std::fs::create_dir_all(env.config_root())
         .map_err(|e| format!("cannot create {}: {e}", env.config_root().display()))?;
     /* The tree, not `data`:  `rgw-vstart.sh --data-root DIR` serves
      * DIR/root, so NooBaa has to write into data/root for the handoff
      * to line up without copying anything. */
-    std::fs::create_dir_all(env.tree())
-        .map_err(|e| format!("cannot create {}: {e}", env.tree().display()))?;
+    std::fs::create_dir_all(&env.data)
+        .map_err(|e| format!("cannot create {}: {e}", env.data.display()))?;
+    account_dir(env, &env.tree(), uid, gid)?;
 
     println!("config   config_root {}", env.config_root().display());
     println!("         tree        {} (uid {uid}, gid {gid})", env.tree().display());
@@ -738,8 +752,8 @@ fn config(env: &Env) -> Result<(), String> {
      * that serves public buckets has one, and the import writes it as an
      * identity row and nothing else (ACCOUNT_IMPORT.md §6.8) -- a record
      * shape and a branch no other record reaches.  Without it here only
-     * synthetic fixtures would cover either.  This process's ids, so the
-     * identity it names exists. */
+     * synthetic fixtures would cover either.  The account's ids, so
+     * the identity it names exists. */
     if nsfs_cli(env, &["account", "status", "--anonymous"]).is_ok() {
         println!("         anonymous account already present");
     } else {
@@ -758,8 +772,7 @@ fn config(env: &Env) -> Result<(), String> {
     if nsfs_cli(env, &["bucket", "status", "--name", &env.bucket]).is_ok() {
         println!("         bucket {:?} already present", env.bucket);
     } else {
-        std::fs::create_dir_all(&bucket_path)
-            .map_err(|e| format!("cannot create {}: {e}", bucket_path.display()))?;
+        account_dir(env, &bucket_path, uid, gid)?;
         /* `--force_md5_etag` is their per-bucket flag, and it is the
          * only one of the three a fixture can reach:  the global
          * `NSFS_CALCULATE_MD5` would need a config.json override and
@@ -790,8 +803,7 @@ fn config(env: &Env) -> Result<(), String> {
     if nsfs_cli(env, &["bucket", "status", "--name", DAMAGED_BUCKET]).is_ok() {
         println!("         bucket {DAMAGED_BUCKET:?} already present");
     } else {
-        std::fs::create_dir_all(&damaged_path)
-            .map_err(|e| format!("cannot create {}: {e}", damaged_path.display()))?;
+        account_dir(env, &damaged_path, uid, gid)?;
         let dp = damaged_path.display().to_string();
         nsfs_cli(env, &["bucket", "add", "--name", DAMAGED_BUCKET,
                         "--owner", &env.account, "--path", &dp])?;
@@ -874,6 +886,15 @@ fn serve(env: &Env) -> Result<(), String> {
     if !env.config_root().join("buckets").exists() {
         return Err("no bucket records;  run `config` first".into());
     }
+    /* Whatever answers on the port below is taken to be this one, so
+     * nothing else may hold it:  a NooBaa from an earlier run would
+     * answer for one that died on EADDRINUSE. */
+    if std::net::TcpStream::connect(("127.0.0.1", env.port)).is_ok() {
+        return Err(format!(
+            "port {} is already taken, and this work directory runs no NooBaa;  \
+             a NooBaa from another work directory?  Stop it, then run again.",
+            env.port));
+    }
 
     let log = std::fs::File::create(env.log_file())
         .map_err(|e| format!("cannot create {}: {e}", env.log_file().display()))?;
@@ -881,7 +902,7 @@ fn serve(env: &Env) -> Result<(), String> {
         .try_clone()
         .map_err(|e| format!("cannot clone the log handle: {e}"))?;
 
-    let child = Command::new(env.node())
+    let child = privileged(env, &node_path(env))
         .args([
             "src/cmd/nsfs.js",
             "--config_root",
@@ -932,15 +953,20 @@ fn serve(env: &Env) -> Result<(), String> {
      * question is whether it will answer, and that is what the corpus
      * will ask it. */
     for i in 0..120 {
-        if std::net::TcpStream::connect(("127.0.0.1", env.port)).is_ok() {
-            println!("serve    answering on http://127.0.0.1:{}", env.port);
-            return Ok(());
-        }
+        /* alive first:  only its own answer counts */
         if !alive(pid) {
             return Err(format!(
                 "it exited before answering;  see {}",
                 env.log_file().display()
             ));
+        }
+        /* both listeners:  IAM comes up after S3, once its certificate
+         * is generated, and `iam-user` asks it next */
+        if std::net::TcpStream::connect(("127.0.0.1", env.port)).is_ok()
+            && std::net::TcpStream::connect(("127.0.0.1", env.iam_port)).is_ok() {
+            println!("serve    answering on http://127.0.0.1:{} (IAM :{})",
+                     env.port, env.iam_port);
+            return Ok(());
         }
         if i == 10 {
             println!("serve    waiting for the port...");
@@ -948,8 +974,9 @@ fn serve(env: &Env) -> Result<(), String> {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
     Err(format!(
-        "it did not answer on port {} within a minute;  see {}",
+        "it did not answer on port {} and IAM port {} within a minute;  see {}",
         env.port,
+        env.iam_port,
         env.log_file().display()
     ))
 }
@@ -1086,16 +1113,35 @@ fn iam_call(env: &Env, params: &[(&str, &str)]) -> Result<String, String> {
 /// is one, on the bucket directory -- changes a file's ctime and not its
 /// mtime or size, so a fingerprint without it missed the corpus putting
 /// a policy on the log-target bucket.
-fn tree_fingerprint(root: &PathBuf) -> Vec<String> {
-    fn walk(d: &PathBuf, out: &mut Vec<String>) {
-        let Ok(rd) = std::fs::read_dir(d) else {
-            return;
-        };
+fn tree_fingerprint(env: &Env) -> Result<Vec<String>, String> {
+    /* Whole, or a failure:  a directory skipped here is one the write
+     * check cannot see, and it would pass while disabled.  Under
+     * `impersonate` taken as the account, which owns the tree. */
+    let root = env.tree();
+    if env.impersonate {
+        let (uid, gid) = account_ids(env)?;
+        let out = Command::new("sudo")
+            .args(["-n", "-u", &format!("#{uid}"), "-g", &format!("#{gid}"), "find"])
+            .arg(&root)
+            .args(["-mindepth", "1", "-printf", "%p\t%s\t%T@\t%C@\n"])
+            .output()
+            .map_err(|e| format!("cannot run find as the account: {e}"))?;
+        if !out.status.success() {
+            return Err(format!("the account cannot walk {}:  {}", root.display(),
+                               String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        let mut v: Vec<String> = String::from_utf8_lossy(&out.stdout)
+            .lines().map(str::to_string).collect();
+        v.sort();
+        return Ok(v);
+    }
+    fn walk(d: &PathBuf, out: &mut Vec<String>) -> Result<(), String> {
+        let rd = std::fs::read_dir(d)
+            .map_err(|e| format!("cannot read {}: {e}", d.display()))?;
         for e in rd.filter_map(Result::ok) {
             let p = e.path();
-            let Ok(m) = e.metadata() else {
-                continue;
-            };
+            let m = e.metadata()
+                .map_err(|e| format!("cannot stat {}: {e}", p.display()))?;
             let mtime = m
                 .modified()
                 .ok()
@@ -1105,14 +1151,15 @@ fn tree_fingerprint(root: &PathBuf) -> Vec<String> {
             out.push(format!("{}\t{}\t{}\t{}.{:09}", p.display(), m.len(), mtime,
                              m.ctime(), m.ctime_nsec()));
             if m.is_dir() {
-                walk(&p, out);
+                walk(&p, out)?;
             }
         }
+        Ok(())
     }
     let mut out = Vec::new();
-    walk(root, &mut out);
+    walk(&root, &mut out)?;
     out.sort();
-    out
+    Ok(out)
 }
 
 fn capture(env: &Env, side: &str) -> Result<(), String> {
@@ -1196,7 +1243,11 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
         for e in entries.filter_map(|e| e.ok()) {
             let name = e.file_name().to_string_lossy().to_string();
             if name.ends_with(".manifest") || name.ends_with(".inventory") {
-                if std::fs::remove_file(e.path()).is_ok() {
+                /* the account's, under `impersonate` */
+                let gone = std::fs::remove_file(e.path()).is_ok()
+                    || (env.impersonate && privileged(env, "rm").arg("-f").arg(e.path())
+                            .status().map(|s| s.success()).unwrap_or(false));
+                if gone {
                     stale += 1;
                 }
             }
@@ -1211,7 +1262,7 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
      * that slipped past a guard is caught by the step that must not
      * make one. */
     let before = if observe {
-        Some(tree_fingerprint(&env.tree()))
+        Some(tree_fingerprint(env)?)
     } else {
         None
     };
@@ -1266,33 +1317,70 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
      *
      * Every path goes through the environment rather than into the
      * command line, so nothing here has to be quoted correctly. */
-    let script = format!(
-        "set -o pipefail; cd \"$ADOPTION_SUITE\" || exit 1; \
-         {runner} 2>&1 | tee \"$ADOPTION_CAPTURE_LOG\""
-    );
-    let st = Command::new("bash")
-        .arg("-c")
-        .arg(&script)
+    /* The CORPUS_* variables are listed, with their meanings, in
+     * ../s3-tests-rs/src/corpus/env.rs.  The tree's modality is not
+     * one of them:  it reaches the corpus as `non_md5_etag` in the
+     * capture conf. */
+    let mut vars: Vec<(&str, String)> = vec![
+        ("S3TEST_CONF", conf.display().to_string()),
+        ("CORPUS_OUT", dir.display().to_string()),
+        /* The disk half.  Same host by construction -- the NooBaa
+         * endpoint is on 127.0.0.1 -- so the inventory can be taken,
+         * and it is the half that answers "what did they write". */
+        ("CORPUS_DATA_ROOT", env.tree().display().to_string()),
+        ("CORPUS_TIER", env.tier.clone()),
+        ("CORPUS_OBSERVE", (if observe { "1" } else { "0" }).to_string()),
+    ];
+    /* The other place a bucket's configuration can live.  NooBaa keeps
+     * tagging, CORS, policy, lifecycle, logging and encryption in the
+     * bucket's record and none of them reaches the bucket directory,
+     * so an axis reading only the tree concludes they were accepted
+     * and dropped.
+     *
+     * Not asked for under `impersonate`.  The store is root's at
+     * `0600` there, as an installation's is, and the account cannot
+     * read it;  what it holds is NooBaa's format, which impersonation
+     * does not change and the unimpersonated run captures. */
+    if !env.impersonate {
+        vars.push(("CORPUS_CONFIG_ROOT", env.config_root().display().to_string()));
+    }
+
+    /* Through bash so the output reaches the terminal and the log at
+     * once:  a capture is slow enough that silence reads as a hang,
+     * and a disagreement that only ever existed in a scrollback is
+     * not a record.  `pipefail` so the runner's status survives tee.
+     *
+     * Under `impersonate` the corpus runs as the account, which owns
+     * the tree and so can read all of it:  the test binary, built
+     * here, run through `sudo -u`, with its environment given on the
+     * command line because sudo does not pass this one on. */
+    let mut cmd = Command::new("bash");
+    if env.impersonate {
+        let exe = corpus_executable(env)?;
+        let (uid, gid) = account_ids(env)?;
+        let st = privileged(env, "chown").arg(format!("{uid}:{gid}")).arg(&dir).status()
+            .map_err(|e| format!("cannot run chown: {e}"))?;
+        if !st.success() {
+            return Err(format!("cannot give {} to the account", dir.display()));
+        }
+        cmd.arg("-c")
+            .arg("set -o pipefail; cd \"$ADOPTION_SUITE\" || exit 1; \
+                  \"$@\" 2>&1 | tee \"$ADOPTION_CAPTURE_LOG\"")
+            .arg("bash")
+            .args(["sudo", "-n", "-u", &format!("#{uid}"), "-g", &format!("#{gid}"), "env",
+                   "HOME=/tmp"])
+            .args(vars.iter().map(|(k, v)| format!("{k}={v}")))
+            .arg(exe)
+            .arg("--test-threads=4");
+    } else {
+        cmd.arg("-c")
+            .arg(format!("set -o pipefail; cd \"$ADOPTION_SUITE\" || exit 1; \
+                          {runner} 2>&1 | tee \"$ADOPTION_CAPTURE_LOG\""))
+            .envs(vars.iter().map(|(k, v)| (*k, v.as_str())));
+    }
+    let st = cmd
         .env("ADOPTION_SUITE", env.suite.display().to_string())
         .env("ADOPTION_CAPTURE_LOG", env.capture_log_for(label).display().to_string())
-        .env("S3TEST_CONF", conf.display().to_string())
-        /* The CORPUS_* variables are listed, with their meanings, in
-         * ../s3-tests-rs/src/corpus/env.rs.  The tree's modality is
-         * not one of them:  it reaches the corpus as `non_md5_etag` in
-         * the capture conf. */
-        .env("CORPUS_OUT", dir.display().to_string())
-        /* The disk half.  Same host by construction -- the NooBaa endpoint
-         * is on 127.0.0.1 -- so the inventory can be taken, and it is
-         * the half that answers "what did they write". */
-        .env("CORPUS_DATA_ROOT", env.tree().display().to_string())
-        /* The other place a bucket's configuration can live.  NooBaa
-         * keeps tagging, CORS, policy, lifecycle, logging and
-         * encryption in the bucket's record and none of them reaches
-         * the bucket directory, so an axis reading only the tree
-         * concludes they were accepted and dropped. */
-        .env("CORPUS_CONFIG_ROOT", env.config_root().display().to_string())
-        .env("CORPUS_TIER", &env.tier)
-        .env("CORPUS_OBSERVE", if observe { "1" } else { "0" })
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
@@ -1332,7 +1420,7 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
      * capture that changed the tree has described something that no
      * longer exists. */
     if let Some(before) = before {
-        let after = tree_fingerprint(&env.tree());
+        let after = tree_fingerprint(env)?;
         if after != before {
             let added: Vec<_> = after.iter().filter(|l| !before.contains(l))
                                      .take(8).collect();
@@ -1598,6 +1686,8 @@ fn compare(env: &Env) -> Result<(), String> {
         }
         Some(1) => Err("the captures differ in ways the list does not account for;  \
                         see the lines above".into()),
+        Some(3) => Err("every difference is accounted for, and known defects remain;  \
+                        see the KNOWN lines above".into()),
         _ => Err("corpus-compare could not read its inputs;  see above".into()),
     }
 }
@@ -1652,7 +1742,14 @@ fn conversion(env: &Env) -> Result<(), String> {
     ];
     for (i, (name, step)) in steps.iter().enumerate() {
         println!("\n==> conversion {}/{}:  {name}", i + 1, steps.len());
-        step(env).map_err(|e| format!("the conversion profile stopped at `{name}`:  {e}"))?;
+        if let Err(e) = step(env) {
+            /* A NooBaa left running holds the port the next one binds,
+             * and answers in its place. */
+            if running(env).is_some() {
+                let _ = stop(env);
+            }
+            return Err(format!("the conversion profile stopped at `{name}`:  {e}"));
+        }
     }
     println!("\n==> conversion:  every step passed");
     Ok(())
@@ -1735,7 +1832,7 @@ fn stop(env: &Env) -> Result<(), String> {
     };
     /* SIGTERM, then wait:  it has a tree open and should be allowed to
      * close it. */
-    let _ = Command::new("kill").arg(pid.to_string()).status();
+    let _ = privileged(env, "kill").arg(pid.to_string()).status();
     for _ in 0..60 {
         if !alive(pid) {
             let _ = std::fs::remove_file(env.pid_file());
@@ -1839,9 +1936,7 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
 
     /* Said out loud, because it is the whole point of the exercise and
      * a reader of the log should be able to see what was handed over. */
-    let buckets = std::fs::read_dir(&tree)
-        .map(|d| d.filter_map(|e| e.ok()).count())
-        .unwrap_or(0);
+    let buckets = tree_entries(env, &tree);
     println!("{tag} tree {} ({buckets} entries)", tree.display());
     println!("         modality {}",
              tree_modality(env).unwrap_or_else(|| "unwritten".into()));
@@ -1864,9 +1959,9 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         println!("{tag} RGW already serves this tree;  adopting in place");
     } else {
     println!("         rgw-vstart.sh --store nsfs --data-root {} \
-              --noobaa-config-root {} --adoption-mode command --with-lifecycle {}",
+              --noobaa-config-root {} --adoption-mode command --with-lifecycle {} {}",
              env.data.display(), env.config_root().display(),
-             rgw_etag_opts(env).join(" "));
+             rgw_etag_opts(env).join(" "), rgw_identity_opts(env).join(" "));
     let st = Command::new("bash")
         .arg(script.display().to_string())
         .args([
@@ -1884,6 +1979,7 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
             "--with-lifecycle",
         ])
         .args(rgw_etag_opts(env))
+        .args(rgw_identity_opts(env))
         .current_dir(build)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -1961,11 +2057,16 @@ fn adopt(env: &Env, step: &str) -> Result<(), String> {
         return Ok(());
     }
 
+    /* the store is root's under `impersonate` */
     let records = env.config_root().join("buckets");
-    let mut names: Vec<String> = std::fs::read_dir(&records)
-        .map_err(|e| format!("cannot read {}: {e}", records.display()))?
-        .filter_map(|e| e.ok())
-        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".json").map(str::to_string))
+    let out = privileged(env, "ls").arg("-1").arg(&records).output()
+        .map_err(|e| format!("cannot run ls: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("cannot read {}:  {}", records.display(),
+                           String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    let mut names: Vec<String> = String::from_utf8_lossy(&out.stdout).lines()
+        .filter_map(|n| n.strip_suffix(".json").map(str::to_string))
         .collect();
     names.sort();
     let damaged = damaged_id(env);
@@ -2042,8 +2143,7 @@ fn damage(env: &Env) -> Result<(), String> {
         return Err(format!("NooBaa is still running (pid {pid});  run `stop` first"));
     }
     let path = env.config_root().join("buckets").join(format!("{DAMAGED_BUCKET}.json"));
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let text = read_store(env, &path)?;
     let mut record: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| format!("{} is not JSON: {e}", path.display()))?;
     let id = record["_id"].as_str()
@@ -2054,8 +2154,7 @@ fn damage(env: &Env) -> Result<(), String> {
         println!("damage   {DAMAGED_BUCKET}:  already damaged");
     } else {
         record["owner_account"] = serde_json::Value::from(NO_SUCH_OWNER);
-        std::fs::write(&path, record.to_string())
-            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        write_store(env, &path, &record.to_string())?;
         println!("damage   {DAMAGED_BUCKET} (_id {id}):  owner_account {was} -> {NO_SUCH_OWNER}");
     }
     let marker = serde_json::json!({
@@ -2138,7 +2237,7 @@ fn after_the_escape_hatch(env: &Env, admin: &str) -> Result<(), String> {
         return Err(format!("{DAMAGED_BUCKET} is served after completion ({status});  \
                             an abandoned bucket never imported must not be"));
     }
-    if !env.tree().join(DAMAGED_BUCKET).is_dir() {
+    if !tree_is_dir(env, &env.tree().join(DAMAGED_BUCKET)) {
         return Err(format!("{DAMAGED_BUCKET}'s directory is gone;  abandoning must not touch data"));
     }
     let id = damaged_id(env).unwrap_or_default();
@@ -2283,7 +2382,7 @@ fn nsfs_cli(env: &Env, args: &[&str]) -> Result<String, String> {
     a.push("--config_root".into());
     a.push(env.config_root().display().to_string());
 
-    let out = Command::new(env.node())
+    let out = privileged(env, &node_path(env))
         .args(&a)
         .current_dir(&wt)
         .output()
@@ -2298,6 +2397,165 @@ fn nsfs_cli(env: &Env, args: &[&str]) -> Result<String, String> {
         ));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// Under `impersonate`:  serve impersonating, under the access model,
+/// with vstart's users and capabilities but not its fixture, which
+/// would write into the tree NooBaa wrote.
+fn rgw_identity_opts(env: &Env) -> Vec<String> {
+    if !env.impersonate {
+        return vec![];
+    }
+    vec!["--with-impersonation".into(), "--no-fixture".into(),
+         "--access-model".into(), env.access_model.clone()]
+}
+
+/// `program` as root under `impersonate`, where NooBaa is root as an
+/// installation's is;  as this process otherwise.  `sudo -n`:  the
+/// password was given to whoever runs this, once.
+fn privileged(env: &Env, program: &str) -> Command {
+    if env.impersonate {
+        let mut c = Command::new("sudo");
+        c.arg("-n").arg(program);
+        c
+    } else {
+        Command::new(program)
+    }
+}
+
+/// `node` by its path:  sudo's `secure_path` would not find it.
+fn node_path(env: &Env) -> String {
+    let n = env.node();
+    if n.contains('/') {
+        return n;
+    }
+    Command::new("sh").args(["-c", "command -v \"$1\"", "sh", &n]).output().ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|p| !p.is_empty())
+        .unwrap_or(n)
+}
+
+/// The account's uid and gid:  vstart's fixture account under
+/// `impersonate`, this process's otherwise.
+fn account_ids(env: &Env) -> Result<(u32, u32), String> {
+    if env.impersonate { fixture_ids(env) } else { running_ids() }
+}
+
+/// vstart's fixture account, `IMP_UID_A` and `IMP_GRP_GID`, read from
+/// rgw-vstart.sh, which stays the single authority on them.  It makes
+/// them on its first impersonated start, so they must already exist.
+fn fixture_ids(env: &Env) -> Result<(u32, u32), String> {
+    let Some(build) = env.ceph_build.as_ref() else {
+        return Err("`impersonate` takes vstart's fixture ids, so `ceph_build` \
+                    must be set".into());
+    };
+    let p = build.join("../src/script/rgw/rgw-vstart.sh");
+    let text = std::fs::read_to_string(&p)
+        .map_err(|e| format!("cannot read {}: {e}", p.display()))?;
+    let get = |k: &str| text.lines()
+        .find_map(|l| l.strip_prefix(&format!("{k}=")))
+        .and_then(|v| v.trim().parse::<u32>().ok());
+    let (Some(uid), Some(gid)) = (get("IMP_UID_A"), get("IMP_GRP_GID")) else {
+        return Err(format!("{} sets no IMP_UID_A or IMP_GRP_GID", p.display()));
+    };
+    let known = Command::new("getent").args(["passwd", &uid.to_string()])
+        .stdout(Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
+    if !known {
+        return Err(format!("uid {uid} has no passwd entry;  run rgw-vstart.sh \
+                            --with-impersonation once, which makes the fixture's users"));
+    }
+    Ok((uid, gid))
+}
+
+/// A directory the account owns:  under `impersonate` made by root for
+/// it, at NooBaa's mode, as an installation's are;  this process's
+/// otherwise.
+fn account_dir(env: &Env, dir: &Path, uid: u32, gid: u32) -> Result<(), String> {
+    if !env.impersonate {
+        return std::fs::create_dir_all(dir)
+            .map_err(|e| format!("cannot create {}: {e}", dir.display()));
+    }
+    let st = privileged(env, "install")
+        .args(["-d", "-o", &uid.to_string(), "-g", &gid.to_string(), "-m", "0770"])
+        .arg(dir).status()
+        .map_err(|e| format!("cannot run install: {e}"))?;
+    if !st.success() {
+        return Err(format!("cannot make {} for the account", dir.display()));
+    }
+    Ok(())
+}
+
+/// Whether `path` in the tree is a directory:  asked as the account under
+/// `impersonate`, which owns the tree, and so sees what this process cannot.
+fn tree_is_dir(env: &Env, path: &Path) -> bool {
+    if !env.impersonate {
+        return path.is_dir();
+    }
+    let Ok((uid, gid)) = account_ids(env) else {
+        return false;
+    };
+    Command::new("sudo")
+        .args(["-n", "-u", &format!("#{uid}"), "-g", &format!("#{gid}"), "test", "-d"])
+        .arg(path).status().map(|s| s.success()).unwrap_or(false)
+}
+
+/// The entries directly under `dir` in the tree, counted as `tree_is_dir` asks.
+fn tree_entries(env: &Env, dir: &Path) -> usize {
+    if !env.impersonate {
+        return std::fs::read_dir(dir).map(|d| d.filter_map(|e| e.ok()).count()).unwrap_or(0);
+    }
+    let Ok((uid, gid)) = account_ids(env) else {
+        return 0;
+    };
+    Command::new("sudo")
+        .args(["-n", "-u", &format!("#{uid}"), "-g", &format!("#{gid}"), "ls", "-A"])
+        .arg(dir).output().ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().count()).unwrap_or(0)
+}
+
+/// A file in NooBaa's store, which is root's at `0600` under
+/// `impersonate`.
+fn read_store(env: &Env, path: &Path) -> Result<String, String> {
+    let out = privileged(env, "cat").arg(path).output()
+        .map_err(|e| format!("cannot run cat: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("cannot read {}:  {}", path.display(),
+                           String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+fn write_store(env: &Env, path: &Path, text: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut child = privileged(env, "tee").arg(path)
+        .stdin(Stdio::piped()).stdout(Stdio::null()).spawn()
+        .map_err(|e| format!("cannot run tee: {e}"))?;
+    child.stdin.take().unwrap().write_all(text.as_bytes())
+        .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    if !child.wait().map(|s| s.success()).unwrap_or(false) {
+        return Err(format!("cannot write {}", path.display()));
+    }
+    Ok(())
+}
+
+/// The corpus test binary, built as this process:  under `impersonate`
+/// it runs as the account, which cannot run cargo in this tree.
+fn corpus_executable(env: &Env) -> Result<String, String> {
+    let out = Command::new("cargo")
+        .args(["test", "--features", "fails_on_noobaa", "--test", "test_corpus",
+               "--no-run", "--message-format=json"])
+        .current_dir(&env.suite)
+        .stderr(Stdio::inherit())
+        .output()
+        .map_err(|e| format!("cannot run cargo: {e}"))?;
+    if !out.status.success() {
+        return Err("the corpus did not build".into());
+    }
+    String::from_utf8_lossy(&out.stdout).lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .find(|v| v["target"]["name"] == "test_corpus" && v["executable"].is_string())
+        .and_then(|v| v["executable"].as_str().map(str::to_string))
+        .ok_or_else(|| "cargo built no test_corpus executable".into())
 }
 
 /// The uid and gid this process runs as, without a libc dependency.
