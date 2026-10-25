@@ -105,6 +105,26 @@ class TestMgmtGatewayHA(GatewayTestCase):
             self.orch('daemon', 'start', keepalived[0])
         self.wait_service(INGRESS)
 
+    def test_port_free_on_host_addresses(self) -> None:
+        """With a virtual_ip the gateway binds the VIP (and the loopback, for
+        keepalived's check) only: its port stays free on the hosts' own
+        addresses for other services (tracker 74929)."""
+        ports = self.gateway_ports()
+        self.assertEqual(len(ports), 1, ports)
+        for host in self.host_names[:2]:
+            addr = self.hosts[host]
+            out = self.remote_for(host).sh([
+                'sudo', 'python3', '-c',
+                'import socket, sys\n'
+                's = socket.socket(socket.AF_INET6 if ":" in sys.argv[1] else socket.AF_INET)\n'
+                'try:\n'
+                '    s.bind((sys.argv[1], int(sys.argv[2]))); print("free")\n'
+                'except OSError as e:\n'
+                '    print("busy", e)\n',
+                addr, str(ports[0])])
+            self.assertEqual(out.strip(), 'free',
+                             f'{addr}:{ports[0]} on {host} is taken: {out.strip()}')
+
     def test_session_spans_oauth2_instances(self) -> None:
         """nginx balances over both oauth2-proxy instances: a session opened
         through one is accepted by the other."""
