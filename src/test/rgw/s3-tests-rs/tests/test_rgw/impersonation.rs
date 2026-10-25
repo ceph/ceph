@@ -826,11 +826,11 @@ async fn test_impersonation_denies_metadata_to_unresolved_credentials() {
 /// cannot create there.  nsfs makes the directory as the gateway, so it
 /// checks the account's access as the account before it does.
 ///
-/// alice is mapped with `/usr` as her `new_buckets_path`, which is
-/// root-owned and not writable by uid 70101:  denied.  (Not `/`, which
-/// nsfs rejects as a path at all.)  The control is
-/// `/tmp`, which anyone may write:  created.  Neither depends on a
-/// fixture directory.
+/// alice's `new_buckets_path` is the `unplaced-directory` hint's `as=`
+/// directory, made for her inside the gateway's base path, so the test
+/// assumes nothing about the gateway host's filesystem and takes no
+/// privilege.  At `0550` she cannot write it:  denied.  The control is
+/// the same location at `0770`:  created.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_new_buckets_path_requires_the_accounts_access() {
@@ -849,34 +849,38 @@ async fn test_new_buckets_path_requires_the_accounts_access() {
         return;
     };
     let alice = &alice_u.client;
-    let bind = |nbp: &'static str| {
-        let me = alice_u.id.clone();
-        async move {
-            let r = nsfs_put_identity(&[
-                ("identity", me.as_str()),
-                ("uid", UID_ALICE),
-                ("gid", UID_ALICE),
-                ("new_buckets_path", nbp),
-            ]).await;
-            assert_eq!(r.status, 200, "binding alice failed: {}", r.body);
-        }
-    };
+    let loc = s3_tests_rs::fixtures::get_new_bucket_name();
+    let made = driver_hint_results("unplaced-directory", &[
+        ("op", "create"), ("name", &loc), ("as", &alice_u.id),
+        ("mode", "0550")]).await
+        .expect("could not make alice a location");
+    let path = made.get("path").cloned().expect("the location's path");
+    let r = nsfs_put_identity(&[
+        ("identity", alice_u.id.as_str()),
+        ("uid", UID_ALICE), ("gid", UID_ALICE),
+        ("new_buckets_path", path.as_str()),
+    ]).await;
+    assert_eq!(r.status, 200, "binding alice's location failed: {}", r.body);
     let status = |r: Result<_, aws_sdk_s3::error::SdkError<
         aws_sdk_s3::operation::create_bucket::CreateBucketError>>| match r {
         Ok(_) => 200,
         Err(e) => e.raw_response().map_or(0, |r| r.status().as_u16()),
     };
 
-    bind("/usr").await;
     let denied = s3_tests_rs::fixtures::get_new_bucket_name();
     let r = status(alice.create_bucket().bucket(&denied).send().await);
 
-    bind("/tmp").await;
+    driver_hint_results("unplaced-directory", &[
+        ("op", "mode"), ("name", &loc), ("as", &alice_u.id),
+        ("mode", "0770")]).await
+        .expect("could not give alice write on her location");
     let allowed = s3_tests_rs::fixtures::get_new_bucket_name();
     let ok = status(alice.create_bucket().bucket(&allowed).send().await);
     if ok == 200 {
         let _ = alice.delete_bucket().bucket(&allowed).send().await;
     }
+    let _ = driver_hint_results("unplaced-directory", &[
+        ("op", "remove"), ("name", &loc), ("as", &alice_u.id)]).await;
 
     assert_eq!(r, 403, "alice created a bucket where she cannot write");
     assert_eq!(ok, 200, "alice was denied where she can write");

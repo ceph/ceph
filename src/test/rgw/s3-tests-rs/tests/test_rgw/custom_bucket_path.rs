@@ -9,13 +9,16 @@
 //! decision through a real request:  denied with no allowlist, admitted
 //! with one, denied outside it.
 
-use s3_tests_rs::admin::{as_json, driver_hint, nsfs_delete_identity,
-                         nsfs_put_identity};
+use s3_tests_rs::admin::{as_json, driver_hint, driver_hint_results,
+                         nsfs_delete_identity, nsfs_put_identity};
 use s3_tests_rs::fixtures::PrivateUser;
-use s3_tests_rs::features::features;
+use s3_tests_rs::features::{feature_bool, features};
+use s3_tests_rs::hints::with_hint;
 use s3_tests_rs::fixtures::{get_new_bucket_name, TestGuard};
 
 const HEADER: &str = "x-noobaa-custom-bucket-path";
+/* the uid this module's user is bound to under impersonation */
+const UID_CUSTOMPATH: &str = "70101";
 
 /// `None` from the accessor means unknown, so skip rather than assert.
 async fn nsfs_only() -> bool {
@@ -71,6 +74,7 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
         eprintln!("not nsfs;  nothing to check");
         return;
     }
+    let impersonating = feature_bool("impersonate").await == Some(true);
     /* A user of this module's own.  This test deletes the identity
      * row of whoever it names, to show that a request with no
      * allowlist is denied -- and 590 tests authenticate as the main
@@ -91,29 +95,86 @@ async fn test_custom_bucket_path_follows_the_allowlist() {
     assert_eq!(create_at(&user.client, &bucket, &at).await, 403,
                "a custom path was admitted with no allowlist");
 
-    /* An allowlist admitting it, and deliberately no uid.  nsfs
-     * checks the authenticated user's own access to the path before it makes
-     * the directory as the gateway, so a row carrying a uid is
-     * denied for any path that uid cannot write.  A row carrying
-     * only an allowlist is served as the gateway, which is what makes
-     * this independent of who owns the path -- and nsfs assumes no
-     * single root of its own (DECISIONS.md 2026-10-13: a bucket
-     * exists because a record says so, and the record carries its
-     * path). */
+    /* An allowlist admitting it, and no uid.  Under impersonation nsfs
+     * checks the owner's own access to the path before it makes the
+     * directory, and an owner whose credentials do not resolve is
+     * denied rather than checked as the gateway (n-plan §6.1).  The
+     * injected arm restores the old reading, which admitted it.
+     * Without impersonation nothing is checked as anybody, so it is
+     * admitted. */
     let r = nsfs_put_identity(&[("identity", me.as_str()),
                                 ("custom_bucket_path_allowed_list", base.as_str())]).await;
     assert_eq!(r.status, 200, "setting the allowlist: {}", r.body);
-    let created = create_at(&user.client, &bucket, &at).await;
+    let unresolved = create_at(&user.client, &bucket, &at).await;
+    if unresolved == 200 {
+        let _ = user.client.delete_bucket().bucket(&bucket).send().await;
+    }
+    let injected = if impersonating {
+        let st = with_hint("inject-unresolved-as-gateway",
+                           &[("enable", "true"), ("user", &me)],
+                           create_at(&user.client, &bucket, &at)).await;
+        if st == 200 {
+            let _ = user.client.delete_bucket().bucket(&bucket).send().await;
+        }
+        Some(st)
+    } else {
+        None
+    };
+
+    /* An owner with access to the path:  a location made for this
+     * user by the `unplaced-directory` hint, inside the gateway's base
+     * path, so the test assumes nothing about the gateway host's
+     * filesystem.  Under impersonation the user is bound to a uid and
+     * the location is that uid's;  without it, the gateway's. */
+    let loc = get_new_bucket_name();
+    let mut row = vec![("identity", me.as_str())];
+    let mut make = vec![("op", "create"), ("name", loc.as_str()),
+                        ("mode", "0770")];
+    if impersonating {
+        row.extend([("uid", UID_CUSTOMPATH), ("gid", UID_CUSTOMPATH)]);
+        make.push(("as", me.as_str()));
+    }
+    let r = nsfs_put_identity(&row).await;
+    assert_eq!(r.status, 200, "binding the user: {}", r.body);
+    let made = driver_hint_results("unplaced-directory", &make).await
+        .expect("could not make the user a location");
+    let path = made.get("path").cloned().expect("the location's path");
+    row.push(("custom_bucket_path_allowed_list", path.as_str()));
+    let r = nsfs_put_identity(&row).await;
+    assert_eq!(r.status, 200, "setting the allowlist: {}", r.body);
+
+    let admitted_name = get_new_bucket_name();
+    let admitted = create_at(&user.client, &admitted_name,
+                             &format!("{path}/custom-{admitted_name}")).await;
+    if admitted == 200 {
+        let _ = user.client.delete_bucket().bucket(&admitted_name)
+            .send().await;
+    }
 
     /* and one path it does not admit */
     let other = get_new_bucket_name();
     let outside =
         create_at(&user.client, &other, "/no/such/allowed/prefix").await;
 
-    if created == 200 {
-        let _ = user.client.delete_bucket().bucket(&bucket).send().await;
+    let mut remove = vec![("op", "remove"), ("name", loc.as_str())];
+    if impersonating {
+        remove.push(("as", me.as_str()));
     }
+    let _ = driver_hint_results("unplaced-directory", &remove).await;
 
-    assert_eq!(created, 200, "a custom path the allowlist admits was denied");
+    if impersonating {
+        assert_eq!(unresolved, 403,
+                   "an owner whose credentials do not resolve was admitted \
+                    to a custom path;  its access was checked as the gateway");
+        assert_eq!(injected, Some(200),
+                   "inject-unresolved-as-gateway did not admit the owner;  \
+                    the arm does not reproduce the defect");
+    } else {
+        assert_eq!(unresolved, 200,
+                   "a custom path the allowlist admits was denied");
+    }
+    assert_eq!(admitted, 200,
+               "a custom path the allowlist admits, which its owner may \
+                write, was denied");
     assert_eq!(outside, 403, "a custom path outside the allowlist was admitted");
 }
