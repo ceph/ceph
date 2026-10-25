@@ -145,3 +145,40 @@ class Checkpoint:
         for key in CHECKPOINT_METADATA_KEYS:
             if key in metadata:
                 fsh.do_snap_md_op(path, key, '', cephfs.CEPH_SNAP_MD_OP_REMOVE)
+
+    def reset_peer_checkpoints(self, fsh, dir_path):
+        """Return replicated checkpoints to created.
+
+        Used when the peer those checkpoints were synced to is removed.
+        created_at is kept, updated_at is set back to created_at, and any
+        error message is removed. Checkpoints already in created are unchanged.
+        """
+        op_update = cephfs.CEPH_SNAP_MD_OP_CREATE
+        for snap_name in self.list_directory_snapshots(fsh, dir_path):
+            try:
+                info = self.snap_info(fsh, dir_path, snap_name)
+            except MirrorException as e:
+                if e.args[0] == -errno.ENOENT:
+                    continue
+                raise
+            metadata = info.get('metadata', {})
+            if not is_checkpointed(metadata):
+                continue
+            try:
+                status = int(metadata.get(CHECKPOINT_STATUS_KEY,
+                                          CHECKPOINT_STATUS_CREATED))
+            except (TypeError, ValueError):
+                status = None
+            if status == CHECKPOINT_STATUS_CREATED:
+                continue
+
+            path = snap_path(dir_path, self.get_snapdir(), snap_name)
+            created_at = metadata.get(CHECKPOINT_CREATED_AT_KEY) or get_checkpoint_epoch()
+            # Status is written last so a retry still sees the old state if an
+            # earlier update fails.
+            fsh.do_snap_md_op(path, CHECKPOINT_UPDATED_AT_KEY, created_at, op_update)
+            if CHECKPOINT_ERROR_MSG_KEY in metadata:
+                fsh.do_snap_md_op(path, CHECKPOINT_ERROR_MSG_KEY, '',
+                                  cephfs.CEPH_SNAP_MD_OP_REMOVE)
+            fsh.do_snap_md_op(path, CHECKPOINT_STATUS_KEY,
+                              str(CHECKPOINT_STATUS_CREATED), op_update)
