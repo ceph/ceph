@@ -9,6 +9,7 @@
 //! `qa/workunits/rgw/s3_user_quota.pl`.  See its own header.
 
 mod admin;
+mod attr_write_fail;
 mod bucket_profile;
 mod custom_bucket_path;
 mod driver_hint;
