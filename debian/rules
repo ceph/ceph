@@ -77,18 +77,18 @@ py3_overrides_packages := $(basename $(notdir $(wildcard debian/*.requires)))
 py3_packages := cephfs-shell cephfs-top cephadm
 
 %:
-	dh $@ --buildsystem=cmake --with javahelper,python3 --parallel
+	dh $@ --buildsystem=cmake+ninja --with javahelper,python3 --parallel
 
 override_dh_auto_configure:
 	env | sort
-	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
+	dh_auto_configure --buildsystem=cmake+ninja -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
 
 override_dh_auto_clean:
-	dh_auto_clean --buildsystem=cmake
+	dh_auto_clean --buildsystem=cmake+ninja
 	rm -f debian/radosgw.init debian/ceph.logrotate debian/ceph-base.docs
 
 override_dh_auto_install:
-	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
+	dh_auto_install --buildsystem=cmake+ninja --destdir=$(DESTDIR)
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
 	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
