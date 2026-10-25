@@ -38,8 +38,8 @@ public:
   struct StrayEvalRequest : public MDSMetaRequest {
     CDentry *dentry;
   public:
-    explicit StrayEvalRequest(int o, ceph_tid_t t, CDentry *d) :
-      MDSMetaRequest(o, t), dentry(d) {
+    explicit StrayEvalRequest(int o, ceph_tid_t t, CDentry *d, mds_rank_t to) :
+      MDSMetaRequest(o, t, to), dentry(d) {
       dentry->get(CDentry::PIN_PURGING);
       dentry->reintegration_reqid = t;
     }
@@ -54,6 +54,12 @@ public:
   void activate();
 
   bool eval_stray(CDentry *dn);
+
+  /**
+   * Drop the reintegration and migration requests sent to an mds that
+   * failed or stopped. It will never reply to them.
+   */
+  void drop_requests_to(mds_rank_t who);
 
   void set_num_strays(uint64_t num);
   uint64_t get_num_strays() const { return num_strays; }
