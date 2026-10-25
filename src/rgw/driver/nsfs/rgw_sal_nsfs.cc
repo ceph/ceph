@@ -3585,7 +3585,7 @@ int File::rename(const DoutPrefixProvider* dpp, optional_yield y,
 
 int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
                       Directory* dst_dir, const std::string& dst_name,
-                      bool src_as_gateway)
+                      const CopyHints& hints, bool src_as_gateway)
 {
   /* remove any existing target */
   {
@@ -3638,8 +3638,8 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
    * read a source the filesystem denies them, which the caller has
    * resolved */
   return fs_strategy->clone_file(dpp, src_dir_fd, get_name(),
-                                 dst_dir_fd, dst_name, /*excl=*/y, false,
-                                 identity, src_as_gateway);
+                                 dst_dir_fd, dst_name, /*excl=*/y, hints,
+                                 false, identity, src_as_gateway);
 }
 
 int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
@@ -4038,7 +4038,7 @@ int Directory::rename(const DoutPrefixProvider* dpp, optional_yield y, Directory
 
 int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
                       Directory* dst_dir, const std::string& dst_name,
-                      bool src_as_gateway)
+                      const CopyHints& hints, bool src_as_gateway)
 {
   int ret;
 
@@ -4099,7 +4099,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   const auto& rn = reserved_or_none(reserved_names);
-  ret = for_each(dpp, [this, &dest, &dpp, &y, &rn,
+  ret = for_each(dpp, [this, &dest, &dpp, &y, &rn, &hints,
 		       src_as_gateway](const char* name) {
     std::unique_ptr<FSEnt> sobj;
 
@@ -4114,7 +4114,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     }
     if (r < 0)
       return r;
-    return sobj->copy(dpp, y, dest.get(), name, src_as_gateway);
+    return sobj->copy(dpp, y, dest.get(), name, hints, src_as_gateway);
   });
 
   return ret;
@@ -4310,10 +4310,10 @@ int NooBaaDirectoryObject::read_attrs(const DoutPrefixProvider* dpp,
 
 int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
 				Directory* dst_dir, const std::string& name,
-				bool src_as_gateway)
+				const CopyHints& hints, bool src_as_gateway)
 {
   if (content) {
-    return content->copy(dpp, y, dst_dir, name, src_as_gateway);
+    return content->copy(dpp, y, dst_dir, name, hints, src_as_gateway);
   }
 
   /* An empty object copies to an empty file.  The destination's
@@ -9593,7 +9593,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
 
       if (rec.stored > 0) {
-	ret = fs->copy_range(dpp, sfd, rec.offset, dfd, 0, rec.stored);
+	ret = fs->copy_range(dpp, sfd, rec.offset, dfd, 0, rec.stored,
+			     driver->copy_hints_for(no_authenticated_user));
 	if (ret < 0) {
 	  ldpp_dout(dpp, 0) << "ERROR: copying part " << *num << " of "
 			    << meta << ": " << cpp_strerror(-ret) << dendl;
@@ -11659,7 +11660,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                    get_key().name == dobj->get_key().name);
   if (!same_key) {
     /* cross-object copy */
-    ret = copy(dpp, y, sb, db, dobj);
+    ret = copy(dpp, y, sb, db, dobj,
+	       driver->copy_hints_for(authenticated_user));
     if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to copy object " << get_key()
                           << dendl;
@@ -11710,7 +11712,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       }
     });
     ret = driver->get_fs_strategy()->clone_fd(
-      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, y, identity,
+      dpp, src_fd, dst_leaf_dir->get_fd(), dst_leaf_name, y,
+      driver->copy_hints_for(authenticated_user), identity,
       copy_source_as_gateway());
     if (ret < 0) {
       return ret;
@@ -12268,6 +12271,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   hdl->leaf_name = leaf;
   hdl->dir_chain = std::move(resolved_dirs);
   hdl->identity = identity;
+  hdl->requester = authenticated_user;
 
   /* sdir_fd stays this function's until a success path hands it over.
    *
@@ -12386,7 +12390,8 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
       "_" + std::to_string(fsio_build_seq.fetch_add(1));
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield, true /* excl */,
+      dpp, parent_fd, leaf, sdir_fd, tmp_name, null_yield,
+      driver->copy_hints_for(authenticated_user), true /* excl */,
       identity, as_gateway);
     if (ret < 0) {
       return FSIOResult{ret, nullptr};
@@ -12835,7 +12840,8 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
   if (src_exists) {
     int ret = driver->get_fs_strategy()->clone_file(
       dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, null_yield,
-      true /* excl */, identity, as_gateway);
+      driver->copy_hints_for(requester), true /* excl */, identity,
+      as_gateway);
     if (ret == -EEXIST) {
       joined = true;
     } else if (ret < 0) {
@@ -15688,7 +15694,8 @@ bool NSFSObject::copy_source_as_gateway() const
 }
 
 int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
-                      NSFSBucket *sb, NSFSBucket *db, NSFSObject *dobj)
+                      NSFSBucket *sb, NSFSBucket *db, NSFSObject *dobj,
+                      const nsfs::CopyHints& hints)
 {
   rgw_obj_key dst_key = dobj->get_key();
 
@@ -15706,7 +15713,7 @@ int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   if (ret < 0)
     return ret;
 
-  return ent->copy(dpp, y, dst_leaf_dir, dst_leaf_name,
+  return ent->copy(dpp, y, dst_leaf_dir, dst_leaf_name, hints,
 		   copy_source_as_gateway());
 }
 
@@ -16331,7 +16338,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 					    staging_fd, placements,
 					    assembled_name,
 					    established_stride(dpp, y),
-					    y, identity);
+					    y, driver->copy_hints_for(auth_user),
+					    identity);
   if (ret < 0) {
     return ret;
   }
@@ -16950,7 +16958,7 @@ int NSFSMultipartWriter::divert(uint64_t written)
   if (written > 0) {
     ret = driver->get_fs_strategy()->copy_range(
 	dpp, shared_file->get_fd(), base_offset,
-	part_file->get_fd(), 0, written);
+	part_file->get_fd(), 0, written, driver->copy_hints_for(auth_user));
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not move part " << part_num
 			<< " out of the shared file: " << cpp_strerror(-ret)
@@ -17024,7 +17032,8 @@ int NSFSMultipartWriter::relocate(optional_yield y)
 
   ret = driver->get_fs_strategy()->copy_range(dpp, shared_file->get_fd(),
 					      base_offset, dst->get_fd(),
-					      tgt->offset, high_water);
+					      tgt->offset, high_water,
+					      driver->copy_hints_for(auth_user));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not move part " << part_num
 		      << " into " << tgt->name << ": " << cpp_strerror(-ret)
@@ -18542,6 +18551,19 @@ int NSFSDriver::hint_unmarked_bucket(
   return 0;
 }
 
+nsfs::CopyHints NSFSDriver::copy_hints_for(const rgw_owner& requester)
+{
+  CopyBundle* b = &daemon_copy_bundle;
+  if (any_copy_bundle && ! nsfs::owner_empty(requester)) {
+    std::lock_guard l{copy_bundles_lock};
+    if (auto it = copy_bundles.find(to_string(requester));
+	it != copy_bundles.end()) {
+      b = &it->second;
+    }
+  }
+  return nsfs::CopyHints{b->force_buffered, &b->buffered_bytes};
+}
+
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 			    const std::string& hint,
 			    const std::map<std::string, std::string>& params,
@@ -18791,16 +18813,21 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       return -EINVAL;
     }
     const bool on = (it->second == "true");
-    if (! fs_strategy) {
-      return -EINVAL;
+    /* `user=` arms that requester's bundle alone, so a test's copies
+     * are the only ones forced and counted;  without it, the daemon's */
+    CopyBundle* b = &daemon_copy_bundle;
+    if (auto u = params.find("user"); u != params.end()) {
+      std::lock_guard l{copy_bundles_lock};
+      b = &copy_bundles.try_emplace(u->second).first->second;
+      any_copy_bundle = true;
     }
-    fs_strategy->set_force_buffered_copy(on);
+    b->force_buffered = on;
     if (out) {
       (*out)["enabled"] = on ? "true" : "false";
-      /* bytes the fallback has copied since this hint was last called,
-       * so a test can prove which path ran rather than assume it */
-      (*out)["buffered_bytes"] =
-	std::to_string(fs_strategy->take_buffered_bytes());
+      /* bytes the fallback has copied for this bundle since this hint
+       * was last called, so a test can prove which path ran rather
+       * than assume it */
+      (*out)["buffered_bytes"] = std::to_string(b->buffered_bytes.exchange(0));
     }
     return 0;
   }

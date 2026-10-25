@@ -421,7 +421,7 @@ public:
   /* src_as_gateway:  the access model permits the gateway to read a
    * source the filesystem denies the requester.  Resolved by the
    * caller, which knows the bucket;  see clone_file_by_copy(). */
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) = 0;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) = 0;
   /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
@@ -466,7 +466,7 @@ public:
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y,
 		   int use_fd = -1) override;
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
   virtual int rename(const DoutPrefixProvider* dpp, optional_yield y, Directory* dst_dir, const std::string& dst_name);
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
@@ -512,7 +512,7 @@ public:
   std::unique_ptr<Directory> clone() {
     return std::make_unique<Directory>(*this);
   }
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
 			     bool as_gateway = false) override;
@@ -619,7 +619,7 @@ public:
 			  int use_fd = -1) override;
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
 			 int use_fd = -1) override;
-  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, bool src_as_gateway = false) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y,
 			     std::string target_fname, bool excl = false,
 			     bool as_gateway = false) override;
@@ -1038,6 +1038,22 @@ protected:
   std::string ran_as_who;
   std::vector<std::pair<std::string, uid_t>> ran_as_seen;
 
+  /* The `inject-buffered-copy` hint, by requester.  Armed with `user=`,
+   * a bundle applies to that requester's copies only;  armed without,
+   * the daemon's applies to every requester with no bundle of its own,
+   * and to the copies with no requester at all.  A bundle is kept for
+   * the driver's life once made, one per user a test has armed, so the
+   * counter a CopyHints points at never dangles. */
+  struct CopyBundle {
+    std::atomic<bool> force_buffered{false};
+    std::atomic<uint64_t> buffered_bytes{0};
+  };
+  CopyBundle daemon_copy_bundle;
+  ceph::mutex copy_bundles_lock =
+    ceph::make_mutex("NSFSDriver::copy_bundles_lock");
+  std::map<std::string, CopyBundle> copy_bundles;
+  std::atomic<bool> any_copy_bundle{false};
+
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
   {
@@ -1080,6 +1096,10 @@ public:
   }
 
   const DoutPrefixProvider* get_dpp() const { return &driver_prefix; }
+
+  /* What `requester`'s copies are asked to do:  its bundle where it has
+   * one, else the daemon's. */
+  nsfs::CopyHints copy_hints_for(const rgw_owner& requester);
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -2668,7 +2688,7 @@ public:
   bool check_exists(const DoutPrefixProvider* dpp) { stat(dpp); return state.exists; }
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
-           NSFSBucket *db, NSFSObject *dobj);
+           NSFSBucket *db, NSFSObject *dobj, const nsfs::CopyHints& hints);
   /* Whether the access model lets the gateway read a source the
    * filesystem denies this requester.  Resolved here because this is
    * where the driver and the object are both in hand. */
@@ -2745,6 +2765,9 @@ public:
     * at get_fsio_handle() and held for the handle's life;  every call
     * on the tree runs as it, and as the gateway where it is inactive */
    nsfs::FSIdentity identity;
+   /* the same user, for the hints its copies carry:  set whether or
+    * not impersonation is, where `identity` is not */
+   rgw_owner requester;
 
    friend class NSFSObject;
 

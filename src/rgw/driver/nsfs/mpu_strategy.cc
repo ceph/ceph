@@ -298,7 +298,7 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 			     const std::vector<PartPlacement>& parts,
 			     const std::string& output_name,
 			     std::optional<uint64_t> stride,
-			     optional_yield y,
+			     optional_yield y, const CopyHints& hints,
 			     const FSIdentity& id) const
 {
   if (! fs) {
@@ -338,7 +338,8 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
       return -ret;
     }
 
-    ret = fs->copy_range(dpp, part_fd, 0, out_fd, out_offset, stx.stx_size);
+    ret = fs->copy_range(dpp, part_fd, 0, out_fd, out_offset, stx.stx_size,
+			 hints);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not copy part " << pname
 			<< ": " << cpp_strerror(-ret) << dendl;
@@ -410,7 +411,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				 const std::vector<PartPlacement>& parts,
 				 const std::string& output_name,
 				 std::optional<uint64_t> stride,
-				 optional_yield y,
+				 optional_yield y, const CopyHints& hints,
 				 const FSIdentity& id) const
 {
   if (!fs) {
@@ -425,7 +426,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   const std::string sname = stride ? *shared_name(*stride) : std::string();
   if (sname.empty()) {
     return PerPartMPUStrategy::assemble(dpp, fs, dir_fd, parts, output_name,
-					stride, y, id);
+					stride, y, hints, id);
   }
 
   /* Can the shared file be the object as it stands?
@@ -550,7 +551,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     }
 
     int ret = fs->copy_range(dpp, src_fd, part.shared ? part.offset : 0,
-			     out_fd, out_offset, part.stored);
+			     out_fd, out_offset, part.stored, hints);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not copy part " << part.num << ": "
 			<< cpp_strerror(-ret) << dendl;
@@ -1156,7 +1157,7 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 				const std::vector<PartPlacement>& parts,
 				const std::string& output_name,
 				std::optional<uint64_t> stride,
-				optional_yield y,
+				optional_yield y, const CopyHints& hints,
 				const FSIdentity& id) const
 {
   return -ERR_INVALID_BUCKET_STATE;

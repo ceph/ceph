@@ -276,7 +276,8 @@ size_t FSStrategy::preferred_io_size(int fd) const
 
 int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                               int src_fd, off_t src_off,
-                              int dst_fd, off_t dst_off, off_t len)
+                              int dst_fd, off_t dst_off, off_t len,
+                              const CopyHints& hints)
 {
   auto buf = std::make_unique<char[]>(bufsz);
 
@@ -313,20 +314,23 @@ int FSStrategy::copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
     src_off += nr;
     dst_off += nr;
     len -= nr;
-    buffered_copy_bytes += nr;
+    if (hints.buffered_bytes) {
+      *hints.buffered_bytes += nr;
+    }
   }
   return 0;
 }
 
 int FSStrategy::copy_range(const DoutPrefixProvider* dpp,
                            int src_fd, off_t src_off,
-                           int dst_fd, off_t dst_off, off_t len)
+                           int dst_fd, off_t dst_off, off_t len,
+                           const CopyHints& hints)
 {
   off_t soff = src_off, doff = dst_off;
 
-  if (force_buffered_copy) {
+  if (hints.force_buffered) {
     return copy_buffered(dpp, preferred_io_size(src_fd),
-                         src_fd, soff, dst_fd, doff, len);
+                         src_fd, soff, dst_fd, doff, len, hints);
   }
 
   while (len > 0) {
@@ -340,7 +344,7 @@ int FSStrategy::copy_range(const DoutPrefixProvider* dpp,
     if (copied < 0) {
       if (errno == EXDEV || errno == ENOSYS || errno == EOPNOTSUPP) {
         return copy_buffered(dpp, preferred_io_size(src_fd),
-                             src_fd, soff, dst_fd, doff, len);
+                             src_fd, soff, dst_fd, doff, len, hints);
       }
       int err = errno;
       ldpp_dout(dpp, 0) << "ERROR: copy_range: copy_file_range failed: "
@@ -511,6 +515,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
                                    optional_yield y,
+                                   const CopyHints& hints,
                                    bool excl,
                                    const nsfs::FSIdentity& id,
                                    bool src_as_gateway)
@@ -636,7 +641,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 
   ret = apply_create_mode(dpp, dst_fd, file_create_mode(), null_yield);
   if (ret == 0) {
-    ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size);
+    ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size, hints);
   }
   ::close(dst_fd);
 
@@ -663,6 +668,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
                                  int gw_src_fd,
                                  int dst_dir_fd, const std::string& dst_name,
                                  optional_yield y,
+                                 const CopyHints& hints,
                                  const nsfs::FSIdentity& id,
                                  bool src_as_gateway)
 {
@@ -754,7 +760,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
   ret = nsfs::with_identity(dpp, id, [&]() -> int {
     int r = apply_create_mode(dpp, tmp_fd, file_create_mode(), null_yield);
     if (r == 0) {
-      r = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size);
+      r = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size, hints);
     }
     return r;
   }, y);
@@ -784,22 +790,23 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
                               int dst_dir_fd, const std::string& dst_name,
-                              optional_yield y,
+                              optional_yield y, const CopyHints& hints,
                               bool excl, const nsfs::FSIdentity& id,
                               bool src_as_gateway)
 {
   return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                            dst_dir_fd, dst_name, y, excl, id, src_as_gateway);
+                            dst_dir_fd, dst_name, y, hints, excl, id,
+                            src_as_gateway);
 }
 
 int POSIXStrategy::clone_fd(const DoutPrefixProvider* dpp,
                             int src_fd,
                             int dst_dir_fd, const std::string& dst_name,
-                            optional_yield y,
+                            optional_yield y, const CopyHints& hints,
                             const nsfs::FSIdentity& id,
                             bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, id,
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, hints, id,
                           src_as_gateway);
 }
 
@@ -1111,7 +1118,7 @@ static std::string clone_parent_name(const std::string& name)
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              int src_dir_fd, const std::string& src_name,
                              int dst_dir_fd, const std::string& dst_name,
-                             optional_yield y,
+                             optional_yield y, const CopyHints& hints,
                              bool excl, const nsfs::FSIdentity& id,
                              bool src_as_gateway)
 {
@@ -1119,7 +1126,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
       << "falling back to copy" << dendl;
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, y, excl, id,
+                              dst_dir_fd, dst_name, y, hints, excl, id,
                               src_as_gateway);
   }
   /* The clone path makes its parent and child as the gateway.  As a
@@ -1127,7 +1134,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
    * source is checked against them. */
   if (id.active()) {
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, y, excl, id,
+                              dst_dir_fd, dst_name, y, hints, excl, id,
                               src_as_gateway);
   }
 
@@ -1185,7 +1192,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
       << " failed: " << cpp_strerror(err)
       << ", falling back to copy" << dendl;
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, y, excl);
+                              dst_dir_fd, dst_name, y, hints, excl);
   }
 
   ret = fn_clone_copy(snap_path.c_str(), dst_path.c_str());
@@ -1196,7 +1203,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
       << ", falling back to copy" << dendl;
     cleanup_clone(dpp, dst_dir_fd, dst_name);
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
-                              dst_dir_fd, dst_name, y, excl);
+                              dst_dir_fd, dst_name, y, hints, excl);
   }
 
   ldpp_dout(dpp, 10) << "gpfs clone_file: cloned " << src_name
@@ -1207,11 +1214,11 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
 int GPFSStrategy::clone_fd(const DoutPrefixProvider* dpp,
                            int src_fd,
                            int dst_dir_fd, const std::string& dst_name,
-                           optional_yield y,
+                           optional_yield y, const CopyHints& hints,
                            const nsfs::FSIdentity& id,
                            bool src_as_gateway)
 {
-  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, id,
+  return clone_fd_by_copy(dpp, src_fd, dst_dir_fd, dst_name, y, hints, id,
                           src_as_gateway);
 }
 

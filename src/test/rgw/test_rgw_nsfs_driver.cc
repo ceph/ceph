@@ -368,7 +368,8 @@ TEST(FSEnt, DirBase)
   sf::path cp{base_path / copyname};
   sf::remove_all(cp);
   EXPECT_FALSE(sf::exists(cp));
-  ret = testdir->copy(env->dpp, null_yield, root.get(), copyname);
+  ret = testdir->copy(env->dpp, null_yield, root.get(), copyname,
+		      nsfs::CopyHints{});
   EXPECT_EQ(ret, 0);
   EXPECT_TRUE(sf::exists(cp));
   EXPECT_TRUE(sf::is_directory(tp));
@@ -4336,7 +4337,7 @@ TEST_F(NSFSImpersonatedAssembleTest, PartsAreReadAsTheUploader)
 
   const Fresh r = on_a_fresh_thread({mpu.part_name(1)}, [&] {
     return mpu.assemble(env->dpp, &fs, dfd, parts, "final", size,
-			null_yield, id);
+			null_yield, nsfs::CopyHints{}, id);
   });
   ASSERT_NO_FATAL_FAILURE(expect_gateway_denied(r));
   ASSERT_EQ(r.assembled, 0)
@@ -4361,7 +4362,7 @@ TEST_F(NSFSImpersonatedAssembleTest, StridedInputsAreReadAsTheUploader)
 
   const Fresh r = on_a_fresh_thread({shared, mpu.part_name(2)}, [&] {
     return mpu.assemble(env->dpp, &fs, dfd, parts, "final", size,
-			null_yield, id);
+			null_yield, nsfs::CopyHints{}, id);
   });
   ASSERT_NO_FATAL_FAILURE(expect_gateway_denied(r));
   ASSERT_EQ(r.assembled, 0)

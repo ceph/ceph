@@ -117,6 +117,16 @@ protected:
   VersionLockHandle() = default;
 };
 
+/* What one copy is asked to do by the hints its requester carries:  the
+ * `inject-buffered-copy` driver hint, which the driver keeps by
+ * requester and resolves into this, so the strategy never sees who the
+ * requester is.  `buffered_bytes` is where the buffered fallback counts
+ * what it moves, and null counts nowhere. */
+struct CopyHints {
+  bool force_buffered = false;
+  std::atomic<uint64_t>* buffered_bytes = nullptr;
+};
+
 class FSStrategy {
 public:
   virtual ~FSStrategy() = default;
@@ -185,7 +195,7 @@ public:
   virtual int copy_range(const DoutPrefixProvider* dpp,
                          int src_fd, off_t src_off,
                          int dst_fd, off_t dst_off,
-                         off_t len);
+                         off_t len, const CopyHints& hints);
 
   /* I/O size for copy_range()'s buffered fallback:  the file's
    * st_blksize, clamped to [MIN_COPY_IO_SIZE, MAX_COPY_IO_SIZE].
@@ -196,19 +206,6 @@ public:
    * this replaced.  Above 4 MiB the cost rises again everywhere.  See
    * probes/results-copyprobe-2026-09-23.txt. */
   virtual size_t preferred_io_size(int fd) const;
-
-  /* test hook:  make copy_range() skip copy_file_range and take the
-   * buffered path.  On a filesystem that shares extents the fallback is
-   * otherwise unreachable, so the only path GPFS ever takes would never
-   * run under test here.  Driven by the "inject-buffered-copy" driver
-   * hint;  never by config. */
-  void set_force_buffered_copy(bool on) { force_buffered_copy = on; }
-
-  /* bytes copied through the buffered fallback, reset when read.  This is
-   * what lets a test assert that the fallback actually ran, rather than
-   * that a flag was set:  on a filesystem which shares extents the two are
-   * otherwise indistinguishable from outside. */
-  uint64_t take_buffered_bytes() { return buffered_copy_bytes.exchange(0); }
 
   /* How many copy sources the gateway read because the access model
    * permits it, the filesystem having denied the requester.  Read,
@@ -245,23 +242,22 @@ protected:
   int clone_file_by_copy(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
-                         optional_yield y,
+                         optional_yield y, const CopyHints& hints,
                          bool excl, const nsfs::FSIdentity& id = {},
                          bool src_as_gateway = false);
 
   int clone_fd_by_copy(const DoutPrefixProvider* dpp, int src_fd,
                        int dst_dir_fd, const std::string& dst_name,
-                       optional_yield y,
+                       optional_yield y, const CopyHints& hints,
                        const nsfs::FSIdentity& id = {},
                        bool src_as_gateway = false);
 
   int copy_buffered(const DoutPrefixProvider* dpp, size_t bufsz,
                     int src_fd, off_t src_off,
-                    int dst_fd, off_t dst_off, off_t len);
+                    int dst_fd, off_t dst_off, off_t len,
+                    const CopyHints& hints);
 
-  std::atomic<bool> force_buffered_copy{false};
   bool fs_shares_extents{false};
-  std::atomic<uint64_t> buffered_copy_bytes{0};
   std::atomic<uint64_t> cross_account_sources{0};
 
 public:
@@ -288,7 +284,7 @@ public:
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
                          int dst_dir_fd, const std::string& dst_name,
-                         optional_yield y,
+                         optional_yield y, const CopyHints& hints,
                          bool excl = false,
                          const nsfs::FSIdentity& id = {},
                          bool src_as_gateway = false) = 0;
@@ -300,7 +296,7 @@ public:
   virtual int clone_fd(const DoutPrefixProvider* dpp,
                        int src_fd,
                        int dst_dir_fd, const std::string& dst_name,
-                       optional_yield y,
+                       optional_yield y, const CopyHints& hints,
                        const nsfs::FSIdentity& id = {},
                        bool src_as_gateway = false) = 0;
 
@@ -389,7 +385,7 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
-                 optional_yield y,
+                 optional_yield y, const CopyHints& hints,
                  bool excl = false,
                  const nsfs::FSIdentity& id = {},
                  bool src_as_gateway = false) override;
@@ -397,7 +393,7 @@ public:
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
                int dst_dir_fd, const std::string& dst_name,
-               optional_yield y,
+               optional_yield y, const CopyHints& hints,
                const nsfs::FSIdentity& id = {},
                bool src_as_gateway = false) override;
 
@@ -518,7 +514,7 @@ public:
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
                  int dst_dir_fd, const std::string& dst_name,
-                 optional_yield y,
+                 optional_yield y, const CopyHints& hints,
                  bool excl = false,
                  const nsfs::FSIdentity& id = {},
                  bool src_as_gateway = false) override;
@@ -526,7 +522,7 @@ public:
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
                int dst_dir_fd, const std::string& dst_name,
-               optional_yield y,
+               optional_yield y, const CopyHints& hints,
                const nsfs::FSIdentity& id = {},
                bool src_as_gateway = false) override;
 
