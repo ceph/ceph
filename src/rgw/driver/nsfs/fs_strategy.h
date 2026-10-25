@@ -117,10 +117,10 @@ protected:
   VersionLockHandle() = default;
 };
 
-/* What one copy is asked to do by the hints its requester carries:  the
- * `inject-buffered-copy` driver hint, which the driver keeps by
- * requester and resolves into this, so the strategy never sees who the
- * requester is.  `buffered_bytes` is where the buffered fallback counts
+/* What one copy is asked to do by the hints set for the user it runs
+ * for:  the `inject-buffered-copy` driver hint, which the driver keeps
+ * by user and resolves into this, so the strategy never sees who the
+ * user is.  `buffered_bytes` is where the buffered fallback counts
  * what it moves, and null counts nowhere. */
 struct CopyHints {
   bool force_buffered = false;
@@ -208,7 +208,7 @@ public:
   virtual size_t preferred_io_size(int fd) const;
 
   /* How many copy sources the gateway read because the access model
-   * permits it, the filesystem having denied the requester.  Read,
+   * permits it, the filesystem having denied `id`.  Read,
    * not drained:  a test compares it across an operation, since the
    * gateway is shared.  Reported by the `access-model` driver hint. */
   uint64_t cross_account_source_reads() const {
@@ -278,8 +278,8 @@ public:
    * the winner's shadow instead.
    *
    * id:  who reads the source and owns the clone.  A copy is a read of
-   * the source and a write of the destination, so both are the
-   * requester's:  the source's permissions are checked against it,
+   * the source and a write of the destination, so both are
+   * `id`'s:  the source's permissions are checked against it,
    * and the destination is created as it. */
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
@@ -578,7 +578,7 @@ mode_t dir_create_mode();
 
 /* Give a file just created the mode it asked for, where the process
  * umask took some of it.  As `id`, because a file created under a
- * personality is the requester's and only its owner may chmod it. */
+ * personality is that identity's and only its owner may chmod it. */
 int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
 		      optional_yield y,
 		      const FSIdentity& id = {});

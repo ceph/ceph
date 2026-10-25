@@ -544,10 +544,10 @@ static bool nsfs_non_md5_etag_into_attrs(const DoutPrefixProvider* dpp,
 
 /* Record that same etag on the object.
  *
- * The attribute is the requester's.  A `user.*` attribute needs write
+ * The attribute is `id`'s.  A `user.*` attribute needs write
  * permission tested against the *calling* thread rather than against
  * whoever opened the descriptor, so the gateway writing through the
- * requester's fd fails on a 0660 file it does not own.  `id` is
+ * identity's fd fails on a 0660 file it does not own.  `id` is
  * undefaulted so a new caller cannot become the gateway by leaving it
  * out.
  *
@@ -790,7 +790,7 @@ static bool credentials_from_recorded_owner(const DoutPrefixProvider* dpp,
 }
 
 /* What the gateway raises to perform, in another identity's key
- * directory or `.versions`, what the requester was denied
+ * directory or `.versions`, what the authenticated user was denied
  * (with_identity_or_raise()):  DAC_OVERRIDE for the directory's mode,
  * FOWNER for a sticky `.versions` and for an attribute on another
  * identity's file. */
@@ -798,7 +798,7 @@ static constexpr uint64_t RAISED_KEYDIR_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
 /* What a raised create raises, and then what gives the new entry its
- * owner:  the requester for an object, the parent's owner for a
+ * owner:  the authenticated user for an object, the parent's owner for a
  * directory (DECISIONS.md 2026-10-20). */
 static constexpr uint64_t RAISED_CREATE_CAPS = nsfs::cap_bit(CAP_DAC_OVERRIDE);
 static constexpr uint64_t RAISED_CHOWN_CAPS = nsfs::cap_bit(CAP_CHOWN);
@@ -834,8 +834,8 @@ static int chown_raised_dir(const DoutPrefixProvider* dpp, int parent_fd,
 }
 
 /* One call as `id`, or as the gateway where `id` is inactive -- the
- * calls inside a key's directory and its `.versions`, which are the
- * requester's (call-site table §11).  Denied, the gateway performs it
+ * calls inside a key's directory and its `.versions`, which are
+ * their creator's (call-site table §11).  Denied, the gateway performs it
  * where `model` permits (with_identity_or_raise());  a null `model`
  * lets the denial stand.  Each returns 0 or a descriptor, or -errno;
  * `dpp` may be null only when `id` is inactive. */
@@ -960,8 +960,8 @@ struct PromoteResult {
  * bucket is never empty and DeleteBucket answers 409 forever;  that
  * went unreported while this returned void. */
 /* `scanner` opens and lists `.versions`, which is the key directory's
- * and so the requester's;  the publish runs as the promoted version's
- * own owner, below.  Called outside any requester wrapper:  run_as()
+ * and so its creator's;  the publish runs as the promoted version's
+ * own owner, below.  Called outside any with_identity():  run_as()
  * refuses one identity on a thread acting as another (H1). */
 static int promote_version(int parent_fd, const std::string& leaf,
                            const DoutPrefixProvider* dpp,
@@ -1073,7 +1073,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
      * link only to the target's owner, a sticky .versions/ entry is
      * the file owner's to unlink, and the timestamp comes off the
      * owner's file.  Nobody configures a promote, so neither the
-     * requester nor the bucket owner has a claim to perform it, and
+     * authenticated user nor the bucket owner has a claim to perform it, and
      * either fails the same way unless it happens to be the
      * writer.  The file says who wrote it, and a hard link preserves
      * the inode's owner, so publishing it under the current name
@@ -1227,7 +1227,7 @@ static int promote_version(int parent_fd, const std::string& leaf,
 /* `.versions` beside `parent_fd`, made if it is missing.
  *
  * As `id`, at NooBaa's mode, where `id` is active:  it is the key
- * directory's, and so the requester's (call-site table §11.1).  The
+ * directory's, and so its creator's (call-site table §11.1).  The
  * gateway's, at the same mode, otherwise.  `dpp` may be null only
  * when `id` is inactive. */
 static int ensure_versions_dir(const DoutPrefixProvider* dpp, int parent_fd,
@@ -1301,8 +1301,8 @@ struct LeafVersion {
 static int list_leaf_versions(int parent_fd, const std::string& leaf,
 			      std::vector<LeafVersion>& out)
 {
-  /* the gateway's listing, in a `.versions` that may be the
-   * requester's:  read-search at the call */
+  /* the gateway's listing, in a `.versions` that may be an
+   * identity's:  read-search at the call */
   if (nsfs::impersonation_enabled()) {
     (void) nsfs::hold_thread_capabilities(nullptr);
   }
@@ -1388,7 +1388,7 @@ static int write_rename_intent(const DoutPrefixProvider* dpp,
     rec.push_back('s');
   }
   std::string name = rename_intent_xattr(xs);
-  /* as `id`:  the `.versions` the record lives on is the requester's */
+  /* as `id`:  the `.versions` the record lives on is its creator's */
   const int err = nsfs::with_identity_or_raise(dpp, id, model,
 						 nsfs::AccessClass::data,
 						 RAISED_KEYDIR_CAPS,
@@ -1429,7 +1429,7 @@ static void clear_rename_intent(const DoutPrefixProvider* dpp,
 				int src_parent_fd, const nsfs::FSIdentity& id,
 				const nsfs::AccessStrategy* model)
 {
-  /* the gateway's open, in a `.versions` that may be the requester's:
+  /* the gateway's open, in a `.versions` that may be an identity's:
    * read-search at the call */
   if (! id.active() && nsfs::impersonation_enabled()) {
     (void) nsfs::hold_thread_capabilities(dpp);
@@ -1466,8 +1466,8 @@ static bool rename_intent_present_at(const nsfs::XattrStrategy* xs,
 static bool rename_intent_present(const nsfs::XattrStrategy* xs,
 				  int src_parent_fd, std::string& rec)
 {
-  /* the gateway's listing, in a `.versions` that may be the
-   * requester's:  read-search at the call */
+  /* the gateway's listing, in a `.versions` that may be an
+   * identity's:  read-search at the call */
   if (nsfs::impersonation_enabled()) {
     (void) nsfs::hold_thread_capabilities(nullptr);
   }
@@ -1695,7 +1695,7 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
   return 0;
 }
 
-/* The version lockfile, the requester's where `id` is active
+/* The version lockfile, `id`'s where `id` is active
  * (DECISIONS 2026-10-15:  a mutex, not a permission).  `dpp` as
  * ensure_versions_dir(). */
 static int open_versions_lockfile(const DoutPrefixProvider* dpp,
@@ -1848,10 +1848,10 @@ struct DemoteResult {
  * fs.protected_hardlinks(5) denies a link to a file the linker
  * neither owns nor can write.  As the gateway that is every object an
  * identity wrote -- a 500 on an account overwriting its own object
- * (PUNCHLIST, run 2026-10-16).  As the requester it succeeds exactly
- * where the requester may write the object, which is the rule the
- * rest of the tree follows.  A caller with no requester says so by
- * passing {}. */
+ * (PUNCHLIST, run 2026-10-16).  As the authenticated user it succeeds
+ * exactly where that user may write the object, which is the rule the
+ * rest of the tree follows.  A caller with no authenticated user says
+ * so by passing {}. */
 static int demote_current_version(const DoutPrefixProvider* dpp,
 				  FSStrategy* fs_strategy,
 				  const nsfs::XattrStrategy* xs,
@@ -2622,8 +2622,8 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 /* Everything in the directory open on `dir_fd`, which this takes, and
  * not the directory itself:  delete_directory() is this and the
  * directory's removal from its parent.  Apart because a bucket in the
- * base path has its contents removed by the requester and its entry by
- * the gateway (NSFSBucket::remove()). */
+ * base path has its contents removed by the authenticated user and its
+ * entry by the gateway (NSFSBucket::remove()). */
 static int delete_directory_entries(int dir_fd, const char* dname,
 				    bool delete_children,
 				    const DoutPrefixProvider* dpp,
@@ -3242,8 +3242,9 @@ int File::create(const DoutPrefixProvider *dpp, optional_yield y,
   need_fsync = true;
 
   /* Made by the gateway, so its mode is the gateway's to set, and then
-   * the object is the requester's (DECISIONS.md 2026-10-20).  A raised
-   * O_CREAT that found the file there made nothing, and leaves it. */
+   * the object is the authenticated user's (DECISIONS.md 2026-10-20).
+   * A raised O_CREAT that found the file there made nothing, and
+   * leaves it. */
   struct statx cstx;
   const bool made_raised = raised && (statx_ids(fd, cstx) == 0) &&
     (cstx.stx_uid == ::geteuid());
@@ -3561,7 +3562,7 @@ int File::rename(const DoutPrefixProvider* dpp, optional_yield y,
     return -EIO;
   }
 
-  /* as the entry's identity:  both directories are the requester's */
+  /* as the entry's identity:  both directories are its */
   const int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
 						 nsfs::AccessClass::data,
 						 RAISED_KEYDIR_CAPS,
@@ -3607,7 +3608,7 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
 			  << ":  a directory holds its name" << dendl;
 	return -ERR_KEY_PATH_CONFLICT;
       }
-      /* as the requester, whom copy_object() gave this entry:  the
+      /* as the authenticated user, whom copy_object() gave this entry:  the
        * bucket directory is not the gateway's (raise site 4), and a
        * leaf directory resolve_key_path() did not make carries no
        * identity of its own */
@@ -3633,7 +3634,7 @@ int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
     dst_dir_fd = dst_dir->get_fd();
   }
 
-  /* as this entry's identity:  the requester reads the source and
+  /* as this entry's identity:  it reads the source and
    * owns the copy -- except that the access model may let the gateway
    * read a source the filesystem denies them, which the caller has
    * resolved */
@@ -3649,7 +3650,7 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
   }
 
   int parent_fd = parent->get_fd();
-  /* as the entry's identity:  its directory is the requester's */
+  /* as the entry's identity:  its directory is the identity's */
   int ret = nsfs::with_identity_or_raise(dpp, identity, access_model,
 					   nsfs::AccessClass::data,
 					   RAISED_KEYDIR_CAPS, [&]() -> int {
@@ -3677,10 +3678,10 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
 
   /* As the gateway only where the caller says the access model allows
    * it (NSFSObject::link_temp_file), which raises CAP_FOWNER for it:
-   * the publish links the requester's O_TMPFILE into the directory,
+   * the publish links the identity's O_TMPFILE into the directory,
    * and fs.protected_hardlinks allows that only to the inode's owner.
    * Narrow on purpose -- the open() and stat() below must stay the
-   * requester's, because they cache a descriptor on the entry and a
+   * identity's, because they cache a descriptor on the entry and a
    * gateway-opened one outliving this call is the defect
    * with_cross_account_retry() records. */
   const FSIdentity& who = as_gateway ? FSIdentity::none() : identity;
@@ -3726,7 +3727,7 @@ int Directory::create(const DoutPrefixProvider* dpp, optional_yield y,
     return -EINVAL;
   }
 
-  /* A key directory made by a walk is its requester's, at NooBaa's
+  /* A key directory made by a walk is its creator's, at NooBaa's
    * mode (resolve_path()).  mkdir(2) masks the mode with the umask, so
    * the mode is then set outright, as the directory's new owner. */
   if (identity.active()) {
@@ -3888,7 +3889,7 @@ int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool dele
    * directory's name is an absolute path, which is how a bucket served
    * from a stored path is built. */
   const int at = parent ? parent->get_fd() : AT_FDCWD;
-  /* A key directory pruned after a delete is its requester's.  A
+  /* A key directory pruned after a delete is its creator's.  A
    * removal with its children is a bucket's, which is the gateway's
    * (raise site 3). */
   if (identity.active() && !delete_children) {
@@ -4060,7 +4061,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
 			  << ":  a directory holds its name" << dendl;
 	return -ERR_KEY_PATH_CONFLICT;
       }
-      /* as the requester, whom copy_object() gave this entry:  the
+      /* as the authenticated user, whom copy_object() gave this entry:  the
        * bucket directory is not the gateway's (raise site 4), and a
        * leaf directory resolve_key_path() did not make carries no
        * identity of its own */
@@ -4334,7 +4335,7 @@ int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
 			<< ":  a directory holds its name" << dendl;
       return -ERR_KEY_PATH_CONFLICT;
     }
-    /* as the requester;  see File::copy() */
+    /* as the authenticated user;  see File::copy() */
     del->set_identity(identity);
     del->set_access_model(access_model);
     ret = del->remove(dpp, y, /*delete_children=*/true);
@@ -4511,8 +4512,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 
   /* enumerate .versions/ for versioned buckets */
   if (flags & FSEnt::FLAG_LIST_VERSIONS) {
-    /* the gateway's listing, in a `.versions` that may be the
-     * requester's:  read-search at the call */
+    /* the gateway's listing, in a `.versions` that may be an
+     * identity's:  read-search at the call */
     if (nsfs::impersonation_enabled()) {
       (void) nsfs::hold_thread_capabilities(dpp);
     }
@@ -4678,7 +4679,7 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, optional_yield y,
    * (`namespace_fs.js:1785`, DECISIONS.md 2026-10-23).  Where the
    * access model performs a denied create, the gateway gives the
    * directory to the uploader, as it gives a raised object to its
-   * requester. */
+   * authenticated user. */
   if (identity.active()) {
     const int pfd = parent->get_fd();
     bool raised = false;
@@ -6483,15 +6484,15 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
   }
 }
 
-/* A requester's credentials:  a user's own row, else its account's;
+/* The credentials `who` runs as:  a user's own row, else its account's;
  * an account's -- a role session in one -- its row.
  *
  * A user's account is needed only here, and such a user is normally in
  * the user cache already, since authenticating it put it there.  A
  * user that will not load still resolves under its own key.
  * `account`, if given, receives the account a user resolved through. */
-static int resolve_requester(const DoutPrefixProvider* dpp,
-			     NSFSDriver* driver, const rgw_owner& who,
+static int resolve_credentials_for(const DoutPrefixProvider* dpp,
+				   NSFSDriver* driver, const rgw_owner& who,
 			     optional_yield y, rgw_account_id* account,
 			     nsfs::Credentials& cred)
 {
@@ -7653,7 +7654,7 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
  * else (raise site 3).
  *
  * `CAP_DAC_OVERRIDE` for the scaffolding under the bucket directory --
- * `.versions` and the `.lock` files in it -- which a requester creates
+ * `.versions` and the `.lock` files in it -- which an identity creates
  * under impersonation at its own 0770, and which the gateway removes
  * with the bucket.  NooBaa removes the same as its process
  * (bucketspace_fs.js:424).  Raised here rather than in
@@ -7667,7 +7668,7 @@ int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
  * -- a bucket placed under `/tmp` -- since the directory is its
  * creator's (raise site 4) and the sticky bit lets only the owner of
  * the entry or of the parent remove it;  DAC_OVERRIDE does not reach
- * that check.  NooBaa removes it as the requester, its owner. */
+ * that check.  NooBaa removes it as the account, its owner. */
 static constexpr uint64_t BUCKET_DELETE_CAPS =
   nsfs::cap_bit(CAP_DAC_OVERRIDE) | nsfs::cap_bit(CAP_FOWNER);
 
@@ -7676,8 +7677,8 @@ static constexpr uint64_t BUCKET_DELETE_CAPS =
  * had to be able to make it (DECISIONS.md 2026-10-24):  in the base
  * path the gateway, which makes the directory for its creator (raise
  * site 4);  under a location the account owns -- its
- * new_buckets_path, or a custom path -- the requester, as NooBaa makes
- * and removes it as the account. */
+ * new_buckets_path, or a custom path -- the authenticated user, as
+ * NooBaa makes and removes it as the account. */
 static bool parent_is_base_path(const std::string& base,
 				const std::string& dir_path)
 {
@@ -7722,8 +7723,9 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
   const std::string leaf = path.filename().string();
   const auto& rn = driver->get_reserved_names();
 
-  /* the parent as the gateway, O_PATH:  the requester acts below it and
-   * never resolves the path above, which may not be theirs to search */
+  /* the parent as the gateway, O_PATH:  the authenticated user acts
+   * below it and never resolves the path above, which may not be
+   * theirs to search */
   const int pfd = ::open(path.parent_path().c_str(),
 			 O_PATH | O_DIRECTORY | O_CLOEXEC);
   if (pfd < 0) {
@@ -7734,9 +7736,9 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
   int ret;
   if (parent_is_base_path(driver->default_bucket_location(),
 			  dir->get_name())) {
-    /* what is in it, as the requester, on a descriptor of its own:  a
-     * dup of the bucket's would share the offset check_empty() has
-     * already read to the end */
+    /* what is in it, as the authenticated user, on a descriptor of its
+     * own:  a dup of the bucket's would share the offset check_empty()
+     * has already read to the end */
     ret = nsfs::with_identity_or_raise(dpp, id, model,
 				       nsfs::AccessClass::data,
 				       BUCKET_DELETE_CAPS, [&]() -> int {
@@ -7764,7 +7766,7 @@ int NSFSBucket::remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  /* a location the account owns:  all of it as the requester, as
+  /* a location the account owns:  all of it as the authenticated user, as
    * NooBaa's folder_delete() as the account */
   return nsfs::with_identity_or_raise(dpp, id, model,
 				      nsfs::AccessClass::data,
@@ -7799,14 +7801,14 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   const bool owns = owns_storage(dpp);
 
   /* Who acts at each layer follows who had to be able to create it
-   * (DECISIONS.md 2026-10-24).  The requester, where a request names
-   * one under impersonation, is checked at the bucket directory,
+   * (DECISIONS.md 2026-10-24).  The authenticated user, where a request
+   * names one under impersonation, is checked at the bucket directory,
    * removes what is below it, and removes its entry from a location the
    * account owns;  the gateway removes its entry from the base path.
-   * Each of the requester's refusals stands under `posix-strict` and is
-   * a model's raise under `s3-native`.  No requester -- the switch off,
-   * or a caller with no request -- is the gateway throughout, raised
-   * after a denial as before. */
+   * Each of that user's refusals stands under `posix-strict` and is
+   * a model's raise under `s3-native`.  No authenticated user -- the
+   * switch off, or a caller with no request -- is the gateway
+   * throughout, raised after a denial as before. */
   nsfs::FSIdentity id;
   if (!is_internal() && !nsfs::owner_empty(authenticated_user)) {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
@@ -8521,7 +8523,7 @@ const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
  *
  * `CAP_DAC_OVERRIDE` alone.  The walk runs as the gateway on an
  * operator's instruction (see convert_attrs()), and an object written
- * under impersonation is its requester's at `0660`, so the gateway can
+ * under impersonation is its writer's at `0660`, so the gateway can
  * read it -- it holds `CAP_DAC_READ_SEARCH` for its whole life -- and
  * cannot write an attribute to it.  Without this the first object
  * stops the walk with EACCES and the converting marker stays.
@@ -10832,9 +10834,10 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
 /* Every upload in progress, aborted, as RadosBucket::abort_multiparts()
  * aborts them:  an upload does not keep its bucket (check_empty()), so
- * deleting the bucket ends it.  No requester:  each abort runs as the
- * gateway, raised after a denial, since staging is its uploader's and
- * this is the bucket delete's scaffolding (raise site 3). */
+ * deleting the bucket ends it.  No authenticated user:  each abort runs
+ * as the gateway, raised after a denial, since staging is its
+ * uploader's and this is the bucket delete's scaffolding (raise
+ * site 3). */
 int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y)
 {
   return abort_multiparts_as(dpp, cct, y, rgw::sal::no_authenticated_user);
@@ -10842,7 +10845,7 @@ int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct
 
 int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
 				    CephContext* cct, optional_yield y,
-				    const rgw_owner& requester)
+				    const rgw_owner& authenticated_user)
 {
   constexpr int max = 1000;
   std::vector<std::unique_ptr<MultipartUpload>> uploads;
@@ -10854,18 +10857,19 @@ int NSFSBucket::abort_multiparts_as(const DoutPrefixProvider* dpp,
   do {
     uploads.clear();
     int ret = list_multiparts(dpp, empty, marker, empty, max, uploads,
-			      nullptr, &is_truncated, y, requester);
+			      nullptr, &is_truncated, y, authenticated_user);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: listing the uploads of bucket "
 	<< get_name() << " to abort them: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     for (const auto& upload : uploads) {
-      /* a requester's abort goes through the access model itself
+      /* an authenticated user's abort goes through the access model itself
        * (remove_staging());  the gateway's is raised after a denial */
       auto abort = [&]() -> int { return upload->abort(dpp, cct, y); };
       ret = abort();
-      if (nsfs::owner_empty(requester) && ((ret == -EACCES) || (ret == -EPERM))) {
+      if (nsfs::owner_empty(authenticated_user) &&
+	  ((ret == -EACCES) || (ret == -EPERM))) {
 	ret = nsfs::with_capabilities(dpp, BUCKET_DELETE_CAPS, abort);
       }
       if ((ret < 0) && (ret != -ENOENT) && (ret != -ERR_NO_SUCH_UPLOAD)) {
@@ -10989,7 +10993,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
       nsfs::impersonation_enabled()) {
     nsfs::Credentials cred;
     if (!nsfs::owner_empty(creator)) {
-      ret = resolve_requester(dpp, driver, creator, y, nullptr, cred);
+      ret = resolve_credentials_for(dpp, driver, creator, y, nullptr, cred);
     } else {
       ret = nsfs::resolve_credentials(dpp, *driver->get_identity_db(),
 				      info.owner, cred);
@@ -11168,7 +11172,7 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  /* the requester's, from the walk through the moves to the intent
+  /* the authenticated user's, from the walk through the moves to the intent
    * record:  both key directories and their `.versions` are theirs.
    * Nobody named is the gateway, as for set_obj_attrs(). */
   nsfs::FSIdentity id;
@@ -11541,9 +11545,9 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   NSFSBucket *sb = static_cast<NSFSBucket*>(src_bucket);
   NSFSObject *dobj = static_cast<NSFSObject*>(dest_object);
 
-  /* Who copies:  the requester reads the source and owns the copy, as
-   * NooBaa's copy runs as its requester.  Denied where it cannot be
-   * applied, as the writers deny it. */
+  /* Who copies:  the authenticated user reads the source and owns the
+   * copy, as NooBaa's copy runs as the request's account.  Denied
+   * where it cannot be applied, as the writers deny it. */
   nsfs::FSIdentity identity;
   {
     const int pret = pin_personality_for(dpp, driver, authenticated_user,
@@ -11683,10 +11687,10 @@ int NSFSObject::copy_object(const ACLOwner& owner,
         << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    /* the source as the requester, and as the gateway where the
+    /* the source as the authenticated user, and as the gateway where the
      * filesystem denies it and the model permits, as the cross-object
      * copy opens it (clone_file_by_copy());  clone_fd() then reopens
-     * it as the requester and falls back to this descriptor only where
+     * it as that user and falls back to this descriptor only where
      * the model permits.  The gateway's descriptor is this call's, never
      * the entry's (with_cross_account_retry()). */
     int src_fd = ent->get_fd();
@@ -11722,7 +11726,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   vlock.reset();
   dobj->set_access(identity, /*ro=*/false);
   dobj->make_ent(ent->get_type());
-  /* the copy is the requester's, so its attributes are written as it */
+  /* the copy is the authenticated user's, so its attributes are
+   * written as it */
   if (identity.active() && dobj->get_fsent()) {
     dobj->get_fsent()->set_identity(identity);
   }
@@ -12271,7 +12276,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   hdl->leaf_name = leaf;
   hdl->dir_chain = std::move(resolved_dirs);
   hdl->identity = identity;
-  hdl->requester = authenticated_user;
+  hdl->authenticated_user = authenticated_user;
 
   /* sdir_fd stays this function's until a success path hands it over.
    *
@@ -12840,7 +12845,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
   if (src_exists) {
     int ret = driver->get_fs_strategy()->clone_file(
       dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, null_yield,
-      driver->copy_hints_for(requester), true /* excl */, identity,
+      driver->copy_hints_for(authenticated_user), true /* excl */, identity,
       as_gateway);
     if (ret == -EEXIST) {
       joined = true;
@@ -13167,7 +13172,7 @@ int NSFSObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
    * Scoping it to the open alone does not work, and the way it fails
    * is quiet:  the open is retried as the gateway and succeeds, the
    * entry's identity is restored on the way out, and the attribute
-   * read that follows runs as the requester and is denied again, so
+   * read that follows runs as the authenticated user and is denied again, so
    * the read fails although S3 authorised it.  Both halves are the
    * operation. */
   /* Both failures reach the caller, and has_attrs is false on either.
@@ -13264,7 +13269,7 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
 					 nsfs::AccessClass what,
 					 std::function<int(int use_fd)> fn)
 {
-  /* -1:  the operation on its own terms, as the requester */
+  /* -1:  the operation on its own terms, as the entry's identity */
   int ret = fn(-1);
   if (ret != -EACCES) {
     return ret;
@@ -13313,7 +13318,7 @@ int NSFSObject::with_cross_account_retry(const DoutPrefixProvider* dpp,
     driver->cross_account_attrs_served.fetch_add(1, std::memory_order_relaxed);
   }
   ldpp_dout(dpp, 10) << "nsfs: " << get_name()
-    << ": the filesystem denied the requester and S3 authorised it,"
+    << ": the filesystem denied the authenticated user and S3 authorised it,"
     " so the gateway performed it (access model "
     << driver->get_access_strategy()->name() << ")" << dendl;
   return rret;
@@ -13356,7 +13361,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   }
   state.attrset.erase(attr_name);
 
-  /* No open here.  One outside the retry fails as the requester and
+  /* No open here.  One outside the retry fails as the authenticated user and
    * returns before the cross-account path is reached -- which it did,
    * leaving DeleteObjectTagging a 403 while the same deployment let a
    * put through.  The retry's own attempt opens, both times. */
@@ -13380,7 +13385,7 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
       }
     }
     /* the caller's descriptor carries no identity;  the entry's
-     * carries the requester's */
+     * carries the authenticated user's */
     return remove_x_attr(dpp, y,
 			 (use_fd >= 0) ? use_fd : ent->get_fd(),
 			 attr_name, get_name(),
@@ -13648,7 +13653,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
         if (parent_fd >= 0) {
           std::string ver_name = nsfs_ver_entry(leaf_name, req_ver);
           /* .versions/ as the walk opens a key's directories:  as the
-           * requester, and as the gateway after a denial only where
+           * authenticated user, and as the gateway after a denial only where
            * the model permits the path class */
           auto ver_dir = std::make_unique<Directory>(
             HIDDEN_VERSIONS_PATH, leaf_dir, driver->ctx());
@@ -13888,7 +13893,7 @@ int NSFSObject::make_ent(ObjectType type)
 
   Directory* leaf_dir;
   std::string leaf_name;
-  /* the walk opens and makes directories as the object's requester,
+  /* the walk opens and makes directories as the object's writer,
    * and both need a prefix provider to report through */
   const DoutPrefix dp(driver->ctx(), dout_subsys, "nsfs make_ent: ");
   int ret = resolve_key_path(&dp,
@@ -13992,7 +13997,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
   /* The publish is on the access-model axis, and the model decides it
    * before the first syscall rather than after a denial.
    *
-   * A bucket directory is its owner's at `0770`, and a requester
+   * A bucket directory is its owner's at `0770`, and a user
    * outside its group may open and write an `O_TMPFILE` there under a
    * raise, and still be denied the link and the rename that publish
    * it.  The write therefore fails at the publish even after the open
@@ -14010,11 +14015,11 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
    *
    * So under a model that permits it the whole publish is the
    * gateway's, for every write and not only a denied one.  The
-   * published inode is still the requester's `O_TMPFILE` -- only the
+   * published inode is still the writer's `O_TMPFILE` -- only the
    * directory operations move.
    *
    * `CAP_FOWNER`, and only the link needs it.  The link is of the
-   * requester's inode, and `fs.protected_hardlinks` allows a hardlink to another's
+   * writer's inode, and `fs.protected_hardlinks` allows a hardlink to another's
    * inode only to its owner or to someone holding read *and* write on
    * it.  The gateway holds `CAP_DAC_READ_SEARCH`, so
    * `safe_hardlink_source()` returns false and the kernel falls to
@@ -14119,7 +14124,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
        * A `user.*` attribute needs write permission on the file,
        * tested against the *calling* thread rather than against
        * whoever opened the descriptor -- so the gateway writing
-       * through the requester's fd fails on a 0660 file it does
+       * through the writer's fd fails on a 0660 file it does
        * not own.  This ignored its result, so under impersonation
        * every versioned PUT published an object carrying no recorded
        * version id while reporting the derived one to the client.
@@ -14207,7 +14212,7 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 
 /* An upload's staging -- its meta object -- is the gateway's, and is
  * read as the gateway whoever asks:  S3 authorizes ListParts and its
- * permission check, and the requester has no access to scaffolding
+ * permission check, and the authenticated user has no access to scaffolding
  * (DECISIONS.md 2026-10-15). */
 static bool reads_staging(rgw::sal::Object* obj)
 {
@@ -14223,7 +14228,7 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
    * Not every read op is a request reading data.  The
    * authorisation path builds one to read an object's ACL
    * attribute -- and must, since that attribute is what decides
-   * whether the requester may read anything at all.  Denying it
+   * whether the authenticated user may read anything at all.  Denying it
    * for having no identity would make authorisation impossible.
    *
    * The denial therefore sits on the data entry points, iterate()
@@ -14510,8 +14515,8 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
 
   rgw_account_id account;
   nsfs::Credentials cred;
-  const int ret = resolve_requester(dpp, driver, who, null_yield,
-				    &account, cred);
+  const int ret = resolve_credentials_for(dpp, driver, who, null_yield,
+					  &account, cred);
   if (ret == -ENOENT) {
     /* A valid account always has an identity record;  one without
      * is a provisioning fault, reported rather than repaired. */
@@ -15436,7 +15441,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
 
-      /* As the requester, which phase C's DeleteOp parameter now
+      /* As the authenticated user, which phase C's DeleteOp parameter now
        * supplies.  The link's target is the current version, which an
        * identity wrote, and fs.protected_hardlinks denies it to the
        * gateway -- the same denial the writer's demote had before it
@@ -15454,8 +15459,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       }, y);
       if (sr == SafeResult::OK) {
         /* when it stopped being current, for NooBaa's lifecycle and
-         * (D5) RGW's:  on the demoted file, which is the requester's,
-         * and a `user.*` write is checked against the calling thread */
+         * (D5) RGW's:  on the demoted file, which is the authenticated
+         * user's, and a `user.*` write is checked against the calling
+         * thread */
         const auto now_ms = std::to_string(
           std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count());
@@ -15480,7 +15486,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
             << cpp_strerror(-tret) << dendl;
         }
         /* CAS unlink: remove current only if it still matches.  The
-         * requester's too:  the entry it removes is in the bucket
+         * authenticated user's too:  the entry it removes is in the bucket
          * directory, which phase D hands to the account. */
         (void) nsfs::with_identity_or_raise(dpp, identity, model,
                                             nsfs::AccessClass::data,
@@ -15496,7 +15502,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         break;
       }
       if (sr == SafeResult::DENIED) {
-        /* the tree denied the requester, which is a 403 and not the
+        /* the tree denied the authenticated user, which is a 403 and not the
          * silent give-up this used to be:  without it the delete
          * marker is written over a current version that was never
          * demoted, and the version history loses an entry */
@@ -15537,10 +15543,10 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   std::string dm_tmp = ".dm_tmp_" +
     std::to_string(getpid()) + "_" + std::to_string(dm_counter.fetch_add(1));
 
-  /* As the requester, all of it.
+  /* As the authenticated user, all of it.
    *
-   * A delete marker is a version in the requester's tree, so it is
-   * the requester's file by the same rule as any other object.  It
+   * A delete marker is a version in that user's tree, so it is
+   * that user's file by the same rule as any other object.  It
    * was the gateway's, and that is not only an ownership
    * inconsistency:  the *next* delete demotes this marker, and a
    * demote hard-links the file it demotes, which
@@ -15552,7 +15558,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * The attribute writes are inside the same switch for the reason
    * the version id is (`0dcf4a191f6`):  a `user.*` write is tested
    * against the calling thread, so the gateway writing to the
-   * requester's file would fail, and these are unchecked. */
+   * authenticated user's file would fail, and these are unchecked. */
   int dm_fd = -1;
   bool dm_raised = false;
   const int dmret = nsfs::with_identity_or_raise(dpp, identity, model,
@@ -15575,15 +15581,15 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   }
   if (dm_fd >= 0) {
     (void) nsfs::apply_create_mode(dpp, dm_fd, nsfs::file_create_mode(), y);
-    /* made by the gateway, and the requester's as any object is */
+    /* made by the gateway, and the authenticated user's as any object is */
     if (dm_raised) {
       (void) chown_raised(dpp, dm_fd, "", identity.cred.uid,
                           identity.cred.gid);
     }
     /* Every attribute on the marker is written as its owner, for the
      * reason the version id is:  a `user.*` write is tested against
-     * the calling thread, so the gateway writing to the requester's
-     * file fails, and none of these is checked. */
+     * the calling thread, so the gateway writing to the authenticated
+     * user's file fails, and none of these is checked. */
     std::string dm_ver_id;
     (void) nsfs::with_identity(dpp, identity, [&]() -> int {
       /* set delete_marker xattr */
@@ -15739,7 +15745,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
 /* The copy's source read is on the access-model axis:  S3 may have
  * authorised a read of an object the filesystem denies this
- * requester, and under a model that permits it the gateway performs
+ * authenticated user, and under a model that permits it the gateway performs
  * the read.  Resolved here rather than inside FSStrategy, because
  * whether the model is a daemon setting or a per-bucket one is not
  * settled (inflight/access-model-axis.md) and the caller is what
@@ -15764,7 +15770,8 @@ int NSFSObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
       driver->get_reserved_names(), db->is_internal(),
       /*create_dirs=*/true, driver->ctx(),
       dst_chain, dst_leaf_dir, dst_leaf_name,
-      /* copy_object() gave the source entry the requester's identity */
+      /* copy_object() gave the source entry the authenticated user's
+       * identity */
       ent ? ent->get_identity() : nsfs::FSIdentity::none(),
       driver->get_access_strategy());
   if (ret < 0)
@@ -16183,7 +16190,7 @@ int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, 
   return 0;
 }
 
-/* As the requester, through the access model (DECISIONS.md
+/* As the authenticated user, through the access model (DECISIONS.md
  * 2026-10-23):  staging is its uploader's, so another identity is
  * denied under posix-strict and performed for under s3-native.  Under
  * the staging root, which is the bucket directory only where the
@@ -16514,7 +16521,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       return dret;
     }
 
-    /* As the requester:  the assembled file leaves the uploader's
+    /* As the authenticated user:  the assembled file leaves the uploader's
      * staging (DECISIONS.md 2026-10-23), as NooBaa's completion moves
      * it.  Under the version lock. */
     ret = renameat_as(dpp, identity, driver->get_access_strategy(),
@@ -17414,7 +17421,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
   int ret;
 
   /* before make_ent(), whose walk makes the key's directories as the
-   * requester */
+   * writer */
   if (identity.active()) {
     obj->set_access(identity, /*ro=*/false);
   }
@@ -18609,12 +18616,12 @@ int NSFSDriver::hint_unmarked_bucket(
   return 0;
 }
 
-nsfs::CopyHints NSFSDriver::copy_hints_for(const rgw_owner& requester)
+nsfs::CopyHints NSFSDriver::copy_hints_for(const rgw_owner& who)
 {
   CopyBundle* b = &daemon_copy_bundle;
-  if (any_copy_bundle && ! nsfs::owner_empty(requester)) {
+  if (any_copy_bundle && ! nsfs::owner_empty(who)) {
     std::lock_guard l{copy_bundles_lock};
-    if (auto it = copy_bundles.find(to_string(requester));
+    if (auto it = copy_bundles.find(to_string(who));
 	it != copy_bundles.end()) {
       b = &it->second;
     }
@@ -18871,7 +18878,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       return -EINVAL;
     }
     const bool on = (it->second == "true");
-    /* `user=` arms that requester's bundle alone, so a test's copies
+    /* `user=` arms that user's bundle alone, so a test's copies
      * are the only ones forced and counted;  without it, the daemon's */
     CopyBundle* b = &daemon_copy_bundle;
     if (auto u = params.find("user"); u != params.end()) {
@@ -18994,8 +19001,8 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      *                                    and the entry's uid where it exists
      *
      * The key's directories must exist.  as=<user>:  made as that user,
-     * as a filesystem client of that identity would make it, so its
-     * requester may remove it under any access model.  Both report the
+     * as a filesystem client of that identity would make it, so that
+     * identity may remove it under any access model.  Both report the
      * bucket's real path as `bucket_path`, from which a test makes an
      * absolute target. */
     auto op = params.find("op");
@@ -19547,11 +19554,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   if (hint == "ran-as") {
     /* Which POSIX identity a converted consumer chose for one object.
      *
-     * `select` names the requester and clears whatever was recorded;
+     * `select` names the user and clears whatever was recorded;
      * a later call with no `select` drains what has been seen since
-     * and stops.  Scoped to one requester rather than global because
+     * and stops.  Scoped to one user rather than global because
      * the suite runs in parallel, and a global slot would answer for
-     * whichever request happened to run last.  By requester rather
+     * whichever request happened to run last.  By user rather
      * than by object:  the question is whether this caller's
      * operations ran as it, and a bucket-level attribute write names
      * no object at all.

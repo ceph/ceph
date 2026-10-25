@@ -44,7 +44,7 @@ enum class AccessClass {
  * bucket could want cross-account policy, and an extended bucket
  * could want strict parity.
  *
- * Under impersonation the requester's POSIX identity can carry two
+ * Under impersonation the authenticated user's POSIX identity can carry two
  * things:  authority, whether an operation may happen, and
  * attribution, whose its result is on disk.  A model says which the
  * identity keeps.  `posix-strict` keeps both;  `s3-native` keeps
@@ -54,19 +54,19 @@ enum class AccessClass {
  *
  * It answers one question:  whether the gateway performs an operation
  * itself, with a raise, once S3 has authorised it and the filesystem
- * has refused the requester.  A further position exists in the tree
- * and is a different question:  lifecycle acts as the **bucket owner**
- * (DECISIONS.md §6.3), which is neither the requester nor the gateway
- * -- *who* performs it, not *whether* the gateway does.  See
- * inflight/access-model-axis.md, which catalogues the positions found
- * so far. */
+ * has refused the authenticated user.  A further position exists in
+ * the tree and is a different question:  lifecycle acts as the
+ * **bucket owner** (DECISIONS.md §6.3), which is neither the
+ * authenticated user nor the gateway -- *who* performs it, not
+ * *whether* the gateway does.  See inflight/access-model-axis.md,
+ * which catalogues the positions found so far. */
 class AccessStrategy {
 public:
   virtual ~AccessStrategy() = default;
 
   /* Whether the model permits the gateway to perform this class of
    * operation itself, once S3 has authorised it and the filesystem has
-   * denied the requester.  Where it does not, the denial stands, and
+   * denied the authenticated user.  Where it does not, the denial stands, and
    * cross-identity sharing is arranged in the filesystem, with a
    * supplementary group. */
   virtual bool permits(AccessClass what) const = 0;
@@ -85,7 +85,7 @@ public:
  * The default, and NooBaa's model:  they perform every operation as
  * the requesting account, and their IAM users and roles carry their
  * account's uid, so S3 and POSIX cannot disagree inside an account.
- * NooBaa walks as the requester, too.  It is the model under which an
+ * NooBaa walks as the request's account, too.  It is the model under which an
  * in-place upgrade of a NooBaa installation keeps its semantics. */
 class PosixStrictAccess final : public AccessStrategy {
 public:
@@ -97,7 +97,7 @@ public:
  * bucket policy and ACLs decide, as on every other RGW backend.  Where
  * S3 granted what the identity cannot do, the gateway performs it as
  * S3's agent, with a raise, and what that creates is attributed as the
- * requester's own would be:  an object the requester's, a directory
+ * authenticated user's own would be:  an object the user's, a directory
  * its parent's owner's (DECISIONS.md 2026-10-20).
  *
  * The filesystem is storage that records whose things are.  A

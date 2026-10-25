@@ -522,12 +522,12 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
 {
   /* A copy is a read of the source and a write of the destination,
    * and both are on the access-model axis.  The read can be an
-   * operation S3 authorised against an object the requester does not
-   * own;  the write can be a create S3 authorised in a directory the
-   * requester cannot write, a bucket another identity created.  Either
+   * operation S3 authorised against an object `id` does not
+   * own;  the write can be a create S3 authorised in a directory
+   * `id` cannot write, a bucket another identity created.  Either
    * is performed raised where the model permits it (`src_as_gateway`,
    * the model's answer for data), and the destination is then given to
-   * the requester, as every raised create is (DECISIONS.md 2026-10-20),
+   * `id`, as every raised create is (DECISIONS.md 2026-10-20),
    * so a copy they are entitled to never lands owned by the gateway.
    *
    * A retry rather than a decision, unlike the publish
@@ -563,7 +563,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     if (oret == 0) {
       cross_account_sources.fetch_add(1, std::memory_order_relaxed);
       ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem denied the"
-	" requester the source " << src_name << " and the gateway read it,"
+	" identity the source " << src_name << " and the gateway read it,"
 	" which the access model permits" << dendl;
     }
   }
@@ -607,7 +607,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     }
     if (dret == 0) {
       ldpp_dout(dpp, 10) << "nsfs: clone_file: the filesystem denied the"
-	" requester the destination " << dst_name << " and the gateway made"
+	" identity the destination " << dst_name << " and the gateway made"
 	" it as theirs, which the access model permits" << dendl;
     } else if (dst_fd >= 0) {
       ::close(dst_fd);
@@ -654,7 +654,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   }
   return ret;
   }, y);
-  /* a raised destination is in a directory the requester cannot write,
+  /* a raised destination is in a directory `id` cannot write,
    * so its removal is the gateway's too */
   if ((ret < 0) && dst_raised) {
     (void) nsfs::with_capabilities(dpp, COPY_DEST_CAPS, [&]() -> int {
@@ -674,14 +674,14 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
 {
   /* As `id`, the source reopened through the descriptor:  an open of
    * the magic link checks the file's permissions against the caller,
-   * so the read is the requester's and not the gateway's, which holds
+   * so the read is `id`'s and not the gateway's, which holds
    * `gw_src_fd`.
    *
-   * Where the filesystem denies the requester and the access model
+   * Where the filesystem denies `id` and the access model
    * permits it, there is nothing to reopen:  `gw_src_fd` is already
    * the gateway's descriptor, so using it as it stands *is* the
    * gateway performing the read.  Hoisted out of the identity block
-   * because the reopen is the requester's and the fallback is not. */
+   * because the reopen is `id`'s and the fallback is not. */
   int own_fd = -1;
   if (id.active()) {
     const std::string via = "/proc/self/fd/" + std::to_string(gw_src_fd);
@@ -692,7 +692,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     if ((oret == -EACCES) && src_as_gateway) {
       cross_account_sources.fetch_add(1, std::memory_order_relaxed);
       ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem denied the"
-	" requester the source and the gateway read it, which the access"
+	" identity the source and the gateway read it, which the access"
 	" model permits" << dendl;
     } else if (oret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: clone_fd: reopening the source failed: "
@@ -743,7 +743,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     }
     if (ret == 0) {
       ldpp_dout(dpp, 10) << "nsfs: clone_fd: the filesystem denied the"
-	" requester the destination " << dst_name << " and the gateway made"
+	" identity the destination " << dst_name << " and the gateway made"
 	" it as theirs, which the access model permits" << dendl;
     }
   }
@@ -774,8 +774,8 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
    * decides it:  its first linkat spends the O_TMPFILE's one link, so it
    * cannot be retried after a denial.  Under a model that permits it
    * the gateway publishes, with CAP_FOWNER for fs.protected_hardlinks
-   * on the requester's inode and CAP_DAC_OVERRIDE for a directory that
-   * is not the gateway's;  the inode stays the requester's. */
+   * on `id`'s inode and CAP_DAC_OVERRIDE for a directory that
+   * is not the gateway's;  the inode stays `id`'s. */
   static constexpr uint64_t PUBLISH_AS_GATEWAY_CAPS =
     nsfs::cap_bit(CAP_FOWNER) | nsfs::cap_bit(CAP_DAC_OVERRIDE);
   if (src_as_gateway && id.active()) {
@@ -1129,9 +1129,9 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                               dst_dir_fd, dst_name, y, hints, excl, id,
                               src_as_gateway);
   }
-  /* The clone path makes its parent and child as the gateway.  As a
-   * requester, copy instead, so the clone is theirs and the read of the
-   * source is checked against them. */
+  /* The clone path makes its parent and child as the gateway.  As an
+   * identity, copy instead, so the clone is its own and the read of
+   * the source is checked against it. */
   if (id.active()) {
     return clone_file_by_copy(dpp, src_dir_fd, src_name,
                               dst_dir_fd, dst_name, y, hints, excl, id,
@@ -1699,7 +1699,7 @@ mode_t dir_create_mode()
  * changed.  That is how a file just created looks;  a file an open
  * with O_CREAT found already there -- a shared part file, a sideloaded
  * object being overwritten -- has its own mode and is left alone, and
- * under impersonation its owner may not be the requester. */
+ * under impersonation its owner may not be `id`. */
 int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
 		      optional_yield y,
 		      const FSIdentity& id)

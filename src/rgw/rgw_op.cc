@@ -366,13 +366,13 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   bufferlist bl;
   int ret = 0;
 
-  /* The ACL read runs as the requester, not as the daemon.
+  /* The ACL read runs as the authenticated user, not as the daemon.
    *
    * A driver which serves requests under the caller's filesystem
    * identity opens the object here, and that descriptor is the one
    * the data read goes on to use -- POSIX decides access at open.
    * Reading the attribute as the daemon would therefore hand the
-   * data path a descriptor the requester could not have obtained.
+   * data path a descriptor that user could not have obtained.
    *
    * Empty where there is no authenticated user -- lifecycle,
    * anonymous access -- and a driver treats that as "serve this as
@@ -382,7 +382,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
    * It costs no extra open:  the alternative is to leave the
    * daemon's descriptor in place and reopen on the data path.
    *
-   * A requester permitted by bucket policy but refused by the
+   * A user permitted by bucket policy but refused by the
    * filesystem now fails here rather than at the data read.  Same
    * status, same request, earlier. */
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op(auth_user);

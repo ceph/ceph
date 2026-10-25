@@ -345,8 +345,8 @@ public:
    * It applies to the *final component* only.  `resolve_path()`
    * opens each ancestor with `Directory::open()`, which takes no
    * identity, so a key directory's own permissions are never checked
-   * against the requester.  NooBaa checks every component, because
-   * it opens an object by its path under the requester's
+   * against the identity.  NooBaa checks every component, because
+   * it opens an object by its path under the account's
    * credentials;  closing that gap means passing this down the walk.
    *
    * There is no descriptor cache in the way:  `dir_chain` is built
@@ -367,7 +367,7 @@ public:
    * Descriptors are opened O_RDWR by default, which cost nothing
    * while the gateway owned every file and could write all of
    * them.  Under impersonation a read is often the whole of what
-   * the requester is entitled to -- an object reachable through a
+   * the authenticated user is entitled to -- an object reachable through a
    * supplementary group and not writable at all -- and the
    * authorisation pass reads attributes with no identity at all,
    * holding only CAP_DAC_READ_SEARCH.  Both need the open to ask
@@ -404,7 +404,7 @@ public:
    * the open and the `user.*` syscalls are each tested on their own.
    *
    * Only the attribute paths want this.  A data path opens as the
-   * requester or not at all. */
+   * authenticated user or not at all. */
   virtual int open_scratch_as_gateway(const DoutPrefixProvider* dpp,
 				      bool read_only);
 
@@ -419,7 +419,7 @@ public:
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs,
 			 int use_fd = -1);
   /* src_as_gateway:  the access model permits the gateway to read a
-   * source the filesystem denies the requester.  Resolved by the
+   * source the filesystem denies the authenticated user.  Resolved by the
    * caller, which knows the bucket;  see clone_file_by_copy(). */
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name, const CopyHints& hints, bool src_as_gateway = false) = 0;
   /* excl:  fail with -EEXIST rather than replace, for If-None-Match: * */
@@ -886,7 +886,7 @@ protected:
   std::unique_ptr<nsfs::AccessStrategy> access_strategy;
   std::atomic<const nsfs::AccessStrategy*> access_strategy_live{nullptr};
   /* How many operations the access model let the gateway perform
-   * after the filesystem denied the requester, by class.
+   * after the filesystem denied the authenticated user, by class.
    *
    * Reported by the `access-model` hint.  Without it a test that
    * sees a read succeed cannot tell *why*:  because the model
@@ -1028,12 +1028,12 @@ protected:
    * one;  this records the choice so a wrong one is a test failure
    * rather than a silent inversion.
    *
-   * Selected by requester, not global.  A global slot would hold
+   * Selected by user, not global.  A global slot would hold
    * whatever ran last, and the suite runs in parallel -- see the
    * buffered-bytes counter, which is global and has no such
    * protection.
    *
-   * By requester rather than by object because the question is
+   * By user rather than by object because the question is
    * whether *this caller's* operations ran as it, which is not a
    * per-object question:  a test may touch several objects, and a
    * bucket-level attribute write names no key at all.  A selected
@@ -1043,12 +1043,12 @@ protected:
   std::string ran_as_who;
   std::vector<std::pair<std::string, uid_t>> ran_as_seen;
 
-  /* The `inject-buffered-copy` hint, by requester.  Armed with `user=`,
-   * a bundle applies to that requester's copies only;  armed without,
-   * the daemon's applies to every requester with no bundle of its own,
-   * and to the copies with no requester at all.  A bundle is kept for
-   * the driver's life once made, one per user a test has armed, so the
-   * counter a CopyHints points at never dangles. */
+  /* The `inject-buffered-copy` hint, by user.  Armed with `user=`,
+   * a bundle applies to that user's copies only;  armed without,
+   * the daemon's applies to every user with no bundle of its own,
+   * and to the copies with no authenticated user at all.  A bundle is
+   * kept for the driver's life once made, one per user a test has
+   * armed, so the counter a CopyHints points at never dangles. */
   struct CopyBundle {
     std::atomic<bool> force_buffered{false};
     std::atomic<uint64_t> buffered_bytes{0};
@@ -1102,9 +1102,9 @@ public:
 
   const DoutPrefixProvider* get_dpp() const { return &driver_prefix; }
 
-  /* What `requester`'s copies are asked to do:  its bundle where it has
+  /* What `who`'s copies are asked to do:  its bundle where it has
    * one, else the daemon's. */
-  nsfs::CopyHints copy_hints_for(const rgw_owner& requester);
+  nsfs::CopyHints copy_hints_for(const rgw_owner& who);
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -1722,7 +1722,7 @@ public:
   bool fsio_link_fail_injected() const { return inject_fsio_link_fail; }
   bool fsio_skip_cleanup_injected() const { return inject_fsio_skip_cleanup; }
 
-  /* Record what this requester's operations choose, discarding
+  /* Record what this user's operations choose, discarding
    * anything held for a previous one.  See ran_as_lock. */
   void select_ran_as(const std::string& who) {
     std::lock_guard l{ran_as_lock};
@@ -1730,7 +1730,7 @@ public:
     ran_as_seen.clear();
   }
   /* Record the identity `site` chose, if this is the selected
-   * requester.
+   * user.
    * An inactive identity is the gateway, which is the answer when
    * impersonation is off and is worth recording rather than
    * dropping:  the test then has both polarities. */
@@ -1759,7 +1759,7 @@ public:
   }
 
   /* How many operations the access model let the gateway perform
-   * after the filesystem denied the requester, by class.
+   * after the filesystem denied the authenticated user, by class.
    *
    * Reported by the `access-model` hint.  Without it a test that
    * sees a read succeed cannot tell *why*:  because the model
@@ -2371,18 +2371,19 @@ public:
 			       CephContext* cct, optional_yield y) override;
 
   /* Internal APIs */
-  /* abort_multiparts() as `requester`, each abort through the access
+  /* abort_multiparts() as `authenticated_user`, each abort through the access
    * model;  no_authenticated_user is the gateway, raised after a
    * denial, as abort_multiparts() is */
   int abort_multiparts_as(const DoutPrefixProvider* dpp, CephContext* cct,
-			  optional_yield y, const rgw_owner& requester);
+			  optional_yield y,
+			  const rgw_owner& authenticated_user);
   /* The bucket directory made by whoever had to be able to make it
    * (DECISIONS.md 2026-10-24):  the gateway in the base path, `creator`
    * under a location the account owns. */
   int make_dir(const DoutPrefixProvider* dpp, optional_yield y,
 	       bool* existed, const rgw_owner& creator);
   /* An owned bucket directory removed with `id` acting where the
-   * requester acts (remove()):  everything in it, and its entry in a
+   * authenticated user acts (remove()):  everything in it, and its entry in a
    * location the account owns;  the gateway removes its entry from the
    * base path. */
   int remove_dir_as(const DoutPrefixProvider* dpp, optional_yield y,
@@ -2532,8 +2533,8 @@ public:
      * it links the current name into `.versions` and unlinks it from
      * the bucket directory, against an object an identity wrote.  As
      * the gateway that link fails with EPERM under
-     * fs.protected_hardlinks, so the requester is what those two calls
-     * need (inflight/n-plan.md phase D).
+     * fs.protected_hardlinks, so the authenticated user is what those
+     * two calls need (inflight/n-plan.md phase D).
      *
      * Not the promote that may follow them.  That publishes as the
      * version file's own owner (§5) and must stay outside any
@@ -2696,7 +2697,7 @@ public:
   int copy(const DoutPrefixProvider *dpp, optional_yield y, NSFSBucket *sb,
            NSFSBucket *db, NSFSObject *dobj, const nsfs::CopyHints& hints);
   /* Whether the access model lets the gateway read a source the
-   * filesystem denies this requester.  Resolved here because this is
+   * filesystem denies this authenticated user.  Resolved here because this is
    * where the driver and the object are both in hand. */
   bool copy_source_as_gateway() const;
   int fill_cache(const DoutPrefixProvider *dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
@@ -2709,7 +2710,7 @@ public:
   int admit_write(const DoutPrefixProvider* dpp, optional_yield y);
 
   /* Put the authenticated user on the entry, so the open and the
-   * attribute write that follow are the requester's rather than the
+   * attribute write that follow are that user's rather than the
    * gateway's.
    *
    * An attribute write opens the object O_RDWR and sets a `user.*`
@@ -2725,7 +2726,7 @@ public:
 			     const rgw_owner& who);
 
   /* Run an attribute operation, and where the filesystem denied the
-   * requester an operation S3 had authorised, run it again as the
+   * authenticated user an operation S3 had authorised, run it again as the
    * gateway with a raise.
    *
    * This is the whole of `rgw_nsfs_cross_account_permission`, and it
@@ -2773,7 +2774,7 @@ public:
    nsfs::FSIdentity identity;
    /* the same user, for the hints its copies carry:  set whether or
     * not impersonation is, where `identity` is not */
-   rgw_owner requester;
+   rgw_owner authenticated_user;
 
    friend class NSFSObject;
 
@@ -2883,12 +2884,12 @@ public:
     on_behalf_of = owner;
   }
 
-  /* complete() resolves the requester and makes the object as it:  the
-   * assembled file is created, or a data file linked in, and its
-   * attributes written, as the identity.  Parts are written as their
+  /* complete() resolves the authenticated user and makes the object
+   * as it:  the assembled file is created, or a data file linked in,
+   * and its attributes written, as the identity.  Parts are written as their
    * uploader by the part writer, as NooBaa writes them.  init() makes
    * staging and the meta object as the uploader, and abort() removes
-   * staging as the requester (DECISIONS.md 2026-10-23);  ListParts
+   * staging as the authenticated user (DECISIONS.md 2026-10-23);  ListParts
    * stays the gateway's (DECISIONS.md 2026-10-15). */
 
   virtual const std::string& get_meta() const override { return mp_obj.meta; }

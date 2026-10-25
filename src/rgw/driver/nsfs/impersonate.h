@@ -304,7 +304,7 @@ ssize_t fgetxattr(int fd, const char* name, void* value, size_t size);
 
 /* statx(2) and fstatat(2), for a gateway stat inside an identity's tree.
  *
- * A key's directories are its requester's at `0770`, so the gateway can
+ * A key's directories are their creator's at `0770`, so the gateway can
  * search them only holding CAP_DAC_READ_SEARCH -- and holds it only on
  * a thread that took it, which a coroutine resumed elsewhere is not.
  * Each stat takes it first, as fgetxattr() does.  Metadata only:  a

@@ -4521,12 +4521,12 @@ TEST_F(NSFSGatewayAttrReadTest, ARaiseKeepsReadSearch)
       << "the raise's restore dropped CAP_DAC_READ_SEARCH";
 }
 
-/* An object rename runs as its requester.
+/* An object rename runs as the authenticated user.
  *
  * Under impersonation a key's directory and its `.versions` are made
- * by the requester at `0770`, so the gateway can neither walk them
- * nor move a name out of them.  The rename has to run as the
- * requester:  the walks on both sides, the version lock, the intent
+ * by the authenticated user at `0770`, so the gateway can neither walk them
+ * nor move a name out of them.  The rename has to run as that
+ * user:  the walks on both sides, the version lock, the intent
  * record on `.versions`, each version's move and the leaf's.  The
  * control is the gateway's own open of the source key directory, on
  * a thread that has never taken read-search:  it must fail, or the
@@ -4608,7 +4608,7 @@ protected:
 			       {{"enable", on ? "true" : "false"}}, &out);
   }
 
-  /* how many operations the gateway performed for a denied requester */
+  /* how many operations the gateway performed for a denied user */
   uint64_t raised() {
     std::map<std::string, std::string> out;
     EXPECT_EQ(driver->driver_hint(env->dpp, "access-model", {}, &out), 0);
@@ -4792,8 +4792,8 @@ TEST_F(NSFSImpersonatedRenameTest, TheOwnersRenameRunsAsTheOwner)
   EXPECT_EQ(owned("dst/.versions/" + moved[0]).uid, owner_uid);
 }
 
-/* The rename records the identity it chose for its requester (phase C's
- * validation clause):  the requester's row, and -- the other polarity,
+/* The rename records the identity it chose for the authenticated user
+ * (phase C's validation clause):  that user's row, and -- the other polarity,
  * so this discriminates -- a different uid once that row moves.  Only
  * librgw renames, so this is the unit test the suite's
  * test_attrs_and_delete_run_as_the_member cannot be for it. */
@@ -4816,7 +4816,7 @@ TEST_F(NSFSImpersonatedRenameTest, TheRenameRecordsTheIdentityItChose)
   EXPECT_EQ(ran_as(), std::to_string(owner_uid));
 
   /* the row moves;  a rename of a key that is not there still pins
-   * the requester first, so the choice is recorded */
+   * the authenticated user first, so the choice is recorded */
   static constexpr uid_t moved_uid = 70162;
   nsfs::Identity row;
   row.key = to_string(rgw_owner{alice});
@@ -4870,22 +4870,22 @@ TEST_F(NSFSImpersonatedRenameTest, AnIdentitysOpenRefusesALinkSwappedIn)
       << "the link swapped in after the stat was followed";
 }
 
-/* A tag removal runs as its requester (phase C's validation clause,
+/* A tag removal runs as the authenticated user (phase C's validation clause,
  * the call-site table's remove_x_attr row), under each access model.
  *
  * fremovexattr(2) of a `user.*` name is checked against the calling
  * thread, so on alice's 0660 object it succeeds only with credentials
  * that may write it.  Under posix-strict no raise is possible, so a
- * removal that succeeds there can only have run with the requester's
+ * removal that succeeds there can only have run with that user's
  * credentials -- which is what remove_x_attr()'s old single-name arm,
  * acting as the gateway, failed (16c5f31a2e1).  The premise is that the
  * gateway, unraised, cannot;  bob, whom posix-strict denies, cannot
- * either, so the identity follows the requester.  Under s3-native the
- * same denial is performed by the gateway under a raise, which the
- * access model's counter shows -- the case in which the file outcome
+ * either, so the identity follows the authenticated user.  Under
+ * s3-native the same denial is performed by the gateway under a raise,
+ * which the access model's counter shows -- the case in which the file outcome
  * alone would not say whose credentials ran.  The model is set here,
  * not inherited;  TearDown() restores the configured one. */
-TEST_F(NSFSImpersonatedRenameTest, ATagRemovalRunsAsItsRequesterUnderEachModel)
+TEST_F(NSFSImpersonatedRenameTest, ATagRemovalRunsAsTheAuthenticatedUserUnderEachModel)
 {
   ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "alice's"));
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
@@ -4937,8 +4937,8 @@ TEST_F(NSFSImpersonatedRenameTest, ATagRemovalRunsAsItsRequesterUnderEachModel)
     return len >= 0;
   };
   /* the gateway performing an attribute operation the filesystem denied
-   * the requester:  with_cross_account_retry()'s counter, reported by
-   * the access-model hint as `attrs_served` -- not raised(), which
+   * the authenticated user:  with_cross_account_retry()'s counter,
+   * reported by the access-model hint as `attrs_served` -- not raised(), which
    * counts with_identity_or_raise()'s directory operations */
   auto attrs_served = [this]() {
     std::map<std::string, std::string> out;
@@ -5053,7 +5053,7 @@ TEST_F(NSFSImpersonatedRenameTest, AnotherIdentitysRenameIsDenied)
 
 /* s3-native:  another identity's writes in the owner's key directory
  * are the gateway's to perform, and what they create is the
- * requester's object in the owner's directories (DECISIONS.md
+ * writer's object in the owner's directories (DECISIONS.md
  * 2026-10-20). */
 TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysPutIsRaised)
 {
@@ -5073,7 +5073,7 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysPutIsRaised)
 
   const Owned m = owned("src/m");
   ASSERT_EQ(m.err, 0);
-  EXPECT_EQ(m.uid, other_uid) << "the object is the requester's";
+  EXPECT_EQ(m.uid, other_uid) << "the object is its writer's";
   EXPECT_EQ(m.mode, 0660u);
 
   const Owned nd = owned("src/new");
@@ -5088,11 +5088,11 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysPutIsRaised)
   const auto hist = versions_in("src/new");
   ASSERT_EQ(hist.size(), 1u);
   EXPECT_EQ(owned("src/new/.versions/" + hist[0]).uid, other_uid)
-      << "the demoted version is still the requester's object";
+      << "the demoted version is still its writer's object";
 }
 
 /* s3-native:  another identity's delete in the owner's key directory
- * is performed, and the delete marker is the requester's. */
+ * is performed, and the delete marker is the deleting user's. */
 TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysDeleteIsRaised)
 {
   ASSERT_NO_FATAL_FAILURE(put_as(alice, "src/k", "alice's"));
@@ -5115,19 +5115,19 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysDeleteIsRaised)
       EXPECT_EQ(o.uid, owner_uid) << v << " changed owner";
     }
   }
-  EXPECT_EQ(markers, 1) << "the delete marker is the requester's";
+  EXPECT_EQ(markers, 1) << "the delete marker is the deleting user's";
 }
 
 static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
 						   const DoutPrefixProvider* dpp,
 						   const std::string& key);
 
-/* A bucket whose versions were all deleted by their requester keeps
- * only scaffolding -- the requester's `.versions` at 0770 -- and the
+/* A bucket whose versions were all deleted by their writer keeps
+ * only scaffolding -- that writer's `.versions` at 0770 -- and the
  * gateway's bucket delete removes it (raise site 3).  The premise is
  * that the gateway, unraised, cannot.  Two versions, so one has been
  * demoted into `.versions` before both are deleted. */
-TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsRequesterIsDeleted)
+TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsWriterIsDeleted)
 {
   ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "first"));
   ASSERT_NO_FATAL_FAILURE(put_as(alice, "k", "second"));
@@ -5151,7 +5151,7 @@ TEST_F(NSFSImpersonatedRenameTest, ABucketEmptiedByItsRequesterIsDeleted)
 
   const Owned v = owned(".versions");
   ASSERT_EQ(v.uid, owner_uid)
-      << "the premise:  the scaffolding is the requester's";
+      << "the premise:  the scaffolding is the writer's";
   ASSERT_EQ(v.mode, 0770u);
   ASSERT_EQ(gateway_unlink_on_a_fresh_thread(".versions/.lock"), -EACCES)
       << "the premise:  the gateway, unraised, cannot remove it";
@@ -5186,7 +5186,7 @@ TEST_F(NSFSImpersonatedRenameTest, UnderS3NativeAnotherIdentitysRenameIsRaised)
   ASSERT_EQ(leaf.err, 0) << "the leaf did not arrive";
   EXPECT_EQ(leaf.uid, owner_uid) << "a rename keeps the inode's owner";
   EXPECT_EQ(owned("dst").uid, other_uid)
-      << "the requester made the destination key directory, unraised";
+      << "the renaming user made the destination key directory, unraised";
   EXPECT_TRUE(versions_in("src").empty()) << "the history stayed behind";
   EXPECT_EQ(versions_in("dst").size(), 1u)
       << "the history did not follow the leaf";
@@ -6284,7 +6284,7 @@ public:
  * object assembly produces -- is the uploader's;  and the same upload
  * by another identity makes them that identity's, so the first arm
  * discriminates.  Not the gateway as the other arm:  under impersonation
- * a part with no requester is denied (n-plan §6.1).  The upload's
+ * a part with no authenticated user is denied (n-plan §6.1).  The upload's
  * `.meta` is the gateway's by design -- staging stays its -- so the
  * data files are named rather than listed. */
 TEST_F(NSFSImpersonatedStridedTest, EveryFileAStridedUploadMakesIsTheUploaders)
