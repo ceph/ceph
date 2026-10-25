@@ -409,7 +409,9 @@ void add_object_to_stats(
     out->num_objects_manifest++;
   }
 
-  if (eval.omap_keys > 0) {
+  /* As maintained by the write path. Note that eval.omap_keys is only
+   * measured by deep scrubs. */
+  if (oi.is_omap()) {
     out->num_objects_omap++;
   }
   out->num_omap_keys += eval.omap_keys;

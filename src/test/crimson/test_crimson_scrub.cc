@@ -1126,29 +1126,36 @@ TEST(TestSnapSet, Stats) {
     return maybe_oi;
   });
 
+  auto set_omap_flag = [&expected_stats](auto maybe_oi) {
+    ceph_assert(maybe_oi);
+    maybe_oi->set_flag(object_info_t::FLAG_OMAP);
+    expected_stats.num_objects_omap++;
+    return maybe_oi;
+  };
+
   {
-    auto &so = add_simple_head(32, [](auto ret) { return ret; });
+    auto &so = add_simple_head(32, set_omap_flag);
     expected_stats.num_omap_keys += (so.object_omap_keys = 10);
     expected_stats.num_omap_bytes += (so.object_omap_bytes = 100);
-    expected_stats.num_objects_omap++;
   }
 
   {
-    auto &so = add_simple_head(64, [](auto ret) { return ret; });
+    auto &so = add_simple_head(64, set_omap_flag);
     expected_stats.num_omap_keys +=
       (so.object_omap_keys = (TEST_OMAP_KEY_LIMIT + 1));
     expected_stats.num_omap_bytes +=
       (so.object_omap_bytes = so.object_omap_keys);
-    expected_stats.num_objects_omap++;
     expected_stats.num_large_omap_objects++;
   }
 
+  // an omap object as seen by a shallow scrub: omap not scanned
+  add_simple_head(16, set_omap_flag);
+
   {
-    auto &so = add_simple_head(64, [](auto ret) { return ret; });
+    auto &so = add_simple_head(64, set_omap_flag);
     expected_stats.num_omap_keys += (so.object_omap_keys = 1);
     expected_stats.num_omap_bytes +=
       (so.object_omap_bytes = (TEST_OMAP_BYTES_LIMIT + 1));
-    expected_stats.num_objects_omap++;
     expected_stats.num_large_omap_objects++;
   }
 
