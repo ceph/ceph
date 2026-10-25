@@ -793,6 +793,7 @@ Requires:       python3dist(pyopenssl)
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
 Requires:       python3dist(cherrypy)
 Requires:       python3dist(jinja2)
+Requires:       python3dist(routes)
 %if 0%{?suse_version}
 Requires:       openssh
 %endif
