@@ -1019,6 +1019,15 @@ protected:
   std::atomic<uint64_t> attr_read_fails_injected{0};
   ceph::mutex inject_attr_read_fail_lock =
       ceph::make_mutex("NSFSDriver::inject_attr_read_fail_lock");
+  /* fail, with EIO, the attribute writes a copy, a delete marker and a
+   * multipart completion make after the object exists, in these
+   * buckets, so a test can assert each returns the failure rather
+   * than discarding it.  Keyed by bucket, as the read failure is */
+  std::set<std::string> inject_attr_write_fail_buckets;
+  std::atomic<bool> inject_attr_write_fail_armed{false};
+  std::atomic<uint64_t> attr_write_fails_injected{0};
+  ceph::mutex inject_attr_write_fail_lock =
+      ceph::make_mutex("NSFSDriver::inject_attr_write_fail_lock");
   /* lift the gate on a bucket not taken over, for these buckets, so a
    * test can show a rejection is the gate's:  the same write succeeds
    * with it lifted.  Keyed by bucket, as the attribute-read injection
@@ -1722,6 +1731,14 @@ public:
     return inject_attr_read_fail_buckets.contains(bucket);
   }
   void record_attr_read_fail() { ++attr_read_fails_injected; }
+  bool attr_write_fail_injected(const std::string& bucket) {
+    if (!inject_attr_write_fail_armed.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    std::lock_guard l{inject_attr_write_fail_lock};
+    return inject_attr_write_fail_buckets.contains(bucket);
+  }
+  void record_attr_write_fail() { ++attr_write_fails_injected; }
   bool adoption_gate_lifted(const std::string& bucket) {
     if (!inject_lift_adoption_gate_armed.load(std::memory_order_relaxed)) {
       return false;

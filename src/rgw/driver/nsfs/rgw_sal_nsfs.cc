@@ -1440,13 +1440,18 @@ static void clear_rename_intent(const DoutPrefixProvider* dpp,
     return;
   }
   std::string name = rename_intent_xattr(xs);
-  (void) nsfs::with_identity_or_raise(dpp, id, model,
-				      nsfs::AccessClass::data,
-				      RAISED_KEYDIR_CAPS,
-				      [&]() -> int {
+  const int cret = nsfs::with_identity_or_raise(dpp, id, model,
+						nsfs::AccessClass::data,
+						RAISED_KEYDIR_CAPS,
+						[&]() -> int {
     return (::fremovexattr(vfd, name.c_str()) < 0) ? -errno : 0;
   }, null_yield);
   ::close(vfd);
+  if ((cret < 0) && (cret != -ENODATA)) {
+    ldpp_dout(dpp, 0) << "ERROR: could not clear a rename record:  "
+      << cpp_strerror(-cret) << ";  the next write to the key goes "
+      "through recovery" << dendl;
+  }
 }
 
 /* takes the .versions/ descriptor, for callers which already have one open */
@@ -1677,10 +1682,15 @@ static int recover_rename_intent(const nsfs::XattrStrategy* xs,
    * raised with the moves:  left behind, it would send the next write
    * back through recovery and keep every rename out of here at -EBUSY */
   const std::string name = rename_intent_xattr(xs);
-  (void) recovery_write(dpp, [&]() -> int {
+  const int cret = recovery_write(dpp, [&]() -> int {
     return (::fremovexattr(src_vfd, name.c_str()) < 0) ? -errno : 0;
   });
   ::close(src_vfd);
+  if ((cret < 0) && (cret != -ENODATA)) {
+    ldpp_dout(dpp, 0) << "ERROR: rename recovery: " << in.leaf
+      << " committed, but its record could not be removed:  "
+      << cpp_strerror(-cret) << ";  renames of it return -EBUSY" << dendl;
+  }
 
   /* The cache cannot describe what recovery just changed:  a rekey expresses
    * a whole move, and this was half of one.  Drop the filled flag on both
@@ -11855,12 +11865,23 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     int obj_fd = dobj->get_fsent()->get_fd();
     if (obj_fd >= 0) {
       std::string vid_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-      /* as the copy's owner */
-      nsfs::with_identity(dpp, identity, [&]() -> int {
-        ::fsetxattr(obj_fd, vid_xattr.c_str(),
-                    new_ver_id.c_str(), new_ver_id.size(), 0);
-        return 0;
+      /* as the copy's owner, and checked, as link_temp_file() is */
+      const int vret = nsfs::with_identity(dpp, identity, [&]() -> int {
+        if (driver->attr_write_fail_injected(db->get_name())) {
+          driver->record_attr_write_fail();
+          return -EIO;
+        }
+        return (::fsetxattr(obj_fd, vid_xattr.c_str(),
+                            new_ver_id.c_str(), new_ver_id.size(), 0) < 0)
+          ? -errno : 0;
       }, y);
+      if (vret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
+          << dobj->get_name() << ": " << cpp_strerror(-vret)
+          << ";  a later demote would file it as the null version"
+          << dendl;
+        return vret;
+      }
     }
 
     auto* bcache = driver->get_bucket_cache();
@@ -15564,7 +15585,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
    * The attribute writes are inside the same switch for the reason
    * the version id is (`0dcf4a191f6`):  a `user.*` write is tested
    * against the calling thread, so the gateway writing to the
-   * authenticated user's file would fail, and these are unchecked. */
+   * authenticated user's file would fail. */
   int dm_fd = -1;
   bool dm_raised = false;
   const int dmret = nsfs::with_identity_or_raise(dpp, identity, model,
@@ -15595,13 +15616,21 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     /* Every attribute on the marker is written as its owner, for the
      * reason the version id is:  a `user.*` write is tested against
      * the calling thread, so the gateway writing to the authenticated
-     * user's file fails, and none of these is checked. */
+     * user's file fails.  Each is checked:  a marker missing its flag
+     * is an empty object, which a GET would return. */
     std::string dm_ver_id;
-    (void) nsfs::with_identity(dpp, identity, [&]() -> int {
+    const int aret = nsfs::with_identity(dpp, identity, [&]() -> int {
+      if (source->driver->attr_write_fail_injected(b->get_name())) {
+	source->driver->record_attr_write_fail();
+	return -EIO;
+      }
       /* set delete_marker xattr */
       std::string dm_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
       std::string dm_val = "true";
-      ::fsetxattr(dm_fd, dm_xattr.c_str(), dm_val.c_str(), dm_val.size(), 0);
+      if (::fsetxattr(dm_fd, dm_xattr.c_str(), dm_val.c_str(),
+		      dm_val.size(), 0) < 0) {
+	return -errno;
+      }
 
       /* stat for version ID */
       struct statx dm_stx;
@@ -15615,8 +15644,10 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
       /* set version_id xattr */
       std::string vid_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-      ::fsetxattr(dm_fd, vid_xattr.c_str(),
-                  dm_ver_id.c_str(), dm_ver_id.size(), 0);
+      if (::fsetxattr(dm_fd, vid_xattr.c_str(),
+		      dm_ver_id.c_str(), dm_ver_id.size(), 0) < 0) {
+	return -errno;
+      }
 
       /* copy ACL from the source object so the DM has owner info.
        *
@@ -15640,12 +15671,24 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         std::string acl_xattr = source->xattr_strategy()->disk_name(RGW_ATTR_ACL);
         std::string acl_v = attr_on_disk(source->xattr_strategy(),
                                          RGW_ATTR_ACL, acl_bl);
-        ::fsetxattr(dm_fd, acl_xattr.c_str(),
-                    acl_v.data(), acl_v.size(), 0);
+        if (::fsetxattr(dm_fd, acl_xattr.c_str(),
+			acl_v.data(), acl_v.size(), 0) < 0) {
+	  return -errno;
+	}
       }
       return 0;
     }, y);
     ::close(dm_fd);
+    /* unnamed yet, so taken back whole;  the demote above stands, as
+     * it does when the marker cannot be created or named */
+    if (aret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: delete_obj: could not write the delete"
+	" marker's attributes for " << dm_leaf << ": "
+	<< cpp_strerror(-aret) << dendl;
+      (void) unlinkat_as(dpp, identity, model, vfd, dm_tmp.c_str());
+      ::close(vfd);
+      return aret;
+    }
 
     /* rename to final name, as the marker's maker */
     std::string dm_name = nsfs_ver_entry(dm_leaf, dm_ver_id);
@@ -16546,6 +16589,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
   /* versioned: compute version ID from published file's stat */
+  int vid_ret = 0;
   if (versioned && leaf_fd >= 0) {
     struct statx new_stx;
     if (nsfs::statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
@@ -16554,17 +16598,30 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         ? nsfs_version_id_from_statx(new_stx) : NULL_VERSION_ID;
       target_obj->set_instance(new_ver_id);
       /* as the object's owner, for the same reason as the attributes
-       * above */
-      nsfs::with_identity(dpp, identity, [&]() -> int {
-        int obj_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY | O_NOFOLLOW);
-        if (obj_fd >= 0) {
-          std::string vid_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-          ::fsetxattr(obj_fd, vid_xattr.c_str(),
-                      new_ver_id.c_str(), new_ver_id.size(), 0);
-          ::close(obj_fd);
+       * above, and checked;  the failure is returned after the
+       * listing and the staging are settled, not before */
+      vid_ret = nsfs::with_identity(dpp, identity, [&]() -> int {
+        if (driver->attr_write_fail_injected(pb->get_name())) {
+          driver->record_attr_write_fail();
+          return -EIO;
         }
-        return 0;
+        int obj_fd = ::openat(leaf_fd, leaf_name.c_str(), O_RDONLY | O_NOFOLLOW);
+        if (obj_fd < 0) {
+          return -errno;
+        }
+        std::string vid_xattr = xattr_strategy()->disk_name(RGW_NSFS_ATTR_VERSION_ID);
+        const int r = (::fsetxattr(obj_fd, vid_xattr.c_str(),
+                                   new_ver_id.c_str(), new_ver_id.size(),
+                                   0) < 0) ? -errno : 0;
+        ::close(obj_fd);
+        return r;
       }, y);
+      if (vid_ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: could not record the version id on "
+          << leaf_name << ": " << cpp_strerror(-vid_ret)
+          << ";  a later demote would file it as the null version"
+          << dendl;
+      }
 
       auto* bcache = driver->get_bucket_cache();
       std::string obj_name = target_obj->get_key().get_index_key_name();
@@ -16667,7 +16724,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // update bucket cache
   target_obj->set_obj_size(ofs);
 
-  return 0;
+  return vid_ret;
 }
 
 int NSFSMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
@@ -18959,6 +19016,35 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       (*out)["enabled"] = on ? "true" : "false";
       (*out)["bucket"] = b_it->second;
       (*out)["fired"] = std::to_string(attr_read_fails_injected.load());
+    }
+    return 0;
+  }
+
+  if (hint == "inject-attr-write-fail") {
+    /* fail the attribute writes made after an object exists -- a
+     * copy's version id, a delete marker's attributes, a multipart
+     * completion's version id -- in one bucket, so a test can assert
+     * each returns the failure */
+    auto it = params.find("enable");
+    auto b_it = params.find("bucket");
+    if ((it == params.end()) || (b_it == params.end()) ||
+	b_it->second.empty()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    {
+      std::lock_guard l{inject_attr_write_fail_lock};
+      if (on) {
+	inject_attr_write_fail_buckets.insert(b_it->second);
+      } else {
+	inject_attr_write_fail_buckets.erase(b_it->second);
+      }
+      inject_attr_write_fail_armed = !inject_attr_write_fail_buckets.empty();
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
+      (*out)["bucket"] = b_it->second;
+      (*out)["fired"] = std::to_string(attr_write_fails_injected.load());
     }
     return 0;
   }
