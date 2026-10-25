@@ -288,6 +288,10 @@ pub enum Outcome {
     Unexpected,
     /// a `known` row matched:  a known defect, which still fails
     Known { row: usize },
+    /// one side could not look:  a value is `manifest::UNOBSERVED`.
+    /// Neither expected nor broken;  reported, and the row it matched,
+    /// if any, counted as used
+    Unobserved { row: Option<usize> },
 }
 
 /// Every difference between `left` and `right`.
@@ -331,13 +335,20 @@ pub fn differences(left: &Capture, right: &Capture) -> Vec<Difference> {
 /// The row that accounts for a difference, first match wins, and what
 /// its class makes of it.
 pub fn evaluate(d: &Difference, rows: &[Row], pair: &str, modality: &str) -> Outcome {
-    let Some(row) = rows.iter().find(|r| {
+    let row = rows.iter().find(|r| {
         r.pair == pair
             && (r.when.is_empty() || r.when == modality)
             && r.artifact == d.artifact
             && (r.subject.is_empty() || glob(&r.subject, &d.subject))
             && glob(&r.key, &d.field)
-    }) else {
+    });
+    let unknown = |s: &Option<BTreeSet<String>>| {
+        s.as_ref().is_some_and(|v| v.iter().any(|x| x.contains(manifest::UNOBSERVED)))
+    };
+    if unknown(&d.left) || unknown(&d.right) {
+        return Outcome::Unobserved { row: row.map(|r| r.line) };
+    }
+    let Some(row) = row else {
         return Outcome::Unexpected;
     };
     let violates = |why: &str| Outcome::Violates { row: row.line, why: why.to_string() };
@@ -427,6 +438,24 @@ mod tests {
         assert_ne!(synthetic_identity("\"mtime-a-ino-1\""),
                    synthetic_identity("\"mtime-a-ino-2\""), "another file");
         assert_eq!(synthetic_identity("\"0123abcd\""), "\"0123abcd\"", "a digest");
+    }
+
+    /* A side that could not look is neither expected nor broken, under
+     * a row or with none;  and the same difference with a real value in
+     * its place is accounted for by the row as before, so the marker is
+     * what makes the difference. */
+    #[test]
+    fn an_unobserved_value_is_neither_expected_nor_broken() {
+        let p = "a:b";
+        let u = format!("record:{}", manifest::UNOBSERVED);
+        let r = [row(p, "manifest", "f", Class::Differs)];
+        assert_eq!(evaluate(&diff("manifest", "f", Some(&u), None), &r, p, "md5-off"),
+                   Outcome::Unobserved { row: Some(r[0].line) });
+        assert_eq!(evaluate(&diff("manifest", "f", None, Some(&u)), &[], p, "md5-off"),
+                   Outcome::Unobserved { row: None });
+        assert!(matches!(evaluate(&diff("manifest", "f", Some("record:x"), None), &r, p,
+                               "md5-off"),
+                         Outcome::Violates { .. }));
     }
 
     /* Each class, both polarities:  a difference it accounts for and one

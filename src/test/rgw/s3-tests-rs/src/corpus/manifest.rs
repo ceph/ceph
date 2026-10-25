@@ -10,6 +10,11 @@
 
 use std::collections::BTreeSet;
 
+/// The value a fact takes where its location could not be looked at:
+/// unknown, which is not absent.  A difference against it is counted
+/// as unobserved, never as expected or broken.
+pub const UNOBSERVED: &str = "<unobserved>";
+
 /// Accumulates facts and emits them sorted.
 ///
 /// `BTreeSet` rather than a vector:  it sorts bytewise as it goes and

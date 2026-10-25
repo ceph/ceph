@@ -111,9 +111,12 @@ async fn corpus_coverage_bucket_config() {
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
 
-    /* Observed at all:  either location is enough, and neither means
-     * the persistence invariant is not asserted. */
-    let have_disk = data_root_bucket(&b).is_some() || config_store_record(&b).is_some();
+    /* "Nowhere" is asserted only where both locations are seen:  with
+     * one, a configuration kept in the other reads as lost.  The
+     * record half is not asked for under impersonation (the store is
+     * root's), and a remote run sees neither. */
+    let have_records = config_store_record(&b).is_some();
+    let have_disk = data_root_bucket(&b).is_some() && have_records;
     let mut steps: Vec<Step> = Vec::new();
 
     /* One macro-free helper per configuration, because each has its own
@@ -160,6 +163,16 @@ async fn corpus_coverage_bucket_config() {
                         continue;
                     }
                     m.bucket(&b, concat!($name, ".present"), &n);
+                }
+                /* A bucket still in NooBaa's format keeps its
+                 * configuration in its record.  Where the record half
+                 * is not asked for, that location is unknown, not
+                 * empty, and the manifest says so;  a converted bucket
+                 * keeps it in the attributes listed above. */
+                if !have_records && data_root_bucket(&b).is_some()
+                    && !bucket_state(&b).iter().any(|(n, _)| n == "xattr:user.nsfs.extensions") {
+                    m.bucket(&b, concat!($name, ".present"),
+                             &format!("record:{}", crate::manifest::UNOBSERVED));
                 }
                 steps.push(Step {
                     name: $name,

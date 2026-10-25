@@ -10,8 +10,10 @@
 //! for is an adoption defect, and `unadopted:converted`, where it is a
 //! conversion defect.  The rules are `s3_tests_rs::corpus::compare`.
 //!
-//! Exits 1 if any difference is unexpected, breaks its row's class, or
-//! is a known defect (a `known` row), 2 if the inputs cannot be read.
+//! Exits 1 if any difference is unexpected or breaks its row's class, 3
+//! if the only failures are known defects (`known` rows), 2 if the
+//! inputs cannot be read.  A known defect still fails:  it is recorded,
+//! not accepted.
 //! Known defects are reported under their own heading, with the row's
 //! reason, so that a new failure stands out from them.
 
@@ -58,6 +60,7 @@ fn main() -> ExitCode {
     };
 
     let mut failed = false;
+    let mut known_only = false;
     let mut used: BTreeMap<usize, usize> = BTreeMap::new();
     for (pair, kind, l, r) in PAIRS {
         let read = |d: &str| Capture::read(&Path::new(root).join(d));
@@ -72,6 +75,7 @@ fn main() -> ExitCode {
         let mut unexpected = Vec::new();
         let mut violations = Vec::new();
         let mut known: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+        let mut unobserved = Vec::new();
         let mut expected = 0usize;
         for d in &diffs {
             match evaluate(d, &rows, pair, modality) {
@@ -88,17 +92,27 @@ fn main() -> ExitCode {
                     *used.entry(row).or_default() += 1;
                     known.entry(row).or_default().push(describe(d));
                 }
+                Outcome::Unobserved { row } => {
+                    if let Some(row) = row {
+                        *used.entry(row).or_default() += 1;
+                    }
+                    unobserved.push(describe(d));
+                }
             }
         }
         let nknown: usize = known.values().map(Vec::len).sum();
         println!("== {kind} ({pair}):  {} differences, {expected} expected, {} \
-                  breaking their row, {} unexpected, {nknown} known defects",
-                 diffs.len(), violations.len(), unexpected.len());
+                  breaking their row, {} unexpected, {nknown} known defects, {} \
+                  unobserved",
+                 diffs.len(), violations.len(), unexpected.len(), unobserved.len());
         for v in &violations {
             println!("  BREAKS      {v}");
         }
         for u in &unexpected {
             println!("  UNEXPECTED  {u}");
+        }
+        for u in &unobserved {
+            println!("  UNOBSERVED  {u}");
         }
         for (line, facts) in &known {
             let reason = rows.iter().find(|r| r.line == *line)
@@ -108,7 +122,8 @@ fn main() -> ExitCode {
                 println!("                {f}");
             }
         }
-        failed |= !violations.is_empty() || !unexpected.is_empty() || nknown > 0;
+        failed |= !violations.is_empty() || !unexpected.is_empty();
+        known_only |= nknown > 0;
     }
 
     /* Two kinds of row match nothing, and they mean opposite things.  A
@@ -150,5 +165,11 @@ fn main() -> ExitCode {
             }
         }
     }
-    if failed { ExitCode::from(1) } else { ExitCode::SUCCESS }
+    if failed {
+        ExitCode::from(1)
+    } else if known_only {
+        ExitCode::from(3)
+    } else {
+        ExitCode::SUCCESS
+    }
 }
