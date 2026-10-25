@@ -14220,6 +14220,14 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			    const std::vector<std::string>* rmattrs,
 			    int use_fd)
 {
+  /* an object nothing has loaded has no entry yet:  open it, as
+   * delete_obj_attrs() does, rather than dereference one */
+  if (!ent) {
+    const int ret = open(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+  }
   return ent->write_attrs(dpp, y, state.attrset, nullptr,
 			  AttrWriteMode::MERGE, rmattrs, use_fd);
 }

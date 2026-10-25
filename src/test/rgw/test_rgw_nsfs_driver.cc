@@ -2832,6 +2832,64 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
   EXPECT_FALSE(object->get_attrs().contains("owner"));
 }
 
+/* An attribute write on an object nothing has loaded opens it, as the
+ * attribute delete does, rather than dereferencing an entry that does
+ * not exist yet:  it was a segfault at write_attrs() (n-plan D4).  The
+ * core loads before an attribute operation, so no S3 path reached it.
+ * ATTR1, written with the object, surviving shows the write merged. */
+TEST_F(NSFSObjectTest, AnAttributeWriteOnAnUnloadedObjectLoadsIt)
+{
+  const std::string probe = RGW_ATTR_META_PREFIX "probe";
+  /* the probe's value as the core sends one, raw;  ATTR1 as the
+   * fixture wrote it, encoded */
+  auto read = [&](const std::string& name) -> std::optional<bufferlist> {
+    auto obj = bucket->get_object(rgw_obj_key(testname));
+    EXPECT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+    auto it = obj->get_attrs().find(name);
+    if (it == obj->get_attrs().end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  };
+  auto has_probe = [&](const std::string& value) {
+    auto bl = read(probe);
+    if (!bl) {
+      return false;
+    }
+    std::string got = bl->to_str();
+    while (!got.empty() && (got.back() == '\0')) {
+      got.pop_back();
+    }
+    return got == value;
+  };
+  auto has_attr1 = [&]() {
+    bufferlist want;
+    encode(ATTR1, want);
+    return read(ATTR1) == want;
+  };
+
+  bufferlist v;
+  v.append("modified");
+  EXPECT_EQ(bucket->get_object(rgw_obj_key(testname))->modify_obj_attrs(
+	      probe.c_str(), v, null_yield, env->dpp, rgw_user()), 0);
+  EXPECT_TRUE(has_probe("modified"));
+  EXPECT_TRUE(has_attr1()) << "the write replaced the object's attributes";
+
+  Attrs set;
+  set[probe].append("set");
+  EXPECT_EQ(bucket->get_object(rgw_obj_key(testname))->set_obj_attrs(
+	      env->dpp, &set, nullptr, null_yield, rgw::sal::FLAG_LOG_OP,
+	      rgw_user()), 0);
+  EXPECT_TRUE(has_probe("set"));
+  EXPECT_TRUE(has_attr1()) << "the write replaced the object's attributes";
+
+  EXPECT_EQ(bucket->get_object(rgw_obj_key("nosuch"))->modify_obj_attrs(
+	      probe.c_str(), v, null_yield, env->dpp, rgw_user()), -ENOENT);
+  EXPECT_EQ(bucket->get_object(rgw_obj_key("nosuch"))->set_obj_attrs(
+	      env->dpp, &set, nullptr, null_yield, rgw::sal::FLAG_LOG_OP,
+	      rgw_user()), -ENOENT);
+}
+
 TEST_F(NSFSObjectTest, XattrOnDisk)
 {
   sf::path obj_path{bp / "root" / testname / testname};
