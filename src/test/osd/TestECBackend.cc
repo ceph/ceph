@@ -262,6 +262,10 @@ public:
   uint64_t min_peer_features() const {
     return 0;
   }
+
+  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override {
+    return {};
+  }
 };
 
 TEST(ECCommon, get_min_want_to_read_shards)
