@@ -791,6 +791,28 @@ class RgwBucketControllerTestCase(ControllerTestCase):
         self._get('/test/api/rgw/bucket/i-do-not-exist')
         self.assertStatus(500)
 
+    @patch('dashboard.controllers.rgw.RgwAccounts')
+    @patch.object(RgwBucket, '_delete_lifecycle')
+    @patch.object(RgwBucket, '_get_encryption', return_value={'Status': 'Disabled'})
+    @patch.object(RgwBucket, '_get_locking', return_value={'lock_enabled': False})
+    @patch('dashboard.services.rgw_client.RgwClient.admin_instance')
+    def test_set_bucket_empty_uid_keeps_tenant(self, mock_admin_instance,
+                                               mock_get_locking, _mock_get_encryption,
+                                               _mock_delete_lifecycle, mock_accounts):
+        # Editing a tenant bucket without changing its owner sends an empty uid.
+        # The tenant and the owner must then come from the bucket itself.
+        mock_instance = Mock()
+        mock_admin_instance.return_value = mock_instance
+        # The REST proxy returns the raw JSON text from RGW.
+        mock_instance.proxy.return_value = (
+            '{"bucket": "test-bucket", "tenant": "kenny", "owner": "testuser"}')
+        mock_accounts.return_value.get_accounts.return_value = []
+
+        self._put('/test/api/rgw/bucket/kenny%2Ftest-bucket', {'bucket_id': 'abc123', 'uid': ''})
+
+        self.assertStatus(200)
+        mock_get_locking.assert_called_once_with('testuser', None, 'kenny:test-bucket')
+
 
 class RgwBucketUiControllerTestCase(ControllerTestCase):
     URL = '/ui-api/rgw/bucket/buckets_and_users_count'
