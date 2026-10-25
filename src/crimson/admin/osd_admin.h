@@ -14,6 +14,7 @@ class DumpMetricsHook;
 class DumpPGStateHistory;
 class DumpPerfCountersHook;
 class FlushPgStatsHook;
+class GetLatestOSDMapHook;
 class InjectDataErrorHook;
 class InjectMDataErrorHook;
 class OsdStatusHook;

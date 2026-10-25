@@ -10,9 +10,11 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/thread.hh>
 #include <seastar/core/scollectd_api.hh>
+#include <seastar/core/with_timeout.hh>
 
 #include "common/config.h"
 #include "crimson/admin/admin_socket.h"
+#include "crimson/common/exception.h"
 #include "crimson/common/log.h"
 #include "crimson/common/metrics_helpers.h"
 #include "crimson/common/perf_counters_collection.h"
@@ -224,6 +226,49 @@ private:
   crimson::osd::OSD& osd;
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<FlushPgStatsHook>(crimson::osd::OSD& osd);
+
+/**
+ * fetch the newest osdmap from the mon, and wait until all PGs have it
+ */
+class GetLatestOSDMapHook : public AdminSocketHook {
+public:
+  explicit GetLatestOSDMapHook(crimson::osd::OSD& osd) :
+    AdminSocketHook("get_latest_osdmap",
+		    "",
+		    "force osd to update the latest map from the mon"),
+    osd{osd}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(AdminSocketHook::GetLatestOSDMapHook);
+    DEBUG("");
+    // unlike classic, do not wait forever: nothing would interrupt the
+    // wait on OSD shutdown
+    static constexpr auto timeout = std::chrono::seconds(60);
+    epoch_t epoch = 0;
+    try {
+      epoch = co_await seastar::with_timeout(
+	seastar::lowres_clock::now() + timeout,
+	osd.wait_for_latest_osdmap());
+    } catch (const seastar::timed_out_error&) {
+      co_return tell_result_t{-ETIMEDOUT, "timed out waiting for the osdmap"};
+    } catch (const crimson::common::system_shutdown_exception&) {
+      co_return tell_result_t{-ESHUTDOWN, "osd is shutting down"};
+    }
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("osdmap");
+    f->dump_unsigned("epoch", epoch);
+    f->close_section();
+    co_return std::move(f);
+  }
+
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<GetLatestOSDMapHook>(crimson::osd::OSD& osd);
 
 /// dump the history of PGs' peering state
 class DumpPGStateHistory final: public AdminSocketHook {
