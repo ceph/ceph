@@ -710,6 +710,13 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
     return;
   }
 
+  mds_rank_t to = rdn->authority().first;
+  if (!mds->mdsmap->is_up(to)) {
+    // send_message_mds() would drop the request and nothing would reply
+    dout(10) << __func__ << ": mds." << to << " is not up" << dendl;
+    return;
+  }
+
   logger->inc(l_mdc_strays_reintegrated);
 
   // rename it to remote linkage .
@@ -723,10 +730,10 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   req->set_filepath2(src);
   req->set_tid(tid);
 
-  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, straydn);
+  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, straydn, to);
   mds->internal_client_requests.emplace(tid, std::move(ptr));
 
-  mds->send_message_mds(req, rdn->authority().first);
+  mds->send_message_mds(req, to);
 }
 
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
@@ -736,6 +743,12 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   if (dn->reintegration_reqid) {
     dout(20) << __func__ << ": stray dentry " << *dn
              << " is already under migrating" << dendl;
+    return;
+  }
+
+  if (!mds->mdsmap->is_up(to)) {
+    // send_message_mds() would drop the request and nothing would reply
+    dout(10) << __func__ << ": mds." << to << " is not up" << dendl;
     return;
   }
 
@@ -755,10 +768,38 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   req->set_filepath2(src);
   req->set_tid(tid);
 
-  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, dn);
+  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, dn, to);
   mds->internal_client_requests.emplace(tid, std::move(ptr));
 
   mds->send_message_mds(req, to);
+}
+
+void StrayManager::drop_requests_to(mds_rank_t who)
+{
+  std::vector<inodeno_t> migrating;
+  auto& reqs = mds->internal_client_requests;
+  for (auto it = reqs.begin(); it != reqs.end(); ) {
+    auto req = dynamic_cast<StrayEvalRequest*>(it->second.get());
+    if (!req || req->get_target() != who) {
+      ++it;
+      continue;
+    }
+    CDentry *dn = req->dentry;
+    dout(5) << __func__ << ": mds." << who << " will not reply to tid "
+            << it->first << ", dropping it for " << *dn << dendl;
+    auto dnl = dn->get_projected_linkage();
+    if (dnl->is_primary())
+      migrating.push_back(dnl->get_inode()->ino());
+    // releases the dentry
+    it = reqs.erase(it);
+  }
+
+  // a stopping mds waits for each stray it migrates, see
+  // MDCache::shutdown_export_strays()
+  if (mds->is_stopping()) {
+    for (auto ino : migrating)
+      mds->mdcache->shutdown_export_stray_finish(ino);
+  }
 }
 
 StrayManager::StrayManager(MDSRank *mds, PurgeQueue &purge_queue_)
