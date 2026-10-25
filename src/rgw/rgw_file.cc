@@ -2403,8 +2403,8 @@ namespace rgw {
           }
           specp = &spec;
         }
-        auto f_result = req.sal_object->get_fsio_handle(&dp, hopen_flags,
-							specp);
+        auto f_result = req.sal_object->get_fsio_handle(&dp, fs->get_user()->user_id,
+							hopen_flags, specp);
         if (!get<0>(f_result)) {
           f->sal_bucket = std::move(req.sal_bucket);
           f->sal_object = std::move(req.sal_object);

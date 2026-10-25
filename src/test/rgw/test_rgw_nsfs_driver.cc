@@ -10859,7 +10859,8 @@ TEST_F(NSFSStrongBucketTest, AWriteHandleHoldsTheGateOpen)
 
   auto obj = bucket->get_object(rgw_obj_key("handle.bin"));
   auto [rc, hdl] = obj->get_fsio_handle(
-      env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+      env->dpp, rgw::sal::no_authenticated_user,
+      rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
 		rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
   ASSERT_EQ(rc, 0) << "could not open a write handle";
   ASSERT_NE(hdl.get(), nullptr);
@@ -10890,7 +10891,8 @@ TEST_F(NSFSStrongBucketTest, AClosedGateRejectsAWriteHandle)
   {
     auto obj = bucket->get_object(rgw_obj_key("there.bin"));
     auto [rc, hdl] = obj->get_fsio_handle(
-	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
 		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
     ASSERT_EQ(rc, 0);
     ASSERT_EQ(hdl->commit(env->dpp,
@@ -10905,7 +10907,8 @@ TEST_F(NSFSStrongBucketTest, AClosedGateRejectsAWriteHandle)
   {
     auto obj = bucket->get_object(rgw_obj_key("rejected.bin"));
     auto [rc, hdl] = obj->get_fsio_handle(
-	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
 		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
     EXPECT_EQ(rc, -ERR_SERVICE_UNAVAILABLE);
     EXPECT_EQ(hdl.get(), nullptr) << "a rejected open left a handle behind";
@@ -10914,7 +10917,8 @@ TEST_F(NSFSStrongBucketTest, AClosedGateRejectsAWriteHandle)
   {
     auto obj = bucket->get_object(rgw_obj_key("there.bin"));
     auto [rc, hdl] = obj->get_fsio_handle(
-	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
     EXPECT_EQ(rc, 0) << "a read handle was rejected";
     if (hdl) {
       hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
@@ -11018,7 +11022,8 @@ TEST_F(NSFSStrongBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
 
   auto obj = bucket->get_object(rgw_obj_key("fsio-new.bin"));
   auto [rc, hdl] = obj->get_fsio_handle(
-      env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+      env->dpp, rgw::sal::no_authenticated_user,
+      rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
 		rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
   ASSERT_EQ(rc, 0);
   ASSERT_NE(hdl.get(), nullptr);
@@ -11057,7 +11062,8 @@ TEST_F(NSFSStrongBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
   for (int pass = 0; pass < 2; ++pass) {
     auto obj = bucket->get_object(rgw_obj_key(name));
     auto [rc, hdl] = obj->get_fsio_handle(
-	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+	env->dpp, rgw::sal::no_authenticated_user,
+	rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
 		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
     ASSERT_EQ(rc, 0) << "pass " << pass;
     ASSERT_NE(hdl.get(), nullptr);

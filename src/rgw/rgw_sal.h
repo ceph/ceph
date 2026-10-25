@@ -1502,9 +1502,14 @@ public:
       int64_t size{-1};                      /* >= 0 to set */
     };
 
-    /** Get a fsio view on an object or object prototype */
+    /** Get a fsio view on an object or object prototype
+     *
+     *  `authenticated_user` names who the handle is for, held for the
+     *  handle's life, as for rename():  undefaulted, so a caller with
+     *  nobody says so with `rgw::sal::no_authenticated_user`. */
     using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
     virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+				       const rgw_owner& authenticated_user,
 				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
 				       const FSIOCreateSpec* spec = nullptr) = 0;
 

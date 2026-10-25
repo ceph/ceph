@@ -12129,6 +12129,7 @@ static int apply_create_spec(const nsfs::XattrStrategy* xs,
 }
 
 Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
+						const rgw_owner& authenticated_user,
 						uint32_t flags,
 						const FSIOCreateSpec* spec)
 {

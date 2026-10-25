@@ -2562,6 +2562,7 @@ public:
 			 optional_yield y) override;
 
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			     const rgw_owner& authenticated_user,
 			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
 			     const FSIOCreateSpec* spec = nullptr) override;
 

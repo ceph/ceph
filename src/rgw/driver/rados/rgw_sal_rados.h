@@ -609,6 +609,7 @@ class RadosObject : public StoreObject {
                            const ceph::real_time& obj_mtime) override;
 
     FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			       const rgw_owner& authenticated_user,
 			       uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
 			       const FSIOCreateSpec* spec = nullptr) override {
       return FSIOResult{-ENOTSUP, nullptr};
