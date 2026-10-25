@@ -176,6 +176,60 @@ class TestFragmentation(CephFSTestCase):
             timeout=30
         )
 
+    def test_rapid_creation_with_null_dentries(self):
+        """
+        That the fast split still happens in time when the dirfrag also
+        holds more null dentries than the fast-splitting limit.
+
+        This guards the result of should_split_fast(), not its cost: a
+        few hundred null dentries are cheap to scan, so it passes without
+        the bound on the scan too.
+        """
+
+        split_size = 100
+        fast_limit = int(split_size * 1.5)
+        nulls = fast_limit * 4
+
+        # leave null dentries behind without splitting the directory
+        self._configure(
+            mds_bal_split_size=nulls * 2,
+            mds_bal_merge_size=1,
+            mds_bal_split_bits=3
+        )
+        self.mount_a.create_n_files("splitdir/old", nulls)
+        self.mount_a.run_shell(["rm", "-f", run.Raw("splitdir/old*")])
+
+        dirs = self.fs.mds_asok(['dump', 'dir', '/splitdir', '--dentry_dump'])
+        self.assertEqual(len(dirs), 1)
+        null_dns = len([dn for dn in dirs[0]['dentries'] if dn['is_null']])
+        log.info(f"{null_dns} null dentries in /splitdir")
+        self.assertGreater(null_dns, fast_limit)
+
+        # The unlinked files went to the stray directories: let them be
+        # purged, so that none of those is split by the smaller split size
+        # below and counted in get_splits().
+        def strays_purged():
+            perf = self.fs.mds_asok(['perf', 'dump'])
+            return (perf['mds_cache']['num_strays'] == 0 and
+                    perf['purge_queue']['pq_executing'] == 0)
+        self.wait_until_true(strays_purged, timeout=60)
+
+        # With the null dentries counted the dirfrag is over the fast
+        # limit from the first create on, so should_split_fast() has to
+        # tell the linked dentries from the null ones.
+        self._configure(
+            mds_bal_split_size=split_size,
+            mds_bal_fragment_size_max=fast_limit + 2
+        )
+        self.assertEqual(self.get_splits(), 0)
+        self.mount_a.create_n_files("splitdir/file", split_size * 4)
+        self.wait_until_equal(
+            self.get_splits,
+            1,
+            reject_fn=lambda s: s > 1,
+            timeout=30
+        )
+
     def test_deep_split(self):
         """
         That when the directory grows many times larger than split size,
