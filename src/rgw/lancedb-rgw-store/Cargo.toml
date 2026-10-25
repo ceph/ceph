@@ -36,6 +36,5 @@ tokio-test = "0.4"
 lazy_static = "1.4"
 # tests/object_store.rs drives the async ObjectStore trait with #[tokio::test];
 # the arrow-rs conformance suite (stream_get) needs a real runtime that
-# futures::executor cannot provide.  dev-dependency only, so the staticlib
-# linked into radosgw stays tokio-free.
+# futures::executor cannot provide.
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

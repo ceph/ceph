@@ -6,12 +6,12 @@
  * See file COPYING for licensing information.
  */
 
-//! Umbrella crate producing a single staticlib that exports the C API of
-//! both `lancedb-c` (the LanceDB C FFI bindings) and `lancedb-rgw-store`
+//! Umbrella crate producing a single shared library that exports the C API
+//! of both `lancedb-c` (the LanceDB C FFI bindings) and `lancedb-rgw-store`
 //! (the RGW SAL backend).  See Cargo.toml for the rationale.
 
-// Re-export both crates so their `#[no_mangle]` C symbols are compiled
-// into the staticlib.
+// Re-export both crates so their `#[no_mangle]` C symbols are linked into
+// the shared library.
 pub use lancedb;
 pub use lancedb_rgw_store;
 

@@ -13,7 +13,7 @@ This crate implements the `object_store::ObjectStore` trait from Apache Arrow, r
 The crate is built automatically as part of the Ceph build process when
 `WITH_RADOSGW_LANCEDB` is enabled. It is compiled through the `rgw-lancedb`
 umbrella crate (which combines `lancedb-c` and `lancedb-rgw-store` into a
-single `librgw_lancedb.a` static library linked into `rgw_common`).
+single `librgw_lancedb.so` shared library that `rgw_common` links).
 
 ```bash
 cd ceph/build
@@ -26,7 +26,7 @@ When making changes to this crate during development:
 
 This crate is not built on its own: it is compiled into the `rgw-lancedb`
 umbrella crate, which is built by an ExternalProject of the same name, and
-produces the `librgw_lancedb.a` static library that the RGW is linked with.
+produces the `librgw_lancedb.so` shared library that the RGW loads.
 
 ```bash
 cd ceph/build
